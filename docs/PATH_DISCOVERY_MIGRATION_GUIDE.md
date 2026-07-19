@@ -484,7 +484,7 @@ fun `TrainNavigationService only returns paths reserved for train`() {
 @Test
 fun `Shunting loop uses both tracks with new APIs`() {
     val context = loadXML("vyhybna.xml")
-    val simulation = ShuntingLoop(context, endTime = 300)
+    val simulation = ShuntingLoop(context, endTime = 1024)
 
     simulation.run()
 
@@ -499,10 +499,10 @@ fun `Shunting loop uses both tracks with new APIs`() {
 **Ensure migration doesn't change behavior**:
 ```bash
 # Before migration
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=300 > baseline.log
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=1024 > baseline.log
 
 # After migration
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=300 > migrated.log
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=1024 > migrated.log
 
 # Compare (allow timing variations)
 diff -u baseline.log migrated.log | grep -v "Time:"

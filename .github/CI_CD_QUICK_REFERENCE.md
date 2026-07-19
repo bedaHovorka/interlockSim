@@ -77,7 +77,7 @@ Add these badges to your PR description or documentation to show build status:
 ./gradlew test jacocoTestReport
 
 # Run smoke test
-java -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -jar build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
 ### View CI Results
@@ -258,7 +258,7 @@ open build/reports/jacoco/test/html/index.html
 
 ```bash
 # Run smoke test locally with verbose logging
-java -Dlogback.level=DEBUG -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -Dlogback.level=DEBUG -jar build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
 ## Best Practices

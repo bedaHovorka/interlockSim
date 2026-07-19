@@ -132,7 +132,7 @@
 - [ ] JaCoCo report reviewed and validates expected improvements
 - [ ] Code follows project style guidelines (tabs, max line 120)
 - [ ] No console warnings or errors during build
-- [ ] Smoke test passes locally: `./gradlew clean build && java -jar build/libs/interlockSim.jar example shuntingLoop 300`
+- [ ] Smoke test passes locally: `./gradlew clean build && java -jar build/libs/interlockSim.jar example shuntingLoop 1024`
 - [ ] Documentation updated as needed
 - [ ] Ready for review
 

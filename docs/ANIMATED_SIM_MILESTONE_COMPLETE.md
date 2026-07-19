@@ -98,7 +98,7 @@
 
 ### User Experience
 - Command: `./gradlew runExampleGui`
-- Docker: `docker compose run app java -jar interlockSim.jar exampleGui shuntingLoop 300`
+- Docker: `docker compose run app java -jar interlockSim.jar exampleGui shuntingLoop 1024`
 - Manual: `java -jar build/libs/interlockSim.jar exampleGui [name] [endTime]`
 
 ---

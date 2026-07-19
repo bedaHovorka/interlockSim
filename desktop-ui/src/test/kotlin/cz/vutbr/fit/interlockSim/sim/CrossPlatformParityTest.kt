@@ -11,7 +11,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.isBetween
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
@@ -49,10 +48,11 @@ import java.util.concurrent.TimeUnit
  * 3. Both produce a summary line (format: `--- Simulation complete: N trains, ...`)
  * 4. Timestamps are chronologically ordered in both outputs
  * 5. Both summaries mention trains
- * 6. Event counts are within the same order of magnitude (ratio 0.5x–2.0x)
+ * 6. Event counts and summary train counts are exactly equal across platforms
  *
- * Exact event counts and timestamps are **not** compared because kDisco.Random
- * may produce different sequences on JVM vs native.
+ * Exact equality is asserted because kDisco's `Random.exp()`/`.normal()` are
+ * bit-identical across JVM and native since bedaHovorka/kdisco#69 was fixed
+ * (pure-Kotlin fdlibm `PortableMath` replacing platform `kotlin.math.ln`/`exp`).
  *
  * @since Issue #439 (ProcessBuilder-based cross-platform parity)
  * @see JvmParityReferenceTest
@@ -72,7 +72,12 @@ class CrossPlatformParityTest {
 		private val JAR_PATH = File("build/libs/interlockSim.jar")
 		private val NATIVE_PATH = File("../fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe")
 
-		private val timestampRegex = Regex("""t=([\d.]+)\s+""")
+		/**
+		 * Anchored to line start so that logger lines whose text merely contains
+		 * `t=<digits>` mid-line (e.g. `endTime=60`) are not miscounted as events.
+		 */
+		private val timestampRegex = Regex("""^\s*t=([\d.]+)\s+""")
+		private val summaryTrainCountRegex = Regex("""Simulation complete: (\d+) trains""")
 	}
 
 	data class ProcessResult(
@@ -155,9 +160,14 @@ class CrossPlatformParityTest {
 				"run ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 first"
 		}
 
+		// JVM runs the `shuntingLoopSync` variant: the default JVM `shuntingLoop` example
+		// wires the Goal 10 dispatcher-agent stack (Issue #733), which does not exist on
+		// the native target. `shuntingLoopSync` mirrors the native `shuntingLoop`
+		// construction (wireSynchronousDispatcher) exactly, making exact-count
+		// comparison meaningful.
 		val jvmResult =
 			runProcess(
-				listOf("java", "-jar", JAR_PATH.absolutePath, "example", "shuntingLoop", "60")
+				listOf("java", "-jar", JAR_PATH.absolutePath, "example", "shuntingLoopSync", "60")
 			)
 		val nativeResult =
 			runProcess(
@@ -205,10 +215,29 @@ class CrossPlatformParityTest {
 		assertThat(jvmSummary!!.contains("trains"), name = "JVM summary mentions trains").isTrue()
 		assertThat(nativeSummary!!.contains("trains"), name = "Native summary mentions trains").isTrue()
 
-		// Invariant 6: Event counts within same order of magnitude
-		// (not exact — kDisco.Random may produce different sequences on JVM vs native)
-		val ratio = jvmEvents.size.toDouble() / nativeEvents.size.toDouble()
-		assertThat(ratio, name = "Event count ratio (JVM=${jvmEvents.size}, Native=${nativeEvents.size})\n$diag")
-			.isBetween(0.5, 2.0)
+		// Invariant 6: Exact cross-platform equality. Since kDisco's Random.exp()/normal()
+		// became bit-identical across platforms (bedaHovorka/kdisco#69, fixed via
+		// pure-Kotlin fdlibm PortableMath), the same seed must produce the same event
+		// count and the same summary train count on JVM and native.
+		assertThat(
+			nativeEvents.size,
+			name = "Event count (JVM=${jvmEvents.size}, Native=${nativeEvents.size})\n$diag"
+		).isEqualTo(jvmEvents.size)
+
+		val jvmTrains =
+			summaryTrainCountRegex
+				.find(jvmSummary)
+				?.groupValues
+				?.get(1)
+				?.toInt()
+		val nativeTrains =
+			summaryTrainCountRegex
+				.find(nativeSummary)
+				?.groupValues
+				?.get(1)
+				?.toInt()
+		assertThat(jvmTrains, name = "JVM summary train count\n$diag").isNotNull()
+		assertThat(nativeTrains, name = "Native summary train count (JVM=$jvmTrains)\n$diag")
+			.isEqualTo(jvmTrains)
 	}
 }

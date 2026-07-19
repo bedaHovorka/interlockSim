@@ -314,7 +314,7 @@ Follow `.editorconfig` configuration:
 
 3. **Verify smoke test:**
    ```bash
-   java -jar build/libs/interlockSim.jar example shuntingLoop 300
+   java -jar build/libs/interlockSim.jar example shuntingLoop 1024
    ```
 
 4. **Review coverage report:**
