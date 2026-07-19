@@ -138,7 +138,15 @@ internal class SimulationController(
 
 		// SP4.2 (Issue #564): pace the dispatcher-agent loop with this run's runner.
 		// getOrNull: the binding is absent in Koin setups without :dispatcher-agent's module.
-		val pacing = (context as? DefaultSimulationContext)?.scope?.getOrNull<DelegatingSimulationController>()
+		// The ClassCastException guard covers test doubles for SimulationContext whose scope
+		// isn't backed by a real Koin registry (e.g. a relaxed mock) — treated the same as
+		// "no dispatcher agent wired" since pacing is an optional seam either way.
+		val pacing =
+			try {
+				(context as? DefaultSimulationContext)?.scope?.getOrNull<DelegatingSimulationController>()
+			} catch (e: ClassCastException) {
+				null
+			}
 		agentPacing = pacing
 		pacing?.delegate = newRunner
 
