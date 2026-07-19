@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicReference
  * SP1.4 (#549) — verifies the per-[DefaultSimulationContext] Koin scoped bindings added to the
  * production [dispatcherAgentModule] actually resolve from a real context scope.
  *
- * `DispatcherAgentModuleSp13Test` only exercises the singleton bindings (it starts Koin with
+ * `DispatcherAgentModuleTest` only exercises the singleton bindings (it starts Koin with
  * `dispatcherAgentModule` alone and never creates a [DefaultSimulationContext]), so the
  * `scope<DefaultSimulationContext> { scoped<NetworkPerceptionPort> / scoped<NetworkActuatorPort>
  * / scoped<KoogAgentFactory> }` bindings — including the `getSource<DefaultSimulationContext>()

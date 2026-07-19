@@ -34,9 +34,11 @@ import cz.vutbr.fit.interlockSim.sim.DispatchObservation
  *
  * ## Speed constraint (Issue #187 / Issue #574)
  *
- * [capabilities.maxSpeedMultiplier][PlannerCapabilities.maxSpeedMultiplier] declares the
- * maximum simulation speed this planner can safely follow.  The wiring layer **MUST** read
- * this value and cap the `SimulationRunner` speed accordingly before starting the simulation.
+ * [capabilities.maxSpeedMultiplier][PlannerCapabilities.maxSpeedMultiplier] *declares* the
+ * maximum simulation speed this planner can safely follow.  Capping the `SimulationRunner` to
+ * that value is wired in SP1.4 (#549); until then the wiring layer rejects an async planner
+ * bound to a no-pacing controller via [assertPlannerPacingCompatible] so an unsafe combination
+ * fails fast instead of silently violating Issue #187.  Synchronous planners are exempt.
  *
  * ## Thread safety
  *

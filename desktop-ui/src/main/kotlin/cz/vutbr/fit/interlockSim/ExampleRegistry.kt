@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
@@ -207,6 +208,10 @@ class ExampleRegistry {
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
 		val planner = context.scope.get<DispatcherPlanner>()
+		// SP3.6 (#574 / #187): reject async/LLM planners until SimulationRunner pacing is wired
+		// (SP1.4, #549). NoOpSimulationController provides no speed cap, so an async planner cannot
+		// honour the 2× real-time limit. The rule-based planner is synchronous and exempt.
+		assertPlannerPacingCompatible(planner, controller)
 
 		val applier =
 			DispatchDecisionApplier(

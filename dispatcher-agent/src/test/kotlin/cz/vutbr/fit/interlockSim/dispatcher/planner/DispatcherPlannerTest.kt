@@ -10,19 +10,24 @@
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
 import assertk.fail
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 /**
  * Unit tests for [PlannerCapabilities], [DispatcherPlanner], and [RuleBasedPlanAdapter].
@@ -161,6 +166,60 @@ class DispatcherPlannerTest {
 				completed = true
 			}
 			assertThat(completed).isTrue()
+		}
+	}
+
+	// ── assertPlannerPacingCompatible (Issue #187 / #574 guard) ───────────────
+
+	@Nested
+	@DisplayName("assertPlannerPacingCompatible guards the Issue #187 speed cap")
+	inner class AssertPlannerPacingCompatibleTests {
+		private val asyncPlanner =
+			object : DispatcherPlanner {
+				override val capabilities =
+					PlannerCapabilities(
+						name = "FakeAsync",
+						isAsynchronous = true,
+						maxSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+					)
+
+				override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> = emptyList()
+			}
+		private val syncPlanner: DispatcherPlanner = RuleBasedPlanAdapter(RuleBasedDispatcher())
+		private val realController: SimulationController = mockk()
+
+		@Test
+		@DisplayName("async planner + NoOpSimulationController throws IllegalStateException (#187 / #549)")
+		fun asyncPlannerWithNoOpControllerThrows() {
+			val ex =
+				assertThrows<IllegalStateException> {
+					assertPlannerPacingCompatible(asyncPlanner, NoOpSimulationController)
+				}
+			assertThat(ex.message ?: "").contains("FakeAsync")
+			assertThat(ex.message ?: "").contains(PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER.toString())
+			assertThat(ex.message ?: "").contains("Issue #187")
+			assertThat(ex.message ?: "").contains("#549")
+		}
+
+		@Test
+		@DisplayName("synchronous planner + NoOpSimulationController is allowed (rule-based is exempt)")
+		fun syncPlannerWithNoOpControllerIsAllowed() {
+			// Must not throw — the rule-based planner needs no pacing.
+			assertPlannerPacingCompatible(syncPlanner, NoOpSimulationController)
+		}
+
+		@Test
+		@DisplayName("async planner + pacing controller is allowed")
+		fun asyncPlannerWithRealControllerIsAllowed() {
+			// Must not throw — a pacing SimulationController can enforce the cap.
+			assertPlannerPacingCompatible(asyncPlanner, realController)
+		}
+
+		@Test
+		@DisplayName("synchronous planner + pacing controller is allowed")
+		fun syncPlannerWithRealControllerIsAllowed() {
+			// Must not throw — synchronous planners are always exempt.
+			assertPlannerPacingCompatible(syncPlanner, realController)
 		}
 	}
 }
