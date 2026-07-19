@@ -13,9 +13,15 @@ import assertk.assertThat
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isNotSameAs
 import assertk.assertions.isTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Unit tests for [DispatcherMode] and [DispatcherModeState] (SP2b.4 — Issue #559).
@@ -183,6 +189,38 @@ class DispatcherModeStateTest {
 		assertThat(state.hasOverride()).isTrue()
 	}
 
+	// ── Concurrency (KDoc bullet 7: last-writer-wins) ─────────────────────────
+
+	@Test
+	fun `concurrent writers observe a well-defined last-writer-wins state`() =
+		runBlocking {
+			val state = DispatcherModeState()
+			// Writers only ever set SEMI_AUTO or MANUAL — deliberately excluding AUTO
+			// (the default). A correct last-writer-wins implementation therefore ends
+			// with an override equal to one of these; a lost/corrupted override would
+			// fall back to AUTO and fail the post-join assertions below.
+			val writtenModes = listOf(DispatcherMode.SEMI_AUTO, DispatcherMode.MANUAL)
+			val writers = 16
+			val iterations = 1_000
+
+			withTimeout(10.seconds) {
+				val jobs =
+					(0 until writers).map { i ->
+						launch(Dispatchers.Default) {
+							repeat(iterations) {
+								state.setOverride(writtenModes[i % writtenModes.size])
+							}
+						}
+					}
+				jobs.joinAll()
+			}
+
+			// An override is active and the effective mode is one the writers actually
+			// wrote — never the default AUTO.
+			assertThat(state.hasOverride()).isTrue()
+			assertTrue(state.getEffectiveMode() in writtenModes)
+		}
+
 	// ── Independence between instances ────────────────────────────────────────
 
 	@Test
@@ -192,7 +230,6 @@ class DispatcherModeStateTest {
 
 		a.setOverride(DispatcherMode.MANUAL)
 
-		assertThat(a).isNotSameAs(b)
 		assertThat(a.getEffectiveMode()).isEqualTo(DispatcherMode.MANUAL)
 		assertThat(b.getEffectiveMode()).isEqualTo(DispatcherMode.AUTO)
 		assertThat(b.hasOverride()).isFalse()

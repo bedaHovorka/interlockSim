@@ -129,7 +129,7 @@ class DispatchDecisionApplier(
 	 * |---|---|
 	 * | [DispatcherMode.AUTO] | Apply directly (pre-SP2b.4 behaviour). |
 	 * | [DispatcherMode.SEMI_AUTO] | Forward to [semiAutoApprover]; apply only if it returns `true`. If no approver is wired, the decision is dropped with a warning. |
-	 * | [DispatcherMode.MANUAL] | Drop the decision without invoking the actuator port; a debug line is logged. [DispatchDecision.NoAction] is applied (it is a no-op regardless of mode). |
+	 * | [DispatcherMode.MANUAL] | Drop the decision without invoking the actuator port; a debug line is logged. [DispatchDecision.NoAction] passes through as a no-op regardless of mode. |
 	 *
 	 * The mode is read once per decision via [DispatcherModeState.getEffectiveMode], so
 	 * a mode change becomes effective on the next drained decision.

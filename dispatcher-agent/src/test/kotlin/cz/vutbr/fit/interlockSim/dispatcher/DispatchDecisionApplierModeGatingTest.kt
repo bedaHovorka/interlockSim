@@ -123,6 +123,22 @@ class DispatchDecisionApplierModeGatingTest {
 			verify(exactly = 1) { networkActuator.requestRoute("T1", "zA", "doA1") }
 			verify(exactly = 1) { trainLifecyclePort.holdTrain("T1", 5.0) }
 		}
+
+		@Test
+		@DisplayName("AUTO still allows NoAction through as a no-op")
+		fun auto_allowsNoAction() {
+			val state = DispatcherModeState() // defaults to AUTO
+			val (queue, applier) = makeApplier(modeState = state)
+			queue.postAll(listOf(DispatchDecision.NoAction))
+
+			// Must not throw and must not touch any actuator — NoAction is a no-op
+			// regardless of mode and bypasses the mode gate in all three modes.
+			applier.onControlStep()
+
+			assertThat(approvedTrains).isEmpty()
+			verify(exactly = 0) { networkActuator.requestRoute(any(), any(), any()) }
+			verify(exactly = 0) { trainLifecyclePort.holdTrain(any(), any()) }
+		}
 	}
 
 	// ── MANUAL mode: drop everything except NoAction ─────────────────────────
