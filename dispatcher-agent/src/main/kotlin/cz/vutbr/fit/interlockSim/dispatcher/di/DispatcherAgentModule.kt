@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -152,7 +153,12 @@ val dispatcherAgentModule: Module =
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultNetworkActuatorPort(env = context)
+				// SP3.5 (Issue #573): wire InterlockingFacade as the single chokepoint so all
+				// requestRoute calls (tool → queue → applier → port) pass through the safety kernel.
+				DefaultNetworkActuatorPort(
+					env = context,
+					interlockingFacade = context.scope.get<InterlockingFacade>()
+				)
 			}
 
 			// SP0.5: ActuatorCommandQueue: one thread-safe handoff queue per simulation context.

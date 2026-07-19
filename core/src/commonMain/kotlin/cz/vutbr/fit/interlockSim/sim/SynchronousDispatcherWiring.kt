@@ -55,19 +55,24 @@ private val logger = KotlinLogging.logger {}
  *   [ShuntingLoop.controlStepListener] are overwritten
  * @param maxConcurrentTrains Admission cap, defaults to production's
  *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS]
+ * @param interlockingFacade SP3.5 (Issue #573): when non-null, [DefaultNetworkActuatorPort.requestRoute]
+ *   is routed through the interlocking safety kernel as the single chokepoint.
+ *   Pass `null` (default) for `:fast-sim` native binary and legacy test wiring that runs
+ *   without Koin DI; those callers fall back to the direct [PathReservationService] path.
  * @since Issue #733 / #742 follow-up (SP0.11 green-up)
  */
 fun wireSynchronousDispatcher(
 	env: SimulationEnvironment,
 	loop: ShuntingLoop,
-	maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+	maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
+	interlockingFacade: InterlockingFacade? = null
 ) {
 	val perceptionPort =
 		DefaultNetworkPerceptionPort(
 			env = env,
 			activeTrains = loop::getApprovedTrains
 		)
-	val actuatorPort = DefaultNetworkActuatorPort(env = env)
+	val actuatorPort = DefaultNetworkActuatorPort(env = env, interlockingFacade = interlockingFacade)
 	val dispatcher = RuleBasedDispatcher(maxConcurrentTrains = maxConcurrentTrains)
 
 	loop.snapshotCaptureHook = perceptionPort::captureSnapshot
