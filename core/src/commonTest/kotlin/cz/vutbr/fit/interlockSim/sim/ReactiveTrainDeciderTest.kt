@@ -148,6 +148,76 @@ class ReactiveTrainDeciderTest {
 		assertThat(decision.targetSpeedMps).isEqualTo(30.0)
 	}
 
+	@Test
+	fun `Vystraha with zero distance to immediate signal brakes to a stand`() {
+		// brakingSpeedLimit(0.0) hits the `distanceMetres <= 0.0` guard → 0.0; min(base, 0.0) = 0.0.
+		val decision =
+			ReactiveTrainDecider.decide(
+				reading(
+					signalAhead = Signal.FREE,
+					nextSignalAhead = Signal.STOP,
+					distanceToSignal = 0.0,
+					speedLimit = 30.0,
+					velocity = 20.0
+				)
+			)
+		assertThat(decision.target).isEqualTo(AccelerationTarget.BRAKE)
+		assertThat(decision.targetSpeedMps).isEqualTo(0.0)
+	}
+
+	@Test
+	fun `Vystraha with negative distance to immediate signal brakes to a stand`() {
+		// Defensive: perception spec says distance >= 0, but the guard must still hold.
+		val decision =
+			ReactiveTrainDecider.decide(
+				reading(
+					signalAhead = Signal.FREE,
+					nextSignalAhead = Signal.STOP,
+					distanceToSignal = -5.0,
+					speedLimit = 30.0,
+					velocity = 20.0
+				)
+			)
+		assertThat(decision.target).isEqualTo(AccelerationTarget.BRAKE)
+		assertThat(decision.targetSpeedMps).isEqualTo(0.0)
+	}
+
+	@Test
+	fun `speed-restricted Vystraha with immediate S30 and next STOP caps to the immediate aspect`() {
+		// "očekávej rychlost X + Výstraha": base = min(30, S30=8.33…) = 8.33… governs
+		// (brakeToStop sqrt(2·3·1000)=77.5 > base), so the immediate S30 aspect caps the target.
+		val decision =
+			ReactiveTrainDecider.decide(
+				reading(
+					signalAhead = Signal.S30,
+					nextSignalAhead = Signal.STOP,
+					distanceToSignal = 1000.0,
+					speedLimit = 30.0,
+					velocity = 20.0
+				)
+			)
+		assertThat(decision.target).isEqualTo(AccelerationTarget.BRAKE)
+		assertThat(decision.targetSpeedMps).isCloseTo(Signal.S30.allowedSpeed(), delta = 1e-9)
+	}
+
+	@Test
+	fun `Vystraha below the braking cap accelerates back up to it`() {
+		// distance 6 m: brakeToStop sqrt(2*3*6) = 6.0 governs (min(30, 6.0) = 6.0);
+		// velocity 3.0 < 6.0 - ε → ACCELERATE back up, not stuck in BRAKE.
+		val decision =
+			ReactiveTrainDecider.decide(
+				reading(
+					signalAhead = Signal.FREE,
+					nextSignalAhead = Signal.STOP,
+					distanceToSignal = 6.0,
+					speedLimit = 30.0,
+					velocity = 3.0
+				)
+			)
+		assertThat(decision.target).isEqualTo(AccelerationTarget.ACCELERATE)
+		assertThat(decision.targetSpeedMps).isCloseTo(6.0, delta = 1e-9)
+	}
+
 	// ── Near destination (no second signal) ────────────────────────────────
 
 	@Test

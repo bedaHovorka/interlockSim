@@ -39,13 +39,15 @@ import kotlin.math.sqrt
  *   semaphore of the destination InOut): target = `min(track limit, immediate allowed
  *   speed, next allowed speed)`, unrestricted running toward the permitted speed.
  * - **Výstraha** — immediate allowing but next `STOP`: the train may pass the immediate
- *   signal yet must brake to a stand at the second signal. The perception exposes only
+ *   signal yet must brake to a stand at the **second** signal. The perception exposes only
  *   the immediate signal's distance (not the second's), so the policy caps the target to
  *   the speed from which the train can still stop within
- *   [TrainPerceptionReading.distanceToSignalAheadMetres] — a **fail-safe lower bound**,
- *   since the second signal is at least that far, so a train able to stop by the
- *   immediate signal can certainly stop by the second. This mirrors the kernel's own
- *   "start on caution" ramp ([Train] `Motor.onWarning`).
+ *   [TrainPerceptionReading.distanceToSignalAheadMetres] — a **fail-safe lower bound**:
+ *   the second signal is at least as far as the immediate (`d_second ≥ d_immediate`), so
+ *   `sqrt(2·a·d_immediate)` is no greater than the true `sqrt(2·a·d_second)` and is
+ *   therefore conservative. This **extends** the kernel's one-signal "start on caution"
+ *   brake ([Train] `Motor.onWarning`, which looks only one signal ahead) with a 2-signal
+ *   Výstraha case enabled by the perception aspect pair.
  *
  * The track [TrainPerceptionReading.currentSpeedLimitMps] always caps the target — even a
  * FREE signal cannot license exceeding the physical track limit.
