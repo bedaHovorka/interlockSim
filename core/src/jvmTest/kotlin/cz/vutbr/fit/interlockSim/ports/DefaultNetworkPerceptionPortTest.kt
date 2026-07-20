@@ -101,7 +101,8 @@ class DefaultNetworkPerceptionPortTest {
 		secondSemaphore: OrientedPathSeparator? = null,
 		distanceToSemaphore: Double = 0.0,
 		speedLimitMps: Double = ABSOLUTE_MAX_SPEED,
-		dwelling: Boolean = true
+		dwelling: Boolean = true,
+		stationDwelling: Boolean = false
 	): Train =
 		mockk<Train>(relaxed = true).also {
 			every { it.name } returns name
@@ -121,6 +122,8 @@ class DefaultNetworkPerceptionPortTest {
 			every { it.distanceToSemaphore() } returns distanceToSemaphore
 			every { it.currentSpeedLimitMps } returns speedLimitMps
 			every { it.isDwelling } returns dwelling
+			// SP2a.3 (Issue #554): commanded station dwell, narrower than isDwelling
+			every { it.isStationDwelling } returns stationDwelling
 		}
 
 	/**
@@ -611,6 +614,44 @@ class DefaultNetworkPerceptionPortTest {
 
 			assertThat(result?.isDwelling).isEqualTo(true)
 			assertThat(result?.signalAheadAspect).isEqualTo(Signal.FREE)
+		}
+
+		@Test
+		@DisplayName("commanded station dwell in progress → isStationDwelling projected true")
+		fun stationDwellInProgressIsProjected() {
+			val t =
+				train(
+					"Train #1",
+					velocity = 0.0,
+					nextSemaphore = semaphore("doB1", Signal.FREE),
+					dwelling = true,
+					stationDwelling = true
+				)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.isStationDwelling).isEqualTo(true)
+		}
+
+		@Test
+		@DisplayName("stopped at a signal (no commanded dwell) → isDwelling true but isStationDwelling false")
+		fun stoppedWithoutCommandedDwellIsNotStationDwelling() {
+			val t =
+				train(
+					"Train #1",
+					velocity = 0.0,
+					nextSemaphore = semaphore("doB1", Signal.STOP),
+					dwelling = true,
+					stationDwelling = false
+				)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			// The two flags are independent: at rest for any reason vs. commanded station dwell
+			assertThat(result?.isDwelling).isEqualTo(true)
+			assertThat(result?.isStationDwelling).isEqualTo(false)
 		}
 
 		@Test

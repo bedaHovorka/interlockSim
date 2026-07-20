@@ -66,4 +66,55 @@ class DefaultTrainActuatorPortTest {
 		// Verify the interface contract via the type assignment; compile-time check only.
 		assertThat(port).isEqualTo(port)
 	}
+
+	// ── holdAtStation (SP2a.3, Issue #554) ───────────────────────────────────
+
+	@Test
+	@DisplayName("holdAtStation delegates to Train.holdAtStation")
+	fun holdAtStationDelegatesToTrain() {
+		val train = mockk<Train>(relaxed = true)
+		val port = DefaultTrainActuatorPort(train)
+
+		port.holdAtStation(45.0)
+
+		verify(exactly = 1) { train.holdAtStation(45.0) }
+	}
+
+	@Test
+	@DisplayName("holdAtStation with positive duration calls Train.holdAtStation")
+	fun holdAtStationPositiveDurationIsValid() {
+		val train = mockk<Train>(relaxed = true)
+		val port = DefaultTrainActuatorPort(train)
+
+		port.holdAtStation(30.0)
+
+		verify(exactly = 1) { train.holdAtStation(30.0) }
+	}
+
+	@Test
+	@DisplayName("holdAtStation zero duration throws IllegalArgumentException before reaching Train")
+	fun holdAtStationZeroDurationThrows() {
+		val train = mockk<Train>(relaxed = true)
+		val port = DefaultTrainActuatorPort(train)
+
+		assertFailsWith<IllegalArgumentException> {
+			port.holdAtStation(0.0)
+		}
+
+		// Train.holdAtStation must NOT have been called
+		verify(exactly = 0) { train.holdAtStation(any()) }
+	}
+
+	@Test
+	@DisplayName("holdAtStation negative duration throws IllegalArgumentException before reaching Train")
+	fun holdAtStationNegativeDurationThrows() {
+		val train = mockk<Train>(relaxed = true)
+		val port = DefaultTrainActuatorPort(train)
+
+		assertFailsWith<IllegalArgumentException> {
+			port.holdAtStation(-5.0)
+		}
+
+		verify(exactly = 0) { train.holdAtStation(any()) }
+	}
 }
