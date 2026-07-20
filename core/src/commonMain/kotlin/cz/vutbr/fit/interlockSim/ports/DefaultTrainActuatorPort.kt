@@ -14,8 +14,8 @@ import cz.vutbr.fit.interlockSim.sim.Train
 /**
  * Simulation-backed implementation of [TrainActuatorPort].
  *
- * Wraps a single [Train] and translates [setTargetSpeed] calls into the train's
- * physics model via [Train.accelerateTo].  This is the **act** side of a train agent's
+ * Wraps a single [Train] and translates [setTargetSpeed] and [holdAtStation] calls into
+ * the train's physics model.  This is the **act** side of a train agent's
  * sense → decide → act loop.
  *
  * ## Design constraint
@@ -51,5 +51,22 @@ class DefaultTrainActuatorPort(
 	override fun setTargetSpeed(speed: Double) {
 		require(speed >= 0.0) { "Target speed must be >= 0, got $speed" }
 		train.setTargetSpeed(speed)
+	}
+
+	/**
+	 * Hold the train at a station for [dwellDurationSeconds] simulation seconds.
+	 *
+	 * Validates the precondition and delegates to [Train.holdAtStation].  A fire-and-forget
+	 * kDisco process is spawned inside [Train] that cancels current acceleration, waits for
+	 * [dwellDurationSeconds] sim-seconds, and then completes — leaving the motor stopped
+	 * until the agent's next [setTargetSpeed] call restarts it.
+	 *
+	 * @param dwellDurationSeconds Dwell time in simulation seconds (must be > 0).
+	 * @throws IllegalArgumentException if [dwellDurationSeconds] is ≤ 0.
+	 * @since Issue #554 (SP2a.3 — Goal 10)
+	 */
+	override fun holdAtStation(dwellDurationSeconds: Double) {
+		require(dwellDurationSeconds > 0.0) { "dwellDurationSeconds must be > 0, got $dwellDurationSeconds" }
+		train.holdAtStation(dwellDurationSeconds)
 	}
 }

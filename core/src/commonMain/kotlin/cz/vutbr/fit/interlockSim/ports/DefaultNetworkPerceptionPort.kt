@@ -268,7 +268,8 @@ class DefaultNetworkPerceptionPort(
 			scheduledArrivalTime = scheduledArrivalTime,
 			isDwelling = isDwelling,
 			nextSignalAheadName = separatorName(secondSep),
-			nextSignalAheadAspect = separatorAspect(secondSep)
+			nextSignalAheadAspect = separatorAspect(secondSep),
+			isStationDwelling = isStationDwelling
 		)
 	}
 
