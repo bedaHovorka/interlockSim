@@ -1347,6 +1347,29 @@ class Train :
 		get() = getVelocity() == 0.0
 
 	/**
+	 * Backing flag for [isStationDwelling]; set by [holdAtStation] and cleared by
+	 * [StationDwellProcess] when the dwell expires.
+	 */
+	private var stationDwelling: Boolean = false
+
+	/**
+	 * Whether a station dwell ([holdAtStation]) is currently in progress.
+	 *
+	 * Distinct from [isDwelling]: [isDwelling] is `true` whenever the train is not moving
+	 * for *any* reason (STOP semaphore, station dwell, before first departure), whereas
+	 * [isStationDwelling] is `true` only while a [StationDwellProcess] is actively holding
+	 * the train — from the [holdAtStation] call until the dwell duration expires.
+	 *
+	 * A reactive train agent (SP2a.2/SP2a.3) reads this to know the minimum dwell has not
+	 * yet elapsed: while it is `true` the agent must not accelerate away; once it flips to
+	 * `false` the agent's next decide → act cycle may restart the train via [setTargetSpeed].
+	 *
+	 * @since Issue #554 (SP2a.3 — Goal 10)
+	 */
+	val isStationDwelling: Boolean
+		get() = stationDwelling
+
+	/**
 	 * Track section where the train's front is currently located.
 	 *
 	 * Used for train position interpolation in animation rendering.
@@ -1476,26 +1499,48 @@ class Train :
 	/**
 	 * Hold this train stationary at a station for [dwellDurationSeconds] simulation seconds.
 	 *
-	 * SP2a.3 act step for station dwell (Issue #554).  Cancels any in-progress motor
-	 * acceleration (stopping the train immediately at its current position) and spawns a
-	 * fire-and-forget [StationDwellProcess] that waits for [dwellDurationSeconds] sim-seconds.
-	 * After the dwell, the process completes and the motor remains stopped; the agent's
-	 * next [setTargetSpeed] call will restart it.
+	 * SP2a.3 act step for station dwell (Issue #554).  Spawns a fire-and-forget
+	 * [StationDwellProcess] that waits for [dwellDurationSeconds] sim-seconds and sets
+	 * [isStationDwelling] for the duration of the dwell.  The caller is **not** blocked.
+	 *
+	 * ## Precondition: the train must already be stopped
+	 *
+	 * This method does **not** brake the train — it starts a dwell timer.  The train must
+	 * already be at rest (`velocity == 0`); the agent is responsible for braking first
+	 * (`applyDecision(BRAKE)` → [setTargetSpeed]`(0.0)`) and calling this only once the
+	 * train has come to a stand.  Calling it on a moving train throws, because a dwell
+	 * timer running alongside a rolling train would silently misrepresent a station stop.
+	 * This mirrors [reverseDirection], which requires the same precondition.
+	 *
+	 * After the dwell expires the motor is *not* restarted here — [isStationDwelling] flips
+	 * back to `false` and the agent's next [setTargetSpeed] call restarts the train.
 	 *
 	 * **Thread safety:** Must be called from the kDisco simulation thread.
 	 *
 	 * @param dwellDurationSeconds Dwell time in simulation seconds (must be > 0).
 	 * @throws IllegalArgumentException if [dwellDurationSeconds] is ≤ 0.
+	 * @throws cz.vutbr.fit.interlockSim.exceptions.SimulationException if the train is moving
+	 *   (`velocity != 0`) or a station dwell is already in progress.
 	 * @since Issue #554 (SP2a.3 — Goal 10)
 	 */
 	fun holdAtStation(dwellDurationSeconds: Double) {
 		require(dwellDurationSeconds > 0.0) {
 			"dwellDurationSeconds must be > 0, got $dwellDurationSeconds"
 		}
+		requireSimulation(getVelocity() == 0.0) {
+			"Train $number must be stopped (velocity = 0) to hold at station. " +
+				"Current velocity: ${getVelocity()}"
+		}
+		requireSimulation(!stationDwelling) {
+			"Train $number is already dwelling at a station"
+		}
 		logger.info {
 			"Train $number: holding at station for ${dwellDurationSeconds}s"
 		}
+		// Defensive: the precondition above guarantees the train is at rest, so this is
+		// normally a no-op.  Kept so a pending acceleration ramp cannot resume mid-dwell.
 		motor.cancelAccelerating()
+		stationDwelling = true
 		Process.activate(StationDwellProcess(dwellDurationSeconds))
 	}
 
@@ -1503,8 +1548,8 @@ class Train :
 	 * Fire-and-forget kDisco process that implements a station dwell pause.
 	 *
 	 * Spawned by [holdAtStation]; holds for [dwellSeconds] simulation seconds and then
-	 * completes.  The motor is not restarted here — the agent's next [setTargetSpeed]
-	 * call will do that.
+	 * completes.  Clears [isStationDwelling] when the dwell expires.  The motor is not
+	 * restarted here — the agent's next [setTargetSpeed] call will do that.
 	 *
 	 * @since Issue #554 (SP2a.3 — Goal 10)
 	 */
@@ -1514,6 +1559,7 @@ class Train :
 		override suspend fun actions() {
 			env.report("dwell start ${dwellSeconds}s", this@Train, ReportType.TRAIN_EVENTS)
 			hold(dwellSeconds)
+			stationDwelling = false
 			logger.info { "Train $number: station dwell of ${dwellSeconds}s complete; ready to resume" }
 			env.report("dwell end", this@Train, ReportType.TRAIN_EVENTS)
 		}

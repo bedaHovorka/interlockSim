@@ -137,15 +137,17 @@ class ReactiveTrainActuatorTest {
 	}
 
 	@Test
-	fun `holdAtStation zero duration throws via actuator`() {
-		// The stub does not validate; but a real actuator (DefaultTrainActuatorPort)
-		// would reject it.  We verify the delegation happens so that the real
-		// implementation's precondition fires on the correct side.
+	fun `holdAtStation forwards exactly one dwell command per call`() {
+		// This object is a pure pass-through: it performs no validation of its own, so the
+		// recording stub accepts any duration.  The ≤ 0 rejection is a real-actuator
+		// concern and is covered by DefaultTrainActuatorPortTest (port precondition) and
+		// TrainHoldAtStationIntegrationTest (kernel precondition).  What matters here is
+		// that exactly one command reaches the port, unchanged.
 		val actuator = RecordingActuator()
 
-		// Zero duration — recorded stub accepts anything; delegation is what matters
 		ReactiveTrainActuator.holdAtStation(1.0, actuator)
-		assertEquals(1, actuator.dwellHistory.size)
+
+		assertEquals(listOf(1.0), actuator.dwellHistory)
 	}
 
 	// ── multiple cycles ───────────────────────────────────────────────────────

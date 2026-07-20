@@ -101,6 +101,12 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * [signalAheadAspect]: if aspect is [Signal.STOP] the train is blocked by a signal; if
  * aspect is allowing (or null) the train may be at a station dwell.
  *
+ * [isStationDwelling] is narrower: it is `true` only while a commanded station dwell
+ * (SP2a.3 [cz.vutbr.fit.interlockSim.ports.TrainActuatorPort.holdAtStation]) is actively
+ * running. Unlike [isDwelling] it flips back to `false` the moment the dwell expires, even
+ * though the train is still at rest — this is the signal the act step's agent uses to know
+ * the minimum dwell has elapsed and it may accelerate away.
+ *
  * @property trainId Train identifier (e.g. `"Train #1"`).
  * @property signalAheadName Name of the next semaphore ahead, or `null` if no path set.
  * @property signalAheadAspect [Signal] aspect of the next semaphore, or `null` if no path.
@@ -129,6 +135,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * @property scheduledArrivalTime Simulation time (in seconds) at which the train is
  *   scheduled to arrive at [destinationInOutName]. Zero if unscheduled.
  * @property isDwelling `true` when the train is stopped (velocity = 0).
+ * @property isStationDwelling `true` while a commanded station dwell is actively in
+ *   progress (SP2a.3). Defaults to `false` for call sites that predate this field
+ *   (snapshot EMPTY, projection, tool).
  *
  * @since Issue #552 (SP2a.1 — Goal 10 train perception)
  */
@@ -146,5 +155,6 @@ data class TrainPerceptionReading(
 	val scheduledArrivalTime: Double,
 	val isDwelling: Boolean,
 	val nextSignalAheadName: String? = null,
-	val nextSignalAheadAspect: Signal? = null
+	val nextSignalAheadAspect: Signal? = null,
+	val isStationDwelling: Boolean = false
 )

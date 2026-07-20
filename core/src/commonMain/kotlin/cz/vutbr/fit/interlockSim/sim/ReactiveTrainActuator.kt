@@ -25,12 +25,13 @@ import cz.vutbr.fit.interlockSim.ports.TrainActuatorPort
  *    The simulation kernel applies the ramp within physics limits; this object only
  *    forwards the desired target.
  *
- * 2. **Station dwell** — [holdAtStation] calls [TrainActuatorPort.holdAtStation].  The
- *    port implementation cancels in-progress motor acceleration and spawns a
- *    fire-and-forget kDisco process that holds for [dwellDurationSeconds] simulation
- *    seconds.  The agent's act step is not blocked — subsequent sense cycles observe
- *    `isDwelling = true` until the dwell expires, at which point the agent will decide
- *    to accelerate and call [applyDecision] again.
+ * 2. **Station dwell** — [holdAtStation] calls [TrainActuatorPort.holdAtStation], which
+ *    spawns a fire-and-forget kDisco process holding the train for the requested number
+ *    of simulation seconds.  The train must already be stopped when this is called (the
+ *    port rejects a moving train); brake first via [applyDecision] with a `0.0` target.
+ *    The agent's act step is not blocked — subsequent sense cycles observe
+ *    `isStationDwelling = true` until the dwell expires, at which point the agent will
+ *    decide to accelerate and call [applyDecision] again.
  *
  * ## What this object does NOT do
  *
@@ -80,14 +81,20 @@ object ReactiveTrainActuator {
 	/**
 	 * Hold the train stationary at a station for [dwellDurationSeconds] simulation seconds.
 	 *
-	 * Delegates to [TrainActuatorPort.holdAtStation].  The port cancels the current motor
-	 * acceleration and schedules a fire-and-forget dwell period after which the motor
-	 * remains stopped.  The calling agent's next sense → decide → act cycle will detect
-	 * the resumed state and call [applyDecision] to restart movement.
+	 * Delegates to [TrainActuatorPort.holdAtStation], which schedules a fire-and-forget
+	 * dwell period after which the motor remains stopped.
+	 *
+	 * The train must already be at rest — this starts a dwell timer, it does not brake.
+	 * Call [applyDecision] with a `0.0` target speed first and wait for the train to come
+	 * to a stand; the port rejects the call while the train is moving.  After the dwell
+	 * expires the agent's next [applyDecision] call restarts movement — the dwell itself
+	 * does not re-accelerate the train.
 	 *
 	 * @param dwellDurationSeconds Station dwell time in simulation seconds (must be > 0).
 	 * @param actuator The actuator port wrapping the train's motor.
 	 * @throws IllegalArgumentException if [dwellDurationSeconds] is ≤ 0.
+	 * @throws cz.vutbr.fit.interlockSim.exceptions.SimulationException if the train is moving
+	 *   or a station dwell is already in progress.
 	 * @since Issue #554 (SP2a.3 — Goal 10)
 	 */
 	fun holdAtStation(
