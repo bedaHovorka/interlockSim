@@ -239,20 +239,31 @@ class Train :
 				requireSimulation(position.isStarted() && pv.isStarted()) {
 					"Position and velocity integration must be active"
 				}
-				// State event (zero-crossing): resume exactly when the front reaches the section
-				// boundary. Root-finding locates the crossing time *within* one integration step,
-				// so `dtMax` no longer has to be tiny to keep the block-boundary overshoot
-				// negligible (Issue #750). The threshold mirrors the original
-				// `waitUntil { position.state + dtMin >= nextLength }`: the boundary counts as
-				// reached once the front is within `dtMin` of it. Keeping that `dtMin` slack is
-				// essential — a train decelerating to a STOP semaphore located *at* the boundary
-				// halts a few nanometres short (v→0 as distance→0), so an exact `nextLength -
-				// position` guard would asymptote to a tiny positive value and never cross zero.
-				// The `if` preserves the old "return immediately when already satisfied" semantics
-				// (`waitCrossing` otherwise waits for a *future* sign change).
-				val boundaryThreshold = nextLength - dtMin
-				if (position.state < boundaryThreshold) {
-					waitCrossing { boundaryThreshold - position.state }
+				// "The front has reached the section boundary" is a LEVEL condition, not an event,
+				// so it must be waited on with `waitUntil` (Issue #797).
+				//
+				// Issue #750 step 1 briefly expressed this as a `waitCrossing` state event. That
+				// is unsafe here: the braking law is `a = -v² / (2s)` (see `Motor.derivatives`),
+				// so a train stopping at a semaphore located *at* the boundary has `v → 0` as
+				// `s → 0` and comes to rest a few nanometres short. `waitCrossing` is
+				// edge-triggered — it samples its guard only across integration-step endpoints and
+				// needs a strict sign change — so once that crossing is missed the position never
+				// changes again and the notice can never fire. The `Site` coroutine is then parked
+				// for the rest of the run, and since `separatorAction`, `semaphoreAction` and the
+				// path re-query all sit downstream of this gate, the train goes silent even after
+				// its route is reserved and its signal clears. That is the #797 deadlock: Train #16
+				// stood at `zA` showing S80, on a fully reserved route, from t=676 to the end.
+				//
+				// `waitUntil` registers a notice that kDisco re-tests after every discrete event
+				// and after every accepted integration step, so a train parked arbitrarily close to
+				// the boundary is always released. The `dtMin` slack is what makes the predicate
+				// reachable at all for that asymptotic approach.
+				//
+				// Re-doing the #750 conversion needs a level-triggered *and* root-found primitive
+				// on the kDisco side; `dtMax` is still 1e-3 here (Motor is not converted either,
+				// Issue #760), so nothing is lost by waiting for it.
+				waitUntil {
+					position.state + dtMin >= nextLength
 				}
 
 				position.state -= nextLength
@@ -1063,15 +1074,13 @@ class Train :
 
 		Process.activate(front)
 
-		// State event (zero-crossing): start the tail exactly when the front has advanced one
-		// train-length, located by root-finding within the integration step (Issue #750). The
-		// threshold carries the same `dtMin` slack as the block-boundary crossing above so that a
-		// front decelerating to a stop within one train-length of entry still triggers tail entry
-		// instead of asymptoting a few nanometres short and hanging. The `if` preserves
-		// `waitUntil`'s immediate-return-when-satisfied semantics for degenerate short-length cases.
-		val tailEntryThreshold = getLength() - dtMin
-		if (front.getTotalDistance() < tailEntryThreshold) {
-			waitCrossing { tailEntryThreshold - front.getTotalDistance() }
+		// "The front has advanced one train-length" is a LEVEL condition, waited on with
+		// `waitUntil` for the same reason as the block-boundary gate above (Issue #797): a front
+		// that decelerates to a stop within one train-length of entry asymptotes short of the
+		// threshold, and an edge-triggered `waitCrossing` would never fire — leaving the tail
+		// permanently outside the network. The `dtMin` slack makes the predicate reachable.
+		waitUntil {
+			front.getTotalDistance() + dtMin >= getLength()
 		}
 		Process.activate(tail)
 

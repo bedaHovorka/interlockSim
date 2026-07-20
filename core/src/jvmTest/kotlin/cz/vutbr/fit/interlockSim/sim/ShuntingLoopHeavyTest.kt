@@ -40,8 +40,12 @@ import java.util.concurrent.TimeUnit
  *
  * **Expected outcome (verified by manual run):** with the fixed-seed train
  * generator (`Generator.random = Random(0L)`) and this branch's `kdisco 0.6.1-SNAPSHOT`
- * `waitCrossing`-based block-boundary detection, a 1024s run against vyhybna.xml
- * always produces exactly 28 trains entered and 14 fully exited.
+ * level-triggered block-boundary detection, a 1024s run against vyhybna.xml
+ * always produces exactly 28 trains entered and 23 fully exited.
+ *
+ * The exited count was 14 until Issue #797 was fixed: the run deadlocked at t≈683 with
+ * Train #16 standing at a green `zA`, losing the last third of the simulation. Re-measured
+ * after the fix; see [Issue797StoppedAtAllowingSignalTest].
  *
  * **These counts are cross-platform identical** and must match the native
  * [cz.vutbr.fit.interlockSim.fastsim.ShuntingLoopDeterminismTest] (same seed, same
@@ -64,7 +68,7 @@ class ShuntingLoopHeavyTest : KoinTestBase() {
 		const val EXPECTED_TRAINS_ENTERED: Int = 28
 
 		/** Expected trains that fully exited the system by t=1024s. */
-		const val EXPECTED_TRAINS_EXITED: Int = 14
+		const val EXPECTED_TRAINS_EXITED: Int = 23
 	}
 
 	private val factory: SimulationContextFactory by inject()
@@ -74,12 +78,12 @@ class ShuntingLoopHeavyTest : KoinTestBase() {
 	 *
 	 * Acceptance criteria per run:
 	 * - Exactly 28 trains entered (generated into the queue).
-	 * - Exactly 14 trains fully exited the system.
+	 * - Exactly 23 trains fully exited the system.
 	 * - Run completes within the per-run timeout → no deadlock.
 	 */
 	@RepeatedTest(1000)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
-	@DisplayName("ShuntingLoop(1024s) run is deterministic: 28 entered / 14 exited")
+	@DisplayName("ShuntingLoop(1024s) run is deterministic: 28 entered / 23 exited")
 	fun eachRunProducesDeterministicOutcome() {
 		val context =
 			TestFixtures.loadShuntingXml().use { stream ->

@@ -35,7 +35,7 @@ import kotlin.time.TimeSource
  * 1000-repetition heavy test like [cz.vutbr.fit.interlockSim.sim.ShuntingLoopHeavyTest]
  * (JVM-only, `:core:heavyTest`, manual-run).
  *
- * **Expected counts (28 entered / 14 exited) are cross-platform identical** and must
+ * **Expected counts (28 entered / 23 exited) are cross-platform identical** and must
  * match [cz.vutbr.fit.interlockSim.sim.ShuntingLoopHeavyTest] on the JVM as well as the
  * *release* `fast-sim.kexe` binary (`linkReleaseExecutableLinuxX64`, what
  * `docker compose run fast-sim` / the CLI actually runs). kDisco's
@@ -57,7 +57,9 @@ class ShuntingLoopDeterminismTest {
 		 */
 		const val REPETITIONS: Int = 5
 		const val EXPECTED_TRAINS_ENTERED: Int = 28
-		const val EXPECTED_TRAINS_EXITED: Int = 14
+
+		/** Was 14 while Issue #797 deadlocked the run at t≈683; re-measured after the fix. */
+		const val EXPECTED_TRAINS_EXITED: Int = 23
 
 		/**
 		 * Per-iteration wall-clock budget. kotlin.test on linuxX64 has no `@Timeout`
