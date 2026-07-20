@@ -63,14 +63,17 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * pre-#729 behaviour where `reservePathToAnyNextSemaphore` returned
  * `AllPathsBlocked`.
  *
- * ## Route-scoring rule engine (SP2b.2)
+ * ## Route-scoring rule engine (SP2b.2) and command generation (SP2b.3)
  * Deterministic priority-rule scoring of candidate routes (shortest path, lowest
  * conflict risk, fewest switch movements) is implemented by [CandidatePathRuleEngine]
  * (SP2b.2, Issue #557). That engine consumes candidates from Goal 2 pathfinding,
- * optionally attaches a conflict-risk weight (conflict-aware selection), and ranks them. This
- * per-tick [decide] currently reserves a single pre-computed section per input and does
+ * optionally attaches a conflict-risk weight (conflict-aware selection), and ranks them.
+ * [PathCommandTranslator] (SP2b.3, Issue #558) translates the selected [PathCandidate]
+ * into explicit [DispatchDecision.SetSwitchPosition] and [DispatchDecision.SetSignalAspect]
+ * commands that the interlocking independently validates before the path is reserved.
+ * This per-tick [decide] currently reserves a single pre-computed section per input and does
  * not yet route through [CandidatePathRuleEngine]; wiring the engine into multi-route
- * selection here is deferred to a later SP2b sub-issue.
+ * selection here is deferred to SP2b.5 (Issue #560).
  *
  * ## Goal 9 integration hook
  * This class is also the designated place for wiring Goal 9's
