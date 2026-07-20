@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -41,14 +42,19 @@ private val logger = KotlinLogging.logger {}
  * ## Algorithm
  *
  * 1. Walk [PathCandidate.sections] from [start] using
- *    [cz.vutbr.fit.interlockSim.objects.core.StaticTrack.getSecondEnd] — the same
- *    traversal used by
+ *    [cz.vutbr.fit.interlockSim.objects.core.StaticTrack.getSecondEnd] — the same section
+ *    walk used by
  *    [cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator]'s
- *    `countSwitchMovements`.
- * 2. For each exit separator that is a [DynamicRailSwitch] **and** is not the terminal
- *    separator (a next section must exist), compute the required
+ *    `countSwitchMovements`, with one deliberate difference in start handling (see step 2).
+ * 2. For each **mid-path** exit separator that is a [DynamicRailSwitch] **and** is not the
+ *    terminal separator (a next section must exist), compute the required
  *    [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf] via
  *    [SimulationContext.getSegment] and emit [DispatchDecision.SetSwitchPosition].
+ *    The [start] separator is **never** configured, even when it is a switch: this is the
+ *    dispatcher's *permissive request*, which assumes the train already occupies [start],
+ *    so aligning a switch the train sits on is the interlocking's/train's responsibility —
+ *    not part of this request. (`countSwitchMovements` counts the start separator and
+ *    `configureSwitchesInPath` configures it; this translator intentionally does not.)
  * 3. If [start] resolves to a [RailSemaphore] (or is already a [DynamicRailSemaphore]),
  *    emit [DispatchDecision.SetSignalAspect] with [Signal.FREE] as the maximum permissive
  *    aspect — the interlocking independently limits it according to the route conditions.
@@ -76,10 +82,13 @@ object PathCommandTranslator {
 	/**
 	 * Translate a selected [PathCandidate] into switch-position and entry-signal commands.
 	 *
-	 * Switch commands are generated for every [DynamicRailSwitch] encountered during
-	 * path traversal (excluding the terminal separator, which has no outgoing section to
-	 * route to). Each command carries the [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf]
-	 * required to align the switch with the chosen path.
+	 * Switch commands are generated for every **mid-path** [DynamicRailSwitch] encountered
+	 * during path traversal — i.e. switches the train passes *through*. The start separator
+	 * and the terminal separator are both excluded (the start is the train's current position
+	 * and aligning it is the interlocking's responsibility; the terminal has no outgoing
+	 * section to route to). Each command carries the
+	 * [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf] required to align the switch
+	 * with the chosen path.
 	 *
 	 * An entry-signal command is added at the end if [start] is (or wraps) a
 	 * [RailSemaphore]. The requested aspect is always [Signal.FREE]; the interlocking
@@ -89,6 +98,8 @@ object PathCommandTranslator {
 	 *   messages and decision [DispatchDecision.rationale] strings.
 	 * @param start     The separator at which traversal begins — typically a
 	 *   [DynamicRailSemaphore] or a [cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut].
+	 *   May also be a [DynamicRailSwitch]; in that case the entry switch is intentionally not
+	 *   reconfigured (see the Algorithm section above).
 	 * @param candidate The selected path; [PathCandidate.sections] drives traversal.
 	 * @param context   Live simulation context required for switch segment lookup via
 	 *   [SimulationContext.getSegment].
@@ -106,8 +117,20 @@ object PathCommandTranslator {
 		val switchCommands = mutableListOf<DispatchDecision.SetSwitchPosition>()
 		val sections = candidate.sections
 
-		// Walk sections from `start` using getSecondEnd — mirrors countSwitchMovements in
-		// DefaultTopologyNavigator.  prevSection / currentSeparator track position.
+		// The start separator is never reconfigured (see KDoc): if the train is sitting on a
+		// switch, aligning it is the interlocking's/train's responsibility, not this request.
+		val staticStart = CellUtilities.assertNodeCell(start)
+		if (staticStart is RailSwitch) {
+			logger.debug {
+				"PathCommandTranslator: start ${staticStart.getName()} is a switch — entry " +
+					"switch intentionally not reconfigured (train's current position); only " +
+					"mid-path switches are commanded for $trainId"
+			}
+		}
+
+		// Walk sections from `start` using getSecondEnd — same section walk as
+		// countSwitchMovements in DefaultTopologyNavigator (start handling differs: the start
+		// separator is not reconfigured here). currentSeparator tracks position.
 		var currentSeparator: PathSeparator = start
 
 		for (index in sections.indices) {
