@@ -595,7 +595,13 @@ class DefaultPathReservationService(
 		target: PathSeparator,
 		maxDepth: Int
 	): Boolean {
-		val candidatePaths = navigator.findAllTopologicalPaths(start, target, maxDepth)
+		// Switch-CONSTRAINED enumeration (Issue #797 follow-up): a target is available only if a
+		// physically legal, all-free route reaches it. The switch-blind findAllTopologicalPaths
+		// admits phantom routes that reverse through a switch to reach a target's back side while
+		// bypassing the occupied block in front of it (e.g. reaching doB1 via the free k2 + a vB
+		// reversal while k1 is occupied), producing a false positive that steers
+		// findNextReservationTarget onto the blocked track and deadlocks opposing trains.
+		val candidatePaths = navigator.findAllSwitchConstrainedPaths(start, target, maxDepth)
 
 		if (candidatePaths.isEmpty()) {
 			return false

@@ -191,6 +191,33 @@ interface TopologyNavigator {
 	): List<List<TrackSection>>
 
 	/**
+	 * Find all routes from [start] to [target] that respect static switch constraints.
+	 *
+	 * Same BFS as [findAllTopologicalPaths] but expands each node only through switch
+	 * transitions that some switch configuration actually allows (via
+	 * `RailSwitch.possibleFollowers`). Physically impossible traversals — e.g. entering a
+	 * switch on one branch leg and leaving on the sibling branch leg — are never enumerated.
+	 *
+	 * Callers deciding **availability** or **reservability** must use this rather than
+	 * [findAllTopologicalPaths]: the switch-blind variant admits phantom routes (an all-free
+	 * path that reverses through a switch to reach a target's back side while bypassing the
+	 * occupied block in front of it), which makes [PathReservationService.isPathAvailable]
+	 * return false positives and steers the dispatcher onto blocked tracks (Issue #797
+	 * follow-up; same family as Issue #742).
+	 *
+	 * @param start    The starting path separator.
+	 * @param target   The target path separator to reach.
+	 * @param maxDepth Maximum search depth to prevent infinite loops (default: 100).
+	 * @return List of switch-legal paths; empty when none exists.
+	 * @see findAllTopologicalPaths
+	 */
+	fun findAllSwitchConstrainedPaths(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int = 100
+	): List<List<TrackSection>>
+
+	/**
 	 * Find all topologically possible paths with a pre-computed cost breakdown.
 	 *
 	 * Equivalent to [findAllTopologicalPaths] but wraps each result in a
