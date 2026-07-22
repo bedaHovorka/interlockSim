@@ -46,15 +46,16 @@ import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
  * ## Contract
  *
  * - [decide] must produce a valid [TrainAccelerationDecision] (non-negative target speed,
- *   non-empty rationale) for every non-null [TrainPerceptionReading].
+ *   non-empty rationale) for every [TrainPerceptionReading].
  * - [decide] must **not** mutate simulation state or retain the reading beyond the call.
  * - [acceptDirective] may update internal state (e.g. a hold flag); it must be idempotent
  *   for identical consecutive directives and must never throw.
  *
  * ## Thread-safety
  *
- * [decide] is called on the kDisco simulation thread.  [acceptDirective] may be called from
- * the dispatcher-agent thread (off-thread).  Implementations that share mutable state between
+ * [decide] is called on the kDisco simulation thread.  [acceptDirective] will be called from
+ * the dispatcher-agent thread once the SP3 directive-delivery wiring lands; implementations
+ * should be prepared for off-thread calls.  Implementations that share mutable state between
  * the two methods must synchronise (e.g. `@Volatile` flag, `AtomicBoolean`).
  *
  * @see AlgorithmicTrainDecisionPolicy

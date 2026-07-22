@@ -104,7 +104,8 @@ class AlgorithmicTrainDecisionPolicy : TrainDecisionPolicy {
 	 * Update the hold state based on the received [directive].
 	 *
 	 * - [TrainDirective.HoldImmediately] → sets [holdActive] = `true` (emergency stop).
-	 * - [TrainDirective.HoldAt] → sets [holdActive] = `true` (stop at named signal).
+	 * - [TrainDirective.HoldAt] → sets [holdActive] = `true` (hold active; [TrainDirective.HoldAt.signalName]
+	 *   recorded for logging/observability, not yet enforced per-signal — see [TrainDirective.HoldAt]).
 	 * - [TrainDirective.RouteGranted] → clears [holdActive] = `false` (proceed permitted).
 	 * - [TrainDirective.RouteDenied] → no-op on hold state (perception handles the wait).
 	 */

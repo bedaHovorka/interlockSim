@@ -56,10 +56,24 @@ sealed interface TrainDirective {
 	 * hold override set by a prior [HoldAt] or [HoldImmediately]; subsequent [TrainDecisionPolicy.decide]
 	 * calls revert to the perception-based [ReactiveTrainDecider] algorithm.
 	 *
+	 * ## Fields not yet consumed by the default policy
+	 *
+	 * [speedLimitKmh] and [movementAuthority] are carried for protocol completeness — the
+	 * `:dispatcher-agent` boundary produces them when bridging the SP3.3 message protocol —
+	 * but the default [AlgorithmicTrainDecisionPolicy.decide] does **not yet** fold them into
+	 * its decision; it relies on [ReactiveTrainDecider] plus
+	 * [cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading.currentSpeedLimitMps] (m/s).
+	 * Folding the MA speed limit into the decision is a follow-up.
+	 *
+	 * ⚠️ **Unit mismatch:** [speedLimitKmh] is in **km/h** while the perception/decision
+	 * pipeline uses **m/s**. Any future wiring that consumes it must divide by 3.6.
+	 *
 	 * @property aspect The signal aspect now shown at the entry signal of the granted route.
 	 * @property speedLimitKmh Maximum permitted speed under the movement authority (km/h, ≥ 0).
+	 *   Carried for protocol completeness; not yet consumed by the default policy.
 	 * @property movementAuthority Full ETCS/LS-style movement authority (oprávnění k jízdě),
-	 *   or `null` when the dispatcher is not using MA-based supervision.
+	 *   or `null` when the dispatcher is not using MA-based supervision. Carried for protocol
+	 *   completeness; not yet consumed by the default policy.
 	 */
 	data class RouteGranted(
 		val aspect: Aspect,
@@ -93,7 +107,17 @@ sealed interface TrainDirective {
 	 * target speed 0.0, regardless of the current signal aspect, until a subsequent
 	 * [RouteGranted] directive clears the hold.
 	 *
+	 * ## Per-signal gating not yet enforced
+	 *
+	 * The default [AlgorithmicTrainDecisionPolicy] applies the hold **unconditionally** once
+	 * this directive is received — it does **not yet** compare [signalName] to the train's
+	 * next signal ([cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading.signalAheadName]).
+	 * [signalName] is currently recorded for logging/observability only; behaviourally
+	 * [HoldAt] is therefore equivalent to [HoldImmediately] until per-signal enforcement is
+	 * implemented in a follow-up.
+	 *
 	 * @property signalName Name of the signal at which the train must stop (e.g. `"L1"`, `"zA"`).
+	 *   Recorded for logging/observability; not yet enforced per-signal by the default policy.
 	 */
 	data class HoldAt(
 		val signalName: String
