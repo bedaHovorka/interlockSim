@@ -295,8 +295,10 @@ class PathCommandTranslatorTest : KoinTestBase() {
 				val rationale = decision.rationale ?: return@forEach
 				assertThat(rationale).isEqualTo(
 					when (decision) {
-						is DispatchDecision.SetSwitchPosition -> "SP2b.3: switch on selected path for myTrain42"
-						is DispatchDecision.SetSignalAspect -> "SP2b.3: entry signal on selected path for myTrain42"
+						is DispatchDecision.SetSwitchPosition ->
+							listOf("SP2b.3: switch on selected path for myTrain42")
+						is DispatchDecision.SetSignalAspect ->
+							listOf("SP2b.3: entry signal on selected path for myTrain42")
 						else -> return@forEach
 					}
 				)

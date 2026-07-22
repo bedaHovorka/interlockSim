@@ -65,7 +65,8 @@ fun DispatchDecision.applyToolDrivenToActuator(
 	when (this) {
 		is DispatchDecision.SetSignalAspect -> {
 			toolDrivenLogger.debug {
-				"$logPrefix: applying SetSignalAspect semaphoreName=$semaphoreName, signal=$signal"
+				"$logPrefix: applying SetSignalAspect semaphoreName=$semaphoreName, signal=$signal" +
+					rationale.toRationaleLogSuffix()
 			}
 			val success = actuator.setSignalAspect(semaphoreName, signal)
 			if (!success) {
@@ -77,7 +78,8 @@ fun DispatchDecision.applyToolDrivenToActuator(
 		}
 		is DispatchDecision.SetSwitchPosition -> {
 			toolDrivenLogger.debug {
-				"$logPrefix: applying SetSwitchPosition switchName=$switchName, position=$position"
+				"$logPrefix: applying SetSwitchPosition switchName=$switchName, position=$position" +
+					rationale.toRationaleLogSuffix()
 			}
 			val success = actuator.setSwitchPosition(switchName, position)
 			if (!success) {
@@ -88,7 +90,10 @@ fun DispatchDecision.applyToolDrivenToActuator(
 			}
 		}
 		is DispatchDecision.ReleaseRoute -> {
-			toolDrivenLogger.debug { "$logPrefix: applying ReleaseRoute trainName=$trainName" }
+			toolDrivenLogger.debug {
+				"$logPrefix: applying ReleaseRoute trainName=$trainName" +
+					rationale.toRationaleLogSuffix()
+			}
 			val released = actuator.releaseRoute(trainName)
 			if (!released) {
 				toolDrivenLogger.debug {
@@ -98,7 +103,8 @@ fun DispatchDecision.applyToolDrivenToActuator(
 		}
 		is DispatchDecision.RequestRoute -> {
 			toolDrivenLogger.debug {
-				"$logPrefix: applying RequestRoute trainName=$trainName, from=$fromEndpointName, to=$toEndpointName"
+				"$logPrefix: applying RequestRoute trainName=$trainName, from=$fromEndpointName, to=$toEndpointName" +
+					rationale.toRationaleLogSuffix()
 			}
 			// Exhaustive `when` over the sealed RouteRequestResult — returning it forces the
 			// compiler to enforce coverage (matches the pattern in DefaultNetworkActuatorPort).

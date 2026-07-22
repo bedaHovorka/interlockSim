@@ -135,14 +135,56 @@ class CandidatePathRuleEngine(
 	 * @return The best candidate, or `null` when there is nothing to choose.
 	 */
 	fun select(candidates: List<PathCandidate>): PathCandidate? {
-		val best = rank(candidates).firstOrNull()
-		if (best != null) {
-			logger.debug {
-				"CandidatePathRuleEngine selected route with ${best.sections.size} section(s), " +
-					"switchMovementCount=${best.switchMovementCount}, conflictRiskWeight=${best.conflictRiskWeight}"
-			}
-		}
+		val (best, _) = selectWithRationale(candidates)
 		return best
+	}
+
+	/**
+	 * Return the best candidate together with a human-readable rationale list
+	 * describing the rule evaluations that produced the selection (SP2b.5,
+	 * Issue #560).
+	 *
+	 * The rationale list always contains at least one entry:
+	 * - If [candidates] is empty: a single entry explaining no path was available.
+	 * - Otherwise: one entry describing the active [priority] rules and one entry
+	 *   summarising the selected candidate's key cost metrics, plus — when more than
+	 *   one candidate was ranked — a third entry
+	 *   `"Ranked N candidate path(s); top-ranked selected"`.
+	 *
+	 * The list is therefore 1 entry (empty input), 2 entries (single candidate), or
+	 * 3 entries (multiple candidates).  The returned [PathCandidate] is `null` when
+	 * [candidates] is empty.
+	 *
+	 * @param candidates The candidate routes to choose from.
+	 * @return A pair of `(best candidate or null, non-empty rationale list)`.
+	 *
+	 * @since Issue #560 (SP2b.5 — Goal 10)
+	 */
+	fun selectWithRationale(candidates: List<PathCandidate>): Pair<PathCandidate?, List<String>> {
+		if (candidates.isEmpty()) {
+			return null to listOf("No candidate paths available")
+		}
+		val ranked = rank(candidates)
+		val best = ranked.first()
+		logger.debug {
+			"CandidatePathRuleEngine selected route with ${best.sections.size} section(s), " +
+				"switchMovementCount=${best.switchMovementCount}, conflictRiskWeight=${best.conflictRiskWeight}"
+		}
+		val rationale =
+			buildList {
+				add(
+					"Rules (priority): ${priority.joinToString(" → ") { it.name }}"
+				)
+				add(
+					"Selected: ${best.sections.size} section(s), " +
+						"switches=${best.switchMovementCount}, " +
+						"conflictRisk=${best.conflictRiskWeight}"
+				)
+				if (ranked.size > 1) {
+					add("Ranked ${ranked.size} candidate path(s); top-ranked selected")
+				}
+			}
+		return best to rationale
 	}
 
 	/**
