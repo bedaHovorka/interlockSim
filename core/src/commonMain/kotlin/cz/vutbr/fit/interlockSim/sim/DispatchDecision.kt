@@ -38,8 +38,15 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * An empty list is valid and means "no explicit rationale recorded".
  *
  * The applier and wiring ignore this field operationally — it is exposed for
- * logging, UI, and observability consumers.  The applier logs non-empty rationale
- * at DEBUG level alongside each applied decision (SP2b.5).
+ * logging, UI, and observability consumers.  Non-empty rationale is logged at
+ * DEBUG level alongside the applied decision (SP2b.5): the four tool-driven
+ * subtypes ([SetSignalAspect], [SetSwitchPosition], [ReleaseRoute],
+ * [RequestRoute]) are logged with their rationale on **both** the synchronous
+ * wiring path and the asynchronous `DispatchDecisionApplier` path, via the shared
+ * [applyToolDrivenToActuator] helper; [ApproveTrain] and [HoldTrain] are logged
+ * with their rationale only on the asynchronous `DispatchDecisionApplier` path
+ * (the synchronous wiring intentionally omits it — its decide-and-apply-in-one-tick
+ * model has no separate log moment).  This asymmetry is deliberate.
  *
  * ## Intended subtypes
  *
@@ -290,3 +297,17 @@ sealed class DispatchDecision {
 		override val rationale: List<String> = emptyList()
 	) : DispatchDecision()
 }
+
+/**
+ * Formats a [DispatchDecision.rationale] list as a log suffix: the empty string when
+ * the list is empty, otherwise `" | rationale: [entry1; entry2; …]"` (SP2b.5).
+ *
+ * Single source of truth for rationale formatting so the synchronous wiring path
+ * ([applyToolDrivenToActuator]) and the asynchronous `:dispatcher-agent`
+ * `DispatchDecisionApplier` path cannot drift apart — both append this exact suffix
+ * to their applied-decision DEBUG log lines.  Co-located with [DispatchDecision]
+ * because it formats [DispatchDecision.rationale].
+ *
+ * @since Issue #560 (SP2b.5 — Goal 10)
+ */
+fun List<String>.toRationaleLogSuffix(): String = if (isEmpty()) "" else " | rationale: [${joinToString("; ")}]"

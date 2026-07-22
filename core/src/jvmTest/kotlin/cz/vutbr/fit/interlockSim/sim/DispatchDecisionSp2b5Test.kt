@@ -34,8 +34,9 @@ import java.util.concurrent.TimeUnit
  *
  * These tests focus on the NEW functionality introduced in SP2b.5; backward-
  * compatibility tests for the existing subtypes live in [DispatchDecisionSp2b1Test].
- * Tests for the `DispatchDecisionApplier.toRationaleLogSuffix` logging helper live in
- * `:dispatcher-agent` (`DispatchDecisionApplierSp2b5Test`).
+ * Tests for the shared `toRationaleLogSuffix` formatter and for the
+ * `DispatchDecisionApplier` log-line integration live in `:dispatcher-agent`
+ * (`DispatchDecisionApplierSp2b5Test`).
  *
  * @since Issue #560 (SP2b.5 — Goal 10)
  */

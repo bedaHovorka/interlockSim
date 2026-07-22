@@ -147,9 +147,13 @@ class CandidatePathRuleEngine(
 	 * The rationale list always contains at least one entry:
 	 * - If [candidates] is empty: a single entry explaining no path was available.
 	 * - Otherwise: one entry describing the active [priority] rules and one entry
-	 *   summarising the selected candidate's key cost metrics.
+	 *   summarising the selected candidate's key cost metrics, plus — when more than
+	 *   one candidate was ranked — a third entry
+	 *   `"Ranked N candidate path(s); top-ranked selected"`.
 	 *
-	 * The returned [PathCandidate] is `null` when [candidates] is empty.
+	 * The list is therefore 1 entry (empty input), 2 entries (single candidate), or
+	 * 3 entries (multiple candidates).  The returned [PathCandidate] is `null` when
+	 * [candidates] is empty.
 	 *
 	 * @param candidates The candidate routes to choose from.
 	 * @return A pair of `(best candidate or null, non-empty rationale list)`.

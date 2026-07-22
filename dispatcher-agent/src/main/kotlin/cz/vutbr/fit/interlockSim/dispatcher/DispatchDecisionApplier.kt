@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
+import cz.vutbr.fit.interlockSim.sim.toRationaleLogSuffix
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -157,15 +158,6 @@ class DispatchDecisionApplier(
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		/**
-		 * Format a rationale list as a log suffix: returns empty string when the list
-		 * is empty, otherwise `" | rationale: [entry1; entry2; …]"` (SP2b.5).
-		 *
-		 * @since Issue #560 (SP2b.5 — Goal 10)
-		 */
-		internal fun List<String>.toRationaleLogSuffix(): String =
-			if (isEmpty()) "" else " | rationale: [${joinToString("; ")}]"
 	}
 
 	/**
