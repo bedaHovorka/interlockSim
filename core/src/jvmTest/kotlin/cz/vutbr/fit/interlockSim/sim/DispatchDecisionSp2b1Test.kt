@@ -11,9 +11,9 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -27,10 +27,10 @@ import java.util.concurrent.TimeUnit
  *
  * The goal of this class is to verify:
  * 1. [DispatchDecision.HoldTrain] construction, properties, and `init` validation.
- * 2. [DispatchDecision.rationale] is accessible on every subtype (defaults to `null`).
+ * 2. [DispatchDecision.rationale] is accessible on every subtype (defaults to empty list).
  * 3. Backward compatibility: existing subtypes still construct correctly without `rationale`.
  *
- * @since Issue #556 (SP2b.1 — Goal 10)
+ * @since Issue #556 (SP2b.1 — Goal 10); rationale changed to List in Issue #560 (SP2b.5)
  */
 @DisplayName("DispatchDecision — SP2b.1 HoldTrain + rationale (Issue #556)")
 @Timeout(10, unit = TimeUnit.SECONDS)
@@ -49,22 +49,22 @@ class DispatchDecisionSp2b1Test {
 		}
 
 		@Test
-		@DisplayName("HoldTrain without rationale has null rationale")
-		fun holdTrain_defaultRationaleIsNull() {
+		@DisplayName("HoldTrain without rationale has empty rationale list")
+		fun holdTrain_defaultRationaleIsEmpty() {
 			val decision = DispatchDecision.HoldTrain("Train-1", 30.0)
-			assertThat(decision.rationale).isNull()
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("HoldTrain with rationale stores the rationale string")
+		@DisplayName("HoldTrain with rationale stores the rationale list")
 		fun holdTrain_withRationale_rationaleStored() {
 			val decision =
 				DispatchDecision.HoldTrain(
 					trainId = "Train-1",
 					holdDurationSeconds = 45.0,
-					rationale = "Train-2 is approaching on the same track"
+					rationale = listOf("Train-2 is approaching on the same track")
 				)
-			assertThat(decision.rationale).isEqualTo("Train-2 is approaching on the same track")
+			assertThat(decision.rationale).isEqualTo(listOf("Train-2 is approaching on the same track"))
 		}
 
 		@Test
@@ -102,8 +102,8 @@ class DispatchDecisionSp2b1Test {
 		@Test
 		@DisplayName("HoldTrain equality: two instances with same properties are equal")
 		fun holdTrain_dataClassEquality() {
-			val a = DispatchDecision.HoldTrain("Train-1", 30.0, "some rationale")
-			val b = DispatchDecision.HoldTrain("Train-1", 30.0, "some rationale")
+			val a = DispatchDecision.HoldTrain("Train-1", 30.0, listOf("some rationale"))
+			val b = DispatchDecision.HoldTrain("Train-1", 30.0, listOf("some rationale"))
 			assertThat(a).isEqualTo(b)
 		}
 	}
@@ -114,79 +114,83 @@ class DispatchDecisionSp2b1Test {
 	@DisplayName("rationale property on existing subtypes (backward compatibility)")
 	inner class RationaleOnExistingSubtypes {
 		@Test
-		@DisplayName("ApproveTrain without rationale has null rationale (backward compat)")
-		fun approveTrain_defaultRationaleIsNull() {
+		@DisplayName("ApproveTrain without rationale has empty rationale list (backward compat)")
+		fun approveTrain_defaultRationaleIsEmpty() {
 			val decision = DispatchDecision.ApproveTrain("T1")
-			assertThat(decision.rationale).isNull()
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("ApproveTrain with rationale stores the rationale string")
+		@DisplayName("ApproveTrain with rationale stores the rationale list")
 		fun approveTrain_withRationale_rationaleStored() {
-			val decision = DispatchDecision.ApproveTrain("T1", rationale = "Main track free; admitting first queued train")
-			assertThat(decision.rationale).isEqualTo("Main track free; admitting first queued train")
+			val decision =
+				DispatchDecision.ApproveTrain(
+					"T1",
+					rationale = listOf("Main track free; admitting first queued train")
+				)
+			assertThat(decision.rationale).isEqualTo(listOf("Main track free; admitting first queued train"))
 		}
 
 		@Test
-		@DisplayName("NoAction has null rationale")
-		fun noAction_rationaleIsNull() {
-			assertThat(DispatchDecision.NoAction.rationale).isNull()
+		@DisplayName("NoAction has empty rationale list")
+		fun noAction_rationaleIsEmpty() {
+			assertThat(DispatchDecision.NoAction.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("ReservePath has null rationale (not LLM-facing)")
-		fun reservePath_rationaleIsNull() {
+		@DisplayName("ReservePath has empty rationale list (not LLM-facing)")
+		fun reservePath_rationaleIsEmpty() {
 			val decision = DispatchDecision.ReservePath("T1", "zA", "nextSep")
-			assertThat(decision.rationale).isNull()
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("SetSignalAspect without rationale has null rationale (backward compat)")
-		fun setSignalAspect_defaultRationaleIsNull() {
+		@DisplayName("SetSignalAspect without rationale has empty rationale list (backward compat)")
+		fun setSignalAspect_defaultRationaleIsEmpty() {
 			val decision =
 				DispatchDecision.SetSignalAspect(
 					"zA",
 					cz.vutbr.fit.interlockSim.objects.cells.Signal.FREE
 				)
-			assertThat(decision.rationale).isNull()
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("SetSwitchPosition without rationale has null rationale (backward compat)")
-		fun setSwitchPosition_defaultRationaleIsNull() {
+		@DisplayName("SetSwitchPosition without rationale has empty rationale list (backward compat)")
+		fun setSwitchPosition_defaultRationaleIsEmpty() {
 			val decision =
 				DispatchDecision.SetSwitchPosition(
 					"vA",
 					cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf.MAIN
 				)
-			assertThat(decision.rationale).isNull()
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("ReleaseRoute without rationale has null rationale (backward compat)")
-		fun releaseRoute_defaultRationaleIsNull() {
+		@DisplayName("ReleaseRoute without rationale has empty rationale list (backward compat)")
+		fun releaseRoute_defaultRationaleIsEmpty() {
 			val decision = DispatchDecision.ReleaseRoute("T1")
-			assertThat(decision.rationale).isNull()
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("RequestRoute without rationale has null rationale (backward compat)")
-		fun requestRoute_defaultRationaleIsNull() {
+		@DisplayName("RequestRoute without rationale has empty rationale list (backward compat)")
+		fun requestRoute_defaultRationaleIsEmpty() {
 			val decision = DispatchDecision.RequestRoute("T1", "A", "B")
-			assertThat(decision.rationale).isNull()
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
-		@DisplayName("RequestRoute with rationale stores the rationale string")
+		@DisplayName("RequestRoute with rationale stores the rationale list")
 		fun requestRoute_withRationale_rationaleStored() {
 			val decision =
 				DispatchDecision.RequestRoute(
 					trainName = "T1",
 					fromEndpointName = "A",
 					toEndpointName = "B",
-					rationale = "Shortest free path from A to B chosen"
+					rationale = listOf("Shortest free path from A to B chosen")
 				)
-			assertThat(decision.rationale).isEqualTo("Shortest free path from A to B chosen")
+			assertThat(decision.rationale).isEqualTo(listOf("Shortest free path from A to B chosen"))
 		}
 	}
 }

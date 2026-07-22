@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
+import cz.vutbr.fit.interlockSim.sim.toRationaleLogSuffix
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -271,7 +272,10 @@ class DispatchDecisionApplier(
 	private fun applyDecision(decision: DispatchDecision) =
 		when (decision) {
 			is DispatchDecision.ApproveTrain -> {
-				logger.debug { "Applying ApproveTrain: trainId=${decision.trainId}" }
+				logger.debug {
+					"Applying ApproveTrain: trainId=${decision.trainId}" +
+						decision.rationale.toRationaleLogSuffix()
+				}
 				onApproveTrain(decision.trainId)
 			}
 			is DispatchDecision.ReservePath -> applyReservePath(decision)
@@ -409,7 +413,8 @@ class DispatchDecisionApplier(
 		}
 		logger.debug {
 			"Applying HoldTrain: trainId=${decision.trainId}, " +
-				"duration=${decision.holdDurationSeconds}s"
+				"duration=${decision.holdDurationSeconds}s" +
+				decision.rationale.toRationaleLogSuffix()
 		}
 		val accepted = port.holdTrain(decision.trainId, decision.holdDurationSeconds)
 		if (!accepted) {
