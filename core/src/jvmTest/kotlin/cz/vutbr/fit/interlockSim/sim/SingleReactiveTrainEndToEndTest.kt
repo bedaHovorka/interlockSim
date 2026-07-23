@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -38,7 +39,9 @@ import java.util.concurrent.TimeUnit
  * - The spy receives at least one [AccelerationTarget.BRAKE] or [AccelerationTarget.COAST]
  *   decision (train slows near a STOP signal or destination).
  * - A custom [TrainDecisionPolicy] implementation can replace [AlgorithmicTrainDecisionPolicy]
- *   entirely via the [trainDecisionPolicy] parameter.
+ *   entirely via the [trainDecisionPolicy] parameter; an always-brake replacement stops every
+ *   train before it reaches the exit (asserts `getTrainsExited() == 0`), pinning the
+ *   `setTargetSpeed` actuator effect — not just that `decide` was invoked.
  *
  * ## Design choice
  *
@@ -131,5 +134,11 @@ class SingleReactiveTrainEndToEndTest : KoinTestBase() {
 		// The custom policy must have been invoked (even if no trains completed
 		// because we brake them).
 		assertThat(callCounts.isNotEmpty()).isTrue()
+
+		// The always-brake policy must actually take effect via the actuator: every train is
+		// braked to a stand before it can reach the exit, so none exits.  This pins the
+		// setTargetSpeed wiring — a bug that called decide() but dropped the actuator call
+		// would still pass the callCounts assertion above but fail this one.
+		assertThat(loop.getTrainsExited()).isEqualTo(0)
 	}
 }
