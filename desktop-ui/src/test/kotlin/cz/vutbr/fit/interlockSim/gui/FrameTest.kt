@@ -74,7 +74,9 @@ class FrameTest : AbstractFrameTestBase() {
 	fun frameHasCorrectInitialSize() {
 		runOnEDT {
 			assertThat(frame.width).isEqualTo(1024)
-			assertThat(frame.height).isEqualTo(768)
+			// Height reserves room for the DispatcherControlPanel line so station tracks stay
+			// visible (PR #801 review comment, Issue #561).
+			assertThat(frame.height).isEqualTo(818)
 		}
 	}
 

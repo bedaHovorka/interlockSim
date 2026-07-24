@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule
-import cz.vutbr.fit.interlockSim.gui.DispatcherControlPanel
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationStateCapture
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -117,25 +116,6 @@ val guiModule: Module =
 	}
 
 /**
- * GUI dispatcher module (SP2b.6)
- *
- * Provides the dispatcher control panel for Goal 10 (AI Dispatcher Routing).
- * The panel displays dispatcher mode (AUTO/SEMI_AUTO/MANUAL), allows mode override,
- * and shows the rationale for the last dispatcher decision.
- *
- * **Singleton scope:** DispatcherControlPanel is a singleton because:
- * - The GUI typically has a single main Frame with one DispatcherControlPanel instance
- * - Panel state is disconnected from simulation context (wired per start via modeState property)
- * - Panel is reused across simulation starts/stops, not created per simulation
- *
- * @see DispatcherControlPanel
- */
-val guiDispatcherModule: Module =
-	module {
-		single<DispatcherControlPanel> { DispatcherControlPanel() }
-	}
-
-/**
  * Animation module
  *
  * Manages animation infrastructure for animated GUI simulation.
@@ -162,8 +142,10 @@ val animationModule: Module =
  *
  * This is the module that gets passed to startKoin()
  *
- * NOTE: guiModule, guiDispatcherModule, and animationModule are NOT included by default to prevent overhead.
+ * NOTE: guiModule and animationModule are NOT included by default to prevent overhead.
  * Load them explicitly when GUI is needed (see Main.kt for conditional loading).
+ * (DispatcherControlPanel is direct-constructed by Frame and bound to the per-context
+ * scoped DispatcherModeState from dispatcherAgentModule — no separate GUI module.)
  */
 val interlockSimModule: Module =
 	module {

@@ -302,4 +302,21 @@ class DispatcherControlPanelTest {
 			assertThat(indicator.foreground.rgb).isEqualTo(java.awt.Color.RED.rgb)
 		}
 	}
+
+	@Test
+	fun `selecting a mode in the combo updates the indicator color immediately`() {
+		// Regression for Critical 2: the combo action listener must refresh the
+		// indicator on operator selection, not only on the next modeState sync
+		// (DispatcherModeState has no event-firing — without this the indicator
+		// would stay stale until modeState is re-assigned).
+		SwingUtilities.invokeAndWait {
+			panel.modeState = modeState
+
+			val comboBox = findComboBox()
+			comboBox.selectedItem = DispatcherMode.MANUAL
+
+			val indicator = findIndicator()
+			assertThat(indicator.foreground.rgb).isEqualTo(java.awt.Color.RED.rgb)
+		}
+	}
 }

@@ -40,9 +40,18 @@ import javax.swing.JPanel
  * ```
  *
  * **Integration:**
- * - Wired via Koin DI in [guiDispatcherModule]
- * - Must be manually wired to [DispatcherModeState] instance on simulation start
+ * - Direct-constructed by [Frame] (one panel per main window); not Koin-injected.
+ * - Bound to the per-context [DispatcherModeState] (a scoped Koin binding in
+ *   `dispatcherAgentModule`) on simulation start via [Frame.wireDispatcherControlPanel].
  * - Callbacks ([onModeChanged], [onRationale]) route user actions to the simulation
+ *
+ * **SEMI_AUTO approval (deferred):**
+ * Selecting a mode records the operator's choice in [DispatcherModeState] via
+ * [onModeChanged]. The dispatcher-applier enforcement of that mode (MANUAL drops
+ * decisions; SEMI_AUTO prompts the operator to approve/dismiss each pending
+ * decision) is intentionally **not** wired in this PR — wiring SEMI_AUTO without
+ * its approval UI would drop every decision. Enforcement + the SEMI_AUTO approval
+ * dialog are tracked by a follow-up sub-issue of #561.
  *
  * **Thread Safety:**
  * All Swing operations must be called from the Event Dispatch Thread (EDT).
@@ -139,6 +148,10 @@ class DispatcherControlPanel : JPanel() {
 			if (!updatingFromState) {
 				val selected = modeComboBox.selectedItem as? DispatcherMode
 				if (selected != null) {
+					// Immediate visual feedback: the indicator color must reflect the
+					// operator's selection right away, not only on the next modeState sync
+					// (DispatcherModeState has no event-firing — see class KDoc).
+					updateIndicator(selected)
 					onModeChanged?.invoke(selected)
 				}
 			}
@@ -171,17 +184,26 @@ class DispatcherControlPanel : JPanel() {
 		updatingFromState = true
 		try {
 			modeComboBox.selectedItem = mode
-
-			// Update visual indicator color based on mode
-			activeIndicator.foreground =
-				when (mode) {
-					DispatcherMode.AUTO -> Color.GREEN
-					DispatcherMode.SEMI_AUTO -> Color.ORANGE
-					DispatcherMode.MANUAL -> Color.RED
-				}
+			updateIndicator(mode)
 		} finally {
 			updatingFromState = false
 		}
+	}
+
+	/**
+	 * Sets the active-mode indicator color for [mode]. Shared by [syncUiToMode]
+	 * (programmatic mode sync) and the combo-box action listener (operator
+	 * selection) so the indicator never goes stale on user input.
+	 *
+	 * Must be called from the EDT.
+	 */
+	private fun updateIndicator(mode: DispatcherMode) {
+		activeIndicator.foreground =
+			when (mode) {
+				DispatcherMode.AUTO -> Color.GREEN
+				DispatcherMode.SEMI_AUTO -> Color.ORANGE
+				DispatcherMode.MANUAL -> Color.RED
+			}
 	}
 
 	/**
