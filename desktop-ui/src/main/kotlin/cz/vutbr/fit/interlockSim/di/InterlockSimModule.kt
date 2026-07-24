@@ -123,6 +123,11 @@ val guiModule: Module =
  * The panel displays dispatcher mode (AUTO/SEMI_AUTO/MANUAL), allows mode override,
  * and shows the rationale for the last dispatcher decision.
  *
+ * **Singleton scope:** DispatcherControlPanel is a singleton because:
+ * - The GUI typically has a single main Frame with one DispatcherControlPanel instance
+ * - Panel state is disconnected from simulation context (wired per start via modeState property)
+ * - Panel is reused across simulation starts/stops, not created per simulation
+ *
  * @see DispatcherControlPanel
  */
 val guiDispatcherModule: Module =

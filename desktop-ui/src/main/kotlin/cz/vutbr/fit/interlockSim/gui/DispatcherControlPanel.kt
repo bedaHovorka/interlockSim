@@ -86,7 +86,7 @@ class DispatcherControlPanel : JPanel() {
 		set(value) {
 			// Remove listener from old state if it exists
 			if (field != null) {
-				field!!.removePropertyChangeListener(STATE_PROP_EFFECTIVE_MODE, stateListener)
+				field?.removePropertyChangeListener(STATE_PROP_EFFECTIVE_MODE, stateListener)
 			}
 			field = value
 
@@ -229,9 +229,13 @@ class DispatcherControlPanel : JPanel() {
 		/**
 		 * Property name for [DispatcherModeState] effective mode changes.
 		 *
-		 * In a real implementation, [DispatcherModeState] would fire this property
-		 * change event when [getEffectiveMode] changes. For now, this is
-		 * declarative so listeners can be installed and manually triggered.
+		 * **Known limitation (SP2b.6):** [DispatcherModeState] does not currently fire
+		 * property change events. This constant serves as a placeholder for future
+		 * implementation. Listeners are installed but only triggered manually via
+		 * [updateDecisionRationale] or similar calls from the simulation engine.
+		 *
+		 * TODO(#561): When [DispatcherModeState] implements PropertyChangeEvent firing,
+		 * update the [stateListener] to respond to this event automatically.
 		 */
 		const val STATE_PROP_EFFECTIVE_MODE = "effectiveMode"
 	}

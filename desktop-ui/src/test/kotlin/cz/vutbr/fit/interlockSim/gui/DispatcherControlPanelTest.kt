@@ -16,6 +16,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import assertk.fail
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
@@ -63,17 +64,17 @@ class DispatcherControlPanelTest {
 
 	private fun findComboBox(): JComboBox<DispatcherMode> =
 		findComponent(panel, JComboBox::class.java)
-			?: error("JComboBox not found in DispatcherControlPanel")
+			?: fail("JComboBox not found in DispatcherControlPanel")
 
 	private fun findButton(text: String): JButton =
 		findAllComponents(panel, JButton::class.java)
 			.firstOrNull { it.text == text }
-			?: error("JButton with text '$text' not found in DispatcherControlPanel")
+			?: fail("JButton with text '$text' not found in DispatcherControlPanel")
 
 	private fun findIndicator(): JLabel =
 		findAllComponents(panel, JLabel::class.java)
 			.firstOrNull { it.text.contains("Active") }
-			?: error("Active indicator label not found in DispatcherControlPanel")
+			?: fail("Active indicator label not found in DispatcherControlPanel")
 
 	// ── Swing component helpers ────────────────────────────────────────────────
 

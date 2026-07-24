@@ -401,16 +401,22 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 */
 	private fun wireDispatcherControlPanel() {
 		val runner = simulationController.runner ?: return
+		// Cast to DefaultSimulationContext is necessary to access the Koin scope.
+		// SimulationContext interface does not expose the scope (by design);
+		// only DefaultSimulationContext provides Koin DI bindings like DispatcherModeState.
+		// This is acceptable because the dispatcher-agent module is only used with
+		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
 		val context = runner.simulationContext as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 			?: return
 		try {
 			val modeState = context.scope.getOrNull<cz.vutbr.fit.interlockSim.sim.DispatcherModeState>()
 			if (modeState != null) {
 				dispatcherControlPanel.modeState = modeState
+			} else {
+				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }
 			}
 		} catch (e: Exception) {
-			// Silently fail if DispatcherModeState is not available in the scope.
-			// The GUI remains functional but without dispatcher mode control (backward compatible).
+			logger.debug(e) { "Failed to wire DispatcherModeState to control panel; dispatcher control panel remains disabled (backward compatible)" }
 		}
 	}
 
