@@ -13,13 +13,12 @@ import cz.hovorka.kdisco.DiscoException
 import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.separatorAspect
 import cz.vutbr.fit.interlockSim.sim.separatorName
-import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
+import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 
 /**
@@ -142,20 +141,7 @@ class DefaultNetworkPerceptionPort(
 	 * block's two endpoint separators.  Returns `"unknown"` only when no name
 	 * is available from any source.
 	 */
-	private fun blockId(block: DynamicTrackBlock): String {
-		val explicit = block.name
-		if (!explicit.isNullOrBlank()) return explicit
-		val endNames =
-			runCatching { block.ends() }
-				.getOrNull()
-				?.mapNotNull { end ->
-					(DynamicWrapperUtils.unwrapToStatic(end) as? NodeCell)
-						?.getName()
-						?.takeIf { it.isNotBlank() }
-				}?.sorted()
-				.orEmpty()
-		return if (endNames.isNotEmpty()) endNames.joinToString("-") else "unknown"
-	}
+	private fun blockId(block: DynamicTrackBlock): String = BlockIdentity.stableBlockId(block)
 
 	// ── Train helper ──────────────────────────────────────────────────────
 

@@ -112,7 +112,7 @@ class KoogAgentFactory(
 	 * Wires:
 	 * 1. Tools from [ToolGroupRegistry] with context-scoped ports (SP1.4)
 	 * 2. Model config from [OllamaExecutorConfig] (global, copied to agent)
-	 * 3. System prompt (default railway dispatcher personality)
+	 * 3. System prompt (default railway dispatcher personality + static station topology, SP2b.8)
 	 *
 	 * ### Current state (SP1.4)
 	 *
@@ -146,12 +146,19 @@ class KoogAgentFactory(
 		// fire-and-forget decisions to the queue (applied on the kDisco thread by the applier).
 		val tools = toolRegistry.assembleAllTools(projection, commandQueue)
 
+		// SP2b.8 (Issue #695): serialize the controlled area's *static* topology (blocks, switches,
+		// signals, valid routes — SP3.2 compact IDs) and load it into the system prompt ONCE, here
+		// at agent construction. Per-turn perception tools then report only dynamic state and
+		// reference topology purely by ID, instead of re-transmitting the structure every turn.
+		val topologyPrompt = StationTopologySerializer.serialize(context)
+		val systemPrompt = "$DEFAULT_SYSTEM_PROMPT\n\n$topologyPrompt"
+
 		// Create agent via service (SP1.6 will add Koog wiring)
 		val agent =
 			agentService.createDispatchAgent(
 				modelName = ollamaConfig.modelName,
 				tools = tools,
-				systemPrompt = DEFAULT_SYSTEM_PROMPT
+				systemPrompt = systemPrompt
 			)
 
 		logger.debug { "KoogAgentFactory: created agent with ${tools.size} tools" }
