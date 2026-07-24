@@ -109,6 +109,14 @@ val commonCoreTestModule: Module =
 						?: throw IllegalStateException("DefaultEditingContext source not found in scope")
 				DefaultTopologyNavigator(context)
 			}
+
+			scoped<AutomaticPathFindingService> {
+				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
+			}
+
+			scoped<RouteFinder> {
+				DefaultRouteFinder(get<AutomaticPathFindingService>())
+			}
 		}
 
 		// Define simulationScope for per-context lifecycle management
