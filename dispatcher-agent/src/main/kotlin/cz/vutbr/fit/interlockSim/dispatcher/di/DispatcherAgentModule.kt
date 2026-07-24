@@ -92,6 +92,7 @@ import org.koin.dsl.module
  * - [NetworkPerceptionPort]: One perception port per context (SP0.2 / SP1.4)
  * - [NetworkActuatorPort]: One actuator port per context (SP0.3 / SP1.4)
  * - [ActuatorCommandQueue]: One handoff queue per simulation (SP0.5)
+ * - [DispatcherModeState]: One mode controller per simulation (SP2b.6, Issue #561) — manages AUTO/SEMI_AUTO/MANUAL mode and human override
  * - [KoogAgentFactory]: Factory receives context-scoped dependencies (ports) and creates agents on demand
  *
  * This design allows multiple simultaneous simulations (e.g., in tests) each with:

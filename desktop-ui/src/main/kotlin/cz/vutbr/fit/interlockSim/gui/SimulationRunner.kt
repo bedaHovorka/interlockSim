@@ -38,6 +38,9 @@ class SimulationRunner(
 	private val pcs = PropertyChangeSupport(this)
 	private val lifecycleLock = Any()
 
+	/** Expose the context for dispatcher integration (SP2b.6, Issue #561) */
+	val simulationContext: SimulationContext get() = context
+
 	/** Single lock guarding pausedBacking, stepEventRequested, and stepTimeRequested. */
 	private val lock = Object()
 

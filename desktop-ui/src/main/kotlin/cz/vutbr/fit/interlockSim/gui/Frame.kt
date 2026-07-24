@@ -401,7 +401,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 */
 	private fun wireDispatcherControlPanel() {
 		val runner = simulationController.runner ?: return
-		val context = (runner as? SimulationRunner)?.context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+		val context = runner.simulationContext as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 			?: return
 		try {
 			val modeState = context.scope.getOrNull<cz.vutbr.fit.interlockSim.sim.DispatcherModeState>()
