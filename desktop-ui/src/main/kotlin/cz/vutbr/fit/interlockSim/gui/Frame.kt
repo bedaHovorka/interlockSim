@@ -403,14 +403,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 */
 	private fun wireDispatcherControlPanel() {
 		val runner = simulationController.runner ?: return
+		val simContext = runner.simulationContext
 		// Cast to DefaultSimulationContext is necessary to access the Koin scope.
 		// SimulationContext interface does not expose the scope (by design);
 		// only DefaultSimulationContext provides Koin DI bindings like DispatcherModeState.
 		// This is acceptable because the dispatcher-agent module is only used with
 		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
-		val context = runner.simulationContext as? DefaultSimulationContext
+		val context = simContext as? DefaultSimulationContext
 		if (context == null) {
-			logger.debug { "Context type ${runner.simulationContext::class.simpleName} is not DefaultSimulationContext; dispatcher control panel remains disabled (backward compatible)" }
+			logger.debug { "Context type ${simContext::class.simpleName} is not DefaultSimulationContext; dispatcher control panel remains disabled (backward compatible)" }
 			return
 		}
 		try {
