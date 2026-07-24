@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -217,6 +218,10 @@ class ExampleRegistry {
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
 		val planner = context.scope.get<DispatcherPlanner>()
+		// SP2b.6 (Issue #561): scoped sink that forwards each applied decision to the GUI
+		// DispatcherControlPanel (the "Why this route?" button). Null-tolerant: console runs
+		// resolve the hub but never attach a sink, so onDecisionApplied is a no-op there.
+		val decisionListener = context.scope.getOrNull<DispatchDecisionListenerHub>()
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
 		// NoOpSimulationController (console runs) has no speed cap, so an async planner cannot
 		// honour the 2× real-time limit there. GUI runs pass the DelegatingSimulationController
@@ -229,7 +234,8 @@ class ExampleRegistry {
 				networkActuator = actuatorPort,
 				onApproveTrain = loop::approveQueuedTrain,
 				onBlockTransition = loop::incrementBlockTransition,
-				onFailedReservation = loop::incrementFailedReservation
+				onFailedReservation = loop::incrementFailedReservation,
+				onDecisionApplied = decisionListener
 			)
 		// Evict the duplicate-suppression guard's entries for a train once any of its blocks
 		// releases — see DispatchDecisionApplier.evictReservationsFor for why this must not

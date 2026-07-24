@@ -24,7 +24,9 @@ import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import org.koin.core.module.Module
@@ -46,6 +48,7 @@ import org.koin.dsl.module
  * | [NetworkPerceptionPort] | per [DefaultSimulationContext] | [DefaultNetworkPerceptionPort] (SP1.4) |
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] (SP1.4) |
  * | [ActuatorCommandQueue] | per [DefaultSimulationContext] | new instance |
+ * | [DispatcherModeState] | per [DefaultSimulationContext] | new instance (SP2b.6) |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance (SP4.2) |
  * | [KoogAgentFactory] | per [DefaultSimulationContext] | [KoogAgentFactory] (SP1.3, updated in SP1.4) |
  *
@@ -90,6 +93,7 @@ import org.koin.dsl.module
  * - [NetworkPerceptionPort]: One perception port per context (SP0.2 / SP1.4)
  * - [NetworkActuatorPort]: One actuator port per context (SP0.3 / SP1.4)
  * - [ActuatorCommandQueue]: One handoff queue per simulation (SP0.5)
+ * - [DispatcherModeState]: One mode controller per simulation (SP2b.6, Issue #561) — manages AUTO/SEMI_AUTO/MANUAL mode and human override
  * - [KoogAgentFactory]: Factory receives context-scoped dependencies (ports) and creates agents on demand
  *
  * This design allows multiple simultaneous simulations (e.g., in tests) each with:
@@ -174,6 +178,21 @@ val dispatcherAgentModule: Module =
 
 			// SP0.5: ActuatorCommandQueue: one thread-safe handoff queue per simulation context.
 			scoped<ActuatorCommandQueue> { ActuatorCommandQueue() }
+
+			// SP2b.6 (Issue #561): DispatcherModeState — dispatcher operating mode controller
+			// One per context for independent mode management across concurrent simulations.
+			// Defaults to AUTO mode; can be overridden to SEMI_AUTO (require human approval) or
+			// MANUAL (monitor-only, no automatic routing). The GUI DispatcherControlPanel binds
+			// to this state to display and allow mode selection.
+			scoped<DispatcherModeState> { DispatcherModeState() }
+
+			// SP2b.6 (Issue #561): DispatchDecisionListenerHub — mutable sink that bridges the
+			// sim-thread DispatchDecisionApplier to the GUI DispatcherControlPanel. The applier
+			// captures this scoped instance at construction (ExampleRegistry.wireDispatcherAgent)
+			// and calls onDecisionApplied for each applied decision; the GUI later points setSink
+			// at a lambda that pushes the decision to the panel on the EDT. Headless/console runs
+			// leave the sink null (no-op). One per context so concurrent sims never cross-wire.
+			scoped<DispatchDecisionListenerHub> { DispatchDecisionListenerHub() }
 
 			// SP4.2 (Issue #564): Late-bound pacing controller for the agent-driver loop.
 			// Wiring layers (e.g. :desktop-ui's ExampleRegistry.wireDispatcherAgent) hand this

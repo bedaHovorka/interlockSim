@@ -144,6 +144,8 @@ val animationModule: Module =
  *
  * NOTE: guiModule and animationModule are NOT included by default to prevent overhead.
  * Load them explicitly when GUI is needed (see Main.kt for conditional loading).
+ * (DispatcherControlPanel is direct-constructed by Frame and bound to the per-context
+ * scoped DispatcherModeState from dispatcherAgentModule — no separate GUI module.)
  */
 val interlockSimModule: Module =
 	module {
@@ -155,7 +157,7 @@ val interlockSimModule: Module =
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
 			dispatcherAgentModule, // Goal 10 dispatcher singleton/scope bindings
 			simulationDesktopModule // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
-			// NOTE: guiModule and animationModule are NOT included by default
+			// NOTE: guiModule, guiDispatcherModule, and animationModule are NOT included by default
 			// Load them explicitly when GUI is needed (edit mode, animated sim mode)
 		)
 	}

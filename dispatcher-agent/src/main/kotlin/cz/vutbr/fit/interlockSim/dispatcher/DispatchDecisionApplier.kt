@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
@@ -87,7 +88,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   is received, a warning is logged and the decision is dropped.
  *
  * @since Issue #731 (SP0.9 — Goal 10); [trainLifecyclePort] added in Issue #556 (SP2b.1);
- *   [modeState] + [semiAutoApprover] added in Issue #559 (SP2b.4)
+ *   [modeState] + [semiAutoApprover] added in Issue #559 (SP2b.4);
+ *   [onDecisionApplied] added in Issue #561 (SP2b.6)
  */
 class DispatchDecisionApplier(
 	private val queue: ActuatorCommandQueue,
@@ -154,7 +156,25 @@ class DispatchDecisionApplier(
 	 *
 	 * @since Issue #559 (SP2b.4 — Goal 10)
 	 */
-	private val semiAutoApprover: ((DispatchDecision) -> Boolean)? = null
+	private val semiAutoApprover: ((DispatchDecision) -> Boolean)? = null,
+	/**
+	 * SP2b.6: Optional observer notified (on the kDisco simulation thread) for
+	 * each applied, non-[DispatchDecision.NoAction] decision.
+	 *
+	 * When `null` (the default) the applier behaves exactly as before SP2b.6 —
+	 * applied decisions are not surfaced to any listener. When non-null (e.g. a
+	 * [cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub] pulled from the
+	 * per-context Koin scope), every gated, non-`NoAction` decision is forwarded
+	 * so a GUI ("Why this route?" panel) can display its rationale.
+	 *
+	 * Dropped decisions (under [DispatcherMode.MANUAL]) and [DispatchDecision.NoAction]
+	 * do not trigger the listener — it fires only for decisions that were actually
+	 * applied.
+	 *
+	 * @since Issue #561 (SP2b.6 — Goal 10)
+	 * @see cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
+	 */
+	private val onDecisionApplied: DispatchDecisionListener? = null
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -216,6 +236,12 @@ class DispatchDecisionApplier(
 		for (decision in decisions) {
 			if (shouldApply(decision)) {
 				applyDecision(decision)
+				// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
+				// "Why this route?" panel can display the rationale. NoAction carries no
+				// rationale, and dropped decisions (e.g. under MANUAL) are not "applied".
+				if (decision !is DispatchDecision.NoAction) {
+					onDecisionApplied?.onDecisionApplied(decision)
+				}
 			}
 		}
 	}
