@@ -70,6 +70,84 @@ object TestTopologies {
 		return context
 	}
 
+	/**
+	 * A chain of [stageCount] binary-switch bypass stages creating exactly 2^[stageCount]
+	 * switch-constrained paths from entry "A" to exit "B".
+	 *
+	 * **Layout per stage i (0-indexed):**
+	 * - `SW{i}` — [RailSwitch] split point (SIMPLE_RIGHT_FALSE, HORIZONTAL).
+	 *   From the incoming (west/A) direction it fans out to:
+	 *   - east (Segment.F → main leg, directly to the merge semaphore), and
+	 *   - southeast (Segment.G → bypass leg, through the bypass semaphore).
+	 * - `BrSem{i}` — [RailSemaphore] bypass intermediate node (no path constraints).
+	 * - `MrgSem{i}` — [RailSemaphore] merge point (accepts from both main and bypass legs;
+	 *   no switch-constraint filtering because it is not a [RailSwitch]).
+	 *
+	 * Each stage doubles the number of active paths, so after [stageCount] stages the
+	 * total path count from "A" to "B" is 2^[stageCount].
+	 *
+	 * **Intended use:** performance testing of [findAllSwitchConstrainedPaths] enumeration
+	 * on branchy networks.  With [stageCount] = 15 this gives 32 768 paths, which is
+	 * enough to make the combinatorial enumeration cost observable while staying well
+	 * below the 2^20 threshold that would make the test itself prohibitively slow.
+	 *
+	 * @param stageCount number of binary-switch bypass stages (1..20); default 15
+	 * @return [EditingContext] with the branchy network and exactly 2 [InOut] separators
+	 *   named "A" (entry) and "B" (exit)
+	 */
+	fun branchySwitchChain(stageCount: Int = 15): EditingContext {
+		require(stageCount in 1..20) { "stageCount must be in 1..20, got $stageCount" }
+
+		// Grid sizing: entry at x=1; each stage advances x by 10; exit adds 4 more.
+		// Max x = 1 + stageCount*10 + 4; height = 20 comfortably fits y=5 and y=10 nodes.
+		val gridWidth = stageCount * 10 + 20
+		val gridHeight = 20
+		val context = DefaultEditingContext(gridWidth, gridHeight)
+
+		val entry = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+		context.putCell(Point(1, 5), entry)
+
+		var prevNode: NodeCell = entry
+		var prevX = 1
+
+		for (i in 0 until stageCount) {
+			// Split switch: 4 units east of previous merge/entry node.
+			val swX = prevX + 4
+			// Bypass semaphore: 3 east, 5 south of the split switch (Segment.G = southeast).
+			val brX = swX + 3
+			val brY = 10
+			// Merge semaphore: 6 east of the split switch (Segment.F = east/main leg).
+			val mrgX = swX + 6
+
+			val sw = RailSwitch("SW$i", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			val brSem = RailSemaphore("BrSem$i", false, Cell.SpatialType.HORIZONTAL)
+			val mrgSem = RailSemaphore("MrgSem$i", false, Cell.SpatialType.HORIZONTAL)
+
+			context.putCell(Point(swX, 5), sw)
+			context.putCell(Point(brX, brY), brSem)
+			context.putCell(Point(mrgX, 5), mrgSem)
+
+			// prevNode → sw  (incoming track from left; arriving at Segment.A on the switch)
+			context.joinCells(Point(prevX, 5), Point(swX, 5), SimpleTrackBlock(prevNode, sw, 100.0, 80.0))
+			// sw → mrgSem    (main leg; Segment.F east direction)
+			context.joinCells(Point(swX, 5), Point(mrgX, 5), SimpleTrackBlock(sw, mrgSem, 100.0, 80.0))
+			// sw → brSem     (bypass leg; Segment.G southeast direction)
+			context.joinCells(Point(swX, 5), Point(brX, brY), SimpleTrackBlock(sw, brSem, 100.0, 80.0))
+			// brSem → mrgSem (bypass completion; RailSemaphore imposes no path constraints)
+			context.joinCells(Point(brX, brY), Point(mrgX, 5), SimpleTrackBlock(brSem, mrgSem, 100.0, 80.0))
+
+			prevNode = mrgSem
+			prevX = mrgX
+		}
+
+		val exitX = prevX + 4
+		val exit = InOut("B", false, Cell.SpatialType.HORIZONTAL)
+		context.putCell(Point(exitX, 5), exit)
+		context.joinCells(Point(prevX, 5), Point(exitX, 5), SimpleTrackBlock(prevNode, exit, 100.0, 80.0))
+
+		return context
+	}
+
 	fun linearPathWithSemaphoreSequence(
 		semaphoreCount: Int = 3,
 		semaphoresAllowing: Boolean = false

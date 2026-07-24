@@ -435,5 +435,49 @@ class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
 
 			assertThat(duration.inWholeMilliseconds).isLessThan(1000L)
 		}
+
+		/**
+		 * Verifies that [findAllPaths] on a switch-rich branchy network
+		 * (a) respects the [maxPaths] cap after full BFS enumeration, and
+		 * (b) completes within an acceptable wall-clock budget.
+		 *
+		 * **Network composition:** [TestTopologies.branchySwitchChain] with 15 binary-switch
+		 * bypass stages creates exactly 2^15 = 32 768 switch-constrained paths from "A" to
+		 * "B".  The implementation enumerates all 32 768 paths in BFS *before* applying the
+		 * [maxPaths] cap, so this test exercises the combinatorial enumeration cost directly
+		 * and will catch regressions that make [findAllSwitchConstrainedPaths] unexpectedly
+		 * slower on branchy networks.
+		 *
+		 * **Time budget (5 000 ms):** Generous to survive CI variance; typical JVM execution
+		 * for 32 768 enumerated paths is well under 1 s.
+		 */
+		@Test
+		fun `findAllPaths on 15-stage branchy network respects maxPaths cap and completes within time budget`() {
+			// 15 binary-switch bypass stages → 2^15 = 32 768 switch-constrained paths.
+			val ctx = TestTopologies.branchySwitchChain(stageCount = 15).also { context = it }
+			val svc = ctx.getAutomaticPathFindingService()
+			val inOuts = ctx.getInOuts()
+			val a = inOuts.single { it.getName() == "A" }
+			val b = inOuts.single { it.getName() == "B" }
+
+			val maxPaths = 10
+
+			// Warm-up to reduce JVM JIT noise before the timed measurement.
+			repeat(2) { svc.findAllPaths(a, b, maxPaths = maxPaths) }
+
+			val duration =
+				measureTime {
+					svc.findAllPaths(a, b, maxPaths = maxPaths)
+				}
+
+			// Time budget: full BFS enumeration of 32 768 paths must finish in under 5 s.
+			assertThat(duration.inWholeMilliseconds).isLessThan(5000L)
+
+			// Correctness: the maxPaths cap is applied after enumeration and must be respected.
+			val result = svc.findAllPaths(a, b, maxPaths = maxPaths)
+			// 32 768 available paths >> maxPaths=10, so the cap is saturated.
+			assertThat(result.size <= maxPaths).isTrue()
+			assertThat(result).hasSize(maxPaths)
+		}
 	}
 }
