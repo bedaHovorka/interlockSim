@@ -230,14 +230,18 @@ class DispatcherControlPanel : JPanel() {
 		 * Property name for [DispatcherModeState] effective mode changes.
 		 *
 		 * **Known limitation (SP2b.6):** [DispatcherModeState] does not currently fire
-		 * PropertyChangeEvents when mode changes. Currently, mode propagation works via:
+		 * PropertyChangeEvents when mode changes. This constant and the listener installation
+		 * (in the [modeState] property setter, lines 89 and 95) represent **preparatory
+		 * infrastructure** for future functionality, not a bug. Currently, mode propagation
+		 * works via:
 		 * - **Direct UI calls:** User selects a mode in the dropdown; `updateEffectiveMode()`
 		 *   synchronously updates the UI, calling registered `onModeChanged` callbacks
 		 * - **Decision rationale updates:** `updateDecisionRationale()` updates the rationale
 		 *   field only (does not trigger mode changes)
 		 *
 		 * When [DispatcherModeState] is enhanced to fire PropertyChangeEvents for mode
-		 * changes, automatic UI synchronization via [stateListener] will be possible.
+		 * changes, automatic UI synchronization via [stateListener] will activate without
+		 * changes to this class.
 		 *
 		 * TODO(#561): When [DispatcherModeState] implements PropertyChangeEvent firing,
 		 * update the [stateListener] to respond to automatic mode changes.

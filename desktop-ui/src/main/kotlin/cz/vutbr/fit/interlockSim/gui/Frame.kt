@@ -11,12 +11,14 @@ package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
+import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
@@ -406,13 +408,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// only DefaultSimulationContext provides Koin DI bindings like DispatcherModeState.
 		// This is acceptable because the dispatcher-agent module is only used with
 		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
-		val context = runner.simulationContext as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+		val context = runner.simulationContext as? DefaultSimulationContext
 		if (context == null) {
 			logger.debug { "Context is not DefaultSimulationContext; dispatcher control panel remains disabled (backward compatible)" }
 			return
 		}
 		try {
-			val modeState = context.scope.getOrNull<cz.vutbr.fit.interlockSim.sim.DispatcherModeState>()
+			val modeState = context.scope.getOrNull<DispatcherModeState>()
 			if (modeState != null) {
 				dispatcherControlPanel.modeState = modeState
 			} else {
