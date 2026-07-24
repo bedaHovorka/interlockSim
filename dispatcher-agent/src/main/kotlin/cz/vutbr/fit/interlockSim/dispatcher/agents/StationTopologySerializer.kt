@@ -107,7 +107,12 @@ object StationTopologySerializer {
 		val grid = env.getRailWayNetGrid()
 
 		val inOuts: List<DynamicInOut> = env.getInOuts().toList()
-		val inOutNames = inOuts.map { it.name }.filter { it.isNotBlank() }.distinct().sorted()
+		val inOutNames =
+			inOuts
+				.map { it.name }
+				.filter { it.isNotBlank() }
+				.distinct()
+				.sorted()
 
 		val signals =
 			grid
