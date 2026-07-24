@@ -248,3 +248,4 @@ class DispatcherControlPanel : JPanel() {
 		 */
 		const val STATE_PROP_EFFECTIVE_MODE = "effectiveMode"
 	}
+}
