@@ -216,6 +216,8 @@ class DispatcherControlPanelTest {
 		val decision = TestDispatchDecision(rationale)
 
 		SwingUtilities.invokeAndWait {
+			// Wire modeState so the button is enabled
+			panel.modeState = modeState
 			panel.updateDecisionRationale(decision)
 		}
 

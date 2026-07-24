@@ -234,7 +234,7 @@ class DispatcherControlPanel : JPanel() {
 		 * (in the [modeState] property setter, lines 89 and 95) represent **preparatory
 		 * infrastructure** for future functionality, not a bug. Currently, mode propagation
 		 * works via:
-		 * - **Direct UI calls:** User selects a mode in the dropdown; `updateEffectiveMode()`
+		 * - **Direct UI calls:** User selects a mode in the dropdown; `syncUiToMode()`
 		 *   synchronously updates the UI, calling registered `onModeChanged` callbacks
 		 * - **Decision rationale updates:** `updateDecisionRationale()` updates the rationale
 		 *   field only (does not trigger mode changes)
