@@ -178,7 +178,7 @@ val dispatcherAgentModule: Module =
 			// SP0.5: ActuatorCommandQueue: one thread-safe handoff queue per simulation context.
 			scoped<ActuatorCommandQueue> { ActuatorCommandQueue() }
 
-			// SP2b.4 (Issue #559): DispatcherModeState — dispatcher operating mode controller
+			// SP2b.6 (Issue #561): DispatcherModeState — dispatcher operating mode controller
 			// One per context for independent mode management across concurrent simulations.
 			// Defaults to AUTO mode; can be overridden to SEMI_AUTO (require human approval) or
 			// MANUAL (monitor-only, no automatic routing). The GUI DispatcherControlPanel binds

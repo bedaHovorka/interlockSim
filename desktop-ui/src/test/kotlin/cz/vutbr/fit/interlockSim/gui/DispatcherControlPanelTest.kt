@@ -64,17 +64,17 @@ class DispatcherControlPanelTest {
 
 	private fun findComboBox(): JComboBox<DispatcherMode> =
 		findComponent(panel, JComboBox::class.java)
-			?: fail("JComboBox not found in DispatcherControlPanel")
+			?: fail("Component finder: JComboBox<DispatcherMode> not found in DispatcherControlPanel")
 
 	private fun findButton(text: String): JButton =
 		findAllComponents(panel, JButton::class.java)
 			.firstOrNull { it.text == text }
-			?: fail("JButton with text '$text' not found in DispatcherControlPanel")
+			?: fail("Component finder: JButton with text '$text' not found in DispatcherControlPanel")
 
 	private fun findIndicator(): JLabel =
 		findAllComponents(panel, JLabel::class.java)
 			.firstOrNull { it.text.contains("Active") }
-			?: fail("Active indicator label not found in DispatcherControlPanel")
+			?: fail("Component finder: Active indicator label not found in DispatcherControlPanel")
 
 	// ── Swing component helpers ────────────────────────────────────────────────
 

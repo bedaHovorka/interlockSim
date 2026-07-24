@@ -86,7 +86,7 @@ class DispatcherControlPanel : JPanel() {
 		set(value) {
 			// Remove listener from old state if it exists
 			if (field != null) {
-				field?.removePropertyChangeListener(STATE_PROP_EFFECTIVE_MODE, stateListener)
+				field.removePropertyChangeListener(STATE_PROP_EFFECTIVE_MODE, stateListener)
 			}
 			field = value
 
@@ -230,13 +230,17 @@ class DispatcherControlPanel : JPanel() {
 		 * Property name for [DispatcherModeState] effective mode changes.
 		 *
 		 * **Known limitation (SP2b.6):** [DispatcherModeState] does not currently fire
-		 * property change events. This constant serves as a placeholder for future
-		 * implementation. Listeners are installed but only triggered manually via
-		 * [updateDecisionRationale] or similar calls from the simulation engine.
+		 * PropertyChangeEvents when mode changes. Currently, mode propagation works via:
+		 * - **Direct UI calls:** User selects a mode in the dropdown; `updateEffectiveMode()`
+		 *   synchronously updates the UI, calling registered `onModeChanged` callbacks
+		 * - **Decision rationale updates:** `updateDecisionRationale()` updates the rationale
+		 *   field only (does not trigger mode changes)
+		 *
+		 * When [DispatcherModeState] is enhanced to fire PropertyChangeEvents for mode
+		 * changes, automatic UI synchronization via [stateListener] will be possible.
 		 *
 		 * TODO(#561): When [DispatcherModeState] implements PropertyChangeEvent firing,
-		 * update the [stateListener] to respond to this event automatically.
+		 * update the [stateListener] to respond to automatic mode changes.
 		 */
 		const val STATE_PROP_EFFECTIVE_MODE = "effectiveMode"
 	}
-}

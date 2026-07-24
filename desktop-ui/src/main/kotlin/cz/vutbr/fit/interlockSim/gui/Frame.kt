@@ -407,7 +407,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// This is acceptable because the dispatcher-agent module is only used with
 		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
 		val context = runner.simulationContext as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-			?: return
+		if (context == null) {
+			logger.debug { "Context is not DefaultSimulationContext; dispatcher control panel remains disabled (backward compatible)" }
+			return
+		}
 		try {
 			val modeState = context.scope.getOrNull<cz.vutbr.fit.interlockSim.sim.DispatcherModeState>()
 			if (modeState != null) {
