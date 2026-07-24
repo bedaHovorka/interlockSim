@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule
+import cz.vutbr.fit.interlockSim.gui.DispatcherControlPanel
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationStateCapture
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -116,6 +117,20 @@ val guiModule: Module =
 	}
 
 /**
+ * GUI dispatcher module (SP2b.6)
+ *
+ * Provides the dispatcher control panel for Goal 10 (AI Dispatcher Routing).
+ * The panel displays dispatcher mode (AUTO/SEMI_AUTO/MANUAL), allows mode override,
+ * and shows the rationale for the last dispatcher decision.
+ *
+ * @see DispatcherControlPanel
+ */
+val guiDispatcherModule: Module =
+	module {
+		single<DispatcherControlPanel> { DispatcherControlPanel() }
+	}
+
+/**
  * Animation module
  *
  * Manages animation infrastructure for animated GUI simulation.
@@ -142,7 +157,7 @@ val animationModule: Module =
  *
  * This is the module that gets passed to startKoin()
  *
- * NOTE: guiModule and animationModule are NOT included by default to prevent overhead.
+ * NOTE: guiModule, guiDispatcherModule, and animationModule are NOT included by default to prevent overhead.
  * Load them explicitly when GUI is needed (see Main.kt for conditional loading).
  */
 val interlockSimModule: Module =
@@ -155,7 +170,7 @@ val interlockSimModule: Module =
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
 			dispatcherAgentModule, // Goal 10 dispatcher singleton/scope bindings
 			simulationDesktopModule // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
-			// NOTE: guiModule and animationModule are NOT included by default
+			// NOTE: guiModule, guiDispatcherModule, and animationModule are NOT included by default
 			// Load them explicitly when GUI is needed (edit mode, animated sim mode)
 		)
 	}

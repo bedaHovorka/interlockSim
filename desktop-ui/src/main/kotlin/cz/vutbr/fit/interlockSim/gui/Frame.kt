@@ -115,6 +115,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
 
+	// Dispatcher control panel (Issue #561, Goal 10 SP2b.6)
+	internal val dispatcherControlPanel: DispatcherControlPanel = DispatcherControlPanel()
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -178,11 +181,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							toolBar.showSimulationControls()
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 							controlPanel.setStopEnabled(true)
+							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
+							wireDispatcherControlPanel()
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
 							toolBar.hideSimulationControls()
 							simulationControlPanel.runner = null
+							dispatcherControlPanel.modeState = null
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 						}
@@ -224,6 +230,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		northContainer.add(controlPanel)
 		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(simulationControlPanel)
+		dispatcherControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
+		northContainer.add(dispatcherControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
 		// Route speed changes from SimulationControlPanel through SimulationController so
@@ -320,6 +328,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
 		simulationControlPanel.isVisible = true
+		dispatcherControlPanel.isVisible = true
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
@@ -366,6 +375,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Hide ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = false
 		simulationControlPanel.isVisible = false
+		dispatcherControlPanel.isVisible = false
+		dispatcherControlPanel.modeState = null
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
@@ -377,6 +388,30 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
+	}
+
+	/**
+	 * Wire the [DispatcherControlPanel] to the [DispatcherModeState] from the active simulation context (Issue #561).
+	 *
+	 * Attempts to retrieve [cz.vutbr.fit.interlockSim.sim.DispatcherModeState] from the context's Koin scope
+	 * (if using the dispatcher-agent module). If the mode state is not available or the lookup fails,
+	 * the panel remains disabled but functional (backward compatibility).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun wireDispatcherControlPanel() {
+		val runner = simulationController.runner ?: return
+		val context = (runner as? SimulationRunner)?.context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+			?: return
+		try {
+			val modeState = context.scope.getOrNull<cz.vutbr.fit.interlockSim.sim.DispatcherModeState>()
+			if (modeState != null) {
+				dispatcherControlPanel.modeState = modeState
+			}
+		} catch (e: Exception) {
+			// Silently fail if DispatcherModeState is not available in the scope.
+			// The GUI remains functional but without dispatcher mode control (backward compatible).
+		}
 	}
 
 	/**
