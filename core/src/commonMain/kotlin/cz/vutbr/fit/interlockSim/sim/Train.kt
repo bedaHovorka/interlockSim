@@ -29,6 +29,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -1316,10 +1318,31 @@ class Train :
 	/**
 	 * Current track speed limit in m/s derived from the reserved path.
 	 *
-	 * Computed as `path.maxSpeed(path.getFirst())` — the minimum speed limit across all tracks
-	 * of the reserved path, as approached from the train's current separator (track geometry,
-	 * switch positions, etc.). This is the **physical** track constraint, independent of the
-	 * signal aspect (captured separately in [signalAheadAspect]).
+	 * Folds each intermediate track/switch element's [PathElement.contributeToPathMaxSpeed]
+	 * along [pathToSemaphore], starting from an unrestricted seed — the minimum speed limit
+	 * across all tracks of the reserved path, as approached from the train's current
+	 * separator (track geometry, switch positions, etc.). This is the **physical** track
+	 * constraint, independent of the signal aspect (captured separately in [signalAheadAspect]).
+	 *
+	 * **Bugfix (Issue #565 follow-up, SP4.3 regression):** [pathToSemaphore]'s first element
+	 * is the semaphore the train most recently departed — e.g. a bidirectional semaphore
+	 * that reports `STOP` for the *opposite* direction it no longer faces (see the
+	 * `SEMAPHORE_SIGNAL_NOT_UPDATED ... reverse direction` warning in
+	 * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]). Delegating straight to
+	 * [Path.maxSpeed] would seed its running minimum from that departed semaphore's *own*
+	 * live [cz.vutbr.fit.interlockSim.objects.cells.Signal.allowedSpeed] (0.0 for `STOP`),
+	 * collapsing this supposedly signal-independent value to `0.0` for the rest of the leg —
+	 * every subsequent [TrainDecisionPolicy] tick would then see "no speed permitted" and
+	 * brake the train to a stand it can never leave, because a train at velocity 0 never
+	 * crosses another separator to advance [pathToSemaphore] and clear the stale reading.
+	 * This was latent since [Path.maxSpeed] was introduced (Issue #552) — nothing invoked
+	 * this property against a live, moving train until SP4.3 wired [TrainDecisionPolicy]
+	 * into [wireSynchronousDispatcher], which is what exposed it as trains failing to
+	 * complete their routes. Folding the path elements directly (mirroring
+	 * [cz.vutbr.fit.interlockSim.objects.paths.AbstractPath.maxSpeed]'s own loop, minus its
+	 * departed-separator seed) restores the "independent of signal aspect" contract without
+	 * touching the shared [Path.maxSpeed] used by [cz.vutbr.fit.interlockSim.objects.paths.AbstractPath]'s
+	 * other, legitimate caller (semaphore path setup, where seeding from the entry signal is correct).
 	 *
 	 * Returns [ABSOLUTE_MAX_SPEED] when no path is currently set for this train (the
 	 * interlocking has not yet reserved a route; no physical constraint is known).
@@ -1327,7 +1350,18 @@ class Train :
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
 	val currentSpeedLimitMps: Double
-		get() = pathToSemaphore?.let { it.maxSpeed(it.getFirst()) } ?: ABSOLUTE_MAX_SPEED
+		get() =
+			pathToSemaphore?.let { path ->
+				var min = ABSOLUTE_MAX_SPEED
+				var prevSep: PathSeparator? = path.getFirst()
+				for (element in path) {
+					if (element == path.getFirst() || element == path.getLast()) continue
+					val contribution = element.contributeToPathMaxSpeed(prevSep, min)
+					min = contribution.minSpeed
+					prevSep = contribution.updatedPreviousSeparator
+				}
+				min
+			} ?: ABSOLUTE_MAX_SPEED
 
 	/**
 	 * Whether the train is currently stopped (velocity = 0).
