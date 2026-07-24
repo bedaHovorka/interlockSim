@@ -70,4 +70,14 @@ class BlockIdentityTest {
 
 		assertThat(result).isEqualTo("unknown")
 	}
+
+	@Test
+	@DisplayName("returns 'unknown' when block.ends() throws, instead of propagating")
+	fun endsThrowingYieldsUnknown() {
+		val block = mockk<DynamicTrackBlock>(relaxed = true)
+		every { block.name } returns null
+		every { block.ends() } throws IllegalStateException("broken ends")
+
+		assertThat(BlockIdentity.stableBlockId(block)).isEqualTo("unknown")
+	}
 }

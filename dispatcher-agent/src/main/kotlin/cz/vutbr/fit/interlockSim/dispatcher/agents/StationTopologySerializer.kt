@@ -106,13 +106,10 @@ object StationTopologySerializer {
 	fun describe(env: SimulationEnvironment): StationTopology {
 		val grid = env.getRailWayNetGrid()
 
-		val inOuts: List<DynamicInOut> = env.getInOuts().toList()
-		val inOutNames =
-			inOuts
-				.map { it.name }
-				.filter { it.isNotBlank() }
-				.distinct()
-				.sorted()
+		// Only InOuts with a usable name are listed and used as route endpoints, so a route never
+		// references an entry/exit point the prompt omitted (Issue #695 review, Important #2).
+		val namedInOuts: List<DynamicInOut> = env.getInOuts().toList().filter { it.name.isNotBlank() }
+		val inOutNames = namedInOuts.map { it.name }.distinct().sorted()
 
 		val signals =
 			grid
@@ -145,7 +142,7 @@ object StationTopologySerializer {
 			signals = signals,
 			switches = switches,
 			blocks = blocks,
-			routes = describeRoutes(env, inOuts)
+			routes = describeRoutes(env, namedInOuts)
 		)
 	}
 
@@ -162,7 +159,9 @@ object StationTopologySerializer {
 			.append(joinOrNone(topology.switches.map { "${it.id.name}[${it.type}]" }))
 			.append('\n')
 		sb.append("Blocks: ").append(joinOrNone(topology.blocks.map { it.name })).append('\n')
-		sb.append("Routes:")
+		// Note the per-pair cap so the agent cannot mistake a capped list for an exhaustive one
+		// (Issue #695 review, Important #1).
+		sb.append("Routes (at most $MAX_ROUTES_PER_PAIR shown per ordered InOut pair; more may exist):")
 		if (topology.routes.isEmpty()) {
 			sb.append(" none")
 		} else {
@@ -192,7 +191,10 @@ object StationTopologySerializer {
 		val result = mutableListOf<RouteDescriptor>()
 		for (from in inOuts) {
 			for (to in inOuts) {
-				if (from === to) continue
+				// Structural equality (DynamicInOut.equals compares staticRef) so a self-pair is
+				// skipped even when the wrapping layer returns distinct wrappers around the same
+				// static InOut (Issue #695 review, Important #3).
+				if (from == to) continue
 				val routes =
 					runCatching {
 						routeFinder.findRoutes(from.staticRef, to.staticRef, env, maxRoutes = MAX_ROUTES_PER_PAIR)

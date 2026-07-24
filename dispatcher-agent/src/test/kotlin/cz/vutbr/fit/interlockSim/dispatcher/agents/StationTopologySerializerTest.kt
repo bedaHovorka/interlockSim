@@ -134,7 +134,8 @@ class StationTopologySerializerTest {
 		assertThat(text).contains("Signals: none")
 		assertThat(text).contains("Switches: none")
 		assertThat(text).contains("Blocks: none")
-		assertThat(text).contains("Routes: none")
+		assertThat(text).contains("Routes (at most")
+		assertThat(text).contains(": none")
 	}
 
 	@Test
@@ -155,6 +156,25 @@ class StationTopologySerializerTest {
 		assertThat(text).contains("Switches: V7[SIMPLE_LEFT_TRUE]")
 		assertThat(text).contains("Blocks: U3, U4")
 		assertThat(text).contains("A->B: U3, U4")
+	}
+
+	@Test
+	@DisplayName("toPromptText() notes the per-pair route cap (no context needed)")
+	fun toPromptTextNotesRouteCap() {
+		val topology =
+			StationTopology(
+				inOuts = listOf("A", "B"),
+				signals = emptyList(),
+				switches = emptyList(),
+				blocks = emptyList(),
+				routes = listOf(RouteDescriptor("A", "B", listOf(BlockId("U1"))))
+			)
+
+		val text = StationTopologySerializer.toPromptText(topology)
+
+		assertThat(text).contains("Routes (at most")
+		assertThat(text).contains("more may exist)")
+		assertThat(text).contains("A->B: U1")
 	}
 
 	@Test
