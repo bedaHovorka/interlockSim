@@ -411,7 +411,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
 		val context = simContext as? DefaultSimulationContext
 		if (context == null) {
-			logger.debug { "Context type ${simContext::class.simpleName} is not DefaultSimulationContext; dispatcher control panel remains disabled (backward compatible)" }
+			logger.debug {
+				"Context type ${simContext::class.simpleName} is not DefaultSimulationContext; " +
+					"dispatcher control panel remains disabled (backward compatible)"
+			}
 			return
 		}
 		try {
@@ -422,7 +425,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }
 			}
 		} catch (e: Exception) {
-			logger.debug(e) { "Failed to wire DispatcherModeState to control panel; dispatcher control panel remains disabled (backward compatible)" }
+			logger.debug(e) {
+				"Failed to wire DispatcherModeState to control panel; dispatcher control panel remains disabled " +
+					"(backward compatible)"
+			}
 		}
 	}
 

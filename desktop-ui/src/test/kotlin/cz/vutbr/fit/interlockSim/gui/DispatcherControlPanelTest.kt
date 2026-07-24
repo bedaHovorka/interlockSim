@@ -13,8 +13,6 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isNotNull
-import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.fail
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
@@ -28,11 +26,6 @@ import javax.swing.JComboBox
 import javax.swing.JLabel
 import javax.swing.SwingUtilities
 
-// ── Test helper class ──────────────────────────────────────────────────────
-
-private data class TestDispatchDecision(override val rationale: List<String> = emptyList()) :
-	DispatchDecision()
-
 /**
  * Unit tests for [DispatcherControlPanel].
  *
@@ -42,13 +35,13 @@ private data class TestDispatchDecision(override val rationale: List<String> = e
  *
  * Covers:
  * - Initial state: combo box disabled, "Why this route?" button disabled
- * - Setting [DispatcherControlPanel.modeState] wires listeners and enables controls
+ * - Setting [DispatcherControlPanel.modeState] syncs the UI and enables controls
  * - Mode selector changes call [onModeChanged] callback
  * - "Why this route?" button calls [onRationale] callback
  * - Decision rationale updates via [updateDecisionRationale]
  * - Visual indicator color changes based on mode (GREEN/ORANGE/RED)
  * - Null mode state disables controls without throwing
- * - PropertyChangeListener integration for external mode changes
+ * - Re-assigning [DispatcherControlPanel.modeState] re-syncs the UI to external changes
  *
  * @since Issue #561 (SP2b.6 — Goal 10)
  */
@@ -67,9 +60,12 @@ class DispatcherControlPanelTest {
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
-	private fun findComboBox(): JComboBox<DispatcherMode> =
-		findComponent(panel, JComboBox::class.java)
+	private fun findComboBox(): JComboBox<DispatcherMode> {
+		@Suppress("UNCHECKED_CAST")
+		val type = JComboBox::class.java as Class<JComboBox<DispatcherMode>>
+		return findComponent(panel, type)
 			?: fail("Component finder: JComboBox<DispatcherMode> not found in DispatcherControlPanel")
+	}
 
 	private fun findButton(text: String): JButton =
 		findAllComponents(panel, JButton::class.java)
@@ -190,21 +186,25 @@ class DispatcherControlPanelTest {
 	}
 
 	@Test
-	fun `setting override via modeState updates combo box without triggering callback`() {
+	fun `re-assigning modeState after an external override syncs combo box without triggering callback`() {
 		val capturedModes = mutableListOf<DispatcherMode>()
 
 		SwingUtilities.invokeAndWait {
 			panel.modeState = modeState
 			panel.onModeChanged = { mode -> capturedModes.add(mode) }
 
-			// Change the effective mode externally
+			// Change the effective mode externally, then re-assign modeState to pick it up.
+			// DispatcherModeState has no event-firing capability (it lives in commonMain,
+			// so it cannot depend on java.beans types), so external changes are only
+			// reflected here the next time modeState is (re-)assigned.
 			modeState.setOverride(DispatcherMode.SEMI_AUTO)
+			panel.modeState = modeState
 
 			val comboBox = findComboBox()
 			assertThat(comboBox.selectedItem).isEqualTo(DispatcherMode.SEMI_AUTO)
 		}
 
-		// onModeChanged should not be called for external changes
+		// onModeChanged should not be called for programmatic re-sync
 		assertThat(capturedModes).isEqualTo(emptyList())
 	}
 
@@ -213,7 +213,7 @@ class DispatcherControlPanelTest {
 	@Test
 	fun `updateDecisionRationale stores rationale for display`() {
 		val rationale = listOf("Rule 1", "Rule 2")
-		val decision = TestDispatchDecision(rationale)
+		val decision = DispatchDecision.ApproveTrain(trainId = "T1", rationale = rationale)
 
 		SwingUtilities.invokeAndWait {
 			// Wire modeState so the button is enabled
@@ -237,8 +237,10 @@ class DispatcherControlPanelTest {
 		val rationale = listOf("Path available", "Shortest route")
 
 		SwingUtilities.invokeAndWait {
+			// Wire modeState so the button is enabled
+			panel.modeState = modeState
 			panel.onRationale = { r -> capturedRationales.add(r) }
-			panel.updateDecisionRationale(TestDispatchDecision(rationale))
+			panel.updateDecisionRationale(DispatchDecision.ApproveTrain(trainId = "T1", rationale = rationale))
 
 			findButton("Why this route?").doClick()
 		}
@@ -251,8 +253,10 @@ class DispatcherControlPanelTest {
 		val capturedRationales = mutableListOf<List<String>>()
 
 		SwingUtilities.invokeAndWait {
+			// Wire modeState so the button is enabled
+			panel.modeState = modeState
 			panel.onRationale = { r -> capturedRationales.add(r) }
-			panel.updateDecisionRationale(TestDispatchDecision(listOf("Rule 1")))
+			panel.updateDecisionRationale(DispatchDecision.ApproveTrain(trainId = "T1", rationale = listOf("Rule 1")))
 			panel.clearRationale()
 
 			findButton("Why this route?").doClick()

@@ -12,20 +12,15 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
-import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Dimension
 import java.awt.FlowLayout
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.JLabel
 import javax.swing.JPanel
-import javax.swing.JTextArea
-import javax.swing.SwingUtilities
 
 /**
  * Control panel for the AI dispatcher, implementing Goal 10 SP2b.6 (Issue #561).
@@ -33,7 +28,7 @@ import javax.swing.SwingUtilities
  * Provides:
  * - A mode selector combo box (AUTO / SEMI_AUTO / MANUAL) with visual indicator
  * - A "Why this route?" button to display the last decision's rationale
- * - Real-time sync with [DispatcherModeState] for human override control
+ * - Sync with [DispatcherModeState] at the moment [modeState] is assigned
  * - Thread-safe EDT integration for mode changes
  *
  * **Layout Structure:**
@@ -48,7 +43,6 @@ import javax.swing.SwingUtilities
  * - Wired via Koin DI in [guiDispatcherModule]
  * - Must be manually wired to [DispatcherModeState] instance on simulation start
  * - Callbacks ([onModeChanged], [onRationale]) route user actions to the simulation
- * - PropertyChangeListener pattern for external state updates
  *
  * **Thread Safety:**
  * All Swing operations must be called from the Event Dispatch Thread (EDT).
@@ -75,24 +69,22 @@ class DispatcherControlPanel : JPanel() {
 	 * The [DispatcherModeState] instance currently wired to this panel, or `null`.
 	 *
 	 * Setting this property:
-	 * - Removes listeners from the old state (if any)
-	 * - Installs a mode-change listener on the new state (if non-null)
 	 * - Synchronises the combo box to the new state's effective mode
 	 * - Disables controls if state is null
+	 *
+	 * Note: this is a one-time sync taken when the property is assigned, not a live
+	 * subscription — [DispatcherModeState] lives in commonMain and has no event-firing
+	 * capability (java.beans PropertyChange types are JVM-only and cannot appear there).
+	 * External mode changes made through [DispatcherModeState.setOverride] are only
+	 * reflected here the next time [modeState] is (re-)assigned.
 	 *
 	 * Must be set from the EDT.
 	 */
 	var modeState: DispatcherModeState? = null
 		set(value) {
-			// Remove listener from old state if it exists
-			if (field != null) {
-				field.removePropertyChangeListener(STATE_PROP_EFFECTIVE_MODE, stateListener)
-			}
 			field = value
 
-			// Install listener on new state if non-null
 			if (value != null) {
-				value.addPropertyChangeListener(STATE_PROP_EFFECTIVE_MODE, stateListener)
 				syncUiToMode(value.getEffectiveMode())
 				modeComboBox.isEnabled = true
 				whyButton.isEnabled = true
@@ -110,8 +102,8 @@ class DispatcherControlPanel : JPanel() {
 	 * The callback receives the selected [DispatcherMode] and is responsible for
 	 * updating the [modeState] override via [DispatcherModeState.setOverride].
 	 *
-	 * Not called when the mode changes programmatically (i.e. from external state
-	 * updates via the PropertyChangeListener).
+	 * Not called when the mode changes programmatically (i.e. when [modeState] is
+	 * (re-)assigned and the combo box is synced to the new state).
 	 */
 	var onModeChanged: ((DispatcherMode) -> Unit)? = null
 
@@ -125,17 +117,6 @@ class DispatcherControlPanel : JPanel() {
 
 	/** Flag to suppress recursive combo box → state → combo box feedback loops. */
 	private var updatingFromState = false
-
-	/** Listener that keeps the UI in sync when the mode state changes externally. */
-	private val stateListener =
-		PropertyChangeListener { evt: PropertyChangeEvent ->
-			val newMode = evt.newValue as? DispatcherMode ?: return@PropertyChangeListener
-			if (SwingUtilities.isEventDispatchThread()) {
-				syncUiToMode(newMode)
-			} else {
-				SwingUtilities.invokeLater { syncUiToMode(newMode) }
-			}
-		}
 
 	init {
 		layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
@@ -153,6 +134,7 @@ class DispatcherControlPanel : JPanel() {
 
 		// Mode combo box
 		modeComboBox.isEditable = false
+		modeComboBox.isEnabled = false
 		modeComboBox.addActionListener { evt ->
 			if (!updatingFromState) {
 				val selected = modeComboBox.selectedItem as? DispatcherMode
@@ -164,13 +146,14 @@ class DispatcherControlPanel : JPanel() {
 		headerPanel.add(modeComboBox)
 
 		// "Why this route?" button
+		whyButton.isEnabled = false
 		whyButton.addActionListener {
 			onRationale?.invoke(lastDecisionRationale)
 		}
 		headerPanel.add(whyButton)
 
-		// Active indicator
-		activeIndicator.foreground = Color.GREEN
+		// Active indicator (disabled by default, matches modeState == null)
+		activeIndicator.foreground = Color.GRAY
 		headerPanel.add(activeIndicator)
 
 		add(headerPanel)
@@ -179,8 +162,8 @@ class DispatcherControlPanel : JPanel() {
 	/**
 	 * Updates the UI to reflect a new effective mode.
 	 *
-	 * Called when the mode state changes externally or when [modeState] is set.
-	 * Updates the combo box selection and visual indicator color.
+	 * Called when [modeState] is (re-)assigned. Updates the combo box selection and
+	 * visual indicator color.
 	 *
 	 * Must be called from the EDT.
 	 */
@@ -223,29 +206,5 @@ class DispatcherControlPanel : JPanel() {
 	 */
 	fun clearRationale() {
 		lastDecisionRationale = emptyList()
-	}
-
-	companion object {
-		/**
-		 * Property name for [DispatcherModeState] effective mode changes.
-		 *
-		 * **Known limitation (SP2b.6):** [DispatcherModeState] does not currently fire
-		 * PropertyChangeEvents when mode changes. This constant and the listener installation
-		 * (in the [modeState] property setter, lines 89 and 95) represent **preparatory
-		 * infrastructure** for future functionality, not a bug. Currently, mode propagation
-		 * works via:
-		 * - **Direct UI calls:** User selects a mode in the dropdown; `syncUiToMode()`
-		 *   synchronously updates the UI, calling registered `onModeChanged` callbacks
-		 * - **Decision rationale updates:** `updateDecisionRationale()` updates the rationale
-		 *   field only (does not trigger mode changes)
-		 *
-		 * When [DispatcherModeState] is enhanced to fire PropertyChangeEvents for mode
-		 * changes, automatic UI synchronization via [stateListener] will activate without
-		 * changes to this class.
-		 *
-		 * TODO(#561): When [DispatcherModeState] implements PropertyChangeEvent firing,
-		 * update the [stateListener] to respond to automatic mode changes.
-		 */
-		const val STATE_PROP_EFFECTIVE_MODE = "effectiveMode"
 	}
 }
