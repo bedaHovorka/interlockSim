@@ -410,7 +410,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
 		val context = runner.simulationContext as? DefaultSimulationContext
 		if (context == null) {
-			logger.debug { "Context is not DefaultSimulationContext; dispatcher control panel remains disabled (backward compatible)" }
+			logger.debug { "Context type ${runner.simulationContext::class.simpleName} is not DefaultSimulationContext; dispatcher control panel remains disabled (backward compatible)" }
 			return
 		}
 		try {

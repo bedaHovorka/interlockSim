@@ -28,6 +28,11 @@ import javax.swing.JComboBox
 import javax.swing.JLabel
 import javax.swing.SwingUtilities
 
+// ── Test helper class ──────────────────────────────────────────────────────
+
+private data class TestDispatchDecision(override val rationale: List<String> = emptyList()) :
+	DispatchDecision()
+
 /**
  * Unit tests for [DispatcherControlPanel].
  *
@@ -291,9 +296,4 @@ class DispatcherControlPanelTest {
 			assertThat(indicator.foreground.rgb).isEqualTo(java.awt.Color.RED.rgb)
 		}
 	}
-
-	// ── Test helper class ──────────────────────────────────────────────────────
-
-	private data class TestDispatchDecision(override val rationale: List<String> = emptyList()) :
-		DispatchDecision()
 }

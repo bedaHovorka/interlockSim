@@ -246,5 +246,6 @@ class DispatcherControlPanel : JPanel() {
 		 * TODO(#561): When [DispatcherModeState] implements PropertyChangeEvent firing,
 		 * update the [stateListener] to respond to automatic mode changes.
 		 */
+		@Suppress("unused")
 		const val STATE_PROP_EFFECTIVE_MODE = "effectiveMode"
 	}
