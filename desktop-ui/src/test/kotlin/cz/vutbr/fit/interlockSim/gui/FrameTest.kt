@@ -74,7 +74,9 @@ class FrameTest : AbstractFrameTestBase() {
 	fun frameHasCorrectInitialSize() {
 		runOnEDT {
 			assertThat(frame.width).isEqualTo(1024)
-			assertThat(frame.height).isEqualTo(768)
+			// Height reserves room for the DispatcherControlPanel line so station tracks stay
+			// visible (PR #801 review comment, Issue #561).
+			assertThat(frame.height).isEqualTo(818)
 		}
 	}
 
@@ -138,14 +140,15 @@ class FrameTest : AbstractFrameTestBase() {
 	@DisplayName("frame has toolbar container at north")
 	fun frameHasToolbarContainerAtNorth() {
 		runOnEDT {
-			// North component is now a JPanel containing ToolBar + ControlPanel + SimulationControlPanel (Issues #205, #190)
+			// North component is now a JPanel containing ToolBar + ControlPanel + SimulationControlPanel
+			// (Issues #205, #190) + DispatcherControlPanel (Issue #561, Goal 10 SP2b.6)
 			val northComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.NORTH)
 			assertThat(northComponent).isNotNull()
 			assertThat(northComponent).isInstanceOf(javax.swing.JPanel::class)
 
-			// Verify the container has components (ToolBar, ControlPanel, SimulationControlPanel)
+			// Verify the container has components (ToolBar, ControlPanel, SimulationControlPanel, DispatcherControlPanel)
 			val panel = northComponent as javax.swing.JPanel
-			assertThat(panel.componentCount).isEqualTo(3)
+			assertThat(panel.componentCount).isEqualTo(4)
 		}
 	}
 

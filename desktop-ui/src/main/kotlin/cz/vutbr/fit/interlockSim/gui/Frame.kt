@@ -11,12 +11,15 @@ package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
+import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
@@ -115,6 +118,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
 
+	// Dispatcher control panel (Issue #561, Goal 10 SP2b.6)
+	internal val dispatcherControlPanel: DispatcherControlPanel = DispatcherControlPanel()
+
+	// Decision-listener hub wired to the active context's Koin scope (Issue #561, SP2b.6).
+	// Held so the STOPPED transition can detach the sink and stop the sim thread from
+	// pushing applied decisions into a stale panel.
+	private var wiredDecisionHub: DispatchDecisionListenerHub? = null
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -178,11 +189,19 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							toolBar.showSimulationControls()
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 							controlPanel.setStopEnabled(true)
+							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
+							wireDispatcherControlPanel()
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
 							toolBar.hideSimulationControls()
 							simulationControlPanel.runner = null
+							// Detach the decision sink first so the sim thread can no longer push
+							// applied decisions into the panel, then clear panel state (Issue #561).
+							wiredDecisionHub?.setSink(null)
+							wiredDecisionHub = null
+							dispatcherControlPanel.modeState = null
+							dispatcherControlPanel.clearRationale()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 						}
@@ -210,7 +229,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 
 	init {
-		setSize(1024, 768)
+		// Height reserves room for the simulation-mode north panels (ToolBar + ControlPanel +
+		// SimulationControlPanel + DispatcherControlPanel, Issue #561). Without the extra
+		// height the DispatcherControlPanel line steals vertical space from the scrollable
+		// RailwayNetGridCanvas, hiding station tracks (PR #801 review comment).
+		setSize(1024, 818)
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE) // Handle close event manually
 		setLayout(BorderLayout())
 		jMenuBar = MenuBar()
@@ -224,6 +247,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		northContainer.add(controlPanel)
 		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(simulationControlPanel)
+		dispatcherControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
+		northContainer.add(dispatcherControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
 		// Route speed changes from SimulationControlPanel through SimulationController so
@@ -320,6 +345,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
 		simulationControlPanel.isVisible = true
+		dispatcherControlPanel.isVisible = true
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
@@ -366,6 +392,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Hide ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = false
 		simulationControlPanel.isVisible = false
+		dispatcherControlPanel.isVisible = false
+		dispatcherControlPanel.modeState = null
+		dispatcherControlPanel.clearRationale()
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
@@ -378,6 +407,97 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
+
+	/**
+	 * Wire the [DispatcherControlPanel] to the active simulation context (Issue #561, SP2b.6).
+	 *
+	 * Resolves three things from the context's Koin scope (when the dispatcher-agent
+	 * module is loaded):
+	 * 1. [cz.vutbr.fit.interlockSim.sim.DispatcherModeState] → drives the panel's mode
+	 *    combo box and indicator.
+	 * 2. [cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub] → the panel's
+	 *    `onModeChanged` callback propagates the operator's selection to
+	 *    [cz.vutbr.fit.interlockSim.sim.DispatcherModeState.setOverride]; the hub's
+	 *    sink feeds every applied [cz.vutbr.fit.interlockSim.sim.DispatchDecision]'s rationale into the panel so
+	 *    the "Why this route?" button can display it.
+	 * 3. The panel's `onRationale` callback → shows the rationale in a dialog.
+	 *
+	 * If any lookup fails (e.g. the context is not a [DefaultSimulationContext], or the
+	 * dispatcher-agent module is not loaded) the panel remains disabled but the GUI is
+	 * still functional (backward compatibility).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun wireDispatcherControlPanel() {
+		val runner = simulationController.runner ?: return
+		val simContext = runner.simulationContext
+		// Cast to DefaultSimulationContext is necessary to access the Koin scope.
+		// SimulationContext interface does not expose the scope (by design);
+		// only DefaultSimulationContext provides Koin DI bindings like DispatcherModeState.
+		// This is acceptable because the dispatcher-agent module is only used with
+		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
+		val context = simContext as? DefaultSimulationContext
+		if (context == null) {
+			logger.debug {
+				"Context type ${simContext::class.simpleName} is not DefaultSimulationContext; " +
+					"dispatcher control panel remains disabled (backward compatible)"
+			}
+			return
+		}
+		try {
+			val modeState = context.scope.getOrNull<DispatcherModeState>()
+			if (modeState != null) {
+				dispatcherControlPanel.modeState = modeState
+				// Critical 2: the operator's combo-box selection propagates to the shared
+				// DispatcherModeState override. (Applier enforcement of the mode is deferred
+				// to the SEMI_AUTO approval follow-up — see DispatcherControlPanel KDoc.)
+				dispatcherControlPanel.onModeChanged = { mode -> modeState.setOverride(mode) }
+				// Critical 1 (display): the "Why this route?" button shows the last decision's
+				// rationale in a modal dialog.
+				dispatcherControlPanel.onRationale = { rationale ->
+					JOptionPane.showMessageDialog(
+						this@Frame,
+						formatRationale(rationale),
+						"Dispatcher decision rationale",
+						JOptionPane.INFORMATION_MESSAGE
+					)
+				}
+				// Critical 1 (feed): the sim-thread applier pushes every applied decision
+				// through the hub; marshal the update onto the EDT before touching the panel.
+				val hub = context.scope.getOrNull<DispatchDecisionListenerHub>()
+				if (hub != null) {
+					hub.setSink { decision ->
+						SwingUtilities.invokeLater {
+							dispatcherControlPanel.updateDecisionRationale(decision)
+						}
+					}
+					wiredDecisionHub = hub
+				} else {
+					logger.debug { "DispatchDecisionListenerHub not available in context scope; rationale button will have no feed" }
+				}
+			} else {
+				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }
+			}
+		} catch (e: Exception) {
+			logger.debug(e) {
+				"Failed to wire DispatcherModeState to control panel; dispatcher control panel remains disabled " +
+					"(backward compatible)"
+			}
+		}
+	}
+
+	/**
+	 * Format the decision rationale list for the "Why this route?" dialog (Issue #561, SP2b.6).
+	 *
+	 * An empty list (no rationale recorded) yields a single explanatory line; a non-empty
+	 * list is rendered as one bullet line per entry.
+	 */
+	private fun formatRationale(rationale: List<String>): String =
+		if (rationale.isEmpty()) {
+			"No rationale recorded for the last decision."
+		} else {
+			rationale.joinToString("\n") { "• $it" }
+		}
 
 	/**
 	 * Set the railway network context and switch UI mode accordingly.
