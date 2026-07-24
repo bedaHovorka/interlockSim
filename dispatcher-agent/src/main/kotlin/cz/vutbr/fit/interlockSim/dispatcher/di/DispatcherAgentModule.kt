@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
@@ -184,6 +185,14 @@ val dispatcherAgentModule: Module =
 			// MANUAL (monitor-only, no automatic routing). The GUI DispatcherControlPanel binds
 			// to this state to display and allow mode selection.
 			scoped<DispatcherModeState> { DispatcherModeState() }
+
+			// SP2b.6 (Issue #561): DispatchDecisionListenerHub — mutable sink that bridges the
+			// sim-thread DispatchDecisionApplier to the GUI DispatcherControlPanel. The applier
+			// captures this scoped instance at construction (ExampleRegistry.wireDispatcherAgent)
+			// and calls onDecisionApplied for each applied decision; the GUI later points setSink
+			// at a lambda that pushes the decision to the panel on the EDT. Headless/console runs
+			// leave the sink null (no-op). One per context so concurrent sims never cross-wire.
+			scoped<DispatchDecisionListenerHub> { DispatchDecisionListenerHub() }
 
 			// SP4.2 (Issue #564): Late-bound pacing controller for the agent-driver loop.
 			// Wiring layers (e.g. :desktop-ui's ExampleRegistry.wireDispatcherAgent) hand this
