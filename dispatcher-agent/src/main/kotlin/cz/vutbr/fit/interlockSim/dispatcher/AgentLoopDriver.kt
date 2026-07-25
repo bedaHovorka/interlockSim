@@ -67,8 +67,15 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param controller     Pacing controller; injected into the driver **only** —
  *   never exposed to [cz.vutbr.fit.interlockSim.context.SimulationEnvironment] or
  *   policy implementations (SP0.5 invariant 3)
+ * @param snapshotSignal Optional sim-to-driver pacing signal (SP0.11c, Issue #746).
+ *   When non-null, the driver blocks on [SnapshotSignal.await] at the top of each
+ *   cycle rather than polling with [Thread.sleep].  The sim thread must call
+ *   [SnapshotSignal.signal] immediately after each
+ *   [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot].
+ *   When null (the default), the original polling behaviour is preserved for backward
+ *   compatibility with callers that do not supply a signal.
  *
- * @since Issue #732 (SP0.10 — Goal 10)
+ * @since Issue #732 (SP0.10 — Goal 10); [snapshotSignal] added in Issue #746 (SP0.11c)
  */
 class AgentLoopDriver(
 	private val perceptionPort: NetworkPerceptionPort,
@@ -96,7 +103,22 @@ class AgentLoopDriver(
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort =
 		DefaultDispatchLoopSensorPort {
 			ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
-		}
+		},
+	/**
+	 * SP0.11c: Optional sim-to-driver pacing signal (Issue #746).
+	 *
+	 * When non-null the driver blocks on [SnapshotSignal.await] at the top of each
+	 * [runCycle] instead of sleeping 1 ms and polling.  The `simTime == prevSimTime`
+	 * early-return guard is also skipped in this mode because the signal already
+	 * guarantees a fresh tick — eliminating the ~4 % `trainsExited = 0` failure that
+	 * occurred when the guard fired inside the lock-step handshake on the first tick.
+	 *
+	 * `null` by default: callers that do not supply a signal retain the original
+	 * polling behaviour ([stagnantSimTimeSkipsCycle][AgentLoopDriverTest] contract).
+	 *
+	 * @since Issue #746 (SP0.11c — Goal 10)
+	 */
+	private val snapshotSignal: SnapshotSignal? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -142,15 +164,27 @@ class AgentLoopDriver(
 	 * loop in [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext].
 	 */
 	suspend fun runCycle() {
+		// 0. WAIT (signal-based mode): block until the sim publishes a fresh snapshot.
+		// Replaces Thread.sleep polling and eliminates the simTime stale-skip race (Issue #746).
+		// In polling mode (snapshotSignal == null) this step is skipped.
+		snapshotSignal?.await()
+
 		// 1. SENSE — read a consistent frozen snapshot off the perception port.
 		val snapshot = perceptionPort.snapshot()
 		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
 		if (snapshot === SimulationSnapshot.EMPTY) {
 			controller.awaitIfPaused()
-			pauseUntilNextSnapshot()
+			// In polling mode: sleep and retry on the next call.
+			// In signal mode: EMPTY is unexpected after a signal — return without decisions;
+			// the driver will block on the next await() for the next tick's signal.
+			if (snapshotSignal == null) pauseUntilNextSnapshot()
 			return
 		}
-		if (hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
+		// Stale-snapshot guard (polling mode only): skip re-deciding on the same sim tick.
+		// In signal mode the signal already guarantees a fresh tick, so this guard is omitted —
+		// it is the guard's firing inside the lock-step handshake that caused the ~4 %
+		// trainsExited=0 failure (Issue #746 / SP0.11c root cause).
+		if (snapshotSignal == null && hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
 			controller.awaitIfPaused()
 			pauseUntilNextSnapshot()
 			return

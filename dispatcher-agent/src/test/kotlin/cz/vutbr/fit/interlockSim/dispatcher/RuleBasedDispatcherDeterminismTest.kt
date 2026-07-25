@@ -20,7 +20,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -139,41 +138,31 @@ class RuleBasedDispatcherDeterminismTest {
 				onBlockTransition = loop::incrementBlockTransition,
 				onFailedReservation = loop::incrementFailedReservation
 			)
+		// SP0.11c (Issue #746): signal-based pacing replaces the lock-step handshake.
+		// The sim thread signals the driver once per tick (after captureSnapshot); the driver
+		// blocks on snapshotSignal.await() at the top of each cycle and processes the fresh
+		// snapshot unconditionally — no simTime stale-skip that could cause trainsExited=0.
+		// Decisions are posted to the queue and drained by the applier at the NEXT tick,
+		// giving at most 1-tick observation lag; this is deterministic across all 10 runs.
+		val snapshotSignal = DefaultSnapshotSignal()
 		val driver =
 			AgentLoopDriver(
 				perceptionPort = perceptionPort,
 				planner = planner,
 				commandQueue = queue,
 				controller = NoOpSimulationController,
-				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
+				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation),
+				snapshotSignal = snapshotSignal
 			)
 
-		// Lock-step handshake (SP0.11 determinism): the free-running driver thread races
-		// the unthrottled headless sim — whether a given tick's snapshot is processed
-		// before the next tick begins depends on OS scheduling, which perturbs admission
-		// timing run-to-run. This gate asserts determinism OF THE DISPATCHER, so the sim
-		// thread hands the driver exactly one cycle per tick and drains the resulting
-		// decisions in the same tick. All production components (driver, queue, applier)
-		// still run on their production threads; only the pacing is pinned.
-		val driverTurn = java.util.concurrent.Semaphore(0)
-		val simTurn = java.util.concurrent.Semaphore(0)
-
-		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
-		loop.controlStepListener =
-			ControlStepListener {
-				driverTurn.release()
-				simTurn.acquireUninterruptibly()
-				applier.onControlStep()
-			}
+		loop.snapshotCaptureHook = {
+			perceptionPort.captureSnapshot()
+			snapshotSignal.signal()
+		}
+		loop.controlStepListener = applier
 		loop.agentDriverAction = {
 			while (loop.isSimActive()) {
-				if (driverTurn.tryAcquire(100, TimeUnit.MILLISECONDS)) {
-					try {
-						driver.runCycle()
-					} finally {
-						simTurn.release()
-					}
-				}
+				driver.runCycle()
 			}
 		}
 

@@ -32,6 +32,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -462,6 +463,86 @@ class AgentLoopDriverTest {
 
 			assertThat(controller.awaitCalls).isEqualTo(cycleCount)
 			assertThat(controller.throttleCalls).isEqualTo(cycleCount)
+		}
+	}
+
+	// ── Signal-based pacing (SP0.11c) ─────────────────────────────────────────
+
+	/**
+	 * Tests for [SnapshotSignal]-based pacing (Issue #746 / SP0.11c).
+	 *
+	 * When a [SnapshotSignal] is supplied the driver awaits a signal at the top of
+	 * each cycle and skips the `simTime == prevSimTime` stale-snapshot guard.
+	 */
+	@Nested
+	@DisplayName("Signal-based pacing (SP0.11c, Issue #746)")
+	inner class SignalBasedPacing {
+		private val signal = DefaultSnapshotSignal()
+
+		private fun makeSignalDriver(): AgentLoopDriver =
+			AgentLoopDriver(
+				perceptionPort = perceptionPort,
+				planner = planner,
+				commandQueue = commandQueue,
+				controller = controller,
+				snapshotSignal = signal
+			)
+
+		/**
+		 * In signal mode the driver must NOT skip a cycle when `simTime` is the same
+		 * as the previous cycle — the signal guarantees a new tick, so the guard that
+		 * prevented re-deciding identical state in polling mode must not fire.
+		 *
+		 * This is the direct regression test for the ~4 % `trainsExited = 0` failure
+		 * (Issue #746): in the old lock-step path the `simTime == prevSimTime` guard
+		 * caused the driver to skip the first tick (both events at `simTime = 0.0`),
+		 * which meant no admission decision was ever posted.
+		 */
+		@Test
+		@DisplayName("stagnant simTime does NOT skip cycle in signal mode (Issue #746 regression guard)")
+		fun stagnantSimTimeDoesNotSkipCycleInSignalMode() {
+			// Both cycles read the same simTime — would be skipped in polling mode.
+			every { perceptionPort.snapshot() } returns emptySnapshot(0.0)
+
+			val driver = makeSignalDriver()
+			runBlocking {
+				// Fire signal twice so both runCycle() calls get their await() unblocked.
+				launch { signal.signal(); signal.signal() }
+				driver.runCycle() // First cycle: processes simTime=0.0 (prevSimTime=0.0 → first)
+				driver.runCycle() // Second cycle: simTime STILL 0.0 — must NOT skip in signal mode
+			}
+
+			// Both cycles must reach the DECIDE step (planner called twice).
+			coVerify(exactly = 2) { planner.plan(any()) }
+			// Both cycles must complete PACE (throttle called twice).
+			assertThat(controller.throttleCalls).isEqualTo(2)
+		}
+
+		/**
+		 * In signal mode [runCycle] blocks on [SnapshotSignal.await] at the top of
+		 * each call. The call does not return until [SnapshotSignal.signal] is called
+		 * from another coroutine.
+		 */
+		@Test
+		@DisplayName("runCycle blocks until signal is fired")
+		fun runCycleBlocksUntilSignalFired() {
+			every { perceptionPort.snapshot() } returns emptySnapshot(1.0)
+
+			val driver = makeSignalDriver()
+			var cycleCompleted = false
+
+			runBlocking {
+				// Launch the cycle; it will block on await().
+				val job = launch { driver.runCycle(); cycleCompleted = true }
+				// Give the coroutine time to block on await().
+				kotlinx.coroutines.delay(10)
+				// Not yet completed — still waiting for signal.
+				assertThat(cycleCompleted).isEqualTo(false)
+				// Fire the signal — cycle should unblock and complete.
+				signal.signal()
+				job.join()
+				assertThat(cycleCompleted).isEqualTo(true)
+			}
 		}
 	}
 

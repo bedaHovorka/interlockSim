@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
@@ -395,16 +396,24 @@ class ExampleRegistry {
 			}
 		)
 
+		// SP0.11c (Issue #746): signal-based pacing — sim thread wakes the driver once per tick.
+		// The snapshotCaptureHook fires captureSnapshot() and then immediately signals the driver,
+		// replacing the Thread.sleep(1) polling that caused the ~4 % trainsExited=0 race.
+		val snapshotSignal = DefaultSnapshotSignal()
 		val driver =
 			AgentLoopDriver(
 				perceptionPort = perceptionPort,
 				planner = planner,
 				commandQueue = queue,
 				controller = controller,
-				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
+				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation),
+				snapshotSignal = snapshotSignal
 			)
 
-		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
+		loop.snapshotCaptureHook = {
+			perceptionPort.captureSnapshot()
+			snapshotSignal.signal()
+		}
 		loop.controlStepListener = applier
 		loop.agentDriverAction = {
 			while (loop.isSimActive()) {
