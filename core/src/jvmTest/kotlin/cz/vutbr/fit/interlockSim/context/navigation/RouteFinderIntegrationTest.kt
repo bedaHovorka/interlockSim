@@ -106,6 +106,12 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 
 				// The reserved block count must equal the cheapest route's segment count exactly.
 				// (Both routes in vyhybna.xml have 7 segments, so this also bounds the costlier route.)
+				// NOTE: this and the length assertion below assume k1 visits each block exactly
+				// once. The service deduplicates sections that map to the same block, so a future
+				// fixture where k1 revisits a block would make reservedBlocks.size < segments.size
+				// (and the segment-sum length would double-count that block) - failing both
+				// assertions on a *correct* reservation. True for vyhybna.xml today; a failure here
+				// from a fixture edit is not a reservation-logic regression.
 				assertThat(success.reservedBlocks.size).isEqualTo(cheapestRoute.segments.size)
 
 				// The total reserved length must equal the cheapest route's total length.
