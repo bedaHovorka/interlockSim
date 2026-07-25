@@ -12,22 +12,11 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
-import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
-import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.sim.ControlStepListener
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
-import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -37,9 +26,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = KotlinLogging.logger {}
 
@@ -74,11 +61,13 @@ private val logger = KotlinLogging.logger {}
  *
  * ## Lock-step rationale
  *
- * Identical to [ShuntingLoopLiftedDriverIntegrationTest]: without lock-step, OS
+ * This test shares the lifted-stack wiring and lock-step handshake with
+ * [ShuntingLoopLiftedDriverIntegrationTest] through [LiftedStackFixture], so the two
+ * gates cannot drift apart in how they drive the dispatcher.  Without lock-step, OS
  * scheduling races between the driver thread and the kDisco sim thread can produce
  * stale observations that cause duplicate reservations, which in turn trigger
- * [CollisionWarning.ReservationConflict]s.  The lock-step handshake pins one driver
- * cycle per simulation tick and eliminates this race.
+ * [CollisionWarning.ReservationConflict]s — see [LiftedStackFixture] and
+ * [ShuntingLoopLiftedDriverIntegrationTest] for the full race analysis.
  *
  * @see ShuntingLoopLiftedDriverIntegrationTest for the single-run Goal 9 correctness gate
  * @see RuleBasedDispatcherDeterminismTest for the 10-run cross-run determinism gate
@@ -87,8 +76,7 @@ private val logger = KotlinLogging.logger {}
 @DisplayName("SP2b.7 — dispatcher routing: zero Goal 3 collision warnings (safety net validation)")
 @Tag("integration-test")
 class DispatcherCollisionValidationTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
+	private val fixture = LiftedStackFixture()
 
 	@BeforeEach
 	fun startKoinForContext() {
@@ -99,12 +87,6 @@ class DispatcherCollisionValidationTest {
 	fun stopKoinAfterContext() {
 		stopKoin()
 	}
-
-	private fun loadShuntingLoopContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
 
 	/**
 	 * Runs `vyhybna.xml` with the full lifted dispatcher-agent stack under lock-step and
@@ -124,19 +106,22 @@ class DispatcherCollisionValidationTest {
 	@Timeout(60, unit = TimeUnit.SECONDS)
 	@DisplayName("zero Goal 3 collision warnings with lifted dispatcher stack (SP2b.7 safety net)")
 	fun dispatcherRoutingProducesZeroCollisionWarnings() {
-		val context = loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
 		val loop = ShuntingLoop(context, endTime = 300L)
 
 		// ── Goal 3 SP2b.7: subscribe to CollisionWarnings — the safety-net assertion ──
+		// Registered before fixture.run() so the listener is live for the whole run.
 		val collisionWarnings: MutableList<CollisionWarning> = mutableListOf()
 		context.getCollisionServices().onCollisionWarning { collisionWarnings.add(it) }
 
 		// Goal 3 SP5: disable auto-pause for headless runs.
 		// Without this, a CRITICAL warning would call requestPause() on the simulation
 		// controller; in a headless scenario there is no operator to react.
+		// Pre-condition: dispatcherAgentTestModule binds the concrete
+		// DefaultCollisionDetectionService, so this cast is safe under the current binding.
 		val collisionService =
 			context.getCollisionServices().getCollisionDetectionService() as DefaultCollisionDetectionService
 		collisionService.autoPauseOnCritical = false
@@ -145,78 +130,30 @@ class DispatcherCollisionValidationTest {
 		val conflictEvents: MutableList<ConflictDetectedEvent> = mutableListOf()
 		context.onConflictDetectedEvent { conflictEvents.add(it) }
 
-		// ── Wire the full lifted dispatcher-agent stack (same as ShuntingLoopLiftedDriverIntegrationTest) ──
-		val perceptionPort =
-			DefaultNetworkPerceptionPort(
-				env = context,
-				activeTrains = loop::getApprovedTrains
-			)
-		val actuatorPort = DefaultNetworkActuatorPort(env = context)
-		val queue = ActuatorCommandQueue()
-		val dispatcher = RuleBasedDispatcher()
-		val planner = RuleBasedPlanAdapter(dispatcher)
-		val applier =
-			DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = actuatorPort,
-				onApproveTrain = loop::approveQueuedTrain,
-				onBlockTransition = loop::incrementBlockTransition,
-				onFailedReservation = loop::incrementFailedReservation
-			)
-		val driver =
-			AgentLoopDriver(
-				perceptionPort = perceptionPort,
-				planner = planner,
-				commandQueue = queue,
-				controller = NoOpSimulationController,
-				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
-			)
+		// ── Run the full lifted stack under the lock-step handshake (shared with the
+		// Goal 9 ShuntingLoopLiftedDriverIntegrationTest — see LiftedStackFixture) ──
+		val run = fixture.run(loop, context)
 
-		// ── Lock-step handshake (same pattern as ShuntingLoopLiftedDriverIntegrationTest) ──
-		val driverCycleCount = AtomicInteger(0)
-		val driverTurn = Semaphore(0)
-		val simTurn = Semaphore(0)
-
-		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
-		loop.controlStepListener =
-			ControlStepListener {
-				driverTurn.release()
-				simTurn.acquireUninterruptibly()
-				applier.onControlStep()
-			}
-		loop.agentDriverAction = {
-			while (loop.isSimActive()) {
-				if (driverTurn.tryAcquire(100, TimeUnit.MILLISECONDS)) {
-					try {
-						driver.runCycle()
-						driverCycleCount.incrementAndGet()
-					} finally {
-						simTurn.release()
-					}
-				}
-			}
-		}
-
-		context.setMainProcess(loop)
-		context.run()
-
-		val trainsExited = loop.getTrainsExited()
+		val trainsExited = run.trainsExited()
 		logger.info {
 			"SP2b.7 validation complete: trainsExited=$trainsExited, " +
-				"driverCycles=${driverCycleCount.get()}, " +
+				"driverCycles=${run.driverCycleCount.get()}, " +
 				"collisionWarnings=${collisionWarnings.size}, " +
 				"conflictEvents=${conflictEvents.size}"
 		}
 
-		// All generated trains must exit — no permanent deadlock.
+		// Assertion order is deliberate diagnostic priority — do not reorder:
+		// 1. liveness: a deadlock hangs context.run() and surfaces as @Timeout, so this
+		//    assertion fires only for a non-deadlock "trains stopped early" failure.
 		assertThat(trainsExited).isGreaterThanOrEqualTo(1)
 
-		// SP2b.7 success criterion: Goal 3 safety net must emit zero warnings.
-		// A non-zero count means the dispatcher produced unsafe routing decisions that
-		// triggered competing reservations or an illegal block entry.
+		// 2. SP2b.7 success criterion: Goal 3 safety net must emit zero warnings. A
+		//    non-zero count means the dispatcher produced unsafe routing decisions that
+		//    triggered competing reservations or an illegal block entry.
 		assertThat(collisionWarnings).isEmpty()
 
-		// Complementary Goal 9 assertion: no competing reservations at the lower layer.
+		// 3. Complementary Goal 9 assertion: no competing reservations at the lower
+		//    reservation layer (which Goal 3 would otherwise promote to a warning).
 		assertThat(conflictEvents).isEmpty()
 	}
 }

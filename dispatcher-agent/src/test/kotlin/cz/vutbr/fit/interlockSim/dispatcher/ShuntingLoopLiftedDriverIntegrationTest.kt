@@ -11,20 +11,9 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
-import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
-import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.sim.ControlStepListener
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
-import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -34,9 +23,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = KotlinLogging.logger {}
 
@@ -71,6 +58,11 @@ private val logger = KotlinLogging.logger {}
  * The guard in [DispatchDecisionApplier] then handles any remaining inter-tick
  * duplicates, and the capacity cap ensures at most one train approaches each block.
  *
+ * The lifted-stack wiring and the lock-step handshake itself live in
+ * [cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture], shared with
+ * [DispatcherCollisionValidationTest] so the two gates cannot drift apart in how they
+ * drive the dispatcher.
+ *
  * ## Relationship to [RuleBasedDispatcherDeterminismTest]
  *
  * [RuleBasedDispatcherDeterminismTest] is the *before/after determinism harness* —
@@ -80,6 +72,8 @@ private val logger = KotlinLogging.logger {}
  * requirement from the SP0.12 acceptance criteria (Issue #734).
  *
  * @see RuleBasedDispatcherDeterminismTest for the 10-run cross-run A3 determinism gate
+ * @see cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture for the shared
+ *   lifted-stack wiring and lock-step handshake
  * @see cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher for the synchronous
  *   wiring alternative used by `:core` and `:fast-sim` tests
  * @since Issue #734 (SP0.12 — Goal 10 A3 integration gate)
@@ -87,8 +81,7 @@ private val logger = KotlinLogging.logger {}
 @DisplayName("ShuntingLoop end-to-end via lifted dispatcher-agent stack (SP0.12 integration gate)")
 @Tag("integration-test")
 class ShuntingLoopLiftedDriverIntegrationTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
+	private val fixture = LiftedStackFixture()
 
 	@BeforeEach
 	fun startKoinForContext() {
@@ -99,12 +92,6 @@ class ShuntingLoopLiftedDriverIntegrationTest {
 	fun stopKoinAfterContext() {
 		stopKoin()
 	}
-
-	private fun loadShuntingLoopContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
 
 	/**
 	 * Runs vyhybna.xml with the lifted stack under a lock-step handshake and asserts:
@@ -124,83 +111,29 @@ class ShuntingLoopLiftedDriverIntegrationTest {
 	@Timeout(60, unit = TimeUnit.SECONDS)
 	@DisplayName("all trains exit and zero conflict events (lock-step, lifted stack)")
 	fun allTrainsExitWithNoConflictEvents() {
-		val context = loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
 		val loop = ShuntingLoop(context, endTime = 300L)
 
 		// Collect ConflictDetectedEvents — must be empty after the run.
+		// Registered before fixture.run() so the listener is live for the whole run.
 		// Lock-step guarantees the listener fires only on the sim thread (no concurrent access).
 		val conflictEvents: MutableList<ConflictDetectedEvent> =
 			mutableListOf()
 		context.onConflictDetectedEvent { conflictEvents.add(it) }
 
-		// Wire the full lifted stack — same components as production.
-		val perceptionPort =
-			DefaultNetworkPerceptionPort(
-				env = context,
-				activeTrains = loop::getApprovedTrains
-			)
-		val actuatorPort = DefaultNetworkActuatorPort(env = context)
-		val queue = ActuatorCommandQueue()
-		val dispatcher = RuleBasedDispatcher()
-		val planner = RuleBasedPlanAdapter(dispatcher)
-		val applier =
-			DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = actuatorPort,
-				onApproveTrain = loop::approveQueuedTrain,
-				onBlockTransition = loop::incrementBlockTransition,
-				onFailedReservation = loop::incrementFailedReservation
-			)
-		val driver =
-			AgentLoopDriver(
-				perceptionPort = perceptionPort,
-				planner = planner,
-				commandQueue = queue,
-				controller = NoOpSimulationController,
-				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
-			)
+		// ── Run the full lifted stack under the lock-step handshake (shared with
+		// DispatcherCollisionValidationTest — see LiftedStackFixture) ──
+		val run = fixture.run(loop, context)
 
-		// Lock-step handshake: same pattern as RuleBasedDispatcherDeterminismTest.
-		// The sim thread signals driverTurn after capturing the snapshot, waits on
-		// simTurn for the driver to complete its cycle, then applies decisions.  This
-		// ensures the observation is always fresh and decisions are applied before the
-		// next tick advances the state.
-		val driverCycleCount = AtomicInteger(0)
-		val driverTurn = Semaphore(0)
-		val simTurn = Semaphore(0)
-
-		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
-		loop.controlStepListener =
-			ControlStepListener {
-				driverTurn.release()
-				simTurn.acquireUninterruptibly()
-				applier.onControlStep()
-			}
-		loop.agentDriverAction = {
-			while (loop.isSimActive()) {
-				if (driverTurn.tryAcquire(100, TimeUnit.MILLISECONDS)) {
-					try {
-						driver.runCycle()
-						driverCycleCount.incrementAndGet()
-					} finally {
-						simTurn.release()
-					}
-				}
-			}
-		}
-
-		context.setMainProcess(loop)
-		context.run()
-
-		val trainsExited = loop.getTrainsExited()
-		val maxConcurrent = loop.getMaxConcurrentTrains()
+		val trainsExited = run.trainsExited()
+		val maxConcurrent = run.maxConcurrentTrains()
 		logger.info {
 			"Integration run complete: trainsExited=$trainsExited, " +
 				"maxConcurrent=$maxConcurrent, " +
-				"driverCycles=${driverCycleCount.get()}, " +
+				"driverCycles=${run.driverCycleCount.get()}, " +
 				"conflictEvents=${conflictEvents.size}"
 		}
 
