@@ -45,13 +45,13 @@ import javax.swing.JPanel
  *   `dispatcherAgentModule`) on simulation start via [Frame.wireDispatcherControlPanel].
  * - Callbacks ([onModeChanged], [onRationale]) route user actions to the simulation
  *
- * **SEMI_AUTO approval (deferred):**
- * Selecting a mode records the operator's choice in [DispatcherModeState] via
- * [onModeChanged]. The dispatcher-applier enforcement of that mode (MANUAL drops
- * decisions; SEMI_AUTO prompts the operator to approve/dismiss each pending
- * decision) is intentionally **not** wired in this PR — wiring SEMI_AUTO without
- * its approval UI would drop every decision. Enforcement + the SEMI_AUTO approval
- * dialog are tracked by a follow-up sub-issue of #561.
+ * **SEMI_AUTO approval:**
+ * Selecting SEMI_AUTO records the operator's choice in [DispatcherModeState] via
+ * [onModeChanged]. When a decision arrives in SEMI_AUTO mode, the sim thread calls the
+ * [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] approver (wired by
+ * [cz.vutbr.fit.interlockSim.gui.Frame.wireDispatcherControlPanel] on sim start) which
+ * shows a [SemiAutoApprovalDialog] to the operator. The operator clicks Approve or Dismiss
+ * before the simulation resumes (Issue #806, SP2b.6 follow-up).
  *
  * **Thread Safety:**
  * All Swing operations must be called from the Event Dispatch Thread (EDT).

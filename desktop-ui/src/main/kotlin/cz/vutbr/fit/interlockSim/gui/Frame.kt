@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
+import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
@@ -126,6 +127,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	// pushing applied decisions into a stale panel.
 	private var wiredDecisionHub: DispatchDecisionListenerHub? = null
 
+	// SEMI_AUTO approval gateway wired to the active context's Koin scope (Issue #806, SP2b.6 follow-up).
+	// Held so the STOPPED transition can detach the approver and prevent the sim thread from
+	// calling a stale dialog after the GUI is torn down.
+	private var wiredSemiAutoGateway: SemiAutoApprovalGateway? = null
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -200,6 +206,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// applied decisions into the panel, then clear panel state (Issue #561).
 							wiredDecisionHub?.setSink(null)
 							wiredDecisionHub = null
+							// Detach the SEMI_AUTO approver so the sim thread cannot call a stale
+							// dialog after the GUI is torn down (Issue #806, SP2b.6 follow-up).
+							wiredSemiAutoGateway?.setApprover(null)
+							wiredSemiAutoGateway = null
 							dispatcherControlPanel.modeState = null
 							dispatcherControlPanel.clearRationale()
 							controlPanel.setStopEnabled(false)
@@ -395,6 +405,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		dispatcherControlPanel.isVisible = false
 		dispatcherControlPanel.modeState = null
 		dispatcherControlPanel.clearRationale()
+		// Detach the SEMI_AUTO approver in case switchToEditingMode is called without a prior
+		// STOPPED transition (e.g. a context swap while the simulation is not running).
+		wiredSemiAutoGateway?.setApprover(null)
+		wiredSemiAutoGateway = null
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
@@ -411,7 +425,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Wire the [DispatcherControlPanel] to the active simulation context (Issue #561, SP2b.6).
 	 *
-	 * Resolves three things from the context's Koin scope (when the dispatcher-agent
+	 * Resolves four things from the context's Koin scope (when the dispatcher-agent
 	 * module is loaded):
 	 * 1. [cz.vutbr.fit.interlockSim.sim.DispatcherModeState] → drives the panel's mode
 	 *    combo box and indicator.
@@ -421,6 +435,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 *    sink feeds every applied [cz.vutbr.fit.interlockSim.sim.DispatchDecision]'s rationale into the panel so
 	 *    the "Why this route?" button can display it.
 	 * 3. The panel's `onRationale` callback → shows the rationale in a dialog.
+	 * 4. [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] → installs a
+	 *    [SemiAutoApprovalDialog]-based blocking approver on the gateway so that
+	 *    decisions in [cz.vutbr.fit.interlockSim.sim.DispatcherMode.SEMI_AUTO] mode
+	 *    wait for the operator to click Approve or Dismiss (Issue #806, SP2b.6 follow-up).
 	 *
 	 * If any lookup fails (e.g. the context is not a [DefaultSimulationContext], or the
 	 * dispatcher-agent module is not loaded) the panel remains disabled but the GUI is
@@ -448,12 +466,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			val modeState = context.scope.getOrNull<DispatcherModeState>()
 			if (modeState != null) {
 				dispatcherControlPanel.modeState = modeState
-				// Critical 2: the operator's combo-box selection propagates to the shared
-				// DispatcherModeState override. (Applier enforcement of the mode is deferred
-				// to the SEMI_AUTO approval follow-up — see DispatcherControlPanel KDoc.)
+				// The operator's combo-box selection propagates to the shared DispatcherModeState override.
+				// In SEMI_AUTO mode, the SemiAutoApprovalGateway (wired below) will prompt the
+				// operator to approve or dismiss each decision (Issue #806, SP2b.6 follow-up).
 				dispatcherControlPanel.onModeChanged = { mode -> modeState.setOverride(mode) }
-				// Critical 1 (display): the "Why this route?" button shows the last decision's
-				// rationale in a modal dialog.
+				// The "Why this route?" button shows the last decision's rationale in a modal dialog.
 				dispatcherControlPanel.onRationale = { rationale ->
 					JOptionPane.showMessageDialog(
 						this@Frame,
@@ -462,8 +479,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 						JOptionPane.INFORMATION_MESSAGE
 					)
 				}
-				// Critical 1 (feed): the sim-thread applier pushes every applied decision
-				// through the hub; marshal the update onto the EDT before touching the panel.
+				// The sim-thread applier pushes every applied decision through the hub;
+				// marshal the update onto the EDT before touching the panel.
 				val hub = context.scope.getOrNull<DispatchDecisionListenerHub>()
 				if (hub != null) {
 					hub.setSink { decision ->
@@ -474,6 +491,20 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 					wiredDecisionHub = hub
 				} else {
 					logger.debug { "DispatchDecisionListenerHub not available in context scope; rationale button will have no feed" }
+				}
+				// SP2b.6 follow-up (Issue #806): install a blocking SemiAutoApprovalDialog
+				// as the SEMI_AUTO approver. The gateway bridges the sim-thread call to this
+				// EDT-side dialog via SwingUtilities.invokeAndWait inside SemiAutoApprovalDialog.promptOnEdt.
+				// On stop, the STOPPED transition calls setApprover(null) to detach.
+				val semiAutoGateway = context.scope.getOrNull<SemiAutoApprovalGateway>()
+				if (semiAutoGateway != null) {
+					semiAutoGateway.setApprover { decision ->
+						// Called on the sim thread; invokeAndWait hands off to EDT to show modal dialog.
+						SemiAutoApprovalDialog.promptOnEdt(this@Frame, decision)
+					}
+					wiredSemiAutoGateway = semiAutoGateway
+				} else {
+					logger.debug { "SemiAutoApprovalGateway not available in context scope; SEMI_AUTO mode will drop decisions with warning" }
 				}
 			} else {
 				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }

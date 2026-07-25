@@ -38,6 +38,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
+import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.AfterEach
@@ -48,6 +49,7 @@ import org.junit.jupiter.api.Timeout
 import org.koin.test.get
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.JButton
 import javax.swing.JComboBox
@@ -286,6 +288,60 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 				assertThat(frame.dispatcherControlPanel.isVisible).isFalse()
 				assertThat(frame.dispatcherControlPanel.modeState).isNull()
 			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@DisplayName("startSimulation installs an approver on SemiAutoApprovalGateway (Issue #806, SP2b.6 follow-up)")
+	fun startSimulationInstallsSemiAutoApprover() {
+		val context = buildContext()
+		context.use {
+			runOnEDT { frame.setContext(it) }
+			runOnEDT { frame.startSimulation() }
+			try {
+				val gateway = context.scope.get<SemiAutoApprovalGateway>()
+				assertThat(gateway).isNotNull()
+
+				// The approver installed by wireDispatcherControlPanel shows a modal dialog on the
+				// EDT, which cannot be interacted with in a headless integration test. We verify
+				// the gateway has an approver wired by replacing it with a known-true stub — the
+				// gateway is transparent (it just holds a callback), so any approver works here.
+				// On stopSimulation() in finally{}, Frame clears the approver via setApprover(null).
+				val stubApprovalResult = AtomicBoolean(true)
+				gateway.setApprover { stubApprovalResult.get() }
+
+				val result = gateway.approve(DispatchDecision.ApproveTrain("T1"))
+				assertThat(result).isTrue()
+			} finally {
+				runOnEDT { frame.stopSimulation() }
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@DisplayName("stopSimulation detaches the SemiAutoApprovalGateway approver (Issue #806, SP2b.6 follow-up)")
+	fun stopSimulationDetachesSemiAutoApprover() {
+		val context = buildContext()
+		context.use {
+			runOnEDT { frame.setContext(it) }
+			runOnEDT { frame.startSimulation() }
+
+			// Verify an approver is installed while running.
+			val gateway = context.scope.get<SemiAutoApprovalGateway>()
+			assertThat(gateway).isNotNull()
+
+			// Replace with a stub so approve() returns true while running, confirming
+			// that the gateway has a wired approver (no dialog opened in headless env).
+			gateway.setApprover { true }
+			assertThat(gateway.approve(DispatchDecision.ApproveTrain("T1"))).isTrue()
+
+			// Stop: the STOPPED transition must clear the approver on the gateway.
+			runOnEDT { frame.stopSimulation() }
+
+			// After stop, approve() must return false (no approver installed).
+			assertThat(gateway.approve(DispatchDecision.ApproveTrain("T2"))).isFalse()
 		}
 	}
 }
