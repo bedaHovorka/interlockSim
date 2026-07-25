@@ -10,9 +10,9 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -75,8 +75,11 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 
 		/**
 		 * The reserved path should use the lowest-cost route (RouteFinder sorts by cost ascending).
-		 * For a shunting loop network with two parallel paths, the primary route has the minimum
-		 * block count.
+		 * For a shunting loop network with two parallel paths, the primary route (k1, 320 m)
+		 * has fewer total metres than the secondary route (k2, 510 m), even though both traverse
+		 * exactly 7 segments.  The assertion verifies both the exact block count and the total
+		 * reserved length so that accidentally reserving the costlier k2 route would cause the
+		 * test to fail.
 		 */
 		@Test
 		fun `reservePath reserves lowest-cost route first`() {
@@ -91,20 +94,30 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 				val inOut0 = inOuts[0]
 				val inOut1 = inOuts[1]
 
-				// Find the cheapest route independently
+				// Find the cheapest route independently via RouteFinder
 				val routes = routeFinder.findRoutes(inOut0.staticRef, inOut1.staticRef, simCtx)
-				val cheapestCost = routes.first().cost
+				val cheapestRoute = routes.first()
+				assertThat(cheapestRoute.cost).isGreaterThan(0.0)
 
-				// Reserve via service
+				// Reserve via service — must select the cheapest route
 				val result = service.reservePath("train1", inOut0, inOut1)
 				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 				val success = result as PathReservationService.ReservationResult.Success
 
-				// The number of reserved blocks should match (or be consistent with) the cheapest route
-				// More expensive routes would have more blocks; the primary route is the smallest
-				val maxBlocksForCheapest = routes.first().segments.size + 1 // +1 for possible splits
-				assertThat(success.reservedBlocks.size).isLessThanOrEqualTo(maxBlocksForCheapest + 3)
-				assertThat(cheapestCost).isGreaterThan(0.0)
+				// The reserved block count must equal the cheapest route's segment count exactly.
+				// (Both routes in vyhybna.xml have 7 segments, so this also bounds the costlier route.)
+				// NOTE: this and the length assertion below assume k1 visits each block exactly
+				// once. The service deduplicates sections that map to the same block, so a future
+				// fixture where k1 revisits a block would make reservedBlocks.size < segments.size
+				// (and the segment-sum length would double-count that block) - failing both
+				// assertions on a *correct* reservation. True for vyhybna.xml today; a failure here
+				// from a fixture edit is not a reservation-logic regression.
+				assertThat(success.reservedBlocks.size).isEqualTo(cheapestRoute.segments.size)
+
+				// The total reserved length must equal the cheapest route's total length.
+				// vyhybna.xml: k1 = 320.0 m, k2 = 510.0 m — a wrong route would fail this check.
+				val totalReservedLength = success.reservedBlocks.sumOf { it.length() }
+				assertThat(totalReservedLength).isEqualTo(cheapestRoute.totalLength)
 			}
 		}
 	}
