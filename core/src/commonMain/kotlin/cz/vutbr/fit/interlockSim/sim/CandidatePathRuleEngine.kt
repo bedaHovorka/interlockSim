@@ -62,13 +62,21 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * break remaining ties.  Callers that want a different emphasis (for example the exact
  * listing order in Issue #557) pass their own [priority].
  *
- * ## Determinism (Goal 10 Stage A3)
+ * ## Determinism and purity (Goal 10 Stage A3)
  *
- * [rank] is a pure function and uses a **stable** sort, so candidates that compare equal
- * under every configured rule retain their input order.  Given a deterministic candidate
- * enumeration (as Goal 2 pathfinding provides for a fixed topology), the engine produces
- * identical rankings across consecutive runs — a prerequisite for the A3 deterministic
- * gate on `vyhybna.xml`.
+ * The engine is **stateless**: its only mutable-free state is the immutable [priority]
+ * list and the derived [comparator], both set at construction time.
+ *
+ * [rank] is a **pure function** — no side effects — and uses a **stable** sort, so
+ * candidates that compare equal under every configured rule retain their input order.
+ * Given a deterministic candidate enumeration (as Goal 2 pathfinding provides for a fixed
+ * topology), the engine produces identical rankings across consecutive runs — a
+ * prerequisite for the A3 deterministic gate on `vyhybna.xml`.
+ *
+ * [select] and [selectWithRationale] are **not** strictly pure: they emit one
+ * `logger.debug` line per invocation naming the selected route's metrics.  This is a
+ * conventional, harmless observational side effect (no state is mutated) and does not
+ * affect the return value or determinism of the selection.
  *
  * @property priority Ordered, non-empty, duplicate-free list of [Rule]s applied
  *   lexicographically.  Defaults to [DEFAULT_PRIORITY].
@@ -155,6 +163,12 @@ class CandidatePathRuleEngine(
 	 * 3 entries (multiple candidates).  The returned [PathCandidate] is `null` when
 	 * [candidates] is empty.
 	 *
+	 * **Side effect:** emits one `logger.debug` line per call naming the selected
+	 * route's key metrics.  This does not affect the return value or determinism.
+	 *
+	 * **Performance:** uses [Iterable.minWithOrNull] (O(n)) rather than a full sort,
+	 * so the best candidate is found in a single pass over [candidates].
+	 *
 	 * @param candidates The candidate routes to choose from.
 	 * @return A pair of `(best candidate or null, non-empty rationale list)`.
 	 *
@@ -164,8 +178,7 @@ class CandidatePathRuleEngine(
 		if (candidates.isEmpty()) {
 			return null to listOf("No candidate paths available")
 		}
-		val ranked = rank(candidates)
-		val best = ranked.first()
+		val best = candidates.minWithOrNull(comparator)!!
 		logger.debug {
 			"CandidatePathRuleEngine selected route with ${best.sections.size} section(s), " +
 				"switchMovementCount=${best.switchMovementCount}, conflictRiskWeight=${best.conflictRiskWeight}"
@@ -180,8 +193,8 @@ class CandidatePathRuleEngine(
 						"switches=${best.switchMovementCount}, " +
 						"conflictRisk=${best.conflictRiskWeight}"
 				)
-				if (ranked.size > 1) {
-					add("Ranked ${ranked.size} candidate path(s); top-ranked selected")
+				if (candidates.size > 1) {
+					add("Ranked ${candidates.size} candidate path(s); top-ranked selected")
 				}
 			}
 		return best to rationale
