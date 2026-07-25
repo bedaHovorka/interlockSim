@@ -504,7 +504,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 					}
 					wiredSemiAutoGateway = semiAutoGateway
 				} else {
-					logger.debug { "SemiAutoApprovalGateway not available in context scope; SEMI_AUTO mode will drop decisions with warning" }
+					logger.debug {
+						"SemiAutoApprovalGateway not available in context scope; SEMI_AUTO mode will drop decisions with warning"
+					}
 				}
 			} else {
 				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }
