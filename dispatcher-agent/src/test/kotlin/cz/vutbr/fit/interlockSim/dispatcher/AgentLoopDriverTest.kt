@@ -32,6 +32,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
@@ -505,9 +506,16 @@ class AgentLoopDriverTest {
 			every { perceptionPort.snapshot() } returns emptySnapshot(0.0)
 
 			val driver = makeSignalDriver()
-			runBlocking {
+			// Dispatchers.IO: DefaultSnapshotSignal.await() blocks the calling thread on a
+			// real java.util.concurrent.Semaphore (by design — see SnapshotSignal KDoc), so the
+			// default single-threaded runBlocking dispatcher would deadlock the launched
+			// signal-firing coroutine against driver.runCycle()'s blocking await().
+			runBlocking(Dispatchers.IO) {
 				// Fire signal twice so both runCycle() calls get their await() unblocked.
-				launch { signal.signal(); signal.signal() }
+				launch {
+					signal.signal()
+					signal.signal()
+				}
 				driver.runCycle() // First cycle: processes simTime=0.0 (prevSimTime=0.0 → first)
 				driver.runCycle() // Second cycle: simTime STILL 0.0 — must NOT skip in signal mode
 			}
@@ -531,9 +539,16 @@ class AgentLoopDriverTest {
 			val driver = makeSignalDriver()
 			var cycleCompleted = false
 
-			runBlocking {
+			// Dispatchers.IO: see stagnantSimTimeDoesNotSkipCycleInSignalMode() above — the
+			// launched job blocks its thread inside await(), so the default single-threaded
+			// runBlocking dispatcher would deadlock against the signal() call below.
+			runBlocking(Dispatchers.IO) {
 				// Launch the cycle; it will block on await().
-				val job = launch { driver.runCycle(); cycleCompleted = true }
+				val job =
+					launch {
+						driver.runCycle()
+						cycleCompleted = true
+					}
 				// Give the coroutine time to block on await().
 				kotlinx.coroutines.delay(10)
 				// Not yet completed — still waiting for signal.
