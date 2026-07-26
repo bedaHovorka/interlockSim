@@ -77,11 +77,16 @@ object TestTopologies {
 	 * **Layout per stage i (0-indexed):**
 	 * - `SW{i}` — [RailSwitch] split point (SIMPLE_RIGHT_FALSE, HORIZONTAL).
 	 *   From the incoming (west/A) direction it fans out to:
-	 *   - east (Segment.F → main leg, directly to the merge semaphore), and
+	 *   - east (Segment.F → main leg, directly to the merge switch), and
 	 *   - southeast (Segment.G → bypass leg, through the bypass semaphore).
 	 * - `BrSem{i}` — [RailSemaphore] bypass intermediate node (no path constraints).
-	 * - `MrgSem{i}` — [RailSemaphore] merge point (accepts from both main and bypass legs;
-	 *   no switch-constraint filtering because it is not a [RailSwitch]).
+	 * - `MrgSem{i}` — [RailSwitch] merge point (SIMPLE_LEFT_TRUE, HORIZONTAL). A plain
+	 *   [RailSemaphore] cannot serve as this merge node: it exposes only 2 connection
+	 *   segments (HORIZONTAL joinsOnLine = {F, A}), but the merge point needs 3 physical
+	 *   connections (main leg in via A, bypass leg in via D, outgoing via F).
+	 *   SIMPLE_LEFT_TRUE exposes exactly {A, D, F} for HORIZONTAL, and its confs graph
+	 *   (F merging, D branch, A main) permits both A→F and D→F, so either incoming leg
+	 *   can reach the outgoing connection.
 	 *
 	 * Each stage doubles the number of active paths, so after [stageCount] stages the
 	 * total path count from "A" to "B" is 2^[stageCount].
@@ -104,7 +109,10 @@ object TestTopologies {
 		val gridHeight = 20
 		val context = DefaultEditingContext(gridWidth, gridHeight)
 
-		val entry = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+		// InOut.direction() = spatialType.segments[if (orientation) 1 else 0]; for HORIZONTAL,
+		// segments = [F (east), A (west)]. "A" sits at the west end of the network and must
+		// point east (F) to join the first switch, so orientation = false here.
+		val entry = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		context.putCell(Point(1, 5), entry)
 
 		var prevNode: NodeCell = entry
@@ -121,7 +129,7 @@ object TestTopologies {
 
 			val sw = RailSwitch("SW$i", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			val brSem = RailSemaphore("BrSem$i", false, Cell.SpatialType.HORIZONTAL)
-			val mrgSem = RailSemaphore("MrgSem$i", false, Cell.SpatialType.HORIZONTAL)
+			val mrgSem = RailSwitch("MrgSem$i", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE)
 
 			context.putCell(Point(swX, 5), sw)
 			context.putCell(Point(brX, brY), brSem)
@@ -129,11 +137,11 @@ object TestTopologies {
 
 			// prevNode → sw  (incoming track from left; arriving at Segment.A on the switch)
 			context.joinCells(Point(prevX, 5), Point(swX, 5), SimpleTrackBlock(prevNode, sw, 100.0, 80.0))
-			// sw → mrgSem    (main leg; Segment.F east direction)
+			// sw → mrgSem    (main leg; Segment.F east on sw, Segment.A west on mrgSem)
 			context.joinCells(Point(swX, 5), Point(mrgX, 5), SimpleTrackBlock(sw, mrgSem, 100.0, 80.0))
 			// sw → brSem     (bypass leg; Segment.G southeast direction)
 			context.joinCells(Point(swX, 5), Point(brX, brY), SimpleTrackBlock(sw, brSem, 100.0, 80.0))
-			// brSem → mrgSem (bypass completion; RailSemaphore imposes no path constraints)
+			// brSem → mrgSem (bypass completion; Segment.D southwest on mrgSem)
 			context.joinCells(Point(brX, brY), Point(mrgX, 5), SimpleTrackBlock(brSem, mrgSem, 100.0, 80.0))
 
 			prevNode = mrgSem
@@ -141,7 +149,9 @@ object TestTopologies {
 		}
 
 		val exitX = prevX + 4
-		val exit = InOut("B", false, Cell.SpatialType.HORIZONTAL)
+		// "B" sits at the east end of the network and must point west (A) to join the last
+		// merge switch, so orientation = true here (mirrors the entry's reasoning above).
+		val exit = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 		context.putCell(Point(exitX, 5), exit)
 		context.joinCells(Point(prevX, 5), Point(exitX, 5), SimpleTrackBlock(prevNode, exit, 100.0, 80.0))
 
