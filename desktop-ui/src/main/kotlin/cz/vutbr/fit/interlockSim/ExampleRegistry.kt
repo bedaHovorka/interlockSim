@@ -28,8 +28,10 @@ import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
+import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
@@ -182,8 +184,10 @@ class ExampleRegistry {
 	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [DispatcherPlanner] binding
 	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
 	 *   (e.g. to an LLM-backed planner, SP3.6) takes effect here too (Goal 10 seam)
-	 * - creates [DispatchDecisionApplier] (with ShuntingLoop counter callbacks) and registers
-	 *   it as [ShuntingLoop.controlStepListener]
+	 * - creates [DispatchDecisionApplier] (with ShuntingLoop counter callbacks, the scoped
+	 *   [DispatcherModeState] for applier-mode enforcement, and the scoped
+	 *   [SemiAutoApprovalGateway] as the SEMI_AUTO approver) and registers it as
+	 *   [ShuntingLoop.controlStepListener]
 	 * - creates [AgentLoopDriver] (with ShuntingLoop observation providers) and registers its
 	 *   run-loop as [ShuntingLoop.agentDriverAction]
 	 * - registers [ShuntingLoop.snapshotCaptureHook] to keep the perception-port snapshot fresh
@@ -196,7 +200,8 @@ class ExampleRegistry {
 	 * delegate when the run starts, so the agent loop is paced by the existing real-time
 	 * sync (speed multiplier, pause).
 	 *
-	 * @since Issue #733 (SP0.11 — Goal 10); SimulationRunner pacing wired in SP4.2 (Issue #564)
+	 * @since Issue #733 (SP0.11 — Goal 10); SimulationRunner pacing wired in SP4.2 (Issue #564);
+	 *   [DispatcherModeState] + [SemiAutoApprovalGateway] passed to applier in Issue #806 (SP2b.6 follow-up)
 	 */
 	private fun wireDispatcherAgent(
 		context: DefaultSimulationContext,
@@ -222,6 +227,18 @@ class ExampleRegistry {
 		// DispatcherControlPanel (the "Why this route?" button). Null-tolerant: console runs
 		// resolve the hub but never attach a sink, so onDecisionApplied is a no-op there.
 		val decisionListener = context.scope.getOrNull<DispatchDecisionListenerHub>()
+		// SP2b.4 (Issue #559): scoped mode state that gates decisions per operator selection.
+		// Null-tolerant: if the dispatcher-agent module is not loaded the applier falls back to
+		// its pre-SP2b.4 behaviour (apply everything without consulting the mode state).
+		val modeState = context.scope.getOrNull<DispatcherModeState>()
+		// SP2b.6 follow-up (Issue #806): scoped approval gateway for SEMI_AUTO decisions.
+		// The gateway holds a mutable approver (null until Frame.wireDispatcherControlPanel
+		// installs the SemiAutoApprovalDialog). Headless runs leave the approver null, so
+		// gateway.approve() returns false and every SEMI_AUTO actuating decision is dropped
+		// (DispatchDecisionApplier already logs a warning in that case). Null-tolerant here
+		// too: if the scope does not contain the gateway the semiAutoApprover is null and the
+		// applier's own "no approver" fallback applies.
+		val semiAutoGateway = context.scope.getOrNull<SemiAutoApprovalGateway>()
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
 		// NoOpSimulationController (console runs) has no speed cap, so an async planner cannot
 		// honour the 2× real-time limit there. GUI runs pass the DelegatingSimulationController
@@ -235,7 +252,9 @@ class ExampleRegistry {
 				onApproveTrain = loop::approveQueuedTrain,
 				onBlockTransition = loop::incrementBlockTransition,
 				onFailedReservation = loop::incrementFailedReservation,
-				onDecisionApplied = decisionListener
+				onDecisionApplied = decisionListener,
+				modeState = modeState,
+				semiAutoApprover = semiAutoGateway?.let { gw -> gw::approve }
 			)
 		// Evict the duplicate-suppression guard's entries for a train once any of its blocks
 		// releases — see DispatchDecisionApplier.evictReservationsFor for why this must not
