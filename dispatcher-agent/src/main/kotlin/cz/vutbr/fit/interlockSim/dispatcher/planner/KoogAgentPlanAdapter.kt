@@ -18,6 +18,8 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import java.time.Duration
 
@@ -54,9 +56,10 @@ import java.time.Duration
  *
  * ## Thread safety
  *
- * [agent] is a `@Volatile` field set at most once by [getOrCreateAgent]. In typical usage
- * ([AgentLoopDriver] drives a single coroutine), the double-initialization window is negligible;
- * both races produce equivalent [KoogDispatchAgent] instances via the same factory.
+ * [getOrCreateAgent] uses a [kotlinx.coroutines.sync.Mutex] to serialize concurrent
+ * initializations — exactly one [KoogAgentFactory.createAgent] call is made even if [plan]
+ * is invoked from multiple coroutines simultaneously. Subsequent calls read the cached
+ * [agent] via the `@Volatile` fast-path without lock contention.
  *
  * @param agentFactory   Per-context factory for building the Koog dispatch agent (scoped).
  * @param context        Simulation context passed to [KoogAgentFactory.createAgent] for
@@ -93,13 +96,17 @@ class KoogAgentPlanAdapter(
 		)
 
 	/**
-	 * Lazily-created Koog dispatch agent.
+	 * Lazily-created Koog dispatch agent, guarded by [agentInitMutex].
 	 *
-	 * Initialized on the first [plan] call via [getOrCreateAgent]; `@Volatile` for safe
-	 * publication across coroutines. `null` until the agent is first created.
+	 * `null` until the first [plan] call; `@Volatile` for safe publication after the mutex
+	 * is released so that the fast path in [getOrCreateAgent] avoids acquiring the lock on
+	 * every subsequent call.
 	 */
 	@Volatile
 	private var agent: KoogDispatchAgent? = null
+
+	/** Ensures exactly one concurrent [KoogAgentFactory.createAgent] call (suspend-friendly). */
+	private val agentInitMutex = Mutex()
 
 	/**
 	 * Produces dispatch decisions by consulting the Koog LLM agent, falling back to
@@ -149,14 +156,15 @@ class KoogAgentPlanAdapter(
 	/**
 	 * Returns the cached [KoogDispatchAgent], creating it lazily on the first call.
 	 *
-	 * Agent creation is deferred to the first [plan] invocation so that the Ollama
-	 * connectivity check and topology serialization happen on the driver thread, not
-	 * during context setup.
+	 * Thread-safe: a [Mutex] serializes concurrent initializations so exactly one
+	 * [KoogAgentFactory.createAgent] call is made even when [plan] is invoked from
+	 * multiple coroutines simultaneously. The `@Volatile` fast-path check avoids
+	 * lock contention after initialization.
 	 */
 	private suspend fun getOrCreateAgent(): KoogDispatchAgent {
 		agent?.let { return it }
-		val created = agentFactory.createAgent(context)
-		agent = created
-		return created
+		return agentInitMutex.withLock {
+			agent ?: agentFactory.createAgent(context).also { agent = it }
+		}
 	}
 }
