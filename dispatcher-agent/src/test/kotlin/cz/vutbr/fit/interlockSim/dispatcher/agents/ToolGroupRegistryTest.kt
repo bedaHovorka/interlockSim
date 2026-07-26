@@ -46,14 +46,14 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `assembleActuatorTools returns 4 actuator tools`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 
 		assertThat(tools).hasSize(4)
 	}
 
 	@Test
 	fun `assembleAllTools returns 13 total tools`() {
-		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
 
 		assertThat(tools).hasSize(13)
 	}
@@ -80,7 +80,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `actuator tools have correct names`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 		val toolNames = tools.map { it.name }
 
 		assertThat(toolNames).isEqualTo(
@@ -104,7 +104,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `actuator tools have descriptions`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 
 		tools.forEach { tool ->
 			assertThat(tool.description).isNotEmpty()
@@ -122,7 +122,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `request_route tool has three parameters`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 		val requestRouteTool = tools.first { it.name == "request_route" }
 
 		assertThat(requestRouteTool.parameters).hasSize(3)
@@ -141,7 +141,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `assembleAllTools returns 13 tools with distinct names`() {
-		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
 
 		assertThat(tools).hasSize(13)
 		// A duplicate-name / drop-one regression must not pass the size check alone (#551 review #9).
@@ -197,7 +197,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `dispatch-loop tools do not overlap with assembleAllTools tool names`() {
-		val allToolNames = registry.assembleAllTools(mockPerceptionPort, commandQueue).map { it.name }.toSet()
+		val allToolNames = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet()).map { it.name }.toSet()
 		val dispatchLoopNames = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue).map { it.name }.toSet()
 
 		assertThat(allToolNames.intersect(dispatchLoopNames)).hasSize(0)
@@ -206,7 +206,7 @@ class ToolGroupRegistryTest {
 	@Test
 	fun `assembleAllTools still returns exactly 13 tools after SP4 additions`() {
 		// Regression guard: SP4.1 additions must NOT affect the SP1/SP2a tool count.
-		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
 
 		assertThat(tools).hasSize(13)
 	}

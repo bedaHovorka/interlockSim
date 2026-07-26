@@ -49,10 +49,19 @@ import java.time.Duration
  *
  * ## Fallback priority
  *
- * 1. LLM returns non-empty decisions → use them
- * 2. LLM returns empty decisions → fall back to [fallbackDispatcher]
- * 3. LLM times out → fall back to [fallbackDispatcher]
- * 4. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
+ * 1. LLM cycle completes (any [KoogDispatchAgent.decideAsync] result, **including an empty
+ *    list**) → use it as-is, never fall back. An empty list is the *normal, successful* outcome
+ *    once real Koog tool-calling is wired: actuator tools already post their
+ *    [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s directly to the shared
+ *    `ActuatorCommandQueue` as a side effect during `decideAsync`, so a completed cycle with no
+ *    returned decisions does not mean the LLM did nothing. Treating "empty" as failure and
+ *    invoking [fallbackDispatcher] on top would double-dispatch: the LLM's tool-driven decision
+ *    plus the rule engine's independently-decided one for the same train/hop, posted to the same
+ *    queue in the same drain cycle — risking the duplicate-`ReservePath` train-freeze regression
+ *    `DispatchDecisionApplier`'s own KDoc documents as a past incident (Issue #733 follow-up),
+ *    from a new source.
+ * 2. LLM times out → fall back to [fallbackDispatcher]
+ * 3. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
  *
  * ## Thread safety
  *
@@ -125,16 +134,14 @@ class KoogAgentPlanAdapter(
 				withTimeout(inferenceTimeout.toMillis()) {
 					a.decideAsync(observation)
 				}
-			if (decisions.isEmpty()) {
-				logger.debug {
-					"KoogAgentPlanAdapter: LLM returned no decisions — applying rule-based fallback " +
-						"(simTime=${observation.snapshot.simTime})"
-				}
-				fallbackDispatcher.decide(observation)
-			} else {
-				logger.debug { "KoogAgentPlanAdapter: LLM produced ${decisions.size} decision(s)" }
-				decisions
+			// An empty list is NOT a failure signal — see the class KDoc's "Fallback priority"
+			// section for why falling back here would risk double-dispatching alongside the
+			// LLM's own tool-driven actuation.
+			logger.debug {
+				"KoogAgentPlanAdapter: LLM cycle completed with ${decisions.size} directly-returned " +
+					"decision(s) (simTime=${observation.snapshot.simTime}); not falling back"
 			}
+			decisions
 		} catch (e: TimeoutCancellationException) {
 			logger.warn {
 				"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +

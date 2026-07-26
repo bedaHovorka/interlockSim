@@ -228,6 +228,24 @@ class DispatchDecisionApplier(
 	 * [ShuntingLoop.iteration][cz.vutbr.fit.interlockSim.sim.ShuntingLoop].
 	 * All simulation-state mutations performed here are serialised with all other
 	 * sim-thread operations by kDisco's single-threaded scheduler.
+	 *
+	 * ## Per-decision exception isolation (Goal 10 incident fix)
+	 *
+	 * Tool-driven decisions ([DispatchDecision.RequestRoute] etc., SP1.7) can carry
+	 * LLM-hallucinated string arguments (an endpoint name that doesn't exist in this
+	 * network). [NetworkActuatorPort.requestRoute]'s `requireEndpoint` check throws
+	 * [IllegalArgumentException] for that case — correct for its other, trusted callers
+	 * (an unknown endpoint there really is a caller bug), but for the LLM tool path it is
+	 * a routine, expected external-input error, not a bug. Without the guard below, that
+	 * exception propagated out of this method and killed the entire kDisco simulation
+	 * thread (confirmed via a live `shuntingLoopAI` run against a real local model), after
+	 * which the simulation stopped dispatching anything at all. Each decision is applied
+	 * in its own try/catch so one bad LLM argument only drops that single decision —
+	 * every other decision in the same drained batch is still applied, and the simulation
+	 * keeps running. Only [IllegalArgumentException] is caught here: it is the specific,
+	 * established idiom this codebase uses for "caller violated an API precondition";
+	 * anything else (e.g. a `NullPointerException` from a genuine bug) still propagates
+	 * and crashes loud, preserving today's dev-time bug visibility.
 	 */
 	override fun onControlStep() {
 		val decisions = queue.drain()
@@ -235,12 +253,19 @@ class DispatchDecisionApplier(
 		logger.debug { "onControlStep: applying ${decisions.size} pending decision(s)" }
 		for (decision in decisions) {
 			if (shouldApply(decision)) {
-				applyDecision(decision)
-				// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
-				// "Why this route?" panel can display the rationale. NoAction carries no
-				// rationale, and dropped decisions (e.g. under MANUAL) are not "applied".
-				if (decision !is DispatchDecision.NoAction) {
-					onDecisionApplied?.onDecisionApplied(decision)
+				try {
+					applyDecision(decision)
+					// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
+					// "Why this route?" panel can display the rationale. NoAction carries no
+					// rationale, and dropped decisions (e.g. under MANUAL) are not "applied".
+					if (decision !is DispatchDecision.NoAction) {
+						onDecisionApplied?.onDecisionApplied(decision)
+					}
+				} catch (e: IllegalArgumentException) {
+					logger.warn(e) {
+						"onControlStep: dropping decision ${decision::class.simpleName} — invalid " +
+							"argument(s): ${e.message}"
+					}
 				}
 			}
 		}

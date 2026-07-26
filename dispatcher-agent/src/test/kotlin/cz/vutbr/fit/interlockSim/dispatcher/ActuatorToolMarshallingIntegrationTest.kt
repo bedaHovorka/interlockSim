@@ -105,7 +105,7 @@ class ActuatorToolMarshallingIntegrationTest {
 		// Publish a snapshot on the sim (test) thread so the projection has data.
 		perceptionPort.captureSnapshot()
 		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
-		val tools = ToolGroupRegistry().assembleAllTools(projection, queue)
+		val tools = ToolGroupRegistry().assembleAllTools(projection, queue, emptySet())
 		val setSignalAspectTool = tools.first { it.name == "set_signal_aspect" }
 
 		// Pick a real semaphore from the network and a target aspect different from its current one.
@@ -161,7 +161,7 @@ class ActuatorToolMarshallingIntegrationTest {
 
 		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
 		val queue = ActuatorCommandQueue()
-		val tools = ToolGroupRegistry().assembleAllTools(projection, queue)
+		val tools = ToolGroupRegistry().assembleAllTools(projection, queue, emptySet())
 		val signalAspectTool = tools.first { it.name == "signal_aspect" }
 
 		// Invoke the perception tool from a BACKGROUND thread — it must read the projected

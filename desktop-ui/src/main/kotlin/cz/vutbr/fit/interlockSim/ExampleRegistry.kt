@@ -27,11 +27,10 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
-import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
@@ -249,7 +248,10 @@ class ExampleRegistry {
 
 	/**
 	 * Wires the SP0.11 dispatcher-agent stack onto [loop]:
-	 * - creates [DefaultNetworkPerceptionPort] and [DefaultNetworkActuatorPort] backed by [context]
+	 * - resolves the Koin-scoped [NetworkPerceptionPort] and [NetworkActuatorPort] for [context]
+	 *   (Goal 10 dispatcher-cannot-approve-trains fix: must be the same instances
+	 *   [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] injects into its tools —
+	 *   constructing separate ones here left the tools' perception port permanently unrefreshed)
 	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [DispatcherPlanner] (singleton)
 	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [DispatcherPlanner] binding
 	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
@@ -286,18 +288,15 @@ class ExampleRegistry {
 		controller: SimulationController,
 		plannerOverride: DispatcherPlanner? = null
 	) {
-		val perceptionPort =
-			DefaultNetworkPerceptionPort(
-				env = context,
-				activeTrains = loop::getApprovedTrains
-			)
-		val actuatorPort =
-			DefaultNetworkActuatorPort(
-				env = context,
-				// SP3.5 (Issue #573): wire InterlockingFacade as the single chokepoint so all
-				// requestRoute calls (tool → queue → applier → port) pass through the safety kernel.
-				interlockingFacade = context.scope.get<InterlockingFacade>()
-			)
+		// Goal 10 dispatcher-cannot-approve-trains fix: resolve the SAME NetworkPerceptionPort /
+		// NetworkActuatorPort instances the Koin-scoped KoogAgentFactory uses for its tools,
+		// instead of constructing separate ones here. Previously this method built its own
+		// DefaultNetworkPerceptionPort and refreshed it via snapshotCaptureHook below, while
+		// KoogAgentFactory's perception tools read a DIFFERENT, never-refreshed Koin-scoped
+		// instance — the LLM's perception tools therefore always saw
+		// SimulationSnapshot.EMPTY regardless of actual simulation state.
+		val perceptionPort = context.scope.get<NetworkPerceptionPort>()
+		val actuatorPort = context.scope.get<NetworkActuatorPort>()
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
 		// SP2b.9 (Issue #566): plannerOverride allows callers to supply a specific planner

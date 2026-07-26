@@ -261,8 +261,16 @@ class DynamicRailSemaphoreTest {
 	// For staticSemaphore1: orientation=true, HORIZONTAL
 	//   direction() = Cell.Segment.A  (HORIZONTAL.segments=[F,A], index 1 for orientation=true)
 	//   anti(A) = F
-	//   Forward: from=F, to=A  → checkPathSegments returns true (valid direction, fires)
-	//   Reverse: from=A, to=F  → checkPathSegments returns false (no signal change)
+	//
+	// A DynamicRailSemaphore sits at a block boundary and clears for traffic entering from
+	// EITHER side of that boundary (Issue #566/SP2b.9 domain decision -- see
+	// DynamicRailSemaphore.checkPathSegments KDoc). `orientation`/`direction()` remain
+	// meaningful for path-finding preference (e.g. PathReservationService.reservePathToAny's
+	// same-side/opposite-side sorting), but they no longer gate whether the physical signal
+	// can display a proceed aspect: a shunting-loop block signal must be able to authorize a
+	// train arriving from either direction across the boundary it protects.
+	//   Entry-side pairing: from=F, to=A  → checkPathSegments succeeds, signal fires
+	//   Exit-side pairing:  from=A, to=F  → checkPathSegments ALSO succeeds, signal fires
 
 	@Test
 	fun `setUpPath fires signal change event for forward direction`() {
@@ -320,25 +328,29 @@ class DynamicRailSemaphoreTest {
 	}
 
 	@Test
-	fun `setUpSpeed with reverse direction does not change signal`() {
+	fun `setUpSpeed with the reverse segment pairing also clears the signal`() {
 		// Signal initially STOP
 		val capturedEvents = mutableListOf<ContextChangeEvent>()
 		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
 
-		// Reverse direction: from=A (direction), to=F (anti-direction)
+		// Reverse pairing: from=A (direction), to=F (anti-direction) -- a train crossing
+		// this semaphore's block boundary from the opposite side. Issue #566/SP2b.9: this
+		// must clear the signal too, since the block boundary is traversable in either
+		// direction (see checkPathSegments KDoc).
 		dynamicSemaphore1.setUpSpeed(Cell.Segment.A, Cell.Segment.F, 20.0)
 
-		// Signal must remain STOP (reverse direction has no effect)
-		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
-		assertThat(capturedEvents).isEmpty()
+		assertThat(dynamicSemaphore1.signal).isNotEqualTo(Signal.STOP)
+		val signalEvents = capturedEvents.filter { it.propertyName == "signal" }
+		assertThat(signalEvents).hasSize(1)
+		assertThat(signalEvents[0].oldValue).isEqualTo(Signal.STOP)
 	}
 
 	@Test
-	fun `setUpPath with reverse direction does not fire event`() {
+	fun `setUpPath with the reverse segment pairing also fires a signal event`() {
 		val capturedEvents = mutableListOf<ContextChangeEvent>()
 		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
 
-		// Reverse direction for setUpPath
+		// Reverse pairing for setUpPath -- see setUpSpeed test above for rationale.
 		dynamicSemaphore1.setUpPath(
 			Cell.Segment.A,
 			Cell.Segment.F,
@@ -346,9 +358,9 @@ class DynamicRailSemaphoreTest {
 			stubTrackOccupant()
 		)
 
-		// No event should be fired; signal unchanged
-		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
-		assertThat(capturedEvents).isEmpty()
+		assertThat(dynamicSemaphore1.signal).isNotEqualTo(Signal.STOP)
+		val signalEvents = capturedEvents.filter { it.propertyName == "signal" }
+		assertThat(signalEvents).hasSize(1)
 	}
 
 	@Test

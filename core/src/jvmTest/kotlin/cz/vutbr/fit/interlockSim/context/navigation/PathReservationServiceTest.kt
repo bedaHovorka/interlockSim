@@ -41,6 +41,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -1393,6 +1394,33 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Assert AFTER - signal was configured to allow movement
 			assertThat(doA1Semaphore.signal).isNotEqualTo(Signal.STOP)
 			assertThat(doA1Semaphore.signal.isAllowing()).isTrue()
+		}
+
+		@Test
+		fun `reservePath configures every semaphore along a full InOut-to-InOut path, not just START`() {
+			// Act - reserve a full InOut-to-InOut route, spanning the intermediate semaphores
+			// at the vA/vB switch junctions (doA1/doA2, doB1/doB2) in addition to the
+			// START/target boundary semaphores.
+			val result = service.reservePath("train1", inOut1, inOut2)
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+
+			// Every semaphore bounding a reserved block must be configured to allow movement --
+			// one left at STOP means a train halts there forever (Issue #296 Phase 4 / Step 2h
+			// configureIntermediateSemaphores, and configureStartSignal for the START boundary).
+			val semaphoresOnPath =
+				success.reservedBlocks
+					.flatMap { it.ends().toList() }
+					.filterIsInstance<DynamicRailSemaphore>()
+					.distinctBy { it.name }
+
+			assertThat(semaphoresOnPath).isNotEmpty()
+			semaphoresOnPath.forEach { semaphore ->
+				assertThat(semaphore.signal)
+					.withMessage("Semaphore ${semaphore.name} must not remain at STOP after path grant")
+					.isNotEqualTo(Signal.STOP)
+			}
 		}
 
 		@Test

@@ -140,9 +140,9 @@ class DispatcherAgentModuleTest {
 			cz.vutbr.fit.interlockSim.dispatcher
 				.ActuatorCommandQueue()
 
-		val allTools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+		val allTools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
 		val perceptionTools = registry.assemblePerceptionTools(mockPerceptionPort)
-		val actuatorTools = registry.assembleActuatorTools(commandQueue)
+		val actuatorTools = registry.assembleActuatorTools(commandQueue, emptySet())
 
 		// SP1.6/SP1.7/SP2a.1: tool implementations are in place (9 perception + 4 actuator = 13 total)
 		assertThat(allTools).hasSize(13)

@@ -86,7 +86,7 @@ class ToolParameterValidationTest {
 
 	@Test
 	fun `request_route rejects any blank argument without posting to the queue`() {
-		val tool = RequestRouteTool(commandQueue)
+		val tool = RequestRouteTool(commandQueue, setOf("zA", "doA1"))
 		runBlocking {
 			assertThat(tool.execute(mapOf("trainName" to "", "fromEndpointName" to "zA", "toEndpointName" to "doA1")))
 				.isInstanceOf<ToolResult.Error>()

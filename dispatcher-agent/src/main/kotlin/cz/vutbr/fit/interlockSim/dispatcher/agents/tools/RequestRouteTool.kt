@@ -39,12 +39,28 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * (`RouteRequestResult`) is therefore not returned to the LLM on this path; reintroducing it
  * would require a request/response channel over the queue (out of scope for SP1.7).
  *
- * @param commandQueue Scoped command queue for this context (injected per simulation)
+ * ## Endpoint-name validation (Goal 10 agent-architect review finding)
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to the queue in Issue #774 (SP1.7)
+ * A live run showed the LLM occasionally hallucinating a plausible-looking endpoint name
+ * (e.g. `"kA"`/`"kB"`) instead of copying one from the topology in its system prompt. Because
+ * this tool is fire-and-forget, a bad name used to sail through as a queued `Success` and only
+ * fail later, invisibly, when [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+ * applied it on the kDisco thread — the LLM never learned its own call had failed. [execute] now
+ * validates [fromEndpointName]/[toEndpointName] against [validEndpointNames] synchronously and
+ * returns a [ToolResult.Error] naming the valid options when either is unrecognized, so the model
+ * gets in-turn feedback and can retry with a real name instead of silently losing the decision.
+ *
+ * @param commandQueue Scoped command queue for this context (injected per simulation)
+ * @param validEndpointNames The exact set of InOut and Signal names this network recognizes
+ *   (from [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopology], captured once at agent
+ *   construction — topology is static and never changes during a run).
+ *
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to the queue in Issue #774 (SP1.7);
+ *   [validEndpointNames] validation added following a Goal 10 agent-architect review
  */
 class RequestRouteTool(
-	private val commandQueue: ActuatorCommandQueue
+	private val commandQueue: ActuatorCommandQueue,
+	private val validEndpointNames: Set<String>
 ) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -67,13 +83,21 @@ class RequestRouteTool(
 			),
 			DomainToolParameter(
 				name = "fromEndpointName",
-				description = "Name of the entry InOut or Semaphore (must exist in the network)",
+				description =
+					"Exact name of the entry point, copied verbatim from the InOuts or " +
+						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
+						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
+						"there, do not call this tool.",
 				type = DomainToolParameterType.String,
 				required = true
 			),
 			DomainToolParameter(
 				name = "toEndpointName",
-				description = "Name of the exit InOut or Semaphore (must exist in the network)",
+				description =
+					"Exact name of the exit point, copied verbatim from the InOuts or " +
+						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
+						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
+						"there, do not call this tool.",
 				type = DomainToolParameterType.String,
 				required = true
 			)
@@ -89,6 +113,19 @@ class RequestRouteTool(
 		val toEndpointName =
 			args.stringParam("toEndpointName")
 				?: return ToolResult.Error("toEndpointName parameter is required and must be a non-blank string")
+
+		if (fromEndpointName !in validEndpointNames) {
+			return ToolResult.Error(
+				"Unknown fromEndpointName '$fromEndpointName' — valid names are: " +
+					validEndpointNames.sorted().joinToString(", ")
+			)
+		}
+		if (toEndpointName !in validEndpointNames) {
+			return ToolResult.Error(
+				"Unknown toEndpointName '$toEndpointName' — valid names are: " +
+					validEndpointNames.sorted().joinToString(", ")
+			)
+		}
 
 		val decision = DispatchDecision.RequestRoute(trainName, fromEndpointName, toEndpointName)
 		logger.debug {

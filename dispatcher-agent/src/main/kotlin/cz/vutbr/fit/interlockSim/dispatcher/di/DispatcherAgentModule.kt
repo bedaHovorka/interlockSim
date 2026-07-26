@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
@@ -42,13 +43,14 @@ import org.koin.dsl.module
  * |---|---|---|
  * | [Dispatcher] | singleton | [RuleBasedDispatcher] |
  * | [DispatcherPlanner] | singleton | [RuleBasedPlanAdapter] (SP3.6) |
- * | [AgentService] | singleton | [DefaultAgentService] (SP1.2) |
+ * | [AgentService] | singleton | [DefaultAgentService] (SP1.2; real Koog wiring SP2b.9, #566) |
  * | [OllamaExecutorConfig] | singleton | [OllamaExecutorConfig.default] (SP1.3) |
  * | [OllamaSimpleExecutor] | singleton | [OllamaSimpleExecutor] (SP1.5) |
  * | [ToolGroupRegistry] | singleton | [ToolGroupRegistry] (SP1.3) |
  * | [NetworkPerceptionPort] | per [DefaultSimulationContext] | [DefaultNetworkPerceptionPort] (SP1.4) |
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] (SP1.4) |
  * | [ActuatorCommandQueue] | per [DefaultSimulationContext] | new instance |
+ * | [DispatchLoopSensorPort] | per [DefaultSimulationContext] | [MainProcessDispatchLoopSensorPort] (Goal 10 fix) |
  * | [DispatcherModeState] | per [DefaultSimulationContext] | new instance (SP2b.6) |
  * | [SemiAutoApprovalGateway] | per [DefaultSimulationContext] | new instance (SP2b.6 follow-up) |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance (SP4.2) |
@@ -126,9 +128,10 @@ val dispatcherAgentModule: Module =
 		single<DispatcherPlanner> { RuleBasedPlanAdapter(get()) }
 
 		// AgentService: global singleton for creating Koog agents (SP1.2 skeleton, Issue #547).
-		// In SP1.3+, this will be injected into per-context agent instances.
+		// SP2b.9 (Issue #566): DefaultAgentService now builds a real Koog AIAgent, so it needs
+		// the Ollama executor + config singletons bound below.
 		// No Spring Boot: uses lightweight Koin DI instead.
-		single<AgentService> { DefaultAgentService() }
+		single<AgentService> { DefaultAgentService(get(), get()) } // OllamaSimpleExecutor, OllamaExecutorConfig
 
 		// SP1.3: Ollama executor configuration (singleton)
 		// All agents share the same Ollama endpoint, model, and inference parameters.
@@ -182,6 +185,18 @@ val dispatcherAgentModule: Module =
 			// SP0.5: ActuatorCommandQueue: one thread-safe handoff queue per simulation context.
 			scoped<ActuatorCommandQueue> { ActuatorCommandQueue() }
 
+			// Goal 10 dispatcher-cannot-approve-trains fix: DispatchLoopSensorPort (scoped per
+			// context), backing KoogAgentFactory's queued_trains/block_inputs tools.
+			// MainProcessDispatchLoopSensorPort resolves context.getMainProcess() lazily at query
+			// time (always after context.setMainProcess(loop) has run) via the interface-based
+			// lookup pattern (see mainProcessActiveTrains / ProvidesDispatchLoopObservation).
+			scoped<DispatchLoopSensorPort> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				MainProcessDispatchLoopSensorPort(context)
+			}
+
 			// SP2b.6 (Issue #561): DispatcherModeState — dispatcher operating mode controller
 			// One per context for independent mode management across concurrent simulations.
 			// Defaults to AUTO mode; can be overridden to SEMI_AUTO (require human approval) or
@@ -222,7 +237,8 @@ val dispatcherAgentModule: Module =
 					ollamaConfig = get(), // Singleton
 					agentService = get(), // Singleton
 					perceptionPort = get(), // Scoped to this context (SP1.4 — live port)
-					commandQueue = get() // Scoped to this context (SP1.7)
+					commandQueue = get(), // Scoped to this context (SP1.7)
+					dispatchLoopSensorPort = get() // Scoped to this context (Goal 10 tool-registration fix)
 				)
 			}
 

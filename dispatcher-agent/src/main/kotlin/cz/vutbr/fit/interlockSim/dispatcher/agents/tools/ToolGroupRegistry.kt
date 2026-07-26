@@ -122,7 +122,8 @@ class ToolGroupRegistry {
 	 */
 	fun assembleAllTools(
 		perceptionPort: NetworkPerceptionPort,
-		commandQueue: ActuatorCommandQueue
+		commandQueue: ActuatorCommandQueue,
+		validEndpointNames: Set<String>
 	): List<DomainTool> {
 		logger.debug {
 			"ToolGroupRegistry.assembleAllTools: assembling perception + actuator tools (SP1.7 queue-wired actuators)"
@@ -132,7 +133,7 @@ class ToolGroupRegistry {
 			// Perception tools (read-only network queries)
 			addAll(assemblePerceptionTools(perceptionPort))
 			// Actuator tools (network commands — fire-and-forget over the queue, SP1.7)
-			addAll(assembleActuatorTools(commandQueue))
+			addAll(assembleActuatorTools(commandQueue, validEndpointNames))
 		}
 	}
 
@@ -192,13 +193,18 @@ class ToolGroupRegistry {
 	 *
 	 * @param commandQueue Scoped command queue for this context (SP1.7); actuator tools post
 	 *   decisions here.
+	 * @param validEndpointNames Exact InOut/Signal names `request_route` validates against before
+	 *   queuing a decision (Goal 10 agent-architect review finding — see [RequestRouteTool]).
 	 * @return Actuator tools (SP1.6: 4 tools)
 	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools; SP1.7 (#774) rewires to the queue
 	 */
-	fun assembleActuatorTools(commandQueue: ActuatorCommandQueue): List<DomainTool> {
+	fun assembleActuatorTools(
+		commandQueue: ActuatorCommandQueue,
+		validEndpointNames: Set<String>
+	): List<DomainTool> {
 		logger.debug { "ToolGroupRegistry.assembleActuatorTools: creating 4 actuator tools (SP1.7 queue-wired)" }
 		return listOf(
-			RequestRouteTool(commandQueue),
+			RequestRouteTool(commandQueue, validEndpointNames),
 			ReleaseRouteTool(commandQueue),
 			SetSwitchPositionTool(commandQueue),
 			SetSignalAspectTool(commandQueue)

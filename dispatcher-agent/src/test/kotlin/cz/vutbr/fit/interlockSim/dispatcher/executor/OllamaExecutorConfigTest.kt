@@ -33,11 +33,13 @@ class OllamaExecutorConfigTest {
 
 		assertThat(config.ollamaEndpoint).isEqualTo("http://localhost:11434")
 		assertThat(config.modelName).isEqualTo("qwen2.5:7b-instruct")
-		assertThat(config.temperature).isEqualTo(0.7f)
+		assertThat(config.temperature).isEqualTo(0.28f)
 		assertThat(config.topP).isEqualTo(0.9f)
 		assertThat(config.maxTokens).isEqualTo(1024)
 		assertThat(config.inferenceTimeout).isEqualTo(Duration.ofSeconds(30))
 		assertThat(config.retryAttempts).isEqualTo(3)
+		assertThat(config.maxAgentIterations).isEqualTo(20)
+		assertThat(config.contextWindowTokens).isEqualTo(32_768L)
 	}
 
 	@Test
@@ -109,6 +111,42 @@ class OllamaExecutorConfigTest {
 
 		val config = OllamaExecutorConfig(maxTokens = 2048)
 		assertThat(config.maxTokens).isGreaterThan(0)
+	}
+
+	@Test
+	fun `custom config validates maxAgentIterations positive`() {
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(maxAgentIterations = 0)
+		}
+
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(maxAgentIterations = -1)
+		}
+
+		val config = OllamaExecutorConfig(maxAgentIterations = 3)
+		assertThat(config.maxAgentIterations).isEqualTo(3)
+	}
+
+	/**
+	 * Regression test for the context-window truncation fix (SP2b.9, Issue #566): Koog's default
+	 * `ContextWindowStrategy.None` never sends `num_ctx`, which makes Ollama fall back to a hard
+	 * 2048-token window — too small for the SP2b.8 static-topology system prompt.
+	 * [OllamaSimpleExecutor] wires [contextWindowTokens] into
+	 * `ContextWindowStrategy.Companion.Fixed`; this test locks in the validated positive value and
+	 * default this project relies on for that fix.
+	 */
+	@Test
+	fun `custom config validates contextWindowTokens positive`() {
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(contextWindowTokens = 0)
+		}
+
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(contextWindowTokens = -1)
+		}
+
+		val config = OllamaExecutorConfig(contextWindowTokens = 16_384)
+		assertThat(config.contextWindowTokens).isEqualTo(16_384L)
 	}
 
 	@Test

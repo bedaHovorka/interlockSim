@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
@@ -79,7 +80,8 @@ class ShuntingLoop(
 ) : Interlocking(context),
 	SpeedControllable,
 	KoinComponent,
-	ApprovesTrains {
+	ApprovesTrains,
+	ProvidesDispatchLoopObservation {
 	@kotlin.concurrent.Volatile
 	override var speedMultiplier: Double = initialSpeedMultiplier
 		set(value) {
@@ -488,6 +490,17 @@ class ShuntingLoop(
 	 * @since Issue #733 (SP0.11 — Goal 10); added by the tearing-fix follow-up
 	 */
 	fun getLatestObservation(): TickObservation = latestObservation
+
+	/**
+	 * [ProvidesDispatchLoopObservation] implementation — lets `:dispatcher-agent`'s Koin wiring
+	 * read the latest dispatch-loop observation via
+	 * [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.getMainProcess] without naming
+	 * [ShuntingLoop] directly (would pull kDisco's `Process` onto its main compile classpath,
+	 * Goal 10 dispatcher-cannot-approve-trains fix). Single @Volatile read, same atomicity as
+	 * [getLatestObservation].
+	 */
+	override fun latestDispatchLoopSnapshot(): DispatchLoopSnapshot =
+		latestObservation.let { DispatchLoopSnapshot(it.queuedTrains, it.innerBlockInputs, it.outerBlockInputs) }
 
 	/**
 	 * Returns a snapshot of the currently approved (active) trains. Used by the external

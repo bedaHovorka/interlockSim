@@ -44,7 +44,7 @@ class ActuatorToolExecuteTest {
 	fun `request_route posts a RequestRoute decision and returns a queued-success descriptor`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue).execute(
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
 					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "doA1")
 				)
 			}
@@ -63,6 +63,37 @@ class ActuatorToolExecuteTest {
 		assertThat(decision.trainName).isEqualTo("T1")
 		assertThat(decision.fromEndpointName).isEqualTo("zA")
 		assertThat(decision.toEndpointName).isEqualTo("doA1")
+	}
+
+	@Test
+	fun `request_route rejects an unknown fromEndpointName without posting to the queue`() {
+		val result =
+			runBlocking {
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+					mapOf("trainName" to "T1", "fromEndpointName" to "kA", "toEndpointName" to "doA1")
+				)
+			}
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		val message = (result as ToolResult.Error).message
+		assertThat(message).contains("kA")
+		assertThat(message).contains("zA")
+		assertThat(message).contains("doA1")
+		assertThat(queue.drain()).hasSize(0)
+	}
+
+	@Test
+	fun `request_route rejects an unknown toEndpointName without posting to the queue`() {
+		val result =
+			runBlocking {
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "kB")
+				)
+			}
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		assertThat((result as ToolResult.Error).message).contains("kB")
+		assertThat(queue.drain()).hasSize(0)
 	}
 
 	@Test
@@ -136,7 +167,13 @@ class ActuatorToolExecuteTest {
 	fun `invalid arguments return ToolResult Error without posting to the queue`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue).execute(mapOf("trainName" to "", "fromEndpointName" to "zA", "toEndpointName" to "doA1"))
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+					mapOf(
+						"trainName" to "",
+						"fromEndpointName" to "zA",
+						"toEndpointName" to "doA1"
+					)
+				)
 			}
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
