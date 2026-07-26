@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -49,6 +50,7 @@ import org.koin.dsl.module
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] (SP1.4) |
  * | [ActuatorCommandQueue] | per [DefaultSimulationContext] | new instance |
  * | [DispatcherModeState] | per [DefaultSimulationContext] | new instance (SP2b.6) |
+ * | [SemiAutoApprovalGateway] | per [DefaultSimulationContext] | new instance (SP2b.6 follow-up) |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance (SP4.2) |
  * | [KoogAgentFactory] | per [DefaultSimulationContext] | [KoogAgentFactory] (SP1.3, updated in SP1.4) |
  *
@@ -94,6 +96,7 @@ import org.koin.dsl.module
  * - [NetworkActuatorPort]: One actuator port per context (SP0.3 / SP1.4)
  * - [ActuatorCommandQueue]: One handoff queue per simulation (SP0.5)
  * - [DispatcherModeState]: One mode controller per simulation (SP2b.6, Issue #561) — manages AUTO/SEMI_AUTO/MANUAL mode and human override
+ * - [SemiAutoApprovalGateway]: One approval gateway per simulation (SP2b.6 follow-up, Issue #806) — bridges sim-thread approver call to GUI dialog
  * - [KoogAgentFactory]: Factory receives context-scoped dependencies (ports) and creates agents on demand
  *
  * This design allows multiple simultaneous simulations (e.g., in tests) each with:
@@ -193,6 +196,14 @@ val dispatcherAgentModule: Module =
 			// at a lambda that pushes the decision to the panel on the EDT. Headless/console runs
 			// leave the sink null (no-op). One per context so concurrent sims never cross-wire.
 			scoped<DispatchDecisionListenerHub> { DispatchDecisionListenerHub() }
+
+			// SP2b.6 follow-up (Issue #806): SemiAutoApprovalGateway — mutable holder that bridges
+			// the sim-thread DispatchDecisionApplier (which calls gateway.approve synchronously) to
+			// the GUI SemiAutoApprovalDialog (wired by Frame.wireDispatcherControlPanel on sim start).
+			// Headless/console runs leave the approver null, so approve() returns false and every
+			// actuating SEMI_AUTO decision is dropped (logged as a warning). One per context so
+			// concurrent simulations never share the same modal dialog.
+			scoped<SemiAutoApprovalGateway> { SemiAutoApprovalGateway() }
 
 			// SP4.2 (Issue #564): Late-bound pacing controller for the agent-driver loop.
 			// Wiring layers (e.g. :desktop-ui's ExampleRegistry.wireDispatcherAgent) hand this
