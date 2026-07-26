@@ -391,9 +391,9 @@ val runExampleAIGui by tasks.registering(JavaExec::class) {
     group = "application"
     description =
         "Run shuntingLoopAI GUI example — Ollama LLM dispatcher with rule-based fallback (SP2b.9). " +
-            "Use -PendTime=seconds to set end time (default 300). " +
-            "Requires local Ollama at http://localhost:11434 (or set OLLAMA_BASE_URL). " +
-            "Falls back to rule-based dispatcher if Ollama is unavailable."
+        "Use -PendTime=seconds to set end time (default 300). " +
+        "Requires local Ollama at http://localhost:11434 (or set OLLAMA_BASE_URL). " +
+        "Falls back to rule-based dispatcher if Ollama is unavailable."
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set(application.mainClass.get())
     val endTimeProp = providers.gradleProperty("endTime")
