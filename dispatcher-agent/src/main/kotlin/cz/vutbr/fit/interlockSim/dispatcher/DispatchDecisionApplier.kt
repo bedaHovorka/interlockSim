@@ -222,6 +222,37 @@ class DispatchDecisionApplier(
 	}
 
 	/**
+	 * Collapses [DispatchDecision.ReservePath] entries sharing an identical
+	 * `(trainId, fromSemaphoreName, toSeparatorName)` triple within a single drained
+	 * batch down to their first occurrence. Other decision types pass through unchanged.
+	 *
+	 * ## Why (SP0.11c follow-up, Issue #746)
+	 *
+	 * The signal-paced [AgentLoopDriver] runs its sense-decide-act cycle in an untethered
+	 * loop on its own thread; under real thread-scheduling variance it can complete two
+	 * cycles before [onControlStep] next drains the queue, posting the identical
+	 * `ReservePath` decision twice because the block-input observation it read had not
+	 * yet reflected the first decision's outcome. Applying the same decision twice in one
+	 * batch calls [NetworkActuatorPort.requestRoute] twice against state that has not
+	 * changed between the two calls: if the first attempt returns `AllPathsBlocked`, the
+	 * second finds the identical contention and spuriously re-triggers the "first-time
+	 * contention" `ConflictDetectedEvent` (Goal 9 SP1) for what is actually one duplicate
+	 * decision, not a second train competing for the block — breaking the Goal 10 A3
+	 * determinism gate ([RuleBasedDispatcherDeterminismTest]).
+	 *
+	 * This complements [appliedReservations] (which guards across separate control steps,
+	 * once a reservation has already *succeeded*) by also collapsing duplicates that
+	 * arrive together in the same batch, regardless of outcome.
+	 */
+	private fun dedupeReservePathDecisions(decisions: List<DispatchDecision>): List<DispatchDecision> {
+		val seenKeys = mutableSetOf<String>()
+		return decisions.filter { decision ->
+			decision !is DispatchDecision.ReservePath ||
+				seenKeys.add("${decision.trainId}|${decision.fromSemaphoreName}|${decision.toSeparatorName}")
+		}
+	}
+
+	/**
 	 * Drains [queue] and applies each pending [DispatchDecision] via the actuator ports.
 	 *
 	 * Always called on the kDisco simulation thread from
@@ -248,7 +279,7 @@ class DispatchDecisionApplier(
 	 * and crashes loud, preserving today's dev-time bug visibility.
 	 */
 	override fun onControlStep() {
-		val decisions = queue.drain()
+		val decisions = dedupeReservePathDecisions(queue.drain())
 		if (decisions.isEmpty()) return
 		logger.debug { "onControlStep: applying ${decisions.size} pending decision(s)" }
 		for (decision in decisions) {
