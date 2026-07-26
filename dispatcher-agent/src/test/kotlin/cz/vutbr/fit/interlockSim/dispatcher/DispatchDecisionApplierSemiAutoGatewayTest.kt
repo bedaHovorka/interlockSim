@@ -63,7 +63,9 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 		approvedTrains.clear()
 	}
 
-	private fun makeApplierWithGateway(gateway: SemiAutoApprovalGateway): Pair<ActuatorCommandQueue, DispatchDecisionApplier> {
+	private fun makeApplierWithGateway(
+		gateway: SemiAutoApprovalGateway
+	): Pair<ActuatorCommandQueue, DispatchDecisionApplier> {
 		val queue = ActuatorCommandQueue()
 		val state = DispatcherModeState().apply { setOverride(DispatcherMode.SEMI_AUTO) }
 		val applier =

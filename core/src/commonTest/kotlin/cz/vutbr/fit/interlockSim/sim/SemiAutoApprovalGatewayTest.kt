@@ -80,8 +80,14 @@ class SemiAutoApprovalGatewayTest {
 		var firstCalled = false
 		var secondCalled = false
 
-		gateway.setApprover { firstCalled = true; true }
-		gateway.setApprover { secondCalled = true; false }
+		gateway.setApprover {
+			firstCalled = true
+			true
+		}
+		gateway.setApprover {
+			secondCalled = true
+			false
+		}
 
 		assertThat(gateway.approve(DispatchDecision.ApproveTrain("T1"))).isFalse()
 		assertThat(firstCalled).isFalse()
@@ -109,7 +115,10 @@ class SemiAutoApprovalGatewayTest {
 					(1..50).map { i ->
 						launch(Dispatchers.Default) {
 							if (i % 2 == 0) {
-								gateway.setApprover { synchronized(lock) { callCount++ }; true }
+								gateway.setApprover {
+									synchronized(lock) { callCount++ }
+									true
+								}
 							} else {
 								gateway.approve(DispatchDecision.ApproveTrain("T$i"))
 							}

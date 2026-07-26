@@ -102,7 +102,10 @@ class SemiAutoApprovalDialog(
 				border = BorderFactory.createEmptyBorder(12, 16, 8, 16)
 			}
 
-		fun labelRow(key: String, value: String): JPanel =
+		fun labelRow(
+			key: String,
+			value: String
+		): JPanel =
 			JPanel(FlowLayout(FlowLayout.LEFT, 0, 2)).apply {
 				isOpaque = false
 				add(JLabel("<html><b>$key</b>&nbsp;</html>"))
