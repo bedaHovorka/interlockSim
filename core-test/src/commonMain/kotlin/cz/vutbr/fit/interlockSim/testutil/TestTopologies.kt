@@ -74,13 +74,25 @@ object TestTopologies {
 	 * A chain of [stageCount] binary-switch bypass stages creating exactly 2^[stageCount]
 	 * switch-constrained paths from entry "A" to exit "B".
 	 *
+	 * **Interlocking-safety invariant:** every input to a switch is guarded by a
+	 * [RailSemaphore] — a converging or diverging junction must be approached under
+	 * signal protection, and this fixture reflects that so it cannot be copied as a
+	 * network that omits approach signals. Per stage:
+	 * - `AppSem{i}` guards `SW{i}.A` (the split switch's west input),
+	 * - `MainSem{i}` guards `Mrg{i}.A` (the merge switch's main-leg input),
+	 * - `BrSem{i}` guards `Mrg{i}.D` (the merge switch's bypass-leg input).
+	 * The exit leg `Mrg{last}.F → B` is a switch *output*, not an input, so it carries
+	 * no extra guard (the [InOut] "B" already provides its own internal inSemaphore).
+	 *
 	 * **Layout per stage i (0-indexed):**
-	 * - `SW{i}` — [RailSwitch] split point (SIMPLE_RIGHT_FALSE, HORIZONTAL).
-	 *   From the incoming (west/A) direction it fans out to:
-	 *   - east (Segment.F → main leg, directly to the merge switch), and
-	 *   - southeast (Segment.G → bypass leg, through the bypass semaphore).
-	 * - `BrSem{i}` — [RailSemaphore] bypass intermediate node (no path constraints).
-	 * - `MrgSem{i}` — [RailSwitch] merge point (SIMPLE_LEFT_TRUE, HORIZONTAL). A plain
+	 * - `AppSem{i}` — [RailSemaphore] approach guard, 2 units west of the split switch.
+	 * - `SW{i}` — [RailSwitch] split point (SIMPLE_RIGHT_FALSE, HORIZONTAL). From the
+	 *   incoming (west/A) direction it fans out to:
+	 *   - east (Segment.F → main leg, via `MainSem{i}` to the merge switch), and
+	 *   - southeast (Segment.G → bypass leg, through the bypass semaphore `BrSem{i}`).
+	 * - `MainSem{i}` — [RailSemaphore] guarding the main-leg input of the merge switch.
+	 * - `BrSem{i}` — [RailSemaphore] bypass intermediate; also guards the merge's bypass input.
+	 * - `Mrg{i}` — [RailSwitch] merge point (SIMPLE_LEFT_TRUE, HORIZONTAL). A plain
 	 *   [RailSemaphore] cannot serve as this merge node: it exposes only 2 connection
 	 *   segments (HORIZONTAL joinsOnLine = {F, A}), but the merge point needs 3 physical
 	 *   connections (main leg in via A, bypass leg in via D, outgoing via F).
@@ -89,19 +101,21 @@ object TestTopologies {
 	 *   can reach the outgoing connection.
 	 *
 	 * Each stage doubles the number of active paths, so after [stageCount] stages the
-	 * total path count from "A" to "B" is 2^[stageCount].
+	 * total path count from "A" to "B" is 2^[stageCount]. A [RailSemaphore] is a
+	 * pass-through node in [findAllSwitchConstrainedPaths] (it does not branch), so the
+	 * added guarding semaphores do not change this count.
 	 *
 	 * **Intended use:** performance testing of [findAllSwitchConstrainedPaths] enumeration
 	 * on branchy networks.  With [stageCount] = 15 this gives 32 768 paths, which is
 	 * enough to make the combinatorial enumeration cost observable while staying well
-	 * below the 2^20 threshold that would make the test itself prohibitively slow.
+	 * below the 2^18 threshold that would make the test itself prohibitively slow.
 	 *
-	 * @param stageCount number of binary-switch bypass stages (1..20); default 15
+	 * @param stageCount number of binary-switch bypass stages (1..18); default 15
 	 * @return [EditingContext] with the branchy network and exactly 2 [InOut] separators
 	 *   named "A" (entry) and "B" (exit)
 	 */
 	fun branchySwitchChain(stageCount: Int = 15): EditingContext {
-		require(stageCount in 1..20) { "stageCount must be in 1..20, got $stageCount" }
+		require(stageCount in 1..18) { "stageCount must be in 1..18, got $stageCount" }
 
 		// Grid sizing: entry at x=1; each stage advances x by 10; exit adds 4 more.
 		// Max x = 1 + stageCount*10 + 4; height = 20 comfortably fits y=5 and y=10 nodes.
@@ -119,32 +133,45 @@ object TestTopologies {
 		var prevX = 1
 
 		for (i in 0 until stageCount) {
-			// Split switch: 4 units east of previous merge/entry node.
+			// Approach guard: 2 units east of the previous merge/entry node; guards SW.A.
+			val appX = prevX + 2
+			// Split switch: 4 units east of the previous merge/entry node.
 			val swX = prevX + 4
-			// Bypass semaphore: 3 east, 5 south of the split switch (Segment.G = southeast).
+			// Bypass semaphore: 3 east, 5 south of the split switch (Segment.G = southeast);
+			// also guards the merge switch's bypass-leg input (Mrg.D).
 			val brX = swX + 3
 			val brY = 10
-			// Merge semaphore: 6 east of the split switch (Segment.F = east/main leg).
+			// Main-leg guard: 3 east of the split switch (Segment.F = east/main leg); guards
+			// the merge switch's main-leg input (Mrg.A). Shares its x-column with BrSem
+			// (which sits at y=10) — distinct cells, no collision.
+			val mainX = swX + 3
+			// Merge switch: 6 east of the split switch.
 			val mrgX = swX + 6
 
+			val appSem = RailSemaphore("AppSem$i", false, Cell.SpatialType.HORIZONTAL)
 			val sw = RailSwitch("SW$i", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			val brSem = RailSemaphore("BrSem$i", false, Cell.SpatialType.HORIZONTAL)
-			val mrgSem = RailSwitch("MrgSem$i", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE)
+			val mainSem = RailSemaphore("MainSem$i", false, Cell.SpatialType.HORIZONTAL)
+			val mrgSw = RailSwitch("Mrg$i", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE)
 
+			context.putCell(Point(appX, 5), appSem)
 			context.putCell(Point(swX, 5), sw)
 			context.putCell(Point(brX, brY), brSem)
-			context.putCell(Point(mrgX, 5), mrgSem)
+			context.putCell(Point(mainX, 5), mainSem)
+			context.putCell(Point(mrgX, 5), mrgSw)
 
-			// prevNode → sw  (incoming track from left; arriving at Segment.A on the switch)
-			context.joinCells(Point(prevX, 5), Point(swX, 5), SimpleTrackBlock(prevNode, sw, 100.0, 80.0))
-			// sw → mrgSem    (main leg; Segment.F east on sw, Segment.A west on mrgSem)
-			context.joinCells(Point(swX, 5), Point(mrgX, 5), SimpleTrackBlock(sw, mrgSem, 100.0, 80.0))
+			// prevNode → appSem → sw  (incoming track; appSem guards SW.A)
+			context.joinCells(Point(prevX, 5), Point(appX, 5), SimpleTrackBlock(prevNode, appSem, 100.0, 80.0))
+			context.joinCells(Point(appX, 5), Point(swX, 5), SimpleTrackBlock(appSem, sw, 100.0, 80.0))
+			// sw → mainSem → mrgSw  (main leg; mainSem guards Mrg.A)
+			context.joinCells(Point(swX, 5), Point(mainX, 5), SimpleTrackBlock(sw, mainSem, 100.0, 80.0))
+			context.joinCells(Point(mainX, 5), Point(mrgX, 5), SimpleTrackBlock(mainSem, mrgSw, 100.0, 80.0))
 			// sw → brSem     (bypass leg; Segment.G southeast direction)
 			context.joinCells(Point(swX, 5), Point(brX, brY), SimpleTrackBlock(sw, brSem, 100.0, 80.0))
-			// brSem → mrgSem (bypass completion; Segment.D southwest on mrgSem)
-			context.joinCells(Point(brX, brY), Point(mrgX, 5), SimpleTrackBlock(brSem, mrgSem, 100.0, 80.0))
+			// brSem → mrgSw  (bypass completion; Segment.D southwest on mrgSw; brSem guards Mrg.D)
+			context.joinCells(Point(brX, brY), Point(mrgX, 5), SimpleTrackBlock(brSem, mrgSw, 100.0, 80.0))
 
-			prevNode = mrgSem
+			prevNode = mrgSw
 			prevX = mrgX
 		}
 
