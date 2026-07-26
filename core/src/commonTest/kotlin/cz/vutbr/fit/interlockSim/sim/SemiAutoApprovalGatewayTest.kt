@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import kotlinx.atomicfu.locks.SynchronizedObject
@@ -30,7 +31,9 @@ import kotlin.time.Duration.Companion.seconds
  * 2. After [SemiAutoApprovalGateway.setApprover], approve delegates to the installed callback.
  * 3. Replacing the approver swaps the callback.
  * 4. `setApprover(null)` detaches (subsequent calls return `false`).
- * 5. Concurrent setApprover + approve do not corrupt state (last-writer-wins approver).
+ * 5. Concurrent setApprover + approve honour the linearizability contract: each `approve`
+ *    returns exactly what the approver that handled it returned, or `false` when no
+ *    approver was installed (the gateway's `approver?.invoke(d) ?: false` semantics).
  *
  * @since Issue #806 (SP2b.6 follow-up — Goal 10)
  */
@@ -104,30 +107,50 @@ class SemiAutoApprovalGatewayTest {
 	}
 
 	@Test
-	fun concurrentSetApproverAndApprove_doesNotCorrupt() {
+	fun concurrentSetApproverAndApprove_returnsExactlyWhatInvokedApproverReturned() {
 		runBlocking {
 			val gateway = SemiAutoApprovalGateway()
 			val lock = SynchronizedObject()
-			var callCount = 0
+			// tid -> what the approver that handled the decision returned (only set when an
+			// approver was actually invoked; absent when approve ran with no approver installed).
+			val approverReturns = mutableMapOf<String, Boolean>()
+			// tid -> what gateway.approve returned for that decision.
+			val approveReturns = mutableMapOf<String, Boolean>()
 
-			withTimeout(5.seconds) {
+			withTimeout(10.seconds) {
 				val jobs =
-					(1..50).map { i ->
+					(1..100).map { i ->
 						launch(Dispatchers.Default) {
 							if (i % 2 == 0) {
-								gateway.setApprover {
-									synchronized(lock) { callCount++ }
-									true
+								// Install an approver whose fixed return alternates with i, so
+								// both true- and false-returning approvers race with approve.
+								val ret = (i % 4 == 0)
+								gateway.setApprover { d ->
+									val tid = (d as DispatchDecision.ApproveTrain).trainId
+									synchronized(lock) { approverReturns[tid] = ret }
+									ret
 								}
 							} else {
-								gateway.approve(DispatchDecision.ApproveTrain("T$i"))
+								val tid = "T$i"
+								val r = gateway.approve(DispatchDecision.ApproveTrain(tid))
+								synchronized(lock) { approveReturns[tid] = r }
 							}
 						}
 					}
 				jobs.joinAll()
 			}
 
-			// No exception thrown; the gateway is still usable after concurrent access.
+			// Linearizability invariant: approve returns exactly what the approver it invoked
+			// returned, or false when no approver was installed (approver?.invoke(d) ?: false).
+			// Pairing by the unique decision trainId is sound even though the gateway invokes
+			// the approver outside its snapshot lock, so approver returns may interleave.
+			synchronized(lock) {
+				for (tid in approveReturns.keys) {
+					assertThat(approveReturns[tid]).isEqualTo(approverReturns[tid] ?: false)
+				}
+			}
+
+			// The gateway is still usable after concurrent access.
 			gateway.setApprover { true }
 			assertThat(gateway.approve(DispatchDecision.ApproveTrain("final"))).isTrue()
 		}

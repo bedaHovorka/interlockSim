@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.JButton
 import javax.swing.JComboBox
+import javax.swing.JLabel
 
 /**
  * Integration test for the [Frame] ↔ [DispatcherControlPanel] wiring seam (Issue #561, SP2b.6).
@@ -342,6 +343,34 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 
 			// After stop, approve() must return false (no approver installed).
 			assertThat(gateway.approve(DispatchDecision.ApproveTrain("T2"))).isFalse()
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("SemiAutoApprovalDialog auto-dismisses (drop) after the timeout (Issue #806, M5)")
+	fun semiAutoDialogAutoDismissesAfterTimeout() {
+		runOnEDT {
+			val dialog = SemiAutoApprovalDialog(frame, DispatchDecision.ApproveTrain("T1"), timeoutSeconds = 1)
+			// Showing a modal dialog blocks the EDT in its own event pump; the one-second
+			// auto-dismiss Timer fires inside that pump, disposes the dialog, and unblocks.
+			dialog.isVisible = true
+			assertThat(dialog.approved).isFalse()
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("SemiAutoApprovalDialog with timeout disabled has no countdown label (Issue #806, M5)")
+	fun semiAutoDialogTimeoutDisabledHasNoCountdownLabel() {
+		runOnEDT {
+			val dialog = SemiAutoApprovalDialog(frame, DispatchDecision.ApproveTrain("T1"), timeoutSeconds = 0)
+			try {
+				val labels = findAllComponents(dialog, JLabel::class.java)
+				assertThat(labels.none { it.text.startsWith("Auto-dismiss") }).isTrue()
+			} finally {
+				dialog.dispose()
+			}
 		}
 	}
 }

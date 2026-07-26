@@ -14,6 +14,8 @@ import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Frame
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 import javax.swing.BorderFactory
 import javax.swing.Box
 import javax.swing.BoxLayout
@@ -24,6 +26,7 @@ import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextArea
 import javax.swing.SwingUtilities
+import javax.swing.Timer
 
 /**
  * Modal Swing dialog for SEMI_AUTO dispatcher-decision approval (SP2b.6 follow-up — Issue #806).
@@ -68,15 +71,30 @@ import javax.swing.SwingUtilities
  * [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] approver lambda installed by
  * [cz.vutbr.fit.interlockSim.gui.Frame.wireDispatcherControlPanel] delegates to it.
  *
- * @param owner         The owning [Frame] (may be `null`).
- * @param decision      The pending [DispatchDecision] to present to the operator.
+ * `promptOnEdt` **must not be called on the EDT** — it uses
+ * [SwingUtilities.invokeAndWait], which throws on the EDT. A `check` guard fails fast
+ * with a clear message if this contract is violated.
+ *
+ * ## Auto-dismiss timeout (fail-safe)
+ *
+ * To prevent the simulation thread from stalling forever if the operator steps away,
+ * the dialog auto-dismisses after [timeoutSeconds] (default [DEFAULT_TIMEOUT_SECONDS])
+ * and returns `false` (drop) — an unreviewed decision is never auto-applied. A live
+ * countdown is shown beside the buttons. Pass `timeoutSeconds <= 0` to disable the
+ * timeout and restore the original indefinite-block behaviour.
+ *
+ * @param owner           The owning [Frame] (may be `null`).
+ * @param decision        The pending [DispatchDecision] to present to the operator.
+ * @param timeoutSeconds  Seconds before the dialog auto-dismisses with `approved = false`
+ *   (fail-safe drop). `0` or negative disables the timeout.
  *
  * @since Issue #806 (SP2b.6 follow-up — Goal 10)
  * @see cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
  */
 class SemiAutoApprovalDialog(
 	owner: Frame?,
-	private val decision: DispatchDecision
+	private val decision: DispatchDecision,
+	private val timeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS
 ) : JDialog(owner, "Dispatcher Decision Pending", true) {
 	/**
 	 * `true` if the operator clicked **Approve**, `false` if they clicked **Dismiss**
@@ -87,11 +105,27 @@ class SemiAutoApprovalDialog(
 	var approved: Boolean = false
 		private set
 
+	/**
+	 * Countdown timer that fires once per second while the dialog is visible, updating
+	 * [countdownLabel]. On reaching zero it sets [approved] = `false` and disposes the
+	 * dialog (fail-safe drop). `null` when the timeout is disabled ([timeoutSeconds] <= 0).
+	 */
+	private var countdownTimer: Timer? = null
+
+	/**
+	 * Label showing the remaining seconds before auto-dismiss, or `null` when the
+	 * timeout is disabled.
+	 */
+	private var countdownLabel: JLabel? = null
+
 	init {
 		isResizable = true
 		minimumSize = Dimension(420, 280)
 		preferredSize = Dimension(480, 320)
-		defaultCloseOperation = HIDE_ON_CLOSE
+		// DISPOSE_ON_CLOSE (not HIDE_ON_CLOSE) so the per-prompt dialog releases its native
+		// window/peer handle immediately on close, rather than accumulating across a long
+		// SEMI_AUTO session until GC.
+		defaultCloseOperation = DISPOSE_ON_CLOSE
 
 		contentPane.layout = BorderLayout(8, 8)
 
@@ -148,8 +182,9 @@ class SemiAutoApprovalDialog(
 		contentPane.add(detailsPanel, BorderLayout.CENTER)
 
 		// ── Button panel ──────────────────────────────────────────────────
+		// BorderLayout so the countdown (WEST) and the buttons (EAST) sit on the same row.
 		val buttonPanel =
-			JPanel(FlowLayout(FlowLayout.RIGHT, 8, 8)).apply {
+			JPanel(BorderLayout(8, 8)).apply {
 				border = BorderFactory.createEmptyBorder(0, 8, 4, 8)
 			}
 
@@ -157,20 +192,62 @@ class SemiAutoApprovalDialog(
 			JButton("Approve").apply {
 				addActionListener {
 					approved = true
-					isVisible = false
+					dispose()
 				}
 			}
 		val dismissButton =
 			JButton("Dismiss").apply {
 				addActionListener {
 					approved = false
-					isVisible = false
+					dispose()
 				}
 			}
 
-		buttonPanel.add(approveButton)
-		buttonPanel.add(dismissButton)
+		val buttonsRow =
+			JPanel(FlowLayout(FlowLayout.RIGHT, 8, 8)).apply {
+				add(approveButton)
+				add(dismissButton)
+			}
+		buttonPanel.add(buttonsRow, BorderLayout.EAST)
+
+		// ── Auto-dismiss countdown ────────────────────────────────────────
+		if (timeoutSeconds > 0) {
+			val label = JLabel("Auto-dismiss in ${timeoutSeconds}s")
+			countdownLabel = label
+			buttonPanel.add(label, BorderLayout.WEST)
+
+			var remaining = timeoutSeconds
+			countdownTimer =
+				Timer(1000) {
+					remaining--
+					if (remaining <= 0) {
+						label.text = "Auto-dismissing…"
+						approved = false
+						countdownTimer?.stop()
+						dispose()
+					} else {
+						label.text = "Auto-dismiss in ${remaining}s"
+					}
+				}
+			countdownTimer?.isRepeats = true
+		}
+
 		contentPane.add(buttonPanel, BorderLayout.SOUTH)
+
+		// Start the countdown only once the dialog actually becomes visible (windowOpened),
+		// so construction time never eats into the timeout; stop it on any close path
+		// (windowClosed) so a fired timer cannot keep the disposed dialog alive.
+		addWindowListener(
+			object : WindowAdapter() {
+				override fun windowOpened(e: WindowEvent) {
+					countdownTimer?.start()
+				}
+
+				override fun windowClosed(e: WindowEvent) {
+					countdownTimer?.stop()
+				}
+			}
+		)
 
 		pack()
 		setLocationRelativeTo(owner)
@@ -178,25 +255,38 @@ class SemiAutoApprovalDialog(
 
 	companion object {
 		/**
+		 * Default auto-dismiss timeout (seconds) when no explicit [timeoutSeconds] is given.
+		 * Chosen as a generous window for an operator reviewing a single dispatcher decision.
+		 */
+		const val DEFAULT_TIMEOUT_SECONDS = 60
+
+		/**
 		 * Shows a blocking [SemiAutoApprovalDialog] for [decision] on the EDT and returns the
 		 * operator's choice.
 		 *
 		 * **Must be called from a non-EDT thread** (typically the kDisco simulation thread).
 		 * Uses [SwingUtilities.invokeAndWait] to show the modal dialog on the EDT; the calling
 		 * thread blocks until the operator clicks **Approve** (`true`) or **Dismiss** / closes
-		 * the dialog (`false`).
+		 * the dialog (`false`), or until the auto-dismiss timeout fires (`false` — fail-safe
+		 * drop). A `check` guard fails fast if this is called on the EDT.
 		 *
-		 * @param owner    The owning [Frame] for centering the dialog (may be `null`).
-		 * @param decision The pending dispatcher decision to present.
+		 * @param owner          The owning [Frame] for centering the dialog (may be `null`).
+		 * @param decision       The pending dispatcher decision to present.
+		 * @param timeoutSeconds Seconds before the dialog auto-dismisses with `false`
+		 *   (defaults to [DEFAULT_TIMEOUT_SECONDS]); `0` or negative disables the timeout.
 		 * @return `true` if the operator approved, `false` otherwise.
 		 */
 		fun promptOnEdt(
 			owner: Frame?,
-			decision: DispatchDecision
+			decision: DispatchDecision,
+			timeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS
 		): Boolean {
+			check(!SwingUtilities.isEventDispatchThread()) {
+				"promptOnEdt must be called from a non-EDT thread; SwingUtilities.invokeAndWait would throw on the EDT"
+			}
 			var result = false
 			SwingUtilities.invokeAndWait {
-				val dialog = SemiAutoApprovalDialog(owner, decision)
+				val dialog = SemiAutoApprovalDialog(owner, decision, timeoutSeconds)
 				dialog.isVisible = true
 				result = dialog.approved
 			}
