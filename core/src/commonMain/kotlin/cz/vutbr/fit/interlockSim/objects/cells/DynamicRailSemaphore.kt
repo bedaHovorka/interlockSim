@@ -113,6 +113,33 @@ sealed class DynamicRailSemaphore(
 	override fun allowedSpeed(): Double = signal.allowedSpeed()
 
 	/**
+	 * Returns true when this semaphore's current signal authorizes travel in the
+	 * direction [from] → [to].
+	 *
+	 * Signal is only ever set for the canonical **forward** direction
+	 * (`from = anti([direction()])` → `to = [direction()]`). Any other direction
+	 * request, or a signal in the [Signal.STOP] state, returns false.
+	 *
+	 * This enables direction-aware perception: a train (or the LLM dispatcher)
+	 * approaching from the reverse direction is not falsely told the signal is clear
+	 * just because another train's reservation set it to FREE in the forward direction.
+	 *
+	 * @param from segment the approaching entity is travelling **from**
+	 * @param to   segment the approaching entity is travelling **to**
+	 * @return true if [signal] is currently allowing AND [from]/[to] match the canonical
+	 *   forward direction (`anti(direction())` → `direction()`) of this semaphore
+	 * @since Issue #812 (direction-aware signal display)
+	 */
+	fun isAllowingFor(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): Boolean {
+		if (!signal.isAllowing()) return false
+		val d = staticRef.direction()
+		return to == d && from == anti(d)
+	}
+
+	/**
 	 * Validate that [from]/[to] are the two segments of this semaphore's block boundary,
 	 * in either traversal order.
 	 *

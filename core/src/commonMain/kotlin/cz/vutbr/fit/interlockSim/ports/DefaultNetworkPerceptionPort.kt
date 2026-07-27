@@ -14,6 +14,7 @@ import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.separatorAspect
@@ -160,13 +161,34 @@ class DefaultNetworkPerceptionPort(
 
 	override fun signalAspect(semaphoreName: String): SemaphoreReading? {
 		val sem = semaphoreByName[semaphoreName] ?: return null
-		return SemaphoreReading(name = sem.name, signal = sem.signal)
+		return sem.toReading()
 	}
 
-	override fun allSignalAspects(): List<SemaphoreReading> =
-		semaphoreCache.map { sem ->
-			SemaphoreReading(name = sem.name, signal = sem.signal)
-		}
+	override fun allSignalAspects(): List<SemaphoreReading> = semaphoreCache.map { sem -> sem.toReading() }
+
+	/**
+	 * Converts a [DynamicRailSemaphore] to an immutable [SemaphoreReading] snapshot.
+	 *
+	 * Populates [SemaphoreReading.authorizedFrom] and [SemaphoreReading.authorizedTo] with the
+	 * canonical forward-direction segment names when the signal is allowing, so consumers (in
+	 * particular the LLM dispatcher's `all_signal_aspects` tool) can distinguish a proceed aspect
+	 * that is authorized for the forward direction from one that would be misleading for the
+	 * opposite direction.
+	 *
+	 * Uses null-safe direction lookup: if [DynamicRailSemaphore.direction] returns `null`
+	 * (e.g. for relaxed mocks in unit tests), the direction fields are omitted (`null`).
+	 *
+	 * @since Issue #812 (direction-aware signal display)
+	 */
+	private fun DynamicRailSemaphore.toReading(): SemaphoreReading {
+		val dir = if (signal.isAllowing()) direction() else null
+		return SemaphoreReading(
+			name = name,
+			signal = signal,
+			authorizedFrom = dir?.let { anti(it).name },
+			authorizedTo = dir?.name
+		)
+	}
 
 	// ── NetworkPerceptionPort — block occupancies ─────────────────────────
 
