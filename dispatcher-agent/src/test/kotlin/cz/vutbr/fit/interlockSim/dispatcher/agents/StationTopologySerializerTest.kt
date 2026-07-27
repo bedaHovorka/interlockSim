@@ -113,6 +113,7 @@ class StationTopologySerializerTest {
 			assertThat(prompt).contains("vB[SIMPLE_LEFT_TRUE]")
 			assertThat(prompt).contains("doA1")
 			assertThat(prompt).contains("A->B")
+			assertThat(prompt).contains("NOT valid request_route arguments")
 		}
 	}
 
@@ -133,8 +134,10 @@ class StationTopologySerializerTest {
 		assertThat(text).contains("InOuts (entry/exit): none")
 		assertThat(text).contains("Signals: none")
 		assertThat(text).contains("Switches: none")
-		assertThat(text).contains("Blocks: none")
-		assertThat(text).contains("Routes (at most")
+		assertThat(text).contains(
+			"Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): none"
+		)
+		assertThat(text).contains("Routes (path context only; block IDs shown are NOT valid request_route arguments;")
 		assertThat(text).contains(": none")
 	}
 
@@ -154,7 +157,9 @@ class StationTopologySerializerTest {
 
 		assertThat(text).contains("Signals: L1")
 		assertThat(text).contains("Switches: V7[SIMPLE_LEFT_TRUE]")
-		assertThat(text).contains("Blocks: U3, U4")
+		assertThat(text).contains(
+			"Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): U3, U4"
+		)
 		assertThat(text).contains("A->B: U3, U4")
 	}
 
@@ -172,7 +177,7 @@ class StationTopologySerializerTest {
 
 		val text = StationTopologySerializer.toPromptText(topology)
 
-		assertThat(text).contains("Routes (at most")
+		assertThat(text).contains("Routes (path context only; block IDs shown are NOT valid request_route arguments;")
 		assertThat(text).contains("more may exist)")
 		assertThat(text).contains("A->B: U1")
 	}

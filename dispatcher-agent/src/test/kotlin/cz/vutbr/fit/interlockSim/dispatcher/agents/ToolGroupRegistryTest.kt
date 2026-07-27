@@ -25,8 +25,9 @@ import org.junit.jupiter.api.Test
  *
  * Tests that:
  * - ToolGroupRegistry correctly assembles perception tools (9 tools)
- * - ToolGroupRegistry correctly assembles actuator tools (4 tools)
- * - ToolGroupRegistry correctly assembles all tools together (13 tools)
+ * - ToolGroupRegistry correctly assembles actuator tools (2 tools — low-level `set_signal_aspect`/
+ *   `set_switch_position` were removed; the agent only acts via `request_route`/`release_route`)
+ * - ToolGroupRegistry correctly assembles all tools together (11 tools)
  * - Tools have proper names, descriptions, and parameters
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP2a.1 (#552) adds train_perception
@@ -45,17 +46,17 @@ class ToolGroupRegistryTest {
 	}
 
 	@Test
-	fun `assembleActuatorTools returns 4 actuator tools`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+	fun `assembleActuatorTools returns 2 actuator tools`() {
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 
-		assertThat(tools).hasSize(4)
+		assertThat(tools).hasSize(2)
 	}
 
 	@Test
-	fun `assembleAllTools returns 13 total tools`() {
-		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+	fun `assembleAllTools returns 11 total tools`() {
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
 
-		assertThat(tools).hasSize(13)
+		assertThat(tools).hasSize(11)
 	}
 
 	@Test
@@ -80,15 +81,13 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `actuator tools have correct names`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 		val toolNames = tools.map { it.name }
 
 		assertThat(toolNames).isEqualTo(
 			listOf(
 				"request_route",
-				"release_route",
-				"set_switch_position",
-				"set_signal_aspect"
+				"release_route"
 			)
 		)
 	}
@@ -104,7 +103,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `actuator tools have descriptions`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 
 		tools.forEach { tool ->
 			assertThat(tool.description).isNotEmpty()
@@ -122,7 +121,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `request_route tool has three parameters`() {
-		val tools = registry.assembleActuatorTools(commandQueue)
+		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
 		val requestRouteTool = tools.first { it.name == "request_route" }
 
 		assertThat(requestRouteTool.parameters).hasSize(3)
@@ -140,12 +139,12 @@ class ToolGroupRegistryTest {
 	}
 
 	@Test
-	fun `assembleAllTools returns 13 tools with distinct names`() {
-		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+	fun `assembleAllTools returns 11 tools with distinct names`() {
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
 
-		assertThat(tools).hasSize(13)
+		assertThat(tools).hasSize(11)
 		// A duplicate-name / drop-one regression must not pass the size check alone (#551 review #9).
-		assertThat(tools.map { it.name }.toSet()).hasSize(13)
+		assertThat(tools.map { it.name }.toSet()).hasSize(11)
 	}
 
 	// ── SP4.1 dispatch-loop tool groups (Issue #563) ──────────────────────────
@@ -159,14 +158,14 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `assembleDispatchLoopActuatorTools returns 1 actuator tool`() {
-		val tools = registry.assembleDispatchLoopActuatorTools(commandQueue)
+		val tools = registry.assembleDispatchLoopActuatorTools(commandQueue) { 0 }
 
 		assertThat(tools).hasSize(1)
 	}
 
 	@Test
 	fun `assembleDispatchLoopTools returns 3 total dispatch-loop tools`() {
-		val tools = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue)
+		val tools = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue) { 0 }
 
 		assertThat(tools).hasSize(3)
 	}
@@ -181,7 +180,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `dispatch-loop actuator tools have correct names`() {
-		val tools = registry.assembleDispatchLoopActuatorTools(commandQueue)
+		val tools = registry.assembleDispatchLoopActuatorTools(commandQueue) { 0 }
 		val toolNames = tools.map { it.name }
 
 		assertThat(toolNames).isEqualTo(listOf("approve_train"))
@@ -189,7 +188,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `assembleDispatchLoopTools returns 3 tools with distinct names`() {
-		val tools = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue)
+		val tools = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue) { 0 }
 
 		assertThat(tools).hasSize(3)
 		assertThat(tools.map { it.name }.toSet()).hasSize(3)
@@ -197,17 +196,17 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `dispatch-loop tools do not overlap with assembleAllTools tool names`() {
-		val allToolNames = registry.assembleAllTools(mockPerceptionPort, commandQueue).map { it.name }.toSet()
-		val dispatchLoopNames = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue).map { it.name }.toSet()
+		val allToolNames = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet()).map { it.name }.toSet()
+		val dispatchLoopNames = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue) { 0 }.map { it.name }.toSet()
 
 		assertThat(allToolNames.intersect(dispatchLoopNames)).hasSize(0)
 	}
 
 	@Test
-	fun `assembleAllTools still returns exactly 13 tools after SP4 additions`() {
+	fun `assembleAllTools still returns exactly 11 tools after SP4 additions`() {
 		// Regression guard: SP4.1 additions must NOT affect the SP1/SP2a tool count.
-		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
 
-		assertThat(tools).hasSize(13)
+		assertThat(tools).hasSize(11)
 	}
 }

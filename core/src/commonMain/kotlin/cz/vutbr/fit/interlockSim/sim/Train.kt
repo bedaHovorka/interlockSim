@@ -427,7 +427,7 @@ class Train :
 				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
 				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
-				waitUntil(allowingSignal(semaphore))
+				waitUntil(allowingSignal(semaphore, separator))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
 
@@ -535,10 +535,13 @@ class Train :
 // 			});
 // 		}
 
-		private fun allowingSignal(semaphore: DynamicRailSemaphore): Condition =
+		private fun allowingSignal(
+			semaphore: DynamicRailSemaphore,
+			separator: DynamicPathSeparator
+		): Condition =
 			Condition {
-				val allowing: Boolean = semaphore.signal.isAllowing()
-				allowing
+				semaphore.signal.isAllowing() &&
+					trainNavService.findReservedPathForTrain(name, separator) is PathResult.Available
 			}
 
 		private fun fireStop() {

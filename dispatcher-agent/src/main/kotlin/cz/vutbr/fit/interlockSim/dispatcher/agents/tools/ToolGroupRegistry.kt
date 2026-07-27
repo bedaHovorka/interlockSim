@@ -92,8 +92,6 @@ class ToolGroupRegistry {
 	 * **Actuator tools** (network commands):
 	 * - `request_route` — request route reservation for a train
 	 * - `release_route` — release reserved blocks for a train
-	 * - `set_switch_position` — command a switch to MAIN or BRANCH
-	 * - `set_signal_aspect` — command a semaphore to a signal aspect
 	 *
 	 * Each tool is constructed using the provided [perceptionPort] or [commandQueue]
 	 * so it can query/actuate the current context's network state.
@@ -114,7 +112,7 @@ class ToolGroupRegistry {
 	 *   off-thread-safe projection in SP1.7+.
 	 * @param commandQueue Scoped command queue for this context (SP1.7); actuator tools post
 	 *   decisions here instead of calling the actuator port directly.
-	 * @return All tools available in this context (SP2a.1: 13 tools)
+	 * @return All tools available in this context (11 tools — 9 perception + 2 high-level actuator)
 	 *
 	 * @since Issue #548 (SP1.3 — skeleton); SP1.4 (#549) adds port parameters; SP1.6 (#551)
 	 *   implements tools; SP1.7 (#774) switches actuator tools to the command queue;
@@ -122,7 +120,8 @@ class ToolGroupRegistry {
 	 */
 	fun assembleAllTools(
 		perceptionPort: NetworkPerceptionPort,
-		commandQueue: ActuatorCommandQueue
+		commandQueue: ActuatorCommandQueue,
+		validEndpointNames: Set<String>
 	): List<DomainTool> {
 		logger.debug {
 			"ToolGroupRegistry.assembleAllTools: assembling perception + actuator tools (SP1.7 queue-wired actuators)"
@@ -132,7 +131,7 @@ class ToolGroupRegistry {
 			// Perception tools (read-only network queries)
 			addAll(assemblePerceptionTools(perceptionPort))
 			// Actuator tools (network commands — fire-and-forget over the queue, SP1.7)
-			addAll(assembleActuatorTools(commandQueue))
+			addAll(assembleActuatorTools(commandQueue, validEndpointNames))
 		}
 	}
 
@@ -183,8 +182,13 @@ class ToolGroupRegistry {
 	 *
 	 * - `request_route(trainName, fromEndpointName, toEndpointName)` — request route reservation
 	 * - `release_route(trainName)` — release reserved blocks for a train
-	 * - `set_switch_position(switchName, position)` — command a switch to MAIN or BRANCH
-	 * - `set_signal_aspect(semaphoreName, signal)` — command a semaphore to a signal aspect
+	 *
+	 * Direct low-level actuator tools (`set_switch_position`, `set_signal_aspect`) were removed
+	 * from the agent's tool list: they let the LLM mutate switch/signal state outside the
+	 * interlocking's reservation flow. The agent is now restricted to the two high-level
+	 * actuators above (plus `approve_train` — see [assembleDispatchLoopActuatorTools]); the
+	 * underlying `DispatchDecision.SetSwitchPosition`/`SetSignalAspect` types remain in use by
+	 * the non-LLM [cz.vutbr.fit.interlockSim.sim.PathCommandTranslator] path.
 	 *
 	 * Each actuator tool posts a [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to the
 	 * [commandQueue] (fire-and-forget, SP1.7 Issue #774) instead of calling the actuator port
@@ -192,16 +196,19 @@ class ToolGroupRegistry {
 	 *
 	 * @param commandQueue Scoped command queue for this context (SP1.7); actuator tools post
 	 *   decisions here.
-	 * @return Actuator tools (SP1.6: 4 tools)
+	 * @param validEndpointNames Exact InOut/Signal names `request_route` validates against before
+	 *   queuing a decision (Goal 10 agent-architect review finding — see [RequestRouteTool]).
+	 * @return Actuator tools (2 tools)
 	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools; SP1.7 (#774) rewires to the queue
 	 */
-	fun assembleActuatorTools(commandQueue: ActuatorCommandQueue): List<DomainTool> {
-		logger.debug { "ToolGroupRegistry.assembleActuatorTools: creating 4 actuator tools (SP1.7 queue-wired)" }
+	fun assembleActuatorTools(
+		commandQueue: ActuatorCommandQueue,
+		validEndpointNames: Set<String>
+	): List<DomainTool> {
+		logger.debug { "ToolGroupRegistry.assembleActuatorTools: creating 2 actuator tools" }
 		return listOf(
-			RequestRouteTool(commandQueue),
-			ReleaseRouteTool(commandQueue),
-			SetSwitchPositionTool(commandQueue),
-			SetSignalAspectTool(commandQueue)
+			RequestRouteTool(commandQueue, validEndpointNames),
+			ReleaseRouteTool(commandQueue)
 		)
 	}
 
@@ -225,20 +232,23 @@ class ToolGroupRegistry {
 	 *
 	 * @param sensorPort Dispatch-loop sensor port for this context (SP4.1)
 	 * @param commandQueue Scoped command queue for this context (fire-and-forget, SP4.1)
+	 * @param activeTrainCountProvider Reads the current number of active trains; see
+	 *   [ApproveTrainTool] for the concurrency-cap contract this feeds.
 	 * @return All dispatch-loop tools (SP4.1: 3 tools)
 	 *
 	 * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
 	 */
 	fun assembleDispatchLoopTools(
 		sensorPort: DispatchLoopSensorPort,
-		commandQueue: ActuatorCommandQueue
+		commandQueue: ActuatorCommandQueue,
+		activeTrainCountProvider: () -> Int
 	): List<DomainTool> {
 		logger.debug {
 			"ToolGroupRegistry.assembleDispatchLoopTools: assembling dispatch-loop sensor + actuator tools (SP4.1)"
 		}
 		return mutableListOf<DomainTool>().apply {
 			addAll(assembleDispatchLoopSensorTools(sensorPort))
-			addAll(assembleDispatchLoopActuatorTools(commandQueue))
+			addAll(assembleDispatchLoopActuatorTools(commandQueue, activeTrainCountProvider))
 		}
 	}
 
@@ -281,14 +291,19 @@ class ToolGroupRegistry {
 	 * applies it on the kDisco thread.
 	 *
 	 * @param commandQueue Scoped command queue for this context (SP4.1)
+	 * @param activeTrainCountProvider Reads the current number of active trains; see
+	 *   [ApproveTrainTool] for the concurrency-cap contract this feeds.
 	 * @return Dispatch-loop actuator tools (SP4.1: 1 tool)
 	 *
 	 * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
 	 */
-	fun assembleDispatchLoopActuatorTools(commandQueue: ActuatorCommandQueue): List<DomainTool> {
+	fun assembleDispatchLoopActuatorTools(
+		commandQueue: ActuatorCommandQueue,
+		activeTrainCountProvider: () -> Int
+	): List<DomainTool> {
 		logger.debug { "ToolGroupRegistry.assembleDispatchLoopActuatorTools: creating 1 dispatch-loop actuator tool (SP4.1)" }
 		return listOf(
-			ApproveTrainTool(DefaultDispatchLoopActuatorPort(commandQueue))
+			ApproveTrainTool(DefaultDispatchLoopActuatorPort(commandQueue), activeTrainCountProvider)
 		)
 	}
 }

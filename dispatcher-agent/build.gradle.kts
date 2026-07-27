@@ -93,6 +93,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:$serializationVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
 
+    // kotlinx-coroutines-core: SP2b.9 (Issue #566) KoogAgentPlanAdapter uses withTimeout
+    // and CancellationException. Available transitively via koog-agents, but listed
+    // explicitly here for compile-time clarity and stable versioning.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+
     // Test dependencies
     testImplementation(project(":core-test"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")

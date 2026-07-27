@@ -41,6 +41,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -168,6 +169,40 @@ class PathReservationServiceTest : KoinTestBase() {
 	}
 
 	@Nested
+	inner class RedundantReservationIdempotency {
+		@Test
+		fun `reservePath for a train that already holds the granted route does not duplicate its PathInfo`() {
+			// Given: a route already granted once (mirrors the LLM dispatcher's request_route
+			// succeeding for a train, Goal 10 SP2b.9)
+			val first = service.reservePath("train1", inOut1, inOut2)
+			assertThat(first).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			val originalPathSize = requireNotNull(registry.getPathInfo("train1")).reservedPath.size
+
+			// When: the identical route is redundantly re-requested for the SAME train
+			// multiple times — exactly what a stateless per-cycle LLM dispatcher does when
+			// it re-issues request_route for a train it already granted a route to, since
+			// it has no memory of its own prior tool calls.
+			repeat(2) {
+				val redundant = service.reservePath("train1", inOut1, inOut2)
+				assertThat(redundant).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			}
+
+			// Then: PathInfo must stay exactly as originally granted — a redundant re-request
+			// for a route the train already fully owns must never grow/duplicate the reserved
+			// path. Without a guard, each redundant call re-merges the identical route onto
+			// itself (doubling every separator), and a further redundant call hits
+			// PathReservationRegistry.mergePathInfo's 3rd-occurrence cycle-abort — which
+			// silently reverts the merge while reservePath still reports Success, an invisible
+			// PathInfo/reality divergence that (per the same bug class) can strand a train
+			// permanently at whichever semaphore first depends on the discarded segment.
+			val finalPathInfo = requireNotNull(registry.getPathInfo("train1"))
+			assertThat(finalPathInfo.reservedPath.size).isEqualTo(originalPathSize)
+			assertThat(finalPathInfo.target).isEqualTo(inOut2)
+		}
+	}
+
+	@Nested
 	inner class AllPathsBlocked {
 		@Test
 		fun `reservePath returns AllPathsBlocked when path is RESERVED by different train`() {
@@ -180,6 +215,20 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Assert
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		}
+
+		@Test
+		fun `reservePath rejects a reverse route through identical blocks while the forward route is held`() {
+			// Arrange - reserve the forward path for train1
+			val result1 = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Act - train2 attempts the same physical blocks in the opposite direction
+			val result2 = service.reservePath("train2", inOut2, inOut1)
+
+			// Assert - blocks are still exclusively owned by train1, regardless of direction
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			assertThat(service.getReservedBlocks("train2")).isEmpty()
 		}
 
 		@Test
@@ -1393,6 +1442,33 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Assert AFTER - signal was configured to allow movement
 			assertThat(doA1Semaphore.signal).isNotEqualTo(Signal.STOP)
 			assertThat(doA1Semaphore.signal.isAllowing()).isTrue()
+		}
+
+		@Test
+		fun `reservePath configures every semaphore along a full InOut-to-InOut path, not just START`() {
+			// Act - reserve a full InOut-to-InOut route, spanning the intermediate semaphores
+			// at the vA/vB switch junctions (doA1/doA2, doB1/doB2) in addition to the
+			// START/target boundary semaphores.
+			val result = service.reservePath("train1", inOut1, inOut2)
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+
+			// Every semaphore bounding a reserved block must be configured to allow movement --
+			// one left at STOP means a train halts there forever (Issue #296 Phase 4 / Step 2h
+			// configureIntermediateSemaphores, and configureStartSignal for the START boundary).
+			val semaphoresOnPath =
+				success.reservedBlocks
+					.flatMap { it.ends().toList() }
+					.filterIsInstance<DynamicRailSemaphore>()
+					.distinctBy { it.name }
+
+			assertThat(semaphoresOnPath).isNotEmpty()
+			semaphoresOnPath.forEach { semaphore ->
+				assertThat(semaphore.signal)
+					.withMessage("Semaphore ${semaphore.name} must not remain at STOP after path grant")
+					.isNotEqualTo(Signal.STOP)
+			}
 		}
 
 		@Test

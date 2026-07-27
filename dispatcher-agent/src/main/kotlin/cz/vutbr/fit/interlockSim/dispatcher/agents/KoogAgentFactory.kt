@@ -13,8 +13,10 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -86,6 +88,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   Wrapped in a snapshot projection before being passed to tools (SP1.7).
  * @property commandQueue Command queue for fire-and-forget actuator commands (scoped per
  *   context, SP1.7).
+ * @property dispatchLoopSensorPort Dispatch-loop sensor port for this context, backing the
+ *   `queued_trains`/`block_inputs` tools — without these (and `approve_train`) the LLM has no
+ *   way to admit a queued train (Goal 10 dispatcher-cannot-approve-trains fix).
  *
  * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port injection; SP1.7 (#774) switches
  *   actuators to the command queue and perception to the snapshot projection
@@ -95,15 +100,38 @@ class KoogAgentFactory(
 	private val ollamaConfig: OllamaExecutorConfig,
 	private val agentService: AgentService,
 	private val perceptionPort: NetworkPerceptionPort,
-	private val commandQueue: ActuatorCommandQueue
+	private val commandQueue: ActuatorCommandQueue,
+	private val dispatchLoopSensorPort: DispatchLoopSensorPort
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
-		private const val DEFAULT_SYSTEM_PROMPT =
+		// Not `const val`: interpolates RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS so the
+		// concrete cap the LLM reasons over never drifts from the non-LLM dispatcher's own policy.
+		private val DEFAULT_SYSTEM_PROMPT =
 			"You are a railway dispatcher coordinating train movements. " +
 				"You can use perception tools to query network state and actuator tools " +
-				"to control signals and routes. Always prioritize safety."
+				"to control signals and routes. Always prioritize safety. " +
+				"All entry/exit points, signals, switches, and blocks you may reference are listed " +
+				"by exact name in the STATION TOPOLOGY section below. Never invent, abbreviate, or " +
+				"guess a name — if you need a name you don't see there, query a perception tool " +
+				"instead of guessing. " +
+				"The only actuator tools available are request_route, release_route, and approve_train " +
+				"— there is no tool to set a signal aspect or switch position directly; signals and " +
+				"switches change only as a side effect of request_route/release_route. " +
+				"request_route's fromEndpointName/toEndpointName arguments accept only InOut or Signal " +
+				"names — never a Block ID from the Blocks list (Block IDs are for block_occupancy / " +
+				"all_block_occupancies only, not for request_route). " +
+				"request_route only reserves interlocking resources for a train — it does not let the " +
+				"train depart; a queued train stays parked, holding its reservation indefinitely, until " +
+				"you separately call approve_train for it. " +
+				"On every turn, admission comes first, exactly like a real interlocking's admission " +
+				"control: check queued_trains and all_train_positions; if there are queued (unapproved) " +
+				"trains and fewer than ${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} trains are " +
+				"currently active, call approve_train for the oldest queued trains first, up to " +
+				"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} total active, before doing anything " +
+				"else. Call approve_train for every queued train you intend to dispatch, in addition to " +
+				"requesting its route."
 	}
 
 	/**
@@ -142,15 +170,31 @@ class KoogAgentFactory(
 		// touching mutable simulation state. snapshot() is @Volatile-backed and off-thread-safe.
 		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
 
+		// Static topology never changes during a run, so it is safe to read off the sim thread
+		// here at agent construction. The InOut/Signal names double as the valid-endpoint set
+		// request_route validates against (agent-architect review finding, Goal 10): the LLM can
+		// hallucinate a plausible-looking endpoint name instead of one from this topology, so
+		// RequestRouteTool rejects unknown names synchronously (ToolResult.Error) rather than
+		// queuing a decision that fails later, invisibly, on the kDisco thread.
+		val topology = StationTopologySerializer.describe(context)
+		val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
+
 		// Assemble tools for this context: perception reads via the projection, actuators post
 		// fire-and-forget decisions to the queue (applied on the kDisco thread by the applier).
-		val tools = toolRegistry.assembleAllTools(projection, commandQueue)
+		// Dispatch-loop tools (queued_trains/block_inputs/approve_train) are added alongside the
+		// general-purpose tools — without them the LLM has no way to admit a queued train onto
+		// the network (Goal 10 dispatcher-cannot-approve-trains fix).
+		val tools =
+			toolRegistry.assembleAllTools(projection, commandQueue, validEndpointNames) +
+				toolRegistry.assembleDispatchLoopTools(dispatchLoopSensorPort, commandQueue) {
+					projection.allTrainPositions().size
+				}
 
 		// SP2b.8 (Issue #695): serialize the controlled area's *static* topology (blocks, switches,
 		// signals, valid routes — SP3.2 compact IDs) and load it into the system prompt ONCE, here
 		// at agent construction. Per-turn perception tools then report only dynamic state and
 		// reference topology purely by ID, instead of re-transmitting the structure every turn.
-		val topologyPrompt = StationTopologySerializer.serialize(context)
+		val topologyPrompt = StationTopologySerializer.toPromptText(topology)
 		val systemPrompt = "$DEFAULT_SYSTEM_PROMPT\n\n$topologyPrompt"
 
 		// Create agent via service (SP1.6 will add Koog wiring)

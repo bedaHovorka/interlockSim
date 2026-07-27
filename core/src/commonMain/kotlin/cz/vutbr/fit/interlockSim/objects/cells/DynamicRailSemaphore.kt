@@ -102,32 +102,49 @@ sealed class DynamicRailSemaphore(
 		to: Cell.Segment?,
 		allowedSpeed: Double
 	) {
-		val isValidDirection = checkPathSegments(from, to)
-
-		if (isValidDirection) {
-			signal = forSpeed(allowedSpeed)
-			logger.debug {
-				"SEMAPHORE_SIGNAL_UPDATED: ${staticRef.getName()} signal changed to $signal " +
-					"(allowedSpeed=$allowedSpeed)"
-			}
-		} else {
-			logger.warn {
-				"SEMAPHORE_SIGNAL_NOT_UPDATED: ${staticRef.getName()} signal remains $signal " +
-					"due to reverse direction (from=$from, to=$to, semaphoreDirection=${staticRef.direction()})"
-			}
+		checkPathSegments(from, to)
+		signal = forSpeed(allowedSpeed)
+		logger.debug {
+			"SEMAPHORE_SIGNAL_UPDATED: ${staticRef.getName()} signal changed to $signal " +
+				"(allowedSpeed=$allowedSpeed)"
 		}
 	}
 
 	override fun allowedSpeed(): Double = signal.allowedSpeed()
 
+	/**
+	 * Validate that [from]/[to] are the two segments of this semaphore's block boundary,
+	 * in either traversal order.
+	 *
+	 * ## Domain decision (Issue #566 / SP2b.9)
+	 *
+	 * A [DynamicRailSemaphore] marks a block boundary a train can legitimately cross from
+	 * either side -- e.g. the vyhybna.xml shunting loop is explicitly designed for trains to
+	 * traverse it in both directions (A→B and B→A), and [staticRef]'s `orientation` continues
+	 * to drive path-finding preference (see `PathReservationService.reservePathToAny`'s
+	 * same-side/opposite-side sorting) without restricting which direction the physical
+	 * signal is allowed to clear for. Earlier revisions treated the "exit-side" pairing
+	 * (`from == direction()`) as invalid and left the signal at STOP, which meant a fully
+	 * granted, block/switch-reserved route through such a boundary could never actually be
+	 * traversed -- `PathReservationService.reservePath` would report `Success` while the
+	 * train stalled forever at that one semaphore (see
+	 * `PathReservationServiceTest.SignalConfigurationTests`, "reservePath configures every
+	 * semaphore along a full InOut-to-InOut path, not just START"). Both segment orderings
+	 * are therefore accepted here; only a genuinely wrong (non-adjacent) segment pairing is
+	 * rejected.
+	 *
+	 * @throws PathSeparatorChangeException if [from]/[to] are not this boundary's two segments
+	 */
 	private fun checkPathSegments(
 		from: Cell.Segment?,
 		to: Cell.Segment?
-	): Boolean {
+	) {
 		val d = staticRef.direction()
-		if (to == d && from == anti(d)) return true
-		if (from == d && to == anti(d)) return false
-		throw PathSeparatorChangeException("wrong aPath segments", this)
+		val antiD = anti(d)
+		val validPairing = (to == d && from == antiD) || (from == d && to == antiD)
+		if (!validPairing) {
+			throw PathSeparatorChangeException("wrong aPath segments", this)
+		}
 	}
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = staticRef.getFollowingSegment(from)

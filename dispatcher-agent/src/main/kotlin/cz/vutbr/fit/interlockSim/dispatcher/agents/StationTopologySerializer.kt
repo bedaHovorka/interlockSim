@@ -158,10 +158,16 @@ object StationTopologySerializer {
 			.append("Switches: ")
 			.append(joinOrNone(topology.switches.map { "${it.id.name}[${it.type}]" }))
 			.append('\n')
-		sb.append("Blocks: ").append(joinOrNone(topology.blocks.map { it.name })).append('\n')
+		sb
+			.append("Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): ")
+			.append(joinOrNone(topology.blocks.map { it.name }))
+			.append('\n')
 		// Note the per-pair cap so the agent cannot mistake a capped list for an exhaustive one
 		// (Issue #695 review, Important #1).
-		sb.append("Routes (at most $MAX_ROUTES_PER_PAIR shown per ordered InOut pair; more may exist):")
+		sb.append(
+			"Routes (path context only; block IDs shown are NOT valid request_route arguments; " +
+				"at most $MAX_ROUTES_PER_PAIR shown per ordered InOut pair; more may exist):"
+		)
 		if (topology.routes.isEmpty()) {
 			sb.append(" none")
 		} else {

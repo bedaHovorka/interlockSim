@@ -10,22 +10,33 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 
 /**
- * Unit tests for [DefaultAgentService] skeleton (SP1.2, Issue #547).
+ * Unit tests for [DefaultAgentService] (SP1.2, Issue #547; real Koog wiring SP2b.9, Issue #566).
  *
- * Tests the basic agent service factory and Koin integration.
- * Tool binding and Ollama integration tests will be added in later phases.
+ * Uses [OllamaExecutorConfig.forLocalTesting] + a fresh [OllamaSimpleExecutor] — construction of
+ * both is network-free (the Ollama client connection is lazy, on first
+ * [OllamaSimpleExecutor.getExecutor] call, which `createDispatchAgent` does trigger, but building
+ * a Koog `AIAgent` around a [ai.koog.prompt.executor.model.PromptExecutor] does not itself make
+ * any network call — the first actual HTTP request only happens when [KoogDispatchAgentImpl]'s
+ * wrapped `AIAgent.run(...)` is invoked, which these tests never do). No live Ollama is required.
  *
  * @since Issue #547 (SP1.2 — Goal 10)
  */
 class DefaultAgentServiceTest {
-	private val service = DefaultAgentService()
+	private val service =
+		DefaultAgentService(
+			OllamaSimpleExecutor(OllamaExecutorConfig.forLocalTesting()),
+			OllamaExecutorConfig.forLocalTesting()
+		)
 
 	@Test
 	fun `createDispatchAgent returns a valid agent instance`() {
@@ -38,6 +49,7 @@ class DefaultAgentServiceTest {
 				)
 
 			assertThat(agent).isNotNull()
+			assertThat(agent).isInstanceOf<KoogDispatchAgentImpl>()
 		}
 	}
 

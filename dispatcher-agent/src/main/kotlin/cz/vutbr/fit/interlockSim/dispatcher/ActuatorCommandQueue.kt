@@ -52,6 +52,19 @@ class ActuatorCommandQueue(
 	private val lock = Any()
 
 	/**
+	 * Per-cycle counter of successful [postAll] calls (actuator-tool posts), reset by
+	 * [resetCycleActuatorCount] at the start of each dispatch cycle.
+	 *
+	 * Unlike [size] (which tracks queue *contents* and is decremented by [drain]), this counter
+	 * tracks post *calls* and is never decremented — so it is immune to the kDisco sim thread
+	 * draining the queue between a before/after sample. That is the property
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] relies on to detect
+	 * "the LLM acted via tools this cycle" reliably under the production decoupled driver/sim
+	 * threading model (PR #811 agent-architect review + traffic-simulation-expert decision).
+	 */
+	private val cycleActuatorPostCount: AtomicInteger = AtomicInteger(0)
+
+	/**
 	 * Atomically posts all [decisions] to the queue.
 	 *
 	 * The call does not block waiting for queue space. Under bounded [capacity] the
@@ -89,6 +102,9 @@ class ActuatorCommandQueue(
 			size.addAndGet(decisions.size)
 			queue.addAll(decisions)
 		}
+		// One successful post of non-empty decisions == one actuator-tool actuation this cycle.
+		// Counted here (not in [size]) so a concurrent [drain] on the sim thread cannot erase it.
+		cycleActuatorPostCount.incrementAndGet()
 		return true
 	}
 
@@ -130,4 +146,27 @@ class ActuatorCommandQueue(
 	 * precise queue-state assertions under concurrency.
 	 */
 	fun approximateSize(): Int = size.get()
+
+	/**
+	 * Marks the start of a new dispatch cycle by zeroing the per-cycle actuator-call counter.
+	 *
+	 * Called by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
+	 * immediately before the LLM runs. See [cycleActuatorPostCount] for why this is a call
+	 * counter rather than a queue-contents read.
+	 */
+	fun resetCycleActuatorCount() {
+		cycleActuatorPostCount.set(0)
+	}
+
+	/**
+	 * `true` if at least one successful [postAll] of non-empty decisions occurred since the last
+	 * [resetCycleActuatorCount] — i.e. an actuator tool posted a decision this dispatch cycle.
+	 *
+	 * Read by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
+	 * immediately after the LLM cycle completes and **before** the admission safety net posts.
+	 * Because the safety net runs after this read and the next cycle's [resetCycleActuatorCount]
+	 * clears the counter, the value consulted here reflects only the LLM's own actuator-tool
+	 * posts for this cycle — not the safety net's, and not the sim thread draining the queue.
+	 */
+	fun actedViaToolsThisCycle(): Boolean = cycleActuatorPostCount.get() > 0
 }

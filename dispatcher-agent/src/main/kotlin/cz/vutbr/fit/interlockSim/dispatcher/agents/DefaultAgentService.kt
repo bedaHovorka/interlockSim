@@ -9,49 +9,38 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
+import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.tools.ToolRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaModelFactory
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Skeleton implementation of [AgentService] for creating Koog dispatch agents (Issue #547).
+ * Real [AgentService] implementation wiring the Koog LLM tool-calling runtime to a local Ollama
+ * model (SP2b.9, Issue #566).
  *
- * ## Current State (SP1.2)
+ * ## History
  *
- * Creates [KoogDispatchAgentImpl] instances with:
- * - Tool registration (stored but not yet wired to Koog)
- * - Model configuration
- * - System prompt storage
+ * Earlier phases (SP1.2–SP1.7, Issues #547–#774) built the pieces this class now wires together:
+ * [DomainTool] implementations, [ai.koog.agents.core.tools.ToolRegistry] assembly via
+ * [KoogToolAdapter], and the [OllamaSimpleExecutor]/[OllamaExecutorConfig] Ollama backend — but no
+ * production code ever called [OllamaSimpleExecutor.getExecutor] or constructed a real Koog
+ * `AIAgent`. [createDispatchAgent] closes that gap: it builds a real
+ * `ai.koog.agents.core.agent.AIAgent<String, String>` (Koog's `singleRunStrategy()` tool-calling
+ * loop) and wraps it in [KoogDispatchAgentImpl].
  *
- * Does NOT yet:
- * - Construct Koog agent objects
- * - Register tools in Koog's framework
- * - Set up LLM model connections
+ * @property ollamaExecutor Shared Koin-singleton Ollama [ai.koog.prompt.executor.model.PromptExecutor]
+ *   provider (heavyweight, lazily initialized on first [OllamaSimpleExecutor.getExecutor] call).
+ * @property ollamaConfig Shared Koin-singleton model/inference configuration (model name,
+ *   temperature, `maxAgentIterations`, `contextWindowTokens`).
  *
- * ## Future (SP1.6, Issue #551)
- *
- * Will be expanded to:
- * - Construct Koog [KoogAgent] with tool definitions
- * - Register each [DomainTool] as a Koog tool
- * - Initialize Ollama model connection
- * - Configure agent personality via system prompt
- *
- * ## Design (SP1 phasing)
- *
- * - SP1.2 (this class): Agent service skeleton, tool collection
- * - SP1.3 (#548): Koin DI wiring (module provides this service)
- * - SP1.4 (#549): Perception/actuator tool implementations (fed into this service)
- * - SP1.5 (#550): Ollama executor backend initialization
- * - SP1.6 (#551): Full Koog tool definitions and agent personality tuning
- *
- * ## No Spring Boot
- *
- * Unlike roi-hunter-assignment, this service:
- * - Has NO Spring/SpringBoot dependencies
- * - Uses Koin for DI (lightweight, Kotlin-native)
- * - Integrates directly with kDisco and domain ports
- *
- * @since Issue #547 (SP1.2 — Goal 10)
+ * @since Issue #547 (SP1.2 — Goal 10 skeleton); real Koog wiring added in Issue #566 (SP2b.9)
  */
-class DefaultAgentService : AgentService {
+class DefaultAgentService(
+	private val ollamaExecutor: OllamaSimpleExecutor,
+	private val ollamaConfig: OllamaExecutorConfig
+) : AgentService {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -62,20 +51,24 @@ class DefaultAgentService : AgentService {
 		systemPrompt: String?
 	): KoogDispatchAgent {
 		logger.debug {
-			"DefaultAgentService.createDispatchAgent: modelName=$modelName, " +
-				"tools=${tools.size}, systemPrompt=${systemPrompt != null} (SP1.2 skeleton)"
+			"DefaultAgentService.createDispatchAgent: modelName=$modelName, tools=${tools.size}, " +
+				"systemPrompt=${systemPrompt != null} (SP2b.9 real Koog wiring)"
 		}
 
-		// SP1.2 skeleton: create agent with tools and configuration stored
-		// SP1.6: Will construct Koog agent, register tools, wire model
-		val agent =
-			KoogDispatchAgentImpl(
-				tools = tools,
-				modelName = modelName,
-				systemPrompt = systemPrompt
+		val toolRegistry = ToolRegistry { tools(tools.map { KoogToolAdapter(it) }) }
+		val model = OllamaModelFactory.toolCapableModel(modelName, ollamaConfig.contextWindowTokens)
+
+		val aiAgent =
+			AIAgent(
+				promptExecutor = ollamaExecutor.getExecutor(),
+				llmModel = model,
+				toolRegistry = toolRegistry,
+				systemPrompt = systemPrompt,
+				temperature = ollamaConfig.temperature.toDouble(),
+				maxIterations = ollamaConfig.maxAgentIterations
 			)
 
-		logger.debug { "DefaultAgentService: created KoogDispatchAgentImpl" }
-		return agent
+		logger.debug { "DefaultAgentService: created AIAgent with ${tools.size} Koog-wrapped tools" }
+		return KoogDispatchAgentImpl(aiAgent)
 	}
 }

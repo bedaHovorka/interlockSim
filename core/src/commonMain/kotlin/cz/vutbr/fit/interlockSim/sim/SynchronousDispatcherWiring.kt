@@ -105,7 +105,19 @@ fun wireSynchronousDispatcher(
 					outerBlockInputs = loop.getOuterBlockInputs()
 				)
 			dispatcher.decide(observation).forEach { decision ->
-				applyDecision(decision, loop, actuatorPort)
+				// Same per-decision exception isolation as DispatchDecisionApplier
+				// (dispatcher-agent) — see that class's onControlStep() KDoc for the full
+				// incident. Not reachable via RuleBasedDispatcher today (it never emits the
+				// tool-driven subtypes an LLM-hallucinated argument could poison), but kept
+				// consistent in case this synchronous path is ever wired to an LLM dispatcher.
+				try {
+					applyDecision(decision, loop, actuatorPort)
+				} catch (e: IllegalArgumentException) {
+					logger.warn(e) {
+						"wireSynchronousDispatcher: dropping decision ${decision::class.simpleName} — " +
+							"invalid argument(s): ${e.message}"
+					}
+				}
 			}
 			// SP4.3: apply reactive train decisions for each active train (Issue #565).
 			// The perception is read live (post-dispatcher) so signal changes from
