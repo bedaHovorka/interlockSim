@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.emitCustom
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException

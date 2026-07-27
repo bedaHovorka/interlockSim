@@ -108,7 +108,7 @@ dependencies {
     // kDisco: :core uses implementation() so the kDisco API is not exported transitively;
     // add explicitly so test code that compiles against ShuntingLoop (a kDisco Process
     // subclass) can resolve kDisco supertype members.
-    testImplementation("cz.hovorka.kdisco:kdisco-core-jvm:$kdiscoVersion")
+    testImplementation("cz.ksimulantenbande.kdisco:kdisco-core-jvm:$kdiscoVersion")
     // kotlinx-coroutines-core: :core uses implementation() so it is not exported
     // transitively; add explicitly for test code that uses runBlocking (e.g. AgentLoopDriverTest).
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")

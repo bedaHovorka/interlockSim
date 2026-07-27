@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.hovorka.kdisco.Condition
+import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
@@ -29,7 +29,7 @@ import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
-import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
+import cz.ksimulantenbande.kdisco.SimulationEvent as KDiscoSimulationEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent as AnimBlockEvent
 
 /**
@@ -150,7 +150,7 @@ interface SimulationEnvironment : NetworkState {
 	 * Create a kDisco [Condition] that becomes true when the path starting at
 	 * [separator] is reserved for [trainId].
 	 *
-	 * This lets a train process suspend with [cz.hovorka.kdisco.Process.waitUntil]
+	 * This lets a train process suspend with [cz.ksimulantenbande.kdisco.Process.waitUntil]
 	 * and resume deterministically as soon as the dispatcher reserves the path
 	 * (or as soon as a conflicting train releases the required blocks).
 	 *
