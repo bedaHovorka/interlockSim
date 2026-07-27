@@ -30,6 +30,7 @@ import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
 import cz.vutbr.fit.interlockSim.util.platformStartDaemonThread
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
 
 /**
@@ -76,7 +77,26 @@ class ShuntingLoop(
 	context: SimulationContext,
 	private val endTime: Long,
 	private val enableRealTimeSync: Boolean = false,
-	initialSpeedMultiplier: Double = 1.0
+	initialSpeedMultiplier: Double = 1.0,
+	/**
+	 * Station capacity — the fixed number of parallel tracks the physical station has, i.e. the
+	 * maximum number of trains that may be simultaneously approved (admitted) at any tick.
+	 *
+	 * This is the hard capacity gate enforced by [approveQueuedTrain]: once [approwedTrains] is
+	 * at capacity, further admissions for this tick are refused (a logged no-op) and the trains
+	 * stay queued until a slot frees. It defaults to
+	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2 for `vyhybna.xml`: tracks k1, k2) —
+	 * the same constant the rule-based dispatcher and the LLM `approve_train` tool/safety net
+	 * use, so the three agree by default. The value is the physical-track count, not a tunable
+	 * performance knob: exceeding it would admit a train with no track left to occupy.
+	 *
+	 * @since SP2b.9 review follow-up (PR #811) — closes the "approve_train cap is not a hard
+	 *   gate" finding. Previously [approveQueuedTrain] admitted blindly and the LLM path could
+	 *   overshoot the capacity contract within a single cycle because the tool and the admission
+	 *   safety net read stale approved-count snapshots; the sim-thread [approveQueuedTrain] is
+	 *   the single chokepoint that owns the true count, so the gate lives here.
+	 */
+	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 ) : Interlocking(context),
 	SpeedControllable,
 	KoinComponent,
@@ -93,6 +113,7 @@ class ShuntingLoop(
 		require(initialSpeedMultiplier > 0.0) {
 			"Speed multiplier must be positive, got: $initialSpeedMultiplier"
 		}
+		require(maxConcurrentTrains > 0) { "maxConcurrentTrains must be positive, got: $maxConcurrentTrains" }
 	}
 
 	// Inject registry for idempotent path reservation checks
@@ -106,6 +127,8 @@ class ShuntingLoop(
 	}
 
 	companion object {
+		private val logger = KotlinLogging.logger {}
+
 		/** Report types enabled by the shunting-loop simulation scenario. */
 		internal val ENABLED_REPORT_TYPES =
 			arrayOf(
@@ -535,6 +558,24 @@ class ShuntingLoop(
 	 */
 	fun approveQueuedTrain(trainId: String) {
 		val train = unapprowedTrains.firstOrNull { it.name == trainId } ?: return
+		// SP2b.9 review follow-up (PR #811): hard capacity gate. approwedTrains is the single
+		// source of truth for the number of currently-admitted trains, owned by this sim-thread
+		// method. The LLM `approve_train` tool and the KoogAgentPlanAdapter admission safety net
+		// both read an off-thread approved-count snapshot that can go stale within one cycle
+		// (multiple tool calls see the same count), so without this gate the LLM path could
+		// admit more trains than the station has physical tracks (maxConcurrentTrains). The
+		// rule-based path never hits this branch: it produces exactly `cap - approvedCount`
+		// ApproveTrain decisions per cycle. Refusing here is a safe, idempotent no-op — the
+		// train stays queued and is admitted on a later tick once a slot frees (terminated
+		// trains are pruned from approwedTrains at the start of each iteration). Enforces the
+		// capacity invariant documented on getMaxConcurrentTrains.
+		if (approwedTrains.size >= maxConcurrentTrains) {
+			logger.warn {
+				"approveQueuedTrain: refusing to admit '$trainId' — $maxConcurrentTrains train(s) " +
+					"already approved (station capacity reached); train stays queued"
+			}
+			return
+		}
 		unapprowedTrains.remove(train)
 		approwedTrains.add(train)
 		activate(train)

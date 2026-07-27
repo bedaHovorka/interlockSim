@@ -105,6 +105,79 @@ class KoogDispatchAgentImplTest {
 	}
 
 	@Test
+	fun `decideAsync omits the approve_train reminder when no trains are queued`() {
+		// Locks the `observation.unapprovedTrains.isNotEmpty()` false branch of buildUserPrompt:
+		// with an empty queue, the per-cycle reminder must not appear (the LLM has nobody to
+		// approve, and a stray reminder was observed to prompt it to hallucinate approve_train
+		// calls for nonexistent train ids).
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val emptyObservation =
+			DispatchObservation(
+				snapshot = SimulationSnapshot.EMPTY,
+				unapprovedTrains = emptyList(),
+				innerBlockInputs = emptyList(),
+				outerBlockInputs = emptyList()
+			)
+
+		runBlocking { agent.decideAsync(emptyObservation) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> !prompt.contains("approve_train") && !prompt.contains("Reminder") },
+				null
+			)
+		}
+	}
+
+	@Test
+	fun `decideAsync passes a prompt stating the simTime of the dispatch cycle`() {
+		// Locks the simTime line of buildUserPrompt (the cycle's only dynamic timestamp).
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val observationAtT =
+			DispatchObservation(
+				snapshot = SimulationSnapshot.EMPTY.copy(simTime = 42.5),
+				unapprovedTrains = emptyList(),
+				innerBlockInputs = emptyList(),
+				outerBlockInputs = emptyList()
+			)
+
+		runBlocking { agent.decideAsync(observationAtT) }
+
+		coVerify {
+			aiAgent.run(match { prompt -> prompt.contains("simTime=42.5") }, null)
+		}
+	}
+
+	@Test
+	fun `decideAsync passes a prompt that does not offer a direct set-switches-or-signals action`() {
+		// SP2b.9 review follow-up (PR #811 Minor #1): the SetSignalAspect/SetSwitchPosition tools
+		// were removed (the LLM may not mutate switches/signals outside the reservation flow), so
+		// the per-cycle user prompt must not instruct the LLM to "set switches/signals" as a
+		// direct actuator action — that would contradict the system prompt and invite the LLM to
+		// hallucinate the removed tool's call shape. Switch and signal aspects change as a side
+		// effect of requesting/canceling routes, which the prompt must say instead.
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		runBlocking { agent.decideAsync(observation("T1")) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					!prompt.contains("set switches/signals") &&
+						prompt.contains("side effect of requesting")
+				},
+				null
+			)
+		}
+	}
+
+	@Test
 	fun `decideAsync passes a prompt stating the current active train count and cap without an extra tool call`() {
 		// Goal 10 SP2b.9 follow-up: the LLM was observed to stop admitting queued trains for many
 		// cycles despite free capacity, partly because learning the active count required an extra

@@ -119,6 +119,12 @@ class OllamaSimpleExecutor(
 				"contextWindowTokens=${config.contextWindowTokens}"
 		}
 
+		// SP2b.9 review follow-up (PR #811): warn once at startup about any no-op settings a
+		// maintainer may have tuned expecting an effect (maxTokens/topP are not forwarded to
+		// Ollama under Koog 1.1.1 — see OllamaExecutorConfig.noOpSettingWarnings). Singleton-scoped,
+		// so this fires exactly once per application.
+		config.noOpSettingWarnings().forEach { logger.warn { it } }
+
 		// Validate that the model is tool-capable before constructing the executor
 		config.validateToolCapableModel()
 

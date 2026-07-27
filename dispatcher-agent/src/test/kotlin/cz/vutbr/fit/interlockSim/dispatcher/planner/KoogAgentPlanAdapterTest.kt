@@ -104,15 +104,67 @@ class KoogAgentPlanAdapterTest {
 	}
 
 	@Test
-	fun `empty decisions from a successful LLM cycle are returned as-is, fallback is not invoked`() {
+	fun `empty decisions with actuator-tool side effects are returned as-is, fallback is not invoked`() {
+		// The LLM returned an empty decision list BUT invoked at least one actuator tool during the
+		// cycle (detected by the command queue growing). That is the normal successful outcome once
+		// real Koog tool-calling is wired: actuation already happened as a tool side effect, so an
+		// empty returned list does NOT mean "the LLM did nothing" — and falling back would
+		// double-dispatch. The adapter must therefore NOT invoke the fallback here.
+		val commandQueue = ActuatorCommandQueue()
 		val koogAgent = mockk<KoogDispatchAgent>()
-		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			commandQueue.postAll(listOf(DispatchDecision.NoAction)) // simulate an actuator tool call
+			emptyList()
+		}
 		val fallback = mockk<Dispatcher>()
 
-		val result = runBlocking { adapter(koogAgent, fallback).plan(observation) }
+		val result = runBlocking { adapter(koogAgent, fallback, commandQueue = commandQueue).plan(observation) }
 
 		assertThat(result).isEmpty()
 		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `a concurrent sim-thread drain mid-cycle does not erase the actuator-tool signal (PR #811 Fix F)`() {
+		// PR #811 agent-architect review: the queue-approximateSize-delta detection had a
+		// false-negative window — the kDisco sim thread drains the queue during a slow
+		// decideAsync, so the after-sample read "no change" and the adapter fell back on top of
+		// the LLM's already-acted tool calls (double-dispatch). The per-cycle actuator-CALL counter
+		// (ActuatorCommandQueue.actedViaToolsThisCycle) counts postAll CALLS, not queue contents,
+		// so draining cannot erase it. This test locks that property: the mock posts a decision
+		// (one actuator-tool call), a concurrent drain empties the queue mid-cycle, then the mock
+		// returns empty — the adapter must still see "acted" and NOT fall back.
+		val commandQueue = ActuatorCommandQueue()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			commandQueue.postAll(listOf(DispatchDecision.NoAction)) // LLM actuator-tool post
+			commandQueue.drain() // sim thread drains the queue mid-cycle
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+
+		val result = runBlocking { adapter(koogAgent, fallback, commandQueue = commandQueue).plan(observation) }
+
+		assertThat(result).isEmpty()
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `empty decisions with no actuator-tool side effects invoke the rule-based fallback`() {
+		// The LLM completed a cycle but neither returned decisions nor invoked any actuator tool —
+		// it truly did nothing. There is no double-dispatch risk (nothing was posted), and not
+		// falling back would leave queued trains un-routed indefinitely (the LLM is stateless across
+		// cycles). The adapter must therefore fall back to the rule-based dispatcher.
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList() // no queue side effect
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+
+		val result = runBlocking { adapter(koogAgent, fallback).plan(observation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		coVerify(exactly = 1) { fallback.decide(any()) }
 	}
 
 	@Test
@@ -185,12 +237,32 @@ class KoogAgentPlanAdapterTest {
 	 */
 	@Nested
 	inner class AdmissionSafetyNet {
+		/**
+		 * A mock [KoogDispatchAgent] that simulates the LLM having acted via at least one actuator
+		 * tool during the cycle: it posts one [DispatchDecision.NoAction] to [commandQueue] as a
+		 * side effect, then returns an empty decision list. This is the shape under which the
+		 * admission safety net is designed to fire — the LLM routed/admitted via tools but left
+		 * free admission capacity unused, so the net force-approves the oldest queued train(s).
+		 * (Without a queue side effect, an empty cycle now correctly falls back instead — see
+		 * `empty decisions with no actuator-tool side effects invoke the rule-based fallback`.)
+		 */
+		private fun agentThatActedViaTools(commandQueue: ActuatorCommandQueue): KoogDispatchAgent =
+			mockk {
+				coEvery { decideAsync(any()) } coAnswers {
+					commandQueue.postAll(listOf(DispatchDecision.NoAction))
+					emptyList()
+				}
+			}
+
+		/** ApproveTrain decisions the safety net posted this cycle (filters out the LLM's own side effects). */
+		private fun approveTrainPosts(queue: ActuatorCommandQueue): List<DispatchDecision.ApproveTrain> =
+			queue.drain().filterIsInstance<DispatchDecision.ApproveTrain>()
+
 		@Test
 		fun `force-approves the oldest queued train when free capacity remains after a completed LLM cycle`() {
-			val koogAgent = mockk<KoogDispatchAgent>()
-			coEvery { koogAgent.decideAsync(any()) } returns emptyList()
-			val fallback = mockk<Dispatcher>()
 			val commandQueue = ActuatorCommandQueue()
+			val koogAgent = agentThatActedViaTools(commandQueue)
+			val fallback = mockk<Dispatcher>()
 			val observation =
 				observationWithQueue(
 					unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A")),
@@ -199,17 +271,17 @@ class KoogAgentPlanAdapterTest {
 
 			runBlocking { adapter(koogAgent, fallback, commandQueue = commandQueue).plan(observation) }
 
-			val posted = commandQueue.drain()
-			assertThat(posted).hasSize(1)
-			assertThat(posted).contains(DispatchDecision.ApproveTrain("Train #1"))
+			val approvals = approveTrainPosts(commandQueue)
+			assertThat(approvals).hasSize(1)
+			assertThat(approvals).contains(DispatchDecision.ApproveTrain("Train #1"))
+			coVerify(exactly = 0) { fallback.decide(any()) }
 		}
 
 		@Test
 		fun `force-approves multiple queued trains up to the free capacity, oldest first`() {
-			val koogAgent = mockk<KoogDispatchAgent>()
-			coEvery { koogAgent.decideAsync(any()) } returns emptyList()
-			val fallback = mockk<Dispatcher>()
 			val commandQueue = ActuatorCommandQueue()
+			val koogAgent = agentThatActedViaTools(commandQueue)
+			val fallback = mockk<Dispatcher>()
 			val observation =
 				observationWithQueue(
 					unapprovedTrains =
@@ -226,18 +298,17 @@ class KoogAgentPlanAdapterTest {
 					.plan(observation)
 			}
 
-			val posted = commandQueue.drain()
-			assertThat(posted).hasSize(2)
-			assertThat(posted).contains(DispatchDecision.ApproveTrain("Train #1"))
-			assertThat(posted).contains(DispatchDecision.ApproveTrain("Train #2"))
+			val approvals = approveTrainPosts(commandQueue)
+			assertThat(approvals).hasSize(2)
+			assertThat(approvals).contains(DispatchDecision.ApproveTrain("Train #1"))
+			assertThat(approvals).contains(DispatchDecision.ApproveTrain("Train #2"))
 		}
 
 		@Test
 		fun `does not force-approve when capacity is already full`() {
-			val koogAgent = mockk<KoogDispatchAgent>()
-			coEvery { koogAgent.decideAsync(any()) } returns emptyList()
-			val fallback = mockk<Dispatcher>()
 			val commandQueue = ActuatorCommandQueue()
+			val koogAgent = agentThatActedViaTools(commandQueue)
+			val fallback = mockk<Dispatcher>()
 			val observation =
 				observationWithQueue(
 					unapprovedTrains = listOf(QueuedTrainObservation("Train #3", "A")),
@@ -249,20 +320,20 @@ class KoogAgentPlanAdapterTest {
 					.plan(observation)
 			}
 
-			assertThat(commandQueue.drain()).isEmpty()
+			assertThat(approveTrainPosts(commandQueue)).isEmpty()
+			coVerify(exactly = 0) { fallback.decide(any()) }
 		}
 
 		@Test
 		fun `does not force-approve when there are no queued trains`() {
-			val koogAgent = mockk<KoogDispatchAgent>()
-			coEvery { koogAgent.decideAsync(any()) } returns emptyList()
-			val fallback = mockk<Dispatcher>()
 			val commandQueue = ActuatorCommandQueue()
+			val koogAgent = agentThatActedViaTools(commandQueue)
+			val fallback = mockk<Dispatcher>()
 			val observation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 0)
 
 			runBlocking { adapter(koogAgent, fallback, commandQueue = commandQueue).plan(observation) }
 
-			assertThat(commandQueue.drain()).isEmpty()
+			assertThat(approveTrainPosts(commandQueue)).isEmpty()
 		}
 
 		@Test

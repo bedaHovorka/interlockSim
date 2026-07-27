@@ -10,6 +10,9 @@
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
 import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
@@ -199,4 +202,39 @@ class OllamaExecutorConfigTest {
 
 			assertThat(result).isEqualTo(OllamaConnectivityResult.Available)
 		}
+
+	// SP2b.9 review follow-up (PR #811 Minor #3): noOpSettingWarnings surfaces settings that have
+	// no effect under the pinned Koog version (1.1.1) — maxTokens and topP are not forwarded to
+	// Ollama. A maintainer tuning either expects a behavior change; these tests pin the
+	// one-time startup diagnostic so the silence is not mistaken for the setting taking effect.
+
+	@Test
+	fun `noOpSettingWarnings is empty for the default config`() {
+		assertThat(OllamaExecutorConfig.default().noOpSettingWarnings()).isEmpty()
+	}
+
+	@Test
+	fun `noOpSettingWarnings flags a non-default maxTokens`() {
+		val warnings = OllamaExecutorConfig(maxTokens = 2048).noOpSettingWarnings()
+
+		assertThat(warnings).hasSize(1)
+		assertThat(warnings[0]).contains("maxTokens=2048")
+		assertThat(warnings[0]).contains("no effect")
+	}
+
+	@Test
+	fun `noOpSettingWarnings flags a non-default topP`() {
+		val warnings = OllamaExecutorConfig(topP = 0.8f).noOpSettingWarnings()
+
+		assertThat(warnings).hasSize(1)
+		assertThat(warnings[0]).contains("topP=0.8")
+		assertThat(warnings[0]).contains("no effect")
+	}
+
+	@Test
+	fun `noOpSettingWarnings flags both when both are non-default`() {
+		val warnings = OllamaExecutorConfig(maxTokens = 2048, topP = 0.8f).noOpSettingWarnings()
+
+		assertThat(warnings).hasSize(2)
+	}
 }

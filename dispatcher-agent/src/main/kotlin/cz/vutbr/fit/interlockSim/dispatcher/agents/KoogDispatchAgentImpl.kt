@@ -78,8 +78,10 @@ class KoogDispatchAgentImpl(
 			}
 			appendLine(
 				"Use the perception tools to inspect current signal/block/train state, then use " +
-					"the actuator tools to reserve routes, release routes, set switches/signals, or " +
-					"approve queued trains as needed this cycle. Respond with plain text when finished."
+					"the actuator tools to reserve routes, release routes, or approve queued trains as " +
+					"needed this cycle. Switch and signal aspects change as a side effect of requesting " +
+					"and canceling routes — there is no direct tool to set them. Respond with plain text " +
+					"when finished."
 			)
 			if (observation.unapprovedTrains.isNotEmpty()) {
 				appendLine(

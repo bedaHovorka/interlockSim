@@ -379,6 +379,12 @@ class DispatcherAgentPortBindingTest {
 			// context.getMainProcess() is null until setMainProcess() is called — never called
 			// in this test. No sim thread is running, so a synchronous query is safe here.
 			assertThat(sensorPort.snapshot()).isEqualTo(DispatchLoopSnapshot.EMPTY)
+			// SP2b.9 review follow-up (PR #811): also exercise the three query-method branches
+			// (getQueuedTrains/getInnerBlockInputs/getOuterBlockInputs), which all delegate to
+			// snapshotOrEmpty() — the EMPTY fallback when there is no main process.
+			assertThat(sensorPort.getQueuedTrains()).isEmpty()
+			assertThat(sensorPort.getInnerBlockInputs()).isEmpty()
+			assertThat(sensorPort.getOuterBlockInputs()).isEmpty()
 		}
 	}
 
@@ -393,6 +399,11 @@ class DispatcherAgentPortBindingTest {
 			val sensorPort = context.scope.get<DispatchLoopSensorPort>()
 
 			assertThat(sensorPort.snapshot()).isEqualTo(DispatchLoopSnapshot.EMPTY)
+			// Same three query-method branches as above, this time hitting the
+			// "main process present but not ProvidesDispatchLoopObservation" path of snapshotOrEmpty().
+			assertThat(sensorPort.getQueuedTrains()).isEmpty()
+			assertThat(sensorPort.getInnerBlockInputs()).isEmpty()
+			assertThat(sensorPort.getOuterBlockInputs()).isEmpty()
 		}
 	}
 }

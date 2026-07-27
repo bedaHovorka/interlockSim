@@ -51,19 +51,55 @@ import java.time.Duration
  *
  * ## Fallback priority
  *
- * 1. LLM cycle completes (any [KoogDispatchAgent.decideAsync] result, **including an empty
- *    list**) → use it as-is, never fall back. An empty list is the *normal, successful* outcome
- *    once real Koog tool-calling is wired: actuator tools already post their
- *    [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s directly to the shared
- *    `ActuatorCommandQueue` as a side effect during `decideAsync`, so a completed cycle with no
- *    returned decisions does not mean the LLM did nothing. Treating "empty" as failure and
- *    invoking [fallbackDispatcher] on top would double-dispatch: the LLM's tool-driven decision
- *    plus the rule engine's independently-decided one for the same train/hop, posted to the same
- *    queue in the same drain cycle — risking the duplicate-`ReservePath` train-freeze regression
+ * 1. LLM cycle completes with a non-empty decision list, **or** the cycle invoked at least one
+ *    actuator tool (detected by [commandQueue]'s per-cycle actuator-call counter — see the
+ *    "How the LLM acted via tools is detected" section; actuator tools post their
+ *    [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s to the shared `ActuatorCommandQueue` as a
+ *    side effect) → use the result as-is, never fall back, and run the [maybeForceAdmission]
+ *    safety net. An empty list with tool side effects is the *normal, successful* outcome once
+ *    real Koog tool-calling is wired: a completed cycle with no returned decisions does not
+ *    mean the LLM did nothing. Treating that case as failure and invoking [fallbackDispatcher]
+ *    on top would double-dispatch: the LLM's tool-driven decision plus the rule engine's
+ *    independently-decided one for the same train/hop, posted to the same queue in the same
+ *    drain cycle — risking the duplicate-`ReservePath` train-freeze regression
  *    `DispatchDecisionApplier`'s own KDoc documents as a past incident (Issue #733 follow-up),
  *    from a new source.
- * 2. LLM times out → fall back to [fallbackDispatcher]
- * 3. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
+ * 2. LLM cycle completes empty **and** invoked no actuator tool (the LLM truly did nothing this
+ *    cycle) → fall back to [fallbackDispatcher]. Nothing was posted this cycle, so there is no
+ *    double-dispatch risk; and because the LLM is stateless across cycles (a fresh
+ *    `singleRunStrategy()` execution per [KoogDispatchAgent.decideAsync] — the agent itself is
+ *    cached and reused; see [KoogAgentFactory]), a no-op cycle is not a preamble to a later
+ *    routing cycle — not falling back would leave queued trains admitted (by the safety net)
+ *    but never routed, stalled at their entry signal indefinitely. The fallback supplies both
+ *    admission and routing, so the [maybeForceAdmission] safety net is intentionally NOT run
+ *    on this path (the fallback's own admission decisions replace it).
+ * 3. LLM times out → fall back to [fallbackDispatcher]
+ * 4. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
+ *
+ * ## How "the LLM acted via tools" is detected
+ *
+ * [ActuatorCommandQueue.resetCycleActuatorCount] is called immediately before
+ * [KoogDispatchAgent.decideAsync] and [ActuatorCommandQueue.actedViaToolsThisCycle] immediately
+ * after; the counter is incremented by each successful [ActuatorCommandQueue.postAll] of
+ * non-empty decisions during the LLM's tool-calling loop. This counts actuator-tool post
+ * **calls**, not queue **contents**, so it is immune to the kDisco sim thread draining the
+ * queue between the two samples — the false-negative window that an
+ * [ActuatorCommandQueue.approximateSize] before/after delta could not close under the
+ * production decoupled driver/sim threading model (the driver runs on the
+ * `dispatcher-agent-driver` daemon thread; `ShuntingLoop.iteration` drains the queue on the
+ * kDisco sim thread; there is no strict handshake between them, only
+ * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]'s polling-based snapshot wait). A slow
+ * local-Ollama cycle can therefore overlap several sim iterations, and a content-delta could
+ * read "no change" after the sim drained the LLM's already-posted decision — the call counter
+ * cannot, because draining does not decrement it.
+ *
+ * **Residual safety** (the backstop if a detection miss ever did occur, e.g. a tool post
+ * rejected by queue backpressure so no call is counted): the downstream layers are idempotent —
+ * `ShuntingLoop.approveQueuedTrain` is a no-op for an already-active/nonexistent train (SP0.11),
+ * and the reservation layer's block-exclusivity rejects a duplicate `ReservePath` for an
+ * already-owned block (`AllPathsBlocked`). So a fallback firing on top of an already-acted
+ * cycle degrades to a redundant (rejected) decision rather than a corrupting one. The call
+ * counter exists to avoid relying on that backstop in the common case.
  *
  * ## Thread safety
  *
@@ -141,19 +177,40 @@ class KoogAgentPlanAdapter(
 	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> {
 		val a = getOrCreateAgent()
 		return try {
+			// Reset the per-cycle actuator-call counter before the LLM cycle so an empty decision
+			// list can be disambiguated: a post from any actuator tool during decideAsync increments
+			// the counter (post CALL, not queue contents — immune to the sim thread draining the
+			// queue mid-cycle), so an empty returned list is the normal successful outcome, not
+			// "the LLM did nothing". See the class KDoc's "Fallback priority" /
+			// "How the LLM acted via tools is detected".
+			commandQueue.resetCycleActuatorCount()
 			val decisions =
 				withTimeout(inferenceTimeout.toMillis()) {
 					a.decideAsync(observation)
 				}
-			// An empty list is NOT a failure signal — see the class KDoc's "Fallback priority"
-			// section for why falling back here would risk double-dispatching alongside the
-			// LLM's own tool-driven actuation.
-			logger.debug {
-				"KoogAgentPlanAdapter: LLM cycle completed with ${decisions.size} directly-returned " +
-					"decision(s) (simTime=${observation.snapshot.simTime}); not falling back"
+			val llmActedViaTools = commandQueue.actedViaToolsThisCycle()
+			if (decisions.isEmpty() && !llmActedViaTools) {
+				// The LLM completed a cycle but neither returned decisions nor invoked any
+				// actuator tool — it truly did nothing. There is no double-dispatch risk in
+				// falling back here (nothing was posted this cycle), and not falling back would
+				// leave queued trains admitted (by the safety net) but never routed, stalled at
+				// their entry signal indefinitely — the LLM is stateless across cycles, so a
+				// no-op cycle is not a preamble to a later routing cycle. The fallback supplies
+				// both admission and routing, so the safety net is intentionally NOT run here.
+				logger.warn {
+					"KoogAgentPlanAdapter: LLM cycle produced no decisions and invoked no actuator " +
+						"tools — applying rule-based fallback (simTime=${observation.snapshot.simTime})"
+				}
+				fallbackDispatcher.decide(observation)
+			} else {
+				logger.debug {
+					"KoogAgentPlanAdapter: LLM cycle completed with ${decisions.size} " +
+						"directly-returned decision(s), llmActedViaTools=$llmActedViaTools " +
+						"(simTime=${observation.snapshot.simTime}); not falling back"
+				}
+				maybeForceAdmission(observation)
+				decisions
 			}
-			maybeForceAdmission(observation)
-			decisions
 		} catch (e: TimeoutCancellationException) {
 			logger.warn {
 				"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +

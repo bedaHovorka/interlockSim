@@ -167,6 +167,40 @@ data class OllamaExecutorConfig(
 		}
 	}
 
+	/**
+	 * Warnings for settings that have no effect under the pinned Koog version (1.1.1).
+	 *
+	 * As of Koog 1.1.1, `OllamaClient.execute()` only forwards `temperature` (plus the computed
+	 * context length) to Ollama's `/api/chat` `options` — [maxTokens] and [topP] have no wiring
+	 * path to the real backend (see the class KDoc's "`maxTokens`/`topP` limitation"). A maintainer
+	 * who tunes either expecting a behavior change gets none, and the silence is easily mistaken
+	 * for the setting taking effect. This function surfaces each no-op setting currently set to a
+	 * non-default value as a human-readable warning string; [OllamaSimpleExecutor] logs them once
+	 * at executor construction (singleton → once per application startup).
+	 *
+	 * @return Warning messages for any no-op setting at a non-default value; empty when all
+	 *   no-op settings are at their defaults (the common case, since [default] only overrides
+	 *   the endpoint).
+	 * @since SP2b.9 review follow-up (PR #811)
+	 */
+	fun noOpSettingWarnings(): List<String> =
+		buildList {
+			if (maxTokens != DEFAULT_MAX_TOKENS) {
+				add(
+					"maxTokens=$maxTokens has no effect under Koog 1.1.1 — OllamaClient.execute() does not " +
+						"forward it to Ollama. The value is retained for forward compatibility (a future Koog " +
+						"release or an LLMParams.additionalProperties escape hatch may pick it up)."
+				)
+			}
+			if (topP != DEFAULT_TOP_P) {
+				add(
+					"topP=$topP has no effect under Koog 1.1.1 — OllamaClient.execute() does not forward it " +
+						"to Ollama. The value is retained for forward compatibility (a future Koog release or " +
+						"an LLMParams.additionalProperties escape hatch may pick it up)."
+				)
+			}
+		}
+
 	init {
 		require(temperature in 0f..1f) { "temperature must be in [0, 1], got $temperature" }
 		require(topP in 0f..1f) { "topP must be in [0, 1], got $topP" }
