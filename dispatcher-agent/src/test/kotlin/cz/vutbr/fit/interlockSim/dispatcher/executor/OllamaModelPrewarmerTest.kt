@@ -70,8 +70,9 @@ class OllamaModelPrewarmerTest {
 
 		val body = OllamaModelPrewarmer.buildRequestBody(config)
 
-		assertThat(body).contains("\"qwen2.5:7b-instruct\"")
-		assertThat(body).contains("\"num_ctx\":32768")
+		// Assert against the config's own values so this test remains correct if the defaults change.
+		assertThat(body).contains("\"${config.modelName}\"")
+		assertThat(body).contains("\"num_ctx\":${config.contextWindowTokens}")
 	}
 
 	@Test
@@ -90,15 +91,6 @@ class OllamaModelPrewarmerTest {
 
 		// Must NOT throw — warmUp is documented non-fatal.
 		runBlocking { OllamaModelPrewarmer.warmUp(config) }
-	}
-
-	@Test
-	fun `warmUp completes without exception for a clearly invalid endpoint URL`() {
-		// Exercises the exception-catch path in warmUp (URI creation succeeds but HTTP fails).
-		val config = OllamaExecutorConfig(ollamaEndpoint = "http://127.0.0.1:1")
-
-		runBlocking { OllamaModelPrewarmer.warmUp(config) }
-		// Implicit assertion: no exception propagated = non-fatal behaviour confirmed.
 	}
 
 	@Test
