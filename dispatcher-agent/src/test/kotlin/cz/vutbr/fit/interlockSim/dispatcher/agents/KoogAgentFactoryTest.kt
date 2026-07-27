@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.mockk.mockk
@@ -152,6 +153,60 @@ class KoogAgentFactoryTest {
 
 			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
 			assertThat(systemPrompt).contains("never a Block ID")
+		}
+	}
+
+	@Test
+	@DisplayName(
+		"createAgent's system prompt states admission comes first, with the concrete concurrent-train cap"
+	)
+	fun createAgentSystemPromptStatesAdmissionFirstWithConcreteCap() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = mockk<NetworkPerceptionPort>(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+			assertThat(systemPrompt).contains("admission comes first")
+			assertThat(systemPrompt).contains("fewer than $cap trains are currently active")
+			assertThat(systemPrompt).contains("up to $cap total active")
+		}
+	}
+
+	@Test
+	@DisplayName(
+		"createAgent's system prompt states the only actuator tools are request_route/release_route/approve_train"
+	)
+	fun createAgentSystemPromptListsActuatorToolInventory() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = mockk<NetworkPerceptionPort>(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains(
+				"The only actuator tools available are request_route, release_route, and approve_train"
+			)
+			assertThat(systemPrompt).contains("there is no tool to set a signal aspect or switch position directly")
 		}
 	}
 }

@@ -70,8 +70,9 @@ class ApproveTrainTool(
 	override val description: String =
 		"Approve a queued train by id, admitting it from the pending queue into the active ShuntingLoop " +
 			"simulation. Fire-and-forget: returns once the request is queued; the train appears in " +
-			"all_train_positions on the next tick after the sim-thread applier processes it. Rejected " +
-			"if the maximum number of concurrently active trains is already reached."
+			"all_train_positions on the next tick after the sim-thread applier processes it. " +
+			"Rejected if $maxConcurrentTrains trains are already active (this station's concurrent-train " +
+			"capacity)."
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(

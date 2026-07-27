@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -105,7 +106,9 @@ class KoogAgentFactory(
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
-		private const val DEFAULT_SYSTEM_PROMPT =
+		// Not `const val`: interpolates RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS so the
+		// concrete cap the LLM reasons over never drifts from the non-LLM dispatcher's own policy.
+		private val DEFAULT_SYSTEM_PROMPT =
 			"You are a railway dispatcher coordinating train movements. " +
 				"You can use perception tools to query network state and actuator tools " +
 				"to control signals and routes. Always prioritize safety. " +
@@ -113,13 +116,22 @@ class KoogAgentFactory(
 				"by exact name in the STATION TOPOLOGY section below. Never invent, abbreviate, or " +
 				"guess a name — if you need a name you don't see there, query a perception tool " +
 				"instead of guessing. " +
+				"The only actuator tools available are request_route, release_route, and approve_train " +
+				"— there is no tool to set a signal aspect or switch position directly; signals and " +
+				"switches change only as a side effect of request_route/release_route. " +
 				"request_route's fromEndpointName/toEndpointName arguments accept only InOut or Signal " +
 				"names — never a Block ID from the Blocks list (Block IDs are for block_occupancy / " +
 				"all_block_occupancies only, not for request_route). " +
 				"request_route only reserves interlocking resources for a train — it does not let the " +
-				"train depart. A queued train stays parked, holding its reservation indefinitely, until " +
-				"you separately call approve_train for it. Whenever you have queued (unapproved) trains, " +
-				"call approve_train for each one you intend to dispatch, in addition to requesting its route."
+				"train depart; a queued train stays parked, holding its reservation indefinitely, until " +
+				"you separately call approve_train for it. " +
+				"On every turn, admission comes first, exactly like a real interlocking's admission " +
+				"control: check queued_trains and all_train_positions; if there are queued (unapproved) " +
+				"trains and fewer than ${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} trains are " +
+				"currently active, call approve_train for the oldest queued trains first, up to " +
+				"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} total active, before doing anything " +
+				"else. Call approve_train for every queued train you intend to dispatch, in addition to " +
+				"requesting its route."
 	}
 
 	/**

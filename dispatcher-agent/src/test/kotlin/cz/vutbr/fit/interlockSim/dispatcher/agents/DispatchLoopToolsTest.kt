@@ -220,6 +220,12 @@ class DispatchLoopToolsTest {
 	}
 
 	@Test
+	fun `approve_train description states the concrete concurrency cap`() {
+		assertThat(approveTool(maxConcurrentTrains = 2).description).contains("Rejected if 2 trains are already active")
+		assertThat(approveTool(maxConcurrentTrains = 3).description).contains("Rejected if 3 trains are already active")
+	}
+
+	@Test
 	fun `approve_train respects a custom maxConcurrentTrains override`() {
 		val result =
 			runBlocking {
