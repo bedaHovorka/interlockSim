@@ -16,8 +16,10 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isInstanceOf
 import assertk.assertions.messageContains
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -36,13 +38,27 @@ import org.junit.jupiter.api.Test
  * @since Issue #566 (SP2b.9 — Goal 10)
  */
 class KoogDispatchAgentImplTest {
-	private fun observation(vararg queuedTrainIds: String) =
-		DispatchObservation(
-			snapshot = SimulationSnapshot.EMPTY,
-			unapprovedTrains = queuedTrainIds.map { QueuedTrainObservation(trainId = it, destinationInOutName = "exitA") },
-			innerBlockInputs = emptyList(),
-			outerBlockInputs = emptyList()
-		)
+	private fun observation(
+		vararg queuedTrainIds: String,
+		approvedTrainCount: Int = 0
+	) = DispatchObservation(
+		snapshot =
+			SimulationSnapshot.EMPTY.copy(
+				trainPositions =
+					List(approvedTrainCount) { index ->
+						TrainPositionReading(
+							trainId = "active-$index",
+							velocity = 0.0,
+							acceleration = 0.0,
+							totalDistance = 0.0,
+							frontSectionName = null
+						)
+					}
+			),
+		unapprovedTrains = queuedTrainIds.map { QueuedTrainObservation(trainId = it, destinationInOutName = "exitA") },
+		innerBlockInputs = emptyList(),
+		outerBlockInputs = emptyList()
+	)
 
 	@Test
 	fun `decideAsync returns empty list and calls agent run once on success`() {
@@ -83,6 +99,27 @@ class KoogDispatchAgentImplTest {
 		coVerify {
 			aiAgent.run(
 				match { prompt -> prompt.contains("approve_train") },
+				null
+			)
+		}
+	}
+
+	@Test
+	fun `decideAsync passes a prompt stating the current active train count and cap without an extra tool call`() {
+		// Goal 10 SP2b.9 follow-up: the LLM was observed to stop admitting queued trains for many
+		// cycles despite free capacity, partly because learning the active count required an extra
+		// perception-tool round-trip before it could even evaluate the admission precondition.
+		// Stating it directly in the per-cycle prompt lets a one-shot decision happen immediately.
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+
+		runBlocking { agent.decideAsync(observation("T1", approvedTrainCount = 1)) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> prompt.contains("Active (approved) trains right now: 1 / $cap") },
 				null
 			)
 		}

@@ -233,7 +233,8 @@ class ExampleRegistry {
 					KoogAgentPlanAdapter(
 						agentFactory = context.scope.get<KoogAgentFactory>(),
 						context = context,
-						fallbackDispatcher = RuleBasedDispatcher()
+						fallbackDispatcher = RuleBasedDispatcher(),
+						commandQueue = context.scope.get<ActuatorCommandQueue>()
 					)
 				wireDispatcherAgent(
 					context,

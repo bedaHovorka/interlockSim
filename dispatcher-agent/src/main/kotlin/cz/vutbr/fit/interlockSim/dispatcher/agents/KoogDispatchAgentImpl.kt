@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import ai.koog.agents.core.agent.AIAgent
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -64,6 +65,13 @@ class KoogDispatchAgentImpl(
 	private fun buildUserPrompt(observation: DispatchObservation): String =
 		buildString {
 			appendLine("Dispatch cycle at simTime=${observation.snapshot.simTime}.")
+			// Goal 10 SP2b.9 follow-up: state the active count/cap directly so the admission
+			// precondition can be evaluated in one shot, without an extra perception-tool
+			// round-trip — this stateless cycle has no memory of the same check from last time.
+			appendLine(
+				"Active (approved) trains right now: ${observation.approvedTrainCount} / " +
+					"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS}"
+			)
 			appendLine("Queued (unapproved) trains: ${observation.unapprovedTrains.size}")
 			observation.unapprovedTrains.forEach {
 				appendLine("- ${it.trainId} -> exit via ${it.destinationInOutName}")

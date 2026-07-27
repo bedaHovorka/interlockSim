@@ -218,6 +218,22 @@ class DefaultPathReservationService(
 						}
 					}
 				}
+				// FIX (Goal 10 SP2b.9 follow-up): a redundant re-request for a route this train
+				// already holds to the same target (e.g. a stateless per-cycle LLM dispatcher
+				// re-issuing request_route for a train it already granted a route to, since it
+				// has no memory of its own prior tool calls) must be a no-op here. Re-registering
+				// an identical PathInfo would duplicate every separator in the merge
+				// (PathReservationRegistry.registerPathInfo/mergePathInfo), and a further
+				// redundant call can hit the registry's 3rd-occurrence cycle-abort — silently
+				// discarding the merge while this method still reports Success, an invisible
+				// PathInfo/reality divergence that can strand the train permanently once it
+				// reaches whatever depends on the discarded segment.
+				val existingPathInfo = registry.getPathInfo(trainId)
+				if (existingPathInfo != null && existingPathInfo.target == target) {
+					clearBlockedTracking(trainId)
+					return PathReservationService.ReservationResult.Success(blocks)
+				}
+
 				// FIX (Issue #296): Register PathInfo for already-owned blocks
 				val pathInfo = pathInfoBuilder.buildPathInfo(start, target, path)
 				registry.registerPathInfo(trainId, pathInfo)

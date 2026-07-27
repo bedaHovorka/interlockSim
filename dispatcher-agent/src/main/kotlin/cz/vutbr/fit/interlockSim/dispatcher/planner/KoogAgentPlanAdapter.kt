@@ -10,11 +10,13 @@
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
@@ -78,6 +80,13 @@ import java.time.Duration
  * @param inferenceTimeout Maximum wall-clock time to wait for a single LLM response before
  *                       invoking the fallback. Defaults to 30 seconds (matches
  *                       [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig.DEFAULT_INFERENCE_TIMEOUT]).
+ * @param commandQueue   Shared actuator command queue for this context, used by the admission
+ *                       safety net (see [maybeForceAdmission]) to post a fire-and-forget
+ *                       [DispatchDecision.ApproveTrain] exactly like the `approve_train` tool
+ *                       itself does.
+ * @param maxConcurrentTrains Station capacity the safety net admits up to. Defaults to
+ *                       [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], the same constant
+ *                       the non-LLM dispatcher and `approve_train` tool use.
  *
  * @since Issue #566 (SP2b.9 — Goal 10)
  */
@@ -85,7 +94,9 @@ class KoogAgentPlanAdapter(
 	private val agentFactory: KoogAgentFactory,
 	private val context: DefaultSimulationContext,
 	private val fallbackDispatcher: Dispatcher,
-	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS)
+	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
+	private val commandQueue: ActuatorCommandQueue,
+	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -141,6 +152,7 @@ class KoogAgentPlanAdapter(
 				"KoogAgentPlanAdapter: LLM cycle completed with ${decisions.size} directly-returned " +
 					"decision(s) (simTime=${observation.snapshot.simTime}); not falling back"
 			}
+			maybeForceAdmission(observation)
 			decisions
 		} catch (e: TimeoutCancellationException) {
 			logger.warn {
@@ -158,6 +170,34 @@ class KoogAgentPlanAdapter(
 			}
 			fallbackDispatcher.decide(observation)
 		}
+	}
+
+	/**
+	 * Admission safety net (Goal 10 SP2b.9 follow-up).
+	 *
+	 * Each LLM dispatch cycle is a fresh, stateless Koog session with no memory of prior
+	 * cycles (see [KoogAgentFactory]/agent-architect analysis) — the LLM was observed to
+	 * successfully admit its first train, then stop calling `approve_train` for many
+	 * subsequent cycles despite free capacity remaining and trains queued.
+	 * [DispatchDecision.ApproveTrain] is documented idempotent (a no-op for an already-active
+	 * or nonexistent train — see `ApproveTrainTool`'s KDoc), so it is always safe to
+	 * force-admit the oldest queued train(s), FIFO, up to [maxConcurrentTrains], after every
+	 * completed (non-fallback) LLM cycle — mirroring [RuleBasedDispatcher]'s own unconditional
+	 * `decideAdmissions()` policy without taking over the rest of the cycle's decisions.
+	 *
+	 * Not invoked on the fallback path: [fallbackDispatcher] (typically [RuleBasedDispatcher])
+	 * already includes its own admission decisions in the list it returns.
+	 */
+	private fun maybeForceAdmission(observation: DispatchObservation) {
+		val freeSlots = maxConcurrentTrains - observation.approvedTrainCount
+		if (freeSlots <= 0) return
+		val toAdmit = observation.unapprovedTrains.take(freeSlots)
+		if (toAdmit.isEmpty()) return
+		logger.info {
+			"KoogAgentPlanAdapter: admission safety net — force-approving ${toAdmit.map { it.trainId }} " +
+				"(LLM left $freeSlots free slot(s) unused this cycle, simTime=${observation.snapshot.simTime})"
+		}
+		commandQueue.postAll(toAdmit.map { DispatchDecision.ApproveTrain(it.trainId) })
 	}
 
 	/**
