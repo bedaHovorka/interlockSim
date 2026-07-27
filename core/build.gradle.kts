@@ -21,7 +21,7 @@
  *     which benefits from commonMain staying free of JVM-only APIs.
  *  3. kDisco 0.4.0 ships multiplatform artifacts (jvm + linuxX64
  *     klibs) and this module consumes the multiplatform coordinate
- *     (`cz.hovorka.kdisco:kdisco-core`; see commonMain dependencies
+ *     (`cz.ksimulantenbande.kdisco:kdisco-core`; see commonMain dependencies
  *     below). Remaining blockers for fully portable common code are
  *     test infrastructure (MockK/JUnit5 are JVM-only; commonTest is
  *     restricted to kotlin.test) and a Koin/xmlutil native audit on
@@ -32,6 +32,8 @@
  * of `java.*` / `javax.*` / `android.*` imports so the day a non-JVM
  * target is enabled, nothing in commonMain has to move.
  */
+
+import java.time.Duration
 
 plugins {
     kotlin("multiplatform")
@@ -131,7 +133,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 // KMP multiplatform artifacts (jvm + linuxX64 klibsavailable in mavenLocal)
-                implementation("cz.hovorka.kdisco:kdisco-core:$kdiscoVersion")
+                implementation("cz.ksimulantenbande.kdisco:kdisco-core:$kdiscoVersion")
                 implementation("io.insert-koin:koin-core:$koinVersion")
                 implementation("io.github.oshai:kotlin-logging:$kotlinLoggingVersion")
                 implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
@@ -356,6 +358,11 @@ val heavyTest by tasks.registering(Test::class) {
     group = "verification"
     description = "Run :core heavy tests (tagged with @Tag(\"heavy-test\")). " +
         "Run after changes to simulation logic to detect deadlocks, race conditions, or resource leaks."
+
+    // Whole-task ceiling: a healthy 1000-rep run takes ~13 min; a wedged run (deadlocked
+    // rep, hung Gradle test worker) must self-terminate instead of blocking forever.
+    // Per-repetition deadlock detection is the @Timeout(30 s) on the test method itself.
+    timeout.set(Duration.ofMinutes(20))
 
     useJUnitPlatform {
         includeTags("heavy-test")

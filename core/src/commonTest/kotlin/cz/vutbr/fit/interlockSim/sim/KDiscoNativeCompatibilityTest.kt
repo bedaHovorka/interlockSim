@@ -3,9 +3,9 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.hovorka.kdisco.Continuous
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Variable
+import cz.ksimulantenbande.kdisco.Continuous
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Variable
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import org.koin.core.component.KoinComponent

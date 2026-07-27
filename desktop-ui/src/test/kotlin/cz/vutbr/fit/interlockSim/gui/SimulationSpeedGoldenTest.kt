@@ -453,7 +453,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 	/**
 	 * **The [Generator] produces identical train-generation sequences across independent runs.**
 	 *
-	 * [Generator] uses a [cz.hovorka.kdisco.Random] seeded with `0L` and inter-arrival
+	 * [Generator] uses a [cz.ksimulantenbande.kdisco.Random] seeded with `0L` and inter-arrival
 	 * distribution `exp(43.0)`. Two independent runs from the same seed must produce
 	 * identical event timestamps, event types, and all train-lifecycle metrics.
 	 *

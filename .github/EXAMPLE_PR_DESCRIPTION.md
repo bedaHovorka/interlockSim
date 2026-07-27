@@ -123,7 +123,7 @@ Relates to #292 - Path discovery architecture implementation
 ./gradlew runExampleGui
 
 # Test with debug logging
-java -Dlogback.level=DEBUG -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -Dlogback.level=DEBUG -jar build/libs/interlockSim.jar example shuntingLoop 1024
 
 # Verify no regressions
 ./gradlew clean build test integrationTest
@@ -156,7 +156,7 @@ java -Dlogback.level=DEBUG -jar build/libs/interlockSim.jar example shuntingLoop
 - [x] JaCoCo report reviewed and validates expected improvements
 - [x] Code follows project style guidelines (tabs, max line 120)
 - [x] No console warnings or errors during build
-- [x] Smoke test passes locally: `./gradlew clean build && java -jar build/libs/interlockSim.jar example shuntingLoop 300`
+- [x] Smoke test passes locally: `./gradlew clean build && java -jar build/libs/interlockSim.jar example shuntingLoop 1024`
 - [x] Documentation updated as needed
 - [x] Ready for review
 

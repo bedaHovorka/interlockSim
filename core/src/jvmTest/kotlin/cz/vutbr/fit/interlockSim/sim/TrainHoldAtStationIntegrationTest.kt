@@ -12,7 +12,11 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.dtMax
+import cz.ksimulantenbande.kdisco.dtMin
+import cz.ksimulantenbande.kdisco.maxAbsError
+import cz.ksimulantenbande.kdisco.maxRelError
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -60,6 +64,23 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 	 * Mirrors [SimpleTestProcess.interLoopSleep].
 	 */
 	private abstract class PollingDriver : LoopProcess() {
+		/**
+		 * Applies the project's physics tolerances, mirroring [Generator.startAction] and
+		 * [SimpleTestProcess.startAction]. Without this, the simulation runs on kDisco's raw
+		 * defaults (`dtMin = 1e-5`, `maxAbsError = 1e-5`), where the `dtMin` slack that
+		 * [Train]'s tail-entry gate deliberately leaves below the train-length threshold
+		 * (`Train.kt`, Issue #797) is the same magnitude as the tolerance and spuriously
+		 * trips `LengthChecker`'s `abs(front − tail − length) ≤ maxAbsError` invariant.
+		 *
+		 * Overriding subclasses must call `super.startAction()`.
+		 */
+		override suspend fun startAction() {
+			dtMin = 1e-6
+			dtMax = 1e-3
+			maxRelError = 1e-2
+			maxAbsError = 1e-2
+		}
+
 		override suspend fun interLoopSleep() {
 			hold(1.0)
 		}
@@ -164,6 +185,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 			ctx.setMainProcess(
 				object : PollingDriver() {
 					override suspend fun startAction() {
+						super.startAction()
 						// Activating the train starts its journey, so it accelerates
 						Process.activate(train)
 					}

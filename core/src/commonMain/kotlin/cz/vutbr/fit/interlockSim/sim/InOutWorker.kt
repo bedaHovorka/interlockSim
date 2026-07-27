@@ -9,10 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Condition
-import cz.hovorka.kdisco.Head
-import cz.hovorka.kdisco.Link
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Condition
+import cz.ksimulantenbande.kdisco.Head
+import cz.ksimulantenbande.kdisco.Link
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService

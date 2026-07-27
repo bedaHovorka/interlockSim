@@ -100,7 +100,7 @@ Use the animated GUI when you need live speed changes:
 ./gradlew runExampleGui
 
 # Equivalent manual JAR launch
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
+java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 For XML files loaded from the desktop UI, use **Simulation → Start...** and then adjust speed with:
@@ -227,7 +227,7 @@ For complete navigation services architecture, Koin DI integration patterns, and
 - `objects/paths/` - Route management
 
 **Simulation engine:**
-- Built on kDisco library (`cz.hovorka.kdisco:kdisco-core-jvm:0.6.0`) — replaces jDisco entirely (Phase 1 migration complete 2026-03-20)
+- Built on kDisco library (`cz.ksimulantenbande.kdisco:kdisco-core-jvm:0.6.1-SNAPSHOT`) — replaces jDisco entirely (Phase 1 migration complete 2026-03-20)
 - kDisco repo: https://github.com/bedaHovorka/kdisco
 - `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
 
