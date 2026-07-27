@@ -19,18 +19,20 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
-import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
@@ -74,6 +76,7 @@ class ExampleRegistry {
 	val guiExamples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
 			"shuntingLoop" to ::createShuntingLoopGuiExample,
+			"shuntingLoopAI" to ::createShuntingLoopAIGuiExample,
 			"multiTrainLoop" to ::createMultiTrainLoopGuiExample,
 			"threeTrainLoop" to ::createThreeTrainLoopGuiExample
 		)
@@ -178,8 +181,78 @@ class ExampleRegistry {
 	}
 
 	/**
+	 * Creates a shunting loop AI simulation example for GUI mode (SP2b.9, Issue #566).
+	 *
+	 * Identical to [createShuntingLoopGuiExample] but wires a [KoogAgentPlanAdapter] as the
+	 * [DispatcherPlanner] instead of the default [cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter].
+	 * The adapter runs the DISPATCHER agent against the configured local Ollama model and falls
+	 * back to [RuleBasedDispatcher] when the LLM stalls, returns no decisions, or throws.
+	 *
+	 * **Requires pacing:** [KoogAgentPlanAdapter] declares `isAsynchronous = true` (LLM inference
+	 * takes real wall-clock time). This example therefore requires the GUI's
+	 * [DelegatingSimulationController]; it cannot run in headless/console mode — use
+	 * [createShuntingLoopExample] (rule-based) for that.
+	 *
+	 * **Ollama prerequisite:** the local Ollama service must be reachable at the configured
+	 * endpoint (default `http://localhost:11434`). Without Ollama, every LLM call times out
+	 * and the rule-based fallback takes over, so the simulation still completes correctly.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run in GUI
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 *
+	 * @since Issue #566 (SP2b.9 — Goal 10)
+	 */
+	private fun createShuntingLoopAIGuiExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext {
+		if (args.size < 3) {
+			throw ContextCreationException("End time of simulation not specified")
+		}
+		val xml =
+			try {
+				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			} catch (e: IllegalArgumentException) {
+				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+			}
+		return xml
+			.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				val time = args[2].toLong()
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				// Enable real-time synchronization for GUI mode with 1x speed multiplier
+				val loop = ShuntingLoop(context, time, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
+				// SP2b.9 (Issue #566): build the LLM-backed planner with rule-based fallback.
+				// KoogAgentPlanAdapter is async (isAsynchronous=true); DelegatingSimulationController
+				// provides the required pacing for assertPlannerPacingCompatible.
+				val aiPlanner =
+					KoogAgentPlanAdapter(
+						agentFactory = context.scope.get<KoogAgentFactory>(),
+						context = context,
+						fallbackDispatcher = RuleBasedDispatcher(),
+						commandQueue = context.scope.get<ActuatorCommandQueue>()
+					)
+				wireDispatcherAgent(
+					context,
+					loop,
+					context.scope.get<DelegatingSimulationController>(),
+					plannerOverride = aiPlanner
+				)
+				context.setMainProcess(loop)
+				context
+			}
+	}
+
+	/**
 	 * Wires the SP0.11 dispatcher-agent stack onto [loop]:
-	 * - creates [DefaultNetworkPerceptionPort] and [DefaultNetworkActuatorPort] backed by [context]
+	 * - resolves the Koin-scoped [NetworkPerceptionPort] and [NetworkActuatorPort] for [context]
+	 *   (Goal 10 dispatcher-cannot-approve-trains fix: must be the same instances
+	 *   [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] injects into its tools —
+	 *   constructing separate ones here left the tools' perception port permanently unrefreshed)
 	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [DispatcherPlanner] (singleton)
 	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [DispatcherPlanner] binding
 	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
@@ -200,29 +273,36 @@ class ExampleRegistry {
 	 * delegate when the run starts, so the agent loop is paced by the existing real-time
 	 * sync (speed multiplier, pause).
 	 *
+	 * [plannerOverride] allows callers to supply a specific [DispatcherPlanner] instance
+	 * instead of resolving the global singleton from the Koin scope.  Pass a
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] here for the
+	 * AI-dispatcher examples (SP2b.9, Issue #566); leave `null` for all rule-based examples
+	 * (falls back to the Koin-scoped singleton).
+	 *
 	 * @since Issue #733 (SP0.11 — Goal 10); SimulationRunner pacing wired in SP4.2 (Issue #564);
-	 *   [DispatcherModeState] + [SemiAutoApprovalGateway] passed to applier in Issue #806 (SP2b.6 follow-up)
+	 *   [DispatcherModeState] + [SemiAutoApprovalGateway] passed to applier in Issue #806 (SP2b.6 follow-up);
+	 *   [plannerOverride] added in Issue #566 (SP2b.9)
 	 */
 	private fun wireDispatcherAgent(
 		context: DefaultSimulationContext,
 		loop: ShuntingLoop,
-		controller: SimulationController
+		controller: SimulationController,
+		plannerOverride: DispatcherPlanner? = null
 	) {
-		val perceptionPort =
-			DefaultNetworkPerceptionPort(
-				env = context,
-				activeTrains = loop::getApprovedTrains
-			)
-		val actuatorPort =
-			DefaultNetworkActuatorPort(
-				env = context,
-				// SP3.5 (Issue #573): wire InterlockingFacade as the single chokepoint so all
-				// requestRoute calls (tool → queue → applier → port) pass through the safety kernel.
-				interlockingFacade = context.scope.get<InterlockingFacade>()
-			)
+		// Goal 10 dispatcher-cannot-approve-trains fix: resolve the SAME NetworkPerceptionPort /
+		// NetworkActuatorPort instances the Koin-scoped KoogAgentFactory uses for its tools,
+		// instead of constructing separate ones here. Previously this method built its own
+		// DefaultNetworkPerceptionPort and refreshed it via snapshotCaptureHook below, while
+		// KoogAgentFactory's perception tools read a DIFFERENT, never-refreshed Koin-scoped
+		// instance — the LLM's perception tools therefore always saw
+		// SimulationSnapshot.EMPTY regardless of actual simulation state.
+		val perceptionPort = context.scope.get<NetworkPerceptionPort>()
+		val actuatorPort = context.scope.get<NetworkActuatorPort>()
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
-		val planner = context.scope.get<DispatcherPlanner>()
+		// SP2b.9 (Issue #566): plannerOverride allows callers to supply a specific planner
+		// (e.g. KoogAgentPlanAdapter for AI examples) instead of the global Koin singleton.
+		val planner = plannerOverride ?: context.scope.get<DispatcherPlanner>()
 		// SP2b.6 (Issue #561): scoped sink that forwards each applied decision to the GUI
 		// DispatcherControlPanel (the "Why this route?" button). Null-tolerant: console runs
 		// resolve the hub but never attach a sink, so onDecisionApplied is a no-op there.

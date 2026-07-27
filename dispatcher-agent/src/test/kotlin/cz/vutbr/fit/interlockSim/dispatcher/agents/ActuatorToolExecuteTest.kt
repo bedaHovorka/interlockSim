@@ -18,22 +18,15 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ReleaseRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SetSignalAspectTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SetSwitchPositionTool
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
 /**
- * Verifies the 4 actuator tools satisfy the SP1.7 threading contract (Issue #774): `execute()`
+ * Verifies the 2 actuator tools satisfy the SP1.7 threading contract (Issue #774): `execute()`
  * runs on the driver thread and posts a [DispatchDecision] to the [ActuatorCommandQueue]
  * (fire-and-forget) rather than touching a [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort]
  * directly. The applier drains the queue on the kDisco thread and applies the decision.
- *
- * Also guards the enum parameter descriptors (#551 review #2: `set_signal_aspect.signal` must
- * be an `Enum` carrying [Signal] entries, not a plain `String`).
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to the queue in Issue #774 (SP1.7)
  */
@@ -44,7 +37,7 @@ class ActuatorToolExecuteTest {
 	fun `request_route posts a RequestRoute decision and returns a queued-success descriptor`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue).execute(
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
 					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "doA1")
 				)
 			}
@@ -66,6 +59,37 @@ class ActuatorToolExecuteTest {
 	}
 
 	@Test
+	fun `request_route rejects an unknown fromEndpointName without posting to the queue`() {
+		val result =
+			runBlocking {
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+					mapOf("trainName" to "T1", "fromEndpointName" to "kA", "toEndpointName" to "doA1")
+				)
+			}
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		val message = (result as ToolResult.Error).message
+		assertThat(message).contains("kA")
+		assertThat(message).contains("zA")
+		assertThat(message).contains("doA1")
+		assertThat(queue.drain()).hasSize(0)
+	}
+
+	@Test
+	fun `request_route rejects an unknown toEndpointName without posting to the queue`() {
+		val result =
+			runBlocking {
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "kB")
+				)
+			}
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		assertThat((result as ToolResult.Error).message).contains("kB")
+		assertThat(queue.drain()).hasSize(0)
+	}
+
+	@Test
 	fun `release_route posts a ReleaseRoute decision`() {
 		val result = runBlocking { ReleaseRouteTool(queue).execute(mapOf("trainName" to "T1")) }
 
@@ -77,66 +101,16 @@ class ActuatorToolExecuteTest {
 	}
 
 	@Test
-	fun `set_switch_position parses lowercase input and posts a SetSwitchPosition decision`() {
-		val result =
-			runBlocking {
-				SetSwitchPositionTool(queue).execute(mapOf("switchName" to "v1", "position" to "main"))
-			}
-
-		assertThat(result).isInstanceOf<ToolResult.Success>()
-		val decision = queue.drain().single() as DispatchDecision.SetSwitchPosition
-		assertThat(decision.switchName).isEqualTo("v1")
-		assertThat(decision.position).isEqualTo(RailSwitch.Conf.MAIN)
-	}
-
-	@Test
-	fun `set_switch_position parses branch case-insensitively`() {
-		runBlocking {
-			SetSwitchPositionTool(queue).execute(mapOf("switchName" to "v2", "position" to "Branch"))
-		}
-
-		val decision = queue.drain().single() as DispatchDecision.SetSwitchPosition
-		assertThat(decision.position).isEqualTo(RailSwitch.Conf.BRANCH)
-	}
-
-	@Test
-	fun `set_signal_aspect parses lowercase input and posts a SetSignalAspect decision`() {
-		val result =
-			runBlocking {
-				SetSignalAspectTool(queue).execute(mapOf("semaphoreName" to "zA", "signal" to "s40"))
-			}
-
-		assertThat(result).isInstanceOf<ToolResult.Success>()
-		val decision = queue.drain().single() as DispatchDecision.SetSignalAspect
-		assertThat(decision.semaphoreName).isEqualTo("zA")
-		assertThat(decision.signal).isEqualTo(Signal.S40)
-	}
-
-	@Test
-	fun `set_signal_aspect signal parameter is an Enum descriptor carrying Signal entries`() {
-		val tool = SetSignalAspectTool(queue)
-		val signalParam = tool.parameters.first { it.name == "signal" }
-
-		assertThat(signalParam.type).isInstanceOf<DomainToolParameterType.Enum>()
-		val enumType = signalParam.type as DomainToolParameterType.Enum
-		assertThat(enumType.entries).isEqualTo(Signal.entries.map { it.name })
-	}
-
-	@Test
-	fun `set_switch_position position parameter is an Enum descriptor carrying Conf entries`() {
-		val tool = SetSwitchPositionTool(queue)
-		val positionParam = tool.parameters.first { it.name == "position" }
-
-		assertThat(positionParam.type).isInstanceOf<DomainToolParameterType.Enum>()
-		val enumType = positionParam.type as DomainToolParameterType.Enum
-		assertThat(enumType.entries).isEqualTo(RailSwitch.Conf.entries.map { it.name })
-	}
-
-	@Test
 	fun `invalid arguments return ToolResult Error without posting to the queue`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue).execute(mapOf("trainName" to "", "fromEndpointName" to "zA", "toEndpointName" to "doA1"))
+				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+					mapOf(
+						"trainName" to "",
+						"fromEndpointName" to "zA",
+						"toEndpointName" to "doA1"
+					)
+				)
 			}
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()

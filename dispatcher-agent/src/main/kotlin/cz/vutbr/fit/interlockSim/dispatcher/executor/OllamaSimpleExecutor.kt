@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.executor
 
 import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
 import ai.koog.prompt.executor.model.PromptExecutor
+import ai.koog.prompt.executor.ollama.client.ContextWindowStrategy
 import ai.koog.prompt.executor.ollama.client.OllamaClient
 import ai.koog.prompt.llm.LLMProvider
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -113,12 +114,30 @@ class OllamaSimpleExecutor(
 	 * @since SP1.5 — initialized on first call to [getExecutor]
 	 */
 	private val promptExecutor: PromptExecutor by lazy {
-		logger.debug { "Creating Ollama executor: endpoint=${config.ollamaEndpoint}, model=${config.modelName}" }
+		logger.debug {
+			"Creating Ollama executor: endpoint=${config.ollamaEndpoint}, model=${config.modelName}, " +
+				"contextWindowTokens=${config.contextWindowTokens}"
+		}
+
+		// SP2b.9 review follow-up (PR #811): warn once at startup about any no-op settings a
+		// maintainer may have tuned expecting an effect (maxTokens/topP are not forwarded to
+		// Ollama under Koog 1.1.1 — see OllamaExecutorConfig.noOpSettingWarnings). Singleton-scoped,
+		// so this fires exactly once per application.
+		config.noOpSettingWarnings().forEach { logger.warn { it } }
 
 		// Validate that the model is tool-capable before constructing the executor
 		config.validateToolCapableModel()
 
-		val result = MultiLLMPromptExecutor(LLMProvider.Ollama to OllamaClient(baseUrl = config.ollamaEndpoint))
+		// SP2b.9: request a Fixed context window rather than Koog's default (None), which never
+		// sends `num_ctx` at all and leaves Ollama defaulting to a 2048-token window — too small
+		// to hold the static station topology loaded into the system prompt (see
+		// OllamaExecutorConfig.contextWindowTokens KDoc for the full rationale).
+		val client =
+			OllamaClient(
+				baseUrl = config.ollamaEndpoint,
+				contextWindowStrategy = ContextWindowStrategy.Companion.Fixed(config.contextWindowTokens)
+			)
+		val result = MultiLLMPromptExecutor(LLMProvider.Ollama to client)
 		executorInitialized = true // set only after construction succeeds
 		result
 	}

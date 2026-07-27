@@ -43,7 +43,10 @@ class BlockOccupancyTool(
 		listOf(
 			DomainToolParameter(
 				name = "blockId",
-				description = "Block identifier (e.g. \"k1\", \"kA\") or auto-generated \"sep1-sep2\" label for unnamed blocks",
+				description =
+					"Block identifier (e.g. \"k1\", \"kA\") or auto-generated \"sep1-sep2\" label for " +
+						"unnamed blocks. This is a Block ID, not an InOut/Signal name — Block IDs are never " +
+						"valid request_route arguments.",
 				type = DomainToolParameterType.String,
 				required = true
 			)

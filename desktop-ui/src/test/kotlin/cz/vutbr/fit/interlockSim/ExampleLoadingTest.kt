@@ -14,6 +14,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
@@ -278,6 +279,43 @@ class ExampleLoadingTest : KoinTestBase() {
 			// Assert
 			assertThat(sortedNames.size > 0).isTrue()
 			assertThat(sortedNames).isEqualTo(listOf("multiTrainLoop", "shuntingLoop", "threeTrainLoop"))
+		}
+
+		/**
+		 * Test that shuntingLoopAI GUI example is registered (SP2b.9, Issue #566)
+		 */
+		@Test
+		fun `shuntingLoopAI GUI example is registered`() {
+			// Arrange
+			val registry = get<ExampleRegistry>()
+
+			// Act
+			val hasShuntingLoopAI = registry.guiExamples.containsKey("shuntingLoopAI")
+
+			// Assert
+			assertThat(hasShuntingLoopAI).isTrue()
+		}
+
+		/**
+		 * Test that shuntingLoopAI is only in GUI examples, not in console examples (SP2b.9, Issue #566)
+		 */
+		@Test
+		fun `shuntingLoopAI is a GUI-only example`() {
+			// The async LLM planner requires a pacing controller — console (NoOp) mode is rejected
+			// by assertPlannerPacingCompatible, so shuntingLoopAI must not appear in console examples.
+			val registry = get<ExampleRegistry>()
+			assertThat(registry.examples.containsKey("shuntingLoopAI")).isFalse()
+			assertThat(registry.guiExamples.containsKey("shuntingLoopAI")).isTrue()
+		}
+
+		/**
+		 * Test that GUI example names include shuntingLoopAI (SP2b.9, Issue #566)
+		 */
+		@Test
+		fun `GUI example names include shuntingLoopAI`() {
+			val registry = get<ExampleRegistry>()
+			val guiNames = registry.getAvailableGuiExamples()
+			assertThat(guiNames).contains("shuntingLoopAI")
 		}
 	}
 }

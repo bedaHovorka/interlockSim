@@ -203,6 +203,39 @@ class DispatchLoopToolsTest {
 		assertThat(tool.parameters[0].name).isEqualTo("trainId")
 	}
 
+	@Test
+	fun `approve_train rejects when active count meets the cap`() {
+		val result = runBlocking { approveTool(activeCount = 2).execute(mapOf("trainId" to "T1")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		assertThat(commandQueue.drain()).hasSize(0)
+	}
+
+	@Test
+	fun `approve_train allows when active count is below the cap`() {
+		val result = runBlocking { approveTool(activeCount = 1).execute(mapOf("trainId" to "T1")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Success>()
+		assertThat(commandQueue.drain()).hasSize(1)
+	}
+
+	@Test
+	fun `approve_train description states the concrete concurrency cap`() {
+		assertThat(approveTool(maxConcurrentTrains = 2).description).contains("Rejected if 2 trains are already active")
+		assertThat(approveTool(maxConcurrentTrains = 3).description).contains("Rejected if 3 trains are already active")
+	}
+
+	@Test
+	fun `approve_train respects a custom maxConcurrentTrains override`() {
+		val result =
+			runBlocking {
+				approveTool(activeCount = 1, maxConcurrentTrains = 1).execute(mapOf("trainId" to "T1"))
+			}
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		assertThat(commandQueue.drain()).hasSize(0)
+	}
+
 	// ── DefaultDispatchLoopActuatorPort direct tests ─────────────────────────
 
 	@Test
@@ -249,8 +282,11 @@ class DispatchLoopToolsTest {
 
 	// ── helpers ───────────────────────────────────────────────────────────────
 
-	private fun approveTool(queue: ActuatorCommandQueue = commandQueue): ApproveTrainTool =
-		ApproveTrainTool(DefaultDispatchLoopActuatorPort(queue))
+	private fun approveTool(
+		queue: ActuatorCommandQueue = commandQueue,
+		activeCount: Int = 0,
+		maxConcurrentTrains: Int = 2
+	): ApproveTrainTool = ApproveTrainTool(DefaultDispatchLoopActuatorPort(queue), { activeCount }, maxConcurrentTrains)
 
 	private fun makeBlockInput(
 		blockId: String,

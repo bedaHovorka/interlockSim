@@ -240,6 +240,61 @@ class DispatchDecisionApplierTest {
 		}
 	}
 
+	// ── Tool-driven decision exception isolation (Goal 10 incident fix) ──────
+
+	/**
+	 * Regression coverage for a live-run incident (SP2b.9, Goal 10): an LLM-hallucinated
+	 * `request_route` endpoint name (`"kA"`/`"kB"` instead of the real `"A"`/`"B"`) made
+	 * [NetworkActuatorPort.requestRoute] throw [IllegalArgumentException] (its `requireEndpoint`
+	 * contract, correct for trusted internal callers but a routine external-input error for the
+	 * LLM tool path), and that exception propagated out of [DispatchDecisionApplier.onControlStep]
+	 * uncaught — killing the entire kDisco simulation thread. [onControlStep] must isolate each
+	 * decision's application so one bad LLM argument only drops that single decision.
+	 */
+	@Nested
+	@DisplayName("Tool-driven decision exception isolation (Goal 10 incident fix)")
+	inner class ToolDrivenExceptionIsolation {
+		@Test
+		@DisplayName("RequestRoute with an unknown endpoint does not throw out of onControlStep")
+		fun requestRoute_unknownEndpoint_doesNotThrow() {
+			every { networkActuator.requestRoute(any(), any(), any()) } throws
+				IllegalArgumentException("Unknown endpoint 'kA' in network (known InOuts: [A, B])")
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "kA", "kB")))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("SetSignalAspect throwing IllegalArgumentException does not throw out of onControlStep")
+		fun setSignalAspect_throwing_doesNotThrow() {
+			every { networkActuator.setSignalAspect(any(), any()) } throws
+				IllegalArgumentException("bad semaphore name")
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("bogus", Signal.STOP)))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("A decision after a failing one in the same batch is still applied")
+		fun subsequentDecisionInSameBatch_stillApplied() {
+			every { networkActuator.requestRoute(any(), any(), any()) } throws
+				IllegalArgumentException("Unknown endpoint 'kA' in network (known InOuts: [A, B])")
+			val (queue, applier) = makeApplier()
+			queue.postAll(
+				listOf(
+					DispatchDecision.RequestRoute("Train #1", "kA", "kB"),
+					DispatchDecision.ApproveTrain("T2")
+				)
+			)
+
+			applier.onControlStep()
+
+			assertThat(approvedTrains).containsExactly("T2")
+		}
+	}
+
 	// ── Duplicate-reservation suppression (SP0.11 regression fix) ────────────
 
 	/**

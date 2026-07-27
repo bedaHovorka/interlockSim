@@ -10,6 +10,9 @@
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
 import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
@@ -33,11 +36,13 @@ class OllamaExecutorConfigTest {
 
 		assertThat(config.ollamaEndpoint).isEqualTo("http://localhost:11434")
 		assertThat(config.modelName).isEqualTo("qwen2.5:7b-instruct")
-		assertThat(config.temperature).isEqualTo(0.7f)
+		assertThat(config.temperature).isEqualTo(0.28f)
 		assertThat(config.topP).isEqualTo(0.9f)
 		assertThat(config.maxTokens).isEqualTo(1024)
 		assertThat(config.inferenceTimeout).isEqualTo(Duration.ofSeconds(30))
 		assertThat(config.retryAttempts).isEqualTo(3)
+		assertThat(config.maxAgentIterations).isEqualTo(20)
+		assertThat(config.contextWindowTokens).isEqualTo(32_768L)
 	}
 
 	@Test
@@ -112,6 +117,42 @@ class OllamaExecutorConfigTest {
 	}
 
 	@Test
+	fun `custom config validates maxAgentIterations positive`() {
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(maxAgentIterations = 0)
+		}
+
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(maxAgentIterations = -1)
+		}
+
+		val config = OllamaExecutorConfig(maxAgentIterations = 3)
+		assertThat(config.maxAgentIterations).isEqualTo(3)
+	}
+
+	/**
+	 * Regression test for the context-window truncation fix (SP2b.9, Issue #566): Koog's default
+	 * `ContextWindowStrategy.None` never sends `num_ctx`, which makes Ollama fall back to a hard
+	 * 2048-token window — too small for the SP2b.8 static-topology system prompt.
+	 * [OllamaSimpleExecutor] wires [contextWindowTokens] into
+	 * `ContextWindowStrategy.Companion.Fixed`; this test locks in the validated positive value and
+	 * default this project relies on for that fix.
+	 */
+	@Test
+	fun `custom config validates contextWindowTokens positive`() {
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(contextWindowTokens = 0)
+		}
+
+		assertThrows<IllegalArgumentException> {
+			OllamaExecutorConfig(contextWindowTokens = -1)
+		}
+
+		val config = OllamaExecutorConfig(contextWindowTokens = 16_384)
+		assertThat(config.contextWindowTokens).isEqualTo(16_384L)
+	}
+
+	@Test
 	fun `validateToolCapableModel rejects old model tags`() {
 		// "mistral" and "llama2" without version are not tool-capable
 		val badConfig1 = OllamaExecutorConfig(modelName = "mistral")
@@ -161,4 +202,39 @@ class OllamaExecutorConfigTest {
 
 			assertThat(result).isEqualTo(OllamaConnectivityResult.Available)
 		}
+
+	// SP2b.9 review follow-up (PR #811 Minor #3): noOpSettingWarnings surfaces settings that have
+	// no effect under the pinned Koog version (1.1.1) — maxTokens and topP are not forwarded to
+	// Ollama. A maintainer tuning either expects a behavior change; these tests pin the
+	// one-time startup diagnostic so the silence is not mistaken for the setting taking effect.
+
+	@Test
+	fun `noOpSettingWarnings is empty for the default config`() {
+		assertThat(OllamaExecutorConfig.default().noOpSettingWarnings()).isEmpty()
+	}
+
+	@Test
+	fun `noOpSettingWarnings flags a non-default maxTokens`() {
+		val warnings = OllamaExecutorConfig(maxTokens = 2048).noOpSettingWarnings()
+
+		assertThat(warnings).hasSize(1)
+		assertThat(warnings[0]).contains("maxTokens=2048")
+		assertThat(warnings[0]).contains("no effect")
+	}
+
+	@Test
+	fun `noOpSettingWarnings flags a non-default topP`() {
+		val warnings = OllamaExecutorConfig(topP = 0.8f).noOpSettingWarnings()
+
+		assertThat(warnings).hasSize(1)
+		assertThat(warnings[0]).contains("topP=0.8")
+		assertThat(warnings[0]).contains("no effect")
+	}
+
+	@Test
+	fun `noOpSettingWarnings flags both when both are non-default`() {
+		val warnings = OllamaExecutorConfig(maxTokens = 2048, topP = 0.8f).noOpSettingWarnings()
+
+		assertThat(warnings).hasSize(2)
+	}
 }

@@ -13,12 +13,11 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
@@ -105,16 +104,11 @@ class ActuatorToolMarshallingIntegrationTest {
 		// Publish a snapshot on the sim (test) thread so the projection has data.
 		perceptionPort.captureSnapshot()
 		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
-		val tools = ToolGroupRegistry().assembleAllTools(projection, queue)
-		val setSignalAspectTool = tools.first { it.name == "set_signal_aspect" }
+		val tools = ToolGroupRegistry().assembleAllTools(projection, queue, setOf("zA", "doA1"))
+		val requestRouteTool = tools.first { it.name == "request_route" }
 
-		// Pick a real semaphore from the network and a target aspect different from its current one.
-		val semaphoreName = "zA"
-		val initialReading = perceptionPort.signalAspect(semaphoreName)
-		assertThat(initialReading).isNotNull()
-		val initial = initialReading!!.signal
-		val target = if (initial != Signal.FREE) Signal.FREE else Signal.STOP
-		assertThat(target).isNotEqualTo(initial)
+		val trainId = "T1"
+		assertThat(perceptionPort.allBlockOccupancies().none { it.trainId == trainId }).isTrue()
 
 		// Invoke the actuator tool from a BACKGROUND thread (the agent driver thread in production).
 		val backgroundThread = Executors.newSingleThreadExecutor()
@@ -123,7 +117,9 @@ class ActuatorToolMarshallingIntegrationTest {
 				backgroundThread
 					.submit<cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult> {
 						runBlocking {
-							setSignalAspectTool.execute(mapOf("semaphoreName" to semaphoreName, "signal" to target.name))
+							requestRouteTool.execute(
+								mapOf("trainName" to trainId, "fromEndpointName" to "zA", "toEndpointName" to "doA1")
+							)
 						}
 					}.get(5, TimeUnit.SECONDS)
 
@@ -135,14 +131,14 @@ class ActuatorToolMarshallingIntegrationTest {
 
 		// The decision is queued but NOT yet applied — live state is unchanged.
 		assertThat(queue.approximateSize()).isEqualTo(1)
-		assertThat(perceptionPort.signalAspect(semaphoreName)!!.signal).isEqualTo(initial)
+		assertThat(perceptionPort.allBlockOccupancies().none { it.trainId == trainId }).isTrue()
 
 		// Sim thread drains + applies the decision.
 		applier.onControlStep()
 
-		// Queue is now empty and the semaphore displays the target aspect.
+		// Queue is now empty and the reservation is now visible in live state.
 		assertThat(queue.approximateSize()).isEqualTo(0)
-		assertThat(perceptionPort.signalAspect(semaphoreName)!!.signal).isEqualTo(target)
+		assertThat(perceptionPort.allBlockOccupancies().any { it.trainId == trainId }).isTrue()
 	}
 
 	@Test
@@ -161,7 +157,7 @@ class ActuatorToolMarshallingIntegrationTest {
 
 		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
 		val queue = ActuatorCommandQueue()
-		val tools = ToolGroupRegistry().assembleAllTools(projection, queue)
+		val tools = ToolGroupRegistry().assembleAllTools(projection, queue, emptySet())
 		val signalAspectTool = tools.first { it.name == "signal_aspect" }
 
 		// Invoke the perception tool from a BACKGROUND thread — it must read the projected

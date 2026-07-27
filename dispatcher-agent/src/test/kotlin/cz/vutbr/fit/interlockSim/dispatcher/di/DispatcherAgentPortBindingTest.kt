@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.di
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
@@ -25,6 +26,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.TimetableReading
@@ -240,6 +243,86 @@ class DispatcherAgentPortBindingTest {
 	}
 
 	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName(
+		"scoped DispatchLoopSensorPort resolved via Koin reports live block-input data during a " +
+			"real ShuntingLoop run (Goal 10 dispatcher-cannot-approve-trains fix)"
+	)
+	fun scopedDispatchLoopSensorPortReportsLiveDataDuringRealRun() {
+		loadShuntingLoopContext().use { context ->
+			context.getInOuts()
+
+			val loop = ShuntingLoop(context, endTime = 300L)
+
+			// Resolve the port under test via the production Koin binding — proves the binding
+			// added for the Goal 10 fix actually reflects context.getMainProcess() rather than
+			// permanently returning DispatchLoopSnapshot.EMPTY (the perception-port dual-instance
+			// bug this fix is modeled on).
+			val perceptionPort = context.scope.get<NetworkPerceptionPort>()
+			val actuatorPort = context.scope.get<NetworkActuatorPort>()
+			val sensorPort = context.scope.get<DispatchLoopSensorPort>()
+
+			val queue = ActuatorCommandQueue()
+			val dispatcher = RuleBasedDispatcher()
+			val planner = RuleBasedPlanAdapter(dispatcher)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = actuatorPort,
+					onApproveTrain = loop::approveQueuedTrain,
+					onBlockTransition = loop::incrementBlockTransition,
+					onFailedReservation = loop::incrementFailedReservation
+				)
+			val driver =
+				AgentLoopDriver(
+					perceptionPort = perceptionPort,
+					planner = planner,
+					commandQueue = queue,
+					controller = NoOpSimulationController,
+					dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
+				)
+
+			val driverTurn = Semaphore(0)
+			val simTurn = Semaphore(0)
+			val capturedSnapshot = AtomicReference<DispatchLoopSnapshot>()
+
+			loop.snapshotCaptureHook = perceptionPort::captureSnapshot
+			loop.controlStepListener =
+				ControlStepListener {
+					driverTurn.release()
+					simTurn.acquireUninterruptibly()
+					applier.onControlStep()
+					// innerBlockInputs is populated from the network's static topology (k1/k2)
+					// on every iteration, independent of train activity — non-empty as soon as
+					// the loop has run at least one tick, so this assertion is not racy.
+					if (capturedSnapshot.get() == null) {
+						val snapshot = sensorPort.snapshot()
+						if (snapshot.innerBlockInputs.isNotEmpty()) {
+							capturedSnapshot.set(snapshot)
+						}
+					}
+				}
+			loop.agentDriverAction = {
+				while (loop.isSimActive()) {
+					if (driverTurn.tryAcquire(100, TimeUnit.MILLISECONDS)) {
+						try {
+							driver.runCycle()
+						} finally {
+							simTurn.release()
+						}
+					}
+				}
+			}
+
+			context.setMainProcess(loop)
+			context.run()
+
+			assertThat(capturedSnapshot.get()).isNotNull()
+			assertThat(requireNotNull(capturedSnapshot.get()).innerBlockInputs).isNotEmpty()
+		}
+	}
+
+	@Test
 	@DisplayName(
 		"scoped NetworkPerceptionPort returns empty train lists when no main process is set " +
 			"(#769 review finding 1)"
@@ -281,6 +364,46 @@ class DispatcherAgentPortBindingTest {
 
 			assertThat(perceptionPort.allTrainPositions()).isEmpty()
 			assertThat(perceptionPort.allTrainTimetables()).isEmpty()
+		}
+	}
+
+	@Test
+	@DisplayName(
+		"scoped DispatchLoopSensorPort returns DispatchLoopSnapshot.EMPTY when no main process " +
+			"is set (Goal 10 dispatcher-cannot-approve-trains fix)"
+	)
+	fun scopedDispatchLoopSensorPortReturnsEmptySnapshotWhenNoMainProcessSet() {
+		loadShuntingLoopContext().use { context ->
+			val sensorPort = context.scope.get<DispatchLoopSensorPort>()
+
+			// context.getMainProcess() is null until setMainProcess() is called — never called
+			// in this test. No sim thread is running, so a synchronous query is safe here.
+			assertThat(sensorPort.snapshot()).isEqualTo(DispatchLoopSnapshot.EMPTY)
+			// SP2b.9 review follow-up (PR #811): also exercise the three query-method branches
+			// (getQueuedTrains/getInnerBlockInputs/getOuterBlockInputs), which all delegate to
+			// snapshotOrEmpty() — the EMPTY fallback when there is no main process.
+			assertThat(sensorPort.getQueuedTrains()).isEmpty()
+			assertThat(sensorPort.getInnerBlockInputs()).isEmpty()
+			assertThat(sensorPort.getOuterBlockInputs()).isEmpty()
+		}
+	}
+
+	@Test
+	@DisplayName(
+		"scoped DispatchLoopSensorPort returns DispatchLoopSnapshot.EMPTY when the main process " +
+			"does not implement ProvidesDispatchLoopObservation (Goal 10 dispatcher-cannot-approve-trains fix)"
+	)
+	fun scopedDispatchLoopSensorPortReturnsEmptySnapshotWhenMainProcessDoesNotProvideObservation() {
+		loadShuntingLoopContext().use { context ->
+			context.setMainProcess(NonApprovingLoopProcess())
+			val sensorPort = context.scope.get<DispatchLoopSensorPort>()
+
+			assertThat(sensorPort.snapshot()).isEqualTo(DispatchLoopSnapshot.EMPTY)
+			// Same three query-method branches as above, this time hitting the
+			// "main process present but not ProvidesDispatchLoopObservation" path of snapshotOrEmpty().
+			assertThat(sensorPort.getQueuedTrains()).isEmpty()
+			assertThat(sensorPort.getInnerBlockInputs()).isEmpty()
+			assertThat(sensorPort.getOuterBlockInputs()).isEmpty()
 		}
 	}
 }
