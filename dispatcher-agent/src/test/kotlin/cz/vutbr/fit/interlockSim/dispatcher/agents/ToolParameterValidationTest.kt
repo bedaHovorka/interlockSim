@@ -16,8 +16,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.BlockOccupancyTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ReleaseRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SetSignalAspectTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SetSwitchPositionTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SignalAspectTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainPositionTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainTimetableTool
@@ -107,38 +105,6 @@ class ToolParameterValidationTest {
 			assertThat(tool.execute(emptyMap())).isInstanceOf<ToolResult.Error>()
 			assertThat(tool.execute(mapOf("trainName" to null))).isInstanceOf<ToolResult.Error>()
 			assertThat(tool.execute(mapOf("trainName" to ""))).isInstanceOf<ToolResult.Error>()
-		}
-		assertThat(commandQueue.drain()).hasSize(0)
-	}
-
-	@Test
-	fun `set_switch_position rejects blank switchName and unknown position without posting to the queue`() {
-		val tool = SetSwitchPositionTool(commandQueue)
-		runBlocking {
-			assertThat(tool.execute(mapOf("switchName" to "", "position" to "MAIN")))
-				.isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("switchName" to "v1", "position" to "SIDE")))
-				.isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("switchName" to "v1", "position" to "")))
-				.isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("switchName" to "v1")))
-				.isInstanceOf<ToolResult.Error>()
-		}
-		assertThat(commandQueue.drain()).hasSize(0)
-	}
-
-	@Test
-	fun `set_signal_aspect rejects blank semaphoreName and unknown signal without posting to the queue`() {
-		val tool = SetSignalAspectTool(commandQueue)
-		runBlocking {
-			assertThat(tool.execute(mapOf("semaphoreName" to "  ", "signal" to "STOP")))
-				.isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("semaphoreName" to "zA", "signal" to "S50")))
-				.isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("semaphoreName" to "zA", "signal" to "")))
-				.isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("semaphoreName" to "zA")))
-				.isInstanceOf<ToolResult.Error>()
 		}
 		assertThat(commandQueue.drain()).hasSize(0)
 	}

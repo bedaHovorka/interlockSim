@@ -184,6 +184,20 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 
 		@Test
+		fun `reservePath rejects a reverse route through identical blocks while the forward route is held`() {
+			// Arrange - reserve the forward path for train1
+			val result1 = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Act - train2 attempts the same physical blocks in the opposite direction
+			val result2 = service.reservePath("train2", inOut2, inOut1)
+
+			// Assert - blocks are still exclusively owned by train1, regardless of direction
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			assertThat(service.getReservedBlocks("train2")).isEmpty()
+		}
+
+		@Test
 		fun `isPathAvailable returns false when path is blocked`() {
 			// Arrange - reserve the path
 			service.reservePath("train1", inOut1, inOut2)

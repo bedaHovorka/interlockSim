@@ -84,7 +84,7 @@ class KoogAgentFactoryTest {
 	}
 
 	@Test
-	@DisplayName("createAgent assembles 16 distinct tools including approve_train, queued_trains, block_inputs")
+	@DisplayName("createAgent assembles 14 distinct tools including approve_train, queued_trains, block_inputs")
 	fun createAgentIncludesDispatchLoopTools() {
 		loadShuntingLoopContext().use { context ->
 			val agentService = CapturingAgentService()
@@ -103,8 +103,8 @@ class KoogAgentFactoryTest {
 			val tools = requireNotNull(agentService.capturedTools)
 			val toolNames = tools.map { it.name }
 
-			assertThat(toolNames).hasSize(16)
-			assertThat(toolNames.toSet()).hasSize(16) // no duplicate names
+			assertThat(toolNames).hasSize(14)
+			assertThat(toolNames.toSet()).hasSize(14) // no duplicate names
 			assertThat(toolNames).contains("approve_train")
 			assertThat(toolNames).contains("queued_trains")
 			assertThat(toolNames).contains("block_inputs")

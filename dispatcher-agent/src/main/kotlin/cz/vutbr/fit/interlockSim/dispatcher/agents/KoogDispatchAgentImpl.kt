@@ -23,7 +23,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Where the actual dispatch decisions go
  *
- * Actuator [DomainTool]s (`RequestRouteTool`, `SetSwitchPositionTool`, etc.) post
+ * Actuator [DomainTool]s (`RequestRouteTool`, `ReleaseRouteTool`, etc.) post
  * [DispatchDecision]s directly to the shared `ActuatorCommandQueue` as a side effect of their own
  * `execute()`, fire-and-forget, during [aiAgent]'s tool-calling loop. [decideAsync] therefore
  * always returns an empty list — that is the **normal, successful outcome**, not a sign the LLM

@@ -171,7 +171,9 @@ class KoogAgentFactory(
 		// the network (Goal 10 dispatcher-cannot-approve-trains fix).
 		val tools =
 			toolRegistry.assembleAllTools(projection, commandQueue, validEndpointNames) +
-				toolRegistry.assembleDispatchLoopTools(dispatchLoopSensorPort, commandQueue)
+				toolRegistry.assembleDispatchLoopTools(dispatchLoopSensorPort, commandQueue) {
+					projection.allTrainPositions().size
+				}
 
 		// SP2b.8 (Issue #695): serialize the controlled area's *static* topology (blocks, switches,
 		// signals, valid routes — SP3.2 compact IDs) and load it into the system prompt ONCE, here
