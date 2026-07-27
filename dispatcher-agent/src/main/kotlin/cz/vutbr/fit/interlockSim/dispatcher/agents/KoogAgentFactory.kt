@@ -113,6 +113,9 @@ class KoogAgentFactory(
 				"by exact name in the STATION TOPOLOGY section below. Never invent, abbreviate, or " +
 				"guess a name — if you need a name you don't see there, query a perception tool " +
 				"instead of guessing. " +
+				"request_route's fromEndpointName/toEndpointName arguments accept only InOut or Signal " +
+				"names — never a Block ID from the Blocks list (Block IDs are for block_occupancy / " +
+				"all_block_occupancies only, not for request_route). " +
 				"request_route only reserves interlocking resources for a train — it does not let the " +
 				"train depart. A queued train stays parked, holding its reservation indefinitely, until " +
 				"you separately call approve_train for it. Whenever you have queued (unapproved) trains, " +

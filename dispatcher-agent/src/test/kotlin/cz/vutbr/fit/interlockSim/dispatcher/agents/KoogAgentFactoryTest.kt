@@ -132,4 +132,26 @@ class KoogAgentFactoryTest {
 			assertThat(systemPrompt).contains("approve_train")
 		}
 	}
+
+	@Test
+	@DisplayName("createAgent's system prompt warns that Block IDs are not valid request_route arguments")
+	fun createAgentSystemPromptWarnsAgainstBlockIdsForRequestRoute() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = mockk<NetworkPerceptionPort>(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("never a Block ID")
+		}
+	}
 }

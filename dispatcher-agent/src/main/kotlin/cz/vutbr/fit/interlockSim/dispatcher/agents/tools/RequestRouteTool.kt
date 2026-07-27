@@ -87,7 +87,8 @@ class RequestRouteTool(
 					"Exact name of the entry point, copied verbatim from the InOuts or " +
 						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
 						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
-						"there, do not call this tool.",
+						"there, do not call this tool. Do NOT pass a Block ID (e.g. a name from the " +
+						"Blocks list, such as \"kA\") — those are only valid for block_occupancy.",
 				type = DomainToolParameterType.String,
 				required = true
 			),
@@ -97,7 +98,8 @@ class RequestRouteTool(
 					"Exact name of the exit point, copied verbatim from the InOuts or " +
 						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
 						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
-						"there, do not call this tool.",
+						"there, do not call this tool. Do NOT pass a Block ID (e.g. a name from the " +
+						"Blocks list, such as \"kA\") — those are only valid for block_occupancy.",
 				type = DomainToolParameterType.String,
 				required = true
 			)
