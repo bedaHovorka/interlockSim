@@ -14,7 +14,6 @@ import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.separatorAspect
@@ -170,23 +169,27 @@ class DefaultNetworkPerceptionPort(
 	 * Converts a [DynamicRailSemaphore] to an immutable [SemaphoreReading] snapshot.
 	 *
 	 * Populates [SemaphoreReading.authorizedFrom] and [SemaphoreReading.authorizedTo] with the
-	 * canonical forward-direction segment names when the signal is allowing, so consumers (in
-	 * particular the LLM dispatcher's `all_signal_aspects` tool) can distinguish a proceed aspect
-	 * that is authorized for the forward direction from one that would be misleading for the
-	 * opposite direction.
+	 * **actual reservation direction** the current proceed aspect was cleared for, via
+	 * [DynamicRailSemaphore.authorizedDirection]. This is the segments the reservation flow
+	 * recorded in [DynamicRailSemaphore.setUpSpeed], so consumers (in particular the LLM
+	 * dispatcher's `all_signal_aspects` tool) learn the real authorized direction rather than the
+	 * semaphore's static forward — which matters when a route is reserved for the reverse
+	 * direction (the vyhybna.xml shunting loop runs both A→B and B→A).
 	 *
-	 * Uses null-safe direction lookup: if [DynamicRailSemaphore.direction] returns `null`
-	 * (e.g. for relaxed mocks in unit tests), the direction fields are omitted (`null`).
+	 * When the signal is [Signal.STOP] nothing is authorized; both direction fields are `null`.
+	 * A proceed aspect set by a direct `signal =` write that bypassed [DynamicRailSemaphore.setUpSpeed]
+	 * (entry/facing signals cleared outside the reservation flow) defaults to the canonical
+	 * forward direction inside [DynamicRailSemaphore.authorizedDirection].
 	 *
 	 * @since Issue #812 (direction-aware signal display)
 	 */
 	private fun DynamicRailSemaphore.toReading(): SemaphoreReading {
-		val dir = if (signal.isAllowing()) direction() else null
+		val (from, to) = authorizedDirection()
 		return SemaphoreReading(
 			name = name,
 			signal = signal,
-			authorizedFrom = dir?.let { anti(it).name },
-			authorizedTo = dir?.name
+			authorizedFrom = from?.name,
+			authorizedTo = to?.name
 		)
 	}
 

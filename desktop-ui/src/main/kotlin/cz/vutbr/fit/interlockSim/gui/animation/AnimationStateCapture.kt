@@ -350,11 +350,17 @@ object AnimationStateCapture {
 	/**
 	 * Capture state of a single semaphore.
 	 *
-	 * Extracts the direction-aware signal indication from the dynamic wrapper:
-	 * only signals authorized for the semaphore's canonical forward direction
-	 * (`anti(direction()) → direction()`) are reported as allowing; a signal that
-	 * was set by a reservation in the opposite direction (or not set at all) yields
-	 * [Signal.STOP].
+	 * Extracts the direction-aware signal indication from the dynamic wrapper. The canvas shows a
+	 * semaphore from its static forward-facing side, so the guard keeps only aspects authorized
+	 * for the semaphore's facing (forward) direction — `isAllowingFor(anti(direction()),
+	 * direction())` — and reports [Signal.STOP] for an aspect that was cleared for the opposite
+	 * (reverse) reservation direction (or not cleared at all).
+	 *
+	 * The guard is meaningful only because [DynamicRailSemaphore.isAllowingFor] compares against
+	 * the **stored reservation direction** (recorded by `setUpSpeed`), not the static orientation:
+	 * a forward query against a reverse-reserved proceed aspect correctly returns false, so the
+	 * forward-facing canvas paints it RED instead of the false GREEN. (Under the PR's original
+	 * static-orientation guard this query was a no-op.)
 	 *
 	 * @param dynamicSemaphore Dynamic semaphore wrapper with current state
 	 * @return Immutable signal state snapshot

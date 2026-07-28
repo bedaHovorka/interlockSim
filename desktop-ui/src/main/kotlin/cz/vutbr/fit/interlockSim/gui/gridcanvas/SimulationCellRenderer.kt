@@ -15,7 +15,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import java.awt.Color
 import java.awt.Graphics2D
 
@@ -81,11 +83,17 @@ open class SimulationCellRenderer(
 		val staticRef = cell.staticRef
 		drawLine(g, staticRef.getSpatialType())
 
-		// Render signal state with color coding
+		// Render signal state with color coding. Direction-aware (Issue #812): the canvas shows the
+		// semaphore from its static forward-facing side, so a proceed aspect cleared for the
+		// opposite (reverse) reservation direction must be shown RED, not the false GREEN. This
+		// mirrors AnimationStateCapture.captureSignalState — the guard is meaningful only because
+		// isAllowingFor compares against the stored reservation direction, not the static one.
+		val d = cell.direction()
+		val effectiveSignal = if (cell.isAllowingFor(anti(d), d)) cell.signal else Signal.STOP
 		val oldColor = g.color
 		g.color =
 			when {
-				cell.signal.isAllowing() -> Color.GREEN
+				effectiveSignal.isAllowing() -> Color.GREEN
 				else -> Color.RED
 			}
 		drawTriangle(g, staticRef)

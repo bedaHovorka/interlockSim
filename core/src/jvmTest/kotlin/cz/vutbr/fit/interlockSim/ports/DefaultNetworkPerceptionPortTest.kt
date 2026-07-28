@@ -51,17 +51,18 @@ class DefaultNetworkPerceptionPortTest {
 
 	private fun semaphore(
 		name: String,
-		signal: Signal = Signal.STOP
+		signal: Signal = Signal.STOP,
+		authorizedDirection: Pair<Cell.Segment?, Cell.Segment?> =
+			if (signal.isAllowing()) Cell.Segment.F to Cell.Segment.A else null to null
 	): DynamicRailSemaphore =
 		mockk<DynamicRailSemaphore>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.signal } returns signal
-			// Stub direction to a fixed canonical value so toReading() and separatorAspect()
-			// produce deterministic SemaphoreReading results (Issue #812).
-			every { it.direction() } returns Cell.Segment.A
-			// isAllowingFor: simplified stub for port-level tests — authorizes any direction
-			// when the signal is allowing (direction-correctness is tested in DynamicRailSemaphoreTest).
-			every { it.isAllowingFor(any(), any()) } returns signal.isAllowing()
+			// authorizedDirection drives toReading() (Issue #812 fix): the port now reports the
+			// actual reserved direction rather than the static forward. Default forward (F→A) for a
+			// proceed aspect, null pair for STOP. Direction-correctness is tested in
+			// DynamicRailSemaphoreTest; this stub just feeds deterministic values to the port.
+			every { it.authorizedDirection() } returns authorizedDirection
 		}
 
 	private fun block(
@@ -91,9 +92,8 @@ class DefaultNetworkPerceptionPortTest {
 		mockk<DynamicInOut>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.outSemaphore } returns semaphore("out-$name", signal)
-			// Stub direction to a fixed canonical value so separatorAspect()'s anti(sep.direction())
-			// call (Issue #812) resolves against a real segment rather than a relaxed-mock default.
-			every { it.direction() } returns Cell.Segment.A
+			// separatorAspect() reads outSemaphore.signal raw (Issue #812 fix reverted the guard),
+			// so no direction stub is needed here. direction() is left to the relaxed-mock default.
 		}
 
 	private fun train(
@@ -194,6 +194,26 @@ class DefaultNetworkPerceptionPortTest {
 				)
 
 			assertThat(port.signalAspect("noSuchSem")).isNull()
+		}
+
+		@Test
+		@DisplayName("reports the actual reserved (reverse) direction, not the static forward")
+		fun reverseReservationReportsReverseDirection() {
+			// A proceed aspect cleared for the reverse direction must surface as the reverse
+			// segment pair in the reading (Issue #812 fix): authorizedDirection feeds toReading
+			// directly, so the LLM dispatcher learns the real authorized direction.
+			val sem = semaphore("doA1", Signal.S60, authorizedDirection = Cell.Segment.A to Cell.Segment.F)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to sem)),
+					activeTrains = { emptyList() }
+				)
+
+			val result = port.signalAspect("doA1")
+
+			assertThat(result).isEqualTo(
+				SemaphoreReading(name = "doA1", signal = Signal.S60, authorizedFrom = "A", authorizedTo = "F")
+			)
 		}
 	}
 

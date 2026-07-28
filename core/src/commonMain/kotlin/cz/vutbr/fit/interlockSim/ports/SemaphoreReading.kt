@@ -27,9 +27,14 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * ## Direction fields
  *
  * When [signal] is an allowing aspect (not [Signal.STOP]), [authorizedFrom] and [authorizedTo]
- * identify the segment names (e.g. `"F"`, `"A"`) that the authorization covers.
- * A train approaching this semaphore from [authorizedFrom] toward [authorizedTo] may proceed;
- * any other approach direction should be treated as [Signal.STOP].
+ * identify the segment names (e.g. `"F"`, `"A"`) the current proceed aspect is **actually
+ * authorized for** — the direction the reservation flow recorded when clearing the signal, not
+ * the semaphore's static forward. A train approaching this semaphore from [authorizedFrom]
+ * toward [authorizedTo] may proceed; any other approach direction should be treated as
+ * [Signal.STOP]. This matters when a route is reserved for the reverse direction (the
+ * vyhybna.xml shunting loop runs both A→B and B→A): a lit forward-facing semaphore cleared for
+ * the reverse direction reports the reverse segment pair here, and a forward-facing observer
+ * must treat it as STOP.
  *
  * Both fields are `null` when [signal] is [Signal.STOP] (nothing is authorized), and also
  * `null` in tests that construct this class with two-argument syntax and do not supply direction
