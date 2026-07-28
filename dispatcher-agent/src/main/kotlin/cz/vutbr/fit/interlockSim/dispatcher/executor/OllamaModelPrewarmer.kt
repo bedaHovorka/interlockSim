@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URI
@@ -109,6 +110,12 @@ object OllamaModelPrewarmer {
 						"first inference may be slower than expected"
 				}
 			}
+		} catch (e: CancellationException) {
+			// Parent coroutine was cancelled — propagate rather than swallow. warmUp runs
+			// outside KoogAgentPlanAdapter.plan's cancellation-aware try/catch, so this is
+			// the only guard against silently absorbing cooperative cancellation of the
+			// driver coroutine mid warm-up.
+			throw e
 		} catch (e: Exception) {
 			logger.warn(e) {
 				"Ollama warm-up failed for model '${config.modelName}' (non-fatal) — " +
@@ -131,12 +138,14 @@ object OllamaModelPrewarmer {
 			val request =
 				HttpRequest
 					.newBuilder()
-					.uri(URI.create("${config.ollamaEndpoint}/api/generate"))
+					.uri(URI.create(generateUrl(config.ollamaEndpoint)))
 					.header("Content-Type", "application/json")
 					.POST(HttpRequest.BodyPublishers.ofString(buildRequestBody(config)))
 					.timeout(WARMUP_TIMEOUT)
 					.build()
-			client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()
+			// HttpClient is AutoCloseable on JDK 21; close it to release the selector thread
+			// and connection pool rather than leaking one per warm-up call.
+			client.use { it.send(request, HttpResponse.BodyHandlers.discarding()).statusCode() }
 		}
 
 	/**
@@ -154,7 +163,23 @@ object OllamaModelPrewarmer {
 	 * @return JSON string suitable for posting to `{ollamaEndpoint}/api/generate`.
 	 */
 	internal fun buildRequestBody(config: OllamaExecutorConfig): String =
-		"""{"model":"${config.modelName}","prompt":"",
-			"stream":false,"options":{"num_predict":1,"num_ctx":${config.contextWindowTokens}}}
-		""".trimMargin()
+		"""{"model":"${config.modelName}","prompt":"","stream":false,"options":{""" +
+			""""num_predict":1,"num_ctx":${config.contextWindowTokens}}}"""
+
+	/**
+	 * Path appended to [OllamaExecutorConfig.ollamaEndpoint] for the warm-up request.
+	 *
+	 * The prewarmer intentionally bypasses Koog's `OllamaClient` (used by
+	 * [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor], which only exposes
+	 * `/api/chat`): warm-up needs `/api/generate` with a custom `options` block and an empty
+	 * prompt, which `OllamaClient` does not surface. Defining the path once here and asserting
+	 * against [GENERATE_PATH] in the HTTP mock test keeps the hand-rolled wiring from drifting.
+	 */
+	const val GENERATE_PATH: String = "/api/generate"
+
+	/**
+	 * Builds the full warm-up URL from a base endpoint. Exposed so tests can assert the exact
+	 * path the prewarmer targets without re-hard-coding [GENERATE_PATH].
+	 */
+	internal fun generateUrl(endpoint: String): String = "$endpoint$GENERATE_PATH"
 }
