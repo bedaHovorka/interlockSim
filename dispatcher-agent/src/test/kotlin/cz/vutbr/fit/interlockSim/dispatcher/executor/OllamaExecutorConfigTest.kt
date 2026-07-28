@@ -20,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
 import java.time.Duration
 
 /**
@@ -27,8 +28,13 @@ import java.time.Duration
  *
  * Tests configuration validation and factory methods.
  *
+ * [OllamaPrewarmExtension] preloads the configured Ollama model once (via `@BeforeAll`) so
+ * the single `@Tag("ollama-test")` proof-of-connection test does not compete with model-load
+ * latency (Issue #815).
+ *
  * @since Issue #548 (SP1.3 — Goal 10)
  */
+@ExtendWith(OllamaPrewarmExtension::class)
 class OllamaExecutorConfigTest {
 	@Test
 	fun `default config uses standard defaults`() {

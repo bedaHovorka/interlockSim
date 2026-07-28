@@ -45,9 +45,12 @@ import java.time.Duration
  *   GUI-based examples only ([assertPlannerPacingCompatible] enforces this at startup).
  * - **Timeout guard**: [withTimeout] wraps each [KoogDispatchAgent.decideAsync] call with
  *   [inferenceTimeout]. On timeout, the fallback dispatcher takes over for that cycle.
- * - **Lazy agent creation**: the Koog agent is created on the first [plan] invocation via
- *   [KoogAgentFactory.createAgent] (a `suspend` function). This defers Ollama connectivity
- *   checks until the simulation actually starts.
+ * - **Lazy agent creation with warm-up**: the Koog agent is created on the first [plan]
+ *   invocation via [KoogAgentFactory.createAgent] (a `suspend` function). As part of agent
+ *   creation, [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaModelPrewarmer.warmUp]
+ *   fires a minimal request to preload the configured model into Ollama memory — this happens
+ *   *before* [withTimeout] starts, so cold model-load latency is absorbed here rather than
+ *   inside the per-cycle timeout budget (Issue #815).
  *
  * ## Fallback priority
  *
