@@ -51,11 +51,18 @@ class DefaultNetworkPerceptionPortTest {
 
 	private fun semaphore(
 		name: String,
-		signal: Signal = Signal.STOP
+		signal: Signal = Signal.STOP,
+		authorizedDirection: Pair<Cell.Segment?, Cell.Segment?> =
+			if (signal.isAllowing()) Cell.Segment.F to Cell.Segment.A else null to null
 	): DynamicRailSemaphore =
 		mockk<DynamicRailSemaphore>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.signal } returns signal
+			// authorizedDirection drives toReading() (Issue #812 fix): the port now reports the
+			// actual reserved direction rather than the static forward. Default forward (F→A) for a
+			// proceed aspect, null pair for STOP. Direction-correctness is tested in
+			// DynamicRailSemaphoreTest; this stub just feeds deterministic values to the port.
+			every { it.authorizedDirection() } returns authorizedDirection
 		}
 
 	private fun block(
@@ -85,6 +92,8 @@ class DefaultNetworkPerceptionPortTest {
 		mockk<DynamicInOut>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.outSemaphore } returns semaphore("out-$name", signal)
+			// separatorAspect() reads outSemaphore.signal raw (Issue #812 fix reverted the guard),
+			// so no direction stub is needed here. direction() is left to the relaxed-mock default.
 		}
 
 	private fun train(
@@ -170,7 +179,9 @@ class DefaultNetworkPerceptionPortTest {
 
 			val result = port.signalAspect("zA")
 
-			assertThat(result).isEqualTo(SemaphoreReading(name = "zA", signal = Signal.FREE))
+			assertThat(result).isEqualTo(
+				SemaphoreReading(name = "zA", signal = Signal.FREE, authorizedFrom = "F", authorizedTo = "A")
+			)
 		}
 
 		@Test
@@ -183,6 +194,26 @@ class DefaultNetworkPerceptionPortTest {
 				)
 
 			assertThat(port.signalAspect("noSuchSem")).isNull()
+		}
+
+		@Test
+		@DisplayName("reports the actual reserved (reverse) direction, not the static forward")
+		fun reverseReservationReportsReverseDirection() {
+			// A proceed aspect cleared for the reverse direction must surface as the reverse
+			// segment pair in the reading (Issue #812 fix): authorizedDirection feeds toReading
+			// directly, so the LLM dispatcher learns the real authorized direction.
+			val sem = semaphore("doA1", Signal.S60, authorizedDirection = Cell.Segment.A to Cell.Segment.F)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to sem)),
+					activeTrains = { emptyList() }
+				)
+
+			val result = port.signalAspect("doA1")
+
+			assertThat(result).isEqualTo(
+				SemaphoreReading(name = "doA1", signal = Signal.S60, authorizedFrom = "A", authorizedTo = "F")
+			)
 		}
 	}
 
@@ -204,7 +235,7 @@ class DefaultNetworkPerceptionPortTest {
 
 			assertThat(result).containsExactlyInAnyOrder(
 				SemaphoreReading("zA", Signal.STOP),
-				SemaphoreReading("doB1", Signal.S60)
+				SemaphoreReading("doB1", Signal.S60, authorizedFrom = "F", authorizedTo = "A")
 			)
 		}
 
@@ -731,7 +762,9 @@ class DefaultNetworkPerceptionPortTest {
 
 			val snap = port.captureSnapshot()
 
-			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
+			assertThat(snap.semaphores).containsExactlyInAnyOrder(
+				SemaphoreReading("zA", Signal.FREE, authorizedFrom = "F", authorizedTo = "A")
+			)
 			assertThat(snap.blocks).containsExactlyInAnyOrder(
 				BlockOccupancyReading("k1", TrackFacility.State.RESERVED, "Train #1")
 			)
@@ -795,7 +828,9 @@ class DefaultNetworkPerceptionPortTest {
 
 			val snap = port.captureSnapshot()
 
-			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("doB1", Signal.S60))
+			assertThat(snap.semaphores).containsExactlyInAnyOrder(
+				SemaphoreReading("doB1", Signal.S60, authorizedFrom = "F", authorizedTo = "A")
+			)
 		}
 
 		@Test
@@ -821,7 +856,9 @@ class DefaultNetworkPerceptionPortTest {
 			active.clear()
 
 			// The already-captured snapshot must reflect the pre-mutation state.
-			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
+			assertThat(snap.semaphores).containsExactlyInAnyOrder(
+				SemaphoreReading("zA", Signal.FREE, authorizedFrom = "F", authorizedTo = "A")
+			)
 			assertThat(snap.blocks).containsExactlyInAnyOrder(
 				BlockOccupancyReading("k1", TrackFacility.State.RESERVED, "Train #1")
 			)
@@ -865,7 +902,9 @@ class DefaultNetworkPerceptionPortTest {
 			// snapshot() is still the frozen, previously-captured value — the off-thread
 			// caller never observed the mutation because it does not re-read live state.
 			assertThat(port.snapshot()).isEqualTo(captured)
-			assertThat(port.snapshot().semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
+			assertThat(port.snapshot().semaphores).containsExactlyInAnyOrder(
+				SemaphoreReading("zA", Signal.FREE, authorizedFrom = "F", authorizedTo = "A")
+			)
 		}
 	}
 }

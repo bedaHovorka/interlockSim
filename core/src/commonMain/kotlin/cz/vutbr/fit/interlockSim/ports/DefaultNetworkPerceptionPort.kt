@@ -160,13 +160,38 @@ class DefaultNetworkPerceptionPort(
 
 	override fun signalAspect(semaphoreName: String): SemaphoreReading? {
 		val sem = semaphoreByName[semaphoreName] ?: return null
-		return SemaphoreReading(name = sem.name, signal = sem.signal)
+		return sem.toReading()
 	}
 
-	override fun allSignalAspects(): List<SemaphoreReading> =
-		semaphoreCache.map { sem ->
-			SemaphoreReading(name = sem.name, signal = sem.signal)
-		}
+	override fun allSignalAspects(): List<SemaphoreReading> = semaphoreCache.map { sem -> sem.toReading() }
+
+	/**
+	 * Converts a [DynamicRailSemaphore] to an immutable [SemaphoreReading] snapshot.
+	 *
+	 * Populates [SemaphoreReading.authorizedFrom] and [SemaphoreReading.authorizedTo] with the
+	 * **actual reservation direction** the current proceed aspect was cleared for, via
+	 * [DynamicRailSemaphore.authorizedDirection]. This is the segments the reservation flow
+	 * recorded in [DynamicRailSemaphore.setUpSpeed], so consumers (in particular the LLM
+	 * dispatcher's `all_signal_aspects` tool) learn the real authorized direction rather than the
+	 * semaphore's static forward — which matters when a route is reserved for the reverse
+	 * direction (the vyhybna.xml shunting loop runs both A→B and B→A).
+	 *
+	 * When the signal is [Signal.STOP] nothing is authorized; both direction fields are `null`.
+	 * A proceed aspect set by a direct `signal =` write that bypassed [DynamicRailSemaphore.setUpSpeed]
+	 * (entry/facing signals cleared outside the reservation flow) defaults to the canonical
+	 * forward direction inside [DynamicRailSemaphore.authorizedDirection].
+	 *
+	 * @since Issue #812 (direction-aware signal display)
+	 */
+	private fun DynamicRailSemaphore.toReading(): SemaphoreReading {
+		val (from, to) = authorizedDirection()
+		return SemaphoreReading(
+			name = name,
+			signal = signal,
+			authorizedFrom = from?.name,
+			authorizedTo = to?.name
+		)
+	}
 
 	// ── NetworkPerceptionPort — block occupancies ─────────────────────────
 
