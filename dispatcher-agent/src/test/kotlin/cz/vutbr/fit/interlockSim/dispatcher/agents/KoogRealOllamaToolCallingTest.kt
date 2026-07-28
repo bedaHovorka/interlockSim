@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaPrewarmExtension
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -21,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -39,8 +41,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * keep the test fast and decoupled from railway-domain correctness — it is only asserting that
  * genuine LLM tool-calling happens, not that any particular railway decision is correct.
  *
+ * [OllamaPrewarmExtension] preloads the model before the test class runs (Issue #815) so the
+ * [testTimeoutMillis] budget is not consumed by cold model-load latency.
+ *
  * @since Issue #566 (SP2b.9 — Goal 10)
  */
+@ExtendWith(OllamaPrewarmExtension::class)
 class KoogRealOllamaToolCallingTest {
 	private class FakePerceptionTool : DomainTool {
 		override val name: String = "signal_aspect"

@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaModelPrewarmer
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
@@ -160,6 +161,14 @@ class KoogAgentFactory(
 	 * @since Issue #548 (SP1.3 — skeleton); SP1.4 (#549) adds port infrastructure
 	 */
 	suspend fun createAgent(context: DefaultSimulationContext): KoogDispatchAgent {
+		// Issue #815 (SP2b.9 warm-up follow-up): preload the model into Ollama memory BEFORE
+		// the agent is handed back to KoogAgentPlanAdapter. The caller's first plan() invocation
+		// wraps decideAsync() in withTimeout(inferenceTimeout) — if the model is cold at that
+		// point the load latency competes with the 30 s budget and causes a spurious fallback to
+		// RuleBasedDispatcher. Warming up here (outside of withTimeout) absorbs the cold-load
+		// penalty before the dispatch timeout window even starts.
+		OllamaModelPrewarmer.warmUp(ollamaConfig)
+
 		logger.debug {
 			"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
 				"model=${ollamaConfig.modelName} (SP1.7 projection + queue)"

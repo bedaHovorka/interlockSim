@@ -15,6 +15,7 @@ import assertk.assertions.isSameAs
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
 
 /**
  * Unit tests for [OllamaSimpleExecutor] (SP1.5, Issue #550).
@@ -26,8 +27,13 @@ import org.junit.jupiter.api.assertThrows
  * unit tests. These are tagged `@Tag("ollama-test")` and conditionally run based on Ollama
  * reachability (see `dispatcher-agent/build.gradle.kts`).
  *
+ * [OllamaPrewarmExtension] preloads the configured Ollama model once (via `@BeforeAll`) so the
+ * `@Tag("ollama-test")` proof-of-connection test does not compete with model-load latency
+ * (Issue #815).
+ *
  * @since Issue #550 (SP1.5 — Goal 10)
  */
+@ExtendWith(OllamaPrewarmExtension::class)
 class OllamaSimpleExecutorTest {
 	@Test
 	fun `constructor accepts valid config`() {
