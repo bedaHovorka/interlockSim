@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 
@@ -369,6 +370,162 @@ class DynamicRailSemaphoreTest {
 			// E and F are not joined by a straight line for HORIZONTAL orientation
 			dynamicSemaphore1.cancelPathSetup(Cell.Segment.E, Cell.Segment.F)
 		}.isInstanceOf(PathSeparatorChangeException::class)
+	}
+
+	// ========== isAllowingFor Tests (Issue #812 direction-aware signal display) ==========
+
+	// For staticSemaphore1: orientation=true, HORIZONTAL
+	//   direction() = A, anti(A) = F
+	//   Forward: from=F, to=A  → isAllowingFor(F, A) returns true when signal is allowing
+	//   Reverse: from=A, to=F  → isAllowingFor(A, F) always returns false
+
+	@Test
+	fun `isAllowingFor returns false when signal is STOP regardless of direction`() {
+		// Signal is initially STOP
+		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
+
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.F, Cell.Segment.A)).isFalse()
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.A, Cell.Segment.F)).isFalse()
+	}
+
+	@Test
+	fun `isAllowingFor returns true for forward direction when signal is allowing`() {
+		// Set up signal in the forward direction
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.F, Cell.Segment.A, 20.0)
+		assertThat(dynamicSemaphore1.signal.isAllowing()).isTrue()
+
+		// Forward direction (F → A) is authorized
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.F, Cell.Segment.A)).isTrue()
+	}
+
+	@Test
+	fun `isAllowingFor returns false for reverse direction even when signal is allowing`() {
+		// Set up signal in the forward direction (signal=allowing)
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.F, Cell.Segment.A, 20.0)
+		assertThat(dynamicSemaphore1.signal.isAllowing()).isTrue()
+
+		// Reverse direction (A → F) is NOT authorized even though signal is allowing
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.A, Cell.Segment.F)).isFalse()
+	}
+
+	@Test
+	fun `isAllowingFor returns false after cancelPathSetup`() {
+		// Set signal to allowing, then cancel
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.F, Cell.Segment.A, 20.0)
+		assertThat(dynamicSemaphore1.signal.isAllowing()).isTrue()
+
+		dynamicSemaphore1.cancelPathSetup(Cell.Segment.F, Cell.Segment.A)
+
+		// After cancel, signal is STOP → isAllowingFor must return false for any direction
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.F, Cell.Segment.A)).isFalse()
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.A, Cell.Segment.F)).isFalse()
+	}
+
+	@Test
+	fun `isAllowingFor returns false for null from and to segments`() {
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.F, Cell.Segment.A, 20.0)
+		assertThat(dynamicSemaphore1.signal.isAllowing()).isTrue()
+
+		// Null segments do not match any authorized direction
+		assertThat(dynamicSemaphore1.isAllowingFor(null, null)).isFalse()
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.F, null)).isFalse()
+		assertThat(dynamicSemaphore1.isAllowingFor(null, Cell.Segment.A)).isFalse()
+	}
+
+	@Test
+	fun `isAllowingFor works for both semaphore orientations`() {
+		// staticSemaphore2: orientation=false, VERTICAL → direction() = H, anti(H) = C
+		// Forward: from=C, to=H
+		// Reverse: from=H, to=C
+		val d2 = dynamicSemaphore2.direction() // H
+		val antiD2 = anti(d2) // C
+
+		// Before any reservation: signal is STOP → isAllowingFor always false
+		assertThat(dynamicSemaphore2.isAllowingFor(antiD2, d2)).isFalse()
+
+		// Set up forward direction
+		dynamicSemaphore2.setUpSpeed(antiD2, d2, 20.0)
+		assertThat(dynamicSemaphore2.signal.isAllowing()).isTrue()
+
+		// Forward direction is authorized
+		assertThat(dynamicSemaphore2.isAllowingFor(antiD2, d2)).isTrue()
+		// Reverse direction is NOT authorized
+		assertThat(dynamicSemaphore2.isAllowingFor(d2, antiD2)).isFalse()
+	}
+
+	// ========== isAllowingFor / authorizedDirection — stored reservation direction (Issue #812 fix) ==========
+	//
+	// For staticSemaphore1: orientation=true, HORIZONTAL → direction() = A, anti(A) = F.
+	// The PR's static-orientation guard was a no-op (a forward query always matched the static
+	// forward); the fix stores the actual reservation direction in setUpSpeed so isAllowingFor /
+	// authorizedDirection can distinguish a forward-reserved proceed aspect from a reverse one.
+
+	@Test
+	fun `isAllowingFor authorizes the reverse reservation's own direction`() {
+		// Reverse pairing: from=A (direction), to=F (anti-direction) -- a train crossing this
+		// block boundary from the opposite side. Issue #566/SP2b.9 lets the signal clear for
+		// this pairing; the stored-direction fix lets isAllowingFor report it correctly.
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.A, Cell.Segment.F, 20.0)
+		assertThat(dynamicSemaphore1.signal.isAllowing()).isTrue()
+
+		// The reverse reservation holder proceeds for its own direction (A → F).
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.A, Cell.Segment.F)).isTrue()
+		// A forward-facing observer of a reverse-reserved aspect must see STOP.
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.F, Cell.Segment.A)).isFalse()
+	}
+
+	@Test
+	fun `authorizedDirection reports stored reservation direction`() {
+		// STOP authorizes nothing.
+		assertThat(dynamicSemaphore1.authorizedDirection()).isEqualTo(null to null)
+
+		// Forward reservation records (F, A).
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.F, Cell.Segment.A, 20.0)
+		assertThat(dynamicSemaphore1.authorizedDirection()).isEqualTo(
+			Cell.Segment.F to Cell.Segment.A
+		)
+
+		// Cancel returns to STOP → null pair.
+		dynamicSemaphore1.cancelPathSetup(Cell.Segment.F, Cell.Segment.A)
+		assertThat(dynamicSemaphore1.authorizedDirection()).isEqualTo(null to null)
+
+		// Reverse reservation records (A, F) -- the actual reserved direction, not static forward.
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.A, Cell.Segment.F, 20.0)
+		assertThat(dynamicSemaphore1.authorizedDirection()).isEqualTo(
+			Cell.Segment.A to Cell.Segment.F
+		)
+	}
+
+	@Test
+	fun `authorizedDirection defaults to static forward for a direct non-STOP write`() {
+		// A direct `signal =` write that bypasses setUpSpeed (interlocking-facade clearSignal /
+		// actuator setSignalAspect) leaves the stored direction null; authorizedDirection then
+		// defaults to the canonical forward (anti(d), d) = (F, A) -- correct for entry/facing
+		// signals cleared outside the reservation flow.
+		dynamicSemaphore1.signal = Signal.S60
+		assertThat(dynamicSemaphore1.signal.isAllowing()).isTrue()
+		assertThat(dynamicSemaphore1.authorizedDirection()).isEqualTo(
+			Cell.Segment.F to Cell.Segment.A
+		)
+		// isAllowingFor authorizes the forward query only.
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.F, Cell.Segment.A)).isTrue()
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.A, Cell.Segment.F)).isFalse()
+	}
+
+	@Test
+	fun `cancelPathSetup clears authorized direction`() {
+		// Reserve forward, then cancel: stored direction must be cleared so a later direct write
+		// defaults cleanly (no stale reverse lingering from a prior reservation).
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.F, Cell.Segment.A, 20.0)
+		assertThat(dynamicSemaphore1.authorizedDirection()).isEqualTo(
+			Cell.Segment.F to Cell.Segment.A
+		)
+
+		dynamicSemaphore1.cancelPathSetup(Cell.Segment.F, Cell.Segment.A)
+
+		assertThat(dynamicSemaphore1.authorizedDirection()).isEqualTo(null to null)
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.F, Cell.Segment.A)).isFalse()
+		assertThat(dynamicSemaphore1.isAllowingFor(Cell.Segment.A, Cell.Segment.F)).isFalse()
 	}
 }
 

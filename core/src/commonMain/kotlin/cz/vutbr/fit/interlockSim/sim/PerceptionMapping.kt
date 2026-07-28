@@ -26,10 +26,26 @@ internal fun separatorName(sep: OrientedPathSeparator?): String? =
 	}
 
 /**
- * Signal aspect perceived at [sep]: the semaphore's own aspect for a [DynamicRailSemaphore],
- * or the [DynamicInOut.outSemaphore] aspect for an InOut endpoint. `null` when [sep] is `null`.
+ * Signal aspect perceived at [sep] — the train's **own next-separator** perception.
+ *
+ * [sep] is always a separator on the train's own reserved path ([Train.nextSemaphore] /
+ * [Train.secondSemaphoreAhead] both read `reservedSeparatorsAhead`), so the train is the
+ * reservation holder and is authorized to proceed whenever the signal is lit. This mapping
+ * therefore returns the raw `signal` (proceed-when-lit), with **no** direction guard.
+ *
+ * Direction-awareness (Issue #812) is deliberately NOT applied here: a guard keyed to the
+ * semaphore's static orientation would be a no-op (the query always matches the forward
+ * direction), and one keyed to the stored reservation direction would incorrectly report STOP to
+ * a reverse-travelling holder at its own semaphore. The display-truthfulness fix lives in the
+ * **global** views instead — the canvas (`AnimationStateCapture.captureSignalState`,
+ * `SimulationCellRenderer`) and the LLM dispatcher's `all_signal_aspects`
+ * ([cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort.toReading] via
+ * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore.authorizedDirection]).
+ *
+ * `null` when [sep] is `null` (no reserved path ahead).
  *
  * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+ * @since Issue #812 (direction-aware signal display — kept raw here; fix moved to canvas/port)
  */
 internal fun separatorAspect(sep: OrientedPathSeparator?): Signal? =
 	when (sep) {

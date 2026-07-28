@@ -369,6 +369,12 @@ fun createMockDynamicSemaphore(
 	every { mock.staticRef } returns staticRef
 	every { mock.signal } returns signal
 	every { mock.getSpatialType() } returns staticRef.getSpatialType()
+	// Direction-aware rendering (Issue #812): the base SimulationCellRenderer.draw derives an
+	// effective signal via direction() + isAllowingFor(anti(d), d). Stub both so the relaxed
+	// mock resolves against a real segment (orientation=true, HORIZONTAL → direction() = A)
+	// rather than throwing in anti(), and so the rendered color matches the signal's allow state.
+	every { mock.direction() } returns Segment.A
+	every { mock.isAllowingFor(any(), any()) } returns signal.isAllowing()
 	return mock
 }
 
