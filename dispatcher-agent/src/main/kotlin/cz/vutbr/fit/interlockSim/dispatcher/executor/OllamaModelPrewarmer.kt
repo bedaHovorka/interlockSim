@@ -124,11 +124,13 @@ object OllamaModelPrewarmer {
 	private suspend fun doWarmUp(config: OllamaExecutorConfig): Int =
 		withContext(Dispatchers.IO) {
 			val client =
-				HttpClient.newBuilder()
+				HttpClient
+					.newBuilder()
 					.connectTimeout(CONNECT_TIMEOUT)
 					.build()
 			val request =
-				HttpRequest.newBuilder()
+				HttpRequest
+					.newBuilder()
 					.uri(URI.create("${config.ollamaEndpoint}/api/generate"))
 					.header("Content-Type", "application/json")
 					.POST(HttpRequest.BodyPublishers.ofString(buildRequestBody(config)))
@@ -152,5 +154,7 @@ object OllamaModelPrewarmer {
 	 * @return JSON string suitable for posting to `{ollamaEndpoint}/api/generate`.
 	 */
 	internal fun buildRequestBody(config: OllamaExecutorConfig): String =
-		"""{"model":"${config.modelName}","prompt":"","stream":false,"options":{"num_predict":1,"num_ctx":${config.contextWindowTokens}}}"""
+		"""{"model":"${config.modelName}","prompt":"",
+			"stream":false,"options":{"num_predict":1,"num_ctx":${config.contextWindowTokens}}}
+		""".trimMargin()
 }
