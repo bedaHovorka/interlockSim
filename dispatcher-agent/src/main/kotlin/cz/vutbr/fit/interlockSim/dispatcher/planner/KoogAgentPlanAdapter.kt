@@ -126,6 +126,13 @@ import java.time.Duration
  * @param maxConcurrentTrains Station capacity the safety net admits up to. Defaults to
  *                       [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], the same constant
  *                       the non-LLM dispatcher and `approve_train` tool use.
+ * @param cycleListener  Optional [PlannerCycleListener] notified after every dispatch cycle
+ *                       with either [PlannerCycleListener.onLlmSuccess] or
+ *                       [PlannerCycleListener.onFallback].  Used by [MeasuringPlanAdapter]
+ *                       to collect fallback metrics without coupling the two classes.
+ *                       Thread-safe: reads are done under `@Volatile`; write must happen
+ *                       before the first [plan] call (typically from the same thread that
+ *                       constructs the outer [MeasuringPlanAdapter]).
  *
  * @since Issue #566 (SP2b.9 — Goal 10)
  */
@@ -135,7 +142,7 @@ class KoogAgentPlanAdapter(
 	private val fallbackDispatcher: Dispatcher,
 	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
 	private val commandQueue: ActuatorCommandQueue,
-	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -146,6 +153,17 @@ class KoogAgentPlanAdapter(
 		/** Default inference timeout in seconds — matches OllamaExecutorConfig.DEFAULT_INFERENCE_TIMEOUT. */
 		const val DEFAULT_TIMEOUT_SECONDS: Long = 30
 	}
+
+	/**
+	 * Optional [PlannerCycleListener] notified after every dispatch cycle.
+	 *
+	 * Set by [MeasuringPlanAdapter] immediately after construction to collect fallback metrics.
+	 * `null` in production runs that don't need metrics.  `@Volatile` for safe publication:
+	 * written once by the constructing thread (before any [plan] call) and read by the
+	 * coroutine running [plan] (the `dispatcher-agent-driver` daemon thread).
+	 */
+	@Volatile
+	var cycleListener: PlannerCycleListener? = null
 
 	override val capabilities: PlannerCapabilities =
 		PlannerCapabilities(
@@ -204,6 +222,7 @@ class KoogAgentPlanAdapter(
 					"KoogAgentPlanAdapter: LLM cycle produced no decisions and invoked no actuator " +
 						"tools — applying rule-based fallback (simTime=${observation.snapshot.simTime})"
 				}
+				cycleListener?.onFallback(FallbackReason.EMPTY_NO_TOOLS, observation.snapshot.simTime)
 				fallbackDispatcher.decide(observation)
 			} else {
 				logger.debug {
@@ -211,6 +230,7 @@ class KoogAgentPlanAdapter(
 						"directly-returned decision(s), llmActedViaTools=$llmActedViaTools " +
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
+				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
 				maybeForceAdmission(observation)
 				decisions
 			}
@@ -219,6 +239,7 @@ class KoogAgentPlanAdapter(
 				"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +
 					"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
 			}
+			cycleListener?.onFallback(FallbackReason.TIMEOUT, observation.snapshot.simTime)
 			fallbackDispatcher.decide(observation)
 		} catch (e: CancellationException) {
 			// Parent coroutine was cancelled — propagate rather than swallow.
@@ -228,6 +249,7 @@ class KoogAgentPlanAdapter(
 				"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
 					"(simTime=${observation.snapshot.simTime})"
 			}
+			cycleListener?.onFallback(FallbackReason.EXCEPTION, observation.snapshot.simTime)
 			fallbackDispatcher.decide(observation)
 		}
 	}
