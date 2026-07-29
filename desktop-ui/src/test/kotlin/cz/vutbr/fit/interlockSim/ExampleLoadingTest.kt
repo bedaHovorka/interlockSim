@@ -264,6 +264,46 @@ class ExampleLoadingTest : KoinTestBase() {
 	}
 
 	@Nested
+	@DisplayName("ShuntingLoopAI Example Factory")
+	inner class ShuntingLoopAIFactoryTests {
+		/**
+		 * Test that createShuntingLoopAIGuiExample registers its MeasuringPlanAdapter into
+		 * the context's Koin scope, so callers outside ExampleRegistry (e.g. Frame's
+		 * SimulationController.STOPPED handler) can retrieve it after the run ends.
+		 */
+		@Test
+		fun `createShuntingLoopAIGuiExample registers MeasuringPlanAdapter in context scope`() {
+			val registry = get<ExampleRegistry>()
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopAIGuiExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("exampleGui", "shuntingLoopAI", "100")
+
+			try {
+				val result = createMethod.invoke(registry, factory, args)
+				val context = result as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+				assertThat(
+					context.scope.getOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
+				).isNotNull()
+			} catch (e: java.lang.reflect.InvocationTargetException) {
+				val cause = e.cause
+				// ContextCreationException is acceptable if vyhybna.xml isn't found in the
+				// test environment — mirrors the tolerance in ShuntingLoopFactoryTests above.
+				if (cause is ContextCreationException) {
+					assertThat((cause.message ?: "").contains("vyhybna.xml")).isTrue()
+				} else {
+					throw e
+				}
+			}
+		}
+	}
+
+	@Nested
 	@DisplayName("Example List Sorting")
 	inner class ExampleListSortingTests {
 		/**

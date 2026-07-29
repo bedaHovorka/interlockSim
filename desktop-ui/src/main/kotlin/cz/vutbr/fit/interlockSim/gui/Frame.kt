@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
@@ -132,6 +133,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	// calling a stale dialog after the GUI is torn down.
 	private var wiredSemiAutoGateway: SemiAutoApprovalGateway? = null
 
+	// MeasuringPlanAdapter wired to the active context's Koin scope, captured at RUNNING time
+	// (Issue tracking: none — internal polish from final review) so the STOPPED transition
+	// logs metrics for the run that just ended, not whatever context happens to be current
+	// when STOPPED is (asynchronously) delivered on the EDT. Only the shuntingLoopAI example
+	// registers one; every other example leaves this null.
+	private var wiredMeasuringAdapter: MeasuringPlanAdapter? = null
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -195,6 +203,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							toolBar.showSimulationControls()
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 							controlPanel.setStopEnabled(true)
+							// Capture now so the STOPPED transition logs metrics for the run that just
+							// ended, not whatever context happens to be current when STOPPED fires.
+							wiredMeasuringAdapter = currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()
 							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
 							wireDispatcherControlPanel()
 						}
@@ -214,6 +225,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							dispatcherControlPanel.clearRationale()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
+							// ended (captured at RUNNING time above). Null for every example except
+							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
+							// Placed last so a failure here can never skip the safety-motivated
+							// detach calls above.
+							wiredMeasuringAdapter?.logFinalSummary()
+							wiredMeasuringAdapter = null
 						}
 					}
 				}

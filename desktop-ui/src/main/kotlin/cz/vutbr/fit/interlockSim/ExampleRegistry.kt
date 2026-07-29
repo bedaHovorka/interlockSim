@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
@@ -275,13 +276,19 @@ class ExampleRegistry {
 				// SP2b.9 (Issue #566): build the LLM-backed planner with rule-based fallback.
 				// KoogAgentPlanAdapter is async (isAsynchronous=true); DelegatingSimulationController
 				// provides the required pacing for assertPlannerPacingCompatible.
-				val aiPlanner =
+				// Issue #817: wrap with MeasuringPlanAdapter to log and measure fallback vs LLM success rate.
+				val koogAdapter =
 					KoogAgentPlanAdapter(
 						agentFactory = context.scope.get<KoogAgentFactory>(),
 						context = context,
 						fallbackDispatcher = RuleBasedDispatcher(),
 						commandQueue = context.scope.get<ActuatorCommandQueue>()
 					)
+				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
+				// Register in scope so callers outside this factory (e.g. Frame's
+				// SimulationController.STOPPED handler) can retrieve it after the run ends
+				// and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
+				context.scope.declare(aiPlanner)
 				wireDispatcherAgent(
 					context,
 					loop,
