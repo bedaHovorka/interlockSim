@@ -45,5 +45,5 @@ enum class FallbackReason {
 	 * The LLM call threw an unexpected exception (network error, invalid tool call, HTTP error,
 	 * etc.).  The fallback ensures simulation continuity despite the transient LLM failure.
 	 */
-	EXCEPTION,
+	EXCEPTION
 }

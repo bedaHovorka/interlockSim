@@ -45,7 +45,6 @@ import java.time.Duration
  */
 @DisplayName("MeasuringPlanAdapter — fallback metrics and LLM success tracking")
 class MeasuringPlanAdapterTest {
-
 	private val observation =
 		DispatchObservation(
 			snapshot = SimulationSnapshot.EMPTY,
@@ -62,7 +61,7 @@ class MeasuringPlanAdapterTest {
 		koogAgent: KoogDispatchAgent,
 		fallback: Dispatcher,
 		inferenceTimeout: Duration = Duration.ofSeconds(30),
-		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue(),
+		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue()
 	): MeasuringPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
 		coEvery { agentFactory.createAgent(any()) } returns koogAgent
@@ -73,7 +72,7 @@ class MeasuringPlanAdapterTest {
 				context = context,
 				fallbackDispatcher = fallback,
 				inferenceTimeout = inferenceTimeout,
-				commandQueue = commandQueue,
+				commandQueue = commandQueue
 			)
 		return MeasuringPlanAdapter(inner)
 	}
@@ -199,8 +198,8 @@ class MeasuringPlanAdapterTest {
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.fallbackCount).isEqualTo(1L)
 			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isZero()
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isZero()
+			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(0L)
+			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isZero()
 		}
 	}
@@ -226,8 +225,8 @@ class MeasuringPlanAdapterTest {
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.fallbackCount).isEqualTo(1L)
 			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isZero()
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isZero()
+			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(0L)
+			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isZero()
 		}
 	}
@@ -250,8 +249,8 @@ class MeasuringPlanAdapterTest {
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.fallbackCount).isEqualTo(1L)
 			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isZero()
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isZero()
+			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(0L)
+			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isZero()
 		}
 	}
@@ -291,8 +290,8 @@ class MeasuringPlanAdapterTest {
 			coEvery { agent.decideAsync(any()) } coAnswers {
 				callCount++
 				when (callCount) {
-					1 -> emptyList()                                    // EMPTY_NO_TOOLS
-					2 -> throw RuntimeException("boom")                 // EXCEPTION
+					1 -> emptyList() // EMPTY_NO_TOOLS
+					2 -> throw RuntimeException("boom") // EXCEPTION
 					else -> listOf(DispatchDecision.NoAction)
 				}
 			}
@@ -305,7 +304,7 @@ class MeasuringPlanAdapterTest {
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(1L)
 			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isZero()
+			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isEqualTo(1L)
 		}
 	}

@@ -56,9 +56,8 @@ import java.util.concurrent.atomic.AtomicLong
  * @since Issue #817 (Goal 10 dispatcher metrics)
  */
 class MeasuringPlanAdapter(
-	private val inner: KoogAgentPlanAdapter,
+	private val inner: KoogAgentPlanAdapter
 ) : DispatcherPlanner by inner {
-
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
@@ -89,7 +88,10 @@ class MeasuringPlanAdapter(
 					logPeriodicSummary(simTime)
 				}
 
-				override fun onFallback(reason: FallbackReason, simTime: Double) {
+				override fun onFallback(
+					reason: FallbackReason,
+					simTime: Double
+				) {
 					fallbackCountByReason.getValue(reason).incrementAndGet()
 					val snapshot = getMetricsSnapshot()
 					logger.info {
@@ -124,7 +126,7 @@ class MeasuringPlanAdapter(
 			fallbackCount = fallbackTotal,
 			fallbacksByReason = byReason,
 			totalCycles = total,
-			ollamaSuccessRate = successRate,
+			ollamaSuccessRate = successRate
 		)
 	}
 

@@ -41,5 +41,5 @@ data class PlannerMetricsSnapshot(
 	val fallbackCount: Long,
 	val fallbacksByReason: Map<FallbackReason, Long>,
 	val totalCycles: Long,
-	val ollamaSuccessRate: Double,
+	val ollamaSuccessRate: Double
 )

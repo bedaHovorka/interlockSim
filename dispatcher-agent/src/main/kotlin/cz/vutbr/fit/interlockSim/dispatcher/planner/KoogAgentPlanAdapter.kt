@@ -142,7 +142,7 @@ class KoogAgentPlanAdapter(
 	private val fallbackDispatcher: Dispatcher,
 	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
 	private val commandQueue: ActuatorCommandQueue,
-	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
+	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}

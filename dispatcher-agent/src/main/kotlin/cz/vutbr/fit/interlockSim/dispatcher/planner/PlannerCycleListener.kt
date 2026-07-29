@@ -45,5 +45,8 @@ interface PlannerCycleListener {
 	 * @param reason Categorised cause of the fallback (timeout / empty cycle / exception).
 	 * @param simTime Simulation time (seconds) at which the fallback was triggered.
 	 */
-	fun onFallback(reason: FallbackReason, simTime: Double)
+	fun onFallback(
+		reason: FallbackReason,
+		simTime: Double
+	)
 }
