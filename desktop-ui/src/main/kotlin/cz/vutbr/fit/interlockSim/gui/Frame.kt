@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
@@ -200,6 +201,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
+							// Log the dispatcher's final PlannerMetricsSnapshot before any other
+							// STOPPED cleanup runs. Null-tolerant: only the shuntingLoopAI example
+							// registers a MeasuringPlanAdapter in scope; every other example is a
+							// silent no-op here (see ExampleRegistry.createShuntingLoopAIGuiExample).
+							currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()?.logFinalSummary()
 							toolBar.hideSimulationControls()
 							simulationControlPanel.runner = null
 							// Detach the decision sink first so the sim thread can no longer push
