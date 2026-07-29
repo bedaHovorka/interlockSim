@@ -134,6 +134,8 @@ bounded outcome channel rather than blocking a tool call. For example:
 3. Add a perception tool that returns those outcomes for a train or correlation identifier.
 4. Publish `IllegalArgumentException` drops through the same channel rather than logging them
    only.
+5. Enforce the concurrent-train cap again when an `ApproveTrain` decision is applied on the
+   simulation thread, where it can use current state rather than the driver's stale snapshot.
 
 This would let a subsequent agent cycle learn whether a queued action actually succeeded without
 allowing the agent driver thread to access mutable simulation state.
