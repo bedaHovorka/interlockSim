@@ -393,4 +393,56 @@ class MeasuringPlanAdapterTest {
 			assertThat(1.0 - rate).isGreaterThan(-0.001) // effectively rate <= 1.0
 		}
 	}
+
+	// ── logFinalSummary ──────────────────────────────────────────────────────
+
+	@Nested
+	@DisplayName("logFinalSummary logs unconditionally")
+	inner class LogFinalSummary {
+		@Test
+		fun `does not throw with zero cycles recorded`() {
+			val agent = mockk<KoogDispatchAgent>()
+			val fallback = mockk<Dispatcher>()
+			val adapter = measuring(agent, fallback)
+
+			adapter.logFinalSummary() // must not throw
+
+			// Calling it must not mutate the counters.
+			val snapshot = adapter.getMetricsSnapshot()
+			assertThat(snapshot.totalCycles).isZero()
+		}
+
+		@Test
+		fun `does not throw with a cycle count not aligned to REPORT_EVERY_N_CYCLES`() {
+			val agent = mockk<KoogDispatchAgent>()
+			coEvery { agent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+			val fallback = mockk<Dispatcher>()
+			every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+			val adapter = measuring(agent, fallback)
+
+			// 3 cycles — not a multiple of MeasuringPlanAdapter.REPORT_EVERY_N_CYCLES (10).
+			repeat(3) { runBlocking { adapter.plan(observation) } }
+
+			adapter.logFinalSummary() // must not throw
+
+			val snapshot = adapter.getMetricsSnapshot()
+			assertThat(snapshot.totalCycles).isEqualTo(3L)
+		}
+
+		@Test
+		fun `does not mutate counters when called multiple times`() {
+			val agent = mockk<KoogDispatchAgent>()
+			coEvery { agent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+			val fallback = mockk<Dispatcher>()
+			every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+			val adapter = measuring(agent, fallback)
+
+			runBlocking { adapter.plan(observation) }
+			adapter.logFinalSummary()
+			adapter.logFinalSummary()
+			adapter.logFinalSummary()
+
+			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(1L)
+		}
+	}
 }

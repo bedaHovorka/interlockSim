@@ -130,23 +130,45 @@ class MeasuringPlanAdapter(
 		)
 	}
 
+	/**
+	 * Logs an unconditional INFO-level summary of the current [PlannerMetricsSnapshot].
+	 *
+	 * Unlike [logPeriodicSummary] (which only fires every [REPORT_EVERY_N_CYCLES] cycles),
+	 * this always logs exactly once per call — intended for callers that detect the
+	 * simulation has stopped (for any reason: natural completion or manual stop) and want
+	 * a guaranteed final data point, even if the run ended between periodic checkpoints.
+	 *
+	 * Safe to call with zero cycles recorded — [PlannerMetricsSnapshot.ollamaSuccessRate]
+	 * is `0.0` in that case. Read-only: does not mutate any counters, so it is safe to
+	 * call more than once (e.g. defensively from multiple call sites).
+	 */
+	fun logFinalSummary() {
+		logger.info { formatSummaryLine("final summary", getMetricsSnapshot()) }
+	}
+
 	// ── Internal helpers ──────────────────────────────────────────────────────
 
 	private fun logPeriodicSummary(simTime: Double) {
 		val snapshot = getMetricsSnapshot()
 		if (snapshot.totalCycles > 0L && snapshot.totalCycles % REPORT_EVERY_N_CYCLES == 0L) {
-			val byReasonStr =
-				FallbackReason.entries.joinToString(", ") { reason ->
-					"${reason.name}=${snapshot.fallbacksByReason[reason] ?: 0}"
-				}
-			logger.info {
-				"[MeasuringPlanAdapter] summary at simTime=${simTime}s — " +
-					"totalCycles=${snapshot.totalCycles} " +
-					"ollamaSuccess=${snapshot.ollamaSuccessCount} " +
-					"fallback=${snapshot.fallbackCount} ($byReasonStr) " +
-					"successRate=${formatRate(snapshot.ollamaSuccessRate)}"
-			}
+			logger.info { formatSummaryLine("summary at simTime=${simTime}s", snapshot) }
 		}
+	}
+
+	/** Builds the shared `[MeasuringPlanAdapter] <label> — totalCycles=... successRate=...` log line. */
+	private fun formatSummaryLine(
+		label: String,
+		snapshot: PlannerMetricsSnapshot
+	): String {
+		val byReasonStr =
+			FallbackReason.entries.joinToString(", ") { reason ->
+				"${reason.name}=${snapshot.fallbacksByReason[reason] ?: 0}"
+			}
+		return "[MeasuringPlanAdapter] $label — " +
+			"totalCycles=${snapshot.totalCycles} " +
+			"ollamaSuccess=${snapshot.ollamaSuccessCount} " +
+			"fallback=${snapshot.fallbackCount} ($byReasonStr) " +
+			"successRate=${formatRate(snapshot.ollamaSuccessRate)}"
 	}
 
 	private fun formatRate(rate: Double): String {
