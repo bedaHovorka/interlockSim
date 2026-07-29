@@ -285,6 +285,10 @@ class ExampleRegistry {
 						commandQueue = context.scope.get<ActuatorCommandQueue>()
 					)
 				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
+				// Register in scope so callers outside this factory (e.g. Frame's
+				// SimulationController.STOPPED handler) can retrieve it after the run ends
+				// and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
+				context.scope.declare(aiPlanner)
 				wireDispatcherAgent(
 					context,
 					loop,
