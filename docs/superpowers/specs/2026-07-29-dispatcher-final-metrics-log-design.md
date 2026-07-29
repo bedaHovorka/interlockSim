@@ -33,7 +33,7 @@ Add a public method that reuses `getMetricsSnapshot()` and logs unconditionally 
 periodic entries:
 
 ```
-[MeasuringPlanAdapter] final summary at simTime=42.0s — totalCycles=7 ollamaSuccess=5
+[MeasuringPlanAdapter] final summary — totalCycles=7 ollamaSuccess=5
 fallback=2 (TIMEOUT=1, EXCEPTION=0, EMPTY_NO_TOOLS=1) successRate=71%
 ```
 

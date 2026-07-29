@@ -133,6 +133,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	// calling a stale dialog after the GUI is torn down.
 	private var wiredSemiAutoGateway: SemiAutoApprovalGateway? = null
 
+	// MeasuringPlanAdapter wired to the active context's Koin scope, captured at RUNNING time
+	// (Issue tracking: none — internal polish from final review) so the STOPPED transition
+	// logs metrics for the run that just ended, not whatever context happens to be current
+	// when STOPPED is (asynchronously) delivered on the EDT. Only the shuntingLoopAI example
+	// registers one; every other example leaves this null.
+	private var wiredMeasuringAdapter: MeasuringPlanAdapter? = null
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -196,16 +203,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							toolBar.showSimulationControls()
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 							controlPanel.setStopEnabled(true)
+							// Capture now so the STOPPED transition logs metrics for the run that just
+							// ended, not whatever context happens to be current when STOPPED fires.
+							wiredMeasuringAdapter = currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()
 							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
 							wireDispatcherControlPanel()
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
-							// Log the dispatcher's final PlannerMetricsSnapshot before any other
-							// STOPPED cleanup runs. Null-tolerant: only the shuntingLoopAI example
-							// registers a MeasuringPlanAdapter in scope; every other example is a
-							// silent no-op here (see ExampleRegistry.createShuntingLoopAIGuiExample).
-							currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()?.logFinalSummary()
 							toolBar.hideSimulationControls()
 							simulationControlPanel.runner = null
 							// Detach the decision sink first so the sim thread can no longer push
@@ -220,6 +225,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							dispatcherControlPanel.clearRationale()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
+							// ended (captured at RUNNING time above). Null for every example except
+							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
+							// Placed last so a failure here can never skip the safety-motivated
+							// detach calls above.
+							wiredMeasuringAdapter?.logFinalSummary()
+							wiredMeasuringAdapter = null
 						}
 					}
 				}

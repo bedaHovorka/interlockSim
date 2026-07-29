@@ -10,9 +10,14 @@
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isZero
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
@@ -26,10 +31,15 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.time.Duration
+import ch.qos.logback.classic.Logger as LogbackLogger
 
 /**
  * Unit tests for [MeasuringPlanAdapter] (Issue #817 — Goal 10 dispatcher metrics).
@@ -443,6 +453,75 @@ class MeasuringPlanAdapterTest {
 			adapter.logFinalSummary()
 
 			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(1L)
+		}
+	}
+
+	// ── logFinalSummary log text ─────────────────────────────────────────────
+
+	/**
+	 * Verifies the integration point: [MeasuringPlanAdapter.logFinalSummary] actually emits
+	 * a log line carrying the `"[MeasuringPlanAdapter] final summary —"` label, not just that
+	 * the counters underneath it are correct (the other [LogFinalSummary] tests already cover
+	 * that). This is a regression guard against `formatSummaryLine`/label wiring silently
+	 * breaking, which snapshot-only assertions cannot catch.
+	 *
+	 * Follows the same Logback `ListAppender` pattern as
+	 * `cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplierSp2b5Test` — a `ListAppender`
+	 * attached to the Logback root logger, plus temporarily raising both the root logger and
+	 * the `cz.vutbr.fit.interlockSim.dispatcher` package logger to INFO, because
+	 * `logback-test.xml` pins the dispatcher package to WARN which would otherwise suppress
+	 * `logFinalSummary`'s INFO-level line regardless of the root level.
+	 */
+	@Nested
+	@DisplayName("logFinalSummary logs the expected label text")
+	inner class LogFinalSummaryLogText {
+		private lateinit var appender: ListAppender<ILoggingEvent>
+		private lateinit var rootLogger: LogbackLogger
+		private lateinit var dispatcherLogger: LogbackLogger
+		private var originalRootLevel: Level = Level.WARN
+		private var originalDispatcherLevel: Level = Level.WARN
+
+		@BeforeEach
+		fun attachAppender() {
+			rootLogger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as LogbackLogger
+			dispatcherLogger =
+				LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.dispatcher") as LogbackLogger
+			originalRootLevel = rootLogger.level
+			originalDispatcherLevel = dispatcherLogger.level
+			rootLogger.level = Level.INFO
+			dispatcherLogger.level = Level.INFO
+			appender = ListAppender()
+			rootLogger.addAppender(appender)
+			appender.start()
+		}
+
+		@AfterEach
+		fun detachAppender() {
+			rootLogger.detachAppender(appender)
+			rootLogger.level = originalRootLevel
+			dispatcherLogger.level = originalDispatcherLevel
+		}
+
+		private fun finalSummaryMessages(): List<String> =
+			appender.list
+				.map { it.formattedMessage }
+				.filter { it.contains("[MeasuringPlanAdapter] final summary —") }
+
+		@Test
+		fun `logFinalSummary emits a line labeled 'final summary'`() {
+			val agent = mockk<KoogDispatchAgent>()
+			coEvery { agent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+			val fallback = mockk<Dispatcher>()
+			every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+			val adapter = measuring(agent, fallback)
+
+			repeat(2) { runBlocking { adapter.plan(observation) } }
+			adapter.logFinalSummary()
+
+			val messages = finalSummaryMessages()
+			assertThat(messages).isNotEmpty()
+			assertThat(messages.first()).contains("[MeasuringPlanAdapter] final summary —")
+			assertThat(messages.first()).contains("totalCycles=2")
 		}
 	}
 }

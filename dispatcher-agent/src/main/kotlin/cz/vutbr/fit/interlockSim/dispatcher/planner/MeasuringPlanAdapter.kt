@@ -34,6 +34,8 @@ import java.util.concurrent.atomic.AtomicLong
  *    [cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService] pattern.
  * 4. **Reports** a periodic INFO-level summary every [REPORT_EVERY_N_CYCLES] cycles so that
  *    long-running simulations remain observable in stdout without a dashboard.
+ * 5. **Guarantees** a final summary via [logFinalSummary] whenever a caller detects the
+ *    simulation has stopped, even if it ended between periodic checkpoints.
  *
  * ## Usage
  *
@@ -141,6 +143,17 @@ class MeasuringPlanAdapter(
 	 * Safe to call with zero cycles recorded — [PlannerMetricsSnapshot.ollamaSuccessRate]
 	 * is `0.0` in that case. Read-only: does not mutate any counters, so it is safe to
 	 * call more than once (e.g. defensively from multiple call sites).
+	 *
+	 * A cycle still in flight on the `dispatcher-agent-driver` thread at the moment of the
+	 * call (e.g. immediately after a manual Stop, mid-LLM-inference) is not yet counted —
+	 * this reports state at the moment of the call, not a strict post-mortem of every cycle
+	 * ever started.
+	 *
+	 * The counters span this adapter's entire lifetime (i.e. the owning context's lifetime)
+	 * and are never reset — if a context were ever reused for more than one run, this would
+	 * report the combined total, not just the most recent run.
+	 *
+	 * @since 2026-07-29 (final metrics log on simulation stop)
 	 */
 	fun logFinalSummary() {
 		logger.info { formatSummaryLine("final summary", getMetricsSnapshot()) }
