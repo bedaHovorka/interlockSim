@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.di
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
@@ -18,6 +19,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
+import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
+import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationSource
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
@@ -51,6 +54,7 @@ import org.koin.dsl.module
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] (SP1.4) |
  * | [ActuatorCommandQueue] | per [DefaultSimulationContext] | new instance |
  * | [DispatchLoopSensorPort] | per [DefaultSimulationContext] | [MainProcessDispatchLoopSensorPort] (Goal 10 fix) |
+ * | [DispatcherObservationSource] | per [DefaultSimulationContext] | [DispatcherObservationProjector] (SP2c.1, #824) |
  * | [DispatcherModeState] | per [DefaultSimulationContext] | new instance (SP2b.6) |
  * | [SemiAutoApprovalGateway] | per [DefaultSimulationContext] | new instance (SP2b.6 follow-up) |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance (SP4.2) |
@@ -196,6 +200,31 @@ val dispatcherAgentModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				MainProcessDispatchLoopSensorPort(context)
 			}
+
+			// SP2c.1 (Issue #824): DispatcherObservationProjector — the single sim-thread-captured
+			// perception value that replaces query-tool-based perception for the SP2c control-loop
+			// redesign (#822). Scoped, never single: it holds context-bound live references
+			// (NetworkPerceptionPort, DispatchLoopSensorPort, PathReservationRegistry, and the
+			// SimulationEnvironment itself for the switch grid walk) and small per-train
+			// "waiting since" bookkeeping that must not leak across concurrent simulations.
+			// PathReservationRegistry comes from the navigation module (CoreModule.kt), which
+			// shares this same DefaultSimulationContext scope.
+			scoped<DispatcherObservationProjector> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DispatcherObservationProjector(
+					perceptionPort = get(),
+					dispatchLoopSensorPort = get(),
+					pathReservationRegistry = get<PathReservationRegistry>(),
+					environment = context
+				)
+			}
+
+			// Downstream code (renderers, annotators, validators — SP2c.2+) depends on the
+			// narrower DispatcherObservationSource interface only, per #824's acceptance
+			// criterion, never on DispatcherObservationProjector directly.
+			scoped<DispatcherObservationSource> { get<DispatcherObservationProjector>() }
 
 			// SP2b.6 (Issue #561): DispatcherModeState — dispatcher operating mode controller
 			// One per context for independent mode management across concurrent simulations.
