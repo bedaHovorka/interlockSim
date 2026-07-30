@@ -10,9 +10,14 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.di.MainProcessDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.dispatcher.di.mainProcessActiveTrains
+import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
+import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationSource
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
@@ -89,5 +94,30 @@ val dispatcherAgentTestModule: Module =
 			// SP4.2 (Issue #564): Late-bound pacing controller — kept in sync with
 			// dispatcherAgentModule so scope-resolution tests exercise the same binding.
 			scoped<DelegatingSimulationController> { DelegatingSimulationController() }
+
+			// Goal 10 dispatcher-cannot-approve-trains fix: DispatchLoopSensorPort for test
+			// contexts -- kept in sync with dispatcherAgentModule's binding.
+			scoped<DispatchLoopSensorPort> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				MainProcessDispatchLoopSensorPort(context)
+			}
+
+			// SP2c.1 (Issue #824): DispatcherObservationProjector for test contexts -- kept in
+			// sync with dispatcherAgentModule's binding. PathReservationRegistry comes from
+			// commonCoreTestModule (re-exported above), which shares this same scope.
+			scoped<DispatcherObservationProjector> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DispatcherObservationProjector(
+					perceptionPort = get(),
+					dispatchLoopSensorPort = get(),
+					pathReservationRegistry = get<PathReservationRegistry>(),
+					environment = context
+				)
+			}
+			scoped<DispatcherObservationSource> { get<DispatcherObservationProjector>() }
 		}
 	}
