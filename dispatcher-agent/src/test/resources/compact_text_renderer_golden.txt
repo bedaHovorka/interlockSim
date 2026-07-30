@@ -17,10 +17,10 @@ active 1/2 ; queued 1
 trains:
   T-3 RUNNING at kA -> B | v=6.4 a=0.4 | ahead doB1=STOP 84m | wait 0s
   T-4 QUEUED -> B | queued since 498.0 | wait 14.4s
-blocks: kA=T-3 kB=FREE kC=FREE kD=FREE kE=FREE kF=FREE kG=RESERVED(T-3) kH=FREE kI=FREE
-        kJ=RESERVED(T-3)
+blocks: kA=T-3 kB=FREE kC=FREE kD=FREE kE=FREE kF=FREE kG=RESERVED(T-3) kH=FREE
+        kI=FREE kJ=RESERVED(T-3)
 switches: vA=MAIN(free) vB=MAIN(locked by T-3)
-signals: zA=STOP zB=STOP doA1=GO doA2=STOP doB1=STOP doB2=STOP
+signals: doA1=GO doA2=STOP doB1=STOP doB2=STOP zA=STOP zB=STOP
 reservations: T-3 -> B via kA,kG,kJ,kB
 === WHAT YOU CAN DO NOW ===
 T-3: approve_train  not applicable - train already active
