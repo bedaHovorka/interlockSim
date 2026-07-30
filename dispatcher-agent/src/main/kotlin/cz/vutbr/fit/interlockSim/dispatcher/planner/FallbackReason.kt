@@ -26,6 +26,14 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * @see MeasuringPlanAdapter
  * @since Issue #817 (Goal 10 dispatcher metrics)
  */
+@Deprecated(
+	message =
+		"Replaced by TickOutcome (Issue #842), which splits EMPTY_NO_TOOLS into the " +
+			"opposite outcomes 'LLM correctly did nothing' (LLM_NO_OP) and 'LLM produced " +
+			"nothing at all' (TIMEOUT_NOOP). Retained for one release; use " +
+			"FallbackReason.toTickOutcome() to project onto the new taxonomy. " +
+			"See PlannerTickListener."
+)
 enum class FallbackReason {
 	/**
 	 * The LLM completed a dispatch cycle but neither returned decisions nor invoked any actuator
