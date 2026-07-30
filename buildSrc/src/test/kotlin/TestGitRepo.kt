@@ -30,6 +30,12 @@ class TestGitRepo(private val dir: File) {
 		git("checkout", "-q", "--orphan", branchName)
 	}
 
+	fun deleteAndCommit(relativePath: String, message: String) {
+		File(dir, relativePath).delete()
+		git("add", "-A")
+		git("commit", "-q", "-m", message)
+	}
+
 	private fun git(vararg args: String): String {
 		val process =
 			ProcessBuilder(listOf("git") + args)

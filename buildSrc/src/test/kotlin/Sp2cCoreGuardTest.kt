@@ -1,5 +1,6 @@
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -91,5 +92,89 @@ class Sp2cCoreGuardTest {
 		assertTrue(skipped.reason.contains(unrelatedRef)) {
 			"expected skip reason to name the baseline ref, was: ${skipped.reason}"
 		}
+	}
+
+	@Test
+	fun `fails and lists a deleted core file since baseline`(
+		@TempDir tempDir: File,
+	) {
+		val repo = TestGitRepo(tempDir)
+		repo.writeAndCommit("core/Foo.kt", "class Foo", "initial commit")
+		val baselineRef = repo.headRef()
+
+		repo.deleteAndCommit("core/Foo.kt", "delete core/Foo.kt")
+
+		val result = Sp2cCoreGuard.evaluate(tempDir, baselineRef, allowlistedPaths = emptySet())
+
+		val violated = assertInstanceOf(Sp2cCoreGuard.Result.Violated::class.java, result)
+		assertEquals(listOf("core/Foo.kt"), violated.offendingFiles)
+	}
+
+	@Test
+	fun `fails and lists a newly added core file since baseline`(
+		@TempDir tempDir: File,
+	) {
+		val repo = TestGitRepo(tempDir)
+		repo.writeAndCommit("README.md", "readme", "initial non-core commit")
+		val baselineRef = repo.headRef()
+
+		repo.writeAndCommit("core/Bar.kt", "class Bar", "add core/Bar.kt")
+
+		val result = Sp2cCoreGuard.evaluate(tempDir, baselineRef, allowlistedPaths = emptySet())
+
+		val violated = assertInstanceOf(Sp2cCoreGuard.Result.Violated::class.java, result)
+		assertEquals(listOf("core/Bar.kt"), violated.offendingFiles)
+	}
+
+	@Test
+	fun `fails and lists every offending core file when multiple changed`(
+		@TempDir tempDir: File,
+	) {
+		val repo = TestGitRepo(tempDir)
+		repo.writeAndCommit("core/Foo.kt", "class Foo", "initial commit")
+		val baselineRef = repo.headRef()
+
+		repo.writeAndCommit("core/Bar.kt", "class Bar", "add core/Bar.kt")
+		repo.writeAndCommit("core/Foo.kt", "class Foo // touched", "touch core/Foo.kt")
+
+		val result = Sp2cCoreGuard.evaluate(tempDir, baselineRef, allowlistedPaths = emptySet())
+
+		val violated = assertInstanceOf(Sp2cCoreGuard.Result.Violated::class.java, result)
+		// git diff --name-only lists paths in sorted order; compare as a set to stay robust.
+		assertEquals(setOf("core/Bar.kt", "core/Foo.kt"), violated.offendingFiles.toSet())
+	}
+
+	@Test
+	fun `throws when baselineRef does not resolve to a commit`(
+		@TempDir tempDir: File,
+	) {
+		val repo = TestGitRepo(tempDir)
+		repo.writeAndCommit("core/Foo.kt", "class Foo", "initial commit")
+
+		// A malformed/non-existent ref makes `git merge-base --is-ancestor` exit 128 (an error,
+		// not 1 = not-ancestor). The guard treats this as misconfiguration, not a skip: it fails
+		// the build loudly via check() so a broken baseline .properties cannot pass silently.
+		val ex = assertThrows(IllegalStateException::class.java) {
+			Sp2cCoreGuard.evaluate(tempDir, "not-a-valid-object", allowlistedPaths = emptySet())
+		}
+		assertTrue(ex.message!!.contains("merge-base") && ex.message!!.contains("128")) {
+			"expected failure to come from the merge-base check with exit 128, was: ${ex.message}"
+		}
+	}
+
+	@Test
+	fun `parseAllowlist trims, drops blanks and comments, and tolerates CRLF`() {
+		val parsed = Sp2cCoreGuard.parseAllowlist(
+			listOf(
+				"core/Foo.kt",
+				"  core/Bar.kt  ",
+				"",
+				"# a comment",
+				"   # indented comment",
+				"core/Baz.kt\r",
+			),
+		)
+
+		assertEquals(setOf("core/Foo.kt", "core/Bar.kt", "core/Baz.kt"), parsed)
 	}
 }

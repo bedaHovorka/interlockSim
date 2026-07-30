@@ -1,4 +1,5 @@
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * SP2c ":core immutability guard" (Issue #823, #822 constraint C10 / principle P9).
@@ -12,6 +13,8 @@ import java.io.File
  * `checkCoreUntouchedBySp2c` task (root build.gradle.kts) is a thin wrapper around [evaluate].
  */
 object Sp2cCoreGuard {
+	private const val GIT_TIMEOUT_SECONDS = 60L
+
 	sealed class Result {
 		/** No `core/` files changed since [baselineRef] (after allowlist filtering). */
 		data class Passed(val baselineRef: String) : Result()
@@ -51,7 +54,7 @@ object Sp2cCoreGuard {
 		}
 
 		val (diffExitCode, diffOutput) =
-			runGit(repoRoot, "diff", "--name-only", "$baselineRef...HEAD", "--", corePathPrefix)
+			runGit(repoRoot, "diff", "--no-renames", "--name-only", "$baselineRef...HEAD", "--", corePathPrefix)
 		check(diffExitCode == 0) {
 			"Sp2cCoreGuard: 'git diff' failed (exit $diffExitCode): $diffOutput"
 		}
@@ -71,6 +74,20 @@ object Sp2cCoreGuard {
 		}
 	}
 
+	/**
+	 * Parses the SP2c core-immutability allowlist (one repo-relative path per line).
+	 *
+	 * Tolerant of CRLF line endings, leading/trailing whitespace, blank lines, and full-line `#`
+	 * comments. A `#` mid-path is preserved (paths may legitimately contain one). Extracted from
+	 * the root `checkCoreUntouchedBySp2c` task so this parsing — the exact code path that could
+	 * silently bypass the guard if broken — is unit-testable directly.
+	 */
+	fun parseAllowlist(lines: List<String>): Set<String> =
+		lines
+			.map { it.trim() }
+			.filterNot { it.isEmpty() || it.startsWith("#") }
+			.toSet()
+
 	private fun runGit(
 		repoRoot: File,
 		vararg args: String,
@@ -80,8 +97,15 @@ object Sp2cCoreGuard {
 				.directory(repoRoot)
 				.redirectErrorStream(true)
 				.start()
-		val output = process.inputStream.bufferedReader().readText()
-		val exitCode = process.waitFor()
-		return exitCode to output.trim()
+		val output = process.inputStream.bufferedReader().use { it.readText() }
+		val finished = process.waitFor(GIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+		if (!finished) {
+			process.destroyForcibly()
+			error(
+				"Sp2cCoreGuard: 'git ${args.joinToString(" ")}' timed out after " +
+					"$GIT_TIMEOUT_SECONDS s in $repoRoot",
+			)
+		}
+		return process.exitValue() to output.trim()
 	}
 }

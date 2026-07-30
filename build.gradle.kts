@@ -98,11 +98,7 @@ val checkCoreUntouchedBySp2c by tasks.registering {
         val allowlistFile = rootProject.file("gradle/sp2c-core-allowlist.txt")
         val allowlistedPaths =
             if (allowlistFile.exists()) {
-                allowlistFile
-                    .readLines()
-                    .map { it.trim() }
-                    .filterNot { it.isEmpty() || it.startsWith("#") }
-                    .toSet()
+                Sp2cCoreGuard.parseAllowlist(allowlistFile.readLines())
             } else {
                 emptySet()
             }
@@ -112,14 +108,14 @@ val checkCoreUntouchedBySp2c by tasks.registering {
                 logger.lifecycle("checkCoreUntouchedBySp2c: SKIPPED — ${result.reason}")
             }
             is Sp2cCoreGuard.Result.Passed -> {
-                println("checkCoreUntouchedBySp2c: PASSED — no core/ changes relative to baseline ${result.baselineRef}.")
+                logger.lifecycle("checkCoreUntouchedBySp2c: PASSED — no core/ changes relative to baseline ${result.baselineRef}.")
             }
             is Sp2cCoreGuard.Result.Violated -> {
-                println(
+                logger.error(
                     "checkCoreUntouchedBySp2c: VIOLATION — the following core/ file(s) changed relative to " +
                         "baseline ${result.baselineRef} without an allowlist entry:",
                 )
-                result.offendingFiles.forEach { println("  $it") }
+                result.offendingFiles.forEach { logger.error("  $it") }
                 throw org.gradle.api.GradleException(
                     "checkCoreUntouchedBySp2c failed: ${result.offendingFiles.size} file(s) under core/ changed " +
                         "relative to baseline ${result.baselineRef} without an allowlist entry: " +
