@@ -48,7 +48,9 @@ class OllamaExecutorConfigTest {
 		assertThat(config.inferenceTimeout).isEqualTo(Duration.ofSeconds(30))
 		assertThat(config.retryAttempts).isEqualTo(3)
 		assertThat(config.maxAgentIterations).isEqualTo(20)
-		assertThat(config.contextWindowTokens).isEqualTo(32_768L)
+		// SP2c.27 (Issue #850): right-sized from 32,768 to 16,384 — see
+		// OllamaExecutorConfig.contextWindowTokens KDoc for the measured rationale.
+		assertThat(config.contextWindowTokens).isEqualTo(16_384L)
 	}
 
 	@Test
