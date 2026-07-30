@@ -97,6 +97,7 @@ class DispatcherObservationProjector(
 	private val lastKnownViews: MutableMap<String, TrainView> = mutableMapOf()
 
 	// Debug-only thread-identity guard (see class KDoc "Threading contract").
+	@Volatile
 	private var capturingThread: Thread? = null
 
 	/**
@@ -153,6 +154,14 @@ class DispatcherObservationProjector(
 		val simTime = snapshot.simTime
 		val activeById: Map<String, TrainPerceptionReading> = snapshot.trainPerceptions.associateBy { it.trainId }
 		val queuedById: Map<String, QueuedTrainObservation> = dispatchSnapshot.queuedTrains.associateBy { it.trainId }
+		// Train IDs are unique by invariant; surface a violation under -ea rather than silently
+		// dropping a train via associateBy's last-wins semantics.
+		assert(snapshot.trainPerceptions.size == activeById.size) {
+			"Duplicate trainId in trainPerceptions: ${snapshot.trainPerceptions.size} readings -> ${activeById.size} keys"
+		}
+		assert(dispatchSnapshot.queuedTrains.size == queuedById.size) {
+			"Duplicate trainId in queuedTrains: ${dispatchSnapshot.queuedTrains.size} entries -> ${queuedById.size} keys"
+		}
 
 		val currentlyWaitingIds: Set<String> =
 			queuedById.keys +

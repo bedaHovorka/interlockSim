@@ -157,6 +157,10 @@ data class QueuedTrainView(
  * publishes an empty [DispatcherObservation.appliedOutcomes] list — there is no channel yet to
  * drain. This shape is intentionally minimal and may be redefined by SP2c.17; it is not part of
  * this issue's (#824) acceptance contract.
+ *
+ * @property trainId Train the actuator command was issued to.
+ * @property description Human-readable outcome of the command.
+ * @property tick Publish-sequence number of the tick the command was applied on.
  */
 data class AppliedOutcome(
 	val trainId: String,

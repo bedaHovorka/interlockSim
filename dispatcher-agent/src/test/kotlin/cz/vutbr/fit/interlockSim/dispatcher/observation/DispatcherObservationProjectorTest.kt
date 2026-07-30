@@ -231,8 +231,8 @@ class DispatcherObservationProjectorTest {
 		}
 
 		@Test
-		@DisplayName("shuffled input reading order yields an identical (sorted) observation")
-		fun shuffledInputReadingOrderYieldsIdenticalObservation() {
+		@DisplayName("reversed input reading order yields an identical (sorted) observation")
+		fun reversedInputReadingOrderYieldsIdenticalObservation() {
 			loadShuntingLoopContext().use { outerContext ->
 				val perceptions =
 					listOf(
@@ -269,9 +269,9 @@ class DispatcherObservationProjectorTest {
 					}
 
 				val original = project(perceptions, blocks, semaphores, queued)
-				val shuffled = project(perceptions.reversed(), blocks.reversed(), semaphores.reversed(), queued.reversed())
+				val reversed = project(perceptions.reversed(), blocks.reversed(), semaphores.reversed(), queued.reversed())
 
-				assertThat(shuffled).isEqualTo(original)
+				assertThat(reversed).isEqualTo(original)
 			}
 		}
 	}
