@@ -141,6 +141,35 @@ class TickOutcomeTest {
 		}
 	}
 
+	// ── TickOutcomeProjection invariant ────────────────────────────────────────
+
+	@Nested
+	@DisplayName("TickOutcomeProjection timeoutNoOpCause invariant")
+	inner class TickOutcomeProjectionInvariant {
+		@Test
+		fun `TIMEOUT_NOOP without a cause throws IllegalArgumentException`() {
+			try {
+				TickOutcomeProjection(outcome = TickOutcome.TIMEOUT_NOOP)
+				error("Expected IllegalArgumentException")
+			} catch (e: IllegalArgumentException) {
+				assertThat(e.message).isNotNull()
+			}
+		}
+
+		@Test
+		fun `non-TIMEOUT_NOOP outcome with a cause throws IllegalArgumentException`() {
+			try {
+				TickOutcomeProjection(
+					outcome = TickOutcome.LLM_NO_OP,
+					timeoutNoOpCause = TimeoutNoOpCause.EMPTY_UNPARSEABLE
+				)
+				error("Expected IllegalArgumentException")
+			} catch (e: IllegalArgumentException) {
+				assertThat(e.message).isNotNull()
+			}
+		}
+	}
+
 	// ── FallbackReason to TickOutcome projection ──────────────────────────────
 
 	@Nested

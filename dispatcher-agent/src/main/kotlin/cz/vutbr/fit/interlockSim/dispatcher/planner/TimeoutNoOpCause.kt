@@ -30,6 +30,10 @@ enum class TimeoutNoOpCause {
 	/**
 	 * The LLM responded, the response was structurally parseable, but the single repair
 	 * attempt still failed to turn it into a valid action set.
+	 *
+	 * Not yet emitted by any code path in Issue #842 — `FallbackReason.toTickOutcome` only
+	 * produces [DEADLINE_MISS] and [EMPTY_UNPARSEABLE]. This value is forward-looking
+	 * taxonomy for the SP2c.20/.22 repair-attempt wiring.
 	 */
 	UNREPAIRABLE_OUTPUT,
 
