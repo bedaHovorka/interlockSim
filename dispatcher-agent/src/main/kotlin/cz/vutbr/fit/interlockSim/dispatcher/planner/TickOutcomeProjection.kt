@@ -24,7 +24,16 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 data class TickOutcomeProjection(
 	val outcome: TickOutcome,
 	val timeoutNoOpCause: TimeoutNoOpCause? = null
-)
+) {
+	init {
+		val expectsCause = outcome == TickOutcome.TIMEOUT_NOOP
+		val hasCause = timeoutNoOpCause != null
+		require(expectsCause == hasCause) {
+			"timeoutNoOpCause must be set if and only if outcome is TIMEOUT_NOOP, " +
+				"but outcome=$outcome timeoutNoOpCause=$timeoutNoOpCause"
+		}
+	}
+}
 
 /**
  * Projects a legacy [FallbackReason] onto the new [TickOutcome] taxonomy (Issue #842).
