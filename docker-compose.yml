@@ -130,6 +130,16 @@ services:
   # testing (@Tag("ollama-test")). This is an ALTERNATIVE to a native Ollama install, not a
   # companion to one -- both would bind port 11434.
   #
+  # profiles: ["ollama"] keeps both this and ollama-port-check out of a bare `docker compose up`
+  # / `up --build` (same reason `test` above is profile-gated): explicitly naming the service, as
+  # in `docker compose up -d ollama` below, still starts it regardless of the active profile --
+  # only an unqualified `up`/`up --build` skips it. Before this was added, a plain `docker compose
+  # up --build -d --remove-orphans` on a machine with a native `ollama serve` already running
+  # would fail outright: ollama-port-check's intentional exit 1 (see below) made Compose report
+  # `service "ollama-port-check" didn't complete successfully` and abort the whole `up`, rather
+  # than the silent no-op the paragraph below promises. Gating it behind a profile means the
+  # bare/default command never reaches that dependency check at all.
+  #
   # ollama-port-check is a one-shot container that probes localhost:11434 via
   # `nc -z` using network_mode: host (direct access to the real host's network stack on
   # Linux). If something is already listening there, it exits 1, which -- via ollama's
@@ -185,6 +195,7 @@ services:
   #   # Then run integrationTest which auto-detects localhost:11434, no config needed
   #   ./gradlew :dispatcher-agent:integrationTest
   ollama-port-check:
+    profiles: ["ollama"]
     image: busybox:latest
     container_name: interlocksim-ollama-port-check
     network_mode: host
@@ -199,6 +210,7 @@ services:
         echo "Port 11434 is free -- proceeding to start the Ollama container."
 
   ollama:
+    profiles: ["ollama"]
     image: ollama/ollama:latest
     container_name: interlocksim-ollama
     depends_on:
