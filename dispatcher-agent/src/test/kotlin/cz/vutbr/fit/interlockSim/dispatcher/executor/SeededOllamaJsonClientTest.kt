@@ -141,6 +141,9 @@ class SeededOllamaJsonClientTest {
 				SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, seed)
 			}
 
+		// Guard against a degenerate empty response comparing equal to itself and looking
+		// "deterministic" — the spike's central claim must hold over real content.
+		assertThat(first.isNotBlank()).isTrue()
 		assertThat(second).isEqualTo(first)
 	}
 }

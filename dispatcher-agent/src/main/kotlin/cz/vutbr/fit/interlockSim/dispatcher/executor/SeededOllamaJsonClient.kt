@@ -142,25 +142,7 @@ object SeededOllamaJsonClient {
 		jsonSchema: JsonObject?,
 		seed: Long
 	): String {
-		val messages =
-			buildList {
-				systemPrompt?.let { add(ChatMessage(role = "system", content = it)) }
-				add(ChatMessage(role = "user", content = userPrompt))
-			}
-		val request =
-			ChatRequest(
-				model = config.modelName,
-				messages = messages,
-				format = jsonSchema,
-				options =
-					ChatOptions(
-						temperature = config.temperature.toDouble(),
-						numCtx = config.contextWindowTokens,
-						seed = seed
-					),
-				stream = false
-			)
-		val body = json.encodeToString(request)
+		val body = buildRequestBody(config, systemPrompt, userPrompt, jsonSchema, seed)
 		val responseBody =
 			withContext(Dispatchers.IO) {
 				val httpClient =

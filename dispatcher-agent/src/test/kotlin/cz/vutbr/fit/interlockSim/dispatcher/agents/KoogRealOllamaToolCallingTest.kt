@@ -64,7 +64,7 @@ class KoogRealOllamaToolCallingTest {
 	}
 
 	/**
-	 * Trivial no-argument perception tool. Used three times under different names ([name] is a
+	 * Trivial no-argument perception tool. Used four times under different names ([name] is a
 	 * constructor parameter) to reproduce the documented "4 perception tool calls" happy-path
 	 * shape from [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig.maxAgentIterations]'s
 	 * KDoc, without pulling in the real 13-tool [ToolGroupRegistry] surface.
