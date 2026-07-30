@@ -39,12 +39,15 @@ object Sp2cCoreGuard {
 	): Result {
 		val (ancestorExitCode, ancestorOutput) =
 			runGit(repoRoot, "merge-base", "--is-ancestor", baselineRef, "HEAD")
-		if (ancestorExitCode != 0) {
+		if (ancestorExitCode == 1) {
 			val detail = if (ancestorOutput.isNotBlank()) " (git said: $ancestorOutput)" else ""
 			return Result.Skipped(
 				"baseline commit $baselineRef is not an ancestor of HEAD on this branch$detail. " +
 					"This is expected on branches unrelated to the SP2c redesign; not failing the build.",
 			)
+		}
+		check(ancestorExitCode == 0) {
+			"Sp2cCoreGuard: 'git merge-base --is-ancestor' failed (exit $ancestorExitCode): $ancestorOutput"
 		}
 
 		val (diffExitCode, diffOutput) =
