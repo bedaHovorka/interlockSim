@@ -73,9 +73,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   because a real signal already guarantees the resulting snapshot is fresh and has
  *   not been processed before — the `snapshot.simTime == prevSimTime` stale-tick
  *   guard is skipped too. The caller must arrange for [SnapshotSignal.signal] to be
- *   called on the sim thread immediately after each
- *   [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot] (see
- *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.snapshotCaptureHook]).
+ *   called on the sim thread from
+ *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.controlStepListener], AFTER
+ *   `iteration()` publishes the per-tick `TickObservation` — NOT from
+ *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.snapshotCaptureHook], which
+ *   `iteration()` calls BEFORE the publish and would wake the driver to read the
+ *   previous tick's observation (the #809 failure mode).
  *   `null` by default: preserves the original polling behaviour for callers that do
  *   not supply a signal (e.g. tests exercising [runCycle] directly against a mocked
  *   [perceptionPort] with no real sim thread to signal from).

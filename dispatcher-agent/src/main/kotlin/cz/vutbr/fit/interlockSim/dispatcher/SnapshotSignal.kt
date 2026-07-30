@@ -18,8 +18,14 @@ import java.util.concurrent.TimeUnit
  *
  * ## Protocol
  *
- * 1. Sim thread (inside [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.snapshotCaptureHook]):
- *    `perceptionPort.captureSnapshot()` → [signal]
+ * 1. Sim thread (inside [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.controlStepListener],
+ *    AFTER `iteration()` has published the per-tick `latestObservation`/`TickObservation`):
+ *    [signal]. **Must NOT be wired from `snapshotCaptureHook`** — `iteration()` calls
+ *    that hook BEFORE it publishes `latestObservation`, so signalling from there wakes
+ *    the driver to read the *previous* tick's observation (the mixed-tick read that
+ *    closed #809 as BROKEN). Both the production wiring
+ *    ([cz.vutbr.fit.interlockSim.ExampleRegistry.wireDispatcherAgent]) and the
+ *    determinism-test wiring fire from `controlStepListener` for exactly this reason.
  * 2. Driver thread (inside [AgentLoopDriver.runCycle]): [await] (blocks until step 1
  *    above runs, or until the bounded timeout — see below) → `perceptionPort.snapshot()`
  *    → decide → post
@@ -52,30 +58,35 @@ import java.util.concurrent.TimeUnit
  *
  * ## Why [await] is bounded, not an unconditional block
  *
- * [ShuntingLoop][cz.vutbr.fit.interlockSim.sim.ShuntingLoop] stops calling
- * `snapshotCaptureHook` (and therefore [signal]) the moment the simulation ends — its
- * `interLoopSleep` sets `isSimActive() == false` and simply never invokes another
- * `iteration()`. [AgentLoopDriver]'s run loop is `while (isSimActive()) { runCycle() }`
+ * [ShuntingLoop][cz.vutbr.fit.interlockSim.sim.ShuntingLoop] stops invoking
+ * `iteration()` entirely the moment the simulation ends — its `interLoopSleep` sets
+ * `isSimActive() == false` and simply never runs another iteration — so whatever hook
+ * [signal] is wired into (`controlStepListener` in production; see the protocol above)
+ * is never called again. [AgentLoopDriver]'s run loop is `while (isSimActive()) { runCycle() }`
  * (see [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.agentDriverAction]); if [await] were
  * an unconditional block, a driver thread that re-entered [AgentLoopDriver.runCycle]
  * for one last time in the (very narrow but real) window between the last real signal
  * being consumed and `isSimActive()` flipping to `false` would then wait on a signal
  * that is never coming again — a leaked, permanently-parked thread on every completed
  * simulation run. [await] returning `false` on a timeout lets that last cycle bail out
- * and re-check `isSimActive()` instead. The timeout is a shutdown safety net only: it
- * is chosen large enough that it is not expected to fire during normal operation (a
- * fresh signal arrives every simulation tick), and even if system load causes a
- * spurious timeout mid-run, no signal is lost — the pending permit (if any) is simply
- * picked up by the next [await] call, since [signal] does not require an [await] to be
- * in progress to take effect.
+ * and re-check `isSimActive()` instead. Note this means shutdown detection is
+ * **timeout-driven, not signal-driven**: the bounded [await] is the mechanism by which
+ * a parked driver notices the sim has stopped. The timeout is a shutdown safety net
+ * only: it is chosen large enough that it is not expected to fire during normal
+ * operation (a fresh signal arrives every simulation tick), and even if system load
+ * causes a spurious timeout mid-run, no signal is lost — the pending permit (if any) is
+ * simply picked up by the next [await] call, since [signal] does not require an [await]
+ * to be in progress to take effect.
  *
  * @since Issue #746 (SP0.11c — Goal 10)
  */
 interface SnapshotSignal {
 	/**
-	 * Called by the sim thread immediately after
-	 * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot] publishes
-	 * a fresh snapshot.
+	 * Called by the sim thread from
+	 * [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.controlStepListener], AFTER
+	 * `iteration()` has published the per-tick `TickObservation` — NOT from
+	 * `snapshotCaptureHook` (see the class KDoc protocol for why that ordering is
+	 * broken).
 	 *
 	 * Wakes one blocked [await] call. Any signal not yet consumed by [await] is dropped
 	 * first, so at most one permit is ever pending — see the class KDoc for why
@@ -116,6 +127,13 @@ interface SnapshotSignal {
  *   before returning `false`. Large relative to a normal simulation tick (ticks arrive
  *   far more often than this in practice) so it is not expected to fire during regular
  *   operation; small enough that a driver thread notices simulation shutdown promptly.
+ *   In GUI 1× real-time mode `ShuntingLoop.iteration()` ends with `hold(1.0)`, so ticks
+ *   arrive ~1 s apart wall-clock and this 50 ms timeout fires ~20 no-op cycles per tick
+ *   — each no-op is just `awaitIfPaused` + `return false` (non-mutating, pause-aware,
+ *   no determinism or correctness risk); the headless #746 target under
+ *   `NoOpSimulationController` is genuinely signal-driven. Kept fixed rather than made
+ *   adaptive: a longer/adaptive timeout would slow shutdown detection for no
+ *   correctness gain.
  *
  * @since Issue #746 (SP0.11c — Goal 10)
  */
