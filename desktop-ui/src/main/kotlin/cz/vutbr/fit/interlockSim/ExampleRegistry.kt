@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
@@ -30,6 +31,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
@@ -402,17 +404,34 @@ class ExampleRegistry {
 			}
 		)
 
+		// SP0.11c (Issue #746): sim-to-driver pacing signal replacing the driver's old
+		// Thread.sleep(1) wall-clock poll. AgentLoopDriver.runCycle() blocks on it instead
+		// of polling, eliminating the pacing race that could stall admission entirely
+		// under NoOpSimulationController (headless runs) — see SnapshotSignal's KDoc.
+		val driverSignal = DefaultSnapshotSignal()
+
 		val driver =
 			AgentLoopDriver(
 				perceptionPort = perceptionPort,
 				planner = planner,
 				commandQueue = queue,
 				controller = controller,
-				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
+				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation),
+				snapshotSignal = driverSignal
 			)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
-		loop.controlStepListener = applier
+		// The signal fires from controlStepListener — NOT from snapshotCaptureHook — because
+		// ShuntingLoop.iteration() calls snapshotCaptureHook() BEFORE it publishes the
+		// per-tick TickObservation (loop.getLatestObservation, read via dispatchLoopSensorPort
+		// above) but calls controlStepListener AFTER. Signalling any earlier would let the
+		// driver wake and read a stale TickObservation from the previous tick — confirmed via
+		// a reproduced conflictEventCount regression during development of this fix.
+		loop.controlStepListener =
+			ControlStepListener {
+				driverSignal.signal()
+				applier.onControlStep()
+			}
 		loop.agentDriverAction = {
 			while (loop.isSimActive()) {
 				driver.runCycle()
