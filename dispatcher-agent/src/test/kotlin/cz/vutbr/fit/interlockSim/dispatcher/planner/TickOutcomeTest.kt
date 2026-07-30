@@ -228,7 +228,7 @@ class TickOutcomeTest {
 	inner class LegacyDeprecation {
 		@Test
 		fun `FallbackReason is annotated Deprecated`() {
-			assertThat(FallbackReason::class.annotations.any { it is Deprecated }).isTrue()
+			assertThat(FallbackReason::class.java.isAnnotationPresent(java.lang.Deprecated::class.java)).isTrue()
 		}
 
 		@Test
