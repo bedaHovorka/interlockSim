@@ -1,0 +1,32 @@
+=== RECENT TICKS ===
+  tick simTime=483.1 outcome=LLM_ACTIONS
+  tick simTime=496.2 outcome=LLM_NO_OP
+  tick simTime=504.8 outcome=LLM_ACTIONS
+=== WORKING MEMORY ===
+consecutive_no_op_ticks: 0
+longest_queued_wait_secs: 14.4
+blocked_train_count: 0
+last_tick_outcome: LLM_ACTIONS
+=== APPLIED OUTCOMES ===
+(none)
+=== CHANGED SINCE LAST TICK ===
+trains: T-3 RUNNING(was HELD)
+blocks: kG FREE->RESERVED(T-3) kJ FREE->RESERVED(T-3)
+=== CURRENT STATE (tick 41, simTime 512.4) ===
+active 1/2 ; queued 1
+trains:
+  T-3 RUNNING at kA -> B | v=6.4 a=0.4 | ahead doB1=STOP 84m | wait 0s
+  T-4 QUEUED -> B | queued since 498.0 | wait 14.4s
+blocks: kA=T-3 kB=FREE kC=FREE kD=FREE kE=FREE kF=FREE kG=RESERVED(T-3) kH=FREE kI=FREE
+        kJ=RESERVED(T-3)
+switches: vA=MAIN(free) vB=MAIN(locked by T-3)
+signals: zA=STOP zB=STOP doA1=GO doA2=STOP doB1=STOP doB2=STOP
+reservations: T-3 -> B via kA,kG,kJ,kB
+=== WHAT YOU CAN DO NOW ===
+T-3: approve_train  not applicable - train already active
+     request_route  not applicable - already holds a route to B
+     cancel_route  applicable - would release kA,kG,kJ,kB
+T-4: approve_train  applicable - 1 of 2 slots free
+     request_route  not applicable - no free path A->B
+     cancel_route  not applicable - holds no route
+no_op: always applicable
