@@ -67,8 +67,23 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param controller     Pacing controller; injected into the driver **only** —
  *   never exposed to [cz.vutbr.fit.interlockSim.context.SimulationEnvironment] or
  *   policy implementations (SP0.5 invariant 3)
+ * @param snapshotSignal Optional sim-to-driver pacing signal (SP0.11c, Issue #746).
+ *   When non-null, [runCycle] blocks on [SnapshotSignal.await] (bounded — see its
+ *   KDoc) at the top of each cycle instead of polling with [Thread.sleep], and —
+ *   because a real signal already guarantees the resulting snapshot is fresh and has
+ *   not been processed before — the `snapshot.simTime == prevSimTime` stale-tick
+ *   guard is skipped too. The caller must arrange for [SnapshotSignal.signal] to be
+ *   called on the sim thread from
+ *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.controlStepListener], AFTER
+ *   `iteration()` publishes the per-tick `TickObservation` — NOT from
+ *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.snapshotCaptureHook], which
+ *   `iteration()` calls BEFORE the publish and would wake the driver to read the
+ *   previous tick's observation (the #809 failure mode).
+ *   `null` by default: preserves the original polling behaviour for callers that do
+ *   not supply a signal (e.g. tests exercising [runCycle] directly against a mocked
+ *   [perceptionPort] with no real sim thread to signal from).
  *
- * @since Issue #732 (SP0.10 — Goal 10)
+ * @since Issue #732 (SP0.10 — Goal 10); [snapshotSignal] added in Issue #746 (SP0.11c)
  */
 class AgentLoopDriver(
 	private val perceptionPort: NetworkPerceptionPort,
@@ -96,7 +111,8 @@ class AgentLoopDriver(
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort =
 		DefaultDispatchLoopSensorPort {
 			ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
-		}
+		},
+	private val snapshotSignal: SnapshotSignal? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -122,6 +138,9 @@ class AgentLoopDriver(
 	 * simulation is paused, without blocking the underlying OS thread.
 	 *
 	 * Cycle steps:
+	 * 0. **WAIT** (signal-based pacing only, [snapshotSignal] non-null) — blocks on
+	 *    [SnapshotSignal.await] until the sim thread has published a fresh snapshot for
+	 *    this tick. Skipped entirely in polling mode ([snapshotSignal] `null`).
 	 * 1. **SENSE** — [NetworkPerceptionPort.snapshot] captures a consistent, frozen
 	 *    picture of the current network state.
 	 * 2. **DECIDE** — the [planner] is called with an observation built from the
@@ -140,20 +159,53 @@ class AgentLoopDriver(
 	 * cycle on the first call, so that delta is taken from the loop's start
 	 * baseline — the same initial-delta convention used by the controlled event
 	 * loop in [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext].
+	 *
+	 * @return `true` if a full cycle actually ran (a decision batch — possibly empty —
+	 *   was computed and posted, and [SimulationController.throttle] was called);
+	 *   `false` if this call was a no-op short-circuit (nothing sensed, decided, posted,
+	 *   or throttled) — an [SimulationSnapshot.EMPTY] / stale-tick / signal-timeout
+	 *   case. Callers that need to know whether a cycle's decisions were actually
+	 *   posted before proceeding (e.g. a caller enforcing strict per-tick ordering
+	 *   against the sim thread) must gate on this return value rather than assume
+	 *   every call did real work — see
+	 *   [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedDispatcherDeterminismTest] for
+	 *   why: releasing such a barrier unconditionally after a no-op call lets the sim
+	 *   thread proceed before the corresponding decision is actually posted.
 	 */
-	suspend fun runCycle() {
+	suspend fun runCycle(): Boolean {
+		// 0. WAIT (signal-based pacing only) — block until the sim thread publishes a
+		// fresh snapshot for this tick. Replaces the Thread.sleep(1) poll and the
+		// simTime-equality guard below with an explicit wake-up (Issue #746 / SP0.11c).
+		// SnapshotSignal.await's bounded timeout is a shutdown safety net (see its KDoc):
+		// if it returns false, no signal arrived — most commonly because the simulation
+		// has just stopped calling the hook that signals — so this cycle does nothing and
+		// lets the caller's `while (isSimActive())` loop notice and exit instead of
+		// blocking here forever. No decision opportunity is lost: any signal that does
+		// eventually arrive is still picked up by the next await() call.
+		if (snapshotSignal != null && !snapshotSignal.await()) {
+			controller.awaitIfPaused()
+			return false
+		}
+
 		// 1. SENSE — read a consistent frozen snapshot off the perception port.
 		val snapshot = perceptionPort.snapshot()
 		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
-		if (snapshot === SimulationSnapshot.EMPTY) {
+		if (snapshotSignal == null && snapshot === SimulationSnapshot.EMPTY) {
 			controller.awaitIfPaused()
 			pauseUntilNextSnapshot()
-			return
+			return false
 		}
-		if (hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
+		if (snapshotSignal == null && hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
+			// Polling-mode-only stale-tick guard. Not applicable in signal-based pacing:
+			// SnapshotSignal.await already guarantees this snapshot was published for THIS
+			// tick and has not been processed before, so re-deriving staleness from
+			// simTime here would be redundant at best and — per the SP0.11c root-cause
+			// analysis (Issue #746) — actively wrong: it is exactly this guard firing on a
+			// tick it should not have skipped that produced the ~4% `trainsExited = 0`
+			// admission-stall residue that this parameter was introduced to eliminate.
 			controller.awaitIfPaused()
 			pauseUntilNextSnapshot()
-			return
+			return false
 		}
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
@@ -189,5 +241,6 @@ class AgentLoopDriver(
 		controller.throttle(simDelta)
 		prevSimTime = snapshot.simTime
 		hasProcessedSnapshot = true
+		return true
 	}
 }

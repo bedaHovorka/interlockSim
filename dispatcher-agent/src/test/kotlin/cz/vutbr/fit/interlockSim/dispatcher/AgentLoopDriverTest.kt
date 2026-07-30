@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isSameAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
@@ -462,6 +463,106 @@ class AgentLoopDriverTest {
 
 			assertThat(controller.awaitCalls).isEqualTo(cycleCount)
 			assertThat(controller.throttleCalls).isEqualTo(cycleCount)
+		}
+	}
+
+	// ── Signal-based pacing (SP0.11c, Issue #746) ────────────────────────────────
+
+	@Nested
+	@DisplayName("Signal-based pacing (snapshotSignal non-null)")
+	inner class SignalBasedPacing {
+		/** [runCycle] must not read anything before the signal returns. */
+		@Test
+		@DisplayName("runCycle awaits the signal before sensing")
+		fun runCycleAwaitsSignalBeforeSensing() {
+			val callOrder = mutableListOf<String>()
+			val signal =
+				mockk<SnapshotSignal> {
+					every { await() } answers {
+						callOrder += "await"
+						true
+					}
+				}
+			every { perceptionPort.snapshot() } answers {
+				callOrder += "sense"
+				emptySnapshot(1.0)
+			}
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, snapshotSignal = signal)
+
+			runBlocking { driver.runCycle() }
+
+			assertThat(callOrder).containsExactly("await", "sense")
+		}
+
+		@Test
+		@DisplayName("runCycle returns true and posts decisions when the signal is delivered")
+		fun runCycleProcessesNormallyWhenSignalled() {
+			val signal = mockk<SnapshotSignal> { every { await() } returns true }
+			coEvery { planner.plan(any()) } returns listOf(DispatchDecision.ApproveTrain("T1"))
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, snapshotSignal = signal)
+
+			val processed = runBlocking { driver.runCycle() }
+
+			assertThat(processed).isTrue()
+			assertThat(commandQueue.drain()).containsExactly(DispatchDecision.ApproveTrain("T1"))
+			coVerify(exactly = 1) { planner.plan(any()) }
+		}
+
+		/**
+		 * The stale-tick guard ([stagnantSimTimeSkipsCycle]'s polling-mode contract) does
+		 * not apply once a real [SnapshotSignal] is delivering a fresh snapshot per call —
+		 * see [AgentLoopDriver]'s KDoc for why keeping that guard in signal mode is the
+		 * exact SP0.11c root cause, not just redundant.
+		 */
+		@Test
+		@DisplayName("unchanged simTime still decides again when re-signalled (guard bypassed)")
+		fun unchangedSimTimeStillDecidesWhenSignalled() {
+			val signal = mockk<SnapshotSignal> { every { await() } returns true }
+			every { perceptionPort.snapshot() } returns emptySnapshot(10.0)
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, snapshotSignal = signal)
+
+			val results =
+				runBlocking {
+					listOf(driver.runCycle(), driver.runCycle())
+				}
+
+			assertThat(results).containsExactly(true, true)
+			coVerify(exactly = 2) { planner.plan(any()) }
+			assertThat(controller.throttleCalls).isEqualTo(2)
+		}
+
+		@Test
+		@DisplayName("runCycle returns false and does not sense/decide when the signal times out")
+		fun runCycleShortCircuitsOnSignalTimeout() {
+			val signal = mockk<SnapshotSignal> { every { await() } returns false }
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, snapshotSignal = signal)
+
+			val processed = runBlocking { driver.runCycle() }
+
+			assertThat(processed).isFalse()
+			verify(exactly = 0) { perceptionPort.snapshot() }
+			coVerify(exactly = 0) { planner.plan(any()) }
+			assertThat(commandQueue.drain()).isEmpty()
+		}
+
+		@Test
+		@DisplayName("a signal timeout still calls awaitIfPaused so pause/step is honoured")
+		fun signalTimeoutStillHonoursPause() {
+			val signal = mockk<SnapshotSignal> { every { await() } returns false }
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, snapshotSignal = signal)
+
+			runBlocking { driver.runCycle() }
+
+			assertThat(controller.awaitCalls).isEqualTo(1)
+			assertThat(controller.throttleCalls).isEqualTo(0)
+		}
+
+		@Test
+		@DisplayName("polling-mode runCycle (no signal) returns true on a normally-processed cycle")
+		fun pollingModeReturnsTrueOnNormalCycle() {
+			val processed = runBlocking { makeDriver().runCycle() }
+
+			assertThat(processed).isTrue()
 		}
 	}
 
