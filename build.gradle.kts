@@ -3,7 +3,7 @@
  *
  * Thin aggregator for interlockSim multi-module project.
  * Application code lives in :desktop-ui, domain code in :core.
- * This file owns: SonarQube config, checkKdisco, and delegation tasks.
+ * This file owns: SonarQube config, checkKdisco, checkCoreUntouchedBySp2c, and delegation tasks.
  */
 
 plugins {
@@ -67,6 +67,72 @@ val checkKdisco by tasks.registering {
 }
 
 // ===========================================
+// SP2c.0: :core immutability guard (Issue #823, #822 constraint C10 / principle P9)
+// ===========================================
+//
+// Fails the build if any file under core/ differs from a frozen SP2c-start baseline commit,
+// unless explicitly allowlisted — see gradle/sp2c-core-baseline.properties and
+// gradle/sp2c-core-allowlist.txt, and docs/KOTLIN_STYLE_GUIDE.md ("SP2c :core Immutability
+// Guard") for the exception process. Diffing logic lives in buildSrc's Sp2cCoreGuard so it is
+// unit-testable in isolation (see buildSrc/src/test/kotlin/Sp2cCoreGuardTest.kt).
+
+val checkCoreUntouchedBySp2c by tasks.registering {
+    group = "verification"
+    description = "Fail if any file under core/ changed relative to the SP2c baseline without an allowlist entry"
+
+    // The result depends on live git history (current HEAD), which Gradle's up-to-date
+    // checking cannot observe from declared task inputs — never treat this as cacheable.
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val baselinePropertiesFile = rootProject.file("gradle/sp2c-core-baseline.properties")
+        if (!baselinePropertiesFile.exists()) {
+            throw org.gradle.api.GradleException(
+                "checkCoreUntouchedBySp2c misconfigured: missing ${baselinePropertiesFile.path}",
+            )
+        }
+        val baselineProperties = java.util.Properties()
+        baselinePropertiesFile.inputStream().use { baselineProperties.load(it) }
+        val baselineRef =
+            baselineProperties.getProperty("baselineRef")?.trim()?.takeIf { it.isNotEmpty() }
+                ?: throw org.gradle.api.GradleException(
+                    "checkCoreUntouchedBySp2c misconfigured: 'baselineRef' missing from ${baselinePropertiesFile.path}",
+                )
+
+        val allowlistFile = rootProject.file("gradle/sp2c-core-allowlist.txt")
+        val allowlistedPaths =
+            if (allowlistFile.exists()) {
+                Sp2cCoreGuard.parseAllowlist(allowlistFile.readLines())
+            } else {
+                emptySet()
+            }
+
+        when (val result = Sp2cCoreGuard.evaluate(rootDir, baselineRef, allowlistedPaths)) {
+            is Sp2cCoreGuard.Result.Skipped -> {
+                logger.lifecycle("checkCoreUntouchedBySp2c: SKIPPED — ${result.reason}")
+            }
+            is Sp2cCoreGuard.Result.Passed -> {
+                logger.lifecycle("checkCoreUntouchedBySp2c: PASSED — no core/ changes relative to baseline ${result.baselineRef}.")
+            }
+            is Sp2cCoreGuard.Result.Violated -> {
+                logger.error(
+                    "checkCoreUntouchedBySp2c: VIOLATION — the following core/ file(s) changed relative to " +
+                        "baseline ${result.baselineRef} without an allowlist entry:",
+                )
+                result.offendingFiles.forEach { logger.error("  $it") }
+                throw org.gradle.api.GradleException(
+                    "checkCoreUntouchedBySp2c failed: ${result.offendingFiles.size} file(s) under core/ changed " +
+                        "relative to baseline ${result.baselineRef} without an allowlist entry: " +
+                        "${result.offendingFiles.joinToString(", ")}. See gradle/sp2c-core-allowlist.txt and " +
+                        "docs/KOTLIN_STYLE_GUIDE.md (\"SP2c :core Immutability Guard\") for the exception process " +
+                        "(Issue #822 C10/P9).",
+                )
+            }
+        }
+    }
+}
+
+// ===========================================
 // Lifecycle delegation tasks
 // ===========================================
 
@@ -80,6 +146,17 @@ tasks.register("integrationTest") {
     group = "verification"
     description = "Run the integration tests of every JVM subproject"
     dependsOn(":core:integrationTest", ":desktop-ui:integrationTest", ":dispatcher-agent:integrationTest")
+}
+
+// The root project applies no `base`/lifecycle-base plugin of its own, so (unlike `test` and
+// `integrationTest` above) there is no pre-existing root `check` task to hook into — running
+// `./gradlew check` from the repo root only triggers each subproject's own `check` task via
+// Gradle's default multi-project task-name matching. Registering a root `check` here adds
+// checkCoreUntouchedBySp2c to that set without displacing the existing per-subproject checks.
+tasks.register("check") {
+    group = "verification"
+    description = "Root aggregate check task; also runs checkCoreUntouchedBySp2c (Issue #823)"
+    dependsOn(checkCoreUntouchedBySp2c)
 }
 
 listOf(
