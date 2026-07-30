@@ -27,6 +27,14 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * @see FallbackReason
  * @since Issue #817 (Goal 10 dispatcher metrics)
  */
+@Deprecated(
+	message =
+		"Replaced by PlannerTickListener (Issue #842), which reports the full TickOutcome " +
+			"taxonomy via a single onTick(TickRecord) callback instead of two lossy " +
+			"onLlmSuccess/onFallback callbacks. Retained for one release; use " +
+			"FallbackReason.toTickOutcome() to project legacy callback data onto the new " +
+			"taxonomy."
+)
 interface PlannerCycleListener {
 	/**
 	 * Called when the LLM dispatch cycle completed successfully.
