@@ -9,11 +9,11 @@ sealed vocabulary + `ActionValidator`) and the SP2c.5 P10 correctness gate (byte
 determinism of `RuleBasedDispatcher`'s decision sequence under the new control loop).
 **Last Updated:** 2026-07-30
 
-**Findings also posted as a comment on
-[#822](https://github.com/bedaHovorka/interlockSim/issues/822)** (so the parent's §5.2 stays
+**Findings also posted as comments on
+[#822](https://github.com/bedaHovorka/interlockSim/issues/822)** (so the parent’s §5.2 stays
 accurate) and the traffic-simulation-expert ruling as a comment on
-[#848](https://github.com/bedaHovorka/interlockSim/issues/848) itself. This document is the
-durable, reviewable copy of both.
+[#848](https://github.com/bedaHovorka/interlockSim/issues/848) itself. This document consolidates
+those comments into a durable, reviewable form (formatting/sectioning may differ from the originals).
 
 ---
 
