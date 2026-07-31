@@ -212,7 +212,11 @@ class CompactTextRenderer : ObservationRenderer {
 			}
 
 			is AppliedOutcome.Approved ->
-				"approve_train ${outcome.trainId} : ADMITTED"
+				if (outcome.admitted) {
+					"approve_train ${outcome.trainId} : ADMITTED"
+				} else {
+					"approve_train ${outcome.trainId} : REFUSED(${outcome.reason?.name ?: "UNKNOWN"})"
+				}
 
 			is AppliedOutcome.DroppedInvalid ->
 				"${outcome.commandType} ${outcome.trainId} : DROPPED (${outcome.message})"
