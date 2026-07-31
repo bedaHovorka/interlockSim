@@ -16,7 +16,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  * The schematic is topology-parameterised: it derives every route line directly from
  * [topology]'s [StationTopology.routes], never from hardcoded `vyhybna.xml` structure
  * (avoiding the SIM-004 mistake). For topologies where the schematic cannot be generated
- * (no routes, or more than [MAX_REPRESENTABLE_INOUTS] InOuts), the section body is exactly
+ * (no routes, or more than [maxRepresentableInOuts] InOuts), the section body is exactly
  * `(schematic unavailable for this topology)` — a non-empty, explicit signal.
  *
  * ## Output format (representable topology)
@@ -39,13 +39,15 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  *
  * @since Issue #825 (SP2c.2 — Goal 10 renderers)
  */
-class SchematicRenderer(private val topology: StationTopology) : ObservationRenderer {
+class SchematicRenderer(
+	private val topology: StationTopology
+) : ObservationRenderer {
 	/**
 	 * Maximum number of InOuts for which a schematic is generated. Topologies with more
 	 * than this many entry/exit points exceed the simple arrow representation and fall back
 	 * to `(schematic unavailable for this topology)`.
 	 */
-	private val MAX_REPRESENTABLE_INOUTS = 8
+	private val maxRepresentableInOuts = 8
 
 	/**
 	 * Pre-rendered schematic string — computed once at construction since the topology is static.
@@ -57,7 +59,7 @@ class SchematicRenderer(private val topology: StationTopology) : ObservationRend
 	private fun buildSchematic(): String {
 		val sb = StringBuilder()
 		sb.append("=== ASCII SCHEMATIC ===\n")
-		if (topology.routes.isEmpty() || topology.inOuts.size > MAX_REPRESENTABLE_INOUTS) {
+		if (topology.routes.isEmpty() || topology.inOuts.size > maxRepresentableInOuts) {
 			sb.append("(schematic unavailable for this topology)\n")
 			return sb.toString()
 		}

@@ -201,13 +201,13 @@ class ObservationRendererTest {
 	@DisplayName("AC6 — token budget: char-length ceiling")
 	inner class TokenBudget {
 		/** 12 000 chars ≈ 3 000 tokens @ average 4 chars/token — safe ceiling for a 32 k context. */
-		private val MAX_USER_MESSAGE_CHARS = 12_000
+		private val maxUserMessageChars = 12_000
 
 		@Test
 		@DisplayName("CompactTextRenderer output stays within char-length ceiling for tick-41 data")
 		fun compactTextWithinBudget() {
 			val output = CompactTextRenderer().render(ctx)
-			assertThat(output.length).isLessThan(MAX_USER_MESSAGE_CHARS)
+			assertThat(output.length).isLessThan(maxUserMessageChars)
 		}
 
 		@Test
@@ -356,8 +356,7 @@ class ObservationRendererTest {
 
 		@Test
 		@DisplayName("contains APPLIED OUTCOMES header")
-		fun hasAppliedOutcomesSection() =
-			assertThat(CompactTextRenderer().render(ctx)).contains("=== APPLIED OUTCOMES ===")
+		fun hasAppliedOutcomesSection() = assertThat(CompactTextRenderer().render(ctx)).contains("=== APPLIED OUTCOMES ===")
 
 		@Test
 		@DisplayName("contains CHANGED SINCE LAST TICK header")
@@ -373,8 +372,7 @@ class ObservationRendererTest {
 
 		@Test
 		@DisplayName("contains WHAT YOU CAN DO NOW header")
-		fun hasAffordancesSection() =
-			assertThat(CompactTextRenderer().render(ctx)).contains("=== WHAT YOU CAN DO NOW ===")
+		fun hasAffordancesSection() = assertThat(CompactTextRenderer().render(ctx)).contains("=== WHAT YOU CAN DO NOW ===")
 
 		@Test
 		@DisplayName("contains history records (simTime formatted)")

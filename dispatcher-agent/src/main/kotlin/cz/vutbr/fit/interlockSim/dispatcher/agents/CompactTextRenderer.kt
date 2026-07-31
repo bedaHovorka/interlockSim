@@ -57,7 +57,10 @@ class CompactTextRenderer : ObservationRenderer {
 
 	// ── Section 4: RECENT TICKS ────────────────────────────────────────────────────────────
 
-	private fun renderRecentTicks(sb: StringBuilder, ctx: RenderContext) {
+	private fun renderRecentTicks(
+		sb: StringBuilder,
+		ctx: RenderContext
+	) {
 		sb.append("=== RECENT TICKS ===\n")
 		if (ctx.history.isEmpty()) {
 			sb.append("(none yet)\n")
@@ -78,7 +81,10 @@ class CompactTextRenderer : ObservationRenderer {
 
 	// ── Section 5: WORKING MEMORY ─────────────────────────────────────────────────────────
 
-	private fun renderWorkingMemory(sb: StringBuilder, wm: WorkingMemory) {
+	private fun renderWorkingMemory(
+		sb: StringBuilder,
+		wm: WorkingMemory
+	) {
 		sb.append("=== WORKING MEMORY ===\n")
 		sb.append("consecutive_no_op_ticks: ")
 		sb.append(wm.consecutiveNoOpTicks)
@@ -96,7 +102,10 @@ class CompactTextRenderer : ObservationRenderer {
 
 	// ── Section 6: APPLIED OUTCOMES ───────────────────────────────────────────────────────
 
-	private fun renderAppliedOutcomes(sb: StringBuilder, observation: DispatcherObservation) {
+	private fun renderAppliedOutcomes(
+		sb: StringBuilder,
+		observation: DispatcherObservation
+	) {
 		sb.append("=== APPLIED OUTCOMES ===\n")
 		if (observation.appliedOutcomes.isEmpty()) {
 			sb.append("(none)\n")
@@ -115,7 +124,10 @@ class CompactTextRenderer : ObservationRenderer {
 
 	// ── Section 8: CURRENT STATE ──────────────────────────────────────────────────────────
 
-	private fun renderCurrentState(sb: StringBuilder, obs: DispatcherObservation) {
+	private fun renderCurrentState(
+		sb: StringBuilder,
+		obs: DispatcherObservation
+	) {
 		sb.append("=== CURRENT STATE (tick ")
 		sb.append(obs.tick)
 		sb.append(", simTime ")
@@ -137,7 +149,10 @@ class CompactTextRenderer : ObservationRenderer {
 		renderReservations(sb, obs)
 	}
 
-	private fun renderTrains(sb: StringBuilder, obs: DispatcherObservation) {
+	private fun renderTrains(
+		sb: StringBuilder,
+		obs: DispatcherObservation
+	) {
 		if (obs.trains.isEmpty()) return
 		sb.append("trains:\n")
 		for (train in obs.trains) {
@@ -147,7 +162,10 @@ class CompactTextRenderer : ObservationRenderer {
 		}
 	}
 
-	private fun renderTrain(sb: StringBuilder, t: TrainView) {
+	private fun renderTrain(
+		sb: StringBuilder,
+		t: TrainView
+	) {
 		val phase = t.phase.name
 		sb.append(t.trainId)
 		sb.append(' ')
@@ -203,7 +221,10 @@ class CompactTextRenderer : ObservationRenderer {
 			else -> signal.name
 		}
 
-	private fun renderBlocks(sb: StringBuilder, obs: DispatcherObservation) {
+	private fun renderBlocks(
+		sb: StringBuilder,
+		obs: DispatcherObservation
+	) {
 		if (obs.blocks.isEmpty()) return
 		sb.append("blocks:")
 		val lineWidth = 80
@@ -222,14 +243,21 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append('\n')
 	}
 
-	private fun blockEntry(blockId: String, state: TrackFacility.State, occupantId: String?): String =
+	private fun blockEntry(
+		blockId: String,
+		state: TrackFacility.State,
+		occupantId: String?
+	): String =
 		when (state) {
 			TrackFacility.State.FREE -> "$blockId=FREE"
 			TrackFacility.State.RESERVED -> "$blockId=RESERVED(${occupantId ?: "?"})"
 			TrackFacility.State.OCCUPIED -> "$blockId=${occupantId ?: "?"}"
 		}
 
-	private fun renderSwitches(sb: StringBuilder, obs: DispatcherObservation) {
+	private fun renderSwitches(
+		sb: StringBuilder,
+		obs: DispatcherObservation
+	) {
 		if (obs.switches.isEmpty()) return
 		sb.append("switches:")
 		for (sw in obs.switches) {
@@ -243,7 +271,10 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append('\n')
 	}
 
-	private fun renderSignals(sb: StringBuilder, obs: DispatcherObservation) {
+	private fun renderSignals(
+		sb: StringBuilder,
+		obs: DispatcherObservation
+	) {
 		if (obs.signals.isEmpty()) return
 		sb.append("signals:")
 		for (sig in obs.signals) {
@@ -255,7 +286,10 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append('\n')
 	}
 
-	private fun renderReservations(sb: StringBuilder, obs: DispatcherObservation) {
+	private fun renderReservations(
+		sb: StringBuilder,
+		obs: DispatcherObservation
+	) {
 		if (obs.reservations.isEmpty()) return
 		sb.append("reservations:")
 		for (res in obs.reservations) {

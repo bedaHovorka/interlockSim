@@ -38,7 +38,6 @@ data class WorkingMemory(
 	 * LLM_ACTIONS or LLM_REPAIRED outcome is recorded.
 	 */
 	val consecutiveNoOpTicks: Int,
-
 	/**
 	 * Simulation-time wait (seconds) of the longest-waiting currently queued train, or `0.0`
 	 * when no trains are queued. Computed from
@@ -46,14 +45,12 @@ data class WorkingMemory(
 	 * [cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase.QUEUED] trains.
 	 */
 	val longestQueuedWaitSecs: Double,
-
 	/**
 	 * Count of approved trains whose phase is
 	 * [cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase.HELD] (stopped at a STOP
 	 * signal, not at a commanded station dwell). Non-zero indicates path-assignment work.
 	 */
 	val blockedTrainCount: Int,
-
 	/**
 	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome] name from the most recent
 	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord], or `null` when [history] was
@@ -63,11 +60,12 @@ data class WorkingMemory(
 ) {
 	companion object {
 		/** A safe zero-state memory for tick 0, before any history has accumulated. */
-		val EMPTY = WorkingMemory(
-			consecutiveNoOpTicks = 0,
-			longestQueuedWaitSecs = 0.0,
-			blockedTrainCount = 0,
-			lastTickOutcome = null
-		)
+		val EMPTY =
+			WorkingMemory(
+				consecutiveNoOpTicks = 0,
+				longestQueuedWaitSecs = 0.0,
+				blockedTrainCount = 0,
+				lastTickOutcome = null
+			)
 	}
 }

@@ -40,7 +40,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  *
  * @since Issue #825 (SP2c.2 — Goal 10 renderers)
  */
-class CompositeTickRenderer(private val parts: List<ObservationRenderer>) : ObservationRenderer {
+class CompositeTickRenderer(
+	private val parts: List<ObservationRenderer>
+) : ObservationRenderer {
 	override fun render(ctx: RenderContext): String {
 		if (parts.isEmpty()) return ""
 		val sb = StringBuilder()

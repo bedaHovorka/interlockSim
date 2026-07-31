@@ -42,11 +42,12 @@ data class Affordance(
 		const val NO_OP_TRAIN_ID = "no_op"
 
 		/** Canonical no-op affordance — always applicable, always listed last. */
-		val NO_OP = Affordance(
-			trainId = NO_OP_TRAIN_ID,
-			action = "no_op",
-			applicable = true,
-			reason = "always applicable"
-		)
+		val NO_OP =
+			Affordance(
+				trainId = NO_OP_TRAIN_ID,
+				action = "no_op",
+				applicable = true,
+				reason = "always applicable"
+			)
 	}
 }

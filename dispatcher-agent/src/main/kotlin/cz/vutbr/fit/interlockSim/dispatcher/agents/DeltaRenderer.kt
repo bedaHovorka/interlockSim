@@ -51,7 +51,11 @@ class DeltaRenderer : ObservationRenderer {
 		return sb.toString()
 	}
 
-	private fun renderDelta(sb: StringBuilder, curr: DispatcherObservation, prev: DispatcherObservation) {
+	private fun renderDelta(
+		sb: StringBuilder,
+		curr: DispatcherObservation,
+		prev: DispatcherObservation
+	) {
 		val trainDeltas = trainDeltas(curr.trains, prev.trains)
 		val blockDeltas = blockDeltas(curr.blocks, prev.blocks)
 		val switchDeltas = switchDeltas(curr.switches, prev.switches)
@@ -84,7 +88,10 @@ class DeltaRenderer : ObservationRenderer {
 		}
 	}
 
-	private fun trainDeltas(curr: List<TrainView>, prev: List<TrainView>): List<String> {
+	private fun trainDeltas(
+		curr: List<TrainView>,
+		prev: List<TrainView>
+	): List<String> {
 		val prevById = prev.associateBy { it.trainId }
 		val result = mutableListOf<String>()
 		for (t in curr) {
@@ -106,7 +113,10 @@ class DeltaRenderer : ObservationRenderer {
 		return result
 	}
 
-	private fun blockDeltas(curr: List<BlockView>, prev: List<BlockView>): List<String> {
+	private fun blockDeltas(
+		curr: List<BlockView>,
+		prev: List<BlockView>
+	): List<String> {
 		val prevById = prev.associateBy { it.blockId }
 		val result = mutableListOf<String>()
 		for (b in curr) {
@@ -127,7 +137,10 @@ class DeltaRenderer : ObservationRenderer {
 			TrackFacility.State.OCCUPIED -> "OCCUPIED(${bv.occupantTrainId ?: "?"})"
 		}
 
-	private fun switchDeltas(curr: List<SwitchView>, prev: List<SwitchView>): List<String> {
+	private fun switchDeltas(
+		curr: List<SwitchView>,
+		prev: List<SwitchView>
+	): List<String> {
 		val prevByName = prev.associateBy { it.switchName }
 		val result = mutableListOf<String>()
 		for (s in curr) {
@@ -146,7 +159,10 @@ class DeltaRenderer : ObservationRenderer {
 		return "${sv.position}$lock"
 	}
 
-	private fun signalDeltas(curr: List<SignalView>, prev: List<SignalView>): List<String> {
+	private fun signalDeltas(
+		curr: List<SignalView>,
+		prev: List<SignalView>
+	): List<String> {
 		val prevByName = prev.associateBy { it.name }
 		val result = mutableListOf<String>()
 		for (s in curr) {
