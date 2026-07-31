@@ -65,9 +65,9 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  * @since Issue #826 (SP2c.3 — Goal 10)
  */
 class ActionValidator(
-	val validEndpointNames: Set<String>,
-	val blockIds: Set<String>,
-	val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK
+	private val validEndpointNames: Set<String>,
+	private val blockIds: Set<String>,
+	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK
 ) {
 	companion object {
 		/** Default per-tick action limit used when [maxActionsPerTick] is not specified. */
@@ -272,7 +272,9 @@ class ActionValidator(
 			)
 		}
 
-		if (trainInList != null && trainInList.phase == TrainPhase.QUEUED || trainInQueue != null && trainInList == null) {
+		if ((trainInList != null && trainInList.phase == TrainPhase.QUEUED) ||
+			(trainInQueue != null && trainInList == null)
+		) {
 			return rejected(
 				RejectionCode.TRAIN_NOT_ADMITTED,
 				"Train '${action.trainId}' has not been admitted yet (still queued)"

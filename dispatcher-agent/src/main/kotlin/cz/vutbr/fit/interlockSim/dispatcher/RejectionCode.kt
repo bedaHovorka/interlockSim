@@ -152,9 +152,15 @@ enum class RejectionCode {
 	NO_ROUTE_HELD,
 
 	/**
-	 * The train is physically occupying (phase OCCUPIED in
-	 * [cz.vutbr.fit.interlockSim.dispatcher.observation.BlockView.state]) at least one block
-	 * in its reservation. Releasing a route while the train is on a reserved block is unsafe.
+	 * The train is physically occupying its front block
+	 * ([cz.vutbr.fit.interlockSim.dispatcher.observation.BlockView.state] is OCCUPIED) and that
+	 * block is part of its reservation. Releasing a route while the train is on a reserved block
+	 * is unsafe.
+	 *
+	 * **Stated limitation:** the observation exposes only the train's front section, so this
+	 * check covers the front block only — it cannot detect a train occupying a non-front
+	 * reserved block (a rare mid-transit case). The `:core` interlocking layer remains the
+	 * authoritative guard for full reservation integrity.
 	 */
 	TRAIN_ON_RESERVED_BLOCK,
 

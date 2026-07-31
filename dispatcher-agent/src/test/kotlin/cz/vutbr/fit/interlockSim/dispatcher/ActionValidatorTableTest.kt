@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.dispatcher.observation.BlockView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.dispatcher.observation.QueuedTrainView
@@ -326,6 +327,9 @@ class ActionValidatorTableTest {
 			.isInstanceOf(ValidationVerdict.Rejected::class)
 		assertThat((verdict as ValidationVerdict.Rejected).code, name = "code for $code")
 			.isEqualTo(code)
+		// ValidationVerdict.Rejected contract: detail is never empty (ValidationVerdict KDoc).
+		assertThat((verdict as ValidationVerdict.Rejected).detail, name = "detail non-empty for $code")
+			.isNotEmpty()
 	}
 
 	// ── Batch-level parameterized test ────────────────────────────────────────
@@ -353,5 +357,57 @@ class ActionValidatorTableTest {
 		val rejectedCodes = results.mapNotNull { (_, v) -> (v as? ValidationVerdict.Rejected)?.code }
 
 		assertThat(rejectedCodes, name = "rejected codes in batch for $code").contains(code)
+		// ValidationVerdict.Rejected contract: detail is never empty (ValidationVerdict KDoc).
+		val firstMatching = results.mapNotNull { (_, v) -> v as? ValidationVerdict.Rejected }.first { it.code == code }
+		assertThat(firstMatching.detail, name = "detail non-empty for $code").isNotEmpty()
+	}
+
+	// ── Batch-ordering guard tests (protect the subtle validateBatch ordering) ──────────────
+
+	@Test
+	@DisplayName("default maxActionsPerTick=3: the 4th valid action is ACTION_LIMIT_EXCEEDED (boundary)")
+	fun defaultLimitBoundaryIsThree() {
+		// VALIDATOR uses the default maxActionsPerTick = 3. Four distinct valid ApproveTrain
+		// actions against a station with room for all: the first three are Valid, the fourth is
+		// ACTION_LIMIT_EXCEEDED. Guards the default-boundary off-by-one (2-allowed-3rd-rejected
+		// or 3-allowed-4th-also-allowed would both fail this).
+		val observation =
+			obs(
+				queued = listOf(queuedView("T1"), queuedView("T2"), queuedView("T3"), queuedView("T4")),
+				activeCount = 0,
+				capacity = 4
+			)
+		val actions =
+			listOf(
+				DispatchAction.ApproveTrain("T1"),
+				DispatchAction.ApproveTrain("T2"),
+				DispatchAction.ApproveTrain("T3"),
+				DispatchAction.ApproveTrain("T4")
+			)
+		val results = VALIDATOR.validateBatch(actions, observation)
+		assertThat(results[0].second, name = "1st action").isEqualTo(ValidationVerdict.Valid)
+		assertThat(results[1].second, name = "2nd action").isEqualTo(ValidationVerdict.Valid)
+		assertThat(results[2].second, name = "3rd action").isEqualTo(ValidationVerdict.Valid)
+		assertThat(results[3].second, name = "4th action").isInstanceOf(ValidationVerdict.Rejected::class)
+		assertThat((results[3].second as ValidationVerdict.Rejected).code, name = "4th action code")
+			.isEqualTo(RejectionCode.ACTION_LIMIT_EXCEEDED)
+	}
+
+	@Test
+	@DisplayName("duplicate tracking short-circuits before the limit check: 4x same action")
+	fun duplicateShortCircuitsBeforeLimit() {
+		// The same valid action four times: the first is Valid (and consumes one slot), the next
+		// three are DUPLICATE_ACTION_THIS_TICK and never reach the limit check. If someone
+		// reorders `seenActions.add` after the limit check, this would flip to ACTION_LIMIT_EXCEEDED.
+		val observation = obs(queued = listOf(queuedView("T1")), activeCount = 0, capacity = 4)
+		val action = DispatchAction.ApproveTrain("T1")
+		val results = VALIDATOR.validateBatch(listOf(action, action, action, action), observation)
+		assertThat(results[0].second, name = "1st").isEqualTo(ValidationVerdict.Valid)
+		assertThat((results[1].second as ValidationVerdict.Rejected).code, name = "2nd code")
+			.isEqualTo(RejectionCode.DUPLICATE_ACTION_THIS_TICK)
+		assertThat((results[2].second as ValidationVerdict.Rejected).code, name = "3rd code")
+			.isEqualTo(RejectionCode.DUPLICATE_ACTION_THIS_TICK)
+		assertThat((results[3].second as ValidationVerdict.Rejected).code, name = "4th code")
+			.isEqualTo(RejectionCode.DUPLICATE_ACTION_THIS_TICK)
 	}
 }
