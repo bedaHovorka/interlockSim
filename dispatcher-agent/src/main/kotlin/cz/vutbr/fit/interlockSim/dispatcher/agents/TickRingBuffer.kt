@@ -38,8 +38,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  * @see WorkingMemory
  * @since Issue #830 (SP2c.7 — Goal 10 ring buffer)
  */
-class TickRingBuffer(val capacity: Int = 3) {
-
+class TickRingBuffer(
+	val capacity: Int = 3
+) {
 	init {
 		require(capacity >= 1) { "capacity must be at least 1, got $capacity" }
 	}

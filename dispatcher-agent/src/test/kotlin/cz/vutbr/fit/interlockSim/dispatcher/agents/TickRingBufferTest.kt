@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("SP2c.7 TickRingBuffer — acceptance criteria (#830)")
 class TickRingBufferTest {
-
 	private fun emptyRecord(tick: Long): TickRecord =
 		TickRecord(
 			tick = tick,
@@ -40,7 +39,6 @@ class TickRingBufferTest {
 	@Nested
 	@DisplayName("Capacity — pushing N records retains exactly the last N, oldest first")
 	inner class CapacityBounds {
-
 		@Test
 		@DisplayName("pushing 10 records into capacity=3 buffer leaves exactly 3 records")
 		fun pushingTenLeavesThree() {
@@ -121,7 +119,6 @@ class TickRingBufferTest {
 	@Nested
 	@DisplayName("Configurable capacity — SP2c.11 sweep")
 	inner class ConfigurableCapacity {
-
 		@Test
 		@DisplayName("capacity=1 retains only the latest record")
 		fun capacityOne() {
@@ -154,7 +151,6 @@ class TickRingBufferTest {
 	@Nested
 	@DisplayName("Snapshot immutability — subsequent pushes don't affect prior snapshots")
 	inner class SnapshotImmutability {
-
 		@Test
 		@DisplayName("snapshot taken before push is not affected by subsequent push")
 		fun snapshotIsImmutable() {
@@ -174,7 +170,6 @@ class TickRingBufferTest {
 	@Nested
 	@DisplayName("Rendered size ceiling — RECENT TICKS block has hard character ceiling")
 	inner class RenderedSizeCeiling {
-
 		/**
 		 * Maximum characters for the RECENT TICKS prompt section.
 		 *
