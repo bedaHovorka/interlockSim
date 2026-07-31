@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ConflictHintLatch
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
@@ -412,6 +413,14 @@ class ExampleRegistry {
 				}
 			}
 		)
+
+		// SP2c.4 (Issue #827): Goal 9 C7 ruling option (a) — latch ConflictDetectedEvents into
+		// affordance reasons. The latch must be registered BEFORE run() — listeners registered
+		// after run() are silently dropped (see DefaultSimulationContext.onConflictDetectedEvent).
+		// The latch is the perception-path bridge for AffordanceAnnotator; it holds no reference
+		// to any actuator and never enacts any simulation effect.
+		val conflictHintLatch = ConflictHintLatch()
+		context.onConflictDetectedEvent(conflictHintLatch::onConflict)
 
 		// SP0.11c (Issue #746): sim-to-driver pacing signal replacing the driver's old
 		// Thread.sleep(1) wall-clock poll. AgentLoopDriver.runCycle() blocks on it instead
