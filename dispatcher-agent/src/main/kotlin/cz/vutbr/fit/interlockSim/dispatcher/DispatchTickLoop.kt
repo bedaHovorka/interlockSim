@@ -83,11 +83,15 @@ import java.util.concurrent.atomic.AtomicLong
  * @param emission Decision-making strategy (rule-based or LLM-backed).
  * @param validator Pre-execution validator for each [DispatchAction]; called once per action.
  * @param queue Thread-safe handoff queue to the sim-thread [DispatchDecisionApplier].
- * @param ring Bounded ring buffer storing recent tick records for rendering context.
- * @param workingMemory Initial cross-tick scratchpad; updated immutably each tick.
+ * @param ring Bounded ring buffer storing recent tick records for rendering context. Defaults to
+ *   a fresh buffer at [TickRingBuffer]'s own default capacity.
+ * @param workingMemory Initial cross-tick scratchpad; updated immutably each tick. Defaults to
+ *   [WorkingMemory.EMPTY] — a run normally starts with nothing remembered.
  * @param budget Deadline wrapper for [EmissionStrategy.emit]; returns `null` on timeout.
  * @param fallbackGuard Observes each completed [TickRecord] and sets [runOutcome] to
- *   [RunOutcome.Failed] when a [ActionAuthor.RULE_FALLBACK] action is detected.
+ *   [RunOutcome.Failed] when a [ActionAuthor.RULE_FALLBACK] action is detected. Defaults to a
+ *   fresh guard: it is loop-private state with nothing to configure, so a caller only supplies
+ *   one when it wants to inspect the guard directly rather than through [runOutcome].
  * @param controller Pacing controller for pause/step and wall-clock throttling.
  * @param snapshotSignal Optional sim-to-driver wake signal (SP0.11c, Issue #746). When
  *   non-null, each tick blocks on [SnapshotSignal.await] instead of reading a potentially
@@ -107,10 +111,10 @@ class DispatchTickLoop(
 	private val emission: EmissionStrategy,
 	private val validator: ActionValidator,
 	private val queue: ActuatorCommandQueue,
-	private val ring: TickRingBuffer,
-	workingMemory: WorkingMemory,
+	private val ring: TickRingBuffer = TickRingBuffer(),
+	workingMemory: WorkingMemory = WorkingMemory.EMPTY,
 	private val budget: TickBudget,
-	private val fallbackGuard: TerminalFallbackGuard,
+	private val fallbackGuard: TerminalFallbackGuard = TerminalFallbackGuard(),
 	private val controller: SimulationController,
 	private val snapshotSignal: SnapshotSignal? = null,
 	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK
@@ -272,7 +276,7 @@ class DispatchTickLoop(
 		fallbackGuard.observe(record)
 
 		logger.debug {
-			"DispatchTickLoop: tick=${obs0.tick} actions=${tickActions.size} outcome=${runOutcome}"
+			"DispatchTickLoop: tick=${obs0.tick} actions=${tickActions.size} outcome=$runOutcome"
 		}
 
 		// 7. PACE — honour pause/step requests, then throttle wall-clock time.
@@ -357,13 +361,15 @@ class DispatchTickLoop(
 				} else {
 					obs.copy(
 						reservations =
-							(obs.reservations +
-								ReservationView(
-									trainId = action.trainId,
-									fromEndpointName = action.fromEndpointName,
-									targetName = action.toEndpointName,
-									blockIds = emptyList()
-								)).sortedBy { it.trainId }
+							(
+								obs.reservations +
+									ReservationView(
+										trainId = action.trainId,
+										fromEndpointName = action.fromEndpointName,
+										targetName = action.toEndpointName,
+										blockIds = emptyList()
+									)
+							).sortedBy { it.trainId }
 					)
 				}
 			}

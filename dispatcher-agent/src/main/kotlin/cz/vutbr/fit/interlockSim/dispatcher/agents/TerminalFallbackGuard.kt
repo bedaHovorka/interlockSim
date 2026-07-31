@@ -43,7 +43,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome.Running
  * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 class TerminalFallbackGuard {
-	private var _outcome: RunOutcome = Running
+	private var outcomeState: RunOutcome = Running
 
 	/**
 	 * The current [RunOutcome] as observed so far.
@@ -51,7 +51,7 @@ class TerminalFallbackGuard {
 	 * Starts as [Running]; transitions to [Failed] the first time a tick record contains
 	 * a [ActionAuthor.RULE_FALLBACK] action. Never reverts after that.
 	 */
-	val currentOutcome: RunOutcome get() = _outcome
+	val currentOutcome: RunOutcome get() = outcomeState
 
 	/**
 	 * Processes a completed [TickRecord].
@@ -63,10 +63,10 @@ class TerminalFallbackGuard {
 	 * @param record The completed tick record to inspect.
 	 */
 	fun observe(record: TickRecord) {
-		if (_outcome is Failed) return
+		if (outcomeState is Failed) return
 		val hasFallback = record.actions.any { it.author == ActionAuthor.RULE_FALLBACK }
 		if (hasFallback) {
-			_outcome = Failed(FailureReason.LLM_ABANDONED)
+			outcomeState = Failed(FailureReason.LLM_ABANDONED)
 		}
 	}
 }

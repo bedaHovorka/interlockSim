@@ -47,8 +47,7 @@ interface TickBudget {
 class DeadlineTickBudget(
 	private val timeoutMillis: Long
 ) : TickBudget {
-	override suspend fun <T> withBudget(block: suspend () -> T?): T? =
-		withTimeoutOrNull(timeoutMillis) { block() }
+	override suspend fun <T> withBudget(block: suspend () -> T?): T? = withTimeoutOrNull(timeoutMillis) { block() }
 }
 
 /**

@@ -180,7 +180,10 @@ class RuleBasedEmissionStrategy(
 	 * caller's `mapNotNull` filters them out, producing an empty list that means
 	 * "nothing to do" (not a timeout).
 	 */
-	private fun toAttributedAction(decision: DispatchDecision, tick: Long): AttributedAction? =
+	private fun toAttributedAction(
+		decision: DispatchDecision,
+		tick: Long
+	): AttributedAction? =
 		when (decision) {
 			is DispatchDecision.ApproveTrain ->
 				AttributedAction(
