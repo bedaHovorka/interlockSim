@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import java.security.MessageDigest
 
@@ -321,8 +322,18 @@ sealed interface AppliedOutcome {
  *   this tick. Populated by [DispatcherObservationProjector] when an
  *   [cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel] is wired (SP2c.17, #840).
  *   Always empty when no channel is wired (headless / rule-based-only runs).
+ * @property innerBlockInputs Directional block-input observations for all **inner** track blocks
+ *   (RailSemaphore–RailSemaphore bounded). Populated by [DispatcherObservationProjector] from
+ *   [cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort.snapshot] on each sim tick.
+ *   Consumed by [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy] to convert a
+ *   [DispatcherObservation] back into a
+ *   [cz.vutbr.fit.interlockSim.sim.DispatchObservation] for [cz.vutbr.fit.interlockSim.sim.Dispatcher.decide].
+ *   Defaults to [emptyList] so existing callers that pre-date SP2c.5 are unaffected.
+ * @property outerBlockInputs Directional block-input observations for all **outer** track blocks
+ *   (InOut–RailSemaphore bounded). Same contract as [innerBlockInputs].
  *
- * @since Issue #824 (SP2c.1 — Goal 10 autonomous dispatcher control-loop redesign)
+ * @since Issue #824 (SP2c.1 — Goal 10 autonomous dispatcher control-loop redesign);
+ *   [innerBlockInputs] / [outerBlockInputs] added in Issue #828 (SP2c.5 — DispatchTickLoop)
  */
 data class DispatcherObservation(
 	val tick: Long,
@@ -335,7 +346,19 @@ data class DispatcherObservation(
 	val queued: List<QueuedTrainView>,
 	val activeCount: Int,
 	val capacity: Int,
-	val appliedOutcomes: List<AppliedOutcome>
+	val appliedOutcomes: List<AppliedOutcome>,
+	/**
+	 * Directional block-input observations for all **inner** track blocks. Populated by
+	 * [DispatcherObservationProjector] from [cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort]
+	 * on each sim tick (SP2c.5, Issue #828). Defaults to [emptyList] for backwards compatibility
+	 * with callers that pre-date SP2c.5 (renderers, tests, the SP2c.1–4 scaffolding).
+	 */
+	val innerBlockInputs: List<BlockInputObservation> = emptyList(),
+	/**
+	 * Directional block-input observations for all **outer** track blocks. Same contract as
+	 * [innerBlockInputs].
+	 */
+	val outerBlockInputs: List<BlockInputObservation> = emptyList()
 ) {
 	/**
 	 * Stable content hash of this observation, suitable as the ring-buffer digest key (#822
