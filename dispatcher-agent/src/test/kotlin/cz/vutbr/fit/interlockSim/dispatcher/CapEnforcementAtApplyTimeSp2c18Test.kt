@@ -14,6 +14,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -252,17 +253,19 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
-			val observation = DispatcherObservation.EMPTY.copy(
-				tick = 2L,
-				appliedOutcomes = outcomes
-			)
-			val ctx = RenderContext(
-				observation = observation,
-				previous = DispatcherObservation.EMPTY,
-				history = emptyList(),
-				workingMemory = WorkingMemory.EMPTY,
-				affordances = listOf(Affordance.NO_OP)
-			)
+			val observation =
+				DispatcherObservation.EMPTY.copy(
+					tick = 2L,
+					appliedOutcomes = outcomes
+				)
+			val ctx =
+				RenderContext(
+					observation = observation,
+					previous = DispatcherObservation.EMPTY,
+					history = emptyList(),
+					workingMemory = WorkingMemory.EMPTY,
+					affordances = listOf(Affordance.NO_OP)
+				)
 			val rendered = CompactTextRenderer().render(ctx)
 			assertThat(rendered).isNotNull()
 			// Renders with the machine-readable reason code
@@ -281,17 +284,19 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
-			val observation = DispatcherObservation.EMPTY.copy(
-				tick = 2L,
-				appliedOutcomes = outcomes
-			)
-			val ctx = RenderContext(
-				observation = observation,
-				previous = DispatcherObservation.EMPTY,
-				history = emptyList(),
-				workingMemory = WorkingMemory.EMPTY,
-				affordances = listOf(Affordance.NO_OP)
-			)
+			val observation =
+				DispatcherObservation.EMPTY.copy(
+					tick = 2L,
+					appliedOutcomes = outcomes
+				)
+			val ctx =
+				RenderContext(
+					observation = observation,
+					previous = DispatcherObservation.EMPTY,
+					history = emptyList(),
+					workingMemory = WorkingMemory.EMPTY,
+					affordances = listOf(Affordance.NO_OP)
+				)
 			val rendered = CompactTextRenderer().render(ctx)
 			assertThat(rendered.contains("approve_train T-10 : ADMITTED")).isTrue()
 		}
@@ -316,13 +321,14 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 		@Test
 		@DisplayName("AppliedOutcome.Approved with admitted=false carries an ApplyFailureCode reason")
 		fun approvedWithAdmittedFalseHasApplyFailureCodeReason() {
-			val outcome = AppliedOutcome.Approved(
-				trainId = "T-1",
-				admitted = false,
-				reason = ApplyFailureCode.CAP_EXCEEDED,
-				id = CommandId(1L),
-				tickIndex = 1L
-			)
+			val outcome =
+				AppliedOutcome.Approved(
+					trainId = "T-1",
+					admitted = false,
+					reason = ApplyFailureCode.CAP_EXCEEDED,
+					id = CommandId(1L),
+					tickIndex = 1L
+				)
 			assertThat(outcome.admitted).isFalse()
 			assertThat(outcome.reason).isNotNull()
 			assertThat(outcome.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
@@ -331,12 +337,13 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 		@Test
 		@DisplayName("AppliedOutcome.Approved with admitted=true has null reason")
 		fun approvedWithAdmittedTrueHasNullReason() {
-			val outcome = AppliedOutcome.Approved(
-				trainId = "T-2",
-				admitted = true,
-				id = CommandId(2L),
-				tickIndex = 1L
-			)
+			val outcome =
+				AppliedOutcome.Approved(
+					trainId = "T-2",
+					admitted = true,
+					id = CommandId(2L),
+					tickIndex = 1L
+				)
 			assertThat(outcome.admitted).isTrue()
 			assertThat(outcome.reason).isNull()
 		}
@@ -416,6 +423,231 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 
 			// All three admitted — no cap check without provider
 			assertThat(admittedTrains).hasSize(3)
+		}
+	}
+
+	// ── Cap boundary ──────────────────────────────────────────────────────────────────────
+
+	@Nested
+	@DisplayName("Cap boundary — the last free slot and the first refusal")
+	inner class CapBoundary {
+		@Test
+		@DisplayName("cap=1: the first admission takes the only slot, the second is refused")
+		fun capOfOneAdmitsExactlyOne() {
+			liveActiveCount.set(0)
+			correlationMap.newCycle()
+			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 1)
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ApproveTrain("T-first"),
+					DispatchDecision.ApproveTrain("T-second")
+				)
+			)
+			applier.onControlStep()
+
+			assertThat(admittedTrains).isEqualTo(listOf("T-first"))
+			val outcomes = outcomeSink.drainSince(0L).map { it as AppliedOutcome.Approved }
+			assertThat(outcomes.map { it.admitted }).isEqualTo(listOf(true, false))
+			assertThat(outcomes[1].reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+		}
+
+		/**
+		 * A refusal must not consume a slot. Would fail if the applier incremented its notion of
+		 * the active count (or invoked `onApproveTrain`) on the refusal branch — the next
+		 * legitimate admission would then be refused too.
+		 */
+		@Test
+		@DisplayName("a refusal does not consume a slot: the live count is unchanged by it")
+		fun refusalDoesNotConsumeASlot() {
+			liveActiveCount.set(2)
+			correlationMap.newCycle()
+			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
+
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-refused")))
+			applier.onControlStep()
+
+			assertThat(admittedTrains).hasSize(0)
+			assertThat(liveActiveCount.get()).isEqualTo(2)
+		}
+
+		/**
+		 * The refusal is a per-tick verdict against live state, not a permanent rejection of the
+		 * train. Once a train exits and frees a slot, the same command must be admitted.
+		 */
+		@Test
+		@DisplayName("a train refused at full capacity is admitted on a later tick once a slot frees")
+		fun refusedTrainIsAdmittedOnceCapacityFrees() {
+			liveActiveCount.set(2)
+			correlationMap.newCycle()
+			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
+
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-late")))
+			applier.onControlStep()
+			assertThat(admittedTrains).hasSize(0)
+
+			// A train exits; the agent re-issues the same admission on the next tick.
+			liveActiveCount.set(1)
+			correlationMap.newCycle()
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-late")))
+			applier.onControlStep()
+
+			assertThat(admittedTrains).isEqualTo(listOf("T-late"))
+		}
+
+		/**
+		 * Exactly one callback invocation per admitted command — a double invocation would
+		 * double-count the train against the cap and admit one train too few afterwards.
+		 */
+		@Test
+		@DisplayName("onApproveTrain is invoked exactly once per admitted command")
+		fun callbackInvokedOncePerAdmission() {
+			liveActiveCount.set(0)
+			correlationMap.newCycle()
+			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 5)
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ApproveTrain("T-1"),
+					DispatchDecision.ApproveTrain("T-2")
+				)
+			)
+			applier.onControlStep()
+
+			assertThat(admittedTrains).isEqualTo(listOf("T-1", "T-2"))
+			assertThat(liveActiveCount.get()).isEqualTo(2)
+		}
+	}
+
+	// ── FIFO across a mixed admitted/refused batch ────────────────────────────────────────
+
+	@Nested
+	@DisplayName("FIFO ordering across a mixed admitted/refused batch")
+	inner class MixedBatchOrdering {
+		/**
+		 * The agent correlates each `applied_outcomes` entry back to the command it issued, so a
+		 * reordered drain would attribute the refusal to the wrong train. Would fail if the
+		 * applier drained into an unordered collection or published refusals after admissions.
+		 */
+		@Test
+		@DisplayName("outcomes are published in the order the commands were queued")
+		fun outcomesFollowQueueOrder() {
+			liveActiveCount.set(0)
+			correlationMap.newCycle()
+			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ApproveTrain("T-a"),
+					DispatchDecision.ApproveTrain("T-b"),
+					DispatchDecision.ApproveTrain("T-c"),
+					DispatchDecision.ApproveTrain("T-d")
+				)
+			)
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L).map { it as AppliedOutcome.Approved }
+			assertThat(outcomes.map { it.trainId }).isEqualTo(listOf("T-a", "T-b", "T-c", "T-d"))
+			assertThat(outcomes.map { it.admitted }).isEqualTo(listOf(true, true, false, false))
+		}
+
+		@Test
+		@DisplayName("every outcome in a mixed batch carries a distinct command id")
+		fun mixedBatchOutcomesHaveDistinctIds() {
+			liveActiveCount.set(0)
+			correlationMap.newCycle()
+			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 1)
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ApproveTrain("T-a"),
+					DispatchDecision.ApproveTrain("T-b"),
+					DispatchDecision.ApproveTrain("T-c")
+				)
+			)
+			applier.onControlStep()
+
+			val ids = outcomeSink.drainSince(0L).map { it.id }
+			assertThat(ids.toSet()).hasSize(ids.size)
+		}
+
+		/**
+		 * The whole point of the outcome channel: the agent must be able to see, in one
+		 * `applied_outcomes` block, both what got in and what did not.
+		 */
+		@Test
+		@DisplayName("the rendered block shows the admitted and the refused train together")
+		fun mixedBatchRendersBothLines() {
+			liveActiveCount.set(0)
+			correlationMap.newCycle()
+			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 1)
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ApproveTrain("T-in"),
+					DispatchDecision.ApproveTrain("T-out")
+				)
+			)
+			applier.onControlStep()
+
+			val rendered =
+				CompactTextRenderer().render(
+					RenderContext(
+						observation =
+							DispatcherObservation.EMPTY.copy(
+								tick = 2L,
+								appliedOutcomes = outcomeSink.drainSince(0L)
+							),
+						previous = DispatcherObservation.EMPTY,
+						history = emptyList(),
+						workingMemory = WorkingMemory.EMPTY,
+						affordances = listOf(Affordance.NO_OP)
+					)
+				)
+
+			assertThat(rendered.contains("approve_train T-in : ADMITTED")).isTrue()
+			assertThat(rendered.contains("approve_train T-out : REFUSED(CAP_EXCEEDED)")).isTrue()
+		}
+	}
+
+	// ── Double-layer interaction with ShuntingLoop's own cap refusal ──────────────────────
+
+	@Nested
+	@DisplayName("Double-layer: the applier refuses before ShuntingLoop's own cap check is reached")
+	inner class DoubleLayerEnforcement {
+		/**
+		 * `ShuntingLoop.approveQueuedTrain` has its own last-resort cap refusal. With the provider
+		 * wired, that second layer must never be reached — the callback is not entered at all — so
+		 * the refusal is observable through the outcome channel rather than only as a
+		 * `ShuntingLoop` warning the agent can never see.
+		 *
+		 * Would fail if the applier invoked the callback first and let it decide.
+		 */
+		@Test
+		@DisplayName("the onApproveTrain callback is never entered for a refused admission")
+		fun callbackNeverEnteredOnRefusal() {
+			liveActiveCount.set(3)
+			correlationMap.newCycle()
+			val callbackEntries = AtomicInteger(0)
+			val queue = ActuatorCommandQueue(correlationMap = correlationMap)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = { callbackEntries.incrementAndGet() },
+					activeTrainCountProvider = { liveActiveCount.get() },
+					maxConcurrentTrains = 3,
+					correlationMap = correlationMap,
+					outcomeSink = outcomeSink
+				)
+
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-blocked")))
+			applier.onControlStep()
+
+			assertThat(callbackEntries.get()).isEqualTo(0)
+			val refusal = outcomeSink.drainSince(0L)[0] as AppliedOutcome.Approved
+			assertThat(refusal.admitted).isFalse()
+			assertThat(refusal.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
 		}
 	}
 }
