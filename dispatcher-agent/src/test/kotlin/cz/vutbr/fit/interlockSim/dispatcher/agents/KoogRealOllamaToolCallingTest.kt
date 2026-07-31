@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isNotEmpty
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaPrewarmExtension
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -230,5 +232,133 @@ class KoogRealOllamaToolCallingTest {
 		assertThat(decisions).isEmpty()
 		// Not asserting on requestRouteTool specifically or the exact tool count — see KDoc above.
 		assertThat(totalToolCalls.get()).isGreaterThanOrEqualTo(1)
+	}
+
+	/**
+	 * Captures the arguments each `request_route` call carried, so a test can assert on the values
+	 * the model produced rather than only on the fact that it called something.
+	 */
+	private class ArgumentCapturingRequestRouteTool : DomainTool {
+		val calls: MutableList<Map<String, Any?>> = mutableListOf()
+
+		override val name: String = "request_route"
+		override val description: String =
+			"Reserve a route for a named train from one point to another."
+		override val parameters: List<DomainToolParameter> =
+			listOf(
+				DomainToolParameter("train_name", "Name of the train", DomainToolParameterType.String),
+				DomainToolParameter("from_point", "Departure point", DomainToolParameterType.String),
+				DomainToolParameter("to_point", "Destination point", DomainToolParameterType.String)
+			)
+
+		override suspend fun execute(args: Map<String, Any?>): ToolResult {
+			calls.add(args)
+			return ToolResult.Success("queued")
+		}
+	}
+
+	/** Always fails. Used to prove a tool error does not abort the whole cycle. */
+	private class AlwaysFailingTool(
+		override val name: String,
+		private val callCount: AtomicInteger
+	) : DomainTool {
+		override val description: String = "Query network state. May be temporarily unavailable."
+		override val parameters: List<DomainToolParameter> = emptyList()
+
+		override suspend fun execute(args: Map<String, Any?>): ToolResult {
+			callCount.incrementAndGet()
+			return ToolResult.Error("sensor temporarily unavailable")
+		}
+	}
+
+	/**
+	 * The existing tests only count invocations, so a model that called `request_route` with
+	 * nonsense arguments would still pass them. Production actuation depends on the *values*: a
+	 * wrong `train_name` reserves a route for the wrong train.
+	 *
+	 * The assertion is deliberately on `train_name` only — the model reliably echoes the entity
+	 * name it was told to act on, whereas point naming is more prone to paraphrase and is an
+	 * orthogonal prompt-compliance question (see #566 §7's benchmark harness).
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `request_route arguments carry the train name from the prompt`() {
+		val tool = ArgumentCapturingRequestRouteTool()
+		val config = OllamaExecutorConfig.forLocalTesting()
+		val service = DefaultAgentService(OllamaSimpleExecutor(config), config)
+
+		val systemPrompt =
+			"You are a railway dispatcher test harness. Exactly one queued train, named T-42, " +
+				"must travel from point A to point B. Call the request_route tool with " +
+				"train_name=T-42, from_point=A, to_point=B, then reply with one short sentence."
+
+		runBlocking {
+			withTimeout(testTimeoutMillis) {
+				service
+					.createDispatchAgent(
+						modelName = config.modelName,
+						tools = listOf(tool),
+						systemPrompt = systemPrompt
+					).decideAsync(
+						DispatchObservation(
+							snapshot = SimulationSnapshot.EMPTY,
+							unapprovedTrains = listOf(QueuedTrainObservation("T-42", "B")),
+							innerBlockInputs = emptyList(),
+							outerBlockInputs = emptyList()
+						)
+					)
+			}
+		}
+
+		assertThat(tool.calls).isNotEmpty()
+		assertThat(tool.calls.any { it["train_name"]?.toString()?.contains("T-42") == true }).isTrue()
+	}
+
+	/**
+	 * A perception tool can legitimately fail at runtime (a sensor port throwing, an unknown
+	 * entity). [ToolResult.Error] is the modelled way to say so, and it must be surfaced to the
+	 * model as a tool-error result rather than propagating out of `decideAsync` — otherwise one
+	 * transient sensor failure would abort the whole dispatch cycle and trip the rule-based
+	 * fallback.
+	 *
+	 * Would fail if `KoogToolAdapter` started rethrowing `ToolResult.Error` instead of marshalling
+	 * it into a tool result.
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `a failing tool does not abort the dispatch cycle`() {
+		val failureCount = AtomicInteger(0)
+		val failingTool = AlwaysFailingTool("all_block_occupancies", failureCount)
+		val requestRouteTool = FakeRequestRouteTool()
+		val config = OllamaExecutorConfig.forLocalTesting()
+		val service = DefaultAgentService(OllamaSimpleExecutor(config), config)
+
+		val systemPrompt =
+			"You are a railway dispatcher test harness. First call all_block_occupancies to read " +
+				"the network. Then, regardless of its result, call request_route with " +
+				"train_name=T1, from_point=A, to_point=B, and reply with one short sentence."
+
+		val decisions =
+			runBlocking {
+				withTimeout(testTimeoutMillis) {
+					service
+						.createDispatchAgent(
+							modelName = config.modelName,
+							tools = listOf(failingTool, requestRouteTool),
+							systemPrompt = systemPrompt
+						).decideAsync(
+							DispatchObservation(
+								snapshot = SimulationSnapshot.EMPTY,
+								unapprovedTrains = listOf(QueuedTrainObservation("T1", "B")),
+								innerBlockInputs = emptyList(),
+								outerBlockInputs = emptyList()
+							)
+						)
+				}
+			}
+
+		// The cycle completed: no exception escaped decideAsync despite the tool error.
+		assertThat(decisions).isEmpty()
+		assertThat(failureCount.get()).isGreaterThanOrEqualTo(1)
 	}
 }

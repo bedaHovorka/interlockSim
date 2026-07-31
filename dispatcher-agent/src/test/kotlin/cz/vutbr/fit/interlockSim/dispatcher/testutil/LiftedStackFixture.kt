@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
@@ -83,10 +84,16 @@ class LiftedStackFixture(
 	 * they are buffered and flushed onto the live services at [DefaultSimulationContext.run]
 	 * time, so registering them earlier in the test is the correct and only ordering that
 	 * makes them live for the whole run.
+	 *
+	 * @param plannerFactory Builds the [DispatcherPlanner] this run drives, given the shared
+	 *   [ActuatorCommandQueue]. Defaults to the [RuleBasedPlanAdapter] both pre-existing gates
+	 *   use, so their behaviour is unchanged. Issue #814's regression tests substitute scripted
+	 *   planners here to reproduce specific LLM misbehaviours against a real simulation.
 	 */
 	fun run(
 		loop: ShuntingLoop,
-		context: DefaultSimulationContext
+		context: DefaultSimulationContext,
+		plannerFactory: (ActuatorCommandQueue) -> DispatcherPlanner = { RuleBasedPlanAdapter(RuleBasedDispatcher()) }
 	): RunResult {
 		// Wire the full lifted stack — same components as production.
 		val perceptionPort =
@@ -96,8 +103,11 @@ class LiftedStackFixture(
 			)
 		val actuatorPort = DefaultNetworkActuatorPort(env = context)
 		val queue = ActuatorCommandQueue()
-		val dispatcher = RuleBasedDispatcher()
-		val planner = RuleBasedPlanAdapter(dispatcher)
+		// Default: the rule-based planner both existing gates use. Issue #814's regression tests
+		// pass a scripted planner instead so they can reproduce specific LLM misbehaviours
+		// deterministically; the queue is handed in because a planner that models the SP2b.9
+		// admission safety net posts to it directly, exactly as KoogAgentPlanAdapter does.
+		val planner = plannerFactory(queue)
 		val applier =
 			DispatchDecisionApplier(
 				queue = queue,
