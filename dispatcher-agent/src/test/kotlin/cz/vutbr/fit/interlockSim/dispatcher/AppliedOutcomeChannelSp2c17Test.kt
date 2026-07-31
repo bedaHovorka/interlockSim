@@ -11,9 +11,13 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.Affordance
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CompactTextRenderer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.RenderContext
@@ -23,6 +27,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatcherMode
+import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -442,6 +448,160 @@ class AppliedOutcomeChannelSp2c17Test {
 			assertThat(rendered).contains("  request_route T-087 -> InOut-B : RESERVED\n")
 			assertThat(rendered).contains("  request_route T-091 -> InOut-B : CONFLICTED (W2 held by T-087)\n")
 			assertThat(rendered).contains("  approve_train T-102 : ADMITTED\n")
+		}
+	}
+
+	// ── AC: request_route NoRoute (7th subtype coverage) ──────────────────────
+
+	@Nested
+	@DisplayName("request_route NoRoute correlation (AC — covers the 7th AppliedOutcome subtype)")
+	inner class RequestRouteNoRoute {
+		@Test
+		@DisplayName(
+			"request_route that yields NoRouteExists appears as NO_ROUTE correlated to the right train and endpoints"
+		)
+		fun requestRouteNoRouteAppearsAsNoRoute() {
+			every {
+				networkActuator.requestRoute("T-087", "zA", "InOut-B")
+			} returns RouteRequestResult.NoRouteExists(fromEndpointName = "zA", toEndpointName = "InOut-B")
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L)
+			assertThat(outcomes).hasSize(1)
+			val outcome = outcomes[0]
+			assertThat(outcome).isInstanceOf(AppliedOutcome.NoRoute::class)
+			outcome as AppliedOutcome.NoRoute
+			assertThat(outcome.trainId).isEqualTo("T-087")
+			assertThat(outcome.fromEndpointName).isEqualTo("zA")
+			assertThat(outcome.toEndpointName).isEqualTo("InOut-B")
+		}
+
+		@Test
+		@DisplayName("NoRoute outcome renders as NO_ROUTE in the next tick's prompt section")
+		fun noRouteRenderedInPrompt() {
+			every {
+				networkActuator.requestRoute("T-087", "zA", "InOut-B")
+			} returns RouteRequestResult.NoRouteExists(fromEndpointName = "zA", toEndpointName = "InOut-B")
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L)
+			val observation = DispatcherObservation.EMPTY.copy(appliedOutcomes = outcomes)
+			val ctx = buildRenderContext(observation)
+			val rendered = CompactTextRenderer().render(ctx)
+
+			assertThat(rendered).contains("request_route T-087 -> InOut-B : NO_ROUTE")
+		}
+	}
+
+	// ── AC: ring-buffer overflow eviction ─────────────────────────────────────
+
+	@Nested
+	@DisplayName("AppliedOutcomeChannel ring-buffer overflow (AC — 512-cap silent drop is observable)")
+	inner class RingBufferOverflow {
+		@Test
+		@DisplayName("publish beyond ringCapacity evicts the oldest; drain returns only the newest outcomes")
+		fun overflowEvictsOldest() {
+			val sink = AppliedOutcomeChannel(ringCapacity = 3)
+			// Publish 4 outcomes; capacity 3 -> the oldest (id=1) is evicted.
+			sink.publish(approved(1L))
+			sink.publish(approved(2L))
+			sink.publish(approved(3L))
+			sink.publish(approved(4L))
+
+			val drained = sink.drainSince(0L)
+			assertThat(drained).hasSize(3)
+			val ids = drained.map { (it as AppliedOutcome.Approved).id.value }
+			assertThat(ids).containsExactly(2L, 3L, 4L)
+			// The ring is empty after a full drain.
+			assertThat(sink.drainSince(0L)).isEmpty()
+		}
+
+		private fun approved(id: Long): AppliedOutcome.Approved =
+			AppliedOutcome.Approved(
+				trainId = "T-x",
+				admitted = true,
+				id = CommandId(id),
+				tickIndex = 0L
+			)
+	}
+
+	// ── AC: CommandCorrelationMap eviction-on-read ────────────────────────────
+
+	@Nested
+	@DisplayName("CommandCorrelationMap correlate eviction-on-read (AC)")
+	inner class CommandCorrelationMapEviction {
+		@Test
+		@DisplayName(
+			"correlate evicts the entry — a second correlate of the same decision returns null and bumps unattributedApplies"
+		)
+		fun correlateEvictsOnRead() {
+			val map = CommandCorrelationMap()
+			val decision = DispatchDecision.RequestRoute("T-1", "zA", "InOut-B")
+			map.register(listOf(decision))
+
+			val first = map.correlate(decision)
+			assertThat(first).isNotNull()
+			assertThat(map.unattributedApplies).isEqualTo(0L)
+
+			val second = map.correlate(decision)
+			assertThat(second).isNull()
+			assertThat(map.unattributedApplies).isEqualTo(1L)
+		}
+
+		@Test
+		@DisplayName("size() reflects registered entries and decreases as they are correlated")
+		fun sizeTracksRegisteredEntries() {
+			val map = CommandCorrelationMap()
+			val d1 = DispatchDecision.RequestRoute("T-1", "zA", "InOut-B")
+			val d2 = DispatchDecision.ReleaseRoute("T-2")
+			map.register(listOf(d1, d2))
+			assertThat(map.size()).isEqualTo(2)
+
+			map.correlate(d1)
+			assertThat(map.size()).isEqualTo(1)
+		}
+	}
+
+	// ── AC: mode gating × outcomes ────────────────────────────────────────────
+
+	@Nested
+	@DisplayName("mode gating × outcomes (AC — dropped decisions publish no outcome)")
+	inner class ModeGatingAndOutcomes {
+		@Test
+		@DisplayName("under DispatcherMode.MANUAL a request_route is dropped and no outcome is published")
+		fun manualModeDropsDecisionAndPublishesNoOutcome() {
+			every {
+				networkActuator.requestRoute(any(), any(), any())
+			} returns RouteRequestResult.Reserved("T-087", blocksCount = 1)
+
+			val manualState = DispatcherModeState(defaultMode = DispatcherMode.MANUAL)
+			val queue = ActuatorCommandQueue(correlationMap = correlationMap)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = { },
+					correlationMap = correlationMap,
+					outcomeSink = outcomeSink,
+					modeState = manualState
+				)
+
+			correlationMap.newCycle()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			applier.onControlStep()
+
+			// The actuator must not have fired under MANUAL ...
+			assertThat(outcomeSink.drainSince(0L)).isEmpty()
+			// ... and the decision was still drained/correlated, so unattributedApplies stays 0.
+			assertThat(correlationMap.unattributedApplies).isEqualTo(0L)
 		}
 	}
 

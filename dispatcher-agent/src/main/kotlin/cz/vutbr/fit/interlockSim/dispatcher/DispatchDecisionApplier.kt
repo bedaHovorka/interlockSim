@@ -636,38 +636,6 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * SP2c.17 (#840): Returns the tool name for this decision type, used in
-	 * [AppliedOutcome.DroppedInvalid.commandType] to identify which tool was attempted.
-	 */
-	private fun DispatchDecision.commandTypeName(): String =
-		when (this) {
-			is DispatchDecision.RequestRoute -> "request_route"
-			is DispatchDecision.ReleaseRoute -> "release_route"
-			is DispatchDecision.ApproveTrain -> "approve_train"
-			is DispatchDecision.ReservePath -> "reserve_path"
-			is DispatchDecision.HoldTrain -> "hold_train"
-			is DispatchDecision.SetSignalAspect -> "set_signal_aspect"
-			is DispatchDecision.SetSwitchPosition -> "set_switch_position"
-			DispatchDecision.NoAction -> "no_action"
-		}
-
-	/**
-	 * SP2c.17 (#840): Returns the train identifier carried by this decision, or an empty
-	 * string when no train identifier is applicable (e.g. [DispatchDecision.NoAction]).
-	 */
-	private fun DispatchDecision.extractTrainId(): String =
-		when (this) {
-			is DispatchDecision.RequestRoute -> trainName
-			is DispatchDecision.ReleaseRoute -> trainName
-			is DispatchDecision.ApproveTrain -> trainId
-			is DispatchDecision.ReservePath -> trainId
-			is DispatchDecision.HoldTrain -> trainId
-			is DispatchDecision.SetSignalAspect -> ""
-			is DispatchDecision.SetSwitchPosition -> ""
-			DispatchDecision.NoAction -> ""
-		}
-
-	/**
 	 * Applies [decision] via [trainLifecyclePort].
 	 *
 	 * Instructs the named train to hold in place for [DispatchDecision.HoldTrain.holdDurationSeconds]
@@ -701,3 +669,42 @@ class DispatchDecisionApplier(
 		}
 	}
 }
+
+/**
+ * SP2c.17 (#840): Returns the tool name for this decision type, used in
+ * [AppliedOutcome.DroppedInvalid.commandType] to identify which tool was attempted.
+ *
+ * Top-level `internal` so exhaustive-branch coverage can be asserted directly by tests
+ * without constructing a [DispatchDecisionApplier] — the function is a pure projection of
+ * the sealed [DispatchDecision] type and references no applier state.
+ */
+internal fun DispatchDecision.commandTypeName(): String =
+	when (this) {
+		is DispatchDecision.RequestRoute -> "request_route"
+		is DispatchDecision.ReleaseRoute -> "release_route"
+		is DispatchDecision.ApproveTrain -> "approve_train"
+		is DispatchDecision.ReservePath -> "reserve_path"
+		is DispatchDecision.HoldTrain -> "hold_train"
+		is DispatchDecision.SetSignalAspect -> "set_signal_aspect"
+		is DispatchDecision.SetSwitchPosition -> "set_switch_position"
+		DispatchDecision.NoAction -> "no_action"
+	}
+
+/**
+ * SP2c.17 (#840): Returns the train identifier carried by this decision, or an empty
+ * string when no train identifier is applicable (e.g. [DispatchDecision.NoAction]).
+ *
+ * Top-level `internal` for the same reason as [commandTypeName] — pure projection, no
+ * applier state, exhaustively testable.
+ */
+internal fun DispatchDecision.extractTrainId(): String =
+	when (this) {
+		is DispatchDecision.RequestRoute -> trainName
+		is DispatchDecision.ReleaseRoute -> trainName
+		is DispatchDecision.ApproveTrain -> trainId
+		is DispatchDecision.ReservePath -> trainId
+		is DispatchDecision.HoldTrain -> trainId
+		is DispatchDecision.SetSignalAspect -> ""
+		is DispatchDecision.SetSwitchPosition -> ""
+		DispatchDecision.NoAction -> ""
+	}

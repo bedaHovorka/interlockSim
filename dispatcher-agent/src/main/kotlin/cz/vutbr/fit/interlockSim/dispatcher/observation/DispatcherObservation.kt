@@ -168,12 +168,14 @@ data class QueuedTrainView(
  * connect "I issued `request_route T-087 -> InOut-B`" to "that request was CONFLICTED because
  * block W2 is held by T-042".
  *
- * ## ThreadIndex attribution
+ * ## tickIndex attribution
  *
  * [tickIndex] is the [CommandCorrelationMap.newCycle] cycle counter value at the time the
- * command was posted. [DispatcherObservationProjector] drains outcomes whose
- * [tickIndex] ≥ `currentTick − 1`, so late arrivals from the immediately previous cycle
- * are never silently dropped.
+ * command was posted — a diagnostic stamp of the originating driver cycle. It is **not** used
+ * by [DispatcherObservationProjector] to filter draining: next-tick semantics come from the
+ * call order in `ShuntingLoop.iteration()` (capture runs before the control step that publishes
+ * new outcomes), so the projector drains the whole ring each tick. [tickIndex] remains
+ * available for consumers to detect gaps via [CommandId] discontinuities.
  *
  * @property id Correlation key issued at queue-post time.
  * @property tickIndex Driver-thread cycle counter value at the time the command was posted.

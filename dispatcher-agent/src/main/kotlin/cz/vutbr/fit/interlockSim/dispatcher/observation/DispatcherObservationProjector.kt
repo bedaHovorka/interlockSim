@@ -138,10 +138,15 @@ class DispatcherObservationProjector(
 		// queued/waiting train, which buildQueuedViews then reads.
 		val trains = buildTrainViews(snapshot, dispatchSnapshot)
 
-		// SP2c.17 (#840): drain all outcomes whose tickIndex >= previous tick so no late
-		// arrivals are silently lost. tickCounter was incremented before this call, so
-		// `tick - 1` targets the control step that ran just before this capture.
-		val appliedOutcomes = outcomeFeed?.drainSince(tick - 1) ?: emptyList()
+		// SP2c.17 (#840): drain every outcome published since the previous capture. Next-tick
+		// semantics come from call order, NOT a tickIndex filter: ShuntingLoop.iteration() runs
+		// this capture BEFORE the control step that publishes new outcomes, so at drain time the
+		// ring holds only outcomes from previous control steps. A tickIndex-based filter would be
+		// unsound here — AppliedOutcome.tickIndex is the driver-cycle counter while `tick` is the
+		// projector's sim-tick counter, two independent domains; if the sim tick outpaced the
+		// driver cycle the filter would strand outcomes until silent 512-cap eviction. Draining
+		// all (fromTickIndex = 0L) avoids that bug.
+		val appliedOutcomes = outcomeFeed?.drainSince(0L) ?: emptyList()
 
 		return DispatcherObservation(
 			tick = tick,

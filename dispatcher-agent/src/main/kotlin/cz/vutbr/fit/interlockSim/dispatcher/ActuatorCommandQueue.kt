@@ -99,17 +99,20 @@ class ActuatorCommandQueue(
 				if (size.get() + decisions.size > capacity) {
 					return false
 				}
+				// SP2c.17 (#840): register by reference identity BEFORE the queue insert so the
+				// sim thread can never drain a decision before its correlation entry exists. A
+				// post-then-register window would make correlate() return null on the sim thread
+				// and silently drop the outcome — the exact bug class SP2c.17 exists to eliminate.
+				correlationMap?.register(decisions)
 				size.addAndGet(decisions.size)
 				queue.addAll(decisions)
 			}
 		} else {
+			// Same register-before-publish ordering as the bounded branch (see comment above).
+			correlationMap?.register(decisions)
 			size.addAndGet(decisions.size)
 			queue.addAll(decisions)
 		}
-		// SP2c.17 (#840): register each posted decision by reference identity so the applier
-		// can correlate applied outcomes back to the originating agent cycle. Called after the
-		// queue insert so the sim thread cannot drain a decision before its entry is registered.
-		correlationMap?.register(decisions)
 		// One successful post of non-empty decisions == one actuator-tool actuation this cycle.
 		// Counted here (not in [size]) so a concurrent [drain] on the sim thread cannot erase it.
 		cycleActuatorPostCount.incrementAndGet()
