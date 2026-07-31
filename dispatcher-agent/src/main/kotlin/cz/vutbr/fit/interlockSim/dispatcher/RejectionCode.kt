@@ -27,7 +27,6 @@ package cz.vutbr.fit.interlockSim.dispatcher
  * @since Issue #826 (SP2c.3 — Goal 10)
  */
 enum class RejectionCode {
-
 	// ── Shape / identity ─────────────────────────────────────────────────────
 
 	/** `trainId` was not found in the current [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation]. */
@@ -171,5 +170,5 @@ enum class RejectionCode {
 	 * The batch already contains [ActionValidator.maxActionsPerTick] valid (non-[DispatchAction.NoOp])
 	 * actions; this action would exceed the per-tick limit.
 	 */
-	ACTION_LIMIT_EXCEEDED,
+	ACTION_LIMIT_EXCEEDED
 }

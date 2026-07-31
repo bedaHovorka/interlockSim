@@ -39,10 +39,11 @@ import org.junit.jupiter.api.Test
 @Tag("integration-test")
 @DisplayName("ActionValidator integration — rejected actions must not reach ActuatorCommandQueue (SP2c.3 #826)")
 class ActionValidatorQueueGatingIntegrationTest {
-	private val validator = ActionValidator(
-		validEndpointNames = setOf("A", "B", "C"),
-		blockIds = setOf("kA", "kB", "kC"),
-	)
+	private val validator =
+		ActionValidator(
+			validEndpointNames = setOf("A", "B", "C"),
+			blockIds = setOf("kA", "kB", "kC")
+		)
 
 	/** A spy wrapping a real [ActuatorCommandQueue] so we can verify `postAll` calls. */
 	private val queue = spyk(ActuatorCommandQueue())
@@ -56,7 +57,7 @@ class ActionValidatorQueueGatingIntegrationTest {
 	 */
 	private fun validateAndMaybePost(
 		action: DispatchAction,
-		observation: DispatcherObservation,
+		observation: DispatcherObservation
 	): ValidationVerdict {
 		val verdict = validator.validate(action, observation)
 		if (verdict is ValidationVerdict.Valid) {
@@ -72,40 +73,44 @@ class ActionValidatorQueueGatingIntegrationTest {
 	@Test
 	@DisplayName("ROUTE_ALREADY_HELD_TO_SAME_TARGET: postAll is NOT called for the rejected action")
 	fun routeAlreadyHeldRejectedBeforeQueuePost() {
-		val observation = DispatcherObservation(
-			tick = 10L,
-			simTime = 60.0,
-			trains = listOf(
-				TrainView(
-					trainId = "T1",
-					phase = TrainPhase.RUNNING,
-					frontSectionName = "kA",
-					velocityMps = 3.0,
-					accelerationMps2 = 0.0,
-					destinationInOutName = "B",
-					signalAheadName = null,
-					signalAheadAspect = null,
-					distanceToSignalAheadMetres = 0.0,
-					waitingSinceSimTime = null,
-					waitSeconds = 0.0,
-				)
-			),
-			blocks = emptyList(),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = listOf(
-				ReservationView(trainId = "T1", fromEndpointName = "A", targetName = "B", blockIds = listOf("kA"))
-			),
-			queued = emptyList(),
-			activeCount = 1,
-			capacity = 2,
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 10L,
+				simTime = 60.0,
+				trains =
+					listOf(
+						TrainView(
+							trainId = "T1",
+							phase = TrainPhase.RUNNING,
+							frontSectionName = "kA",
+							velocityMps = 3.0,
+							accelerationMps2 = 0.0,
+							destinationInOutName = "B",
+							signalAheadName = null,
+							signalAheadAspect = null,
+							distanceToSignalAheadMetres = 0.0,
+							waitingSinceSimTime = null,
+							waitSeconds = 0.0
+						)
+					),
+				blocks = emptyList(),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations =
+					listOf(
+						ReservationView(trainId = "T1", fromEndpointName = "A", targetName = "B", blockIds = listOf("kA"))
+					),
+				queued = emptyList(),
+				activeCount = 1,
+				capacity = 2,
+				appliedOutcomes = emptyList()
+			)
 
-		val verdict = validateAndMaybePost(
-			DispatchAction.RequestRoute("T1", "A", "B"),
-			observation,
-		)
+		val verdict =
+			validateAndMaybePost(
+				DispatchAction.RequestRoute("T1", "A", "B"),
+				observation
+			)
 
 		assertThat(verdict).isInstanceOf(ValidationVerdict.Rejected::class)
 		assertThat((verdict as ValidationVerdict.Rejected).code)
@@ -117,19 +122,20 @@ class ActionValidatorQueueGatingIntegrationTest {
 	@Test
 	@DisplayName("CAPACITY_FULL (approve_train): postAll is NOT called for the rejected action")
 	fun capacityFullRejectedBeforeQueuePost() {
-		val observation = DispatcherObservation(
-			tick = 11L,
-			simTime = 61.0,
-			trains = emptyList(),
-			blocks = emptyList(),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = emptyList(),
-			queued = listOf(QueuedTrainView("T1", "B", 1.0)),
-			activeCount = 2,
-			capacity = 2, // at capacity
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 11L,
+				simTime = 61.0,
+				trains = emptyList(),
+				blocks = emptyList(),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations = emptyList(),
+				queued = listOf(QueuedTrainView("T1", "B", 1.0)),
+				activeCount = 2,
+				capacity = 2, // at capacity
+				appliedOutcomes = emptyList()
+			)
 
 		val verdict = validateAndMaybePost(DispatchAction.ApproveTrain("T1"), observation)
 
@@ -142,19 +148,20 @@ class ActionValidatorQueueGatingIntegrationTest {
 	@Test
 	@DisplayName("valid ApproveTrain: postAll IS called exactly once")
 	fun validApproveTrainPostsToQueue() {
-		val observation = DispatcherObservation(
-			tick = 12L,
-			simTime = 62.0,
-			trains = emptyList(),
-			blocks = emptyList(),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = emptyList(),
-			queued = listOf(QueuedTrainView("T1", "B", 1.0)),
-			activeCount = 0,
-			capacity = 2,
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 12L,
+				simTime = 62.0,
+				trains = emptyList(),
+				blocks = emptyList(),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations = emptyList(),
+				queued = listOf(QueuedTrainView("T1", "B", 1.0)),
+				activeCount = 0,
+				capacity = 2,
+				appliedOutcomes = emptyList()
+			)
 
 		val verdict = validateAndMaybePost(DispatchAction.ApproveTrain("T1"), observation)
 
@@ -170,7 +177,7 @@ class ActionValidatorQueueGatingIntegrationTest {
 		listOf(
 			DispatchAction.ApproveTrain("Ghost"),
 			DispatchAction.RequestRoute("Ghost", "A", "B"),
-			DispatchAction.CancelRoute("Ghost"),
+			DispatchAction.CancelRoute("Ghost")
 		).forEach { action ->
 			val verdict = validateAndMaybePost(action, emptyObservation)
 			assertThat(verdict, name = "verdict for ${action.kind}").isInstanceOf(ValidationVerdict.Rejected::class)

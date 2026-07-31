@@ -10,7 +10,9 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+import cz.vutbr.fit.interlockSim.dispatcher.observation.QueuedTrainView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
+import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 
 /**
@@ -65,7 +67,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 class ActionValidator(
 	val validEndpointNames: Set<String>,
 	val blockIds: Set<String>,
-	val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK,
+	val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK
 ) {
 	companion object {
 		/** Default per-tick action limit used when [maxActionsPerTick] is not specified. */
@@ -83,7 +85,10 @@ class ActionValidator(
 	 * [RejectionCode.ACTION_LIMIT_EXCEEDED]) are never produced by this method — use
 	 * [validateBatch] to apply those checks.
 	 */
-	fun validate(action: DispatchAction, observation: DispatcherObservation): ValidationVerdict =
+	fun validate(
+		action: DispatchAction,
+		observation: DispatcherObservation
+	): ValidationVerdict =
 		when (action) {
 			is DispatchAction.ApproveTrain -> validateApproveTrain(action, observation)
 			is DispatchAction.RequestRoute -> validateRequestRoute(action, observation)
@@ -114,39 +119,40 @@ class ActionValidator(
 	 */
 	fun validateBatch(
 		actions: List<DispatchAction>,
-		observation: DispatcherObservation,
+		observation: DispatcherObservation
 	): List<Pair<DispatchAction, ValidationVerdict>> {
 		val seenActions = mutableSetOf<DispatchAction>()
 		var validCount = 0
 
 		return actions.map { action ->
-			val verdict = when {
-				action is DispatchAction.NoOp -> ValidationVerdict.Valid
+			val verdict =
+				when {
+					action is DispatchAction.NoOp -> ValidationVerdict.Valid
 
-				action in seenActions ->
-					ValidationVerdict.Rejected(
-						RejectionCode.DUPLICATE_ACTION_THIS_TICK,
-						"Duplicate action in this tick: ${action.kind}",
-					)
+					action in seenActions ->
+						ValidationVerdict.Rejected(
+							RejectionCode.DUPLICATE_ACTION_THIS_TICK,
+							"Duplicate action in this tick: ${action.kind}"
+						)
 
-				else -> {
-					seenActions.add(action)
-					val individual = validate(action, observation)
-					if (individual is ValidationVerdict.Valid) {
-						if (validCount >= maxActionsPerTick) {
-							ValidationVerdict.Rejected(
-								RejectionCode.ACTION_LIMIT_EXCEEDED,
-								"Per-tick action limit ($maxActionsPerTick) exceeded; drop non-essential actions",
-							)
+					else -> {
+						seenActions.add(action)
+						val individual = validate(action, observation)
+						if (individual is ValidationVerdict.Valid) {
+							if (validCount >= maxActionsPerTick) {
+								ValidationVerdict.Rejected(
+									RejectionCode.ACTION_LIMIT_EXCEEDED,
+									"Per-tick action limit ($maxActionsPerTick) exceeded; drop non-essential actions"
+								)
+							} else {
+								validCount++
+								ValidationVerdict.Valid
+							}
 						} else {
-							validCount++
-							ValidationVerdict.Valid
+							individual
 						}
-					} else {
-						individual
 					}
 				}
-			}
 			action to verdict
 		}
 	}
@@ -155,7 +161,7 @@ class ActionValidator(
 
 	private fun validateApproveTrain(
 		action: DispatchAction.ApproveTrain,
-		observation: DispatcherObservation,
+		observation: DispatcherObservation
 	): ValidationVerdict {
 		if (action.trainId.isBlank()) {
 			return rejected(RejectionCode.BLANK_ARGUMENT, "trainId must not be blank")
@@ -171,7 +177,7 @@ class ActionValidator(
 		if (trainInList != null && trainInList.phase == TrainPhase.EXITED) {
 			return rejected(
 				RejectionCode.TRAIN_ALREADY_EXITED,
-				"Train '${action.trainId}' has already exited the network",
+				"Train '${action.trainId}' has already exited the network"
 			)
 		}
 
@@ -180,21 +186,21 @@ class ActionValidator(
 		) {
 			return rejected(
 				RejectionCode.TRAIN_ALREADY_ACTIVE,
-				"Train '${action.trainId}' is already active (phase: ${trainInList.phase})",
+				"Train '${action.trainId}' is already active (phase: ${trainInList.phase})"
 			)
 		}
 
 		if (trainInQueue == null) {
 			return rejected(
 				RejectionCode.TRAIN_NOT_QUEUED,
-				"Train '${action.trainId}' is not in the admission queue",
+				"Train '${action.trainId}' is not in the admission queue"
 			)
 		}
 
 		if (observation.activeCount >= observation.capacity) {
 			return rejected(
 				RejectionCode.CAPACITY_FULL,
-				"Station at capacity: ${observation.activeCount} of ${observation.capacity} active trains",
+				"Station at capacity: ${observation.activeCount} of ${observation.capacity} active trains"
 			)
 		}
 
@@ -203,14 +209,28 @@ class ActionValidator(
 
 	private fun validateRequestRoute(
 		action: DispatchAction.RequestRoute,
-		observation: DispatcherObservation,
+		observation: DispatcherObservation
 	): ValidationVerdict {
-		// ── Argument shape ────────────────────────────────────────────────────
+		validateRequestRouteArguments(action)?.let { return it }
 
+		val trainInList = observation.trains.find { it.trainId == action.trainId }
+		val trainInQueue = observation.queued.find { it.trainId == action.trainId }
+
+		validateRequestRouteTrainPhase(action, trainInList, trainInQueue)?.let { return it }
+		validateRequestRouteConflict(action, observation)?.let { return it }
+		validateRequestRouteDestinationAndOrigin(action, trainInList)?.let { return it }
+		validateRequestRoutePathAvailability(action, observation)?.let { return it }
+
+		return ValidationVerdict.Valid
+	}
+
+	// ── validateRequestRoute helpers (split out to keep cyclomatic complexity under threshold) ──
+
+	private fun validateRequestRouteArguments(action: DispatchAction.RequestRoute): ValidationVerdict.Rejected? {
 		if (action.trainId.isBlank() || action.fromEndpointName.isBlank() || action.toEndpointName.isBlank()) {
 			return rejected(
 				RejectionCode.BLANK_ARGUMENT,
-				"All three arguments (trainId, fromEndpointName, toEndpointName) must be non-blank",
+				"All three arguments (trainId, fromEndpointName, toEndpointName) must be non-blank"
 			)
 		}
 
@@ -220,7 +240,7 @@ class ActionValidator(
 			return rejected(
 				RejectionCode.ENDPOINT_IS_BLOCK_ID,
 				"'$offender' is a block ID, not an InOut or Signal name — " +
-					"valid endpoint names: ${validEndpointNames.sorted().joinToString(", ")}",
+					"valid endpoint names: ${validEndpointNames.sorted().joinToString(", ")}"
 			)
 		}
 
@@ -229,15 +249,18 @@ class ActionValidator(
 				if (action.fromEndpointName !in validEndpointNames) action.fromEndpointName else action.toEndpointName
 			return rejected(
 				RejectionCode.UNKNOWN_ENDPOINT,
-				"Unknown endpoint '$offender' — valid names: ${validEndpointNames.sorted().joinToString(", ")}",
+				"Unknown endpoint '$offender' — valid names: ${validEndpointNames.sorted().joinToString(", ")}"
 			)
 		}
 
-		// ── Train identity and phase ───────────────────────────────────────────
+		return null
+	}
 
-		val trainInList = observation.trains.find { it.trainId == action.trainId }
-		val trainInQueue = observation.queued.find { it.trainId == action.trainId }
-
+	private fun validateRequestRouteTrainPhase(
+		action: DispatchAction.RequestRoute,
+		trainInList: TrainView?,
+		trainInQueue: QueuedTrainView?
+	): ValidationVerdict.Rejected? {
 		if (trainInList == null && trainInQueue == null) {
 			return rejected(RejectionCode.UNKNOWN_TRAIN, "Unknown train '${action.trainId}'")
 		}
@@ -245,48 +268,54 @@ class ActionValidator(
 		if (trainInList != null && trainInList.phase == TrainPhase.EXITED) {
 			return rejected(
 				RejectionCode.TRAIN_ALREADY_EXITED,
-				"Train '${action.trainId}' has already exited; cannot request a route",
+				"Train '${action.trainId}' has already exited; cannot request a route"
 			)
 		}
 
 		if (trainInList != null && trainInList.phase == TrainPhase.QUEUED || trainInQueue != null && trainInList == null) {
 			return rejected(
 				RejectionCode.TRAIN_NOT_ADMITTED,
-				"Train '${action.trainId}' has not been admitted yet (still queued)",
+				"Train '${action.trainId}' has not been admitted yet (still queued)"
 			)
 		}
 
-		// ── Reservation conflict (#814 Symptom 3) ─────────────────────────────
+		return null
+	}
 
-		val existingReservation = observation.reservations.find { it.trainId == action.trainId }
-		if (existingReservation != null) {
-			return if (existingReservation.targetName == action.toEndpointName) {
-				rejected(
-					RejectionCode.ROUTE_ALREADY_HELD_TO_SAME_TARGET,
-					"Train '${action.trainId}' already holds a route to '${action.toEndpointName}' " +
-						"(blocks: ${existingReservation.blockIds.joinToString(",")})",
-				)
-			} else {
-				rejected(
-					RejectionCode.ROUTE_HELD_TO_DIFFERENT_TARGET,
-					"Train '${action.trainId}' holds a route to '${existingReservation.targetName}'; " +
-						"issue cancel_route first before requesting a new route to '${action.toEndpointName}'",
-				)
-			}
+	private fun validateRequestRouteConflict(
+		action: DispatchAction.RequestRoute,
+		observation: DispatcherObservation
+	): ValidationVerdict.Rejected? {
+		val existingReservation =
+			observation.reservations.find { it.trainId == action.trainId } ?: return null
+
+		return if (existingReservation.targetName == action.toEndpointName) {
+			rejected(
+				RejectionCode.ROUTE_ALREADY_HELD_TO_SAME_TARGET,
+				"Train '${action.trainId}' already holds a route to '${action.toEndpointName}' " +
+					"(blocks: ${existingReservation.blockIds.joinToString(",")})"
+			)
+		} else {
+			rejected(
+				RejectionCode.ROUTE_HELD_TO_DIFFERENT_TARGET,
+				"Train '${action.trainId}' holds a route to '${existingReservation.targetName}'; " +
+					"issue cancel_route first before requesting a new route to '${action.toEndpointName}'"
+			)
 		}
+	}
 
-		// ── Destination match ─────────────────────────────────────────────────
-
+	private fun validateRequestRouteDestinationAndOrigin(
+		action: DispatchAction.RequestRoute,
+		trainInList: TrainView?
+	): ValidationVerdict.Rejected? {
 		if (trainInList != null && action.toEndpointName != trainInList.destinationInOutName) {
 			return rejected(
 				RejectionCode.TARGET_NOT_TRAIN_DESTINATION,
 				"'${action.toEndpointName}' is not the declared destination of train '${action.trainId}' " +
 					"(declared: '${trainInList.destinationInOutName}'). " +
-					"Note: domain ruling pending — this may be relaxed for shunting/reversal scenarios.",
+					"Note: domain ruling pending — this may be relaxed for shunting/reversal scenarios."
 			)
 		}
-
-		// ── Origin position check (HELD trains only) ──────────────────────────
 
 		if (trainInList != null &&
 			trainInList.phase == TrainPhase.HELD &&
@@ -296,12 +325,17 @@ class ActionValidator(
 			return rejected(
 				RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION,
 				"Train '${action.trainId}' is HELD at signal '${trainInList.signalAheadName}'; " +
-					"fromEndpointName must be '${trainInList.signalAheadName}', got '${action.fromEndpointName}'",
+					"fromEndpointName must be '${trainInList.signalAheadName}', got '${action.fromEndpointName}'"
 			)
 		}
 
-		// ── Path availability (observation-visible ownership only) ────────────
+		return null
+	}
 
+	private fun validateRequestRoutePathAvailability(
+		action: DispatchAction.RequestRoute,
+		observation: DispatcherObservation
+	): ValidationVerdict.Rejected? {
 		val allBlocksBusy =
 			observation.blocks.isNotEmpty() &&
 				observation.blocks.all { block ->
@@ -312,16 +346,15 @@ class ActionValidator(
 				RejectionCode.NO_FREE_PATH,
 				"All observable blocks are owned by other trains; no plausible free path to '${action.toEndpointName}'. " +
 					"Note: this check is observation-only and incomplete — failed requests surface as " +
-					"ALL_PATHS_BLOCKED outcomes next tick.",
+					"ALL_PATHS_BLOCKED outcomes next tick."
 			)
 		}
-
-		return ValidationVerdict.Valid
+		return null
 	}
 
 	private fun validateCancelRoute(
 		action: DispatchAction.CancelRoute,
-		observation: DispatcherObservation,
+		observation: DispatcherObservation
 	): ValidationVerdict {
 		if (action.trainId.isBlank()) {
 			return rejected(RejectionCode.BLANK_ARGUMENT, "trainId must not be blank")
@@ -337,7 +370,7 @@ class ActionValidator(
 		if (trainInList != null && trainInList.phase == TrainPhase.EXITED) {
 			return rejected(
 				RejectionCode.TRAIN_ALREADY_EXITED,
-				"Train '${action.trainId}' has already exited; no route to cancel",
+				"Train '${action.trainId}' has already exited; no route to cancel"
 			)
 		}
 
@@ -345,7 +378,7 @@ class ActionValidator(
 		if (reservation == null) {
 			return rejected(
 				RejectionCode.NO_ROUTE_HELD,
-				"Train '${action.trainId}' holds no path reservation; nothing to cancel",
+				"Train '${action.trainId}' holds no path reservation; nothing to cancel"
 			)
 		}
 
@@ -361,7 +394,7 @@ class ActionValidator(
 				return rejected(
 					RejectionCode.TRAIN_ON_RESERVED_BLOCK,
 					"Train '${action.trainId}' is currently occupying block '$frontSection', " +
-						"which is part of its reservation — unsafe to cancel route mid-transit",
+						"which is part of its reservation — unsafe to cancel route mid-transit"
 				)
 			}
 		}
@@ -369,6 +402,8 @@ class ActionValidator(
 		return ValidationVerdict.Valid
 	}
 
-	private fun rejected(code: RejectionCode, detail: String): ValidationVerdict.Rejected =
-		ValidationVerdict.Rejected(code, detail)
+	private fun rejected(
+		code: RejectionCode,
+		detail: String
+	): ValidationVerdict.Rejected = ValidationVerdict.Rejected(code, detail)
 }

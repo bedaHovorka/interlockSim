@@ -36,5 +36,8 @@ sealed interface ValidationVerdict {
 	 * @property detail Human-readable explanation. Never empty; always explains which field
 	 *   was invalid or which state constraint was violated.
 	 */
-	data class Rejected(val code: RejectionCode, val detail: String) : ValidationVerdict
+	data class Rejected(
+		val code: RejectionCode,
+		val detail: String
+	) : ValidationVerdict
 }

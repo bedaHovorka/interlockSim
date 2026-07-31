@@ -54,10 +54,11 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Issue #814 regression — ROUTE_ALREADY_HELD_TO_SAME_TARGET rejected before queue post")
 class ActionValidator814RegressionTest {
-	private val validator = ActionValidator(
-		validEndpointNames = setOf("A", "B", "C", "kG", "kJ"),
-		blockIds = setOf("kA", "kB", "kC", "kD", "kE", "kF"),
-	)
+	private val validator =
+		ActionValidator(
+			validEndpointNames = setOf("A", "B", "C", "kG", "kJ"),
+			blockIds = setOf("kA", "kB", "kC", "kD", "kE", "kF")
+		)
 
 	/**
 	 * Simulate the #814 Symptom 3 scenario from a live run:
@@ -73,55 +74,60 @@ class ActionValidator814RegressionTest {
 
 		// Mimic the observation from the live #814 run: T1 holds a route to "B" via kA,kG,kJ,kB
 		// (using valid endpoint names and block IDs from the validator constructor above)
-		val observation = DispatcherObservation(
-			tick = 42L,
-			simTime = 120.0,
-			trains = listOf(
-				TrainView(
-					trainId = "T1",
-					phase = TrainPhase.RUNNING,
-					frontSectionName = "kA",
-					velocityMps = 5.0,
-					accelerationMps2 = 0.0,
-					destinationInOutName = "B",
-					signalAheadName = null,
-					signalAheadAspect = null,
-					distanceToSignalAheadMetres = 0.0,
-					waitingSinceSimTime = null,
-					waitSeconds = 0.0,
-				)
-			),
-			blocks = listOf(
-				BlockView("kA", TrackFacility.State.RESERVED, "T1"),
-				BlockView("kB", TrackFacility.State.RESERVED, "T1"),
-				BlockView("kC", TrackFacility.State.FREE, null),
-				BlockView("kD", TrackFacility.State.FREE, null),
-				BlockView("kE", TrackFacility.State.FREE, null),
-				BlockView("kF", TrackFacility.State.FREE, null),
-			),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = listOf(
-				// T1 already holds a route to "B" — this is the Symptom 3 state
-				ReservationView(
-					trainId = "T1",
-					fromEndpointName = "A",
-					targetName = "B",
-					blockIds = listOf("kA", "kG", "kJ", "kB"),
-				)
-			),
-			queued = emptyList(),
-			activeCount = 1,
-			capacity = 2,
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 42L,
+				simTime = 120.0,
+				trains =
+					listOf(
+						TrainView(
+							trainId = "T1",
+							phase = TrainPhase.RUNNING,
+							frontSectionName = "kA",
+							velocityMps = 5.0,
+							accelerationMps2 = 0.0,
+							destinationInOutName = "B",
+							signalAheadName = null,
+							signalAheadAspect = null,
+							distanceToSignalAheadMetres = 0.0,
+							waitingSinceSimTime = null,
+							waitSeconds = 0.0
+						)
+					),
+				blocks =
+					listOf(
+						BlockView("kA", TrackFacility.State.RESERVED, "T1"),
+						BlockView("kB", TrackFacility.State.RESERVED, "T1"),
+						BlockView("kC", TrackFacility.State.FREE, null),
+						BlockView("kD", TrackFacility.State.FREE, null),
+						BlockView("kE", TrackFacility.State.FREE, null),
+						BlockView("kF", TrackFacility.State.FREE, null)
+					),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations =
+					listOf(
+						// T1 already holds a route to "B" — this is the Symptom 3 state
+						ReservationView(
+							trainId = "T1",
+							fromEndpointName = "A",
+							targetName = "B",
+							blockIds = listOf("kA", "kG", "kJ", "kB")
+						)
+					),
+				queued = emptyList(),
+				activeCount = 1,
+				capacity = 2,
+				appliedOutcomes = emptyList()
+			)
 
 		// The LLM re-requests the exact same route it already holds
-		val action = DispatchAction.RequestRoute(
-			trainId = "T1",
-			fromEndpointName = "A",
-			toEndpointName = "B",
-		)
+		val action =
+			DispatchAction.RequestRoute(
+				trainId = "T1",
+				fromEndpointName = "A",
+				toEndpointName = "B"
+			)
 
 		// Spy on the ActuatorCommandQueue to verify postAll is never called for a rejected action
 		val queueSpy = mockk<ActuatorCommandQueue>(relaxed = true)
@@ -163,35 +169,38 @@ class ActionValidator814RegressionTest {
 	@Test
 	@DisplayName("requesting different target while holding a route is ROUTE_HELD_TO_DIFFERENT_TARGET before queue post")
 	fun differentTargetRejectedWithDifferentCodeBeforeQueuePost() {
-		val observation = DispatcherObservation(
-			tick = 43L,
-			simTime = 125.0,
-			trains = listOf(
-				TrainView(
-					trainId = "T1",
-					phase = TrainPhase.RUNNING,
-					frontSectionName = "kA",
-					velocityMps = 5.0,
-					accelerationMps2 = 0.0,
-					destinationInOutName = "C",
-					signalAheadName = null,
-					signalAheadAspect = null,
-					distanceToSignalAheadMetres = 0.0,
-					waitingSinceSimTime = null,
-					waitSeconds = 0.0,
-				)
-			),
-			blocks = emptyList(),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = listOf(
-				ReservationView(trainId = "T1", fromEndpointName = "A", targetName = "B", blockIds = listOf("kA"))
-			),
-			queued = emptyList(),
-			activeCount = 1,
-			capacity = 2,
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 43L,
+				simTime = 125.0,
+				trains =
+					listOf(
+						TrainView(
+							trainId = "T1",
+							phase = TrainPhase.RUNNING,
+							frontSectionName = "kA",
+							velocityMps = 5.0,
+							accelerationMps2 = 0.0,
+							destinationInOutName = "C",
+							signalAheadName = null,
+							signalAheadAspect = null,
+							distanceToSignalAheadMetres = 0.0,
+							waitingSinceSimTime = null,
+							waitSeconds = 0.0
+						)
+					),
+				blocks = emptyList(),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations =
+					listOf(
+						ReservationView(trainId = "T1", fromEndpointName = "A", targetName = "B", blockIds = listOf("kA"))
+					),
+				queued = emptyList(),
+				activeCount = 1,
+				capacity = 2,
+				appliedOutcomes = emptyList()
+			)
 
 		val action = DispatchAction.RequestRoute("T1", "A", "C") // "C" != existing target "B"
 
@@ -207,5 +216,4 @@ class ActionValidator814RegressionTest {
 			.isEqualTo(RejectionCode.ROUTE_HELD_TO_DIFFERENT_TARGET)
 		verify(exactly = 0) { queueSpy.postAll(any()) }
 	}
-
 }

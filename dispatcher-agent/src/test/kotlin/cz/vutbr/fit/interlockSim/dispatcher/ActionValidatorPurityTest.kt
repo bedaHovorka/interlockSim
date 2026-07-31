@@ -40,10 +40,11 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("ActionValidator — purity: constructor-shape and 1000× idempotency (SP2c.3 #826)")
 class ActionValidatorPurityTest {
-	private val validator = ActionValidator(
-		validEndpointNames = setOf("A", "B", "C", "sigA"),
-		blockIds = setOf("kA", "kB", "kC"),
-	)
+	private val validator =
+		ActionValidator(
+			validEndpointNames = setOf("A", "B", "C", "sigA"),
+			blockIds = setOf("kA", "kB", "kC")
+		)
 
 	// ── Constructor-shape tests ────────────────────────────────────────────────
 
@@ -76,37 +77,40 @@ class ActionValidatorPurityTest {
 	@Test
 	@DisplayName("validate called 1000× on same VALID action returns identical Valid verdict every time")
 	fun validActionIdempotent1000Times() {
-		val observation = DispatcherObservation(
-			tick = 5L,
-			simTime = 30.0,
-			trains = listOf(
-				TrainView(
-					trainId = "T1",
-					phase = TrainPhase.RUNNING,
-					frontSectionName = "kA",
-					velocityMps = 10.0,
-					accelerationMps2 = 0.0,
-					destinationInOutName = "B",
-					signalAheadName = null,
-					signalAheadAspect = null,
-					distanceToSignalAheadMetres = 0.0,
-					waitingSinceSimTime = null,
-					waitSeconds = 0.0,
-				)
-			),
-			blocks = listOf(
-				BlockView("kA", TrackFacility.State.OCCUPIED, "T1"),
-				BlockView("kB", TrackFacility.State.FREE, null),
-				BlockView("kC", TrackFacility.State.FREE, null),
-			),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = emptyList(),
-			queued = emptyList(),
-			activeCount = 1,
-			capacity = 2,
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 5L,
+				simTime = 30.0,
+				trains =
+					listOf(
+						TrainView(
+							trainId = "T1",
+							phase = TrainPhase.RUNNING,
+							frontSectionName = "kA",
+							velocityMps = 10.0,
+							accelerationMps2 = 0.0,
+							destinationInOutName = "B",
+							signalAheadName = null,
+							signalAheadAspect = null,
+							distanceToSignalAheadMetres = 0.0,
+							waitingSinceSimTime = null,
+							waitSeconds = 0.0
+						)
+					),
+				blocks =
+					listOf(
+						BlockView("kA", TrackFacility.State.OCCUPIED, "T1"),
+						BlockView("kB", TrackFacility.State.FREE, null),
+						BlockView("kC", TrackFacility.State.FREE, null)
+					),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations = emptyList(),
+				queued = emptyList(),
+				activeCount = 1,
+				capacity = 2,
+				appliedOutcomes = emptyList()
+			)
 
 		val action = DispatchAction.RequestRoute("T1", "A", "B")
 
@@ -120,35 +124,38 @@ class ActionValidatorPurityTest {
 	@Test
 	@DisplayName("validate called 1000× on same REJECTED action returns identical Rejected verdict every time")
 	fun rejectedActionIdempotent1000Times() {
-		val observation = DispatcherObservation(
-			tick = 6L,
-			simTime = 40.0,
-			trains = listOf(
-				TrainView(
-					trainId = "T1",
-					phase = TrainPhase.RUNNING,
-					frontSectionName = "kA",
-					velocityMps = 5.0,
-					accelerationMps2 = 0.0,
-					destinationInOutName = "B",
-					signalAheadName = null,
-					signalAheadAspect = null,
-					distanceToSignalAheadMetres = 0.0,
-					waitingSinceSimTime = null,
-					waitSeconds = 0.0,
-				)
-			),
-			blocks = emptyList(),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = listOf(
-				ReservationView(trainId = "T1", fromEndpointName = "A", targetName = "B", blockIds = listOf("kA", "kB"))
-			),
-			queued = emptyList(),
-			activeCount = 1,
-			capacity = 2,
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 6L,
+				simTime = 40.0,
+				trains =
+					listOf(
+						TrainView(
+							trainId = "T1",
+							phase = TrainPhase.RUNNING,
+							frontSectionName = "kA",
+							velocityMps = 5.0,
+							accelerationMps2 = 0.0,
+							destinationInOutName = "B",
+							signalAheadName = null,
+							signalAheadAspect = null,
+							distanceToSignalAheadMetres = 0.0,
+							waitingSinceSimTime = null,
+							waitSeconds = 0.0
+						)
+					),
+				blocks = emptyList(),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations =
+					listOf(
+						ReservationView(trainId = "T1", fromEndpointName = "A", targetName = "B", blockIds = listOf("kA", "kB"))
+					),
+				queued = emptyList(),
+				activeCount = 1,
+				capacity = 2,
+				appliedOutcomes = emptyList()
+			)
 
 		// This is the #814 Symptom 3 scenario — same target already held
 		val action = DispatchAction.RequestRoute("T1", "A", "B")
@@ -163,19 +170,20 @@ class ActionValidatorPurityTest {
 	@Test
 	@DisplayName("validate called 1000× on ApproveTrain when capacity full returns identical Rejected every time")
 	fun capacityFullIdempotent1000Times() {
-		val observation = DispatcherObservation(
-			tick = 7L,
-			simTime = 50.0,
-			trains = emptyList(),
-			blocks = emptyList(),
-			switches = emptyList(),
-			signals = emptyList(),
-			reservations = emptyList(),
-			queued = listOf(QueuedTrainView("T1", "B", 1.0)),
-			activeCount = 2,
-			capacity = 2, // at capacity
-			appliedOutcomes = emptyList(),
-		)
+		val observation =
+			DispatcherObservation(
+				tick = 7L,
+				simTime = 50.0,
+				trains = emptyList(),
+				blocks = emptyList(),
+				switches = emptyList(),
+				signals = emptyList(),
+				reservations = emptyList(),
+				queued = listOf(QueuedTrainView("T1", "B", 1.0)),
+				activeCount = 2,
+				capacity = 2, // at capacity
+				appliedOutcomes = emptyList()
+			)
 
 		val action = DispatchAction.ApproveTrain("T1")
 

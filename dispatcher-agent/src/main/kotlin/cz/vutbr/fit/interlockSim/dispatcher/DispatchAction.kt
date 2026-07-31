@@ -53,7 +53,9 @@ sealed interface DispatchAction {
 	 * @property trainId Identifier of the train to approve (must be non-blank and currently
 	 *   present in [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation.queued]).
 	 */
-	data class ApproveTrain(val trainId: String) : DispatchAction {
+	data class ApproveTrain(
+		val trainId: String
+	) : DispatchAction {
 		override val kind: String = "approve_train"
 	}
 
@@ -70,7 +72,7 @@ sealed interface DispatchAction {
 	data class RequestRoute(
 		val trainId: String,
 		val fromEndpointName: String,
-		val toEndpointName: String,
+		val toEndpointName: String
 	) : DispatchAction {
 		override val kind: String = "request_route"
 	}
@@ -81,7 +83,9 @@ sealed interface DispatchAction {
 	 *
 	 * @property trainId Identifier of the train whose route should be released.
 	 */
-	data class CancelRoute(val trainId: String) : DispatchAction {
+	data class CancelRoute(
+		val trainId: String
+	) : DispatchAction {
 		override val kind: String = "cancel_route"
 	}
 
