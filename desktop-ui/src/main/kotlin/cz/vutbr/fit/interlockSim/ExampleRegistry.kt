@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
+import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
@@ -374,6 +376,11 @@ class ExampleRegistry {
 		// too: if the scope does not contain the gateway the semiAutoApprover is null and the
 		// applier's own "no approver" fallback applies.
 		val semiAutoGateway = context.scope.getOrNull<SemiAutoApprovalGateway>()
+		// SP2c.17 (#840): correlation map and outcome channel for pushed outcome attribution.
+		// Null-tolerant: if the dispatcher-agent module is not loaded these stay null and the
+		// applier falls back to fire-and-forget behaviour (pre-SP2c.17 compatibility).
+		val correlationMap = context.scope.getOrNull<CommandCorrelationMap>()
+		val outcomeSink = context.scope.getOrNull<AppliedOutcomeChannel>()
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
 		// NoOpSimulationController (console runs) has no speed cap, so an async planner cannot
 		// honour the 2× real-time limit there. GUI runs pass the DelegatingSimulationController
@@ -389,7 +396,9 @@ class ExampleRegistry {
 				onFailedReservation = loop::incrementFailedReservation,
 				onDecisionApplied = decisionListener,
 				modeState = modeState,
-				semiAutoApprover = semiAutoGateway?.let { gw -> gw::approve }
+				semiAutoApprover = semiAutoGateway?.let { gw -> gw::approve },
+				correlationMap = correlationMap,
+				outcomeSink = outcomeSink
 			)
 		// Evict the duplicate-suppression guard's entries for a train once any of its blocks
 		// releases — see DispatchDecisionApplier.evictReservationsFor for why this must not
