@@ -260,11 +260,11 @@ class ObservationRendererTest {
 		}
 
 		@Test
-		@DisplayName("CompactTextRenderer renders longestQueuedWaitSecs with %.1f")
+		@DisplayName("CompactTextRenderer renders ticks_since_progress in working memory section")
 		fun compactTextWorkingMemoryFormatted() {
 			val output = CompactTextRenderer().render(ctx)
-			// longestQueuedWaitSecs = 14.4
-			assertThat(output).contains("14.4")
+			// ticks_since_progress is an integer field
+			assertThat(output).contains("ticks_since_progress: 0")
 		}
 
 		@Test
@@ -438,14 +438,19 @@ class ObservationRendererTest {
 		fun hasAffordancesSection() = assertThat(CompactTextRenderer().render(ctx)).contains("=== WHAT YOU CAN DO NOW ===")
 
 		@Test
-		@DisplayName("contains history records (simTime formatted)")
+		@DisplayName("contains history records (tick, simTime, digest, action formatted)")
 		fun historyRecordsFormatted() {
 			val output = CompactTextRenderer().render(ctx)
-			assertThat(output).contains("simTime=483.1")
-			assertThat(output).contains("simTime=496.2")
-			assertThat(output).contains("simTime=504.8")
-			assertThat(output).contains("outcome=LLM_ACTIONS")
-			assertThat(output).contains("outcome=LLM_NO_OP")
+			// New ring-buffer TickRecord fields
+			assertThat(output).contains("tick=38")
+			assertThat(output).contains("tick=39")
+			assertThat(output).contains("tick=40")
+			assertThat(output).contains("t=483.1")
+			assertThat(output).contains("t=496.2")
+			assertThat(output).contains("t=504.8")
+			// tick 39 has NoOp->VALID, tick 40 has request_route->VALID
+			assertThat(output).contains("no_op->VALID")
+			assertThat(output).contains("request_route(T-3,A,B)->VALID")
 		}
 
 		@Test
@@ -544,13 +549,14 @@ class ObservationRendererTest {
 		}
 
 		@Test
-		@DisplayName("working memory fields are all present")
+		@DisplayName("working memory fields are all present (SP2c.7 redesign)")
 		fun workingMemoryFieldsPresent() {
 			val output = CompactTextRenderer().render(ctx)
-			assertThat(output).contains("consecutive_no_op_ticks: 0")
-			assertThat(output).contains("longest_queued_wait_secs: 14.4")
-			assertThat(output).contains("blocked_train_count: 0")
-			assertThat(output).contains("last_tick_outcome: LLM_ACTIONS")
+			assertThat(output).contains("ticks_since_progress: 0")
+			assertThat(output).contains("active_count: 1")
+			assertThat(output).contains("capacity: 2")
+			assertThat(output).contains("pending_requests: 0")
+			assertThat(output).contains("last_actions: T-3=request_route@40")
 		}
 	}
 

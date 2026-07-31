@@ -9,6 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
+import cz.vutbr.fit.interlockSim.dispatcher.CommandId
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.ValidationVerdict
 import cz.vutbr.fit.interlockSim.dispatcher.observation.BlockView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.dispatcher.observation.QueuedTrainView
@@ -17,8 +20,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.SignalView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.SwitchView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
-import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
-import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -138,21 +139,43 @@ object RendererFixtures {
 			reservations = emptyList()
 		)
 
-	/** Three history records (ticks before tick 41). */
+	/** Three ring-buffer history records (ticks 38–40, before the current tick 41). */
 	val history: List<TickRecord> =
 		listOf(
-			TickRecord(outcome = TickOutcome.LLM_ACTIONS, simTime = 483.1),
-			TickRecord(outcome = TickOutcome.LLM_NO_OP, simTime = 496.2),
-			TickRecord(outcome = TickOutcome.LLM_ACTIONS, simTime = 504.8)
+			TickRecord(
+				tick = 38L,
+				simTime = 483.1,
+				stateDigest = "a1b2c3d4e5f60000000000000000000000000000000000000000000000000000",
+				actions = emptyList(),
+				verdicts = emptyList(),
+				outcomes = emptyList()
+			),
+			TickRecord(
+				tick = 39L,
+				simTime = 496.2,
+				stateDigest = "f7e8d9c0b1a20000000000000000000000000000000000000000000000000000",
+				actions = listOf(AttributedAction(CommandId(39L), 39L, DispatchAction.NoOp)),
+				verdicts = listOf(ValidationVerdict.Valid),
+				outcomes = emptyList()
+			),
+			TickRecord(
+				tick = 40L,
+				simTime = 504.8,
+				stateDigest = "1a2b3c4d5e6f0000000000000000000000000000000000000000000000000000",
+				actions = listOf(AttributedAction(CommandId(40L), 40L, DispatchAction.RequestRoute("T-3", "A", "B"))),
+				verdicts = listOf(ValidationVerdict.Valid),
+				outcomes = emptyList()
+			)
 		)
 
 	/** Working memory for tick 41. */
 	val workingMemory: WorkingMemory =
 		WorkingMemory(
-			consecutiveNoOpTicks = 0,
-			longestQueuedWaitSecs = 14.4,
-			blockedTrainCount = 0,
-			lastTickOutcome = "LLM_ACTIONS"
+			pendingRequests = emptyMap(),
+			lastActionPerTrain = mapOf("T-3" to Pair("request_route", 40L)),
+			ticksSinceProgress = 0,
+			activeCount = 1,
+			capacity = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 		)
 
 	/** Pre-evaluated affordances for tick 41. */

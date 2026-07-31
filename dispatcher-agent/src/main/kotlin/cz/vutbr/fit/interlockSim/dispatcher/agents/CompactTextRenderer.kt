@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.ValidationVerdict
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
@@ -76,17 +78,50 @@ class CompactTextRenderer : ObservationRenderer {
 			sb.append("(none yet)\n")
 		} else {
 			for (record in ctx.history.takeLast(3)) {
-				sb.append("  tick simTime=")
+				sb.append("  tick=")
+				sb.append(record.tick)
+				sb.append(" t=")
 				sb.append(record.simTime.f1())
-				sb.append(" outcome=")
-				sb.append(record.outcome.name)
-				if (record.timeoutNoOpCause != null) {
-					sb.append(" cause=")
-					sb.append(record.timeoutNoOpCause.name)
+				sb.append(" d=")
+				// Truncate to first 8 hex chars for compactness
+				sb.append(record.stateDigest.take(8))
+				if (record.actions.isEmpty()) {
+					sb.append(" (no actions)")
+				} else {
+					sb.append(' ')
+					sb.append(
+						record.actions.zip(record.verdicts).joinToString(" ") { (aa, verdict) ->
+							renderAttributedAction(aa, verdict)
+						}
+					)
+				}
+				if (record.outcomes.isNotEmpty()) {
+					sb.append(" out=[")
+					sb.append(record.outcomes.joinToString(",") { o -> renderAppliedOutcome(o) })
+					sb.append(']')
 				}
 				sb.append('\n')
 			}
 		}
+	}
+
+	private fun renderAttributedAction(
+		aa: AttributedAction,
+		verdict: ValidationVerdict
+	): String {
+		val actionStr =
+			when (val a = aa.action) {
+				is DispatchAction.ApproveTrain -> "approve_train(${a.trainId})"
+				is DispatchAction.RequestRoute -> "request_route(${a.trainId},${a.fromEndpointName},${a.toEndpointName})"
+				is DispatchAction.CancelRoute -> "cancel_route(${a.trainId})"
+				DispatchAction.NoOp -> "no_op"
+			}
+		val verdictStr =
+			when (verdict) {
+				ValidationVerdict.Valid -> "VALID"
+				is ValidationVerdict.Rejected -> "REJECTED(${verdict.code.name})"
+			}
+		return "$actionStr->$verdictStr"
 	}
 
 	// ── Section 5: WORKING MEMORY ─────────────────────────────────────────────────────────
@@ -96,18 +131,31 @@ class CompactTextRenderer : ObservationRenderer {
 		wm: WorkingMemory
 	) {
 		sb.append("=== WORKING MEMORY ===\n")
-		sb.append("consecutive_no_op_ticks: ")
-		sb.append(wm.consecutiveNoOpTicks)
+		sb.append("ticks_since_progress: ")
+		sb.append(wm.ticksSinceProgress)
 		sb.append('\n')
-		sb.append("longest_queued_wait_secs: ")
-		sb.append(wm.longestQueuedWaitSecs.f1())
+		sb.append("active_count: ")
+		sb.append(wm.activeCount)
 		sb.append('\n')
-		sb.append("blocked_train_count: ")
-		sb.append(wm.blockedTrainCount)
+		sb.append("capacity: ")
+		sb.append(wm.capacity)
 		sb.append('\n')
-		sb.append("last_tick_outcome: ")
-		sb.append(wm.lastTickOutcome ?: "none")
+		sb.append("pending_requests: ")
+		sb.append(wm.pendingRequests.size)
 		sb.append('\n')
+		if (wm.lastActionPerTrain.isNotEmpty()) {
+			sb.append("last_actions:")
+			// Sort by trainId for determinism
+			for ((trainId, kindAndTick) in wm.lastActionPerTrain.entries.sortedBy { it.key }) {
+				sb.append(' ')
+				sb.append(trainId)
+				sb.append('=')
+				sb.append(kindAndTick.first)
+				sb.append('@')
+				sb.append(kindAndTick.second)
+			}
+			sb.append('\n')
+		}
 	}
 
 	// ── Section 6: APPLIED OUTCOMES ───────────────────────────────────────────────────────
