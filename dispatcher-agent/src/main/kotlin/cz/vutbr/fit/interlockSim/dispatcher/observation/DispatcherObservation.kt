@@ -18,6 +18,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.observation
 
+import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -236,12 +237,32 @@ sealed interface AppliedOutcome {
 	) : AppliedOutcome
 
 	/**
-	 * `approve_train` was applied. [admitted] is always `true` because the callback is
-	 * idempotent — an absent or already-active train is silently ignored, not an error.
+	 * `approve_train` was processed at apply time on the simulation thread.
+	 *
+	 * - [admitted] = `true`, [reason] = `null`: the train was successfully admitted.
+	 *   The callback (`ShuntingLoop.approveQueuedTrain`) was invoked.
+	 * - [admitted] = `false`, [reason] = [ApplyFailureCode.CAP_EXCEEDED]: the station was
+	 *   already at full capacity when this command was drained.  The callback was **not**
+	 *   invoked.  The agent should wait for an active train to exit before retrying.
+	 *
+	 * ## SP2c.18 note
+	 *
+	 * Prior to SP2c.18, [admitted] was always `true` (the applier never checked the cap).
+	 * SP2c.18 moves the authoritative cap check onto the sim thread so two commands posted
+	 * in the same driver tick that both passed the stale-snapshot [ActionValidator] check
+	 * are resolved correctly in FIFO order: the first is admitted, the second receives
+	 * [ApplyFailureCode.CAP_EXCEEDED].
 	 */
 	data class Approved(
 		val trainId: String,
 		val admitted: Boolean,
+		/**
+		 * Non-null when [admitted] is `false`, carries the machine-readable reason.
+		 * Always `null` when [admitted] is `true`.
+		 *
+		 * @since Issue #841 (SP2c.18 — Goal 10 apply-time cap enforcement)
+		 */
+		val reason: ApplyFailureCode? = null,
 		override val id: CommandId,
 		override val tickIndex: Long
 	) : AppliedOutcome

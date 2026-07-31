@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
 import cz.vutbr.fit.interlockSim.sim.toRationaleLogSuffix
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -83,6 +84,19 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   kept as a `(String) -> Unit` callback for backward compatibility; `HoldTrain`
  *   is routed through [trainLifecyclePort] — the new dedicated port introduced by
  *   SP2b.1 (#556), symmetric with [NetworkActuatorPort].
+ * @param activeTrainCountProvider SP2c.18: optional callback (on the sim thread) that
+ *   returns the **live** number of currently approved trains. When non-null, the applier
+ *   checks `activeTrainCountProvider() >= maxConcurrentTrains` before invoking [onApproveTrain]:
+ *   if the cap is already reached, [onApproveTrain] is **not** called and an
+ *   [AppliedOutcome.Approved] with `admitted = false, reason = `[ApplyFailureCode.CAP_EXCEEDED]`
+ *   is published through [outcomeSink]. When `null` (the default), no apply-time cap check
+ *   is performed — existing callers that rely on the inner [ShuntingLoop.approveQueuedTrain]
+ *   guard are unaffected.
+ * @param maxConcurrentTrains SP2c.18: maximum concurrent trains allowed; only consulted when
+ *   [activeTrainCountProvider] is non-null. Defaults to
+ *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], matching the constant used by
+ *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop]'s own admission gate and
+ *   [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ApproveTrainTool]'s pre-queue check.
  * @param trainLifecyclePort Train lifecycle actuator port for [DispatchDecision.HoldTrain]
  *   commands (SP2b.1 — Issue #556).  `null` by default for backward compatibility with
  *   callers that do not need train-lifecycle commands; when `null` and a [DispatchDecision.HoldTrain]
@@ -90,12 +104,27 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #731 (SP0.9 — Goal 10); [trainLifecyclePort] added in Issue #556 (SP2b.1);
  *   [modeState] + [semiAutoApprover] added in Issue #559 (SP2b.4);
- *   [onDecisionApplied] added in Issue #561 (SP2b.6)
+ *   [onDecisionApplied] added in Issue #561 (SP2b.6);
+ *   [activeTrainCountProvider] + [maxConcurrentTrains] added in Issue #841 (SP2c.18)
  */
 class DispatchDecisionApplier(
 	private val queue: ActuatorCommandQueue,
 	private val networkActuator: NetworkActuatorPort,
 	private val onApproveTrain: (trainId: String) -> Unit,
+	/**
+	 * SP2c.18: Optional provider for the live active-train count on the sim thread.
+	 * When non-null, the cap check [maxConcurrentTrains] is enforced at apply time.
+	 *
+	 * @since Issue #841 (SP2c.18 — Goal 10)
+	 */
+	private val activeTrainCountProvider: (() -> Int)? = null,
+	/**
+	 * SP2c.18: Maximum concurrent trains allowed (only consulted when
+	 * [activeTrainCountProvider] is non-null).
+	 *
+	 * @since Issue #841 (SP2c.18 — Goal 10)
+	 */
+	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
 	/**
 	 * SP0.11: Callback invoked on the sim thread when a path reservation succeeds.
 	 * Increments [ShuntingLoop.incrementBlockTransition] (the counter previously
@@ -365,26 +394,7 @@ class DispatchDecisionApplier(
 		decision: DispatchDecision,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) = when (decision) {
-		is DispatchDecision.ApproveTrain -> {
-			logger.debug {
-				"Applying ApproveTrain: trainId=${decision.trainId}" +
-					decision.rationale.toRationaleLogSuffix()
-			}
-			onApproveTrain(decision.trainId)
-			// SP2c.17 (#840): ApproveTrain callback returns Unit; the call is idempotent
-			// for absent/already-active trains, so admitted is always true here.
-			if (correlation != null) {
-				outcomeSink?.publish(
-					AppliedOutcome.Approved(
-						trainId = decision.trainId,
-						admitted = true,
-						id = correlation.id,
-						tickIndex = correlation.tickIndex
-					)
-				)
-			}
-			Unit
-		}
+		is DispatchDecision.ApproveTrain -> applyApproveTrain(decision, correlation)
 		is DispatchDecision.ReservePath -> applyReservePath(decision)
 		DispatchDecision.NoAction -> Unit
 		// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
@@ -399,6 +409,70 @@ class DispatchDecisionApplier(
 			decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
 		is DispatchDecision.ReleaseRoute -> applyReleaseRoute(decision, correlation)
 		is DispatchDecision.RequestRoute -> applyRequestRoute(decision, correlation)
+	}
+
+	/**
+	 * SP2c.18 (#841): Applies [decision] by checking the live active-train count (if
+	 * [activeTrainCountProvider] is wired) and either admitting the train or refusing
+	 * with [ApplyFailureCode.CAP_EXCEEDED].
+	 *
+	 * ## Cap enforcement at apply time
+	 *
+	 * When [activeTrainCountProvider] is non-null, this method reads the **live** count
+	 * from the sim thread before invoking [onApproveTrain].  Because both the read and
+	 * the admission callback are on the same kDisco thread, two `ApproveTrain` commands
+	 * drained in the same tick see the updated count after the first admission: the first
+	 * command is admitted (count goes from N to N+1), and if N+1 equals [maxConcurrentTrains]
+	 * the second command receives [ApplyFailureCode.CAP_EXCEEDED] — the stale-snapshot race
+	 * that was possible with [ActionValidator]'s pre-queue check alone is closed.
+	 *
+	 * When [activeTrainCountProvider] is `null`, no apply-time cap check is performed and
+	 * [onApproveTrain] is always invoked (pre-SP2c.18 behaviour for callers that rely on
+	 * [ShuntingLoop.approveQueuedTrain]'s own inner guard).
+	 *
+	 * @since Issue #841 (SP2c.18 — Goal 10 apply-time cap enforcement)
+	 */
+	private fun applyApproveTrain(
+		decision: DispatchDecision.ApproveTrain,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		val provider = activeTrainCountProvider
+		if (provider != null) {
+			val liveCount = provider()
+			if (liveCount >= maxConcurrentTrains) {
+				logger.debug {
+					"ApproveTrain CAP_EXCEEDED at apply time: trainId=${decision.trainId} " +
+						"live=$liveCount max=$maxConcurrentTrains — admission refused"
+				}
+				if (correlation != null) {
+					outcomeSink?.publish(
+						AppliedOutcome.Approved(
+							trainId = decision.trainId,
+							admitted = false,
+							reason = ApplyFailureCode.CAP_EXCEEDED,
+							id = correlation.id,
+							tickIndex = correlation.tickIndex
+						)
+					)
+				}
+				return
+			}
+		}
+		logger.debug {
+			"Applying ApproveTrain: trainId=${decision.trainId}" +
+				decision.rationale.toRationaleLogSuffix()
+		}
+		onApproveTrain(decision.trainId)
+		if (correlation != null) {
+			outcomeSink?.publish(
+				AppliedOutcome.Approved(
+					trainId = decision.trainId,
+					admitted = true,
+					id = correlation.id,
+					tickIndex = correlation.tickIndex
+				)
+			)
+		}
 	}
 
 	/**

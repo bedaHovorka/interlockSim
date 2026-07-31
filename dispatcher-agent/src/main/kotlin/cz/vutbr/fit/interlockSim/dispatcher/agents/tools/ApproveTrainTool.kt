@@ -39,12 +39,22 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Concurrency cap
  *
- * [execute] rejects the request with [ToolResult.Error] when [activeTrainCountProvider] already
- * reports [maxConcurrentTrains] or more active trains, mirroring [RuleBasedDispatcher]'s own
- * admission policy for the non-LLM dispatch path. [activeTrainCountProvider] reads an off-thread-safe
- * snapshot that is only refreshed once per simulation tick, so two `approve_train` calls issued
- * faster than one tick can both observe the same stale under-cap count and both be queued — a
- * small, bounded overshoot, not an unbounded one.
+ * [execute] rejects the request early with [ToolResult.Error] when [activeTrainCountProvider]
+ * already reports [maxConcurrentTrains] or more active trains. This is a **validator hint**
+ * (fast feedback to the LLM, based on the most recent tick's snapshot), not the authoritative
+ * enforcement point.
+ *
+ * The **authoritative enforcement** is in [DispatchDecisionApplier] on the kDisco simulation
+ * thread, where the live active-train count is available. Two `approve_train` calls issued in
+ * the same driver tick can both pass this stale-snapshot check; the applier resolves them in
+ * FIFO order and publishes [cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome.Approved]
+ * with `admitted = false, reason = `[cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode.CAP_EXCEEDED]`
+ * for any that exceed the cap. The refusal surfaces in the next tick's `applied_outcomes` block
+ * (SP2c.17/#840) so the agent learns the admission did not take effect.
+ *
+ * Pre-queue rejections (this method) are distinguishable from apply-time refusals in the
+ * metrics by their type: [cz.vutbr.fit.interlockSim.dispatcher.RejectionCode.CAPACITY_FULL]
+ * vs [cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode.CAP_EXCEEDED] (SP2c.18/#841, SP2c.20).
  *
  * @param actuatorPort Dispatch-loop actuator port for this context (injected per simulation);
  *   the default implementation wraps the scoped [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue].
