@@ -15,11 +15,19 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThan
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.observation.SignalView
+import cz.vutbr.fit.interlockSim.dispatcher.observation.SwitchView
+import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
+import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
+import java.util.Locale
 
 /**
  * Acceptance-criteria tests for the SP2c.2 renderers (#825):
@@ -257,6 +265,25 @@ class ObservationRendererTest {
 			// longestQueuedWaitSecs = 14.4
 			assertThat(output).contains("14.4")
 		}
+
+		@Test
+		@DisplayName("CompactTextRenderer output is locale-independent: a comma-locale JVM still yields '.' decimals")
+		fun compactTextLocaleIndependent() {
+			// Guard for the AC7/Locale.ROOT fix. Under a comma-decimal locale (de_DE), the default
+			// `String.format("%.1f", d)` would produce "6,4"/"512,4" and break byte-identical golden
+			// output. The renderer must force Locale.ROOT so the separator is always '.'.
+			val previous = Locale.getDefault()
+			Locale.setDefault(Locale.GERMANY)
+			try {
+				val output = CompactTextRenderer().render(ctx)
+				assertThat(output).contains("v=6.4")
+				assertThat(output).contains("simTime 512.4")
+				assertThat(output).doesNotContain("6,4")
+				assertThat(output).doesNotContain("512,4")
+			} finally {
+				Locale.setDefault(previous)
+			}
+		}
 	}
 
 	// ── AC8: SchematicRenderer degrades gracefully ────────────────────────────────────────
@@ -311,6 +338,41 @@ class ObservationRendererTest {
 			val first = renderer.render(ctx)
 			val second = renderer.render(ctx0)
 			assertThat(first).isEqualTo(second)
+		}
+
+		@Test
+		@DisplayName("schematic for exactly 8 InOuts (maxRepresentableInOuts boundary) still renders route arrows")
+		fun eightInOutsRendersRoutes() {
+			// 8 is the boundary — `size > maxRepresentableInOuts` is false, so it must render.
+			val eightInOuts =
+				StationTopology(
+					inOuts = listOf("A", "B", "C", "D", "E", "F", "G", "H"),
+					signals = emptyList(),
+					switches = emptyList(),
+					blocks = listOf(BlockId("kA"), BlockId("kB")),
+					routes = listOf(RouteDescriptor("A", "B", listOf(BlockId("kA"), BlockId("kB"))))
+				)
+			val output = SchematicRenderer(eightInOuts).render(ctx)
+			assertThat(output).contains("=== ASCII SCHEMATIC ===")
+			assertThat(output).contains("A --> B")
+			assertThat(output).doesNotContain("schematic unavailable for this topology")
+		}
+
+		@Test
+		@DisplayName("schematic for 9 InOuts (one over maxRepresentableInOuts) degrades to unavailable")
+		fun nineInOutsDegrades() {
+			// 9 is one over the boundary — `size > maxRepresentableInOuts` is true, so it must degrade.
+			val nineInOuts =
+				StationTopology(
+					inOuts = listOf("A", "B", "C", "D", "E", "F", "G", "H", "I"),
+					signals = emptyList(),
+					switches = emptyList(),
+					blocks = listOf(BlockId("kA"), BlockId("kB")),
+					routes = listOf(RouteDescriptor("A", "B", listOf(BlockId("kA"), BlockId("kB"))))
+				)
+			val output = SchematicRenderer(nineInOuts).render(ctx)
+			assertThat(output).contains("schematic unavailable for this topology")
+			assertThat(output).doesNotContain("A --> B")
 		}
 	}
 
@@ -462,6 +524,17 @@ class ObservationRendererTest {
 		}
 
 		@Test
+		@DisplayName("applied outcomes section lists each outcome when non-empty")
+		fun appliedOutcomesPopulated() {
+			val obs =
+				RendererFixtures.observationTick41.copy(
+					appliedOutcomes = listOf(AppliedOutcome("T-3", "route reserved to B", 40L))
+				)
+			val output = CompactTextRenderer().render(ctx.copy(observation = obs))
+			assertThat(output).contains("tick=40 train=T-3: route reserved to B")
+		}
+
+		@Test
 		@DisplayName("working memory fields are all present")
 		fun workingMemoryFieldsPresent() {
 			val output = CompactTextRenderer().render(ctx)
@@ -513,6 +586,59 @@ class ObservationRendererTest {
 			val output = DeltaRenderer().render(identical)
 			assertThat(output).contains("(no changes)")
 		}
+
+		@Test
+		@DisplayName("reports switch position change MAIN(free)->BRANCH(free)")
+		fun reportsSwitchPositionDelta() {
+			val prev = RendererFixtures.observationTick41.copy(switches = listOf(SwitchView("vA", RailSwitch.Conf.MAIN, null)))
+			val curr = RendererFixtures.observationTick41.copy(switches = listOf(SwitchView("vA", RailSwitch.Conf.BRANCH, null)))
+			val output = DeltaRenderer().render(RenderContext(curr, prev, emptyList(), WorkingMemory.EMPTY, emptyList()))
+			assertThat(output).contains("switches:")
+			assertThat(output).contains("vA MAIN(free)->BRANCH(free)")
+		}
+
+		@Test
+		@DisplayName("reports switch lock change free->locked by T-3 (same position)")
+		fun reportsSwitchLockDelta() {
+			val prev = RendererFixtures.observationTick41.copy(switches = listOf(SwitchView("vA", RailSwitch.Conf.MAIN, null)))
+			val curr = RendererFixtures.observationTick41.copy(switches = listOf(SwitchView("vA", RailSwitch.Conf.MAIN, "T-3")))
+			val output = DeltaRenderer().render(RenderContext(curr, prev, emptyList(), WorkingMemory.EMPTY, emptyList()))
+			assertThat(output).contains("vA MAIN(free)->MAIN(locked by T-3)")
+		}
+
+		@Test
+		@DisplayName("reports signal aspect change STOP->FREE")
+		fun reportsSignalDelta() {
+			val prev = RendererFixtures.observationTick41.copy(signals = listOf(SignalView("doA1", Signal.STOP, null, null)))
+			val curr = RendererFixtures.observationTick41.copy(signals = listOf(SignalView("doA1", Signal.FREE, null, null)))
+			val output = DeltaRenderer().render(RenderContext(curr, prev, emptyList(), WorkingMemory.EMPTY, emptyList()))
+			assertThat(output).contains("signals:")
+			assertThat(output).contains("doA1 STOP->FREE")
+		}
+
+		@Test
+		@DisplayName("reports a newly-appeared train as (new/<phase>)")
+		fun reportsNewTrainDelta() {
+			val prev = RendererFixtures.observationTick41.copy(trains = emptyList())
+			val curr =
+				RendererFixtures.observationTick41.copy(
+					trains = listOf(TrainView("T-5", TrainPhase.RUNNING, "kA", 5.0, 0.0, "B", null, null, 0.0, null, 0.0))
+				)
+			val output = DeltaRenderer().render(RenderContext(curr, prev, emptyList(), WorkingMemory.EMPTY, emptyList()))
+			assertThat(output).contains("T-5(new/RUNNING)")
+		}
+
+		@Test
+		@DisplayName("reports a disappeared train as (exited)")
+		fun reportsExitedTrainDelta() {
+			val prev =
+				RendererFixtures.observationTick41.copy(
+					trains = listOf(TrainView("T-6", TrainPhase.RUNNING, "kA", 5.0, 0.0, "B", null, null, 0.0, null, 0.0))
+				)
+			val curr = RendererFixtures.observationTick41.copy(trains = emptyList())
+			val output = DeltaRenderer().render(RenderContext(curr, prev, emptyList(), WorkingMemory.EMPTY, emptyList()))
+			assertThat(output).contains("T-6(exited)")
+		}
 	}
 
 	// ── CompositeTickRenderer tests ───────────────────────────────────────────────────────
@@ -561,28 +687,35 @@ class ObservationRendererTest {
 	@DisplayName("Golden file — byte-identical output for recorded tick-41 data")
 	inner class GoldenFile {
 		/**
-		 * Loads the golden file at [resourcePath] from the test classpath, or returns `null`
-		 * if it does not exist. Uses LF line endings regardless of host OS.
+		 * Loads the golden file at [resourcePath] from the test classpath, normalised to LF
+		 * line endings. Fails loudly (throws) if the resource is missing — a silently-absent
+		 * golden file would let a byte-identical regression go unnoticed, so the missing case is
+		 * a test infrastructure failure, not a soft pass.
 		 */
-		private fun loadGolden(resourcePath: String): String? =
-			javaClass.classLoader
-				.getResourceAsStream(resourcePath)
-				?.bufferedReader(Charsets.UTF_8)
-				?.use { it.readText() }
-				?.replace("\r\n", "\n")
-				?.replace("\r", "\n")
+		private fun loadGolden(resourcePath: String): String =
+			requireNotNull(
+				javaClass.classLoader
+					.getResourceAsStream(resourcePath)
+					?.bufferedReader(Charsets.UTF_8)
+					?.use { it.readText() }
+					?.replace("\r\n", "\n")
+					?.replace("\r", "\n")
+			) { "$resourcePath not found on test classpath — golden resource is missing" }
+
+		private fun lf(s: String): String = s.replace("\r\n", "\n").replace("\r", "\n")
+
+		@Test
+		@DisplayName("CompactTextRenderer golden file matches (canonical, always-on renderer)")
+		fun compactTextGolden() {
+			val actual = lf(CompactTextRenderer().render(ctx))
+			assertThat(actual).isEqualTo(loadGolden("compact_text_renderer_golden.txt"))
+		}
 
 		@Test
 		@DisplayName("DeltaRenderer golden file matches")
 		fun deltaGolden() {
-			val actual = DeltaRenderer().render(ctx).replace("\r\n", "\n").replace("\r", "\n")
-			val golden = loadGolden("delta_renderer_golden.txt")
-			if (golden == null) {
-				println("=== delta_renderer_golden.txt NOT FOUND — actual output: ===\n$actual")
-				assertThat(actual).contains("=== CHANGED SINCE LAST TICK ===")
-			} else {
-				assertThat(actual).isEqualTo(golden)
-			}
+			val actual = lf(DeltaRenderer().render(ctx))
+			assertThat(actual).isEqualTo(loadGolden("delta_renderer_golden.txt"))
 		}
 
 		@Test
@@ -600,14 +733,8 @@ class ObservationRendererTest {
 							RouteDescriptor("B", "A", listOf(BlockId("kB"), BlockId("kA")))
 						)
 				)
-			val actual = SchematicRenderer(twoRoute).render(ctx).replace("\r\n", "\n").replace("\r", "\n")
-			val golden = loadGolden("schematic_renderer_golden.txt")
-			if (golden == null) {
-				println("=== schematic_renderer_golden.txt NOT FOUND — actual output: ===\n$actual")
-				assertThat(actual).contains("=== ASCII SCHEMATIC ===")
-			} else {
-				assertThat(actual).isEqualTo(golden)
-			}
+			val actual = lf(SchematicRenderer(twoRoute).render(ctx))
+			assertThat(actual).isEqualTo(loadGolden("schematic_renderer_golden.txt"))
 		}
 	}
 }

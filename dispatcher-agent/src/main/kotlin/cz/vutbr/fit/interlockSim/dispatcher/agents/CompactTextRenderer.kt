@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import java.util.Locale
 
 /**
  * Canonical USER-message renderer — always on (SP2c.2, #825).
@@ -31,8 +32,11 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  *
  * ## Determinism (AC3 / AC7)
  *
- * All doubles are formatted with `"%.1f".format(d)` (never `Double.toString`). Rendering the
- * same [RenderContext] any number of times produces byte-identical output.
+ * All doubles are formatted through the locale-independent [f1] / [f0] helpers, which pin
+ * [Locale.ROOT] so the decimal separator is always `.` regardless of the JVM default locale
+ * (never `Double.toString`, never the default-locale `"%.1f".format(d)` which would emit a
+ * comma under e.g. `cs_CZ`/`de_DE`/`fr_FR` and break byte-identical golden output). Rendering
+ * the same [RenderContext] any number of times produces byte-identical output.
  *
  * ## No-menu invariant (C9)
  *
@@ -42,6 +46,11 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  * @since Issue #825 (SP2c.2 — Goal 10 renderers)
  */
 class CompactTextRenderer : ObservationRenderer {
+	companion object {
+		/** Wrap width (chars) for the multi-entry `blocks:` line in CURRENT STATE. */
+		private const val BLOCK_LINE_WRAP_WIDTH = 80
+	}
+
 	private val deltaRenderer = DeltaRenderer()
 
 	override fun render(ctx: RenderContext): String {
@@ -67,7 +76,7 @@ class CompactTextRenderer : ObservationRenderer {
 		} else {
 			for (record in ctx.history.takeLast(3)) {
 				sb.append("  tick simTime=")
-				sb.append("%.1f".format(record.simTime))
+				sb.append(record.simTime.f1())
 				sb.append(" outcome=")
 				sb.append(record.outcome.name)
 				if (record.timeoutNoOpCause != null) {
@@ -90,7 +99,7 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append(wm.consecutiveNoOpTicks)
 		sb.append('\n')
 		sb.append("longest_queued_wait_secs: ")
-		sb.append("%.1f".format(wm.longestQueuedWaitSecs))
+		sb.append(wm.longestQueuedWaitSecs.f1())
 		sb.append('\n')
 		sb.append("blocked_train_count: ")
 		sb.append(wm.blockedTrainCount)
@@ -131,7 +140,7 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append("=== CURRENT STATE (tick ")
 		sb.append(obs.tick)
 		sb.append(", simTime ")
-		sb.append("%.1f".format(obs.simTime))
+		sb.append(obs.simTime.f1())
 		sb.append(") ===\n")
 
 		sb.append("active ")
@@ -179,20 +188,22 @@ class CompactTextRenderer : ObservationRenderer {
 				sb.append(" -> ")
 				sb.append(t.destinationInOutName)
 				sb.append(" | v=")
-				sb.append("%.1f".format(t.velocityMps))
+				sb.append(t.velocityMps.f1())
 				sb.append(" a=")
-				sb.append("%.1f".format(t.accelerationMps2))
+				sb.append(t.accelerationMps2.f1())
 				if (t.signalAheadName != null) {
 					sb.append(" | ahead ")
 					sb.append(t.signalAheadName)
 					sb.append('=')
 					sb.append(signalDisplayName(t.signalAheadAspect))
 					sb.append(' ')
-					sb.append("%.0f".format(t.distanceToSignalAheadMetres))
+					sb.append(t.distanceToSignalAheadMetres.f0())
 					sb.append('m')
 				}
+				// RUNNING/HELD/DWELLING wait is rendered as integer seconds (whole-second
+				// waits); QUEUED wait below uses %.1f because queued waits are sub-second precise.
 				sb.append(" | wait ")
-				sb.append("%.0f".format(t.waitSeconds))
+				sb.append(t.waitSeconds.f0())
 				sb.append('s')
 			}
 			TrainPhase.QUEUED -> {
@@ -200,10 +211,10 @@ class CompactTextRenderer : ObservationRenderer {
 				sb.append(t.destinationInOutName)
 				if (t.waitingSinceSimTime != null) {
 					sb.append(" | queued since ")
-					sb.append("%.1f".format(t.waitingSinceSimTime))
+					sb.append(t.waitingSinceSimTime.f1())
 				}
 				sb.append(" | wait ")
-				sb.append("%.1f".format(t.waitSeconds))
+				sb.append(t.waitSeconds.f1())
 				sb.append('s')
 			}
 			TrainPhase.EXITED -> {
@@ -227,7 +238,7 @@ class CompactTextRenderer : ObservationRenderer {
 	) {
 		if (obs.blocks.isEmpty()) return
 		sb.append("blocks:")
-		val lineWidth = 80
+		val lineWidth = BLOCK_LINE_WRAP_WIDTH
 		var lineLen = 7 // "blocks:".length
 		for (block in obs.blocks) {
 			val entry = blockEntry(block.blockId, block.state, block.occupantTrainId)
@@ -277,6 +288,9 @@ class CompactTextRenderer : ObservationRenderer {
 	) {
 		if (obs.signals.isEmpty()) return
 		sb.append("signals:")
+		// Only the aspect is rendered. SignalView.authorizedFrom/authorizedTo are intentionally
+		// omitted — the worked example (#825) shows only `doA1=GO`; the authorised segment is
+		// implied by the aspect and the dispatcher does not need the explicit from/to pair.
 		for (sig in obs.signals) {
 			sb.append(' ')
 			sb.append(sig.name)
@@ -292,6 +306,9 @@ class CompactTextRenderer : ObservationRenderer {
 	) {
 		if (obs.reservations.isEmpty()) return
 		sb.append("reservations:")
+		// ReservationView.fromEndpointName is intentionally omitted — the worked example (#825)
+		// shows only `trainId -> targetName via blockIds`; the origin is implied by the train's
+		// current position and is not useful to the dispatcher as a separate field.
 		for (res in obs.reservations) {
 			sb.append(' ')
 			sb.append(res.trainId)
@@ -347,3 +364,18 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append("no_op: always applicable\n")
 	}
 }
+
+/**
+ * Locale-independent one-decimal formatting (AC7 — see [RenderContext] determinism KDoc).
+ *
+ * Kotlin's stdlib `"%.1f".format(d)` delegates to `java.lang.String.format` using the JVM
+ * default locale, which emits a comma decimal separator under e.g. `cs_CZ`/`de_DE`/`fr_FR`
+ * and would break byte-identical golden output. [Locale.ROOT] forces the invariant `.`
+ * separator on every JVM.
+ */
+private fun Double.f1(): String = String.format(Locale.ROOT, "%.1f", this)
+
+/**
+ * Locale-independent integer (rounded) formatting — see [f1] for the locale rationale.
+ */
+private fun Double.f0(): String = String.format(Locale.ROOT, "%.0f", this)

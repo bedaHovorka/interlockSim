@@ -20,9 +20,18 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  * Renders **only** the `=== CHANGED SINCE LAST TICK ===` section (prompt section 7,
  * SP2c.2 layout, #825).
  *
- * Compares [RenderContext.observation] against [RenderContext.previous] field-by-field and
- * lists only those trains, blocks, switches, and signals whose state changed. When
+ * Compares [RenderContext.observation] against [RenderContext.previous] and lists only those
+ * trains, blocks, switches, and signals whose **discrete** state changed. When
  * [RenderContext.previous] is `null` (tick 0), the section body is exactly `(first tick)`.
+ *
+ * ## Train deltas are phase-only by design
+ *
+ * A train contributes a delta line only when its [TrainPhase] changes (e.g. HELD→RUNNING) or
+ * when it appears/disappears (`(new/...)` / `(exited)`). Continuous fields — velocity, front
+ * section, distance to signal ahead — are deliberately **not** reported: a RUNNING train's
+ * velocity changes on essentially every tick, so reporting it would make the delta fire
+ * constantly and defeat its purpose (a short "what changed" summary). A train slowing to a halt
+ * without a phase transition is therefore invisible to the delta; that is intentional.
  *
  * ## Token savings
  *
@@ -32,9 +41,9 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  *
  * ## Determinism
  *
- * All output is built with explicit fixed-precision formatting (`"%.1f".format(d)`) — never
- * `Double.toString` — satisfying AC7 (#825). Rendering the same [RenderContext] any number of
- * times produces byte-identical output.
+ * The delta carries no floating-point fields (phase/state/aspect changes only), so rendering
+ * is trivially locale-independent. Rendering the same [RenderContext] any number of times
+ * produces byte-identical output (AC3, #825).
  *
  * @since Issue #825 (SP2c.2 — Goal 10 renderers)
  */
