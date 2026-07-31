@@ -143,8 +143,8 @@ class OllamaRuntimeContractOllamaTest {
 		}
 
 		/**
-		 * A resident model must have a non-expired `expires_at`; a zero/absent one would mean the
-		 * entry is a stale record rather than a live load.
+		 * A resident model must report a non-zero VRAM/RAM footprint (`size`); a zero/absent `size`
+		 * would mean the `/api/ps` entry is a stale record rather than a live load.
 		 */
 		@Test
 		@Tag("ollama-test")

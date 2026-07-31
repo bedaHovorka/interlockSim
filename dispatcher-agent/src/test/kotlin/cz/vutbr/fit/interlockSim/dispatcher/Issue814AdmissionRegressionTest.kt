@@ -279,14 +279,16 @@ class Issue814AdmissionRegressionTest {
 				plannerBuilder(queue, safetyNet).also { planner = it }
 			}
 
+		val resolvedPlanner = planner ?: error("planner not constructed by fixture")
+
 		return RunOutcome(
 			trainsExited = run.trainsExited(),
 			maxConcurrent = run.maxConcurrentTrains(),
 			conflictEvents = conflictEvents,
-			cycles = planner!!.cycles.get(),
-			plannerAdmissions = planner!!.plannerAdmissions.get(),
+			cycles = resolvedPlanner.cycles.get(),
+			plannerAdmissions = resolvedPlanner.plannerAdmissions.get(),
 			safetyNetAdmissions = safetyNet?.forcedAdmissions?.get() ?: 0,
-			staleReRequests = (planner as? RedundantRouteRequestPlanner)?.staleReRequests?.get() ?: 0
+			staleReRequests = (resolvedPlanner as? RedundantRouteRequestPlanner)?.staleReRequests?.get() ?: 0
 		)
 	}
 

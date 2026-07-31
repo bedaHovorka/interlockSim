@@ -18,6 +18,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.junit.jupiter.api.Tag
@@ -250,8 +252,16 @@ class SeededOllamaJsonClientTest {
 	fun `the configured contextWindowTokens is accepted as num_ctx by the live model`() {
 		val config = OllamaExecutorConfig.forLocalTesting()
 
-		assertThat(SeededOllamaJsonClient.buildRequestBody(config, null, "ok", null, 1L))
-			.contains("\"num_ctx\":${config.contextWindowTokens}")
+		val numCtx =
+			Json
+				.parseToJsonElement(SeededOllamaJsonClient.buildRequestBody(config, null, "ok", null, 1L))
+				.jsonObject["options"]
+				?.jsonObject
+				?.get("num_ctx")
+				?.jsonPrimitive
+				?.long
+
+		assertThat(numCtx).isEqualTo(config.contextWindowTokens)
 
 		val content =
 			runBlocking {
