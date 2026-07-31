@@ -114,6 +114,17 @@ class ActionValidator(
 	 * [DispatchAction.NoOp]. The action-count limit applies only to individually-valid non-NoOp
 	 * actions.
 	 *
+	 * ## Production caller (SP2c.5)
+	 *
+	 * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] does NOT call this
+	 * batch method: it validates each emitted action one at a time via [validate] and enforces the
+	 * per-tick cap with `take(maxActionsPerTick)` on the emission list. The optimistic intra-tick
+	 * projection (`applyOptimistically`) feeds each action's post-state into the next [validate]
+	 * call, so within-tick duplicates are caught by the single-action conflict rule rather than by
+	 * [RejectionCode.DUPLICATE_ACTION_THIS_TICK]. This batch method is therefore exercised by tests
+	 * and by any future caller that validates a pre-built action list in one shot; it is kept in sync
+	 * with [validate] so the two paths cannot drift.
+	 *
 	 * @return One [Pair] per input action, in the same order, pairing each action with its
 	 *   [ValidationVerdict].
 	 */

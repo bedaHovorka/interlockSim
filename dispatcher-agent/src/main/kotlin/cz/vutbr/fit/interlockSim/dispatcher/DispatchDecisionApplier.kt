@@ -220,6 +220,21 @@ class DispatchDecisionApplier(
 	private val appliedReservations: MutableSet<String> = mutableSetOf()
 
 	/**
+	 * Request-route triples (`trainName|fromEndpointName|toEndpointName`) already
+	 * successfully applied via [applyRequestRoute], for the duplicate-suppression guard
+	 * symmetric to [appliedReservations] (see [applyRequestRoute] KDoc).
+	 *
+	 * Evicted together with [appliedReservations] by [evictReservationsFor] — the same
+	 * bidirectional-operation rationale applies: a train that reverses and re-approaches
+	 * an endpoint pair it already traversed must not stay suppressed.
+	 *
+	 * @since SP2c.5 (#865) — anchor for the #829 (SP2c.6) O5 validator relaxation; see
+	 *   [applyRequestRoute] for why this guard is dormant today but load-bearing once the
+	 *   `ActionValidator` conflict rule permits forward extensions.
+	 */
+	private val appliedRequestRoutes: MutableSet<String> = mutableSetOf()
+
+	/**
 	 * Evicts every [appliedReservations] entry recorded for [trainId].
 	 *
 	 * ## Why eviction is needed (Goal 10 code-review fix)
@@ -239,11 +254,17 @@ class DispatchDecisionApplier(
 	 * from a [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener] subscribed to
 	 * [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType.BLOCK_RELEASED] events.
 	 *
-	 * @since Goal 10 code-review fix — latent bug found during the SP0.11 review
+	 * Clears both [appliedReservations] (per-hop `ReservePath`) and [appliedRequestRoutes]
+	 * (destination-level `RequestRoute`) so a single block-release event re-enables either
+	 * vocabulary's dedup guard for that train.
+	 *
+	 * @since Goal 10 code-review fix — latent bug found during the SP0.11 review;
+	 *   [appliedRequestRoutes] eviction added in SP2c.5 (#865)
 	 */
 	fun evictReservationsFor(trainId: String) {
 		val prefix = "$trainId|"
 		appliedReservations.removeAll { it.startsWith(prefix) }
+		appliedRequestRoutes.removeAll { it.startsWith(prefix) }
 	}
 
 	/**
@@ -539,15 +560,38 @@ class DispatchDecisionApplier(
 	 *
 	 * Inlined from [cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator] so the outcome can
 	 * be captured without modifying `:core`. Logging is identical to the shared helper.
+	 *
+	 * ## Duplicate-suppression guard (SP2c.5 / #865)
+	 *
+	 * Symmetric to [applyReservePath]: an exact `trainName|fromEndpointName|toEndpointName` triple
+	 * already successfully applied is skipped on re-entry. The guard is **dormant today** because
+	 * `ActionValidator.validateRequestRouteConflict` rejects any second `RequestRoute` for a train
+	 * that already holds a reservation before it reaches this applier — so a duplicate never gets
+	 * this far. It becomes **load-bearing once #829 (SP2c.6) lands the O5 fix** that lets the
+	 * validator accept a contiguous forward extension (`from == existing.target`): at that point a
+	 * train may legitimately re-emit the *same* `RequestRoute` while its first application is still
+	 * in flight, and re-applying it would corrupt the `PathReservationRegistry` merge exactly as
+	 * `applyReservePath`'s guard prevents for `ReservePath` (the #733 train-freeze). Recording the
+	 * triple only on `Reserved` keeps the guard aligned with actual successful application.
+	 *
+	 * @since SP2c.17 (#840); duplicate-suppression guard added in SP2c.5 (#865) as a hard anchor
+	 *   for the #829 (SP2c.6) O5 validator relaxation.
 	 */
 	private fun applyRequestRoute(
 		decision: DispatchDecision.RequestRoute,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
+		val reservationKey = "${decision.trainName}|${decision.fromEndpointName}|${decision.toEndpointName}"
+		if (reservationKey in appliedRequestRoutes) {
+			logger.debug {
+				"DispatchDecisionApplier: skipping duplicate RequestRoute: " +
+					"trainName=${decision.trainName} ${decision.fromEndpointName} → ${decision.toEndpointName} (already applied)"
+			}
+			return
+		}
 		logger.debug {
 			"DispatchDecisionApplier: applying RequestRoute trainName=${decision.trainName}, " +
-				"from=${decision.fromEndpointName}, to=${decision.toEndpointName}" +
-				decision.rationale.toRationaleLogSuffix()
+				"from=${decision.fromEndpointName}, to=${decision.toEndpointName}${decision.rationale.toRationaleLogSuffix()}"
 		}
 		return when (
 			val result =
@@ -561,6 +605,7 @@ class DispatchDecisionApplier(
 				logger.debug {
 					"DispatchDecisionApplier: RequestRoute reserved ${result.blocksCount} block(s) for ${decision.trainName}"
 				}
+				appliedRequestRoutes.add(reservationKey)
 				if (correlation != null) {
 					outcomeSink?.publish(
 						AppliedOutcome.Reserved(

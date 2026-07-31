@@ -126,7 +126,7 @@ class RuleBasedEmissionStrategyTest {
 			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted).isNotNull()
-			assertThat(emitted!!.map { it.action }).containsExactly(DispatchAction.ApproveTrain("T-1"))
+			assertThat(emitted.map { it.action }).containsExactly(DispatchAction.ApproveTrain("T-1"))
 		}
 
 		/**
@@ -140,7 +140,7 @@ class RuleBasedEmissionStrategyTest {
 			val decision = DispatchDecision.ReservePath("T-2", fromSemaphoreName = "doA1", toSeparatorName = "B")
 			val strategy = RuleBasedEmissionStrategy(ScriptedDispatcher(listOf(decision)))
 
-			val emitted = runBlocking { strategy.emit("", observation) }!!
+			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted.map { it.action }).containsExactly(
 				DispatchAction.RequestRoute(trainId = "T-2", fromEndpointName = "doA1", toEndpointName = "B")
@@ -160,7 +160,7 @@ class RuleBasedEmissionStrategyTest {
 			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted).isNotNull()
-			assertThat(emitted!!).isEmpty()
+			assertThat(emitted).isEmpty()
 		}
 
 		@Test
@@ -168,7 +168,7 @@ class RuleBasedEmissionStrategyTest {
 		fun emptyDecisionsProduceEmptyActions() {
 			val strategy = RuleBasedEmissionStrategy(ScriptedDispatcher(emptyList()))
 
-			assertThat(runBlocking { strategy.emit("", observation) }!!).isEmpty()
+			assertThat(runBlocking { strategy.emit("", observation) }).isEmpty()
 		}
 
 		@Test
@@ -184,7 +184,7 @@ class RuleBasedEmissionStrategyTest {
 					)
 				)
 
-			val emitted = runBlocking { strategy.emit("", observation) }!!
+			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted).hasSize(1)
 			assertThat(emitted[0].action).isEqualTo(DispatchAction.ApproveTrain("T-1"))
@@ -203,7 +203,7 @@ class RuleBasedEmissionStrategyTest {
 					)
 				)
 
-			val emitted = runBlocking { strategy.emit("", observation) }!!
+			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted.map { it.action.kind }).containsExactly("approve_train", "request_route")
 		}
@@ -231,7 +231,7 @@ class RuleBasedEmissionStrategyTest {
 					)
 				)
 
-			val emitted = runBlocking { strategy.emit("", observation) }!!
+			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted.all { it.author == ActionAuthor.RULE_BASED }).isTrue()
 			assertThat(emitted.any { it.author == ActionAuthor.RULE_FALLBACK }).isFalse()
@@ -242,7 +242,7 @@ class RuleBasedEmissionStrategyTest {
 		fun actionsCarryObservationTick() {
 			val strategy = RuleBasedEmissionStrategy(ScriptedDispatcher(listOf(DispatchDecision.ApproveTrain("T-1"))))
 
-			val emitted = runBlocking { strategy.emit("", observation) }!!
+			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted[0].tick).isEqualTo(12L)
 		}
@@ -252,8 +252,8 @@ class RuleBasedEmissionStrategyTest {
 		fun commandIdsAreUnique() {
 			val strategy = RuleBasedEmissionStrategy(ScriptedDispatcher(listOf(DispatchDecision.ApproveTrain("T-1"))))
 
-			val first = runBlocking { strategy.emit("", observation) }!!
-			val second = runBlocking { strategy.emit("", observation) }!!
+			val first = runBlocking { strategy.emit("", observation) }
+			val second = runBlocking { strategy.emit("", observation) }
 
 			assertThat(second[0].commandId.value).isGreaterThan(first[0].commandId.value)
 		}
@@ -386,8 +386,8 @@ class RuleBasedEmissionStrategyTest {
 			val dispatcher = ScriptedDispatcher(listOf(DispatchDecision.ApproveTrain("T-1")))
 			val strategy = RuleBasedEmissionStrategy(dispatcher)
 
-			val withPrompt = runBlocking { strategy.emit("a long rendered prompt", observation) }!!
-			val withoutPrompt = runBlocking { strategy.emit("", observation) }!!
+			val withPrompt = runBlocking { strategy.emit("a long rendered prompt", observation) }
+			val withoutPrompt = runBlocking { strategy.emit("", observation) }
 
 			assertThat(withPrompt.map { it.action }).isEqualTo(withoutPrompt.map { it.action })
 		}
