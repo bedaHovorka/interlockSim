@@ -15,7 +15,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.junit.jupiter.api.Tag
@@ -145,5 +147,117 @@ class SeededOllamaJsonClientTest {
 		// "deterministic" — the spike's central claim must hold over real content.
 		assertThat(first.isNotBlank()).isTrue()
 		assertThat(second).isEqualTo(first)
+	}
+
+	/**
+	 * Strengthens the two-run claim above. The audit document explicitly records "2 repeats, one
+	 * machine, one model" as a limitation; three runs is still a small sample, but it turns a
+	 * single coincidence into a pattern at negligible extra cost.
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `three requests with the same seed all produce identical content`() {
+		val config = OllamaExecutorConfig.forLocalTesting()
+		val systemPrompt = "Reply with strict JSON only, matching the schema. Do not add commentary."
+		val userPrompt = "Describe a single railway dispatch action for a train named T1 going from A to B."
+
+		val runs =
+			(1..3).map {
+				runBlocking {
+					SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, seed = 4242L)
+				}
+			}
+
+		assertThat(runs[0].isNotBlank()).isTrue()
+		assertThat(runs.toSet().size).isEqualTo(1)
+	}
+
+	/**
+	 * The `format` half of the client's contract: the response must actually satisfy the schema it
+	 * was constrained by. Would fail if `format` stopped being sent (the `jsonSchema` argument
+	 * dropped from [SeededOllamaJsonClient.buildRequestBody]) — the model would then answer in
+	 * prose and this parse would blow up or the key would be missing.
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `a schema-constrained response parses as JSON carrying the schema's key`() {
+		val config = OllamaExecutorConfig.forLocalTesting()
+
+		val content =
+			runBlocking {
+				SeededOllamaJsonClient.requestJson(
+					config,
+					systemPrompt = "Reply with strict JSON only, matching the schema. Do not add commentary.",
+					userPrompt = "Name one railway dispatch action.",
+					jsonSchema = schema,
+					seed = 99L
+				)
+			}
+
+		val parsed = Json.parseToJsonElement(content).jsonObject
+		assertThat(parsed.containsKey("action")).isTrue()
+	}
+
+	/**
+	 * Two different seeds are not *required* to differ — a short, tightly-constrained answer can
+	 * legitimately be identical. What must hold is that both seeds still produce a schema-valid,
+	 * non-blank answer: a seed value must never break the request.
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `different seeds both produce well-formed schema-valid responses`() {
+		val config = OllamaExecutorConfig.forLocalTesting()
+		val systemPrompt = "Reply with strict JSON only, matching the schema. Do not add commentary."
+		val userPrompt = "Name one railway dispatch action."
+
+		val first =
+			runBlocking { SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, 1L) }
+		val second =
+			runBlocking { SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, 2L) }
+
+		assertThat(Json.parseToJsonElement(first).jsonObject.containsKey("action")).isTrue()
+		assertThat(Json.parseToJsonElement(second).jsonObject.containsKey("action")).isTrue()
+	}
+
+	/**
+	 * Without a schema the client must still work — the seeded path is not schema-only. Would fail
+	 * if `format` became a required field rather than a nullable one.
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `a request without a schema still returns non-blank content`() {
+		val content =
+			runBlocking {
+				SeededOllamaJsonClient.requestJson(
+					OllamaExecutorConfig.forLocalTesting(),
+					systemPrompt = null,
+					userPrompt = "Reply with the single word: ok",
+					jsonSchema = null,
+					seed = 5L
+				)
+			}
+
+		assertThat(content.isNotBlank()).isTrue()
+	}
+
+	/**
+	 * The client sends the production `contextWindowTokens` as `num_ctx`. SP2c.27 Spike 3 raised
+	 * that value to 16384 specifically to avoid silent oldest-message truncation, so a request
+	 * carrying it must be accepted rather than rejected by the running model.
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `the configured contextWindowTokens is accepted as num_ctx by the live model`() {
+		val config = OllamaExecutorConfig.forLocalTesting()
+
+		assertThat(SeededOllamaJsonClient.buildRequestBody(config, null, "ok", null, 1L))
+			.contains("\"num_ctx\":${config.contextWindowTokens}")
+
+		val content =
+			runBlocking {
+				SeededOllamaJsonClient.requestJson(config, null, "Reply with the single word: ok", null, 1L)
+			}
+
+		assertThat(content.isNotBlank()).isTrue()
 	}
 }
