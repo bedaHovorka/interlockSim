@@ -478,11 +478,11 @@ class DispatcherObservationProjectorTest {
 	}
 
 	@Nested
-	@DisplayName("appliedOutcomes (SP2c.17 placeholder)")
+	@DisplayName("appliedOutcomes (SP2c.17 — #840)")
 	inner class AppliedOutcomes {
 		@Test
-		@DisplayName("is always empty until the SP2c.17 outcome channel lands")
-		fun appliedOutcomesIsAlwaysEmptyForNow() {
+		@DisplayName("is empty when no outcomeFeed is wired (backward-compat / headless runs)")
+		fun appliedOutcomesIsEmptyWithNoFeed() {
 			loadShuntingLoopContext().use { context ->
 				val snapshot = snapshotOf(simTime = 0.0, perceptions = emptyList())
 				val projector = stubPorts(context, snapshot, dispatchSnapshotOf(emptyList()))

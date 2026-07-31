@@ -18,6 +18,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.observation
 
+import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -157,25 +158,106 @@ data class QueuedTrainView(
 )
 
 /**
- * Placeholder shape for one completed actuator command's outcome, ahead of the correlated
- * async outcome channel (SP2c.17, a sibling of #824). [DispatcherObservation] already carries
- * the field so downstream code (renderers, the future control loop) can be written against the
- * final shape once, without a breaking change when SP2c.17 lands.
+ * Correlated outcome of one applied actuator command, pushed into the next tick's perception
+ * prompt so the agent always learns what actually happened — closing the fire-and-forget gap
+ * documented in SP2c.17 (#840).
  *
- * Until SP2c.17 wires a real `AppliedOutcomeChannel`, [DispatcherObservationProjector] always
- * publishes an empty [DispatcherObservation.appliedOutcomes] list — there is no channel yet to
- * drain. This shape is intentionally minimal and may be redefined by SP2c.17; it is not part of
- * this issue's (#824) acceptance contract.
+ * Every outcome carries a [CommandId] that was issued at queue-post time (driver thread) and
+ * looked up by identity in [cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap] on the
+ * sim thread when the decision was applied. This one-to-one correlation is how the agent can
+ * connect "I issued `request_route T-087 -> InOut-B`" to "that request was CONFLICTED because
+ * block W2 is held by T-042".
  *
- * @property trainId Train the actuator command was issued to.
- * @property description Human-readable outcome of the command.
- * @property tick Publish-sequence number of the tick the command was applied on.
+ * ## ThreadIndex attribution
+ *
+ * [tickIndex] is the [CommandCorrelationMap.newCycle] cycle counter value at the time the
+ * command was posted. [DispatcherObservationProjector] drains outcomes whose
+ * [tickIndex] ≥ `currentTick − 1`, so late arrivals from the immediately previous cycle
+ * are never silently dropped.
+ *
+ * @property id Correlation key issued at queue-post time.
+ * @property tickIndex Driver-thread cycle counter value at the time the command was posted.
+ *
+ * @since Issue #840 (SP2c.17 — correlated async outcome channel)
  */
-data class AppliedOutcome(
-	val trainId: String,
-	val description: String,
-	val tick: Long
-)
+sealed interface AppliedOutcome {
+	val id: CommandId
+	val tickIndex: Long
+
+	/** `request_route` succeeded; the full path from [fromEndpointName] to [toEndpointName] is now locked. */
+	data class Reserved(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		val blocksCount: Int,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/** `request_route` failed because all paths between the endpoints were physically blocked. */
+	data class Blocked(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		val attemptedPaths: Int,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/** `request_route` failed because a competing train holds a block on every candidate path. */
+	data class Conflicted(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		/** Name of the conflicting block, or `null` when not determinable from the result. */
+		val blockName: String?,
+		val existingOwner: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/** `request_route` failed because the station topology contains no path between the endpoints. */
+	data class NoRoute(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/** `release_route` completed; [anyReleased] is `true` if at least one block was released. */
+	data class Released(
+		val trainId: String,
+		val anyReleased: Boolean,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/**
+	 * `approve_train` was applied. [admitted] is always `true` because the callback is
+	 * idempotent — an absent or already-active train is silently ignored, not an error.
+	 */
+	data class Approved(
+		val trainId: String,
+		val admitted: Boolean,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/**
+	 * The decision was dropped because [NetworkActuatorPort] threw an
+	 * [IllegalArgumentException] (e.g. the LLM hallucinated an endpoint name that
+	 * doesn't exist in this station). The command was **not** applied.
+	 */
+	data class DroppedInvalid(
+		/** Tool name that produced the command (e.g. `"request_route"`, `"release_route"`). */
+		val commandType: String,
+		val trainId: String,
+		val message: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+}
 
 /**
  * One immutable, deterministic, sim-thread-captured snapshot of everything the Goal 10
@@ -211,7 +293,9 @@ data class AppliedOutcome(
  *   guard, and the (now-deleted per #822 §6) admission safety net all used, so every consumer of
  *   "capacity" in this codebase agrees by default.
  * @property appliedOutcomes Outcomes of previously queued actuator commands correlated back to
- *   this tick. Always empty until SP2c.17 lands — see [AppliedOutcome].
+ *   this tick. Populated by [DispatcherObservationProjector] when an
+ *   [cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel] is wired (SP2c.17, #840).
+ *   Always empty when no channel is wired (headless / rule-based-only runs).
  *
  * @since Issue #824 (SP2c.1 — Goal 10 autonomous dispatcher control-loop redesign)
  */

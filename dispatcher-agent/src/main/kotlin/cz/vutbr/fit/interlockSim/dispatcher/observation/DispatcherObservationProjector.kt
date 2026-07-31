@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.observation
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -84,7 +85,15 @@ class DispatcherObservationProjector(
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort,
 	private val pathReservationRegistry: PathReservationRegistry,
 	private val environment: SimulationEnvironment,
-	private val capacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+	private val capacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
+	/**
+	 * SP2c.17 (#840): Optional outcome feed drained on each [captureOnSimThread] call.
+	 *
+	 * When non-null, all [AppliedOutcome]s accumulated since the previous tick are drained and
+	 * included in [DispatcherObservation.appliedOutcomes]. When null (the default), the list
+	 * remains empty — existing callers that do not need the feedback channel are unaffected.
+	 */
+	private val outcomeFeed: AppliedOutcomeFeed? = null
 ) : DispatcherObservationSource {
 	@Volatile
 	private var published: DispatcherObservation = DispatcherObservation.EMPTY
@@ -129,6 +138,11 @@ class DispatcherObservationProjector(
 		// queued/waiting train, which buildQueuedViews then reads.
 		val trains = buildTrainViews(snapshot, dispatchSnapshot)
 
+		// SP2c.17 (#840): drain all outcomes whose tickIndex >= previous tick so no late
+		// arrivals are silently lost. tickCounter was incremented before this call, so
+		// `tick - 1` targets the control step that ran just before this capture.
+		val appliedOutcomes = outcomeFeed?.drainSince(tick - 1) ?: emptyList()
+
 		return DispatcherObservation(
 			tick = tick,
 			simTime = snapshot.simTime,
@@ -143,7 +157,7 @@ class DispatcherObservationProjector(
 			queued = buildQueuedViews(dispatchSnapshot, snapshot.simTime),
 			activeCount = snapshot.trainPositions.size,
 			capacity = capacity,
-			appliedOutcomes = emptyList()
+			appliedOutcomes = appliedOutcomes
 		)
 	}
 

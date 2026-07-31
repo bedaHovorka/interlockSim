@@ -32,11 +32,15 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * @param capacity Maximum number of decisions the queue may hold. Defaults to
  *   [DEFAULT_CAPACITY]. A negative capacity disables the limit.
+ * @param correlationMap Optional correlation map wired for SP2c.17 (#840). When non-null,
+ *   every successful [postAll] call also registers each decision by reference identity so
+ *   [DispatchDecisionApplier] can correlate applied outcomes back to the originating agent cycle.
  *
- * @since Issue #730 (SP0.8 — Goal 10)
+ * @since Issue #730 (SP0.8 — Goal 10); [correlationMap] added in Issue #840 (SP2c.17)
  */
 class ActuatorCommandQueue(
-	private val capacity: Int = DEFAULT_CAPACITY
+	private val capacity: Int = DEFAULT_CAPACITY,
+	private val correlationMap: CommandCorrelationMap? = null
 ) {
 	companion object {
 		/** Default maximum queue capacity. */
@@ -102,6 +106,10 @@ class ActuatorCommandQueue(
 			size.addAndGet(decisions.size)
 			queue.addAll(decisions)
 		}
+		// SP2c.17 (#840): register each posted decision by reference identity so the applier
+		// can correlate applied outcomes back to the originating agent cycle. Called after the
+		// queue insert so the sim thread cannot drain a decision before its entry is registered.
+		correlationMap?.register(decisions)
 		// One successful post of non-empty decisions == one actuator-tool actuation this cycle.
 		// Counted here (not in [size]) so a concurrent [drain] on the sim thread cannot erase it.
 		cycleActuatorPostCount.incrementAndGet()
@@ -153,9 +161,13 @@ class ActuatorCommandQueue(
 	 * Called by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
 	 * immediately before the LLM runs. See [cycleActuatorPostCount] for why this is a call
 	 * counter rather than a queue-contents read.
+	 *
+	 * SP2c.17 (#840): also advances the [CommandCorrelationMap] cycle counter so every decision
+	 * posted in this new LLM cycle receives a tick index one higher than the previous cycle's.
 	 */
 	fun resetCycleActuatorCount() {
 		cycleActuatorPostCount.set(0)
+		correlationMap?.newCycle()
 	}
 
 	/**
