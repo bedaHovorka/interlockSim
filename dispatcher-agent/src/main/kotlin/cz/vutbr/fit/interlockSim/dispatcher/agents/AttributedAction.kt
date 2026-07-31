@@ -13,6 +13,51 @@ import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 
 /**
+ * Attribution tag for a [DispatchAction] emitted by [DispatchTickLoop] (SP2c.5, Issue #828).
+ *
+ * Distinguishes the originating decision-maker so that [TerminalFallbackGuard] can correctly
+ * classify a tick as rule-based (acceptable) vs. terminal fallback (run FAILED) and
+ * [RunOutcome] is never marked FAILED for a determinism run that is deliberately rule-based
+ * all the way through (the P10 gate).
+ *
+ * | Value | Meaning |
+ * |---|---|
+ * | [LLM] | Action produced by the LLM emission strategy during a normal inference cycle. |
+ * | [TIMEOUT_NOOP] | Budget deadline expired; the loop substituted [DispatchAction.NoOp] automatically. |
+ * | [RULE_BASED] | A [RuleBasedEmissionStrategy] run — rule-based all the way, intentionally so. |
+ * | [RULE_FALLBACK] | Terminal fallback fired **mid-LLM-run** — the LLM failed and rules took over. Sets [RunOutcome.Failed]. |
+ * | [OPERATOR] | Human operator override (reserved for future interactive use). |
+ *
+ * **Why [RULE_BASED] ≠ [RULE_FALLBACK]:** conflating them would mark every rule-based
+ * determinism run (the P10 gate, SP2c.5 acceptance criterion) as FAILED — exactly the bug
+ * the [TerminalFallbackGuard] / [RunOutcome.Failed] combination must avoid.
+ *
+ * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
+ */
+enum class ActionAuthor {
+	/** Action produced by the LLM emission strategy during a normal inference cycle. */
+	LLM,
+
+	/** Budget deadline expired; the loop substituted [DispatchAction.NoOp] automatically. */
+	TIMEOUT_NOOP,
+
+	/**
+	 * Action produced by [RuleBasedEmissionStrategy] — rule-based all the way, intentionally so.
+	 * **Not** a fallback; a run where all actions have this author stays [RunOutcome.Running].
+	 */
+	RULE_BASED,
+
+	/**
+	 * Terminal fallback engaged **mid-LLM-run**: the LLM failed and a rule-based strategy
+	 * took over. Sets [RunOutcome.Failed] via [TerminalFallbackGuard].
+	 */
+	RULE_FALLBACK,
+
+	/** Human operator override. Reserved for future interactive use. */
+	OPERATOR
+}
+
+/**
  * A [DispatchAction] emitted this tick, tagged with the [CommandId] issued when it was posted
  * to the actuator queue, so it can be tracked in [WorkingMemory.pendingRequests] until the
  * matching [cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome] arrives or the
@@ -58,7 +103,18 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 data class AttributedAction(
 	val commandId: CommandId,
 	val tick: Long,
-	val action: DispatchAction
+	val action: DispatchAction,
+	/**
+	 * Attribution tag identifying the decision-maker that produced this action.
+	 *
+	 * Defaults to [ActionAuthor.LLM] for backwards-compatibility with existing code that
+	 * creates [AttributedAction] instances without explicitly specifying an author. New code
+	 * (particularly [DispatchTickLoop] and [RuleBasedEmissionStrategy]) should always pass an
+	 * explicit value.
+	 *
+	 * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
+	 */
+	val author: ActionAuthor = ActionAuthor.LLM
 )
 
 /** Extracts the trainId from a [DispatchAction], or `null` for [DispatchAction.NoOp]. */

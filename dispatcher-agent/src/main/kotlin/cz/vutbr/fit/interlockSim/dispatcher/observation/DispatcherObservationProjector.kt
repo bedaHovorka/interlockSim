@@ -162,7 +162,9 @@ class DispatcherObservationProjector(
 			queued = buildQueuedViews(dispatchSnapshot, snapshot.simTime),
 			activeCount = snapshot.trainPositions.size,
 			capacity = capacity,
-			appliedOutcomes = appliedOutcomes
+			appliedOutcomes = appliedOutcomes,
+			innerBlockInputs = dispatchSnapshot.innerBlockInputs,
+			outerBlockInputs = dispatchSnapshot.outerBlockInputs
 		)
 	}
 
