@@ -88,10 +88,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   returns the **live** number of currently approved trains. When non-null, the applier
  *   checks `activeTrainCountProvider() >= maxConcurrentTrains` before invoking [onApproveTrain]:
  *   if the cap is already reached, [onApproveTrain] is **not** called and an
- *   [AppliedOutcome.Approved] with `admitted = false, reason = `[ApplyFailureCode.CAP_EXCEEDED]`
+ *   [AppliedOutcome.Approved] with `admitted = false` and reason [ApplyFailureCode.CAP_EXCEEDED]
  *   is published through [outcomeSink]. When `null` (the default), no apply-time cap check
  *   is performed — existing callers that rely on the inner [ShuntingLoop.approveQueuedTrain]
- *   guard are unaffected.
+ *   guard are unaffected. The provider **must not throw** — an exception escapes into
+ *   [onControlStep] and crashes the kDisco simulation thread (the production provider
+ *   `{ loop.getApprovedTrains().size }` is safe).
  * @param maxConcurrentTrains SP2c.18: maximum concurrent trains allowed; only consulted when
  *   [activeTrainCountProvider] is non-null. Defaults to
  *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], matching the constant used by
@@ -197,9 +199,10 @@ class DispatchDecisionApplier(
 	 * per-context Koin scope), every gated, non-`NoAction` decision is forwarded
 	 * so a GUI ("Why this route?" panel) can display its rationale.
 	 *
-	 * Dropped decisions (under [DispatcherMode.MANUAL]) and [DispatchDecision.NoAction]
-	 * do not trigger the listener — it fires only for decisions that were actually
-	 * applied.
+	 * Dropped decisions (under [DispatcherMode.MANUAL]), [DispatchDecision.NoAction], and
+	 * apply-time refusals (an [DispatchDecision.ApproveTrain] refused with
+	 * [ApplyFailureCode.CAP_EXCEEDED] — see [applyApproveTrain]) do not trigger the listener:
+	 * it fires only for decisions that were actually applied.
 	 *
 	 * @since Issue #561 (SP2b.6 — Goal 10)
 	 * @see cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
@@ -232,6 +235,20 @@ class DispatchDecisionApplier(
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+	}
+
+	/**
+	 * SP2c.18 (#841): fail fast at wiring time when the apply-time cap is misconfigured.
+	 * With a non-null [activeTrainCountProvider], a `maxConcurrentTrains <= 0` would silently
+	 * refuse every `approve_train` (live count `>= 0` is always true) with only a debug log —
+	 * mirroring [RuleBasedDispatcher]'s own `require(maxConcurrentTrains > 0)` guard.
+	 */
+	init {
+		if (activeTrainCountProvider != null) {
+			require(maxConcurrentTrains > 0) {
+				"maxConcurrentTrains must be > 0 when activeTrainCountProvider is wired, but was $maxConcurrentTrains"
+			}
+		}
 	}
 
 	/**
@@ -311,11 +328,13 @@ class DispatchDecisionApplier(
 			val correlation = correlationMap?.correlate(decision)
 			if (shouldApply(decision)) {
 				try {
-					applyDecision(decision, correlation)
+					val applied = applyDecision(decision, correlation)
 					// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
 					// "Why this route?" panel can display the rationale. NoAction carries no
-					// rationale, and dropped decisions (e.g. under MANUAL) are not "applied".
-					if (decision !is DispatchDecision.NoAction) {
+					// rationale, and dropped/refused decisions (under MANUAL, or an apply-time
+					// CAP_EXCEEDED refusal — see applyApproveTrain) are not "applied", so
+					// applyDecision returns false and the listener is not invoked.
+					if (applied) {
 						onDecisionApplied?.onDecisionApplied(decision)
 					}
 				} catch (e: IllegalArgumentException) {
@@ -389,26 +408,43 @@ class DispatchDecisionApplier(
 
 	// Expression-body `when` so the compiler enforces exhaustiveness over the sealed
 	// DispatchDecision type — adding a future subtype becomes a compile error here
-	// rather than a silently-dropped decision.
+	// rather than a silently-dropped decision. Returns `true` when the decision was actually
+	// applied (so [onDecisionApplied] should fire); `false` for [DispatchDecision.NoAction]
+	// and for an [DispatchDecision.ApproveTrain] refused at apply time (CAP_EXCEEDED) —
+	// those are not "applied" and must not surface to the GUI "Why this route?" observer.
 	private fun applyDecision(
 		decision: DispatchDecision,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) = when (decision) {
 		is DispatchDecision.ApproveTrain -> applyApproveTrain(decision, correlation)
-		is DispatchDecision.ReservePath -> applyReservePath(decision)
-		DispatchDecision.NoAction -> Unit
+		is DispatchDecision.ReservePath -> {
+			applyReservePath(decision)
+			true
+		}
+		DispatchDecision.NoAction -> false
 		// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
-		is DispatchDecision.HoldTrain -> applyHoldTrain(decision)
+		is DispatchDecision.HoldTrain -> {
+			applyHoldTrain(decision)
+			true
+		}
 		// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
 		// SetSignalAspect and SetSwitchPosition still delegate to the shared helper in :core
 		// (no outcome type defined for them in SP2c.17). ReleaseRoute and RequestRoute are
 		// handled directly here so the outcome can be captured and published without touching
 		// :core's applyToolDrivenToActuator (zero :core changes, per SP2c.17 constraint C10).
 		is DispatchDecision.SetSignalAspect,
-		is DispatchDecision.SetSwitchPosition ->
+		is DispatchDecision.SetSwitchPosition -> {
 			decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
-		is DispatchDecision.ReleaseRoute -> applyReleaseRoute(decision, correlation)
-		is DispatchDecision.RequestRoute -> applyRequestRoute(decision, correlation)
+			true
+		}
+		is DispatchDecision.ReleaseRoute -> {
+			applyReleaseRoute(decision, correlation)
+			true
+		}
+		is DispatchDecision.RequestRoute -> {
+			applyRequestRoute(decision, correlation)
+			true
+		}
 	}
 
 	/**
@@ -431,11 +467,16 @@ class DispatchDecisionApplier(
 	 * [ShuntingLoop.approveQueuedTrain]'s own inner guard).
 	 *
 	 * @since Issue #841 (SP2c.18 — Goal 10 apply-time cap enforcement)
+	 *
+	 * @return `true` when the train was admitted ([onApproveTrain] invoked); `false` when the
+	 *   cap was already reached and the admission was refused with [ApplyFailureCode.CAP_EXCEEDED].
+	 *   The Boolean lets [onControlStep] skip [onDecisionApplied] for a refusal — a refused
+	 *   admission was not "applied" and must not surface to the GUI "Why this route?" observer.
 	 */
 	private fun applyApproveTrain(
 		decision: DispatchDecision.ApproveTrain,
 		correlation: CommandCorrelationMap.CommandAndTick?
-	) {
+	): Boolean {
 		val provider = activeTrainCountProvider
 		if (provider != null) {
 			val liveCount = provider()
@@ -455,7 +496,7 @@ class DispatchDecisionApplier(
 						)
 					)
 				}
-				return
+				return false
 			}
 		}
 		logger.debug {
@@ -473,6 +514,7 @@ class DispatchDecisionApplier(
 				)
 			)
 		}
+		return true
 	}
 
 	/**

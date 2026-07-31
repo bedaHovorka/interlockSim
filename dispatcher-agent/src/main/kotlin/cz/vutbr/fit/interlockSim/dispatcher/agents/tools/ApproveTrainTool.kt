@@ -48,8 +48,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * thread, where the live active-train count is available. Two `approve_train` calls issued in
  * the same driver tick can both pass this stale-snapshot check; the applier resolves them in
  * FIFO order and publishes [cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome.Approved]
- * with `admitted = false, reason = `[cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode.CAP_EXCEEDED]`
- * for any that exceed the cap. The refusal surfaces in the next tick's `applied_outcomes` block
+ * with `admitted = false` and reason
+ * [cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode.CAP_EXCEEDED] for any that exceed the cap.
+ * The refusal surfaces in the next tick's `applied_outcomes` block
  * (SP2c.17/#840) so the agent learns the admission did not take effect.
  *
  * Pre-queue rejections (this method) are distinguishable from apply-time refusals in the

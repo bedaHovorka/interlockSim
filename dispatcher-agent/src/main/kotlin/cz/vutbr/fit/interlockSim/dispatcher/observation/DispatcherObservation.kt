@@ -239,8 +239,10 @@ sealed interface AppliedOutcome {
 	/**
 	 * `approve_train` was processed at apply time on the simulation thread.
 	 *
-	 * - [admitted] = `true`, [reason] = `null`: the train was successfully admitted.
-	 *   The callback (`ShuntingLoop.approveQueuedTrain`) was invoked.
+	 * - [admitted] = `true`, [reason] = `null`: the cap check passed and the admission callback
+	 *   (`ShuntingLoop.approveQueuedTrain`) was invoked. The callback itself is idempotent — an
+	 *   absent or already-active train is silently ignored — so `admitted = true` means the
+	 *   command was applied, not necessarily that a new train entered the sim.
 	 * - [admitted] = `false`, [reason] = [ApplyFailureCode.CAP_EXCEEDED]: the station was
 	 *   already at full capacity when this command was drained.  The callback was **not**
 	 *   invoked.  The agent should wait for an active train to exit before retrying.

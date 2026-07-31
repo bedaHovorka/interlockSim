@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.assertThrows
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -648,6 +650,101 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			val refusal = outcomeSink.drainSince(0L)[0] as AppliedOutcome.Approved
 			assertThat(refusal.admitted).isFalse()
 			assertThat(refusal.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+		}
+	}
+
+	// ── AC: onDecisionApplied fires only for actually-applied decisions ─────────────────
+
+	@Nested
+	@DisplayName("AC: onDecisionApplied fires only for applied decisions, not refusals")
+	inner class OnDecisionAppliedGating {
+		/**
+		 * A CAP_EXCEEDED refusal is not "applied" — [DispatchDecisionApplier]'s `onApproveTrain`
+		 * callback was never invoked — so the GUI "Why this route?" observer must not be notified
+		 * for it. Would fail if `applyDecision` returned `Unit` and `onControlStep` fired
+		 * `onDecisionApplied` unconditionally for every non-`NoAction` decision.
+		 */
+		@Test
+		@DisplayName("onDecisionApplied fires for the admitted train but not the refused one")
+		fun onDecisionApplied_firesForAdmittedNotRefused() {
+			liveActiveCount.set(1) // cap=2, 1 slot free
+			correlationMap.newCycle()
+			val fired = mutableListOf<DispatchDecision>()
+			val queue = ActuatorCommandQueue(correlationMap = correlationMap)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = { trainId ->
+						admittedTrains.add(trainId)
+						liveActiveCount.incrementAndGet()
+					},
+					activeTrainCountProvider = { liveActiveCount.get() },
+					maxConcurrentTrains = 2,
+					correlationMap = correlationMap,
+					outcomeSink = outcomeSink,
+					onDecisionApplied = DispatchDecisionListener { fired.add(it) }
+				)
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ApproveTrain("T-in"),
+					DispatchDecision.ApproveTrain("T-out")
+				)
+			)
+			applier.onControlStep()
+
+			// Exactly one admission, one refusal
+			assertThat(admittedTrains).isEqualTo(listOf("T-in"))
+			val outcomes = outcomeSink.drainSince(0L).map { it as AppliedOutcome.Approved }
+			assertThat(outcomes.map { it.admitted }).isEqualTo(listOf(true, false))
+
+			// The listener heard only the admitted decision, not the refused one
+			assertThat(fired).hasSize(1)
+			assertThat((fired[0] as DispatchDecision.ApproveTrain).trainId).isEqualTo("T-in")
+		}
+
+		@Test
+		@DisplayName("onDecisionApplied does not fire for NoAction")
+		fun onDecisionApplied_doesNotFireForNoAction() {
+			liveActiveCount.set(0)
+			correlationMap.newCycle()
+			val fired = mutableListOf<DispatchDecision>()
+			val queue = ActuatorCommandQueue(correlationMap = correlationMap)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = { trainId -> admittedTrains.add(trainId) },
+					activeTrainCountProvider = { liveActiveCount.get() },
+					maxConcurrentTrains = 2,
+					correlationMap = correlationMap,
+					outcomeSink = outcomeSink,
+					onDecisionApplied = DispatchDecisionListener { fired.add(it) }
+				)
+
+			queue.postAll(listOf(DispatchDecision.NoAction))
+			applier.onControlStep()
+
+			assertThat(fired).hasSize(0)
+		}
+
+		/**
+		 * Guards the [require] guard added with the provider: a misconfigured cap must fail at
+		 * wiring time rather than silently refusing every admission.
+		 */
+		@Test
+		@DisplayName("maxConcurrentTrains <= 0 with a provider throws at construction (fail-fast)")
+		fun maxConcurrentTrainsZeroOrNegativeThrowsAtConstruction() {
+			assertThrows<IllegalArgumentException> {
+				DispatchDecisionApplier(
+					queue = ActuatorCommandQueue(),
+					networkActuator = networkActuator,
+					onApproveTrain = { },
+					activeTrainCountProvider = { liveActiveCount.get() },
+					maxConcurrentTrains = 0
+				)
+			}
 		}
 	}
 }
