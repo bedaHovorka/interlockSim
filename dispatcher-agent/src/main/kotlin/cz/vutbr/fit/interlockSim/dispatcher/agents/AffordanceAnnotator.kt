@@ -35,6 +35,17 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
  * events, not from any actuator or conflict-resolution path — Goal 9 becomes better-worded
  * perception. See [ConflictHintLatch] for latch lifecycle.
  *
+ * ## Wiring status (SP2c.4 scope)
+ *
+ * This annotator is scaffolded but **not yet wired into the production agent loop**.
+ * `RenderContext` — the only consumer of the returned `List<Affordance>` — is currently
+ * constructed only in test fixtures (`RendererFixtures`); the production
+ * `AgentLoopDriver` DECIDE step calls `planner.plan(...)` and does not build a
+ * `RenderContext` or call `annotate`. Wiring lands in the SP step that builds the
+ * production LLM-planner perception/render path. Consequently a `ConflictHintLatch`
+ * registered in `ExampleRegistry.wireDispatcherAgent` receives conflict events but has
+ * no production consumer of `getHint` until that wiring lands.
+ *
  * ## Output contract
  *
  * - No numbering, no selection semantics, no ordering by preference (C9 compliance).

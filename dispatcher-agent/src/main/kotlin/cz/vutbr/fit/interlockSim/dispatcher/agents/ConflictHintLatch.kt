@@ -45,6 +45,14 @@ import java.util.concurrent.ConcurrentHashMap
  * [ConflictDetectedEvent] is already deduplicated upstream, re-insertion is unlikely but
  * harmless: the latch stores exactly one hint per `trainId`.
  *
+ * ## Wiring status (SP2c.4 scope)
+ *
+ * `ExampleRegistry.wireDispatcherAgent` registers `onConflict` as a production conflict
+ * listener, so the latch is populated in live runs. However `getHint` has **no production
+ * caller** until `AffordanceAnnotator` is wired into the agent loop (see that class's
+ * "Wiring status" KDoc). Until then the latch receives events that nothing reads —
+ * dormant by design, bounded by the per-context latch lifetime.
+ *
  * @since Issue #827 (SP2c.4 — Goal 10, Goal 9 C7 ruling option (a))
  */
 class ConflictHintLatch {

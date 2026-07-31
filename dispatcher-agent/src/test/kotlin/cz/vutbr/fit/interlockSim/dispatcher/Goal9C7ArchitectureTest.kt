@@ -28,8 +28,8 @@ import org.junit.jupiter.api.Test
  * - KDoc says the result is *"purely advisory … the caller is responsible for enacting the
  *   simulation effect"*.
  * - It has zero production call sites in the dispatcher agent loop (only test call sites).
- * - It is NOT reachable in `shuntingLoopAI`: `wireDispatcherAgent` never resolves
- *   `ConflictResolver` or `AutoConflictResolutionService`.
+ * - `wireDispatcherAgent` never resolves `ConflictResolver` or `AutoConflictResolutionService`
+ *   as direct fields of the dispatcher-agent classes below.
  *
  * **Option (a) adopted:** demote to information source — `ConflictDetectedEvent` feeds
  * affordance reasons via [ConflictHintLatch]. The LLM remains the only actor.
@@ -37,10 +37,10 @@ import org.junit.jupiter.api.Test
  * ## What this test enforces
  *
  * 1. **Dispatcher-agent non-conflict classes** (`DispatchDecisionApplier`, `AgentLoopDriver`,
- *    `ActuatorCommandQueue`) hold **no field** of type `ConflictResolver` or
- *    `AutoConflictResolutionService` — these are reachable from `:dispatcher-agent` only
- *    through the annotator path ([AffordanceAnnotator] → [ConflictHintLatch] →
- *    [ConflictDetectedEvent]).
+ *    `ActuatorCommandQueue`) hold **no direct field** of type `ConflictResolver` or
+ *    `AutoConflictResolutionService` (no direct field ownership). The reflection check below
+ *    inspects `Class.declaredFields` field-type names only — reachability via DI/Koin scope,
+ *    constructor parameters, or call chains is **not** asserted here.
  *
  * 2. **Goal 9 conflict classes** (`DefaultAutoConflictResolutionService`) hold **no field** of
  *    actuator types (`ActuatorCommandQueue`, `NetworkActuatorPort`, `DispatchLoopActuatorPort`)

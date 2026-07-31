@@ -19,9 +19,14 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.ValidationVerdict
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.dispatcher.observation.QueuedTrainView
+import cz.vutbr.fit.interlockSim.dispatcher.observation.ReservationView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -283,17 +288,35 @@ class AffordanceAnnotatorTest {
 			val latch = ConflictHintLatch()
 			val annotatorWithLatch = AffordanceAnnotator(validator, enumerator, latch)
 
-			// Simulate a conflict: T-3 is blocked at kB by T-5
-			latch.getHint("T-3") // no hint yet → null
-			// Directly insert hint to test augmentation without needing a real ConflictDetectedEvent
-			// (ConflictHintLatch.snapshot() can't set hints; test via a mock event is impractical
-			// without a live DynamicTrackBlock — instead test via the public API)
-			// We'll test without a live simulation event; the latch unit tests cover onConflict().
-			// Here we verify: when latch.getHint returns a value, the annotator appends it.
-			// We need an observation where T-3 is HELD so the latch retains hints.
-			// obsWithHeld has T-3 as HELD, with signalAheadName = null in tick40 fixture.
-			// Without a real ConflictDetectedEvent we cannot test full e2e here.
-			// This assertion is covered by ConflictHintLatchTest for the latch unit behaviour.
+			// Seed a conflict hint for T-3 (blocked at kB by T-4), the way ConflictHintLatchTest does.
+			val mockBlock = mockk<DynamicTrackBlock>(relaxed = true)
+			every { mockBlock.name } returns "kB"
+			latch.onConflict(
+				ConflictDetectedEvent(
+					block = mockBlock,
+					trainId = "T-3",
+					conflictingTrainId = "T-4",
+					time = 42.0
+				)
+			)
+
+			// T-3 is HELD in obsWithHeld (tick40), so updateFromObservation retains the hint.
+			// Give T-3 a reservation to a DIFFERENT target ("A") so its request_route to "B"
+			// is rejected with ROUTE_HELD_TO_DIFFERENT_TARGET — the !applicable guard then
+			// fires the hint-augmentation branch in AffordanceAnnotator.toAffordance.
+			val obsHeldWithDifferentRoute =
+				obsWithHeld.copy(
+					reservations = listOf(ReservationView("T-3", null, "A", listOf("kA")))
+				)
+			val affordances = annotatorWithLatch.annotate(obsHeldWithDifferentRoute)
+
+			val rejected =
+				affordances.find {
+					it.trainId == "T-3" && it.action == "request_route" && !it.applicable
+				}
+			assertThat(rejected != null).isTrue()
+			assertThat(rejected!!.reason.contains("blocked at kB by T-4")).isTrue()
+			assertThat(rejected.reason.startsWith("blocked — ")).isTrue()
 		}
 
 		@Test
@@ -310,6 +333,35 @@ class AffordanceAnnotatorTest {
 					// No unexpected "(blocked at..." suffix from the latch
 					assertThat(aff.reason.contains("(blocked at")).isFalse()
 				}
+		}
+
+		@Test
+		@DisplayName("When request_route is valid, the hint is NOT appended (!applicable guard)")
+		fun validRequestRouteIsNotAugmentedWithHint() {
+			val latch = ConflictHintLatch()
+			val annotatorWithLatch = AffordanceAnnotator(validator, enumerator, latch)
+
+			val mockBlock = mockk<DynamicTrackBlock>(relaxed = true)
+			every { mockBlock.name } returns "kB"
+			latch.onConflict(
+				ConflictDetectedEvent(
+					block = mockBlock,
+					trainId = "T-3",
+					conflictingTrainId = "T-4",
+					time = 42.0
+				)
+			)
+
+			// obsWithHeld (tick40): T-3 is HELD, no reservation, free blocks exist →
+			// RequestRoute("T-3","doB1","B") is Valid, so the !applicable guard skips augmentation.
+			val affordances = annotatorWithLatch.annotate(obsWithHeld)
+
+			val valid =
+				affordances.find {
+					it.trainId == "T-3" && it.action == "request_route" && it.applicable
+				}
+			assertThat(valid != null).isTrue()
+			assertThat(valid!!.reason.contains("(blocked at")).isFalse()
 		}
 	}
 
