@@ -393,6 +393,11 @@ class ExampleRegistry {
 				queue = queue,
 				networkActuator = actuatorPort,
 				onApproveTrain = loop::approveQueuedTrain,
+				// SP2c.18 (#841): live active-train count provider for apply-time cap enforcement.
+				// loop.getApprovedTrains() returns the sim-thread-owned list as a snapshot; calling
+				// .size on it on the sim thread (inside onControlStep) is safe and gives the live
+				// count after any earlier approvals in the same drained batch.
+				activeTrainCountProvider = { loop.getApprovedTrains().size },
 				onBlockTransition = loop::incrementBlockTransition,
 				onFailedReservation = loop::incrementFailedReservation,
 				onDecisionApplied = decisionListener,
