@@ -12,13 +12,17 @@ package cz.vutbr.fit.interlockSim.dispatcher.observation
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.doesNotContain
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
+import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -478,16 +482,55 @@ class DispatcherObservationProjectorTest {
 	}
 
 	@Nested
-	@DisplayName("appliedOutcomes (SP2c.17 placeholder)")
+	@DisplayName("appliedOutcomes (SP2c.17 — #840)")
 	inner class AppliedOutcomes {
 		@Test
-		@DisplayName("is always empty until the SP2c.17 outcome channel lands")
-		fun appliedOutcomesIsAlwaysEmptyForNow() {
+		@DisplayName("is empty when no outcomeFeed is wired (backward-compat / headless runs)")
+		fun appliedOutcomesIsEmptyWithNoFeed() {
 			loadShuntingLoopContext().use { context ->
 				val snapshot = snapshotOf(simTime = 0.0, perceptions = emptyList())
 				val projector = stubPorts(context, snapshot, dispatchSnapshotOf(emptyList()))
 
 				assertThat(projector.projectTick(1L).appliedOutcomes).isEmpty()
+			}
+		}
+
+		@Test
+		@DisplayName(
+			"drains every outcome published since the previous capture when a feed is wired (next-tick semantics by call order)"
+		)
+		fun drainsOutcomesFromWiredFeed() {
+			loadShuntingLoopContext().use { context ->
+				val feed = AppliedOutcomeChannel()
+				feed.publish(
+					AppliedOutcome.Approved(
+						trainId = "T-102",
+						admitted = true,
+						id = CommandId(1L),
+						tickIndex = 7L
+					)
+				)
+				val perceptionPort = mockk<NetworkPerceptionPort>()
+				val sensorPort = mockk<DispatchLoopSensorPort>()
+				every { perceptionPort.captureSnapshot() } returns snapshotOf(simTime = 0.0, perceptions = emptyList())
+				every { sensorPort.snapshot() } returns dispatchSnapshotOf(emptyList())
+				val projector =
+					DispatcherObservationProjector(
+						perceptionPort = perceptionPort,
+						dispatchLoopSensorPort = sensorPort,
+						pathReservationRegistry = context.scope.get<PathReservationRegistry>(),
+						environment = context,
+						outcomeFeed = feed
+					)
+
+				val observation = projector.projectTick(2L)
+
+				assertThat(observation.appliedOutcomes).hasSize(1)
+				val outcome = observation.appliedOutcomes[0]
+				assertThat(outcome).isInstanceOf(AppliedOutcome.Approved::class)
+				assertThat((outcome as AppliedOutcome.Approved).trainId).isEqualTo("T-102")
+				// The feed is drained — a second projection from the same feed yields nothing.
+				assertThat(projector.projectTick(3L).appliedOutcomes).isEmpty()
 			}
 		}
 	}

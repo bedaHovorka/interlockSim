@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.di
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
+import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
@@ -186,8 +188,21 @@ val dispatcherAgentModule: Module =
 				)
 			}
 
+			// SP2c.17 (#840): CommandCorrelationMap (scoped per context)
+			// Identity-keyed side map that correlates DispatchDecisions from post time (driver
+			// thread) to apply time (sim thread), enabling outcome attribution.
+			scoped<CommandCorrelationMap> { CommandCorrelationMap() }
+
 			// SP0.5: ActuatorCommandQueue: one thread-safe handoff queue per simulation context.
-			scoped<ActuatorCommandQueue> { ActuatorCommandQueue() }
+			// SP2c.17 (#840): wired with the CommandCorrelationMap so every postAll() registers
+			// decisions for later outcome correlation.
+			scoped<ActuatorCommandQueue> { ActuatorCommandQueue(correlationMap = get()) }
+
+			// SP2c.17 (#840): AppliedOutcomeChannel (scoped per context)
+			// Bounded ring buffer that receives outcomes published by DispatchDecisionApplier (sim
+			// thread) and is drained by DispatcherObservationProjector on the next captureOnSimThread
+			// call to populate DispatcherObservation.appliedOutcomes.
+			scoped<AppliedOutcomeChannel> { AppliedOutcomeChannel() }
 
 			// Goal 10 dispatcher-cannot-approve-trains fix: DispatchLoopSensorPort (scoped per
 			// context), backing KoogAgentFactory's queued_trains/block_inputs tools.
@@ -209,6 +224,8 @@ val dispatcherAgentModule: Module =
 			// "waiting since" bookkeeping that must not leak across concurrent simulations.
 			// PathReservationRegistry comes from the navigation module (CoreModule.kt), which
 			// shares this same DefaultSimulationContext scope.
+			// SP2c.17 (#840): also wired with the AppliedOutcomeChannel as outcomeFeed so
+			// applied outcomes flow into each tick's observation.
 			scoped<DispatcherObservationProjector> {
 				val context =
 					getSource<DefaultSimulationContext>()
@@ -217,7 +234,8 @@ val dispatcherAgentModule: Module =
 					perceptionPort = get(),
 					dispatchLoopSensorPort = get(),
 					pathReservationRegistry = get<PathReservationRegistry>(),
-					environment = context
+					environment = context,
+					outcomeFeed = get<AppliedOutcomeChannel>()
 				)
 			}
 

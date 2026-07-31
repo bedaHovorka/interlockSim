@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
@@ -174,7 +175,31 @@ class DispatchDecisionApplier(
 	 * @since Issue #561 (SP2b.6 — Goal 10)
 	 * @see cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
 	 */
-	private val onDecisionApplied: DispatchDecisionListener? = null
+	private val onDecisionApplied: DispatchDecisionListener? = null,
+	/**
+	 * SP2c.17: Identity-keyed side map used to correlate each drained [DispatchDecision]
+	 * back to the [CommandId] and tick index assigned at post time.
+	 *
+	 * When `null` (the default) no correlation is performed and [outcomeSink] is never
+	 * called — existing callers that do not need the feedback channel are unaffected.
+	 *
+	 * @since Issue #840 (SP2c.17 — correlated async outcome channel)
+	 */
+	private val correlationMap: CommandCorrelationMap? = null,
+	/**
+	 * SP2c.17: Sink that receives an [AppliedOutcome] for each decision applied on the sim
+	 * thread. Populated outcomes are drained by [DispatcherObservationProjector] and included
+	 * in the next tick's pushed observation so the agent learns what actually happened.
+	 *
+	 * Implementations **must** be allocation-light and **must not** call any `logger.*`
+	 * method — a log call on the sim thread injects latency into the physics loop.
+	 *
+	 * When `null` (the default) no outcomes are published — existing callers that do not
+	 * need the feedback channel are unaffected.
+	 *
+	 * @since Issue #840 (SP2c.17 — correlated async outcome channel)
+	 */
+	private val outcomeSink: AppliedOutcomeSink? = null
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -252,9 +277,12 @@ class DispatchDecisionApplier(
 		if (decisions.isEmpty()) return
 		logger.debug { "onControlStep: applying ${decisions.size} pending decision(s)" }
 		for (decision in decisions) {
+			// SP2c.17 (#840): look up the CommandId and tick index assigned at post time.
+			// Evicts the entry so the map doesn't grow unboundedly.
+			val correlation = correlationMap?.correlate(decision)
 			if (shouldApply(decision)) {
 				try {
-					applyDecision(decision)
+					applyDecision(decision, correlation)
 					// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
 					// "Why this route?" panel can display the rationale. NoAction carries no
 					// rationale, and dropped decisions (e.g. under MANUAL) are not "applied".
@@ -265,6 +293,19 @@ class DispatchDecisionApplier(
 					logger.warn(e) {
 						"onControlStep: dropping decision ${decision::class.simpleName} — invalid " +
 							"argument(s): ${e.message}"
+					}
+					// SP2c.17 (#840): publish DroppedInvalid so the agent learns that its command
+					// was dropped — a silently lost outcome is how this class of bug hides.
+					if (correlation != null) {
+						outcomeSink?.publish(
+							AppliedOutcome.DroppedInvalid(
+								commandType = decision.commandTypeName(),
+								trainId = decision.extractTrainId(),
+								message = e.message ?: "invalid argument",
+								id = correlation.id,
+								tickIndex = correlation.tickIndex
+							)
+						)
 					}
 				}
 			}
@@ -320,28 +361,45 @@ class DispatchDecisionApplier(
 	// Expression-body `when` so the compiler enforces exhaustiveness over the sealed
 	// DispatchDecision type — adding a future subtype becomes a compile error here
 	// rather than a silently-dropped decision.
-	private fun applyDecision(decision: DispatchDecision) =
-		when (decision) {
-			is DispatchDecision.ApproveTrain -> {
-				logger.debug {
-					"Applying ApproveTrain: trainId=${decision.trainId}" +
-						decision.rationale.toRationaleLogSuffix()
-				}
-				onApproveTrain(decision.trainId)
+	private fun applyDecision(
+		decision: DispatchDecision,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) = when (decision) {
+		is DispatchDecision.ApproveTrain -> {
+			logger.debug {
+				"Applying ApproveTrain: trainId=${decision.trainId}" +
+					decision.rationale.toRationaleLogSuffix()
 			}
-			is DispatchDecision.ReservePath -> applyReservePath(decision)
-			DispatchDecision.NoAction -> Unit
-			// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
-			is DispatchDecision.HoldTrain -> applyHoldTrain(decision)
-			// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
-			// Delegated to the shared DispatchDecision.applyToolDrivenToActuator helper in :core
-			// so the asynchronous path and SynchronousDispatcherWiring cannot drift apart.
-			is DispatchDecision.SetSignalAspect,
-			is DispatchDecision.SetSwitchPosition,
-			is DispatchDecision.ReleaseRoute,
-			is DispatchDecision.RequestRoute ->
-				decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
+			onApproveTrain(decision.trainId)
+			// SP2c.17 (#840): ApproveTrain callback returns Unit; the call is idempotent
+			// for absent/already-active trains, so admitted is always true here.
+			if (correlation != null) {
+				outcomeSink?.publish(
+					AppliedOutcome.Approved(
+						trainId = decision.trainId,
+						admitted = true,
+						id = correlation.id,
+						tickIndex = correlation.tickIndex
+					)
+				)
+			}
+			Unit
 		}
+		is DispatchDecision.ReservePath -> applyReservePath(decision)
+		DispatchDecision.NoAction -> Unit
+		// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
+		is DispatchDecision.HoldTrain -> applyHoldTrain(decision)
+		// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
+		// SetSignalAspect and SetSwitchPosition still delegate to the shared helper in :core
+		// (no outcome type defined for them in SP2c.17). ReleaseRoute and RequestRoute are
+		// handled directly here so the outcome can be captured and published without touching
+		// :core's applyToolDrivenToActuator (zero :core changes, per SP2c.17 constraint C10).
+		is DispatchDecision.SetSignalAspect,
+		is DispatchDecision.SetSwitchPosition ->
+			decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
+		is DispatchDecision.ReleaseRoute -> applyReleaseRoute(decision, correlation)
+		is DispatchDecision.RequestRoute -> applyRequestRoute(decision, correlation)
+	}
 
 	/**
 	 * Applies [decision] via [NetworkActuatorPort.requestRoute], guarding against
@@ -442,6 +500,142 @@ class DispatchDecisionApplier(
 	}
 
 	/**
+	 * SP2c.17 (#840): Applies [decision] via [NetworkActuatorPort.releaseRoute] and publishes
+	 * an [AppliedOutcome.Released] when a [correlation] is available.
+	 *
+	 * Inlined from [cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator] so the outcome can
+	 * be captured without modifying `:core`. Logging is identical to the shared helper.
+	 */
+	private fun applyReleaseRoute(
+		decision: DispatchDecision.ReleaseRoute,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.debug {
+			"DispatchDecisionApplier: applying ReleaseRoute trainName=${decision.trainName}" +
+				decision.rationale.toRationaleLogSuffix()
+		}
+		val released = networkActuator.releaseRoute(decision.trainName)
+		if (!released) {
+			logger.debug {
+				"DispatchDecisionApplier: ReleaseRoute train '${decision.trainName}' held no reservation (no-op)"
+			}
+		}
+		if (correlation != null) {
+			outcomeSink?.publish(
+				AppliedOutcome.Released(
+					trainId = decision.trainName,
+					anyReleased = released,
+					id = correlation.id,
+					tickIndex = correlation.tickIndex
+				)
+			)
+		}
+	}
+
+	/**
+	 * SP2c.17 (#840): Applies [decision] via [NetworkActuatorPort.requestRoute] and publishes
+	 * an [AppliedOutcome] subtype matching the [RouteRequestResult] when a [correlation] is
+	 * available.
+	 *
+	 * Inlined from [cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator] so the outcome can
+	 * be captured without modifying `:core`. Logging is identical to the shared helper.
+	 */
+	private fun applyRequestRoute(
+		decision: DispatchDecision.RequestRoute,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.debug {
+			"DispatchDecisionApplier: applying RequestRoute trainName=${decision.trainName}, " +
+				"from=${decision.fromEndpointName}, to=${decision.toEndpointName}" +
+				decision.rationale.toRationaleLogSuffix()
+		}
+		return when (
+			val result =
+				networkActuator.requestRoute(
+					decision.trainName,
+					decision.fromEndpointName,
+					decision.toEndpointName
+				)
+		) {
+			is RouteRequestResult.Reserved -> {
+				logger.debug {
+					"DispatchDecisionApplier: RequestRoute reserved ${result.blocksCount} block(s) for ${decision.trainName}"
+				}
+				if (correlation != null) {
+					outcomeSink?.publish(
+						AppliedOutcome.Reserved(
+							trainId = decision.trainName,
+							fromEndpointName = decision.fromEndpointName,
+							toEndpointName = decision.toEndpointName,
+							blocksCount = result.blocksCount,
+							id = correlation.id,
+							tickIndex = correlation.tickIndex
+						)
+					)
+				}
+				Unit
+			}
+			is RouteRequestResult.AllPathsBlocked -> {
+				logger.warn {
+					"DispatchDecisionApplier: RequestRoute all paths blocked for ${decision.trainName} " +
+						"(${decision.fromEndpointName} → ${decision.toEndpointName}); attempted: ${result.attemptedPaths}"
+				}
+				if (correlation != null) {
+					outcomeSink?.publish(
+						AppliedOutcome.Blocked(
+							trainId = decision.trainName,
+							fromEndpointName = decision.fromEndpointName,
+							toEndpointName = decision.toEndpointName,
+							attemptedPaths = result.attemptedPaths,
+							id = correlation.id,
+							tickIndex = correlation.tickIndex
+						)
+					)
+				}
+				Unit
+			}
+			is RouteRequestResult.Conflict -> {
+				logger.warn {
+					"DispatchDecisionApplier: RequestRoute conflict for ${decision.trainName} — " +
+						"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
+				}
+				if (correlation != null) {
+					outcomeSink?.publish(
+						AppliedOutcome.Conflicted(
+							trainId = decision.trainName,
+							fromEndpointName = decision.fromEndpointName,
+							toEndpointName = decision.toEndpointName,
+							blockName = result.blockName,
+							existingOwner = result.existingOwner,
+							id = correlation.id,
+							tickIndex = correlation.tickIndex
+						)
+					)
+				}
+				Unit
+			}
+			is RouteRequestResult.NoRouteExists -> {
+				logger.warn {
+					"DispatchDecisionApplier: RequestRoute no route exists " +
+						"${decision.fromEndpointName} → ${decision.toEndpointName} for ${decision.trainName}"
+				}
+				if (correlation != null) {
+					outcomeSink?.publish(
+						AppliedOutcome.NoRoute(
+							trainId = decision.trainName,
+							fromEndpointName = decision.fromEndpointName,
+							toEndpointName = decision.toEndpointName,
+							id = correlation.id,
+							tickIndex = correlation.tickIndex
+						)
+					)
+				}
+				Unit
+			}
+		}
+	}
+
+	/**
 	 * Applies [decision] via [trainLifecyclePort].
 	 *
 	 * Instructs the named train to hold in place for [DispatchDecision.HoldTrain.holdDurationSeconds]
@@ -475,3 +669,42 @@ class DispatchDecisionApplier(
 		}
 	}
 }
+
+/**
+ * SP2c.17 (#840): Returns the tool name for this decision type, used in
+ * [AppliedOutcome.DroppedInvalid.commandType] to identify which tool was attempted.
+ *
+ * Top-level `internal` so exhaustive-branch coverage can be asserted directly by tests
+ * without constructing a [DispatchDecisionApplier] — the function is a pure projection of
+ * the sealed [DispatchDecision] type and references no applier state.
+ */
+internal fun DispatchDecision.commandTypeName(): String =
+	when (this) {
+		is DispatchDecision.RequestRoute -> "request_route"
+		is DispatchDecision.ReleaseRoute -> "release_route"
+		is DispatchDecision.ApproveTrain -> "approve_train"
+		is DispatchDecision.ReservePath -> "reserve_path"
+		is DispatchDecision.HoldTrain -> "hold_train"
+		is DispatchDecision.SetSignalAspect -> "set_signal_aspect"
+		is DispatchDecision.SetSwitchPosition -> "set_switch_position"
+		DispatchDecision.NoAction -> "no_action"
+	}
+
+/**
+ * SP2c.17 (#840): Returns the train identifier carried by this decision, or an empty
+ * string when no train identifier is applicable (e.g. [DispatchDecision.NoAction]).
+ *
+ * Top-level `internal` for the same reason as [commandTypeName] — pure projection, no
+ * applier state, exhaustively testable.
+ */
+internal fun DispatchDecision.extractTrainId(): String =
+	when (this) {
+		is DispatchDecision.RequestRoute -> trainName
+		is DispatchDecision.ReleaseRoute -> trainName
+		is DispatchDecision.ApproveTrain -> trainId
+		is DispatchDecision.ReservePath -> trainId
+		is DispatchDecision.HoldTrain -> trainId
+		is DispatchDecision.SetSignalAspect -> ""
+		is DispatchDecision.SetSwitchPosition -> ""
+		DispatchDecision.NoAction -> ""
+	}

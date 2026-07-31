@@ -15,6 +15,7 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThan
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.observation.SignalView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.SwitchView
@@ -417,7 +418,7 @@ class ObservationRendererTest {
 		fun hasWorkingMemorySection() = assertThat(CompactTextRenderer().render(ctx)).contains("=== WORKING MEMORY ===")
 
 		@Test
-		@DisplayName("contains APPLIED OUTCOMES header")
+		@DisplayName("contains applied outcomes header")
 		fun hasAppliedOutcomesSection() = assertThat(CompactTextRenderer().render(ctx)).contains("=== APPLIED OUTCOMES ===")
 
 		@Test
@@ -528,10 +529,18 @@ class ObservationRendererTest {
 		fun appliedOutcomesPopulated() {
 			val obs =
 				RendererFixtures.observationTick41.copy(
-					appliedOutcomes = listOf(AppliedOutcome("T-3", "route reserved to B", 40L))
+					appliedOutcomes =
+						listOf(
+							AppliedOutcome.Approved(
+								trainId = "T-3",
+								admitted = true,
+								id = CommandId(40L),
+								tickIndex = 40L
+							)
+						)
 				)
 			val output = CompactTextRenderer().render(ctx.copy(observation = obs))
-			assertThat(output).contains("tick=40 train=T-3: route reserved to B")
+			assertThat(output).contains("approve_train T-3 : ADMITTED")
 		}
 
 		@Test
