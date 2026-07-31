@@ -116,9 +116,9 @@ class CompactTextRenderer : ObservationRenderer {
 		sb: StringBuilder,
 		observation: DispatcherObservation
 	) {
-		sb.append("applied outcomes since last tick:\n")
+		sb.append("=== APPLIED OUTCOMES ===\n")
 		if (observation.appliedOutcomes.isEmpty()) {
-			sb.append("  (none)\n")
+			sb.append("(none)\n")
 		} else {
 			for (outcome in observation.appliedOutcomes) {
 				sb.append("  ")
@@ -128,34 +128,35 @@ class CompactTextRenderer : ObservationRenderer {
 		}
 	}
 
-	private fun renderAppliedOutcome(outcome: AppliedOutcome): String = when (outcome) {
-		is AppliedOutcome.Reserved ->
-			"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : RESERVED"
+	private fun renderAppliedOutcome(outcome: AppliedOutcome): String =
+		when (outcome) {
+			is AppliedOutcome.Reserved ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : RESERVED"
 
-		is AppliedOutcome.Blocked ->
-			"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : BLOCKED " +
-				"(${outcome.attemptedPaths} path(s) attempted)"
+			is AppliedOutcome.Blocked ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : BLOCKED " +
+					"(${outcome.attemptedPaths} path(s) attempted)"
 
-		is AppliedOutcome.Conflicted -> {
-			val block = outcome.blockName ?: "block"
-			"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : CONFLICTED " +
-				"($block held by ${outcome.existingOwner})"
+			is AppliedOutcome.Conflicted -> {
+				val block = outcome.blockName ?: "block"
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : CONFLICTED " +
+					"($block held by ${outcome.existingOwner})"
+			}
+
+			is AppliedOutcome.NoRoute ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : NO_ROUTE"
+
+			is AppliedOutcome.Released -> {
+				val status = if (outcome.anyReleased) "RELEASED" else "NO_RESERVATION"
+				"release_route ${outcome.trainId} : $status"
+			}
+
+			is AppliedOutcome.Approved ->
+				"approve_train ${outcome.trainId} : ADMITTED"
+
+			is AppliedOutcome.DroppedInvalid ->
+				"${outcome.commandType} ${outcome.trainId} : DROPPED (${outcome.message})"
 		}
-
-		is AppliedOutcome.NoRoute ->
-			"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : NO_ROUTE"
-
-		is AppliedOutcome.Released -> {
-			val status = if (outcome.anyReleased) "RELEASED" else "NO_RESERVATION"
-			"release_route ${outcome.trainId} : $status"
-		}
-
-		is AppliedOutcome.Approved ->
-			"approve_train ${outcome.trainId} : ADMITTED"
-
-		is AppliedOutcome.DroppedInvalid ->
-			"${outcome.commandType} ${outcome.trainId} : DROPPED (${outcome.message})"
-	}
 
 	// ── Section 8: CURRENT STATE ──────────────────────────────────────────────────────────
 

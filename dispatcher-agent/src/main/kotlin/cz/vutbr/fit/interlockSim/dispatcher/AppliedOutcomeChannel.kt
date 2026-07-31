@@ -69,8 +69,8 @@ fun interface AppliedOutcomeFeed {
  */
 class AppliedOutcomeChannel(
 	private val ringCapacity: Int = DEFAULT_RING_CAPACITY
-) : AppliedOutcomeSink, AppliedOutcomeFeed {
-
+) : AppliedOutcomeSink,
+	AppliedOutcomeFeed {
 	companion object {
 		/** Default ring capacity: 512 outcomes, far more than any realistic burst. */
 		const val DEFAULT_RING_CAPACITY: Int = 512

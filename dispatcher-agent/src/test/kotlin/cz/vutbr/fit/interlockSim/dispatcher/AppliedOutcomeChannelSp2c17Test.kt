@@ -65,13 +65,14 @@ class AppliedOutcomeChannelSp2c17Test {
 	 */
 	private fun makeWiredApplier(): Pair<ActuatorCommandQueue, DispatchDecisionApplier> {
 		val queue = ActuatorCommandQueue(correlationMap = correlationMap)
-		val applier = DispatchDecisionApplier(
-			queue = queue,
-			networkActuator = networkActuator,
-			onApproveTrain = { },
-			correlationMap = correlationMap,
-			outcomeSink = outcomeSink
-		)
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = networkActuator,
+				onApproveTrain = { },
+				correlationMap = correlationMap,
+				outcomeSink = outcomeSink
+			)
 		return queue to applier
 	}
 
@@ -85,10 +86,11 @@ class AppliedOutcomeChannelSp2c17Test {
 		fun requestRouteConflictAppearsAsConflicted() {
 			every {
 				networkActuator.requestRoute("T-087", "zA", "InOut-B")
-			} returns RouteRequestResult.Conflict(
-				blockName = "W2",
-				existingOwner = "T-042"
-			)
+			} returns
+				RouteRequestResult.Conflict(
+					blockName = "W2",
+					existingOwner = "T-042"
+				)
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
@@ -112,10 +114,11 @@ class AppliedOutcomeChannelSp2c17Test {
 		fun conflictedOutcomeRenderedInPrompt() {
 			every {
 				networkActuator.requestRoute("T-087", "zA", "InOut-B")
-			} returns RouteRequestResult.Conflict(
-				blockName = "W2",
-				existingOwner = "T-042"
-			)
+			} returns
+				RouteRequestResult.Conflict(
+					blockName = "W2",
+					existingOwner = "T-042"
+				)
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
@@ -124,10 +127,11 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			// Simulate the projector draining outcomes for the next tick
 			val outcomes = outcomeSink.drainSince(0L)
-			val observation = DispatcherObservation.EMPTY.copy(
-				tick = 2L,
-				appliedOutcomes = outcomes
-			)
+			val observation =
+				DispatcherObservation.EMPTY.copy(
+					tick = 2L,
+					appliedOutcomes = outcomes
+				)
 			val ctx = buildRenderContext(observation)
 			val rendered = CompactTextRenderer().render(ctx)
 
@@ -182,13 +186,14 @@ class AppliedOutcomeChannelSp2c17Test {
 		fun approveTrain_renderedAsAdmitted() {
 			val admittedTrains = mutableListOf<String>()
 			val queue = ActuatorCommandQueue(correlationMap = correlationMap)
-			val applier = DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = networkActuator,
-				onApproveTrain = { admittedTrains.add(it) },
-				correlationMap = correlationMap,
-				outcomeSink = outcomeSink
-			)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = { admittedTrains.add(it) },
+					correlationMap = correlationMap,
+					outcomeSink = outcomeSink
+				)
 			correlationMap.newCycle()
 			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-102")))
 			applier.onControlStep()
@@ -202,7 +207,9 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 
 		@Test
-		@DisplayName("CommandId is unique per queued decision — two identical RequestRoute in different cycles get distinct IDs")
+		@DisplayName(
+			"CommandId is unique per queued decision — two identical RequestRoute in different cycles get distinct IDs"
+		)
 		fun distinctCommandIdsAcrossCycles() {
 			every {
 				networkActuator.requestRoute(any(), any(), any())
@@ -257,13 +264,14 @@ class AppliedOutcomeChannelSp2c17Test {
 			// Applier with a FRESH correlationMap that has NO registered decisions
 			val emptyCorrelationMap = CommandCorrelationMap()
 			val queue = ActuatorCommandQueue() // NOT wired to correlationMap, so nothing is registered
-			val applier = DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = networkActuator,
-				onApproveTrain = { },
-				correlationMap = emptyCorrelationMap,
-				outcomeSink = outcomeSink
-			)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = { },
+					correlationMap = emptyCorrelationMap,
+					outcomeSink = outcomeSink
+				)
 
 			// Post directly to the queue (bypasses correlationMap.register)
 			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
@@ -390,7 +398,7 @@ class AppliedOutcomeChannelSp2c17Test {
 			val ctx = buildRenderContext(observation)
 			val rendered = CompactTextRenderer().render(ctx)
 
-			assertThat(rendered).contains("applied outcomes since last tick:\n  (none)\n")
+			assertThat(rendered).contains("=== APPLIED OUTCOMES ===\n(none)\n")
 		}
 
 		@Test
@@ -399,37 +407,38 @@ class AppliedOutcomeChannelSp2c17Test {
 			val id1 = CommandId(1L)
 			val id2 = CommandId(2L)
 			val id3 = CommandId(3L)
-			val outcomes = listOf(
-				AppliedOutcome.Reserved(
-					trainId = "T-087",
-					fromEndpointName = "zA",
-					toEndpointName = "InOut-B",
-					blocksCount = 2,
-					id = id1,
-					tickIndex = 5L
-				),
-				AppliedOutcome.Conflicted(
-					trainId = "T-091",
-					fromEndpointName = "zA",
-					toEndpointName = "InOut-B",
-					blockName = "W2",
-					existingOwner = "T-087",
-					id = id2,
-					tickIndex = 5L
-				),
-				AppliedOutcome.Approved(
-					trainId = "T-102",
-					admitted = true,
-					id = id3,
-					tickIndex = 5L
+			val outcomes =
+				listOf(
+					AppliedOutcome.Reserved(
+						trainId = "T-087",
+						fromEndpointName = "zA",
+						toEndpointName = "InOut-B",
+						blocksCount = 2,
+						id = id1,
+						tickIndex = 5L
+					),
+					AppliedOutcome.Conflicted(
+						trainId = "T-091",
+						fromEndpointName = "zA",
+						toEndpointName = "InOut-B",
+						blockName = "W2",
+						existingOwner = "T-087",
+						id = id2,
+						tickIndex = 5L
+					),
+					AppliedOutcome.Approved(
+						trainId = "T-102",
+						admitted = true,
+						id = id3,
+						tickIndex = 5L
+					)
 				)
-			)
 			val observation = DispatcherObservation.EMPTY.copy(appliedOutcomes = outcomes)
 			val ctx = buildRenderContext(observation)
 			val rendered = CompactTextRenderer().render(ctx)
 
 			// Golden-file: check the exact section format
-			assertThat(rendered).contains("applied outcomes since last tick:\n")
+			assertThat(rendered).contains("=== APPLIED OUTCOMES ===\n")
 			assertThat(rendered).contains("  request_route T-087 -> InOut-B : RESERVED\n")
 			assertThat(rendered).contains("  request_route T-091 -> InOut-B : CONFLICTED (W2 held by T-087)\n")
 			assertThat(rendered).contains("  approve_train T-102 : ADMITTED\n")

@@ -419,7 +419,7 @@ class ObservationRendererTest {
 
 		@Test
 		@DisplayName("contains applied outcomes header")
-		fun hasAppliedOutcomesSection() = assertThat(CompactTextRenderer().render(ctx)).contains("applied outcomes since last tick:")
+		fun hasAppliedOutcomesSection() = assertThat(CompactTextRenderer().render(ctx)).contains("=== APPLIED OUTCOMES ===")
 
 		@Test
 		@DisplayName("contains CHANGED SINCE LAST TICK header")
@@ -529,14 +529,15 @@ class ObservationRendererTest {
 		fun appliedOutcomesPopulated() {
 			val obs =
 				RendererFixtures.observationTick41.copy(
-					appliedOutcomes = listOf(
-						AppliedOutcome.Approved(
-							trainId = "T-3",
-							admitted = true,
-							id = CommandId(40L),
-							tickIndex = 40L
+					appliedOutcomes =
+						listOf(
+							AppliedOutcome.Approved(
+								trainId = "T-3",
+								admitted = true,
+								id = CommandId(40L),
+								tickIndex = 40L
+							)
 						)
-					)
 				)
 			val output = CompactTextRenderer().render(ctx.copy(observation = obs))
 			assertThat(output).contains("approve_train T-3 : ADMITTED")

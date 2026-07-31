@@ -25,7 +25,9 @@ import java.util.concurrent.atomic.AtomicLong
  * @since Issue #840 (SP2c.17 — correlated async outcome channel)
  */
 @JvmInline
-value class CommandId(val value: Long)
+value class CommandId(
+	val value: Long
+)
 
 /**
  * Identity-keyed side map that correlates a [DispatchDecision] instance (posted by the
@@ -69,7 +71,10 @@ class CommandCorrelationMap {
 	 * A [CommandId] paired with the [tickIndex] at which the command was queued.
 	 * The tick index is the value of the internal [cycleCounter] at registration time.
 	 */
-	data class CommandAndTick(val id: CommandId, val tickIndex: Long)
+	data class CommandAndTick(
+		val id: CommandId,
+		val tickIndex: Long
+	)
 
 	/**
 	 * Total number of apply-time lookups that found no registered entry.
