@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
-import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 
 /**
  * All inputs a renderer needs to build one USER-message tick (SP2c.2, #825).

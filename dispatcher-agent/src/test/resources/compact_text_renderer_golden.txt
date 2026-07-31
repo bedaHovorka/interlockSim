@@ -1,12 +1,13 @@
 === RECENT TICKS ===
-  tick simTime=483.1 outcome=LLM_ACTIONS
-  tick simTime=496.2 outcome=LLM_NO_OP
-  tick simTime=504.8 outcome=LLM_ACTIONS
+  tick=38 t=483.1 d=a1b2c3d4 (no actions)
+  tick=39 t=496.2 d=f7e8d9c0 no_op->VALID
+  tick=40 t=504.8 d=1a2b3c4d request_route(T-3,A,B)->VALID
 === WORKING MEMORY ===
-consecutive_no_op_ticks: 0
-longest_queued_wait_secs: 14.4
-blocked_train_count: 0
-last_tick_outcome: LLM_ACTIONS
+ticks_since_progress: 0
+active_count: 1
+capacity: 2
+pending_requests: 0
+last_actions: T-3=request_route@40
 === APPLIED OUTCOMES ===
 (none)
 === CHANGED SINCE LAST TICK ===
