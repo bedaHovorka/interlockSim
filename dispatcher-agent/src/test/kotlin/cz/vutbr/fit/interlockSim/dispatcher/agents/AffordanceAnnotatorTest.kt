@@ -255,8 +255,8 @@ class AffordanceAnnotatorTest {
 		@Test
 		@DisplayName("HELD train request_route candidate uses signalAheadName, not destinationInOutName")
 		fun heldTrainUsesSignalAheadNameAsFrom() {
-			// obsWithHeld has T-3 in HELD phase with signalAheadName = "doA2" (from RendererFixtures)
-			// The enumerator should generate RequestRoute("T-3", "doA2", "B")
+			// obsWithHeld has T-3 in HELD phase with signalAheadName = "doB1" (inherited from tick41 fixture)
+			// The enumerator should generate RequestRoute("T-3", "doB1", "B")
 			val candidates = enumerator.enumerate(obsWithHeld)
 			val requestRouteCandidate =
 				candidates.filterIsInstance<DispatchAction.RequestRoute>()
