@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThan
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.observation.SignalView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.SwitchView
@@ -557,6 +558,22 @@ class ObservationRendererTest {
 			assertThat(output).contains("capacity: 2")
 			assertThat(output).contains("pending_requests: 0")
 			assertThat(output).contains("last_actions: T-3=request_route@40")
+		}
+
+		@Test
+		@DisplayName("droppedThisTick is rendered as a 'dropped:' line in WORKING MEMORY section")
+		fun droppedThisTickRendered() {
+			val droppedAction =
+				AttributedAction(
+					commandId = CommandId(99L),
+					tick = 40L,
+					action = DispatchAction.RequestRoute("T-7", "A", "B")
+				)
+			val wmWithDrop = ctx.workingMemory.copy(droppedThisTick = listOf(droppedAction))
+			val output = CompactTextRenderer().render(ctx.copy(workingMemory = wmWithDrop))
+			assertThat(output).contains("dropped:")
+			assertThat(output).contains("T-7")
+			assertThat(output).contains("DROPPED_NO_OUTCOME")
 		}
 	}
 

@@ -156,6 +156,18 @@ class CompactTextRenderer : ObservationRenderer {
 			}
 			sb.append('\n')
 		}
+		if (wm.droppedThisTick.isNotEmpty()) {
+			sb.append("dropped:")
+			for (drop in wm.droppedThisTick.sortedWith(compareBy({ it.tick }, { trainIdOf(it.action) ?: "" }))) {
+				sb.append(' ')
+				sb.append(trainIdOf(drop.action) ?: "unknown")
+				sb.append('@')
+				sb.append(drop.tick)
+				sb.append('=')
+				sb.append(WorkingMemory.DROPPED_NO_OUTCOME)
+			}
+			sb.append('\n')
+		}
 	}
 
 	// ── Section 6: APPLIED OUTCOMES ───────────────────────────────────────────────────────

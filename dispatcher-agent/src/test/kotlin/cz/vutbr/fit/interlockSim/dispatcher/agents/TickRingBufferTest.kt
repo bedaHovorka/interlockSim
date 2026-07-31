@@ -13,6 +13,10 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThan
+import cz.vutbr.fit.interlockSim.dispatcher.CommandId
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.ValidationVerdict
+import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -183,15 +187,56 @@ class TickRingBufferTest {
 		@DisplayName("rendered RECENT TICKS block stays within char ceiling for full 3-record buffer")
 		fun renderedRecentTicksBlockWithinCharCeiling() {
 			val buf = TickRingBuffer(capacity = 3)
-			// Push 3 maximally populated records (3 actions each — per-tick action limit is 3)
+			// Push 3 maximally populated records: 3 distinct AttributedActions each (per-tick
+			// action limit is 3) paired with ValidationVerdict.Valid, plus a non-empty outcomes
+			// list to exercise the `out=[…]` suffix — the worst case for the section length.
 			repeat(3) { i ->
 				val tick = (38 + i).toLong()
+				val actions =
+					listOf(
+						AttributedAction(CommandId(tick * 1000), tick, DispatchAction.RequestRoute("T-1", "A", "B")),
+						AttributedAction(CommandId(tick * 1000 + 1), tick, DispatchAction.ApproveTrain("T-2")),
+						AttributedAction(CommandId(tick * 1000 + 2), tick, DispatchAction.CancelRoute("T-3"))
+					)
+				val verdicts =
+					listOf(
+						ValidationVerdict.Valid,
+						ValidationVerdict.Valid,
+						ValidationVerdict.Valid
+					)
+				val outcomes =
+					listOf(
+						AppliedOutcome.Reserved(
+							trainId = "T-1",
+							fromEndpointName = "A",
+							toEndpointName = "B",
+							blocksCount = 2,
+							id = CommandId(tick * 1000),
+							tickIndex = tick
+						)
+					)
 				buf.push(
-					RendererFixtures.history[i]
+					TickRecord(
+						tick = tick,
+						simTime = tick.toDouble(),
+						stateDigest = "a1b2c3d4".repeat(8),
+						actions = actions,
+						verdicts = verdicts,
+						outcomes = outcomes
+					)
 				)
 			}
-			// Render just the RECENT TICKS section using the fixture context
-			val output = CompactTextRenderer().render(RendererFixtures.tick41Context)
+			// Render from buf.snapshot() using the fixture observation/previous/workingMemory/
+			// affordances for the non-history slots.
+			val ctx =
+				RenderContext(
+					observation = RendererFixtures.observationTick41,
+					previous = RendererFixtures.observationTick40,
+					history = buf.snapshot(),
+					workingMemory = RendererFixtures.workingMemory,
+					affordances = RendererFixtures.affordances
+				)
+			val output = CompactTextRenderer().render(ctx)
 			val recentTicksStart = output.indexOf("=== RECENT TICKS ===")
 			val workingMemStart = output.indexOf("=== WORKING MEMORY ===")
 			val recentTicksSection = output.substring(recentTicksStart, workingMemStart)

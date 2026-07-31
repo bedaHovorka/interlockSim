@@ -30,7 +30,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("SP2c.7 WorkingMemory.update — acceptance criteria (#830)")
 class WorkingMemoryUpdateTest {
-
 	// ── Helpers ──────────────────────────────────────────────────────────────────────────
 
 	private fun emptyRecord(tick: Long): TickRecord =
@@ -43,7 +42,10 @@ class WorkingMemoryUpdateTest {
 			outcomes = emptyList()
 		)
 
-	private fun observation(activeCount: Int = 1, capacity: Int = 2): DispatcherObservation =
+	private fun observation(
+		activeCount: Int = 1,
+		capacity: Int = 2
+	): DispatcherObservation =
 		DispatcherObservation.EMPTY.copy(
 			tick = 1L,
 			activeCount = activeCount,
@@ -51,7 +53,10 @@ class WorkingMemoryUpdateTest {
 		)
 
 	/** Deterministic per-test [CommandId] built from a tick and a per-tick sequence number. */
-	private fun cmdId(tick: Long, seq: Int = 0) = CommandId(tick * 1000 + seq)
+	private fun cmdId(
+		tick: Long,
+		seq: Int = 0
+	) = CommandId(tick * 1000 + seq)
 
 	private fun routeAction(trainId: String = "T-1") = DispatchAction.RequestRoute(trainId, "A", "B")
 
@@ -68,7 +73,6 @@ class WorkingMemoryUpdateTest {
 	@Nested
 	@DisplayName("Pure function — same inputs yield == results")
 	inner class PureFunction {
-
 		@Test
 		@DisplayName("same record and observation always return == WorkingMemory")
 		fun sameInputsEqualResult() {
@@ -84,14 +88,15 @@ class WorkingMemoryUpdateTest {
 		@DisplayName("multiple calls on same wm with same inputs are idempotent")
 		fun multipleCallsIdempotent() {
 			val wm = WorkingMemory.EMPTY
-			val record = TickRecord(
-				tick = 5L,
-				simTime = 50.0,
-				stateDigest = "a".repeat(64),
-				actions = listOf(AttributedAction(cmdId(5L), 5L, routeAction())),
-				verdicts = listOf(ValidationVerdict.Valid),
-				outcomes = emptyList()
-			)
+			val record =
+				TickRecord(
+					tick = 5L,
+					simTime = 50.0,
+					stateDigest = "a".repeat(64),
+					actions = listOf(AttributedAction(cmdId(5L), 5L, routeAction())),
+					verdicts = listOf(ValidationVerdict.Valid),
+					outcomes = emptyList()
+				)
 			val obs = observation(activeCount = 2, capacity = 3)
 			val r1 = wm.update(record, obs)
 			val r2 = wm.update(record, obs)
@@ -104,20 +109,20 @@ class WorkingMemoryUpdateTest {
 	@Nested
 	@DisplayName("ticksSinceProgress — mechanical definition per branch")
 	inner class TicksSinceProgress {
-
 		@Test
 		@DisplayName("resets to 0 when record.outcomes is non-empty (progress branch)")
 		fun resetsWhenOutcomesPresent() {
 			val wm = WorkingMemory.EMPTY.copy(ticksSinceProgress = 3)
 			val outcome = outcomeFor("T-1", CommandId(1L), 1L)
-			val record = TickRecord(
-				tick = 1L,
-				simTime = 10.0,
-				stateDigest = "0".repeat(64),
-				actions = emptyList(),
-				verdicts = emptyList(),
-				outcomes = listOf(outcome)
-			)
+			val record =
+				TickRecord(
+					tick = 1L,
+					simTime = 10.0,
+					stateDigest = "0".repeat(64),
+					actions = emptyList(),
+					verdicts = emptyList(),
+					outcomes = listOf(outcome)
+				)
 			val result = wm.update(record, observation())
 			assertThat(result.ticksSinceProgress).isEqualTo(0)
 		}
@@ -144,14 +149,15 @@ class WorkingMemoryUpdateTest {
 		fun firstTickWithProgressStartsAtZero() {
 			val wm = WorkingMemory.EMPTY
 			val outcome = outcomeFor("T-1", CommandId(1L), 1L)
-			val record = TickRecord(
-				tick = 1L,
-				simTime = 10.0,
-				stateDigest = "0".repeat(64),
-				actions = emptyList(),
-				verdicts = emptyList(),
-				outcomes = listOf(outcome)
-			)
+			val record =
+				TickRecord(
+					tick = 1L,
+					simTime = 10.0,
+					stateDigest = "0".repeat(64),
+					actions = emptyList(),
+					verdicts = emptyList(),
+					outcomes = listOf(outcome)
+				)
 			val result = wm.update(record, observation())
 			assertThat(result.ticksSinceProgress).isEqualTo(0)
 		}
@@ -162,21 +168,21 @@ class WorkingMemoryUpdateTest {
 	@Nested
 	@DisplayName("pendingRequests — drains when matching AppliedOutcome arrives")
 	inner class PendingRequestsDrain {
-
 		@Test
 		@DisplayName("action added to pendingRequests on first tick (no matching outcome yet)")
 		fun actionAddedToPending() {
 			val wm = WorkingMemory.EMPTY
 			val corr = cmdId(1L)
 			val action = routeAction()
-			val record = TickRecord(
-				tick = 1L,
-				simTime = 10.0,
-				stateDigest = "0".repeat(64),
-				actions = listOf(AttributedAction(corr, 1L, action)),
-				verdicts = listOf(ValidationVerdict.Valid),
-				outcomes = emptyList()
-			)
+			val record =
+				TickRecord(
+					tick = 1L,
+					simTime = 10.0,
+					stateDigest = "0".repeat(64),
+					actions = listOf(AttributedAction(corr, 1L, action)),
+					verdicts = listOf(ValidationVerdict.Valid),
+					outcomes = emptyList()
+				)
 			val result = wm.update(record, observation())
 			assertThat(result.pendingRequests[corr]?.action).isEqualTo(action)
 		}
@@ -187,19 +193,21 @@ class WorkingMemoryUpdateTest {
 			val corr = cmdId(1L)
 			val action = routeAction()
 			// After tick 1: action is pending
-			val wmAfterTick1 = WorkingMemory.EMPTY.copy(
-				pendingRequests = mapOf(corr to AttributedAction(corr, 1L, action))
-			)
+			val wmAfterTick1 =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests = mapOf(corr to AttributedAction(corr, 1L, action))
+				)
 			// Tick 2: outcome arrives with matching CommandId
 			val outcome = outcomeFor("T-1", corr, 2L)
-			val record = TickRecord(
-				tick = 2L,
-				simTime = 20.0,
-				stateDigest = "0".repeat(64),
-				actions = emptyList(),
-				verdicts = emptyList(),
-				outcomes = listOf(outcome)
-			)
+			val record =
+				TickRecord(
+					tick = 2L,
+					simTime = 20.0,
+					stateDigest = "0".repeat(64),
+					actions = emptyList(),
+					verdicts = emptyList(),
+					outcomes = listOf(outcome)
+				)
 			val result = wmAfterTick1.update(record, observation())
 			assertThat(result.pendingRequests).isEmpty()
 		}
@@ -211,22 +219,25 @@ class WorkingMemoryUpdateTest {
 			val corr2 = cmdId(1L, 1)
 			val action1 = DispatchAction.RequestRoute("T-1", "A", "B")
 			val action2 = DispatchAction.RequestRoute("T-2", "C", "D")
-			val wmWithTwo = WorkingMemory.EMPTY.copy(
-				pendingRequests = mapOf(
-					corr1 to AttributedAction(corr1, 1L, action1),
-					corr2 to AttributedAction(corr2, 1L, action2)
+			val wmWithTwo =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests =
+						mapOf(
+							corr1 to AttributedAction(corr1, 1L, action1),
+							corr2 to AttributedAction(corr2, 1L, action2)
+						)
 				)
-			)
 			// Outcome arrives only for corr1
 			val outcome = outcomeFor("T-1", corr1, 2L)
-			val record = TickRecord(
-				tick = 2L,
-				simTime = 20.0,
-				stateDigest = "0".repeat(64),
-				actions = emptyList(),
-				verdicts = emptyList(),
-				outcomes = listOf(outcome)
-			)
+			val record =
+				TickRecord(
+					tick = 2L,
+					simTime = 20.0,
+					stateDigest = "0".repeat(64),
+					actions = emptyList(),
+					verdicts = emptyList(),
+					outcomes = listOf(outcome)
+				)
 			val result = wmWithTwo.update(record, observation())
 			assertThat(result.pendingRequests.size).isEqualTo(1)
 			assertThat(result.pendingRequests[corr2]?.action).isEqualTo(action2)
@@ -237,14 +248,15 @@ class WorkingMemoryUpdateTest {
 		fun noOpNotAddedToPending() {
 			val wm = WorkingMemory.EMPTY
 			val corr = cmdId(1L)
-			val record = TickRecord(
-				tick = 1L,
-				simTime = 10.0,
-				stateDigest = "0".repeat(64),
-				actions = listOf(AttributedAction(corr, 1L, DispatchAction.NoOp)),
-				verdicts = listOf(ValidationVerdict.Valid),
-				outcomes = emptyList()
-			)
+			val record =
+				TickRecord(
+					tick = 1L,
+					simTime = 10.0,
+					stateDigest = "0".repeat(64),
+					actions = listOf(AttributedAction(corr, 1L, DispatchAction.NoOp)),
+					verdicts = listOf(ValidationVerdict.Valid),
+					outcomes = emptyList()
+				)
 			val result = wm.update(record, observation())
 			assertThat(result.pendingRequests).isEmpty()
 		}
@@ -255,16 +267,16 @@ class WorkingMemoryUpdateTest {
 	@Nested
 	@DisplayName("TTL expiry — surfaces in droppedThisTick, never silently dropped")
 	inner class TtlExpiry {
-
 		@Test
 		@DisplayName("entry added at tick 0 expires at tick 5 (TTL=5 ticks)")
 		fun expiresAfterFiveTicks() {
 			val addedTick = 0L
 			val corr = cmdId(addedTick)
 			val action = routeAction()
-			val wmWithPending = WorkingMemory.EMPTY.copy(
-				pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action))
-			)
+			val wmWithPending =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action))
+				)
 			// Tick 5: TTL threshold reached (5 - 0 = 5 >= PENDING_TTL_TICKS)
 			val expiryTick = addedTick + PENDING_TTL_TICKS
 			val record = emptyRecord(expiryTick)
@@ -283,9 +295,10 @@ class WorkingMemoryUpdateTest {
 			val addedTick = 0L
 			val corr = cmdId(addedTick)
 			val action = routeAction()
-			val wmWithPending = WorkingMemory.EMPTY.copy(
-				pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action))
-			)
+			val wmWithPending =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action))
+				)
 			// Tick 4: not yet expired (4 - 0 = 4 < PENDING_TTL_TICKS = 5)
 			val record = emptyRecord(addedTick + PENDING_TTL_TICKS - 1)
 			val result = wmWithPending.update(record, observation())
@@ -299,9 +312,10 @@ class WorkingMemoryUpdateTest {
 		fun droppedThisTickClearedOnNextUpdate() {
 			val corr = cmdId(0L)
 			val action = routeAction()
-			val wmWithPending = WorkingMemory.EMPTY.copy(
-				pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action))
-			)
+			val wmWithPending =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action))
+				)
 			// Force expiry at tick 5
 			val wmAfterExpiry = wmWithPending.update(emptyRecord(PENDING_TTL_TICKS), observation())
 			assertThat(wmAfterExpiry.droppedThisTick.size).isEqualTo(1)
@@ -316,9 +330,10 @@ class WorkingMemoryUpdateTest {
 		fun droppedOutcomeCarriesExpiryTick() {
 			val corr = cmdId(0L)
 			val action = routeAction()
-			val wmWithPending = WorkingMemory.EMPTY.copy(
-				pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action))
-			)
+			val wmWithPending =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action))
+				)
 			val expiryTick = PENDING_TTL_TICKS
 			val result = wmWithPending.update(emptyRecord(expiryTick), observation())
 
@@ -331,15 +346,44 @@ class WorkingMemoryUpdateTest {
 		fun multipleEntriesExpireSameTick() {
 			val corr1 = cmdId(0L, 0)
 			val corr2 = cmdId(0L, 1)
-			val wmWithTwo = WorkingMemory.EMPTY.copy(
-				pendingRequests = mapOf(
-					corr1 to AttributedAction(corr1, 0L, DispatchAction.RequestRoute("T-1", "A", "B")),
-					corr2 to AttributedAction(corr2, 0L, DispatchAction.RequestRoute("T-2", "C", "D"))
+			val wmWithTwo =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests =
+						mapOf(
+							corr1 to AttributedAction(corr1, 0L, DispatchAction.RequestRoute("T-1", "A", "B")),
+							corr2 to AttributedAction(corr2, 0L, DispatchAction.RequestRoute("T-2", "C", "D"))
+						)
 				)
-			)
 			val result = wmWithTwo.update(emptyRecord(PENDING_TTL_TICKS), observation())
 			assertThat(result.pendingRequests).isEmpty()
 			assertThat(result.droppedThisTick.size).isEqualTo(2)
+		}
+
+		@Test
+		@DisplayName("entry resolved by a real AppliedOutcome on its TTL tick is not double-reported as DROPPED_NO_OUTCOME")
+		fun entryResolvedOnTtlTickDoesNotProduceSpuriousDrop() {
+			val corr = cmdId(0L)
+			val wmWithPending =
+				WorkingMemory.EMPTY.copy(
+					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, routeAction()))
+				)
+			// Tick 5: TTL threshold reached AND a real outcome arrives for the same commandId.
+			val outcome = outcomeFor("T-1", corr, 5L)
+			val record =
+				TickRecord(
+					tick = PENDING_TTL_TICKS,
+					simTime = 50.0,
+					stateDigest = "0".repeat(64),
+					actions = emptyList(),
+					verdicts = emptyList(),
+					outcomes = listOf(outcome)
+				)
+			val result = wmWithPending.update(record, observation())
+
+			// The real outcome resolved the entry — no spurious DROPPED_NO_OUTCOME should appear.
+			assertThat(result.droppedThisTick).isEmpty()
+			// And the entry is removed from pendingRequests.
+			assertThat(result.pendingRequests).isEmpty()
 		}
 	}
 
@@ -348,20 +392,20 @@ class WorkingMemoryUpdateTest {
 	@Nested
 	@DisplayName("lastActionPerTrain — updated from record actions per train")
 	inner class LastActionPerTrain {
-
 		@Test
 		@DisplayName("action for a train is recorded in lastActionPerTrain")
 		fun actionRecordedForTrain() {
 			val wm = WorkingMemory.EMPTY
 			val corr = cmdId(5L)
-			val record = TickRecord(
-				tick = 5L,
-				simTime = 50.0,
-				stateDigest = "0".repeat(64),
-				actions = listOf(AttributedAction(corr, 5L, routeAction("T-3"))),
-				verdicts = listOf(ValidationVerdict.Valid),
-				outcomes = emptyList()
-			)
+			val record =
+				TickRecord(
+					tick = 5L,
+					simTime = 50.0,
+					stateDigest = "0".repeat(64),
+					actions = listOf(AttributedAction(corr, 5L, routeAction("T-3"))),
+					verdicts = listOf(ValidationVerdict.Valid),
+					outcomes = emptyList()
+				)
 			val result = wm.update(record, observation())
 			val lastAction = result.lastActionPerTrain["T-3"]
 			assertThat(lastAction).isEqualTo(Pair("request_route", 5L))
@@ -372,14 +416,15 @@ class WorkingMemoryUpdateTest {
 		fun noOpNotRecordedInLastActions() {
 			val wm = WorkingMemory.EMPTY
 			val corr = cmdId(5L)
-			val record = TickRecord(
-				tick = 5L,
-				simTime = 50.0,
-				stateDigest = "0".repeat(64),
-				actions = listOf(AttributedAction(corr, 5L, DispatchAction.NoOp)),
-				verdicts = listOf(ValidationVerdict.Valid),
-				outcomes = emptyList()
-			)
+			val record =
+				TickRecord(
+					tick = 5L,
+					simTime = 50.0,
+					stateDigest = "0".repeat(64),
+					actions = listOf(AttributedAction(corr, 5L, DispatchAction.NoOp)),
+					verdicts = listOf(ValidationVerdict.Valid),
+					outcomes = emptyList()
+				)
 			val result = wm.update(record, observation())
 			assertThat(result.lastActionPerTrain).isEmpty()
 		}
@@ -387,18 +432,20 @@ class WorkingMemoryUpdateTest {
 		@Test
 		@DisplayName("later action for same train overwrites the earlier entry")
 		fun laterActionOverwritesEarlier() {
-			val wm = WorkingMemory.EMPTY.copy(
-				lastActionPerTrain = mapOf("T-1" to Pair("approve_train", 3L))
-			)
+			val wm =
+				WorkingMemory.EMPTY.copy(
+					lastActionPerTrain = mapOf("T-1" to Pair("approve_train", 3L))
+				)
 			val corr = cmdId(7L)
-			val record = TickRecord(
-				tick = 7L,
-				simTime = 70.0,
-				stateDigest = "0".repeat(64),
-				actions = listOf(AttributedAction(corr, 7L, routeAction("T-1"))),
-				verdicts = listOf(ValidationVerdict.Valid),
-				outcomes = emptyList()
-			)
+			val record =
+				TickRecord(
+					tick = 7L,
+					simTime = 70.0,
+					stateDigest = "0".repeat(64),
+					actions = listOf(AttributedAction(corr, 7L, routeAction("T-1"))),
+					verdicts = listOf(ValidationVerdict.Valid),
+					outcomes = emptyList()
+				)
 			val result = wm.update(record, observation())
 			assertThat(result.lastActionPerTrain["T-1"]).isEqualTo(Pair("request_route", 7L))
 		}
@@ -409,17 +456,19 @@ class WorkingMemoryUpdateTest {
 			val wm = WorkingMemory.EMPTY
 			val corrA = cmdId(1L, 0)
 			val corrB = cmdId(1L, 1)
-			val record = TickRecord(
-				tick = 1L,
-				simTime = 10.0,
-				stateDigest = "0".repeat(64),
-				actions = listOf(
-					AttributedAction(corrA, 1L, DispatchAction.ApproveTrain("T-1")),
-					AttributedAction(corrB, 1L, routeAction("T-2"))
-				),
-				verdicts = listOf(ValidationVerdict.Valid, ValidationVerdict.Valid),
-				outcomes = emptyList()
-			)
+			val record =
+				TickRecord(
+					tick = 1L,
+					simTime = 10.0,
+					stateDigest = "0".repeat(64),
+					actions =
+						listOf(
+							AttributedAction(corrA, 1L, DispatchAction.ApproveTrain("T-1")),
+							AttributedAction(corrB, 1L, routeAction("T-2"))
+						),
+					verdicts = listOf(ValidationVerdict.Valid, ValidationVerdict.Valid),
+					outcomes = emptyList()
+				)
 			val result = wm.update(record, observation())
 			assertThat(result.lastActionPerTrain.keys.containsAll(listOf("T-1", "T-2"))).isTrue()
 		}
@@ -430,7 +479,6 @@ class WorkingMemoryUpdateTest {
 	@Nested
 	@DisplayName("activeCount and capacity — taken from observation")
 	inner class ActiveCountAndCapacity {
-
 		@Test
 		@DisplayName("activeCount reflects observation.activeCount")
 		fun activeCountFromObservation() {

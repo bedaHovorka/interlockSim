@@ -67,7 +67,6 @@ data class WorkingMemory(
 	 * [TickRecord.outcomes] or when the entry expires by [PENDING_TTL_TICKS].
 	 */
 	val pendingRequests: Map<CommandId, AttributedAction>,
-
 	/**
 	 * Most recent action taken per train: `trainId → (kind, tick)`.
 	 *
@@ -76,7 +75,6 @@ data class WorkingMemory(
 	 * Entries for a train are retained until overwritten by a later action for that train.
 	 */
 	val lastActionPerTrain: Map<String, Pair<String, Long>>,
-
 	/**
 	 * Number of consecutive most-recent ticks without a progress event.
 	 *
@@ -85,19 +83,16 @@ data class WorkingMemory(
 	 * otherwise. A high value indicates the dispatcher may be stalled.
 	 */
 	val ticksSinceProgress: Int,
-
 	/**
 	 * Number of currently approved (active) trains. Taken from
 	 * [DispatcherObservation.activeCount] passed to [update].
 	 */
 	val activeCount: Int,
-
 	/**
 	 * Station capacity (maximum concurrently active trains). Taken from
 	 * [DispatcherObservation.capacity] passed to [update].
 	 */
 	val capacity: Int,
-
 	/**
 	 * [AttributedAction] entries for [pendingRequests] entries that expired by TTL during the
 	 * most recent [update] call.
@@ -105,7 +100,9 @@ data class WorkingMemory(
 	 * Reset to empty at the start of each [update] call. Callers may include these in the
 	 * next tick's [TickRecord.outcomes] to surface the drops in the ring buffer and prevent
 	 * the information-starvation failure mode (Issue #830 — "the model watches an action
-	 * silently vanish").
+	 * silently vanish"). [CompactTextRenderer.renderWorkingMemory] now renders [droppedThisTick]
+	 * directly as a `dropped:` line in the WORKING MEMORY section, so drops are surfaced in the
+	 * prompt this tick — the "never silently dropped" claim holds at the render layer.
 	 *
 	 * Each entry's [AttributedAction.tick] is overwritten to the tick the expiry was
 	 * *detected* on (the [update] call's `record.tick`), not the tick the action was
@@ -114,7 +111,6 @@ data class WorkingMemory(
 	 */
 	val droppedThisTick: List<AttributedAction> = emptyList()
 ) {
-
 	/**
 	 * Produces the next [WorkingMemory] from the just-completed [record] and the current
 	 * [observation].
@@ -163,30 +159,37 @@ data class WorkingMemory(
 
 		// Step 3: add new non-NoOp actions
 		val newPending: Map<CommandId, AttributedAction> =
-			surviving + record.actions
-				.filter { aa -> aa.action !is DispatchAction.NoOp }
-				.associateBy { aa -> aa.commandId }
+			surviving +
+				record.actions
+					.filter { aa -> aa.action !is DispatchAction.NoOp }
+					.associateBy { aa -> aa.commandId }
 
 		// Step 4: update lastActionPerTrain
 		val newLastActions: Map<String, Pair<String, Long>> =
-			lastActionPerTrain + record.actions
-				.mapNotNull { aa ->
-					trainIdOf(aa.action)?.let { trainId ->
-						trainId to Pair(aa.action.kind, currentTick)
-					}
-				}
-				.toMap()
+			lastActionPerTrain +
+				record.actions
+					.mapNotNull { aa ->
+						trainIdOf(aa.action)?.let { trainId ->
+							trainId to Pair(aa.action.kind, currentTick)
+						}
+					}.toMap()
 
 		// Step 5: recompute ticksSinceProgress
 		// Progress = any outcome arrived this tick (real or synthetic TTL drops included)
 		val newTicksSinceProgress =
 			if (record.outcomes.isNotEmpty()) 0 else ticksSinceProgress + 1
 
-		// Step 7: expired entries surface as droppedThisTick. The reported tick is the tick the
+		// Step 7: expired entries surface as droppedThisTick. An entry that is also in
+		// resolvedIds was resolved by a real AppliedOutcome on this tick (age == PENDING_TTL_TICKS);
+		// reporting it as dropped too would double-report it. The reported tick is the tick the
 		// expiry was *detected* on (currentTick), not the tick the action was originally posted —
 		// matching the superseded flat-AppliedOutcome design this replaces (tick = "publish-sequence
 		// number of the tick the command was applied on").
-		val dropped = expired.values.map { aa -> aa.copy(tick = currentTick) }
+		val dropped =
+			expired
+				.filterKeys { id -> id !in resolvedIds }
+				.values
+				.map { aa -> aa.copy(tick = currentTick) }
 
 		return WorkingMemory(
 			pendingRequests = newPending,
