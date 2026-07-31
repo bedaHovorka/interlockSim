@@ -67,7 +67,8 @@ class AffordanceAnnotator(
 		conflictHintLatch?.updateFromObservation(observation)
 
 		val affordances =
-			candidates.enumerate(observation)
+			candidates
+				.enumerate(observation)
 				.map { action -> toAffordance(action, validator.validate(action, observation)) }
 				.toMutableList()
 
@@ -78,7 +79,10 @@ class AffordanceAnnotator(
 	// ── Private helpers ───────────────────────────────────────────────────────
 
 	/** Maps one (action, verdict) pair to an [Affordance] with no predicate logic. */
-	private fun toAffordance(action: DispatchAction, verdict: ValidationVerdict): Affordance {
+	private fun toAffordance(
+		action: DispatchAction,
+		verdict: ValidationVerdict
+	): Affordance {
 		val trainId = action.subjectTrainId() ?: Affordance.NO_OP_TRAIN_ID
 		val applicable = verdict is ValidationVerdict.Valid
 		val baseReason =

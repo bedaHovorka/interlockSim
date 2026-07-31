@@ -52,7 +52,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("AffordanceAnnotator — consistency and coverage property tests (SP2c.4 #827)")
 class AffordanceAnnotatorTest {
-
 	// ── Fixtures ───────────────────────────────────────────────────────────────
 
 	private val validEndpoints = setOf("A", "B", "doA1", "doB1")
@@ -259,7 +258,8 @@ class AffordanceAnnotatorTest {
 			// The enumerator should generate RequestRoute("T-3", "doB1", "B")
 			val candidates = enumerator.enumerate(obsWithHeld)
 			val requestRouteCandidate =
-				candidates.filterIsInstance<DispatchAction.RequestRoute>()
+				candidates
+					.filterIsInstance<DispatchAction.RequestRoute>()
 					.find { it.trainId == "T-3" }
 
 			assertThat(requestRouteCandidate != null).isTrue()

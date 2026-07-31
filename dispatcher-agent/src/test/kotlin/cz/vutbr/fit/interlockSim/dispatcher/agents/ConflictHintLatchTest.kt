@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
+import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -151,24 +152,25 @@ class ConflictHintLatchTest {
 			assertThat(latch.getHint("T-3")).isNotNull()
 
 			// Observation with T-3 as RUNNING (not HELD) → hint should be cleared
-			val obs = DispatcherObservation.EMPTY.copy(
-				trains =
-					listOf(
-						TrainView(
-							trainId = "T-3",
-							phase = TrainPhase.RUNNING,
-							frontSectionName = "kB",
-							velocityMps = 5.0,
-							accelerationMps2 = 0.0,
-							destinationInOutName = "B",
-							signalAheadName = null,
-							signalAheadAspect = null,
-							distanceToSignalAheadMetres = 0.0,
-							waitingSinceSimTime = null,
-							waitSeconds = 0.0
+			val obs =
+				DispatcherObservation.EMPTY.copy(
+					trains =
+						listOf(
+							TrainView(
+								trainId = "T-3",
+								phase = TrainPhase.RUNNING,
+								frontSectionName = "kB",
+								velocityMps = 5.0,
+								accelerationMps2 = 0.0,
+								destinationInOutName = "B",
+								signalAheadName = null,
+								signalAheadAspect = null,
+								distanceToSignalAheadMetres = 0.0,
+								waitingSinceSimTime = null,
+								waitSeconds = 0.0
+							)
 						)
-					)
-			)
+				)
 			latch.updateFromObservation(obs)
 			assertThat(latch.getHint("T-3")).isNull()
 		}

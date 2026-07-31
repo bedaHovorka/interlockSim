@@ -80,11 +80,13 @@ class ConflictListenerWiringTest {
 		val processFactory = DefaultSimulationProcessFactory()
 
 		val ctx =
-			TestFixtures.loadShuntingXml().use { stream ->
-				factory.createContext(stream) as EditingContext
-			}.let { editCtx ->
-				DefaultSimulationContext.fromEditingContext(editCtx, processFactory)
-			}
+			TestFixtures
+				.loadShuntingXml()
+				.use { stream ->
+					factory.createContext(stream) as EditingContext
+				}.let { editCtx ->
+					DefaultSimulationContext.fromEditingContext(editCtx, processFactory)
+				}
 		context = ctx
 
 		// Step 1: Register a listener BEFORE run()

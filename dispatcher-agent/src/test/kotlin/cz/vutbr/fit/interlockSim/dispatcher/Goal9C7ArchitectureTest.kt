@@ -56,7 +56,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Goal 9 C7 ruling: architecture invariants enforced in CI (SP2c.4 #827)")
 class Goal9C7ArchitectureTest {
-
 	// ── Forbidden actuator type names (simple class name suffixes) ─────────────
 
 	private val actuatorTypeNames =
@@ -68,7 +67,10 @@ class Goal9C7ArchitectureTest {
 
 	// ── Helper ──────────────────────────────────────────────────────────────────
 
-	private fun assertNoForbiddenFields(clazz: Class<*>, forbidden: List<String>) {
+	private fun assertNoForbiddenFields(
+		clazz: Class<*>,
+		forbidden: List<String>
+	) {
 		val violating =
 			clazz.declaredFields
 				.map { it.type.name }
