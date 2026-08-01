@@ -134,6 +134,9 @@ class DispatchTickLoop(
 
 		/** Default per-tick action limit — mirrors [ActionValidator.DEFAULT_MAX_ACTIONS_PER_TICK]. */
 		const val DEFAULT_MAX_ACTIONS_PER_TICK: Int = 3
+
+		/** Nanoseconds per second, for F2 real-time ratio computation. */
+		private const val NANOS_PER_SECOND: Double = 1_000_000_000.0
 	}
 
 	// ── Per-loop mutable state ──────────────────────────────────────────────
@@ -231,7 +234,16 @@ class DispatchTickLoop(
 		// Exception = LLM infrastructure failure. See [runEmission] for the SP2c.8/#831 vs
 		// SP2c.26/#849 reconciliation (swallow-and-engage when a fallback is configured, rethrow
 		// otherwise so the failure is diagnosable by the caller).
+		//
+		// F2 real-time ratio (SP2c.10, Issue #833): measure wall-clock time of the whole emission
+		// step (primary attempt + any fallback engage) and log the ratio
+		// (simDelta / emissionWallClockSeconds). Wrapping [runEmission] — not the bare
+		// `budget.withBudget { emission.emit(...) }` — means the ratio reflects the full pacing
+		// latency unit, including fallback work. For the LLM arm this is reported but NOT used to
+		// gate the run (A6 split). Rule-based arm is intrinsically ≥ 1× (synchronous).
+		val emissionStartNanos = System.nanoTime()
 		val emittedRaw: List<AttributedAction>? = runEmission(prompt, obs0)
+		val emissionNanos = System.nanoTime() - emissionStartNanos
 		val emitted =
 			when {
 				emittedRaw == null ->
@@ -323,6 +335,22 @@ class DispatchTickLoop(
 		controller.awaitIfPaused()
 		val simDelta = obs0.simTime - prevSimTime
 		controller.throttle(simDelta)
+
+		// F2 real-time ratio reporting (SP2c.10, Issue #833 — A6 split):
+		// simDelta is the simulation time elapsed since the previous tick.
+		// emissionNanos is the wall-clock time the emission strategy took.
+		// ratio = simDelta / emissionWallClockSeconds; < 1.0 means the emission was slower
+		// than the sim tick period (LLM falling behind). Reported at debug level, UNGATED —
+		// it does not fail the run. The rule-based arm is intrinsically ≥ 1× (synchronous).
+		if (emissionNanos > 0L && simDelta > 0.0) {
+			val emissionWallClockSeconds = emissionNanos.toDouble() / NANOS_PER_SECOND
+			val realTimeRatio = simDelta / emissionWallClockSeconds
+			logger.debug {
+				"DispatchTickLoop: tick=${obs0.tick} real-time ratio=%.3f (simDelta=%.3f s, emission=%.3f s)"
+					.format(realTimeRatio, simDelta, emissionWallClockSeconds)
+			}
+		}
+
 		prevSimTime = obs0.simTime
 		prevObs = obs0
 
