@@ -44,6 +44,16 @@ class KoogDispatchAgentImpl(
 		private val logger = KotlinLogging.logger {}
 	}
 
+	/**
+	 * The built Koog agent, exposed `internal` for the SP2c.6 build-contract test (Issue #829 /
+	 * #850) to reflect on its strategy + [ai.koog.agents.core.agent.config.AIAgentConfig] without
+	 * driving a live LLM run. Production code must not reach past [decideAsync]; this getter is
+	 * a test-only seam, not a public API.
+	 *
+	 * @since Issue #829 (SP2c.6 — Goal 10 four-actuator tool surface)
+	 */
+	internal val builtAgent: AIAgent<String, String> get() = aiAgent
+
 	override suspend fun decideAsync(observation: DispatchObservation): List<DispatchDecision> {
 		val userPrompt = buildUserPrompt(observation)
 		val finalText = aiAgent.run(userPrompt)

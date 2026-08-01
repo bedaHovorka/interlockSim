@@ -70,7 +70,7 @@ class ApproveTrainTool(
 			args.stringParam(TRAIN_ID_PARAM) ?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG)
 
 		logger.debug { "ApproveTrainTool.execute: trainId=$trainId" }
-		sinkHolder.current.emit(DispatchAction.ApproveTrain(trainId))
+		sinkHolder.emit(DispatchAction.ApproveTrain(trainId))
 		return ToolResult.Success("emitted approve_train trainId=$trainId")
 	}
 }

@@ -53,7 +53,7 @@ class NoOpTool(
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {
-		sinkHolder.current.emit(DispatchAction.NoOp)
+		sinkHolder.emit(DispatchAction.NoOp)
 		return ToolResult.Success("emitted no_op")
 	}
 }

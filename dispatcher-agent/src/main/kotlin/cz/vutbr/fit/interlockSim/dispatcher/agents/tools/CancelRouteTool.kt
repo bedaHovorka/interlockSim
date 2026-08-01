@@ -66,7 +66,7 @@ class CancelRouteTool(
 			args.stringParam(TRAIN_ID_PARAM) ?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG)
 
 		logger.debug { "CancelRouteTool.execute: trainId=$trainId" }
-		sinkHolder.current.emit(DispatchAction.CancelRoute(trainId))
+		sinkHolder.emit(DispatchAction.CancelRoute(trainId))
 		return ToolResult.Success("emitted cancel_route train=$trainId")
 	}
 }

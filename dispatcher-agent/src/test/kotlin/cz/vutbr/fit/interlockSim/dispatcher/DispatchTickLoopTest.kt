@@ -354,7 +354,7 @@ class DispatchTickLoopTest {
 	// ── Budget / TIMEOUT_NOOP substitution ────────────────────────────────────────────────
 
 	@Nested
-	@DisplayName("Budget: null emission becomes TIMEOUT_NOOP, empty emission does not")
+	@DisplayName("Budget: null emission becomes TIMEOUT_NOOP, empty emission becomes a strategy-authored NoOp")
 	inner class BudgetSubstitution {
 		/**
 		 * Would fail if the elvis in [DispatchTickLoop.runTick] step 4 were dropped or the
@@ -374,19 +374,27 @@ class DispatchTickLoopTest {
 		}
 
 		/**
-		 * The `NoAction → emptyList()` contract [RuleBasedEmissionStrategy] depends on: an empty
-		 * list means "nothing to do", which must NOT be rewritten into a timeout NoOp. Would fail
-		 * if the substitution used `isNullOrEmpty()` instead of a null check.
+		 * The `NoAction → emptyList()` contract [RuleBasedEmissionStrategy] depends on (SP2c.6 / #829):
+		 * an empty list means "the strategy ran and decided there is nothing to do this tick", which the
+		 * loop substitutes with a single [DispatchAction.NoOp] authored by the strategy's own
+		 * [EmissionStrategy.author] ([ActionAuthor.RULE_BASED] for the rule engine / [ScriptedEmission]
+		 * default) — a deliberate idle tick, NOT a degraded [ActionAuthor.TIMEOUT_NOOP]. Would fail if
+		 * the substitution used `isNullOrEmpty()` (collapsing empty into the timeout branch) or if the
+		 * empty branch were dropped (leaving zero actions, breaking the "exactly one action per tick,
+		 * `no_op` included" contract).
 		 */
 		@Test
-		@DisplayName("an empty emission list records zero actions, not a TIMEOUT_NOOP")
-		fun emptyEmissionRecordsNoActions() {
+		@DisplayName("an empty emission list yields one strategy-authored NoOp, not a TIMEOUT_NOOP and not zero actions")
+		fun emptyEmissionRecordsOneStrategyNoOp() {
 			val h = harness(listOf(observation()), listOf(emptyList()))
 
 			val record = runBlocking { h.loop.runTick() }!!
 
-			assertThat(record.actions).isEmpty()
-			assertThat(record.verdicts).isEmpty()
+			assertThat(record.actions).hasSize(1)
+			assertThat(record.actions[0].action).isEqualTo(DispatchAction.NoOp)
+			assertThat(record.actions[0].author).isEqualTo(ActionAuthor.RULE_BASED)
+			assertThat(record.verdicts).hasSize(1)
+			assertThat(h.queue.drain()).isEmpty()
 		}
 
 		@Test

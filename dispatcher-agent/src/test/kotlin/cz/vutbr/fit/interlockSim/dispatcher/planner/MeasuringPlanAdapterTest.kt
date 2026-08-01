@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -82,7 +83,8 @@ class MeasuringPlanAdapterTest {
 				context = context,
 				fallbackDispatcher = fallback,
 				inferenceTimeout = inferenceTimeout,
-				commandQueue = commandQueue
+				commandQueue = commandQueue,
+				sinkHolder = SinkHolder()
 			)
 		return MeasuringPlanAdapter(inner)
 	}

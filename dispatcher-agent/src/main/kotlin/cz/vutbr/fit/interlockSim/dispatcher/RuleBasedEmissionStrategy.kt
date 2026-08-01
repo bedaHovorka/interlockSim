@@ -68,8 +68,10 @@ import java.util.concurrent.atomic.AtomicLong
  * | Any other subtype | filtered out |
  *
  * `NoAction` produces no [AttributedAction] — an empty result list — which the [DispatchTickLoop]
- * treats as "nothing to do this tick" and does **not** substitute with a [ActionAuthor.TIMEOUT_NOOP]
- * (that substitution applies only to `null` returns, i.e. deadline timeouts).
+ * treats as "nothing to do this tick" and substitutes with a single [DispatchAction.NoOp] authored
+ * by this strategy's [author] ([ActionAuthor.RULE_BASED]) — i.e. a deliberate rule-engine idle tick,
+ * **not** a [ActionAuthor.TIMEOUT_NOOP] degraded timeout (that substitution applies only to `null`
+ * returns, i.e. deadline timeouts).
  *
  * ## `CommandId` assignment
  *
@@ -96,15 +98,25 @@ class RuleBasedEmissionStrategy(
 	private val commandIdCounter: AtomicLong = AtomicLong(0L)
 
 	/**
+	 * [ActionAuthor.RULE_BASED] — the author the loop attributes an idle-substituted `no_op` to
+	 * when this strategy returns an empty list (the dispatcher emitted only [DispatchDecision.NoAction]).
+	 * Overridden explicitly to document that the rule engine's idle ticks are deliberate, not
+	 * degraded; the inherited interface default has the same value.
+	 */
+	override val author: ActionAuthor
+		get() = ActionAuthor.RULE_BASED
+
+	/**
 	 * Invokes [Dispatcher.decide] with a [DispatchObservation] built from [observation] and
 	 * maps the returned [DispatchDecision]s to [AttributedAction]s.
 	 *
 	 * Ignores [prompt] entirely — the rule-based dispatcher decides from the observation alone.
 	 *
 	 * Returns an empty list (not `null`) when the dispatcher produces only [DispatchDecision.NoAction]:
-	 * an empty list means "nothing to do this tick" and does not trigger the
-	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor.TIMEOUT_NOOP] substitution in
-	 * [DispatchTickLoop].
+	 * an empty list means "nothing to do this tick"; [DispatchTickLoop] substitutes a single
+	 * [DispatchAction.NoOp] authored by [author] ([ActionAuthor.RULE_BASED]) — a deliberate idle
+	 * tick, not the [cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor.TIMEOUT_NOOP]
+	 * substitution that only a `null` (deadline) return triggers.
 	 */
 	override suspend fun emit(
 		prompt: String,

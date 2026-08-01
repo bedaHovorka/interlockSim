@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -275,6 +276,13 @@ val dispatcherAgentModule: Module =
 			// concurrent simulations pace independently.
 			scoped<DelegatingSimulationController> { DelegatingSimulationController() }
 
+			// SP2c.6 (#829): SinkHolder — one per context, shared by the four actuator tools and
+			// KoogAgentPlanAdapter. KoogAgentFactory installs the queue-posting wrapper on its
+			// `current` at agent construction; KoogAgentPlanAdapter reads its per-cycle emission
+			// counter to decide whether the LLM acted via tools (and thus whether the rule-based
+			// fallback must run). Defaults to EmittedActionSink.NO_OP until the factory wires it.
+			scoped<SinkHolder> { SinkHolder() }
+
 			// SP1.3: KoogAgentFactory (per-context builder, receives tools/config)
 			// Factory is scoped because it receives context-scoped dependencies (ports from SP1.4, tools in SP1.4+).
 			// Each context gets its own factory instance.
@@ -285,7 +293,8 @@ val dispatcherAgentModule: Module =
 					agentService = get(), // Singleton
 					perceptionPort = get(), // Scoped to this context (SP1.4 — live port)
 					commandQueue = get(), // Scoped to this context (SP1.7)
-					dispatchLoopSensorPort = get() // Scoped to this context (Goal 10 tool-registration fix)
+					dispatchLoopSensorPort = get(), // Scoped to this context (Goal 10 tool-registration fix)
+					sinkHolder = get() // Scoped to this context (SP2c.6 — shared with KoogAgentPlanAdapter)
 				)
 			}
 

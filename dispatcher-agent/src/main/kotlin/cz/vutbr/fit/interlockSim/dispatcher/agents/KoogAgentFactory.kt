@@ -42,10 +42,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   Wrapped in a snapshot projection before topology is read (SP1.7).
  * @property commandQueue Command queue for fire-and-forget actuator commands (scoped per
  *   context, SP1.7). Receives converted [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s from
- *   the [SinkHolder] queue-posting wrapper in SP2c.6.
+ *   the [sinkHolder] queue-posting wrapper in SP2c.6.
  * @property dispatchLoopSensorPort Dispatch-loop sensor port for this context. Retained for
  *   topology reads and future use; dispatch-loop sensor tools (`queued_trains`/`block_inputs`)
  *   are NOT added to the LLM's tool surface in SP2c.6.
+ * @property sinkHolder Per-context shared [SinkHolder] for the four actuator tools (SP2c.6, #829).
+ *   Holds the queue-posting wrapper installed here so every actuator tool's `emit` posts its
+ *   converted [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to [commandQueue]; the same
+ *   instance is read by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] to
+ *   detect via the per-cycle emission counter whether the LLM acted via tools (and therefore the
+ *   rule-based fallback must not double-dispatch).
  *
  * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549), SP1.7 (#774), SP2c.6 (#829)
  */
@@ -55,7 +61,8 @@ class KoogAgentFactory(
 	private val agentService: AgentService,
 	private val perceptionPort: NetworkPerceptionPort,
 	private val commandQueue: ActuatorCommandQueue,
-	private val dispatchLoopSensorPort: DispatchLoopSensorPort
+	private val dispatchLoopSensorPort: DispatchLoopSensorPort,
+	private val sinkHolder: SinkHolder
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -119,31 +126,30 @@ class KoogAgentFactory(
 		val topology = StationTopologySerializer.describe(context)
 		val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
 
-		// SP2c.6 (#829): build a SinkHolder backed by a queue-posting wrapper.
+		// SP2c.6 (#829): install the queue-posting wrapper on the per-context SinkHolder.
 		// Every DispatchAction emitted by an actuator tool is converted to a DispatchDecision
-		// and posted to commandQueue (fire-and-forget). The SinkHolder is shared by all four tools.
-		val sinkHolder =
-			SinkHolder(
-				EmittedActionSink { action ->
-					val decisions: List<DispatchDecision> =
-						when (action) {
-							is DispatchAction.ApproveTrain ->
-								listOf(DispatchDecision.ApproveTrain(trainId = action.trainId))
-							is DispatchAction.RequestRoute ->
-								listOf(
-									DispatchDecision.RequestRoute(
-										trainName = action.trainId,
-										fromEndpointName = action.fromEndpointName,
-										toEndpointName = action.toEndpointName
-									)
+		// and posted to commandQueue (fire-and-forget). The SinkHolder is shared by all four tools
+		// and with KoogAgentPlanAdapter, which reads its per-cycle emission counter.
+		sinkHolder.current =
+			EmittedActionSink { action ->
+				val decisions: List<DispatchDecision> =
+					when (action) {
+						is DispatchAction.ApproveTrain ->
+							listOf(DispatchDecision.ApproveTrain(trainId = action.trainId))
+						is DispatchAction.RequestRoute ->
+							listOf(
+								DispatchDecision.RequestRoute(
+									trainName = action.trainId,
+									fromEndpointName = action.fromEndpointName,
+									toEndpointName = action.toEndpointName
 								)
-							is DispatchAction.CancelRoute ->
-								listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
-							is DispatchAction.NoOp -> emptyList()
-						}
-					commandQueue.postAll(decisions)
-				}
-			)
+							)
+						is DispatchAction.CancelRoute ->
+							listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
+						is DispatchAction.NoOp -> emptyList()
+					}
+				commandQueue.postAll(decisions)
+			}
 
 		// Assemble the four-tool actuator surface for this context.
 		val tools = toolRegistry.assembleAllTools(validEndpointNames, sinkHolder)

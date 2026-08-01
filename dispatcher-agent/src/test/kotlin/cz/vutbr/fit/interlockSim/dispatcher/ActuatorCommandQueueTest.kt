@@ -18,6 +18,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
+import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import org.junit.jupiter.api.DisplayName
@@ -271,5 +272,54 @@ class ActuatorCommandQueueTest {
 	fun zeroCapacityRejected() {
 		assertFailure { ActuatorCommandQueue(capacity = 0) }
 			.isInstanceOf<IllegalArgumentException>()
+	}
+
+	// ── advanceCorrelationCycle (SP2c.6, Issue #829) ─────────────────────────
+
+	/**
+	 * [ActuatorCommandQueue.advanceCorrelationCycle] is a no-op when no [CommandCorrelationMap] is
+	 * wired — the queue is usable without outcome correlation, and advancing the cycle must not
+	 * throw. Would fail (NPE) if the `?.` safe-call on `correlationMap` were replaced with a
+	 * direct call.
+	 */
+	@Test
+	@DisplayName("advanceCorrelationCycle is a no-op when no correlation map is wired")
+	fun advanceCorrelationCycleNoOpWithoutMap() {
+		val queue = ActuatorCommandQueue()
+
+		// Must not throw — correlationMap == null here.
+		queue.advanceCorrelationCycle()
+		queue.advanceCorrelationCycle()
+
+		assertThat(queue.drain()).isEmpty()
+	}
+
+	/**
+	 * With a [CommandCorrelationMap] wired, [ActuatorCommandQueue.advanceCorrelationCycle] delegates
+	 * to [CommandCorrelationMap.newCycle], so each decision posted in a later cycle receives a tick
+	 * index one higher than the previous cycle's. Verifies the delegation (the SP2c.6 replacement for
+	 * the deleted `resetCycleActuatorCount` still advances the correlation cycle).
+	 */
+	@Test
+	@DisplayName("advanceCorrelationCycle advances the tick index for subsequently posted decisions")
+	fun advanceCorrelationCycleAdvancesTickIndex() {
+		val correlationMap = CommandCorrelationMap()
+		val queue = ActuatorCommandQueue(correlationMap = correlationMap)
+
+		val firstCycleDecision = DispatchDecision.ApproveTrain("T1")
+		queue.postAll(listOf(firstCycleDecision))
+		val firstCorrelation = correlationMap.correlate(firstCycleDecision)
+
+		assertThat(firstCorrelation).isNotNull()
+		assertThat(firstCorrelation!!.tickIndex).isEqualTo(0L)
+
+		// Advance the cycle — the next decision must land in tick index 1.
+		queue.advanceCorrelationCycle()
+		val secondCycleDecision = DispatchDecision.ApproveTrain("T2")
+		queue.postAll(listOf(secondCycleDecision))
+		val secondCorrelation = correlationMap.correlate(secondCycleDecision)
+
+		assertThat(secondCorrelation).isNotNull()
+		assertThat(secondCorrelation!!.tickIndex).isEqualTo(1L)
 	}
 }

@@ -18,8 +18,10 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
@@ -62,12 +64,21 @@ class KoogAgentPlanAdapterTest {
 		fallback: Dispatcher,
 		inferenceTimeout: Duration = Duration.ofSeconds(30),
 		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue(),
+		sinkHolder: SinkHolder = SinkHolder(),
 		maxConcurrentTrains: Int = 2
 	): KoogAgentPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
 		coEvery { agentFactory.createAgent(any()) } returns koogAgent
 		val context = mockk<DefaultSimulationContext>()
-		return KoogAgentPlanAdapter(agentFactory, context, fallback, inferenceTimeout, commandQueue, maxConcurrentTrains)
+		return KoogAgentPlanAdapter(
+			agentFactory,
+			context,
+			fallback,
+			inferenceTimeout,
+			commandQueue,
+			sinkHolder,
+			maxConcurrentTrains
+		)
 	}
 
 	private fun observationWithQueue(
@@ -107,11 +118,11 @@ class KoogAgentPlanAdapterTest {
 	}
 
 	@Test
-	fun `empty decisions always invoke the rule-based fallback (SP2c6)`() {
-		// SP2c.6 (#829): the queue-actuation-side-effect detection (actedViaToolsThisCycle) was
-		// removed. Actuator tools now emit to the SinkHolder seam, not to a return value observed
-		// here, so an empty decision list from decideAsync unconditionally falls back — regardless
-		// of whether tools acted during the cycle.
+	fun `empty decisions always invoke the rule-based fallback when no tool emitted (SP2c6)`() {
+		// SP2c.6 (#829): the actuator tools emit to the SinkHolder seam, not to a return value
+		// observed here. An empty decision list from decideAsync with NO tool emission means the
+		// LLM truly did nothing this cycle → fall back. The emission counter (not the return value)
+		// is now the load-bearing signal.
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
 		val fallbackDecisions = listOf(DispatchDecision.NoAction)
@@ -122,6 +133,31 @@ class KoogAgentPlanAdapterTest {
 
 		assertThat(result).containsExactly(DispatchDecision.NoAction)
 		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `an empty decision list with a tool emission skips the fallback (SP2c6 SinkHolder counter)`() {
+		// SP2c.6 (#829): when the LLM acts via its actuator tools, the decisions are already posted
+		// to the queue through sinkHolder.current; decideAsync still returns empty. The per-cycle
+		// emission counter must detect this and skip the fallback — otherwise the rule engine's
+		// own decisions double-dispatch to the same queue. This is the regression the counter
+		// restores (the pre-#829 queue-actuation-side-effect heuristic went stale once tools were
+		// rewired to SinkHolder, making every cycle 100% fallback).
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			// The LLM called an actuator tool during its cycle (emission already posted via the
+			// queue-posting wrapper in production; here a bare sinkHolder with NO_OP default still
+			// records the emission so the counter detects it).
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+
+		val result = runBlocking { adapter(koogAgent, fallback, sinkHolder = sinkHolder).plan(observation) }
+
+		assertThat(result).isEmpty()
+		coVerify(exactly = 0) { fallback.decide(any()) }
 	}
 
 	@Test
@@ -195,11 +231,11 @@ class KoogAgentPlanAdapterTest {
 	@Nested
 	inner class AdmissionSafetyNet {
 		/**
-		 * A mock [KoogDispatchAgent] that returns a non-empty decision list — the shape under
-		 * which [KoogAgentPlanAdapter.plan] does not fall back and instead runs the admission
-		 * safety net (SP2c.6, Issue #829: the empty-branch queue-actuation-side-effect detection
-		 * was removed, so only a non-empty [KoogDispatchAgent.decideAsync] result now avoids the
-		 * fallback — see `empty decisions always invoke the rule-based fallback (SP2c6)`).
+		 * A mock [KoogDispatchAgent] that returns a non-empty decision list — one of the shapes
+		 * under which [KoogAgentPlanAdapter.plan] does not fall back and instead runs the
+		 * admission safety net. (The other shape — an empty return with a tool emission via the
+		 * [SinkHolder] counter — is covered by `an empty decision list with a tool emission skips
+		 * the fallback (SP2c6 SinkHolder counter)`.)
 		 */
 		private fun agentThatActedViaTools(): KoogDispatchAgent =
 			mockk {

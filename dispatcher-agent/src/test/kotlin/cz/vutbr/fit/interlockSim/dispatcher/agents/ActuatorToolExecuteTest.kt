@@ -11,11 +11,13 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.CancelRouteTool
+import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.NoOpTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -47,6 +49,9 @@ class ActuatorToolExecuteTest {
 		assertThat(data).contains("T1")
 		assertThat(data).contains("zA")
 		assertThat(data).contains("doA1")
+		// SP2c.6 receipt-string contract (#829 M2): actuator tools return "emitted …", never "queued".
+		assertThat(data).contains("emitted")
+		assertThat(data).doesNotContain("queued")
 
 		assertThat(emitted).hasSize(1)
 		val action = emitted.single()
@@ -95,10 +100,31 @@ class ActuatorToolExecuteTest {
 		assertThat(result).isInstanceOf<ToolResult.Success>()
 		val data = (result as ToolResult.Success).data as String
 		assertThat(data).contains("T1")
+		// SP2c.6 receipt-string contract (#829 M2): actuator tools return "emitted …", never "queued".
+		assertThat(data).contains("emitted")
+		assertThat(data).doesNotContain("queued")
 
 		assertThat(emitted).hasSize(1)
 		assertThat(emitted.single()).isInstanceOf<DispatchAction.CancelRoute>()
 		assertThat((emitted.single() as DispatchAction.CancelRoute).trainId).isEqualTo("T1")
+	}
+
+	/**
+	 * SP2c.6 receipt-string contract (#829 M2): `no_op` emits a [DispatchAction.NoOp] and returns
+	 * an "emitted no_op" descriptor (never "queued"). The optional `reason` argument is accepted but
+	 * ignored — it must not affect the emitted action or the receipt string.
+	 */
+	@Test
+	fun `no_op emits a NoOp action and returns an emitted-success descriptor`() {
+		val result = runBlocking { NoOpTool(sinkHolder).execute(mapOf("reason" to "nothing to do")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Success>()
+		val data = (result as ToolResult.Success).data as String
+		assertThat(data).contains("emitted")
+		assertThat(data).doesNotContain("queued")
+
+		assertThat(emitted).hasSize(1)
+		assertThat(emitted.single()).isInstanceOf<DispatchAction.NoOp>()
 	}
 
 	@Test

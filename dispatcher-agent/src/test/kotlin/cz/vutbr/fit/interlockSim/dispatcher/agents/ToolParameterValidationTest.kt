@@ -13,76 +13,27 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.BlockOccupancyTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.CancelRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SignalAspectTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainPositionTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainTimetableTool
-import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
 /**
- * Verifies that arg-taking tools reject invalid arguments (missing / null / blank / unknown enum)
- * with [ToolResult.Error] **without reaching the port or emitting to the sink** (#551 review
- * #3/#4/#6; actuator tools emit via the [SinkHolder]/[EmittedActionSink] seam since SP2c.6,
- * Issue #829).
+ * Verifies that the actuator tools reject invalid arguments (missing / null / blank) with
+ * [ToolResult.Error] **without emitting to the sink** (#551 review #3/#4/#6; actuator tools emit
+ * via the [SinkHolder]/[EmittedActionSink] seam since SP2c.6, Issue #829).
+ *
+ * The perception-tool validation cases were removed in SP2c.6 along with the perception tools
+ * themselves (perception now flows through the sim-thread-captured
+ * [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector], not LLM
+ * tools). `approve_train` argument validation is covered by [DispatchLoopToolsTest].
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP2c.6 (#829) rewires actuator tools to
  *   SinkHolder
  */
 class ToolParameterValidationTest {
-	private val perceptionPort = mockk<NetworkPerceptionPort>(relaxed = true)
 	private val emitted = mutableListOf<DispatchAction>()
 	private val sinkHolder = SinkHolder(EmittedActionSink { emitted.add(it) })
-
-	@Test
-	fun `signal_aspect rejects missing null and blank semaphoreName without calling the port`() {
-		val tool = SignalAspectTool(perceptionPort)
-		runBlocking {
-			assertThat(tool.execute(emptyMap())).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("semaphoreName" to null))).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("semaphoreName" to "  "))).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("semaphoreName" to 42))).isInstanceOf<ToolResult.Error>()
-		}
-		verify(exactly = 0) { perceptionPort.signalAspect(any()) }
-	}
-
-	@Test
-	fun `block_occupancy rejects missing null and blank blockId without calling the port`() {
-		val tool = BlockOccupancyTool(perceptionPort)
-		runBlocking {
-			assertThat(tool.execute(emptyMap())).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("blockId" to null))).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("blockId" to ""))).isInstanceOf<ToolResult.Error>()
-		}
-		verify(exactly = 0) { perceptionPort.blockOccupancy(any()) }
-	}
-
-	@Test
-	fun `train_position rejects missing null and blank trainId without calling the port`() {
-		val tool = TrainPositionTool(perceptionPort)
-		runBlocking {
-			assertThat(tool.execute(emptyMap())).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("trainId" to null))).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("trainId" to "\t"))).isInstanceOf<ToolResult.Error>()
-		}
-		verify(exactly = 0) { perceptionPort.trainPosition(any()) }
-	}
-
-	@Test
-	fun `train_timetable rejects missing null and blank trainId without calling the port`() {
-		val tool = TrainTimetableTool(perceptionPort)
-		runBlocking {
-			assertThat(tool.execute(emptyMap())).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("trainId" to null))).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("trainId" to " "))).isInstanceOf<ToolResult.Error>()
-		}
-		verify(exactly = 0) { perceptionPort.trainTimetable(any()) }
-	}
 
 	@Test
 	fun `request_route rejects any blank argument without emitting to the sink`() {

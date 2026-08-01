@@ -123,7 +123,7 @@ class RequestRouteTool(
 			"RequestRouteTool.execute: emitting action trainName=$trainName, " +
 				"from=$fromEndpointName, to=$toEndpointName"
 		}
-		sinkHolder.current.emit(action)
+		sinkHolder.emit(action)
 		return ToolResult.Success("emitted request_route train=$trainName from=$fromEndpointName to=$toEndpointName")
 	}
 }

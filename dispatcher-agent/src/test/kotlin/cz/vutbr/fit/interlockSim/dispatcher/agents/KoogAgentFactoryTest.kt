@@ -11,17 +11,21 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -30,6 +34,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -101,7 +106,8 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = mockk<NetworkPerceptionPort>(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					sinkHolder = SinkHolder()
 				)
 
 			runBlocking { factory.createAgent(context) }
@@ -126,7 +132,8 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = mockk<NetworkPerceptionPort>(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					sinkHolder = SinkHolder()
 				)
 
 			runBlocking { factory.createAgent(context) }
@@ -148,7 +155,8 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = mockk<NetworkPerceptionPort>(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					sinkHolder = SinkHolder()
 				)
 
 			runBlocking { factory.createAgent(context) }
@@ -172,7 +180,8 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = mockk<NetworkPerceptionPort>(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					sinkHolder = SinkHolder()
 				)
 
 			runBlocking { factory.createAgent(context) }
@@ -199,7 +208,8 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = mockk<NetworkPerceptionPort>(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>()
+					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					sinkHolder = SinkHolder()
 				)
 
 			runBlocking { factory.createAgent(context) }
@@ -209,6 +219,97 @@ class KoogAgentFactoryTest {
 				"The only actuator tools available are approve_train, request_route, cancel_route, and no_op"
 			)
 			assertThat(systemPrompt).contains("there is no tool to set a signal aspect or switch position directly")
+		}
+	}
+
+	// ── SinkHolder queue-posting wrapper (SP2c.6, Issue #829) ──────────────────
+
+	/**
+	 * Drives the real [KoogAgentFactory.createAgent] so the SP2c.6 queue-posting wrapper is installed
+	 * on [sinkHolder], then returns the captured tool surface so each actuator tool's end-to-end
+	 * `execute → sinkHolder.emit → wrapper → commandQueue.postAll` path can be exercised.
+	 *
+	 * The wrapper converts each [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction] to a
+	 * [DispatchDecision] and posts it to [commandQueue]; the drained decisions are the assertions.
+	 * `request_route` is already covered by the marshalling integration test, so this nested class
+	 * covers the other three mappings (`approve_train`, `cancel_route`, `no_op`).
+	 */
+	private fun driveFactoryAndCaptureTools(
+		agentService: CapturingAgentService,
+		commandQueue: ActuatorCommandQueue,
+		sinkHolder: SinkHolder
+	): List<DomainTool> {
+		val factory =
+			KoogAgentFactory(
+				toolRegistry = ToolGroupRegistry(),
+				ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+				agentService = agentService,
+				perceptionPort = mockk<NetworkPerceptionPort>(),
+				commandQueue = commandQueue,
+				dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+				sinkHolder = sinkHolder
+			)
+		loadShuntingLoopContext().use { context -> runBlocking { factory.createAgent(context) } }
+		return requireNotNull(agentService.capturedTools)
+	}
+
+	@Nested
+	@DisplayName("SinkHolder wrapper maps each actuator tool's DispatchAction to a DispatchDecision")
+	inner class SinkHolderWrapperMapping {
+		/**
+		 * `approve_train` → [DispatchDecision.ApproveTrain]. Would fail if the wrapper's `when`
+		 * branch for [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.ApproveTrain] were dropped
+		 * or mapped to the wrong decision subtype.
+		 */
+		@Test
+		@DisplayName("approve_train posts DispatchDecision.ApproveTrain")
+		fun approveTrainMapsToApproveTrainDecision() {
+			val agentService = CapturingAgentService()
+			val commandQueue = ActuatorCommandQueue()
+			val tools = driveFactoryAndCaptureTools(agentService, commandQueue, SinkHolder())
+			val approveTrain = tools.single { it.name == "approve_train" }
+
+			runBlocking { approveTrain.execute(mapOf("trainId" to "T1")) }
+
+			assertThat(commandQueue.drain()).containsExactly(DispatchDecision.ApproveTrain("T1"))
+			assertThat(commandQueue.drain()).isEmpty()
+		}
+
+		/**
+		 * `cancel_route` → [DispatchDecision.ReleaseRoute] (note the rename: the LLM speaks
+		 * `cancel_route`; the rule engine speaks `ReleaseRoute`). Would fail if the wrapper mapped
+		 * CancelRoute to a same-named decision or dropped the rename.
+		 */
+		@Test
+		@DisplayName("cancel_route posts DispatchDecision.ReleaseRoute")
+		fun cancelRouteMapsToReleaseRouteDecision() {
+			val agentService = CapturingAgentService()
+			val commandQueue = ActuatorCommandQueue()
+			val tools = driveFactoryAndCaptureTools(agentService, commandQueue, SinkHolder())
+			val cancelRoute = tools.single { it.name == "cancel_route" }
+
+			runBlocking { cancelRoute.execute(mapOf("trainId" to "T1")) }
+
+			assertThat(commandQueue.drain()).containsExactly(DispatchDecision.ReleaseRoute(trainName = "T1"))
+			assertThat(commandQueue.drain()).isEmpty()
+		}
+
+		/**
+		 * `no_op` posts nothing — the wrapper maps [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp]
+		 * to an empty decision list, so [ActuatorCommandQueue.postAll] is a no-op. Would fail if NoOp
+		 * were mapped to a placeholder decision (e.g. NoAction) that actually enqueued.
+		 */
+		@Test
+		@DisplayName("no_op posts nothing to the command queue")
+		fun noOpPostsNothing() {
+			val agentService = CapturingAgentService()
+			val commandQueue = ActuatorCommandQueue()
+			val tools = driveFactoryAndCaptureTools(agentService, commandQueue, SinkHolder())
+			val noOp = tools.single { it.name == "no_op" }
+
+			runBlocking { noOp.execute(mapOf("reason" to "idle")) }
+
+			assertThat(commandQueue.drain()).isEmpty()
 		}
 	}
 }

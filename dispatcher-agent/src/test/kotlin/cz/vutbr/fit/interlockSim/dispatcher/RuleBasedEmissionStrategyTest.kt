@@ -242,6 +242,22 @@ class RuleBasedEmissionStrategyTest {
 			assertThat(emitted.any { it.author == ActionAuthor.RULE_FALLBACK }).isFalse()
 		}
 
+		/**
+		 * The strategy's [cz.vutbr.fit.interlockSim.dispatcher.agents.EmissionStrategy.author] is
+		 * [ActionAuthor.RULE_BASED] — the author [DispatchTickLoop] attributes an idle-substituted
+		 * `no_op` to when this strategy returns an empty list (a deliberate rule-engine idle tick,
+		 * not a [ActionAuthor.TIMEOUT_NOOP] degraded timeout). Would fail if the override were
+		 * dropped/changed to any other author (the inherited default happens to match, but the
+		 * override documents the rule engine's intent).
+		 */
+		@Test
+		@DisplayName("the strategy's author property is ActionAuthor.RULE_BASED")
+		fun authorPropertyIsRuleBased() {
+			val strategy = RuleBasedEmissionStrategy(ScriptedDispatcher(emptyList()))
+
+			assertThat(strategy.author).isEqualTo(ActionAuthor.RULE_BASED)
+		}
+
 		@Test
 		@DisplayName("emitted actions carry the observation's tick")
 		fun actionsCarryObservationTick() {
