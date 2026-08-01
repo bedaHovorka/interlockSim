@@ -44,6 +44,23 @@
 	<!-- kDisco statistics suppressed during tests -->
 	<logger name="kDisco.statistics" level="ERROR"/>
 
+	<!--
+		SP2c.26 (Issue #849) F1 paused-clock spike: these tests exist to REPORT measurements
+		(pause latency, pause/resume overhead, speed-multiplier interaction) that are quoted in
+		docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md. Both appenders above carry a ThresholdFilter
+		at WARN/ERROR, so raising the logger level alone would not surface those numbers — the spike
+		needs an unfiltered appender. Scoped to this one package with additivity="false" so no other
+		INFO logging is let through.
+	-->
+	<appender name="SPIKE_MEASUREMENTS" class="ch.qos.logback.core.ConsoleAppender">
+		<encoder>
+			<pattern>%-5level %logger{36} - %msg%n</pattern>
+		</encoder>
+	</appender>
+	<logger name="cz.vutbr.fit.interlockSim.timing" level="INFO" additivity="false">
+		<appender-ref ref="SPIKE_MEASUREMENTS"/>
+	</logger>
+
 	<!-- Root logger - WARN level for tests -->
 	<root level="WARN">
 		<appender-ref ref="CONSOLE"/>

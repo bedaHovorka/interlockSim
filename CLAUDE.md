@@ -499,6 +499,7 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 - `KOIN_SCOPE_LIFECYCLE_TESTS.md` - Koin scope lifecycle test documentation (Issue #220)
 - `GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` - LLM model comparison for the Goal 10 DISPATCHER agent (Issue #534, SP3.1; TRAIN agents are algorithmic-only, never LLM)
 - `GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` - Ollama/Koog capability audit: seed reachability, format+tools coexistence, num_ctx right-sizing, maxIterations tripwire (Issue #850, SP2c.27)
+- `GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` - Recorded traffic-simulation-expert ruling on the F1 paused-clock timing regime and the R8 headless-pacing question (Issue #849, SP2c.26)
 
 ## Known Issues
 
