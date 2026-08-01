@@ -168,6 +168,10 @@ open class ControlledLoopOverheadBenchmark {
 		override fun requestPause() {
 			// No-op: benchmark runs headless.
 		}
+
+		override fun requestResume() {
+			// No-op: benchmark runs headless.
+		}
 	}
 
 	/**

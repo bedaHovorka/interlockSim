@@ -63,4 +63,10 @@ class SimulationControllerTest {
 		// Should not throw — no-op implementation for headless/non-GUI runs
 		NoOpSimulationController.requestPause()
 	}
+
+	@Test
+	fun `NoOpSimulationController requestResume does nothing`() {
+		// Should not throw — no-op implementation; headless runs are never paused
+		NoOpSimulationController.requestResume()
+	}
 }

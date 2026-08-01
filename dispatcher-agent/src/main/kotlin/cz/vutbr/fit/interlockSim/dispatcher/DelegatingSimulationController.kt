@@ -133,6 +133,23 @@ class DelegatingSimulationController : SimulationController {
 		delegate.requestPause()
 	}
 
+	/**
+	 * Forwards the resume request to the [delegate].
+	 *
+	 * Unlike [awaitIfPaused], [pollStepEvent], and [pollStepTime] — which are intentionally
+	 * NOT forwarded to protect the simulation thread's exclusive ownership of step requests —
+	 * a resume is **safe to forward**: it only clears the pause flag and wakes any parked
+	 * simulation thread; it does not consume any step-event or step-time credit. Forwarding is
+	 * therefore correct and necessary: without it, a [cz.vutbr.fit.interlockSim.dispatcher.agents.TickBudget]-shaped
+	 * consumer that holds only a [cz.vutbr.fit.interlockSim.context.SimulationController] reference
+	 * would have no way to release a pause it took, causing the simulation to park indefinitely.
+	 *
+	 * @since Issue #872 (SP2c.26 follow-up I1)
+	 */
+	override fun requestResume() {
+		delegate.requestResume()
+	}
+
 	companion object {
 		/** Poll interval while waiting out a pause; coarse is fine — no new observations arrive while paused. */
 		private const val PAUSE_POLL_MS: Long = 10L
