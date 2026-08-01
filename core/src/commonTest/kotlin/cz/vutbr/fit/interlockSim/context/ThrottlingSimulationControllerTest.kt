@@ -68,6 +68,22 @@ class ThrottlingSimulationControllerTest {
 	}
 
 	@Test
+	fun `requestResume does nothing`() {
+		val controller = ThrottlingSimulationController()
+		// Should not throw — headless implementation is never paused
+		controller.requestResume()
+		assertThat(controller.isPaused()).isFalse()
+	}
+
+	@Test
+	fun `requestResume after requestPause leaves controller unpaused`() {
+		val controller = ThrottlingSimulationController()
+		controller.requestPause()
+		controller.requestResume()
+		assertThat(controller.isPaused()).isFalse()
+	}
+
+	@Test
 	fun `implements SimulationController`() {
 		val controller: SimulationController = ThrottlingSimulationController()
 		assertThat(controller).isInstanceOf(ThrottlingSimulationController::class)

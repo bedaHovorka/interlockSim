@@ -110,6 +110,11 @@ class ThrottlingSimulationController(
 		// No-op: headless runs do not support interactive pause
 	}
 
+	/** Headless: never paused, so resume requests are silently ignored. */
+	override fun requestResume() {
+		// No-op: headless runs are never paused
+	}
+
 	companion object {
 		/** Minimum valid speed multiplier. */
 		const val MIN_SPEED: Double = 0.1
