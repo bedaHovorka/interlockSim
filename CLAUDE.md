@@ -481,6 +481,12 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 - **SIM-004:** ShuntingLoop hardcoded for `vyhybna.xml` configuration only
 - **DEFERRED-001:** XMLContextFactoryTest missing exception type predicates (9 occurrences)
 - Minor simulation issues (SIM-001 to SIM-006) documented in code comments
+- **`:core:linuxX64Test` JUnit XML disabled:** works around an unresolved Gradle × Kotlin/Native
+  race ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990), KT-69896) where
+  concurrent stdout/stderr forwarding from a native test process corrupts Gradle's binary test
+  result index, causing `IllegalArgumentException: Multiple entries with same key` when writing
+  the XML report — even though all tests passed. See `core/build.gradle.kts` (`linuxX64Test`
+  configuration). Do not re-enable without confirming the upstream bug is fixed.
 
 **Test coverage:** 1840 tests (1836 passing, 4 skipped), 51% code coverage.
 

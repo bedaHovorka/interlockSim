@@ -262,6 +262,16 @@ if (isLinuxHost) {
 
 if (isLinuxHost) {
     tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("linuxX64Test") {
+        // Gradle's TestOutputStore.onOutput is not thread-safe; KotlinTest forwards a native
+        // test process's stdout/stderr on two separate reader threads, and concurrent calls
+        // corrupt the binary result index. This later surfaces as "Could not write XML test
+        // results" / IllegalArgumentException: Multiple entries with same key, failing the
+        // task despite all tests passing. Unresolved upstream: gradle/gradle#33990 (KT-69896
+        // tracks the Kotlin-side fix). No consumer reads this task's XML report, so disabling
+        // it sidesteps the crash without losing anything — console output (via testLogging
+        // below) still reports full pass/fail detail.
+        reports.junitXml.required.set(false)
+
         testLogging {
             events("passed", "skipped", "failed")
             exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
