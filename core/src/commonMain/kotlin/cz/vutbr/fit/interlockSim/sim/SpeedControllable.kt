@@ -17,8 +17,9 @@ package cz.vutbr.fit.interlockSim.sim
  * (or any thread driving GUI controls / keyboard shortcuts). Use `@kotlin.concurrent.Volatile`
  * on the backing field.
  *
- * Range validation is left to the implementation; the canonical bounds used by the
- * desktop GUI live on `SimulationRunner.MIN_SPEED`/`MAX_SPEED`.
+ * Range validation is left to the implementation; the canonical bounds live on
+ * `SimulationPacing.MIN_SPEED`/`MAX_SPEED` (aliased by `SimulationRunner.MIN_SPEED`/`MAX_SPEED`
+ * for the desktop GUI).
  */
 interface SpeedControllable {
 	/** Wall-clock speed multiplier. 1.0 = real-time, 2.0 = twice as fast, 0.5 = half-speed. */

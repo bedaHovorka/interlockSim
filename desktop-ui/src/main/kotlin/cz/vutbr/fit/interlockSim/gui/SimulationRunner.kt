@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.context.SimulationPacing
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -88,9 +89,7 @@ class SimulationRunner(
 	var speedMultiplier: Double
 		get() = speedMultiplierBacking
 		set(value) {
-			require(value in MIN_SPEED..MAX_SPEED) {
-				"speedMultiplier must be in [$MIN_SPEED..$MAX_SPEED], got: $value"
-			}
+			SimulationPacing.requireSpeedMultiplier(value)
 			val old = speedMultiplierBacking
 			if (old != value) {
 				speedMultiplierBacking = value
@@ -343,9 +342,9 @@ class SimulationRunner(
 	}
 
 	companion object {
-		const val MIN_SPEED: Double = 0.1
-		const val MAX_SPEED: Double = 100.0
-		const val DEFAULT_SPEED: Double = 1.0
+		const val MIN_SPEED: Double = SimulationPacing.MIN_SPEED
+		const val MAX_SPEED: Double = SimulationPacing.MAX_SPEED
+		const val DEFAULT_SPEED: Double = SimulationPacing.DEFAULT_SPEED
 
 		const val MIN_STEP_TIME_DELTA: Double = 0.001
 		const val MAX_STEP_TIME_DELTA: Double = 60.0
@@ -356,7 +355,7 @@ class SimulationRunner(
 		const val PROP_STEP_EVENT_REQUESTED: String = "stepEventRequested"
 		const val PROP_STEP_TIME_REQUESTED: String = "stepTimeRequested"
 
-		private const val MILLIS_PER_SECOND: Double = 1000.0
+		private const val MILLIS_PER_SECOND: Double = SimulationPacing.MILLIS_PER_SECOND
 
 		private val logger = KotlinLogging.logger {}
 	}

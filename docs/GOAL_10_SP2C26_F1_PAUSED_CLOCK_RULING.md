@@ -227,7 +227,7 @@ Each lands on its own branch and PR; none is in scope for #849.
 | Ref | Work | Blocks |
 |---|---|---|
 | **I1** | Add a resume path to `SimulationController` (`requestResume()` / `setPaused(Boolean)`) and forward it through `DelegatingSimulationController`. | Hard prerequisite for any `PausedClockTickBudget` — SP2c.10 (#833) F1 arm |
-| **I2** | Extract `SimulationRunner`'s pacing core out of `:desktop-ui` (or add a sibling headless controller) and allow `shuntingLoopAI` to register headlessly. | SP2c.24 (#847) headless sweep → A4 |
+| **I2** ✅ | Add `ThrottlingSimulationController` to `:core` (Issue #873) — a headless pacing controller using `platformSleep`; register `shuntingLoopAI` in the console `examples` map wired to it. `assertPlannerPacingCompatible` unchanged. | SP2c.24 (#847) headless sweep → A4 |
 
 ---
 
