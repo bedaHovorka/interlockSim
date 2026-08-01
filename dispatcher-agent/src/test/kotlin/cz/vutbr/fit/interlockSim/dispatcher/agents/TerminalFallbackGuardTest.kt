@@ -25,21 +25,30 @@ import org.junit.jupiter.params.provider.EnumSource
 import java.util.concurrent.TimeUnit
 
 /**
- * Unit coverage for [TerminalFallbackGuard] (SP2c.8, Issue #831).
+ * Unit coverage for [TerminalFallbackGuard] (SP2c.8 / SP2c.9, Issues #831 / #832).
  *
- * The guard answers one question: "did the LLM fail to produce output for [threshold]
- * consecutive ticks?" It must NOT engage for a correctly-idle LLM that emits `no_op` authored
- * [ActionAuthor.LLM], and must engage immediately on an unhandled emission exception via
- * [TerminalFallbackGuard.engageImmediately].
+ * The guard has three engagement triggers:
+ * 1. [ActionAuthor.TIMEOUT_NOOP] for [threshold] consecutive ticks → [FailureReason.LLM_ABANDONED].
+ * 2. An unhandled emission exception via [TerminalFallbackGuard.engageImmediately] →
+ *    [FailureReason.LLM_ABANDONED].
+ * 3. Any [ActionAuthor.SAFETY_NET] action in a tick → [FailureReason.SAFETY_NET_ENGAGED]
+ *    (or [FailureReason.LLM_ABANDONED] when [ActionAuthor.RULE_FALLBACK] also appears —
+ *    RULE_FALLBACK priority in the both-appear case).
+ *
+ * It must NOT engage for a correctly-idle LLM that emits `no_op` authored [ActionAuthor.LLM],
+ * and [ActionAuthor.RULE_FALLBACK] alone must NOT engage (it is a post-engagement author, not
+ * a trigger — engaging on it would make the post-engagement fallback indistinguishable from
+ * the trigger that started it).
  *
  * Key invariant: only [ActionAuthor.TIMEOUT_NOOP] increments the counter. Any other author
  * (including [ActionAuthor.LLM], [ActionAuthor.RULE_BASED], [ActionAuthor.RULE_FALLBACK]) resets
  * it to 0. A healthy idle station emitting `no_op` authored [ActionAuthor.LLM] must never trip
  * the guard (500-tick test).
  *
- * @since Issue #831 (SP2c.8 — Goal 10 terminal fallback guard redesign)
+ * @since Issue #831 (SP2c.8 — Goal 10 terminal fallback guard redesign);
+ *   SAFETY_NET trigger coverage added in Issue #832 (SP2c.9)
  */
-@DisplayName("SP2c.8 — TerminalFallbackGuard (#831)")
+@DisplayName("SP2c.8/SP2c.9 — TerminalFallbackGuard (#831/#832)")
 @Timeout(10, unit = TimeUnit.SECONDS)
 class TerminalFallbackGuardTest {
 	private fun record(vararg authors: ActionAuthor): TickRecord =
@@ -81,13 +90,20 @@ class TerminalFallbackGuardTest {
 	// ── Single-tick counter semantics ─────────────────────────────────────
 
 	/**
-	 * A single tick of any author leaves the guard Running, because:
+	 * A single tick of any non-SAFETY_NET author leaves the guard Running, because:
 	 * - TIMEOUT_NOOP increments counter to 1, which is < threshold=5
-	 * - every other author resets counter to 0
+	 * - every other author (incl. RULE_FALLBACK — a post-engagement author, not a trigger)
+	 *   resets counter to 0
+	 *
+	 * [ActionAuthor.SAFETY_NET] is excluded because it engages the guard immediately (trigger 3).
 	 */
 	@ParameterizedTest(name = "single tick with author {0} leaves the guard Running")
-	@EnumSource(ActionAuthor::class)
-	@DisplayName("every author in a single tick leaves the guard Running (threshold not yet reached)")
+	@EnumSource(
+		ActionAuthor::class,
+		names = ["SAFETY_NET"],
+		mode = EnumSource.Mode.EXCLUDE
+	)
+	@DisplayName("every non-SAFETY_NET author in a single tick leaves the guard Running (threshold not yet reached)")
 	fun singleTickAlwaysLeavesRunning(author: ActionAuthor) {
 		val guard = TerminalFallbackGuard()
 		guard.observe(record(author))
@@ -126,6 +142,102 @@ class TerminalFallbackGuardTest {
 		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Running)
 		// 4 more timeouts after the reset — still below threshold
 		repeat(4) { guard.observe(record(ActionAuthor.TIMEOUT_NOOP)) }
+		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Running)
+		assertThat(guard.engaged).isFalse()
+	}
+
+	// ── SAFETY_NET — immediate-engage trigger (SP2c.9) ─────────────────────
+
+	@Test
+	@DisplayName("a SAFETY_NET action transitions to Failed(SAFETY_NET_ENGAGED)")
+	fun safetyNetFails() {
+		val guard = TerminalFallbackGuard()
+
+		guard.observe(record(ActionAuthor.SAFETY_NET))
+
+		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Failed(FailureReason.SAFETY_NET_ENGAGED))
+		assertThat(guard.engaged).isTrue()
+	}
+
+	@Test
+	@DisplayName("a single SAFETY_NET among several actions is enough to engage the guard")
+	fun oneSafetyNetAmongManyEngages() {
+		val guard = TerminalFallbackGuard()
+
+		guard.observe(record(ActionAuthor.RULE_BASED, ActionAuthor.SAFETY_NET, ActionAuthor.LLM))
+
+		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Failed(FailureReason.SAFETY_NET_ENGAGED))
+		assertThat(guard.engaged).isTrue()
+	}
+
+	@Test
+	@DisplayName("RULE_FALLBACK takes priority over SAFETY_NET when both appear in the same record")
+	fun ruleFallbackTakesPriorityOverSafetyNet() {
+		val guard = TerminalFallbackGuard()
+
+		guard.observe(record(ActionAuthor.SAFETY_NET, ActionAuthor.RULE_FALLBACK))
+
+		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Failed(FailureReason.LLM_ABANDONED))
+		assertThat(guard.engaged).isTrue()
+	}
+
+	@Test
+	@DisplayName("SAFETY_NET engagement fires onAbandoned with SAFETY_NET_ENGAGED reason")
+	fun safetyNetEngagementFiresCallbackWithReason() {
+		var receivedReason: FailureReason? = null
+		val guard = TerminalFallbackGuard { reason -> receivedReason = reason }
+
+		guard.observe(record(ActionAuthor.SAFETY_NET))
+
+		assertThat(receivedReason).isEqualTo(FailureReason.SAFETY_NET_ENGAGED)
+	}
+
+	@Test
+	@DisplayName("both-appear case fires onAbandoned with LLM_ABANDONED reason (RULE_FALLBACK priority)")
+	fun bothAppearFiresCallbackWithLlmAbandoned() {
+		var receivedReason: FailureReason? = null
+		val guard = TerminalFallbackGuard { reason -> receivedReason = reason }
+
+		guard.observe(record(ActionAuthor.SAFETY_NET, ActionAuthor.RULE_FALLBACK))
+
+		assertThat(receivedReason).isEqualTo(FailureReason.LLM_ABANDONED)
+	}
+
+	// ── RULE_FALLBACK does NOT engage under the counter model (SP2c.9) ──────
+
+	@Test
+	@DisplayName("a RULE_FALLBACK action alone does NOT engage the guard (counter model — post-engagement author)")
+	fun ruleFallbackAloneDoesNotEngage() {
+		val guard = TerminalFallbackGuard()
+
+		guard.observe(record(ActionAuthor.RULE_FALLBACK))
+
+		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Running)
+		assertThat(guard.engaged).isFalse()
+	}
+
+	@Test
+	@DisplayName("a RULE_FALLBACK action among several non-SAFETY_NET actions does NOT engage the guard")
+	fun ruleFallbackAmongManyDoesNotEngage() {
+		val guard = TerminalFallbackGuard()
+
+		guard.observe(record(ActionAuthor.RULE_BASED, ActionAuthor.RULE_FALLBACK, ActionAuthor.LLM))
+
+		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Running)
+		assertThat(guard.engaged).isFalse()
+	}
+
+	@Test
+	@DisplayName("RULE_FALLBACK resets the consecutive-timeout counter (it is not TIMEOUT_NOOP)")
+	fun ruleFallbackResetsCounter() {
+		val guard = TerminalFallbackGuard(threshold = 3)
+		// 2 timeouts build the counter to 2
+		repeat(2) { guard.observe(record(ActionAuthor.TIMEOUT_NOOP)) }
+		// RULE_FALLBACK resets the counter to 0 (post-engagement author, not a trigger)
+		guard.observe(record(ActionAuthor.RULE_FALLBACK))
+		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Running)
+		// 2 more timeouts — still below threshold of 3
+		repeat(2) { guard.observe(record(ActionAuthor.TIMEOUT_NOOP)) }
 		assertThat(guard.currentOutcome).isEqualTo(RunOutcome.Running)
 		assertThat(guard.engaged).isFalse()
 	}

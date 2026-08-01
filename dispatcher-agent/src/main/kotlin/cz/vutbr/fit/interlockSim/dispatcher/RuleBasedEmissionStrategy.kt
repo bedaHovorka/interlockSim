@@ -208,7 +208,8 @@ class RuleBasedEmissionStrategy(
 					commandId = CommandId(commandIdCounter.incrementAndGet()),
 					tick = tick,
 					action = DispatchAction.ApproveTrain(trainId = decision.trainId),
-					author = overrideAuthor
+					author = overrideAuthor,
+					reason = "rule-based: approve train ${decision.trainId} for departure"
 				)
 
 			is DispatchDecision.ReservePath ->
@@ -225,7 +226,8 @@ class RuleBasedEmissionStrategy(
 							// RouteScope's KDoc for why ActionValidator needs this discriminant.
 							scope = RouteScope.Section
 						),
-					author = overrideAuthor
+					author = overrideAuthor,
+					reason = "rule-based: reserve next block-boundary hop for train ${decision.trainId}"
 				)
 
 			// NoAction: return null → caller's mapNotNull produces an empty list, which DispatchTickLoop

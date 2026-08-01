@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AffordanceAnnotator
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AttributedAction
+import cz.vutbr.fit.interlockSim.dispatcher.agents.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.dispatcher.agents.EmissionStrategy
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ObservationRenderer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.RenderContext
@@ -127,7 +128,18 @@ class DispatchTickLoop(
 	private val fallbackEmission: EmissionStrategy? = null,
 	private val controller: SimulationController,
 	private val snapshotSignal: SnapshotSignal? = null,
-	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK
+	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK,
+	/**
+	 * Optional attribution store for SP2c.9 (Issue #832). When non-null, each completed
+	 * [TickRecord] is forwarded to [DispatcherPreferenceStore.observe] after the ring-buffer
+	 * push and working-memory update, so the store accumulates a per-run author-count summary
+	 * that can be emitted via [DispatcherPreferenceStore.logFinalSummary] at run end.
+	 *
+	 * When null (the default) no attribution tracking is performed — existing callers are unaffected.
+	 *
+	 * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance)
+	 */
+	private val preferenceStore: DispatcherPreferenceStore? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -313,6 +325,7 @@ class DispatchTickLoop(
 		ring.push(record)
 		workingMemory = workingMemory.update(record, obs0)
 		fallbackGuard.observe(record)
+		preferenceStore?.observe(record)
 
 		logger.debug {
 			"DispatchTickLoop: tick=${obs0.tick} actions=${tickActions.size} outcome=$runOutcome"
