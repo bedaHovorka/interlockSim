@@ -19,6 +19,13 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
+import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
+import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
+import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
@@ -338,6 +345,58 @@ class ExampleLoadingTest : KoinTestBase() {
 					throw e
 				}
 			}
+		}
+	}
+
+	@Nested
+	@DisplayName("Headless Pacing Guard Reachability (Issue #873, R8)")
+	inner class HeadlessPacingGuardTests {
+		/**
+		 * Belt-and-suspenders proof that the A4 headless sweep is reachable: an async
+		 * (LLM-style) planner bound to a [ThrottlingSimulationController] passes
+		 * [assertPlannerPacingCompatible] — the guard that previously blocked all headless
+		 * AI runs (R8 in Issue #822). The factory test above exercises this indirectly via
+		 * [ExampleRegistry.createShuntingLoopAIExample]; this test asserts the guard
+		 * directly with a lightweight async planner stand-in so a future regression in the
+		 * guard or the controller is caught here too.
+		 */
+		@Test
+		fun `async planner with ThrottlingSimulationController passes the pacing guard`() {
+			val asyncPlanner =
+				object : DispatcherPlanner {
+					override val capabilities =
+						PlannerCapabilities(
+							name = "test-async",
+							isAsynchronous = true,
+							maxSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+						)
+
+					override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> = emptyList()
+				}
+			// Must not throw — ThrottlingSimulationController is a real pacing controller, not NoOp
+			assertPlannerPacingCompatible(asyncPlanner, ThrottlingSimulationController())
+		}
+
+		/**
+		 * Confirms the guard is **unchanged** and still rejects an async planner bound to a
+		 * [NoOpSimulationController] — i.e. the R8 fix did not weaken the safety check.
+		 */
+		@Test
+		fun `async planner with NoOpSimulationController is still rejected by the pacing guard`() {
+			val asyncPlanner =
+				object : DispatcherPlanner {
+					override val capabilities =
+						PlannerCapabilities(
+							name = "test-async",
+							isAsynchronous = true,
+							maxSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+						)
+
+					override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> = emptyList()
+				}
+			assertFailure {
+				assertPlannerPacingCompatible(asyncPlanner, NoOpSimulationController)
+			}.isInstanceOf<IllegalStateException>()
 		}
 	}
 

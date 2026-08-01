@@ -416,9 +416,11 @@ class ExampleRegistry {
 	 *   run-loop as [ShuntingLoop.agentDriverAction]
 	 * - registers [ShuntingLoop.snapshotCaptureHook] to keep the perception-port snapshot fresh
 	 *
-	 * [controller] is [NoOpSimulationController] for headless (console) runs — keeping the
-	 * [assertPlannerPacingCompatible] guard effective there — and the scoped
-	 * [DelegatingSimulationController] for GUI runs (SP4.2, Issue #564):
+	 * [controller] is [NoOpSimulationController] for rule-based headless (console) runs,
+	 * [ThrottlingSimulationController] for the AI console run ([createShuntingLoopAIExample],
+	 * Issue #873 — a real pacing controller so [assertPlannerPacingCompatible] stays effective
+	 * for async LLM planners headlessly), and the scoped [DelegatingSimulationController] for
+	 * GUI runs (SP4.2, Issue #564):
 	 * [gui.SimulationController][cz.vutbr.fit.interlockSim.gui.SimulationController] attaches
 	 * the live [SimulationRunner][cz.vutbr.fit.interlockSim.gui.SimulationRunner] as its
 	 * delegate when the run starts, so the agent loop is paced by the existing real-time
@@ -476,9 +478,11 @@ class ExampleRegistry {
 		val correlationMap = context.scope.getOrNull<CommandCorrelationMap>()
 		val outcomeSink = context.scope.getOrNull<AppliedOutcomeChannel>()
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
-		// NoOpSimulationController (console runs) has no speed cap, so an async planner cannot
-		// honour the 2× real-time limit there. GUI runs pass the DelegatingSimulationController
-		// paced by SimulationRunner (SP4.2, #564). The rule-based planner is synchronous and exempt.
+		// NoOpSimulationController (rule-based console runs) has no speed cap, so an async planner
+		// cannot honour the 2x real-time limit there. The AI console run passes
+		// ThrottlingSimulationController (Issue #873) which provides real pacing headlessly; GUI
+		// runs pass the DelegatingSimulationController paced by SimulationRunner (SP4.2, #564).
+		// The rule-based planner is synchronous and exempt.
 		assertPlannerPacingCompatible(planner, controller)
 
 		val applier =

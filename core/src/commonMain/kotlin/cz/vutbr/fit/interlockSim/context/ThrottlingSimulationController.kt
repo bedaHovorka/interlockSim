@@ -28,7 +28,10 @@ import kotlin.math.roundToLong
  * `SimulationRunner` (`:desktop-ui`) is GUI-*located* but not GUI-*coupled*; it carries
  * [java.beans.PropertyChangeSupport], lifecycle thread management, pause/step state, and
  * speed-change notifications. This class extracts only the throttling core — the part
- * required to make the pacing guard pass without `:desktop-ui` on the classpath.
+ * required to make the pacing guard pass without `:desktop-ui` on the classpath. The
+ * shared bounds and range validation live on [SimulationPacing]; each implementation
+ * keeps its own `throttle()` body (see [SimulationPacing] for why the formula is not
+ * shared).
  *
  * Prefer `SimulationRunner` when you also need pause/step/speed-change notifications
  * (GUI runs). Use `ThrottlingSimulationController` when you only need the
@@ -55,9 +58,7 @@ class ThrottlingSimulationController(
 	private var speedMultiplierBacking: Double
 
 	init {
-		require(initialSpeedMultiplier in MIN_SPEED..MAX_SPEED) {
-			"speedMultiplier must be in [$MIN_SPEED..$MAX_SPEED], got: $initialSpeedMultiplier"
-		}
+		SimulationPacing.requireSpeedMultiplier(initialSpeedMultiplier)
 		speedMultiplierBacking = initialSpeedMultiplier
 	}
 
@@ -70,9 +71,7 @@ class ThrottlingSimulationController(
 	var speedMultiplier: Double
 		get() = speedMultiplierBacking
 		set(value) {
-			require(value in MIN_SPEED..MAX_SPEED) {
-				"speedMultiplier must be in [$MIN_SPEED..$MAX_SPEED], got: $value"
-			}
+			SimulationPacing.requireSpeedMultiplier(value)
 			speedMultiplierBacking = value
 		}
 
@@ -115,15 +114,15 @@ class ThrottlingSimulationController(
 	}
 
 	companion object {
-		/** Minimum valid speed multiplier. */
-		const val MIN_SPEED: Double = 0.1
+		/** Minimum valid speed multiplier. Alias of [SimulationPacing.MIN_SPEED]. */
+		const val MIN_SPEED: Double = SimulationPacing.MIN_SPEED
 
-		/** Maximum valid speed multiplier. */
-		const val MAX_SPEED: Double = 100.0
+		/** Maximum valid speed multiplier. Alias of [SimulationPacing.MAX_SPEED]. */
+		const val MAX_SPEED: Double = SimulationPacing.MAX_SPEED
 
-		/** Default speed (real-time). */
-		const val DEFAULT_SPEED: Double = 1.0
+		/** Default speed (real-time). Alias of [SimulationPacing.DEFAULT_SPEED]. */
+		const val DEFAULT_SPEED: Double = SimulationPacing.DEFAULT_SPEED
 
-		private const val MILLIS_PER_SECOND: Double = 1000.0
+		private const val MILLIS_PER_SECOND: Double = SimulationPacing.MILLIS_PER_SECOND
 	}
 }

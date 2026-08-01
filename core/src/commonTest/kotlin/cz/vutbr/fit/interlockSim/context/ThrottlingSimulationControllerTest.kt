@@ -14,10 +14,13 @@ import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isLessThan
 import assertk.assertions.isNull
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import kotlin.time.TimeSource
 
 /**
  * Tests for [ThrottlingSimulationController] verifying that the headless pacing
@@ -56,6 +59,60 @@ class ThrottlingSimulationControllerTest {
 		// Should return immediately for zero or negative deltas regardless of speed
 		controller.throttle(0.0)
 		controller.throttle(-1.0)
+	}
+
+	/**
+	 * Proves `throttle()` actually sleeps — the core pacing behavior that makes this controller
+	 * satisfy R8 (a real pacing controller, not a no-op-in-disguise). `assertPlannerPacingCompatible`
+	 * only checks the controller is not `NoOpSimulationController`; it cannot verify pacing happens,
+	 * so that invariant must be guarded here. Lower-bound only: a sleep never returns *early*, so
+	 * scheduler jitter only lengthens the elapsed time and cannot make these assertions flaky.
+	 */
+	@Test
+	fun `throttle sleeps at least the scaled wall-clock duration at 1x`() {
+		val controller = ThrottlingSimulationController(initialSpeedMultiplier = 1.0)
+		val mark = TimeSource.Monotonic.markNow()
+		controller.throttle(0.05) // intended ~50 ms at 1.0x
+		val elapsedMs = mark.elapsedNow().inWholeMilliseconds
+		// >=30 ms proves a real sleep happened (intended 50 ms with jitter margin)
+		assertThat(elapsedMs).isGreaterThanOrEqualTo(30L)
+	}
+
+	/**
+	 * Proves the sleep scales with the simulation-time delta: a larger delta yields a longer sleep.
+	 */
+	@Test
+	fun `throttle sleep scales with sim-time delta`() {
+		val controller = ThrottlingSimulationController(initialSpeedMultiplier = 1.0)
+		val shortMark = TimeSource.Monotonic.markNow()
+		controller.throttle(0.05) // intended ~50 ms
+		val shortMs = shortMark.elapsedNow().inWholeMilliseconds
+		val longMark = TimeSource.Monotonic.markNow()
+		controller.throttle(0.1) // intended ~100 ms
+		val longMs = longMark.elapsedNow().inWholeMilliseconds
+		assertThat(shortMs).isGreaterThanOrEqualTo(30L)
+		assertThat(longMs).isGreaterThanOrEqualTo(80L) // bigger delta => bigger sleep
+	}
+
+	/**
+	 * Proves the sleep is inversely proportional to the speed multiplier: a faster multiplier
+	 * yields a shorter sleep. The 100 ms vs ~12.5 ms gap is large enough that the ordering
+	 * (`fast < slow`) is robust under jitter, since monotonic sleeps guarantee the slow one
+	 * (intended 100 ms) cannot finish earlier than the fast one (intended 12.5 ms).
+	 */
+	@Test
+	fun `throttle sleep is inversely proportional to speed multiplier`() {
+		val slow = ThrottlingSimulationController(initialSpeedMultiplier = 0.5) // 0.05s -> ~100 ms
+		val fast = ThrottlingSimulationController(initialSpeedMultiplier = 4.0) // 0.05s -> ~12.5 ms
+		val slowMark = TimeSource.Monotonic.markNow()
+		slow.throttle(0.05)
+		val slowMs = slowMark.elapsedNow().inWholeMilliseconds
+		val fastMark = TimeSource.Monotonic.markNow()
+		fast.throttle(0.05)
+		val fastMs = fastMark.elapsedNow().inWholeMilliseconds
+		assertThat(slowMs).isGreaterThanOrEqualTo(70L) // ~100 ms with jitter margin
+		assertThat(fastMs).isGreaterThanOrEqualTo(8L) // ~12.5 ms with jitter margin
+		assertThat(fastMs).isLessThan(slowMs) // faster multiplier => shorter sleep
 	}
 
 	@Test
