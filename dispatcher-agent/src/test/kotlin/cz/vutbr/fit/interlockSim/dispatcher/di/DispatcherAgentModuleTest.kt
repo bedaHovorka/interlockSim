@@ -19,7 +19,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
-import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -131,22 +130,18 @@ class DispatcherAgentModuleTest {
 	fun toolGroupRegistryAssemblesFullToolSetViaKoinSingleton() {
 		val registry: ToolGroupRegistry by inject(ToolGroupRegistry::class.java)
 
-		// Registry requires a perception port and a command queue to assemble tools. Since this
-		// test is at the singleton level (no context scope), we create a mock perception port
-		// and a real command queue just to verify the Koin-provided registry instance assembles
-		// the real SP1.6/SP1.7 tool set through them.
-		val mockPerceptionPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
-		val commandQueue =
-			cz.vutbr.fit.interlockSim.dispatcher
-				.ActuatorCommandQueue()
+		// SP2c.6 (#829): the registry now exposes only the four-tool actuator surface
+		// (approve_train/request_route/cancel_route/no_op) via assembleAllTools. The perception
+		// and dispatch-loop sensor assembly methods were removed in SP2c.6 — perception flows
+		// through the sim-thread-captured DispatcherObservationProjector, not LLM-queried tools.
+		// This test is at the singleton level (no context scope), so a real SinkHolder is created
+		// to verify the Koin-provided registry instance assembles the real actuator tool set.
+		val sinkHolder =
+			cz.vutbr.fit.interlockSim.dispatcher.agents
+				.SinkHolder()
 
-		val allTools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
-		val perceptionTools = registry.assemblePerceptionTools(mockPerceptionPort)
-		val actuatorTools = registry.assembleActuatorTools(commandQueue, emptySet())
+		val allTools = registry.assembleAllTools(emptySet(), sinkHolder)
 
-		// 9 perception + 2 high-level actuator (set_signal_aspect/set_switch_position removed) = 11 total
-		assertThat(allTools).hasSize(11)
-		assertThat(perceptionTools).hasSize(9)
-		assertThat(actuatorTools).hasSize(2)
+		assertThat(allTools).hasSize(4)
 	}
 }

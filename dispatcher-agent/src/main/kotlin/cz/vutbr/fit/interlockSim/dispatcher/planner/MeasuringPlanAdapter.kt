@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicLong
  * ## Usage
  *
  * ```kotlin
- * val koogAdapter = KoogAgentPlanAdapter(agentFactory, context, fallback, commandQueue = queue)
+ * val koogAdapter = KoogAgentPlanAdapter(agentFactory, context, fallback, commandQueue = queue, sinkHolder = sink)
  * val planner: DispatcherPlanner = MeasuringPlanAdapter(koogAdapter)
  * // Use planner as the DispatcherPlanner — capabilities, isAsynchronous, etc. are forwarded.
  * val snapshot: PlannerMetricsSnapshot = (planner as MeasuringPlanAdapter).getMetricsSnapshot()

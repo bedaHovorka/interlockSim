@@ -717,25 +717,8 @@ class DispatchDecisionApplier(
 					decision.toEndpointName
 				)
 		) {
-			is RouteRequestResult.Reserved -> {
-				logger.debug {
-					"DispatchDecisionApplier: RequestRoute reserved ${result.blocksCount} block(s) for ${decision.trainName}"
-				}
-				appliedRequestRoutes.add(reservationKey)
-				if (correlation != null) {
-					outcomeSink?.publish(
-						AppliedOutcome.Reserved(
-							trainId = decision.trainName,
-							fromEndpointName = decision.fromEndpointName,
-							toEndpointName = decision.toEndpointName,
-							blocksCount = result.blocksCount,
-							id = correlation.id,
-							tickIndex = correlation.tickIndex
-						)
-					)
-				}
-				Unit
-			}
+			is RouteRequestResult.Reserved ->
+				handleRequestRouteReserved(decision, result, reservationKey, correlation)
 			is RouteRequestResult.AllPathsBlocked -> {
 				logger.warn {
 					"DispatchDecisionApplier: RequestRoute all paths blocked for ${decision.trainName} " +
@@ -793,6 +776,39 @@ class DispatchDecisionApplier(
 				}
 				Unit
 			}
+		}
+	}
+
+	/**
+	 * Handles the [RouteRequestResult.Reserved] branch of [applyRequestRoute] — extracted to
+	 * keep that method within the detekt LongMethod budget.
+	 *
+	 * @since SP2c.17 (#840); [onBlockTransition] call added in SP2c.6 (#829) to restore
+	 *   block-transition counting for the [DispatchTickLoop]-emitted `RequestRoute` path,
+	 *   mirroring [applyReservePath]
+	 */
+	private fun handleRequestRouteReserved(
+		decision: DispatchDecision.RequestRoute,
+		result: RouteRequestResult.Reserved,
+		reservationKey: String,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.debug {
+			"DispatchDecisionApplier: RequestRoute reserved ${result.blocksCount} block(s) for ${decision.trainName}"
+		}
+		appliedRequestRoutes.add(reservationKey)
+		onBlockTransition(decision.trainName)
+		if (correlation != null) {
+			outcomeSink?.publish(
+				AppliedOutcome.Reserved(
+					trainId = decision.trainName,
+					fromEndpointName = decision.fromEndpointName,
+					toEndpointName = decision.toEndpointName,
+					blocksCount = result.blocksCount,
+					id = correlation.id,
+					tickIndex = correlation.tickIndex
+				)
+			)
 		}
 	}
 

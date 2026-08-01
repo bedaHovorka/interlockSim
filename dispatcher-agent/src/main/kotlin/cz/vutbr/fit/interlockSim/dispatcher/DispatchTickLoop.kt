@@ -204,18 +204,33 @@ class DispatchTickLoop(
 
 		// 4. DECIDE — call the emission strategy with the budget wrapper.
 		// null return = deadline exceeded; substitute a single TIMEOUT_NOOP.
+		// empty list = strategy ran and decided there is nothing to do this tick; substitute a
+		// single NoOp authored by the strategy's own author (RULE_BASED / future LLM) so an idle
+		// tick records as a deliberate decision, not a degraded timeout (SP2c.19 / #829).
 		val emittedRaw = budget.withBudget { emission.emit(prompt, obs0) }
 		val emitted =
-			emittedRaw
-				?.map { it.copy(commandId = CommandId(commandIdCounter.incrementAndGet())) }
-				?: listOf(
-					AttributedAction(
-						commandId = CommandId(commandIdCounter.incrementAndGet()),
-						tick = obs0.tick,
-						action = DispatchAction.NoOp,
-						author = ActionAuthor.TIMEOUT_NOOP
+			when {
+				emittedRaw == null ->
+					listOf(
+						AttributedAction(
+							commandId = CommandId(commandIdCounter.incrementAndGet()),
+							tick = obs0.tick,
+							action = DispatchAction.NoOp,
+							author = ActionAuthor.TIMEOUT_NOOP
+						)
 					)
-				)
+				emittedRaw.isEmpty() ->
+					listOf(
+						AttributedAction(
+							commandId = CommandId(commandIdCounter.incrementAndGet()),
+							tick = obs0.tick,
+							action = DispatchAction.NoOp,
+							author = emission.author
+						)
+					)
+				else ->
+					emittedRaw.map { it.copy(commandId = CommandId(commandIdCounter.incrementAndGet())) }
+			}
 
 		// 5. VALIDATE & ACT — validate each action against the current (optionally projected) observation.
 		// For C6: after each valid non-NoOp action the observation is updated optimistically so the

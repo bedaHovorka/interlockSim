@@ -36,7 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *   every successful [postAll] call also registers each decision by reference identity so
  *   [DispatchDecisionApplier] can correlate applied outcomes back to the originating agent cycle.
  *
- * @since Issue #730 (SP0.8 — Goal 10); [correlationMap] added in Issue #840 (SP2c.17)
+ * @since Issue #730 (SP0.8 — Goal 10); [correlationMap] added in Issue #840 (SP2c.17);
+ *   [resetCycleActuatorCount]/[actedViaToolsThisCycle] removed in SP2c.6 (#829)
  */
 class ActuatorCommandQueue(
 	private val capacity: Int = DEFAULT_CAPACITY,
@@ -54,19 +55,6 @@ class ActuatorCommandQueue(
 	private val queue: ConcurrentLinkedQueue<DispatchDecision> = ConcurrentLinkedQueue()
 	private val size: AtomicInteger = AtomicInteger(0)
 	private val lock = Any()
-
-	/**
-	 * Per-cycle counter of successful [postAll] calls (actuator-tool posts), reset by
-	 * [resetCycleActuatorCount] at the start of each dispatch cycle.
-	 *
-	 * Unlike [size] (which tracks queue *contents* and is decremented by [drain]), this counter
-	 * tracks post *calls* and is never decremented — so it is immune to the kDisco sim thread
-	 * draining the queue between a before/after sample. That is the property
-	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] relies on to detect
-	 * "the LLM acted via tools this cycle" reliably under the production decoupled driver/sim
-	 * threading model (PR #811 agent-architect review + traffic-simulation-expert decision).
-	 */
-	private val cycleActuatorPostCount: AtomicInteger = AtomicInteger(0)
 
 	/**
 	 * Atomically posts all [decisions] to the queue.
@@ -113,9 +101,6 @@ class ActuatorCommandQueue(
 			size.addAndGet(decisions.size)
 			queue.addAll(decisions)
 		}
-		// One successful post of non-empty decisions == one actuator-tool actuation this cycle.
-		// Counted here (not in [size]) so a concurrent [drain] on the sim thread cannot erase it.
-		cycleActuatorPostCount.incrementAndGet()
 		return true
 	}
 
@@ -159,29 +144,17 @@ class ActuatorCommandQueue(
 	fun approximateSize(): Int = size.get()
 
 	/**
-	 * Marks the start of a new dispatch cycle by zeroing the per-cycle actuator-call counter.
+	 * Advances the [CommandCorrelationMap] cycle counter to the next dispatch cycle.
 	 *
 	 * Called by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
-	 * immediately before the LLM runs. See [cycleActuatorPostCount] for why this is a call
-	 * counter rather than a queue-contents read.
+	 * immediately before the LLM runs. Every decision posted in the new LLM cycle will
+	 * receive a tick index one higher than the previous cycle's, enabling
+	 * [DispatchDecisionApplier] to correlate applied outcomes back to the correct agent cycle.
 	 *
-	 * SP2c.17 (#840): also advances the [CommandCorrelationMap] cycle counter so every decision
-	 * posted in this new LLM cycle receives a tick index one higher than the previous cycle's.
+	 * SP2c.6 (#829): replaces [resetCycleActuatorCount] (which also zeroed the now-deleted
+	 * per-cycle actuator-post counter). The [correlationMap]?.newCycle() call is preserved.
 	 */
-	fun resetCycleActuatorCount() {
-		cycleActuatorPostCount.set(0)
+	fun advanceCorrelationCycle() {
 		correlationMap?.newCycle()
 	}
-
-	/**
-	 * `true` if at least one successful [postAll] of non-empty decisions occurred since the last
-	 * [resetCycleActuatorCount] — i.e. an actuator tool posted a decision this dispatch cycle.
-	 *
-	 * Read by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
-	 * immediately after the LLM cycle completes and **before** the admission safety net posts.
-	 * Because the safety net runs after this read and the next cycle's [resetCycleActuatorCount]
-	 * clears the counter, the value consulted here reflects only the LLM's own actuator-tool
-	 * posts for this cycle — not the safety net's, and not the sim thread draining the queue.
-	 */
-	fun actedViaToolsThisCycle(): Boolean = cycleActuatorPostCount.get() > 0
 }

@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -82,7 +83,8 @@ class MeasuringPlanAdapterTest {
 				context = context,
 				fallbackDispatcher = fallback,
 				inferenceTimeout = inferenceTimeout,
-				commandQueue = commandQueue
+				commandQueue = commandQueue,
+				sinkHolder = SinkHolder()
 			)
 		return MeasuringPlanAdapter(inner)
 	}
@@ -140,23 +142,6 @@ class MeasuringPlanAdapterTest {
 			coEvery { agent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
 			val fallback = mockk<Dispatcher>()
 			val adapter = measuring(agent, fallback)
-
-			runBlocking { adapter.plan(observation) }
-
-			assertThat(adapter.getMetricsSnapshot().ollamaSuccessCount).isEqualTo(1L)
-			assertThat(adapter.getMetricsSnapshot().fallbackCount).isZero()
-		}
-
-		@Test
-		fun `empty LLM result with actuator-tool side effect increments ollamaSuccessCount`() {
-			val commandQueue = ActuatorCommandQueue()
-			val agent = mockk<KoogDispatchAgent>()
-			coEvery { agent.decideAsync(any()) } coAnswers {
-				commandQueue.postAll(listOf(DispatchDecision.NoAction))
-				emptyList()
-			}
-			val fallback = mockk<Dispatcher>()
-			val adapter = measuring(agent, fallback, commandQueue = commandQueue)
 
 			runBlocking { adapter.plan(observation) }
 

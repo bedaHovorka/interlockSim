@@ -11,33 +11,35 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ReleaseRouteTool
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.CancelRouteTool
+import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.NoOpTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
-import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
 /**
- * Verifies the 2 actuator tools satisfy the SP1.7 threading contract (Issue #774): `execute()`
- * runs on the driver thread and posts a [DispatchDecision] to the [ActuatorCommandQueue]
- * (fire-and-forget) rather than touching a [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort]
- * directly. The applier drains the queue on the kDisco thread and applies the decision.
+ * Verifies the actuator tools satisfy the SP2c.6 SinkHolder contract (Issue #829):
+ * `execute()` runs on the driver thread and emits a [DispatchAction] to the [SinkHolder]
+ * (fire-and-forget). Replaces the SP1.7 queue-based contract verified by this class before
+ * the SP2c.6 rewrite.
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to the queue in Issue #774 (SP1.7)
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP1.7 (#774) rewired to queue;
+ *   SP2c.6 (#829) rewired to SinkHolder
  */
 class ActuatorToolExecuteTest {
-	private val queue = ActuatorCommandQueue()
+	private val emitted = mutableListOf<DispatchAction>()
+	private val sinkHolder = SinkHolder(EmittedActionSink { emitted.add(it) })
 
 	@Test
-	fun `request_route posts a RequestRoute decision and returns a queued-success descriptor`() {
+	fun `request_route emits a RequestRoute action and returns an emitted-success descriptor`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+				RequestRouteTool(sinkHolder, setOf("zA", "doA1")).execute(
 					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "doA1")
 				)
 			}
@@ -47,22 +49,24 @@ class ActuatorToolExecuteTest {
 		assertThat(data).contains("T1")
 		assertThat(data).contains("zA")
 		assertThat(data).contains("doA1")
+		// SP2c.6 receipt-string contract (#829 M2): actuator tools return "emitted …", never "queued".
+		assertThat(data).contains("emitted")
+		assertThat(data).doesNotContain("queued")
 
-		val decisions = queue.drain()
-		assertThat(decisions).hasSize(1)
-		val decision = decisions.single()
-		assertThat(decision).isInstanceOf<DispatchDecision.RequestRoute>()
-		decision as DispatchDecision.RequestRoute
-		assertThat(decision.trainName).isEqualTo("T1")
-		assertThat(decision.fromEndpointName).isEqualTo("zA")
-		assertThat(decision.toEndpointName).isEqualTo("doA1")
+		assertThat(emitted).hasSize(1)
+		val action = emitted.single()
+		assertThat(action).isInstanceOf<DispatchAction.RequestRoute>()
+		action as DispatchAction.RequestRoute
+		assertThat(action.trainId).isEqualTo("T1")
+		assertThat(action.fromEndpointName).isEqualTo("zA")
+		assertThat(action.toEndpointName).isEqualTo("doA1")
 	}
 
 	@Test
-	fun `request_route rejects an unknown fromEndpointName without posting to the queue`() {
+	fun `request_route rejects an unknown fromEndpointName without emitting`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+				RequestRouteTool(sinkHolder, setOf("zA", "doA1")).execute(
 					mapOf("trainName" to "T1", "fromEndpointName" to "kA", "toEndpointName" to "doA1")
 				)
 			}
@@ -72,39 +76,62 @@ class ActuatorToolExecuteTest {
 		assertThat(message).contains("kA")
 		assertThat(message).contains("zA")
 		assertThat(message).contains("doA1")
-		assertThat(queue.drain()).hasSize(0)
+		assertThat(emitted).hasSize(0)
 	}
 
 	@Test
-	fun `request_route rejects an unknown toEndpointName without posting to the queue`() {
+	fun `request_route rejects an unknown toEndpointName without emitting`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+				RequestRouteTool(sinkHolder, setOf("zA", "doA1")).execute(
 					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "kB")
 				)
 			}
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
 		assertThat((result as ToolResult.Error).message).contains("kB")
-		assertThat(queue.drain()).hasSize(0)
+		assertThat(emitted).hasSize(0)
 	}
 
 	@Test
-	fun `release_route posts a ReleaseRoute decision`() {
-		val result = runBlocking { ReleaseRouteTool(queue).execute(mapOf("trainName" to "T1")) }
+	fun `cancel_route emits a CancelRoute action and returns an emitted-success descriptor`() {
+		val result = runBlocking { CancelRouteTool(sinkHolder).execute(mapOf("trainId" to "T1")) }
 
 		assertThat(result).isInstanceOf<ToolResult.Success>()
-		val decisions = queue.drain()
-		assertThat(decisions).hasSize(1)
-		assertThat(decisions.single()).isInstanceOf<DispatchDecision.ReleaseRoute>()
-		assertThat((decisions.single() as DispatchDecision.ReleaseRoute).trainName).isEqualTo("T1")
+		val data = (result as ToolResult.Success).data as String
+		assertThat(data).contains("T1")
+		// SP2c.6 receipt-string contract (#829 M2): actuator tools return "emitted …", never "queued".
+		assertThat(data).contains("emitted")
+		assertThat(data).doesNotContain("queued")
+
+		assertThat(emitted).hasSize(1)
+		assertThat(emitted.single()).isInstanceOf<DispatchAction.CancelRoute>()
+		assertThat((emitted.single() as DispatchAction.CancelRoute).trainId).isEqualTo("T1")
+	}
+
+	/**
+	 * SP2c.6 receipt-string contract (#829 M2): `no_op` emits a [DispatchAction.NoOp] and returns
+	 * an "emitted no_op" descriptor (never "queued"). The optional `reason` argument is accepted but
+	 * ignored — it must not affect the emitted action or the receipt string.
+	 */
+	@Test
+	fun `no_op emits a NoOp action and returns an emitted-success descriptor`() {
+		val result = runBlocking { NoOpTool(sinkHolder).execute(mapOf("reason" to "nothing to do")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Success>()
+		val data = (result as ToolResult.Success).data as String
+		assertThat(data).contains("emitted")
+		assertThat(data).doesNotContain("queued")
+
+		assertThat(emitted).hasSize(1)
+		assertThat(emitted.single()).isInstanceOf<DispatchAction.NoOp>()
 	}
 
 	@Test
-	fun `invalid arguments return ToolResult Error without posting to the queue`() {
+	fun `invalid arguments return ToolResult Error without emitting`() {
 		val result =
 			runBlocking {
-				RequestRouteTool(queue, setOf("zA", "doA1")).execute(
+				RequestRouteTool(sinkHolder, setOf("zA", "doA1")).execute(
 					mapOf(
 						"trainName" to "",
 						"fromEndpointName" to "zA",
@@ -114,20 +141,6 @@ class ActuatorToolExecuteTest {
 			}
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
-		assertThat(queue.drain()).hasSize(0)
-	}
-
-	@Test
-	fun `actuator tool reports backpressure as ToolResult Error when the queue is full`() {
-		val fullQueue = ActuatorCommandQueue(capacity = 1)
-		// Occupy the single slot.
-		fullQueue.postAll(listOf(DispatchDecision.ReleaseRoute("occupier")))
-
-		val result = runBlocking { ReleaseRouteTool(fullQueue).execute(mapOf("trainName" to "T1")) }
-
-		assertThat(result).isInstanceOf<ToolResult.Error>()
-		assertThat((result as ToolResult.Error).message).isNotNull()
-		// The occupier decision is still the only one in the queue.
-		assertThat(fullQueue.drain()).hasSize(1)
+		assertThat(emitted).hasSize(0)
 	}
 }

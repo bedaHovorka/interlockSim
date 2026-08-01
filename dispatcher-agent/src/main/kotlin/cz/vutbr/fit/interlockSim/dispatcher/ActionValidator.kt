@@ -302,6 +302,13 @@ class ActionValidator(
 		val existingReservation =
 			observation.reservations.find { it.trainId == action.trainId } ?: return null
 
+		// Forward extension: train holds a route to X, and the new request starts from X — this is
+		// the normal multi-hop case where the dispatcher extends the path one section at a time.
+		// PathReservationRegistry's own merge precondition is new.start == old.target; mirror it.
+		if (action.fromEndpointName == existingReservation.targetName) {
+			return null
+		}
+
 		return if (existingReservation.targetName == action.toEndpointName) {
 			rejected(
 				RejectionCode.ROUTE_ALREADY_HELD_TO_SAME_TARGET,
@@ -321,7 +328,14 @@ class ActionValidator(
 		action: DispatchAction.RequestRoute,
 		trainInList: TrainView?
 	): ValidationVerdict.Rejected? {
-		if (trainInList != null && action.toEndpointName != trainInList.destinationInOutName) {
+		// Section-scoped requests (Issue #848 / #829) target an intermediate hop, not the train's
+		// final destination — RuleBasedEmissionStrategy's per-block-boundary ReservePath mapping is
+		// the production example. Only EndToEnd requests are checked against the declared
+		// destination.
+		if (action.scope == RouteScope.EndToEnd &&
+			trainInList != null &&
+			action.toEndpointName != trainInList.destinationInOutName
+		) {
 			return rejected(
 				RejectionCode.TARGET_NOT_TRAIN_DESTINATION,
 				"'${action.toEndpointName}' is not the declared destination of train '${action.trainId}' " +

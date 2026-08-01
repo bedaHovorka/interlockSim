@@ -81,13 +81,14 @@ class RuleBasedDispatcherDeterminismRunner {
 	 * across successive simulation runs — a known cosmetic issue (SIM-002). Sorting
 	 * the transition counts is sufficient to verify route determinism.
 	 *
-	 * **Note (SP2c.5 #828):** [sortedBlockTransitionCounts] will be all-zero or empty in
-	 * this runner. [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier.applyRequestRoute]
+	 * **Note (SP2c.6 #829):** [sortedBlockTransitionCounts] is populated again.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier.applyRequestRoute]
 	 * (which handles [cz.vutbr.fit.interlockSim.sim.DispatchDecision.RequestRoute], the decision
-	 * type emitted by [DispatchTickLoop]) does not call [ShuntingLoop.incrementBlockTransition],
-	 * unlike the superseded [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier.applyReservePath].
-	 * The P10 gate verifies cross-run consistency (all 10 runs match), not an external baseline,
-	 * so equal empty/zero counts still satisfy the gate.
+	 * type emitted by [DispatchTickLoop]) now calls [ShuntingLoop.incrementBlockTransition] on
+	 * every successful reservation, mirroring the superseded
+	 * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier.applyReservePath] — restored
+	 * as part of the #829 fix (SP2c.5 #828 had temporarily left this dormant, degrading this
+	 * cross-run assertion to a constant-vs-constant tautology).
 	 *
 	 * [conflictEventCount] must be 0 in every run: [RuleBasedDispatcher] uses the
 	 * capacity cap and path-extension flags to avoid issuing competing reservations,

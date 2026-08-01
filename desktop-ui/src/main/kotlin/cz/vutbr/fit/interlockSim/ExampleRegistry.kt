@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ConflictHintLatch
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
@@ -287,7 +288,8 @@ class ExampleRegistry {
 						agentFactory = context.scope.get<KoogAgentFactory>(),
 						context = context,
 						fallbackDispatcher = RuleBasedDispatcher(),
-						commandQueue = context.scope.get<ActuatorCommandQueue>()
+						commandQueue = context.scope.get<ActuatorCommandQueue>(),
+						sinkHolder = context.scope.get<SinkHolder>()
 					)
 				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 				// Register in scope so callers outside this factory (e.g. Frame's

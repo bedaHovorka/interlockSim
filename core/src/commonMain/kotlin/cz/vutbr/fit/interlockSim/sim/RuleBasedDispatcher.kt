@@ -139,19 +139,47 @@ class RuleBasedDispatcher(
 
 	// ── Path advancement ────────────────────────────────────────────────────
 
-	private fun checkAllInputs(observed: DispatchObservation): List<DispatchDecision.ReservePath> =
-		(observed.innerBlockInputs + observed.outerBlockInputs).mapNotNull(::checkInput)
+	/**
+	 * Evaluates every block input and collects the resulting reservations.
+	 *
+	 * ## Same-tick same-target dedup (Goal 10 Stage A3, Issue #829)
+	 *
+	 * [checkInput] resolves each input independently from one frozen [observed] snapshot, so
+	 * two different trains approaching a track merge (different blocks) can both compute the
+	 * *same* [BlockInputObservation.toSeparatorName] as their next FREE separator — neither
+	 * input can see the other's not-yet-applied reservation. Emitting both
+	 * [DispatchDecision.ReservePath]s lets one land as a same-tick reservation race purely from
+	 * this evaluation order, not from any real track contention (confirmed via
+	 * `RuleBasedDispatcherDeterminismTest` producing an intermittent
+	 * `ConflictDetectedEvent` on `vyhybna.xml`'s merge points).
+	 *
+	 * [claimedSeparators] tracks every target already claimed earlier in this same batch; a
+	 * later input targeting an already-claimed separator is deferred (yields no decision) rather
+	 * than emitted — the deferred train is simply re-evaluated next tick, by which point the
+	 * winner's reservation has updated the topology and the shell will recompute a (likely
+	 * different) FREE separator for it.
+	 */
+	private fun checkAllInputs(observed: DispatchObservation): List<DispatchDecision.ReservePath> {
+		val claimedSeparators = mutableSetOf<String>()
+		return (observed.innerBlockInputs + observed.outerBlockInputs).mapNotNull { checkInput(it, claimedSeparators) }
+	}
 
 	/**
 	 * Decides whether a forward path reservation is warranted from [input].
 	 *
-	 * @return A [DispatchDecision.ReservePath] when the block state warrants one
-	 *   and the shell found a FREE next separator ([BlockInputObservation.toSeparatorName]
-	 *   non-null), `null` when the state requires no action (FREE, or
-	 *   occupied/reserved but not eligible toward this input, or already extended,
-	 *   or no FREE next separator toward the destination).
+	 * @param claimedSeparators Separators already claimed by an earlier input in this same
+	 *   [checkAllInputs] batch; mutated in place when this call claims a new one.
+	 * @return A [DispatchDecision.ReservePath] when the block state warrants one, the shell
+	 *   found a FREE next separator ([BlockInputObservation.toSeparatorName] non-null), and that
+	 *   separator has not already been claimed this tick; `null` when the state requires no
+	 *   action (FREE, or occupied/reserved but not eligible toward this input, or already
+	 *   extended, or no FREE next separator toward the destination, or the target separator was
+	 *   already claimed by an earlier input this tick).
 	 */
-	private fun checkInput(input: BlockInputObservation): DispatchDecision.ReservePath? =
+	private fun checkInput(
+		input: BlockInputObservation,
+		claimedSeparators: MutableSet<String>
+	): DispatchDecision.ReservePath? =
 		when (input.state) {
 			TrackFacility.State.FREE -> null
 
@@ -164,22 +192,8 @@ class RuleBasedDispatcher(
 							"skipping redundant reservation"
 					}
 					null
-				} else if (input.toSeparatorName == null) {
-					logger.debug {
-						"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +
-							"deferring reservation"
-					}
-					null
 				} else {
-					logger.debug {
-						"Train ${input.ownerTrainId} approaching ${input.towardSemaphoreName}, " +
-							"reserving forward path to ${input.toSeparatorName}"
-					}
-					DispatchDecision.ReservePath(
-						requireNotNull(input.ownerTrainId),
-						input.towardSemaphoreName,
-						input.toSeparatorName
-					)
+					reserveOrDefer(input, claimedSeparators)
 				}
 			}
 
@@ -192,23 +206,44 @@ class RuleBasedDispatcher(
 							"(reserved block), skipping"
 					}
 					null
-				} else if (input.toSeparatorName == null) {
-					logger.debug {
-						"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId} " +
-							"(reserved block), deferring reservation"
-					}
-					null
 				} else {
-					logger.debug {
-						"Path already set up through ${input.towardSemaphoreName}, " +
-							"attempting extension to ${input.toSeparatorName}"
-					}
-					DispatchDecision.ReservePath(
-						requireNotNull(input.ownerTrainId),
-						input.towardSemaphoreName,
-						input.toSeparatorName
-					)
+					reserveOrDefer(input, claimedSeparators)
 				}
 			}
 		}
+
+	/**
+	 * Shared tail of the OCCUPIED/RESERVED [checkInput] branches: emits a [DispatchDecision.ReservePath]
+	 * toward [BlockInputObservation.toSeparatorName], unless there is no FREE separator yet or it was
+	 * already claimed by an earlier input this tick (see [checkAllInputs]).
+	 */
+	private fun reserveOrDefer(
+		input: BlockInputObservation,
+		claimedSeparators: MutableSet<String>
+	): DispatchDecision.ReservePath? {
+		val target = input.toSeparatorName
+		if (target == null) {
+			logger.debug {
+				"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +
+					"deferring reservation"
+			}
+			return null
+		}
+		if (!claimedSeparators.add(target)) {
+			logger.debug {
+				"Separator $target already claimed by another train this tick; deferring " +
+					"${input.ownerTrainId}'s reservation from ${input.towardSemaphoreName} to next tick"
+			}
+			return null
+		}
+		logger.debug {
+			"Train ${input.ownerTrainId} approaching ${input.towardSemaphoreName}, " +
+				"reserving forward path to $target"
+		}
+		return DispatchDecision.ReservePath(
+			requireNotNull(input.ownerTrainId),
+			input.towardSemaphoreName,
+			target
+		)
+	}
 }
