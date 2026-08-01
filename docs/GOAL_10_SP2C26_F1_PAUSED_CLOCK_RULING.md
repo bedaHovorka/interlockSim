@@ -71,8 +71,12 @@ clock.
 
 | Window (600 ms) | Simulation-clock advance |
 |---|---|
-| Running (control) | **6.0 sim s** — exactly 10x, probe confirmed live |
+| Running (control) | advances — probe confirmed live (≈6.0 sim s at 10x in one run) |
 | Paused | **0.0 sim s** |
+
+The exact running advance varies with throttle scheduling and hardware (one run logged 6.0 sim s,
+another 5.0 sim s); the test asserts only that the running clock moves and the paused clock does
+not. The frozen-window result, not the running magnitude, is the load-bearing claim.
 
 **Pause latency** — simulation time elapsing between `isPaused = true` and the thread actually parking,
 over 20 pause/resume cycles: **max 0.0 sim s, mean 0.0 sim s**.
@@ -94,8 +98,12 @@ on slower hardware.
 | p99 | **7 µs** |
 | Max | **28 µs** |
 
-Against a 1 s tick this is **immaterial** — roughly seven parts per million at p99. Pause/resume cost
-is not a design constraint for F1.
+These specific figures are from one run on one machine and vary several-fold by hardware (a busier
+host logged mean ~1.7 µs, p99 ~20 µs, max ~66 µs — still well inside the gate). The binding property
+the test enforces is **p99 < 1 ms**, not any particular microsecond value.
+
+Against a 1 s tick this is **immaterial** — well under one part per thousand at p99 even on the
+slower host. Pause/resume cost is not a design constraint for F1.
 
 ### 3.3 Interaction with real-time sync and the speed multiplier (AC4)
 

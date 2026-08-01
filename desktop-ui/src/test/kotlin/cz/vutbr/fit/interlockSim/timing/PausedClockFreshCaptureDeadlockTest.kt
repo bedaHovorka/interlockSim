@@ -82,6 +82,12 @@ class PausedClockFreshCaptureDeadlockTest : KoinTestBase() {
 
 			val record = runBlocking { tickLoop.runTick() }
 
+			// Reproduces the hazard: with the pause held the sim thread parks in awaitIfPaused before the
+			// next snapshotCaptureHook, so no fresh tick is published and this stays false. The one
+			// theoretical false-fail: if isPaused is set during the microsecond window the sim thread is
+			// mid-event, it can publish one more tick before parking, flipping this true. The window is
+			// ~us against a ~100 ms tick at 10x, so this is a flake risk only — and a false-fail, never a
+			// false-pass, so the ruling is unaffected. Re-run if it ever fires.
 			assertThat(sawFreshCapture.get()).isFalse()
 			// The tick itself still completed: the deadlock is in waiting for the capture, not in
 			// pausing as such.
