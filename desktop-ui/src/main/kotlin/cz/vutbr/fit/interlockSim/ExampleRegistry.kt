@@ -257,9 +257,10 @@ class ExampleRegistry {
 				// Register in scope so callers outside this factory can retrieve it after the run
 				// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
 				context.scope.declare(aiPlanner)
-				val pacingController = ThrottlingSimulationController(
-					initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
-				)
+				val pacingController =
+					ThrottlingSimulationController(
+						initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+					)
 				wireDispatcherAgent(
 					context,
 					loop,

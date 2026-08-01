@@ -51,7 +51,6 @@ import kotlin.math.roundToLong
 class ThrottlingSimulationController(
 	initialSpeedMultiplier: Double = DEFAULT_SPEED
 ) : SimulationController {
-
 	@kotlin.concurrent.Volatile
 	private var speedMultiplierBacking: Double
 

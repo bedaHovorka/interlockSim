@@ -24,7 +24,6 @@ import kotlin.test.Test
  * implementation throttles correctly and behaves neutrally on pause/step operations.
  */
 class ThrottlingSimulationControllerTest {
-
 	@Test
 	fun `isPaused returns false`() {
 		val controller = ThrottlingSimulationController()
