@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+import cz.vutbr.fit.interlockSim.dispatcher.observation.ReservationView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 
@@ -40,13 +41,15 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
  * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator] uses for origin validation:
  * - HELD train with non-null [TrainView.signalAheadName]: `from = signalAheadName` (the
  *   validator enforces this for HELD trains).
- * - All other active phases: `from = destinationInOutName` (the validator performs no origin
- *   check for non-HELD trains, so any valid endpoint name passes this check).
+ * - Active train with an existing reservation: `from = reservation.targetName` so the
+ *   request_route candidate correctly models the forward extension (new start == old target).
+ * - Otherwise: `from = destinationInOutName` (last-resort fallback; the validator performs no
+ *   origin check for non-HELD trains without a reservation).
  *
  * @param destinationOf Maps each [TrainView] to its declared destination InOut name. Defaults
  *   to [TrainView.destinationInOutName]. Override in tests to inject fixed values.
  *
- * @since Issue #827 (SP2c.4 — Goal 10)
+ * @since Issue #827 (SP2c.4 — Goal 10); forward-extension `from` fix in Issue #829 (SP2c.6)
  */
 class ActionCandidateEnumerator(
 	private val destinationOf: (TrainView) -> String = { it.destinationInOutName }
@@ -74,11 +77,18 @@ class ActionCandidateEnumerator(
 		observation.trains
 			.filter { it.phase != TrainPhase.QUEUED && it.phase != TrainPhase.EXITED }
 			.forEach { train ->
+				val existingReservation: ReservationView? =
+					observation.reservations.find { it.trainId == train.trainId }
 				val from =
-					if (train.phase == TrainPhase.HELD && train.signalAheadName != null) {
-						train.signalAheadName
-					} else {
-						train.destinationInOutName
+					when {
+						train.phase == TrainPhase.HELD && train.signalAheadName != null ->
+							train.signalAheadName
+						existingReservation != null ->
+							// Forward extension: new.from == old.target mirrors
+							// PathReservationRegistry's merge precondition and ActionValidator's
+							// forward-extension allowance (Issue #829 SP2c.6).
+							existingReservation.targetName
+						else -> train.destinationInOutName
 					}
 				candidates += DispatchAction.RequestRoute(train.trainId, from, destinationOf(train))
 				candidates += DispatchAction.CancelRoute(train.trainId)

@@ -302,6 +302,13 @@ class ActionValidator(
 		val existingReservation =
 			observation.reservations.find { it.trainId == action.trainId } ?: return null
 
+		// Forward extension: train holds a route to X, and the new request starts from X — this is
+		// the normal multi-hop case where the dispatcher extends the path one section at a time.
+		// PathReservationRegistry's own merge precondition is new.start == old.target; mirror it.
+		if (action.fromEndpointName == existingReservation.targetName) {
+			return null
+		}
+
 		return if (existingReservation.targetName == action.toEndpointName) {
 			rejected(
 				RejectionCode.ROUTE_ALREADY_HELD_TO_SAME_TARGET,

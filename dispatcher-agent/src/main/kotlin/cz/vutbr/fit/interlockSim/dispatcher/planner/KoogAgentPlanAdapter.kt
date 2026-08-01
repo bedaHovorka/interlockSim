@@ -198,37 +198,31 @@ class KoogAgentPlanAdapter(
 	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> {
 		val a = getOrCreateAgent()
 		return try {
-			// Reset the per-cycle actuator-call counter before the LLM cycle so an empty decision
-			// list can be disambiguated: a post from any actuator tool during decideAsync increments
-			// the counter (post CALL, not queue contents — immune to the sim thread draining the
-			// queue mid-cycle), so an empty returned list is the normal successful outcome, not
-			// "the LLM did nothing". See the class KDoc's "Fallback priority" /
-			// "How the LLM acted via tools is detected".
-			commandQueue.resetCycleActuatorCount()
+			// Advance the correlation-map cycle counter before the LLM cycle so every decision
+			// posted by actuator tools during decideAsync receives the correct tick index.
+			// SP2c.6 (#829): replaces resetCycleActuatorCount() — the per-cycle actuator-post
+			// counter was deleted along with the actedViaToolsThisCycle() heuristic.
+			commandQueue.advanceCorrelationCycle()
 			val decisions =
 				withTimeout(inferenceTimeout.toMillis()) {
 					a.decideAsync(observation)
 				}
-			val llmActedViaTools = commandQueue.actedViaToolsThisCycle()
-			if (decisions.isEmpty() && !llmActedViaTools) {
-				// The LLM completed a cycle but neither returned decisions nor invoked any
-				// actuator tool — it truly did nothing. There is no double-dispatch risk in
-				// falling back here (nothing was posted this cycle), and not falling back would
-				// leave queued trains admitted (by the safety net) but never routed, stalled at
-				// their entry signal indefinitely — the LLM is stateless across cycles, so a
-				// no-op cycle is not a preamble to a later routing cycle. The fallback supplies
-				// both admission and routing, so the safety net is intentionally NOT run here.
+			if (decisions.isEmpty()) {
+				// The LLM completed a cycle but returned no decisions. In SP2c.6 the actuator tools
+				// emit directly to EmittedActionSink (SinkHolder path), not to this commandQueue —
+				// so there is no need to check actedViaToolsThisCycle(). An empty decision list
+				// means "the LLM did nothing directly-returned this cycle"; the fallback supplies
+				// both admission and routing.
 				logger.warn {
-					"KoogAgentPlanAdapter: LLM cycle produced no decisions and invoked no actuator " +
-						"tools — applying rule-based fallback (simTime=${observation.snapshot.simTime})"
+					"KoogAgentPlanAdapter: LLM cycle produced no decisions — " +
+						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
 				}
 				cycleListener?.onFallback(FallbackReason.EMPTY_NO_TOOLS, observation.snapshot.simTime)
 				fallbackDispatcher.decide(observation)
 			} else {
 				logger.debug {
 					"KoogAgentPlanAdapter: LLM cycle completed with ${decisions.size} " +
-						"directly-returned decision(s), llmActedViaTools=$llmActedViaTools " +
-						"(simTime=${observation.snapshot.simTime}); not falling back"
+						"directly-returned decision(s) (simTime=${observation.snapshot.simTime}); not falling back"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
 				maybeForceAdmission(observation)

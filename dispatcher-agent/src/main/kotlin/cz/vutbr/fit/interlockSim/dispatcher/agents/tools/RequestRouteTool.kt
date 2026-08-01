@@ -9,57 +9,46 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
-import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
-import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Actuator tool exposing end-to-end route reservation to Koog agents (SP1.6, Issue #551;
- * rewired to the command queue in SP1.7, Issue #774).
+ * rewired to [SinkHolder] in SP2c.6, Issue #829).
  *
  * Request a route reservation from one endpoint to another for a named train.
  *
- * ## Threading contract (SP1.7, Issue #774)
+ * ## Threading contract (SP2c.6, Issue #829)
  *
- * `execute()` runs on the agent driver thread, **not** the kDisco simulation thread, so it
- * must not touch the live [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort] directly.
- * Instead it marshals the request through the [ActuatorCommandQueue]: it builds a
- * [DispatchDecision.RequestRoute] and posts it via [ActuatorCommandQueue.postAll].
- * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier] drains the queue on the
- * kDisco thread and applies the decision — satisfying the threading contract.
- *
- * This is **fire-and-forget**: the tool returns a `Success` describing the queued request and
- * does **not** wait for the reservation to succeed or fail. The agent observes the outcome
- * (blocks reserved, or still free / a conflict) via the perception tools (`block_occupancy`,
- * `signal_aspect`) on the next tick's snapshot. The synchronous grant/deny reason
- * (`RouteRequestResult`) is therefore not returned to the LLM on this path; reintroducing it
- * would require a request/response channel over the queue (out of scope for SP1.7).
+ * `execute()` runs on the agent driver thread. It emits [DispatchAction.RequestRoute] to the
+ * active [sinkHolder] (fire-and-forget). The [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop]
+ * collects the emission, validates it through [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator],
+ * and posts the validated [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to the
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] for the kDisco thread.
  *
  * ## Endpoint-name validation (Goal 10 agent-architect review finding)
  *
  * A live run showed the LLM occasionally hallucinating a plausible-looking endpoint name
- * (e.g. `"kA"`/`"kB"`) instead of copying one from the topology in its system prompt. Because
- * this tool is fire-and-forget, a bad name used to sail through as a queued `Success` and only
- * fail later, invisibly, when [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
- * applied it on the kDisco thread — the LLM never learned its own call had failed. [execute] now
+ * (e.g. `"kA"`/`"kB"`) instead of copying one from the topology in its system prompt. [execute]
  * validates [fromEndpointName]/[toEndpointName] against [validEndpointNames] synchronously and
  * returns a [ToolResult.Error] naming the valid options when either is unrecognized, so the model
  * gets in-turn feedback and can retry with a real name instead of silently losing the decision.
  *
- * @param commandQueue Scoped command queue for this context (injected per simulation)
+ * @param sinkHolder Shared sink holder for this agent instance; [DispatchAction.RequestRoute]
+ *   is emitted to the active sink on successful execution.
  * @param validEndpointNames The exact set of InOut and Signal names this network recognizes
  *   (from [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopology], captured once at agent
  *   construction — topology is static and never changes during a run).
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to the queue in Issue #774 (SP1.7);
- *   [validEndpointNames] validation added following a Goal 10 agent-architect review
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to [SinkHolder] in Issue #829 (SP2c.6)
  */
 class RequestRouteTool(
-	private val commandQueue: ActuatorCommandQueue,
+	private val sinkHolder: SinkHolder,
 	private val validEndpointNames: Set<String>
 ) : DomainTool {
 	companion object {
@@ -70,7 +59,7 @@ class RequestRouteTool(
 
 	override val description: String =
 		"Request the interlocking to find and atomically reserve a free end-to-end path for a named train. " +
-			"Fire-and-forget: returns once the request is queued; the reservation outcome is observed " +
+			"Fire-and-forget: returns once the request is emitted; the reservation outcome is observed " +
 			"via block_occupancy / signal_aspect on the next tick."
 
 	override val parameters: List<DomainToolParameter> =
@@ -129,16 +118,12 @@ class RequestRouteTool(
 			)
 		}
 
-		val decision = DispatchDecision.RequestRoute(trainName, fromEndpointName, toEndpointName)
+		val action = DispatchAction.RequestRoute(trainName, fromEndpointName, toEndpointName)
 		logger.debug {
-			"RequestRouteTool.execute: posting decision trainName=$trainName, " +
+			"RequestRouteTool.execute: emitting action trainName=$trainName, " +
 				"from=$fromEndpointName, to=$toEndpointName"
 		}
-		val accepted = commandQueue.postAll(listOf(decision))
-		return if (accepted) {
-			ToolResult.Success("queued request_route train=$trainName from=$fromEndpointName to=$toEndpointName")
-		} else {
-			ToolResult.Error("request_route rejected: actuator command queue is full (backpressure)")
-		}
+		sinkHolder.current.emit(action)
+		return ToolResult.Success("emitted request_route train=$trainName from=$fromEndpointName to=$toEndpointName")
 	}
 }

@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.RepetitionInfo
@@ -58,43 +57,11 @@ private val logger = KotlinLogging.logger {}
  * @see RuleBasedDispatcher
  * @see cz.vutbr.fit.interlockSim.sim.ShuntingLoop
  * @see RuleBasedDispatcherDeterminismHeavyTest
- * @since Issue #540 (SP0.1 — Goal 10 Stage A3)
- *
- * ## Temporarily disabled — SP2c.6 (#829) owns re-enabling this
- *
- * SP2c.5 (#828) re-points this gate at `DispatchTickLoop` + [RuleBasedEmissionStrategy], and in
- * that wiring it fails 10/10 with `trainsExited == 0`. The cause is **not** in this test or in
- * the loop: [RuleBasedEmissionStrategy] maps the rule-based dispatcher's **hop-level**
- * `DispatchDecision.ReservePath` onto the **destination-level** `request_route` verb, and
- * [ActionValidator] rejects that as [RejectionCode.ROUTE_HELD_TO_DIFFERENT_TARGET] from the
- * second hop onward — 2690 of 2720 emitted actions rejected, two trains admitted, none ever
- * routed.
- *
- * The underlying defect is in SP2c.3 (#860), which shipped `DispatchAction.RequestRoute` without
- * the `scope: Section | EndToEnd` discriminant that #848's recorded traffic-simulation-expert
- * ruling made a binding constraint precisely to stop this surfacing here. See the analysis on
- * PR #865 for the full trace and the proposed fix (make [ActionValidator]'s conflict rule
- * model-aware, mirroring `PathReservationRegistry`'s own `new.start == old.target` merge
- * precondition, plus the missing discriminant).
- *
- * **This gate is disabled, not deleted, and it must not stay disabled.** SP2c.6 (#829) routes the
- * agent's four actuator tools through the same [ActionValidator], so it hits the identical
- * rejection on every train's first `request_route` and cannot land without fixing it. Re-enabling
- * this test is therefore part of #829's definition of done — it is the acceptance check that the
- * fix actually works.
- *
- * The `heavyTest` variant [RuleBasedDispatcherDeterminismHeavyTest] is left untouched: it is
- * manual-only and in no gate, so it does not need disabling — but it will fail the same way if
- * run before #829's fix lands.
+ * @since Issue #540 (SP0.1 — Goal 10 Stage A3); re-enabled in Issue #829 (SP2c.6) after the
+ *   ActionValidator forward-extension fix landed.
  */
 @DisplayName("RuleBasedDispatcher determinism — 10 consecutive vyhybna.xml runs (Goal 10 A3)")
 @Tag("integration-test")
-@Disabled(
-	"Blocked by the SP2c.3 (#860) vocabulary defect that surfaces via SP2c.5's re-pointed wiring: " +
-		"hop-level ReservePath mapped onto destination-level request_route is rejected as " +
-		"ROUTE_HELD_TO_DIFFERENT_TARGET, so trainsExited == 0. SP2c.6 (#829) must re-enable and " +
-		"fix this — see the analysis comment on PR #865."
-)
 class RuleBasedDispatcherDeterminismTest {
 	private val runner = RuleBasedDispatcherDeterminismRunner()
 
