@@ -160,6 +160,26 @@ class SimulationRunnerTest {
 	}
 
 	@Test
+	@DisplayName("requestResume clears an active pause")
+	fun requestResumeClearsPause() {
+		runner.requestPause()
+
+		assertThat(runner.isPaused).isTrue()
+
+		runner.requestResume()
+
+		assertThat(runner.isPaused).isFalse()
+	}
+
+	@Test
+	@DisplayName("requestResume while not paused is a harmless no-op")
+	fun requestResumeWhileNotPausedIsNoOp() {
+		runner.requestResume() // fresh runner, never paused
+
+		assertThat(runner.isPaused).isFalse()
+	}
+
+	@Test
 	@DisplayName("removePropertyChangeListener stops notifications")
 	fun removeListener() {
 		val events = mutableListOf<PropertyChangeEvent>()
