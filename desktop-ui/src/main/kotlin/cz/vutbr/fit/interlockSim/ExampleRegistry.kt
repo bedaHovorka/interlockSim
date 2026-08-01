@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
@@ -28,6 +29,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
@@ -67,10 +69,18 @@ import cz.vutbr.fit.interlockSim.util.Util
 class ExampleRegistry {
 	/**
 	 * Registry of console-based examples. Maps example name to factory function.
+	 *
+	 * **shuntingLoopAI** is registered here (in addition to [guiExamples]) since
+	 * Issue #873 (SP2c.26 follow-up I2, R8 resolution): [createShuntingLoopAIExample]
+	 * wires the async LLM planner to a [ThrottlingSimulationController] instead of
+	 * [NoOpSimulationController], so [assertPlannerPacingCompatible] no longer blocks
+	 * headless/console AI runs. The guard itself is unchanged — see the Issue #873 KDoc
+	 * on [ThrottlingSimulationController] for the full rationale.
 	 */
 	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
 			"shuntingLoop" to ::createShuntingLoopExample,
+			"shuntingLoopAI" to ::createShuntingLoopAIExample,
 			"shuntingLoopSync" to ::createShuntingLoopSyncExample,
 			"multiTrainLoop" to ::createMultiTrainLoopExample,
 			"threeTrainLoop" to ::createThreeTrainLoopExample
@@ -183,6 +193,85 @@ class ExampleRegistry {
 	}
 
 	/**
+	 * Creates a headless shunting loop AI simulation example for console mode (Issue #873).
+	 *
+	 * Identical to [createShuntingLoopAIGuiExample] in planner construction but wires the
+	 * async [KoogAgentPlanAdapter] to a [ThrottlingSimulationController] capped at
+	 * [PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER] instead of the GUI's
+	 * [DelegatingSimulationController]. This satisfies [assertPlannerPacingCompatible]
+	 * without `:desktop-ui` on the classpath.
+	 *
+	 * **Resolution of R8 (Issue #822):** the guard previously blocked headless AI runs
+	 * because [NoOpSimulationController] has no pacing and was rejected up-front.
+	 * [ThrottlingSimulationController] is a real pacing controller (wall-clock
+	 * throttle via `platformSleep`) that does not require any GUI class.
+	 *
+	 * **Ollama prerequisite:** the local Ollama service must be reachable at the
+	 * configured endpoint (default `http://localhost:11434`). Without Ollama, every
+	 * LLM call times out and the rule-based fallback takes over.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run in console mode
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 *
+	 * @since Issue #873 (SP2c.26 follow-up I2 — headless pacing controller)
+	 */
+	private fun createShuntingLoopAIExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext {
+		if (args.size < 3) {
+			throw ContextCreationException("End time of simulation not specified")
+		}
+		val xml =
+			try {
+				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			} catch (e: IllegalArgumentException) {
+				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+			}
+		return xml
+			.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				val time = args[2].toLong()
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				// Headless: no real-time sync for the ShuntingLoop itself — the simulation
+				// runs at full speed. Pacing only applies to the agent-driver loop below.
+				val loop = ShuntingLoop(context, time)
+				// Issue #873 (R8 resolution): build the LLM-backed planner with rule-based fallback.
+				// KoogAgentPlanAdapter is async (isAsynchronous=true); ThrottlingSimulationController
+				// provides the required pacing for assertPlannerPacingCompatible without `:desktop-ui`.
+				// Capped at AGENT_MAX_SPEED_MULTIPLIER so the agent driver has sufficient wall-clock
+				// time to produce decisions before the simulation advances past the relevant state.
+				val koogAdapter =
+					KoogAgentPlanAdapter(
+						agentFactory = context.scope.get<KoogAgentFactory>(),
+						context = context,
+						fallbackDispatcher = RuleBasedDispatcher(),
+						commandQueue = context.scope.get<ActuatorCommandQueue>(),
+						sinkHolder = context.scope.get<SinkHolder>()
+					)
+				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
+				// Register in scope so callers outside this factory can retrieve it after the run
+				// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
+				context.scope.declare(aiPlanner)
+				val pacingController = ThrottlingSimulationController(
+					initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+				)
+				wireDispatcherAgent(
+					context,
+					loop,
+					pacingController,
+					plannerOverride = aiPlanner
+				)
+				context.setMainProcess(loop)
+				context
+			}
+	}
+
+	/**
 	 * Creates a shunting loop simulation example for GUI mode (Issue #206, #207).
 	 *
 	 * This example is similar to [createShuntingLoopExample] but designed for display
@@ -242,9 +331,10 @@ class ExampleRegistry {
 	 * back to [RuleBasedDispatcher] when the LLM stalls, returns no decisions, or throws.
 	 *
 	 * **Requires pacing:** [KoogAgentPlanAdapter] declares `isAsynchronous = true` (LLM inference
-	 * takes real wall-clock time). This example therefore requires the GUI's
-	 * [DelegatingSimulationController]; it cannot run in headless/console mode — use
-	 * [createShuntingLoopExample] (rule-based) for that.
+	 * takes real wall-clock time). This GUI version uses [DelegatingSimulationController] for
+	 * pause/step/speed-change integration. For headless/console runs, use
+	 * [createShuntingLoopAIExample] which uses [ThrottlingSimulationController] instead
+	 * (Issue #873, R8 resolution).
 	 *
 	 * **Ollama prerequisite:** the local Ollama service must be reachable at the configured
 	 * endpoint (default `http://localhost:11434`). Without Ollama, every LLM call times out
