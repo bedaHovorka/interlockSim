@@ -52,7 +52,7 @@ class ThrottlingSimulationController(
 	initialSpeedMultiplier: Double = DEFAULT_SPEED
 ) : SimulationController {
 
-	@Volatile
+	@kotlin.concurrent.Volatile
 	private var speedMultiplierBacking: Double
 
 	init {
