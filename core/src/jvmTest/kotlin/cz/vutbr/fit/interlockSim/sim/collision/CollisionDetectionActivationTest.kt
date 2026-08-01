@@ -70,6 +70,10 @@ class CollisionDetectionActivationTest : KoinTestBase() {
 		override fun requestPause() {
 			requestPauseCalled = true
 		}
+
+		override fun requestResume() {
+			// No-op: not needed for this test
+		}
 	}
 
 	@Test

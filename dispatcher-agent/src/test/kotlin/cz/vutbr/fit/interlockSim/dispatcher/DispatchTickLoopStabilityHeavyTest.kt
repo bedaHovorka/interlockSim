@@ -98,6 +98,8 @@ class DispatchTickLoopStabilityHeavyTest {
 		override fun pollStepTime(): Double? = null
 
 		override fun requestPause() = Unit
+
+		override fun requestResume() = Unit
 	}
 
 	private fun observation(tick: Long): DispatcherObservation =

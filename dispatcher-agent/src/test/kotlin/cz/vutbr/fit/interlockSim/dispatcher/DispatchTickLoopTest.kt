@@ -137,6 +137,8 @@ class DispatchTickLoopTest {
 		override fun pollStepTime(): Double? = null
 
 		override fun requestPause() = Unit
+
+		override fun requestResume() = Unit
 	}
 
 	/** Returns scripted [await] results; the last entry repeats once exhausted. */

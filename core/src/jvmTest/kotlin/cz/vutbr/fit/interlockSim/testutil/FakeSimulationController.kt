@@ -118,4 +118,16 @@ class FakeSimulationController(
 	override fun requestPause() {
 		requestPauseCalls++
 	}
+
+	/** Total number of [requestResume] calls received. */
+	var requestResumeCalls: Int = 0
+		private set
+
+	/**
+	 * Records the call so tests can assert on resume request count.
+	 * @since Issue #872 (SP2c.26 follow-up I1)
+	 */
+	override fun requestResume() {
+		requestResumeCalls++
+	}
 }

@@ -304,4 +304,8 @@ class RecordingPacingController(
 	override fun requestPause() {
 		delegate.requestPause()
 	}
+
+	override fun requestResume() {
+		delegate.requestResume()
+	}
 }

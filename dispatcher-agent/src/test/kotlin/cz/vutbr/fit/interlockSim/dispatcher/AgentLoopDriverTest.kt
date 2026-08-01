@@ -147,6 +147,8 @@ class AgentLoopDriverTest {
 					override fun pollStepTime(): Double? = null
 
 					override fun requestPause() = Unit
+
+					override fun requestResume() = Unit
 				}
 
 			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controllerWithOrder)
@@ -177,6 +179,8 @@ class AgentLoopDriverTest {
 					override fun pollStepTime(): Double? = null
 
 					override fun requestPause() = Unit
+
+					override fun requestResume() = Unit
 				}
 
 			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, orderedController)
@@ -598,5 +602,7 @@ class AgentLoopDriverTest {
 		override fun pollStepTime(): Double? = null
 
 		override fun requestPause() = Unit
+
+		override fun requestResume() = Unit
 	}
 }

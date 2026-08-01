@@ -183,6 +183,19 @@ class SimulationRunner(
 		isPaused = true
 	}
 
+	/**
+	 * Release a previously requested pause, allowing the simulation to continue.
+	 *
+	 * Thread-safe: delegates to the [isPaused] setter, which notifies all waiters under [lock].
+	 * Calling this when not paused is a harmless no-op (the setter short-circuits when the value
+	 * is already `false`).
+	 *
+	 * @since Issue #872 (SP2c.26 follow-up I1)
+	 */
+	override fun requestResume() {
+		isPaused = false
+	}
+
 	override fun isPaused(): Boolean = synchronized(lock) { pausedBacking }
 
 	/** Register a listener for all property change events. */

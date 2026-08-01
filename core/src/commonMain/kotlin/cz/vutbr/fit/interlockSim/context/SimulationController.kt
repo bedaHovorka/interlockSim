@@ -119,6 +119,28 @@ interface SimulationController {
 	 * @since Issue #611 (Goal 3 SP1)
 	 */
 	fun requestPause()
+
+	/**
+	 * Release a previously requested pause, allowing the simulation to continue.
+	 *
+	 * Counterpart to [requestPause]: once the caller that paused the simulation has
+	 * finished its work (e.g. an LLM inference step bracketed by pause/resume), it
+	 * calls this method to unpark the simulation thread.
+	 *
+	 * **Thread safety:** implementations must be thread-safe; this method may be called
+	 * from any thread, including a thread different from the one that called [requestPause].
+	 *
+	 * **Contract C4:** the resume must be placed in a `finally` block so that a throwing
+	 * emission does not leave the simulation parked indefinitely:
+	 * ```kotlin
+	 * controller.requestPause()
+	 * try { emission.emit(prompt, obs) } finally { controller.requestResume() }
+	 * ```
+	 * Calling [requestResume] when not paused is a harmless no-op.
+	 *
+	 * @since Issue #872 (SP2c.26 follow-up I1)
+	 */
+	fun requestResume()
 }
 
 /**
@@ -133,6 +155,8 @@ interface SimulationController {
  * - [isPaused] always returns `false`
  * - [pollStepEvent] always returns `false`
  * - [pollStepTime] always returns `null`
+ * - [requestPause] does nothing
+ * - [requestResume] does nothing
  */
 object NoOpSimulationController : SimulationController {
 	override suspend fun awaitIfPaused() {
@@ -151,5 +175,9 @@ object NoOpSimulationController : SimulationController {
 
 	override fun requestPause() {
 		// No-op: headless / no-GUI runs do not support pause requests
+	}
+
+	override fun requestResume() {
+		// No-op: headless / no-GUI runs are never paused
 	}
 }

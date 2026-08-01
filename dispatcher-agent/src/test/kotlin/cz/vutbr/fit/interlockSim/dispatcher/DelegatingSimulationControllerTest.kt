@@ -81,6 +81,12 @@ class DelegatingSimulationControllerTest {
 
 		override fun requestPause() {
 			calls += "requestPause"
+			paused = true
+		}
+
+		override fun requestResume() {
+			calls += "requestResume"
+			paused = false
 		}
 	}
 
@@ -219,6 +225,74 @@ class DelegatingSimulationControllerTest {
 			driverThread.join()
 
 			assertThat(interrupted).isTrue()
+		}
+	}
+
+	@Nested
+	@DisplayName("Resume forwarding (Issue #872)")
+	inner class ResumeForwarding {
+		@Test
+		@DisplayName("requestResume forwards to the delegate")
+		fun requestResumeForwards() {
+			val delegate = RecordingDelegate()
+			val controller = DelegatingSimulationController().apply { this.delegate = delegate }
+
+			controller.requestResume()
+
+			assertThat(delegate.calls).containsExactly("requestResume")
+		}
+
+		@Test
+		@DisplayName("pause then resume round trip through the delegating controller")
+		fun pauseResumeRoundTrip() {
+			val delegate = RecordingDelegate()
+			val controller = DelegatingSimulationController().apply { this.delegate = delegate }
+
+			controller.requestPause()
+			assertThat(controller.isPaused()).isTrue()
+
+			controller.requestResume()
+			assertThat(controller.isPaused()).isFalse()
+			assertThat(delegate.calls).containsExactly("requestPause", "requestResume")
+		}
+
+		@Test
+		@DisplayName("requestResume while not paused is a harmless no-op")
+		fun resumeWhileNotPausedIsNoOp() {
+			val delegate = RecordingDelegate()
+			val controller = DelegatingSimulationController().apply { this.delegate = delegate }
+
+			// Delegate starts unpaused; calling resume must not crash or change state
+			assertThat(controller.isPaused()).isFalse()
+			controller.requestResume()
+			assertThat(controller.isPaused()).isFalse()
+			assertThat(delegate.calls).containsExactly("requestResume")
+		}
+
+		@Test
+		@DisplayName("resume from a thread other than the pauser wakes the waiting driver")
+		fun resumeFromDifferentThreadWakesWaiter() {
+			val delegate = RecordingDelegate()
+			delegate.paused = true
+			val controller = DelegatingSimulationController().apply { this.delegate = delegate }
+			val resumed = AtomicBoolean(false)
+
+			// Resumer thread: a separate thread (not the one that set paused) clears the pause
+			val resumerThread =
+				Thread {
+					Thread.sleep(50)
+					resumed.set(true)
+					controller.requestResume()
+				}
+			resumerThread.isDaemon = true
+			resumerThread.start()
+
+			// Driver thread blocks in awaitIfPaused until resumed
+			runBlocking { controller.awaitIfPaused() }
+
+			assertThat(resumed.get()).isTrue()
+			assertThat(controller.isPaused()).isFalse()
+			resumerThread.join()
 		}
 	}
 }
