@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.FailureReason
+import cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -133,12 +135,18 @@ class MeasuringPlanAdapter(
 	}
 
 	/**
-	 * Logs an unconditional INFO-level summary of the current [PlannerMetricsSnapshot].
+	 * Logs an unconditional final summary of the current [PlannerMetricsSnapshot].
 	 *
 	 * Unlike [logPeriodicSummary] (which only fires every [REPORT_EVERY_N_CYCLES] cycles),
 	 * this always logs exactly once per call — intended for callers that detect the
 	 * simulation has stopped (for any reason: natural completion or manual stop) and want
 	 * a guaranteed final data point, even if the run ended between periodic checkpoints.
+	 *
+	 * When [runOutcome] is [RunOutcome.Failed] (e.g. [FailureReason.LLM_ABANDONED]), a
+	 * prominent WARN-level line is emitted **before** the INFO summary so that the failure
+	 * is unmissable in the log — a run that silently degrades to rule-based and reports
+	 * success is the exact failure mode the terminal fallback guard was introduced to prevent
+	 * (SP2c.8, Issue #831).
 	 *
 	 * Safe to call with zero cycles recorded — [PlannerMetricsSnapshot.ollamaSuccessRate]
 	 * is `0.0` in that case. Read-only: does not mutate any counters, so it is safe to
@@ -153,9 +161,26 @@ class MeasuringPlanAdapter(
 	 * and are never reset — if a context were ever reused for more than one run, this would
 	 * report the combined total, not just the most recent run.
 	 *
-	 * @since 2026-07-29 (final metrics log on simulation stop)
+	 * @param runOutcome The terminal outcome of the run. Defaults to [RunOutcome.Running]
+	 *   (i.e. normal completion or run stopped without an LLM failure). When
+	 *   [RunOutcome.Failed] with reason [FailureReason.LLM_ABANDONED], a WARN-level failure
+	 *   banner is logged before the INFO metrics summary.
+	 * @param failedAtTick The tick number at which the terminal fallback guard engaged.
+	 *   Only used (and should be non-null) when [runOutcome] is [RunOutcome.Failed].
+	 *
+	 * @since 2026-07-29 (final metrics log on simulation stop); extended SP2c.8 Issue #831
 	 */
-	fun logFinalSummary() {
+	fun logFinalSummary(
+		runOutcome: RunOutcome = RunOutcome.Running,
+		failedAtTick: Long? = null
+	) {
+		val outcome = runOutcome
+		if (outcome is RunOutcome.Failed) {
+			val tickStr = if (failedAtTick != null) "at tick $failedAtTick" else "(tick unknown)"
+			logger.warn {
+				"*** [MeasuringPlanAdapter] FAILED (${outcome.reason.name}) $tickStr ***"
+			}
+		}
 		logger.info { formatSummaryLine("final summary", getMetricsSnapshot()) }
 	}
 

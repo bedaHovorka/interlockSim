@@ -11,9 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertFailure
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.containsExactly
-import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -35,20 +33,22 @@ import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.time.Duration
 
 /**
- * Unit tests for [KoogAgentPlanAdapter] (SP2b.9, Issue #566) — in particular the fallback
- * semantics: a **non-empty** decision list from [KoogDispatchAgent.decideAsync] is returned
- * as-is and triggers the admission safety net instead of [Dispatcher] fallback; an **empty**
- * decision list always falls back (SP2c.6, Issue #829, removed the queue-actuation-side-effect
- * detection that used to make an empty-but-acted-via-tools cycle skip the fallback — see the
- * class KDoc on [KoogAgentPlanAdapter]).
+ * Unit tests for [KoogAgentPlanAdapter] (SP2b.9, Issue #566).
  *
- * @since Issue #566 (SP2b.9 — Goal 10); SP2c.6 (#829) simplifies the empty-decisions branch to
- *   always fall back
+ * ## SP2c.8 (Issue #831) — admission safety net deleted
+ *
+ * The admission safety net (`maybeForceAdmission`) has been deleted. These tests verify the
+ * P3 principle: no non-LLM component originates a [DispatchDecision.ApproveTrain] during an
+ * LLM run. With a no-op LLM (acting via tools but emitting no decisions), zero admission
+ * decisions are force-posted to the command queue.
+ *
+ * @since Issue #566 (SP2b.9 — Goal 10); SP2c.6 (#829) simplifies the empty-decisions branch;
+ *   SP2c.8 (#831) deletes the admission safety net
  */
 class KoogAgentPlanAdapterTest {
 	private val observation =
@@ -64,8 +64,7 @@ class KoogAgentPlanAdapterTest {
 		fallback: Dispatcher,
 		inferenceTimeout: Duration = Duration.ofSeconds(30),
 		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue(),
-		sinkHolder: SinkHolder = SinkHolder(),
-		maxConcurrentTrains: Int = 2
+		sinkHolder: SinkHolder = SinkHolder()
 	): KoogAgentPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
 		coEvery { agentFactory.createAgent(any()) } returns koogAgent
@@ -76,8 +75,7 @@ class KoogAgentPlanAdapterTest {
 			fallback,
 			inferenceTimeout,
 			commandQueue,
-			sinkHolder,
-			maxConcurrentTrains
+			sinkHolder
 		)
 	}
 
@@ -220,135 +218,39 @@ class KoogAgentPlanAdapterTest {
 	}
 
 	/**
-	 * Admission safety net (Goal 10 SP2b.9 follow-up): the LLM's dispatch cycle is stateless
-	 * (fresh Koog session every call, no memory of prior cycles — see the agent-architect
-	 * analysis this fix is based on) and was observed to stop calling `approve_train` after
-	 * the first train, even across many cycles where free capacity remained. Since
-	 * `approve_train`/[DispatchDecision.ApproveTrain] is documented idempotent (a no-op for an
-	 * already-active or nonexistent train), it's always safe for the driver to force-admit the
-	 * oldest queued train(s) whenever a completed LLM cycle leaves free capacity unused.
+	 * P3 — no non-LLM component originates a [DispatchDecision.ApproveTrain] during an LLM run
+	 * (SP2c.8, Issue #831 — admission safety net deleted).
+	 *
+	 * The old `maybeForceAdmission()` would have force-posted [DispatchDecision.ApproveTrain]
+	 * after every successful LLM cycle. With it removed, the command queue stays empty even
+	 * when the LLM emits a no_op (via tools) while trains are queued and capacity is free.
 	 */
-	@Nested
-	inner class AdmissionSafetyNet {
-		/**
-		 * A mock [KoogDispatchAgent] that returns a non-empty decision list — one of the shapes
-		 * under which [KoogAgentPlanAdapter.plan] does not fall back and instead runs the
-		 * admission safety net. (The other shape — an empty return with a tool emission via the
-		 * [SinkHolder] counter — is covered by `an empty decision list with a tool emission skips
-		 * the fallback (SP2c6 SinkHolder counter)`.)
-		 */
-		private fun agentThatActedViaTools(): KoogDispatchAgent =
-			mockk {
-				coEvery { decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
-			}
+	@Test
+	@DisplayName("P3 — no non-LLM component originates ApproveTrain when LLM acts via tools (SP2c.8 #831)")
+	fun `P3 LLM tool emission does not cause force-approval of queued trains`() {
+		val commandQueue = ActuatorCommandQueue()
+		val sinkHolder = SinkHolder()
+		val fallback = mockk<Dispatcher>()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			// LLM emits a no_op via tool — actedThisCycle() returns true, success path taken
+			sinkHolder.emit(DispatchAction.NoOp)
+			emptyList()
+		}
+		val observation =
+			observationWithQueue(
+				unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A")),
+				approvedTrainCount = 0
+			)
 
-		/** ApproveTrain decisions the safety net posted this cycle (filters out the LLM's own side effects). */
-		private fun approveTrainPosts(queue: ActuatorCommandQueue): List<DispatchDecision.ApproveTrain> =
-			queue.drain().filterIsInstance<DispatchDecision.ApproveTrain>()
-
-		@Test
-		fun `force-approves the oldest queued train when free capacity remains after a completed LLM cycle`() {
-			val commandQueue = ActuatorCommandQueue()
-			val koogAgent = agentThatActedViaTools()
-			val fallback = mockk<Dispatcher>()
-			val observation =
-				observationWithQueue(
-					unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A")),
-					approvedTrainCount = 0
-				)
-
-			runBlocking { adapter(koogAgent, fallback, commandQueue = commandQueue).plan(observation) }
-
-			val approvals = approveTrainPosts(commandQueue)
-			assertThat(approvals).hasSize(1)
-			assertThat(approvals).contains(DispatchDecision.ApproveTrain("Train #1"))
-			coVerify(exactly = 0) { fallback.decide(any()) }
+		runBlocking {
+			adapter(koogAgent, fallback, commandQueue = commandQueue, sinkHolder = sinkHolder)
+				.plan(observation)
 		}
 
-		@Test
-		fun `force-approves multiple queued trains up to the free capacity, oldest first`() {
-			val commandQueue = ActuatorCommandQueue()
-			val koogAgent = agentThatActedViaTools()
-			val fallback = mockk<Dispatcher>()
-			val observation =
-				observationWithQueue(
-					unapprovedTrains =
-						listOf(
-							QueuedTrainObservation("Train #1", "A"),
-							QueuedTrainObservation("Train #2", "B"),
-							QueuedTrainObservation("Train #3", "A")
-						),
-					approvedTrainCount = 0
-				)
-
-			runBlocking {
-				adapter(koogAgent, fallback, commandQueue = commandQueue, maxConcurrentTrains = 2)
-					.plan(observation)
-			}
-
-			val approvals = approveTrainPosts(commandQueue)
-			assertThat(approvals).hasSize(2)
-			assertThat(approvals).contains(DispatchDecision.ApproveTrain("Train #1"))
-			assertThat(approvals).contains(DispatchDecision.ApproveTrain("Train #2"))
-		}
-
-		@Test
-		fun `does not force-approve when capacity is already full`() {
-			val commandQueue = ActuatorCommandQueue()
-			val koogAgent = agentThatActedViaTools()
-			val fallback = mockk<Dispatcher>()
-			val observation =
-				observationWithQueue(
-					unapprovedTrains = listOf(QueuedTrainObservation("Train #3", "A")),
-					approvedTrainCount = 2
-				)
-
-			runBlocking {
-				adapter(koogAgent, fallback, commandQueue = commandQueue, maxConcurrentTrains = 2)
-					.plan(observation)
-			}
-
-			assertThat(approveTrainPosts(commandQueue)).isEmpty()
-			coVerify(exactly = 0) { fallback.decide(any()) }
-		}
-
-		@Test
-		fun `does not force-approve when there are no queued trains`() {
-			val commandQueue = ActuatorCommandQueue()
-			val koogAgent = agentThatActedViaTools()
-			val fallback = mockk<Dispatcher>()
-			val observation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 0)
-
-			runBlocking { adapter(koogAgent, fallback, commandQueue = commandQueue).plan(observation) }
-
-			assertThat(approveTrainPosts(commandQueue)).isEmpty()
-		}
-
-		@Test
-		fun `does not force-approve on the timeout fallback path`() {
-			// The fallback dispatcher (RuleBasedDispatcher in production) already handles
-			// admission itself via its own returned decisions; the safety net must not also
-			// fire here, since fallback.decide() is a stand-in for a real Dispatcher whose
-			// own admission decisions this test does not model.
-			val koogAgent = mockk<KoogDispatchAgent>()
-			coEvery { koogAgent.decideAsync(any()) } coAnswers {
-				delay(500)
-				emptyList()
-			}
-			val fallback = mockk<Dispatcher>()
-			every { fallback.decide(any()) } returns emptyList()
-			val commandQueue = ActuatorCommandQueue()
-			val observation =
-				observationWithQueue(
-					unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A")),
-					approvedTrainCount = 0
-				)
-
-			runBlocking {
-				adapter(koogAgent, fallback, Duration.ofMillis(50), commandQueue = commandQueue).plan(observation)
-			}
-
-			assertThat(commandQueue.drain()).isEmpty()
-		}
+		// No ApproveTrain was force-posted — maybeForceAdmission is deleted (P3)
+		assertThat(commandQueue.drain()).isEmpty()
+		// LLM acted via tools → fallback was NOT invoked
+		coVerify(exactly = 0) { fallback.decide(any()) }
 	}
 }

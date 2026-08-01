@@ -15,8 +15,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 /**
  * Attribution tag for a [DispatchAction] emitted by [DispatchTickLoop] (SP2c.5, Issue #828).
  *
- * Distinguishes the originating decision-maker so that [TerminalFallbackGuard] can correctly
- * classify a tick as rule-based (acceptable) vs. terminal fallback (run FAILED) and
+ * Distinguishes the originating decision-maker so that the metrics and reporting layer can
+ * correctly classify each tick. [TerminalFallbackGuard] now counts [TIMEOUT_NOOP] ticks
+ * (SP2c.8, Issue #831) rather than watching for [RULE_FALLBACK] — [RunOutcome.Failed] is
+ * triggered by the LLM being *absent* (timeouts/exceptions), not by the fallback emitting.
  * [RunOutcome] is never marked FAILED for a determinism run that is deliberately rule-based
  * all the way through (the P10 gate).
  *
@@ -25,7 +27,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
  * | [LLM] | Action produced by the LLM emission strategy during a normal inference cycle. |
  * | [TIMEOUT_NOOP] | Budget deadline expired; the loop substituted [DispatchAction.NoOp] automatically. |
  * | [RULE_BASED] | A [RuleBasedEmissionStrategy] run — rule-based all the way, intentionally so. |
- * | [RULE_FALLBACK] | Terminal fallback fired **mid-LLM-run** — the LLM failed and rules took over. Sets [RunOutcome.Failed]. |
+ * | [RULE_FALLBACK] | Post-engagement rule-based action: [TerminalFallbackGuard] has already marked the run FAILED; the rule engine runs to bring the simulation to a terminating state. |
  * | [OPERATOR] | Human operator override (reserved for future interactive use). |
  *
  * **Why [RULE_BASED] ≠ [RULE_FALLBACK]:** conflating them would mark every rule-based
@@ -48,8 +50,12 @@ enum class ActionAuthor {
 	RULE_BASED,
 
 	/**
-	 * Terminal fallback engaged **mid-LLM-run**: the LLM failed and a rule-based strategy
-	 * took over. Sets [RunOutcome.Failed] via [TerminalFallbackGuard].
+	 * Post-engagement action produced by the fallback emission strategy after
+	 * [TerminalFallbackGuard] has engaged and marked the run [RunOutcome.Failed].
+	 *
+	 * The run is already failed; the rule engine runs only so the simulation reaches a
+	 * terminating state and artefacts are inspectable. This author is set by constructing a
+	 * [RuleBasedEmissionStrategy] with `overrideAuthor = RULE_FALLBACK` (SP2c.8, #831).
 	 */
 	RULE_FALLBACK,
 
