@@ -131,22 +131,25 @@ class DispatcherAgentModuleTest {
 	fun toolGroupRegistryAssemblesFullToolSetViaKoinSingleton() {
 		val registry: ToolGroupRegistry by inject(ToolGroupRegistry::class.java)
 
-		// Registry requires a perception port and a command queue to assemble tools. Since this
-		// test is at the singleton level (no context scope), we create a mock perception port
-		// and a real command queue just to verify the Koin-provided registry instance assembles
-		// the real SP1.6/SP1.7 tool set through them.
+		// Registry requires a perception port to assemble perception tools, and a SinkHolder to
+		// assemble the four-tool actuator surface (SP2c.6, Issue #829). Since this test is at the
+		// singleton level (no context scope), we create a mock perception port and a real
+		// SinkHolder just to verify the Koin-provided registry instance assembles the real tool
+		// sets through them.
 		val mockPerceptionPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
-		val commandQueue =
-			cz.vutbr.fit.interlockSim.dispatcher
-				.ActuatorCommandQueue()
+		val mockSensorPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort>()
+		val sinkHolder =
+			cz.vutbr.fit.interlockSim.dispatcher.agents
+				.SinkHolder()
 
-		val allTools = registry.assembleAllTools(mockPerceptionPort, commandQueue, emptySet())
+		val allTools = registry.assembleAllTools(emptySet(), sinkHolder)
 		val perceptionTools = registry.assemblePerceptionTools(mockPerceptionPort)
-		val actuatorTools = registry.assembleActuatorTools(commandQueue, emptySet())
+		val dispatchLoopTools = registry.assembleDispatchLoopTools(mockSensorPort)
 
-		// 9 perception + 2 high-level actuator (set_signal_aspect/set_switch_position removed) = 11 total
-		assertThat(allTools).hasSize(11)
+		// SP2c.6 (#829): the four-tool actuator surface is exactly approve_train/request_route/
+		// cancel_route/no_op — no longer bundled with perception tools.
+		assertThat(allTools).hasSize(4)
 		assertThat(perceptionTools).hasSize(9)
-		assertThat(actuatorTools).hasSize(2)
+		assertThat(dispatchLoopTools).hasSize(2)
 	}
 }

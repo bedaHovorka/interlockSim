@@ -328,7 +328,14 @@ class ActionValidator(
 		action: DispatchAction.RequestRoute,
 		trainInList: TrainView?
 	): ValidationVerdict.Rejected? {
-		if (trainInList != null && action.toEndpointName != trainInList.destinationInOutName) {
+		// Section-scoped requests (Issue #848 / #829) target an intermediate hop, not the train's
+		// final destination — RuleBasedEmissionStrategy's per-block-boundary ReservePath mapping is
+		// the production example. Only EndToEnd requests are checked against the declared
+		// destination.
+		if (action.scope == RouteScope.EndToEnd &&
+			trainInList != null &&
+			action.toEndpointName != trainInList.destinationInOutName
+		) {
 			return rejected(
 				RejectionCode.TARGET_NOT_TRAIN_DESTINATION,
 				"'${action.toEndpointName}' is not the declared destination of train '${action.trainId}' " +

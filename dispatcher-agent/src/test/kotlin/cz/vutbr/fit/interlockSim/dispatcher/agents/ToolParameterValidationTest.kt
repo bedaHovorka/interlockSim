@@ -12,9 +12,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isInstanceOf
-import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.BlockOccupancyTool
-import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ReleaseRouteTool
+import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.CancelRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SignalAspectTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainPositionTool
@@ -27,15 +27,17 @@ import org.junit.jupiter.api.Test
 
 /**
  * Verifies that arg-taking tools reject invalid arguments (missing / null / blank / unknown enum)
- * with [ToolResult.Error] **without reaching the port or posting to the queue** (#551 review
- * #3/#4/#6; SP1.7 actuator tools now post to the [ActuatorCommandQueue] instead of an actuator
- * port — Issue #774).
+ * with [ToolResult.Error] **without reaching the port or emitting to the sink** (#551 review
+ * #3/#4/#6; actuator tools emit via the [SinkHolder]/[EmittedActionSink] seam since SP2c.6,
+ * Issue #829).
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP2c.6 (#829) rewires actuator tools to
+ *   SinkHolder
  */
 class ToolParameterValidationTest {
 	private val perceptionPort = mockk<NetworkPerceptionPort>(relaxed = true)
-	private val commandQueue = ActuatorCommandQueue()
+	private val emitted = mutableListOf<DispatchAction>()
+	private val sinkHolder = SinkHolder(EmittedActionSink { emitted.add(it) })
 
 	@Test
 	fun `signal_aspect rejects missing null and blank semaphoreName without calling the port`() {
@@ -83,8 +85,8 @@ class ToolParameterValidationTest {
 	}
 
 	@Test
-	fun `request_route rejects any blank argument without posting to the queue`() {
-		val tool = RequestRouteTool(commandQueue, setOf("zA", "doA1"))
+	fun `request_route rejects any blank argument without emitting to the sink`() {
+		val tool = RequestRouteTool(sinkHolder, setOf("zA", "doA1"))
 		runBlocking {
 			assertThat(tool.execute(mapOf("trainName" to "", "fromEndpointName" to "zA", "toEndpointName" to "doA1")))
 				.isInstanceOf<ToolResult.Error>()
@@ -95,17 +97,17 @@ class ToolParameterValidationTest {
 			assertThat(tool.execute(mapOf("trainName" to "T1")))
 				.isInstanceOf<ToolResult.Error>()
 		}
-		assertThat(commandQueue.drain()).hasSize(0)
+		assertThat(emitted).hasSize(0)
 	}
 
 	@Test
-	fun `release_route rejects missing null and blank trainName without posting to the queue`() {
-		val tool = ReleaseRouteTool(commandQueue)
+	fun `cancel_route rejects missing null and blank trainId without emitting to the sink`() {
+		val tool = CancelRouteTool(sinkHolder)
 		runBlocking {
 			assertThat(tool.execute(emptyMap())).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("trainName" to null))).isInstanceOf<ToolResult.Error>()
-			assertThat(tool.execute(mapOf("trainName" to ""))).isInstanceOf<ToolResult.Error>()
+			assertThat(tool.execute(mapOf("trainId" to null))).isInstanceOf<ToolResult.Error>()
+			assertThat(tool.execute(mapOf("trainId" to ""))).isInstanceOf<ToolResult.Error>()
 		}
-		assertThat(commandQueue.drain()).hasSize(0)
+		assertThat(emitted).hasSize(0)
 	}
 }

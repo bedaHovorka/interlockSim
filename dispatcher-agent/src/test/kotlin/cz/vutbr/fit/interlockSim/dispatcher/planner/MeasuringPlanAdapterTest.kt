@@ -148,23 +148,6 @@ class MeasuringPlanAdapterTest {
 		}
 
 		@Test
-		fun `empty LLM result with actuator-tool side effect increments ollamaSuccessCount`() {
-			val commandQueue = ActuatorCommandQueue()
-			val agent = mockk<KoogDispatchAgent>()
-			coEvery { agent.decideAsync(any()) } coAnswers {
-				commandQueue.postAll(listOf(DispatchDecision.NoAction))
-				emptyList()
-			}
-			val fallback = mockk<Dispatcher>()
-			val adapter = measuring(agent, fallback, commandQueue = commandQueue)
-
-			runBlocking { adapter.plan(observation) }
-
-			assertThat(adapter.getMetricsSnapshot().ollamaSuccessCount).isEqualTo(1L)
-			assertThat(adapter.getMetricsSnapshot().fallbackCount).isZero()
-		}
-
-		@Test
 		fun `multiple successful LLM cycles accumulate correctly`() {
 			val agent = mockk<KoogDispatchAgent>()
 			coEvery { agent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)

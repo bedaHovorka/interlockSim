@@ -60,19 +60,22 @@ sealed interface DispatchAction {
 	}
 
 	/**
-	 * Request the interlocking to find and atomically reserve a free end-to-end path for a
-	 * named train.
+	 * Request the interlocking to find and atomically reserve a free path for a named train.
 	 *
 	 * @property trainId Identifier of the train that will use the reserved route.
 	 * @property fromEndpointName Name of the entry InOut or Signal (must be in
 	 *   [ActionValidator]'s `validEndpointNames`; must not be a block ID).
 	 * @property toEndpointName Name of the exit InOut or Signal (same constraints as
 	 *   [fromEndpointName]).
+	 * @property scope Whether [toEndpointName] is the train's final declared destination
+	 *   ([RouteScope.EndToEnd], the default) or an intermediate hop toward it
+	 *   ([RouteScope.Section]). See [RouteScope] for why this exists.
 	 */
 	data class RequestRoute(
 		val trainId: String,
 		val fromEndpointName: String,
-		val toEndpointName: String
+		val toEndpointName: String,
+		val scope: RouteScope = RouteScope.EndToEnd
 	) : DispatchAction {
 		override val kind: String = "request_route"
 	}
@@ -98,4 +101,43 @@ sealed interface DispatchAction {
 	data object NoOp : DispatchAction {
 		override val kind: String = "no_op"
 	}
+}
+
+/**
+ * Discriminates whether a [DispatchAction.RequestRoute]'s `toEndpointName` is the train's final
+ * declared destination or an intermediate hop toward it (Issue #848's traffic-simulation-expert
+ * ruling, implemented in Issue #829 — SP2c.6).
+ *
+ * ## Why this exists
+ *
+ * [ActionValidator] originally modeled every `RequestRoute` as targeting the train's declared
+ * destination ([TrainView.destinationInOutName][cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView.destinationInOutName]).
+ * That is correct for the LLM's `request_route` tool, but [RuleBasedEmissionStrategy] maps the
+ * rule-based dispatcher's **hop-level** `DispatchDecision.ReservePath` (one block-boundary
+ * separator at a time — see [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkInput]) onto
+ * the same verb. Validating every hop's target against the *final* destination rejected nearly
+ * every rule-based `RequestRoute` with `RejectionCode.TARGET_NOT_TRAIN_DESTINATION`, deadlocking
+ * the Goal 10 Stage A3 determinism gate (`trainsExited == 0`, confirmed 2026-08-01).
+ *
+ * A payload field (not a sub-payload / nested type) keeps the four-tool actuator surface (C1/C8)
+ * and the `request_route` tool schema the model sees completely unchanged — only production code
+ * that already knows it is emitting a hop (`RuleBasedEmissionStrategy`) sets [Section].
+ *
+ * @since Issue #829 (SP2c.6 — Goal 10); Issue #848 (traffic-simulation-expert ruling)
+ */
+enum class RouteScope {
+	/**
+	 * `toEndpointName` is an intermediate hop (a block-boundary separator or signal) toward the
+	 * train's destination, not the destination itself. [ActionValidator] does not check
+	 * [DispatchAction.RequestRoute.toEndpointName] against the train's declared destination for
+	 * this scope.
+	 */
+	Section,
+
+	/**
+	 * `toEndpointName` is the train's final declared destination. This is the default: every
+	 * existing caller (the LLM's `request_route` tool, [ActionCandidateEnumerator][cz.vutbr.fit.interlockSim.dispatcher.agents.ActionCandidateEnumerator])
+	 * already targets the destination, so this preserves prior behavior unchanged.
+	 */
+	EndToEnd
 }

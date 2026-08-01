@@ -351,13 +351,59 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("eligible inputs of DIFFERENT blocks each yield a from→to reservation (no cross-block dedup)")
+	@DisplayName("eligible inputs of DIFFERENT blocks with DIFFERENT targets each yield a reservation")
 	fun multipleBlocksEachYieldReservation() {
 		// Documents the frozen-observation + independent-evaluation contract: a
 		// reservation decision for one block does not suppress another block's
-		// decision. The shell builds one BlockInputObservation per block input, and
-		// checkAllInputs evaluates them all; pure decide() never deduplicates across
-		// blocks.
+		// decision, as long as the two blocks target different separators. The
+		// shell builds one BlockInputObservation per block input, and checkAllInputs
+		// evaluates them all.
+		val dispatcher = RuleBasedDispatcher()
+		val inputK1 =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k1",
+				towardSemaphoreName = "doB1",
+				toSeparatorName = "zB1",
+				ownerTrainId = "T1",
+				isApproachingThisInput = true
+			)
+		val inputK2 =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k2",
+				towardSemaphoreName = "doB2",
+				toSeparatorName = "zB2",
+				ownerTrainId = "T2",
+				isApproachingThisInput = true
+			)
+
+		val decisions = dispatcher.decide(observation(innerBlockInputs = listOf(inputK1, inputK2)))
+
+		assertThat(decisions).containsExactly(
+			DispatchDecision.ReservePath("T1", "doB1", "zB1"),
+			DispatchDecision.ReservePath("T2", "doB2", "zB2")
+		)
+	}
+
+	@Test
+	@DisplayName(
+		"two DIFFERENT trains whose next-hop targets the SAME separator: only the first yields a " +
+			"reservation this tick, the second defers"
+	)
+	fun sameTargetSeparatorDefersSecondTrainThisTick() {
+		// Goal 10 Stage A3 determinism gate (RuleBasedDispatcherDeterminismTest) found this
+		// exact shape non-deterministically firing a ConflictDetectedEvent on vyhybna.xml: two
+		// trains approaching a track merge (different blocks, e.g. doB1/doB2 converging on
+		// separator zB) both compute the SAME free next separator as their target in the SAME
+		// decide() call, since the shell resolves toSeparatorName once per input from a single
+		// frozen observation — neither input sees the other's not-yet-applied reservation.
+		// Emitting both ReservePaths lets one land as a genuine ActionValidator/registry
+		// conflict purely from this same-tick race, not from any real track contention.
+		// checkAllInputs now tracks separators already claimed earlier in this batch and defers
+		// (returns no decision for) any later input targeting an already-claimed separator; the
+		// deferred train is simply re-evaluated next tick, once the winner's reservation has
+		// updated the topology and the shell recomputes a (likely different) FREE separator.
 		val dispatcher = RuleBasedDispatcher()
 		val inputK1 =
 			input(
@@ -380,10 +426,7 @@ class RuleBasedDispatcherTest {
 
 		val decisions = dispatcher.decide(observation(innerBlockInputs = listOf(inputK1, inputK2)))
 
-		assertThat(decisions).containsExactly(
-			DispatchDecision.ReservePath("T1", "doB1", "zB"),
-			DispatchDecision.ReservePath("T2", "doB2", "zB")
-		)
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "doB1", "zB"))
 	}
 
 	@Test

@@ -30,7 +30,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  *
  * @since Issue #829 (SP2c.6 — Goal 10)
  */
-class SinkHolder(initial: EmittedActionSink = EmittedActionSink.NO_OP) {
+class SinkHolder(
+	initial: EmittedActionSink = EmittedActionSink.NO_OP
+) {
 	@Volatile
 	var current: EmittedActionSink = initial
 }

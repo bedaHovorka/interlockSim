@@ -20,16 +20,18 @@ import org.junit.jupiter.api.Test
 
 /**
  * Unit tests for tool registry and tool assembly (SP1.6, Issue #551; updated in SP1.7, Issue #774
- * for actuator tools taking an [ActuatorCommandQueue] instead of an actuator port).
+ * for actuator tools taking an [ActuatorCommandQueue] instead of an actuator port; updated again
+ * in SP2c.6, Issue #829 for the four-tool [SinkHolder]-based actuator surface).
  *
  * Tests that:
  * - ToolGroupRegistry correctly assembles perception tools (9 tools)
- * - ToolGroupRegistry correctly assembles actuator tools (2 tools — low-level `set_signal_aspect`/
- *   `set_switch_position` were removed; the agent only acts via `request_route`/`release_route`)
- * - ToolGroupRegistry correctly assembles all tools together (11 tools)
+ * - ToolGroupRegistry correctly assembles the four-tool actuator surface (`approve_train`,
+ *   `request_route`, `cancel_route`, `no_op` — SP2c.6)
+ * - ToolGroupRegistry correctly assembles dispatch-loop sensor tools (2 tools)
  * - Tools have proper names, descriptions, and parameters
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP2a.1 (#552) adds train_perception
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP2a.1 (#552) adds train_perception;
+ *   SP2c.6 (#829) reduces the actuator surface to four tools
  */
 class ToolGroupRegistryTest {
 	private val mockPerceptionPort = mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
@@ -74,19 +76,6 @@ class ToolGroupRegistryTest {
 				"train_timetable",
 				"all_train_timetables",
 				"train_perception"
-			)
-		)
-	}
-
-	@Test
-	fun `actuator tools have correct names`() {
-		val tools = registry.assembleActuatorTools(commandQueue, emptySet())
-		val toolNames = tools.map { it.name }
-
-		assertThat(toolNames).isEqualTo(
-			listOf(
-				"request_route",
-				"release_route"
 			)
 		)
 	}

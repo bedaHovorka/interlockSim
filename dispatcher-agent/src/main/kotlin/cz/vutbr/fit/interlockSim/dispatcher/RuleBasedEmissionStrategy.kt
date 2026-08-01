@@ -63,7 +63,7 @@ import java.util.concurrent.atomic.AtomicLong
  * | [DispatchDecision] | [DispatchAction] |
  * |---|---|
  * | [DispatchDecision.ApproveTrain] | [DispatchAction.ApproveTrain] |
- * | [DispatchDecision.ReservePath] | [DispatchAction.RequestRoute] (same `from`/`to` semantics) |
+ * | [DispatchDecision.ReservePath] | [DispatchAction.RequestRoute] (same `from`/`to` semantics; `scope = RouteScope.Section` — see Issue #848 / #829) |
  * | [DispatchDecision.NoAction] | filtered out (empty list = "nothing to do") |
  * | Any other subtype | filtered out |
  *
@@ -201,7 +201,11 @@ class RuleBasedEmissionStrategy(
 						DispatchAction.RequestRoute(
 							trainId = decision.trainId,
 							fromEndpointName = decision.fromSemaphoreName,
-							toEndpointName = decision.toSeparatorName
+							toEndpointName = decision.toSeparatorName,
+							// Issue #848 / #829: ReservePath is a hop-level (per-block-boundary)
+							// decision, not a request for the train's final destination — see
+							// RouteScope's KDoc for why ActionValidator needs this discriminant.
+							scope = RouteScope.Section
 						),
 					author = ActionAuthor.RULE_BASED
 				)

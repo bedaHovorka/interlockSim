@@ -19,6 +19,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isSameAs
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ApproveTrainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.BlockInputsTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.QueuedTrainsTool
@@ -37,15 +38,23 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
 /**
- * Unit tests for the three dispatch-loop tools introduced by SP4.1 (Issue #563):
+ * Unit tests for the dispatch-loop sensor tools introduced by SP4.1 (Issue #563) and the
+ * [ApproveTrainTool] actuator tool (rewired to the [SinkHolder] seam in SP2c.6, Issue #829):
  * - [QueuedTrainsTool] — sensor, reads [DispatchLoopSensorPort.getQueuedTrains]
  * - [BlockInputsTool] — sensor, reads inner + outer block inputs
- * - [ApproveTrainTool] — actuator, posts [DispatchDecision.ApproveTrain] to queue
+ * - [ApproveTrainTool] — actuator, emits [DispatchAction.ApproveTrain] to the active sink
  *
- * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
+ * The concurrent-train cap check that used to live in [ApproveTrainTool] was removed in SP2c.6;
+ * it is now enforced at apply time on the sim thread (SP2c.18) — see
+ * `CapEnforcementAtApplyTimeSp2c18Test`.
+ *
+ * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent); SP2c.6 (#829) rewires ApproveTrainTool
+ *   to [SinkHolder] and drops the cap check
  */
 class DispatchLoopToolsTest {
 	private val commandQueue = ActuatorCommandQueue()
+	private val emitted = mutableListOf<DispatchAction>()
+	private val sinkHolder = SinkHolder(EmittedActionSink { emitted.add(it) })
 
 	// ── QueuedTrainsTool ──────────────────────────────────────────────────────
 
@@ -153,87 +162,41 @@ class DispatchLoopToolsTest {
 	// ── ApproveTrainTool ──────────────────────────────────────────────────────
 
 	@Test
-	fun `approve_train posts ApproveTrain decision and returns queued-success`() {
-		val result = runBlocking { approveTool().execute(mapOf("trainId" to "Train #1")) }
+	fun `approve_train emits ApproveTrain action and returns emitted-success`() {
+		val result = runBlocking { ApproveTrainTool(sinkHolder).execute(mapOf("trainId" to "Train #1")) }
 
 		assertThat(result).isInstanceOf<ToolResult.Success>()
 		val msg = (result as ToolResult.Success).data as String
 		assertThat(msg).contains("Train #1")
 
-		val decisions = commandQueue.drain()
-		assertThat(decisions).hasSize(1)
-		assertThat(decisions.single()).isInstanceOf<DispatchDecision.ApproveTrain>()
-		assertThat((decisions.single() as DispatchDecision.ApproveTrain).trainId).isEqualTo("Train #1")
+		assertThat(emitted).hasSize(1)
+		assertThat(emitted.single()).isInstanceOf<DispatchAction.ApproveTrain>()
+		assertThat((emitted.single() as DispatchAction.ApproveTrain).trainId).isEqualTo("Train #1")
 	}
 
 	@Test
-	fun `approve_train missing trainId returns ToolResult Error without posting`() {
-		val result = runBlocking { approveTool().execute(emptyMap()) }
+	fun `approve_train missing trainId returns ToolResult Error without emitting`() {
+		val result = runBlocking { ApproveTrainTool(sinkHolder).execute(emptyMap()) }
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
-		assertThat(commandQueue.drain()).hasSize(0)
+		assertThat(emitted).hasSize(0)
 	}
 
 	@Test
-	fun `approve_train blank trainId returns ToolResult Error without posting`() {
-		val result = runBlocking { approveTool().execute(mapOf("trainId" to "")) }
+	fun `approve_train blank trainId returns ToolResult Error without emitting`() {
+		val result = runBlocking { ApproveTrainTool(sinkHolder).execute(mapOf("trainId" to "")) }
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
-		assertThat(commandQueue.drain()).hasSize(0)
-	}
-
-	@Test
-	fun `approve_train reports backpressure when queue is full`() {
-		val fullQueue = ActuatorCommandQueue(capacity = 1)
-		fullQueue.postAll(listOf(DispatchDecision.ReleaseRoute("occupier")))
-
-		val result = runBlocking { approveTool(fullQueue).execute(mapOf("trainId" to "T1")) }
-
-		assertThat(result).isInstanceOf<ToolResult.Error>()
-		// The occupier decision is still the only one in the queue.
-		assertThat(fullQueue.drain()).hasSize(1)
+		assertThat(emitted).hasSize(0)
 	}
 
 	@Test
 	fun `approve_train tool has correct name and one trainId parameter`() {
-		val tool = approveTool()
+		val tool = ApproveTrainTool(sinkHolder)
 
 		assertThat(tool.name).isEqualTo("approve_train")
 		assertThat(tool.parameters).hasSize(1)
 		assertThat(tool.parameters[0].name).isEqualTo("trainId")
-	}
-
-	@Test
-	fun `approve_train rejects when active count meets the cap`() {
-		val result = runBlocking { approveTool(activeCount = 2).execute(mapOf("trainId" to "T1")) }
-
-		assertThat(result).isInstanceOf<ToolResult.Error>()
-		assertThat(commandQueue.drain()).hasSize(0)
-	}
-
-	@Test
-	fun `approve_train allows when active count is below the cap`() {
-		val result = runBlocking { approveTool(activeCount = 1).execute(mapOf("trainId" to "T1")) }
-
-		assertThat(result).isInstanceOf<ToolResult.Success>()
-		assertThat(commandQueue.drain()).hasSize(1)
-	}
-
-	@Test
-	fun `approve_train description states the concrete concurrency cap`() {
-		assertThat(approveTool(maxConcurrentTrains = 2).description).contains("Rejected if 2 trains are already active")
-		assertThat(approveTool(maxConcurrentTrains = 3).description).contains("Rejected if 3 trains are already active")
-	}
-
-	@Test
-	fun `approve_train respects a custom maxConcurrentTrains override`() {
-		val result =
-			runBlocking {
-				approveTool(activeCount = 1, maxConcurrentTrains = 1).execute(mapOf("trainId" to "T1"))
-			}
-
-		assertThat(result).isInstanceOf<ToolResult.Error>()
-		assertThat(commandQueue.drain()).hasSize(0)
 	}
 
 	// ── DefaultDispatchLoopActuatorPort direct tests ─────────────────────────
@@ -281,12 +244,6 @@ class DispatchLoopToolsTest {
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
-
-	private fun approveTool(
-		queue: ActuatorCommandQueue = commandQueue,
-		activeCount: Int = 0,
-		maxConcurrentTrains: Int = 2
-	): ApproveTrainTool = ApproveTrainTool(DefaultDispatchLoopActuatorPort(queue), { activeCount }, maxConcurrentTrains)
 
 	private fun makeBlockInput(
 		blockId: String,

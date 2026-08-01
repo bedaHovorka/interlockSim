@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.hasSize
+import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
@@ -34,16 +35,20 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
 /**
- * Unit tests for [KoogAgentFactory] (Goal 10 dispatcher-cannot-approve-trains fix).
+ * Unit tests for [KoogAgentFactory] (Goal 10 dispatcher-cannot-approve-trains fix; tool surface
+ * updated for SP2c.6, Issue #829).
  *
- * Regression coverage for the root cause where [KoogAgentFactory.createAgent] only assembled
- * [ToolGroupRegistry.assembleAllTools] (perception + generic actuator tools) and never included
- * [ToolGroupRegistry.assembleDispatchLoopTools] (`approve_train`/`queued_trains`/`block_inputs`)
- * — the LLM dispatcher therefore had no tool capable of admitting a queued train.
+ * Regression coverage for the root cause where [KoogAgentFactory.createAgent] once assembled
+ * perception + generic actuator tools but never included `approve_train` — the LLM dispatcher
+ * therefore had no tool capable of admitting a queued train. SP2c.6 (#829) reduces the surface to
+ * exactly the four-tool [ToolGroupRegistry.assembleAllTools] actuator surface (`approve_train`,
+ * `request_route`, `cancel_route`, `no_op`) behind a [SinkHolder]; perception tools and the
+ * dispatch-loop sensor tools (`queued_trains`/`block_inputs`) are no longer bundled into the
+ * agent's tool surface.
  *
- * @since Goal 10 dispatcher tool-registration fix (2026-07-26)
+ * @since Goal 10 dispatcher tool-registration fix (2026-07-26); SP2c.6 (#829) narrows to 4 tools
  */
-@DisplayName("KoogAgentFactory assembles dispatch-loop tools alongside the general-purpose tools")
+@DisplayName("KoogAgentFactory assembles the SP2c.6 four-tool actuator surface")
 class KoogAgentFactoryTest {
 	private val xmlContextFactory = XMLContextFactory()
 	private val processFactory = DefaultSimulationProcessFactory()
@@ -85,7 +90,7 @@ class KoogAgentFactoryTest {
 	}
 
 	@Test
-	@DisplayName("createAgent assembles 14 distinct tools including approve_train, queued_trains, block_inputs")
+	@DisplayName("createAgent assembles exactly the 4-tool actuator surface including approve_train (SP2c6)")
 	fun createAgentIncludesDispatchLoopTools() {
 		loadShuntingLoopContext().use { context ->
 			val agentService = CapturingAgentService()
@@ -104,11 +109,8 @@ class KoogAgentFactoryTest {
 			val tools = requireNotNull(agentService.capturedTools)
 			val toolNames = tools.map { it.name }
 
-			assertThat(toolNames).hasSize(14)
-			assertThat(toolNames.toSet()).hasSize(14) // no duplicate names
-			assertThat(toolNames).contains("approve_train")
-			assertThat(toolNames).contains("queued_trains")
-			assertThat(toolNames).contains("block_inputs")
+			assertThat(toolNames).hasSize(4)
+			assertThat(toolNames.toSet()).isEqualTo(setOf("approve_train", "request_route", "cancel_route", "no_op"))
 		}
 	}
 
@@ -185,7 +187,7 @@ class KoogAgentFactoryTest {
 
 	@Test
 	@DisplayName(
-		"createAgent's system prompt states the only actuator tools are request_route/release_route/approve_train"
+		"createAgent's system prompt states the only actuator tools are approve_train/request_route/cancel_route/no_op (SP2c6)"
 	)
 	fun createAgentSystemPromptListsActuatorToolInventory() {
 		loadShuntingLoopContext().use { context ->
@@ -204,7 +206,7 @@ class KoogAgentFactoryTest {
 
 			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
 			assertThat(systemPrompt).contains(
-				"The only actuator tools available are request_route, release_route, and approve_train"
+				"The only actuator tools available are approve_train, request_route, cancel_route, and no_op"
 			)
 			assertThat(systemPrompt).contains("there is no tool to set a signal aspect or switch position directly")
 		}

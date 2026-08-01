@@ -143,7 +143,12 @@ class RuleBasedEmissionStrategyTest {
 			val emitted = runBlocking { strategy.emit("", observation) }
 
 			assertThat(emitted.map { it.action }).containsExactly(
-				DispatchAction.RequestRoute(trainId = "T-2", fromEndpointName = "doA1", toEndpointName = "B")
+				DispatchAction.RequestRoute(
+					trainId = "T-2",
+					fromEndpointName = "doA1",
+					toEndpointName = "B",
+					scope = RouteScope.Section
+				)
 			)
 		}
 
