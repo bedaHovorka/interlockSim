@@ -230,7 +230,7 @@ class DelegatingSimulationControllerTest {
 
 	@Nested
 	@DisplayName("Resume forwarding (Issue #872)")
-	inner class ResumeFordwarding {
+	inner class ResumeForwarding {
 		@Test
 		@DisplayName("requestResume forwards to the delegate")
 		fun requestResumeForwards() {
