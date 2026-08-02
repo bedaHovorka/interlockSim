@@ -208,8 +208,11 @@ class TickBudgetTest {
 			}
 
 			override suspend fun awaitIfPaused() = Unit
+
 			override fun pollStepEvent(): Boolean = false
+
 			override fun pollStepTime(): Double? = null
+
 			override fun throttle(simDeltaSeconds: Double) = Unit
 		}
 

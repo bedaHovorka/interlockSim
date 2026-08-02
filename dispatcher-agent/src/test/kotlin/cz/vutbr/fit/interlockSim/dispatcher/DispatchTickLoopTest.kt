@@ -432,6 +432,41 @@ class DispatchTickLoopTest {
 			assertThat(record.actions[0].author).isEqualTo(ActionAuthor.TIMEOUT_NOOP)
 		}
 
+		/**
+		 * Exercises issue #833's F2 acceptance criterion literally: the 3 s hard deadline
+		 * ([DeadlineTickBudget]'s documented default for LLM strategies) against a fake emission
+		 * that sleeps 5 s — i.e. the deadline is exceeded, not merely delayed past a tiny test
+		 * timeout as in [deadlineBudgetTimesOut] above. Runs for ~3 real seconds.
+		 */
+		@Test
+		@DisplayName("F2: a 3 s hard deadline against a 5 s emission yields exactly one NoOp authored TIMEOUT_NOOP")
+		fun threeSecondDeadlineAgainstFiveSecondEmissionYieldsSingleTimeoutNoOp() {
+			val slowEmission =
+				EmissionStrategy { _, _ ->
+					delay(5_000L)
+					listOf(action(DispatchAction.ApproveTrain("T-1")))
+				}
+			val ring = TickRingBuffer()
+			val loop =
+				DispatchTickLoop(
+					observations = { observation() },
+					annotator = annotator,
+					renderer = ObservationRenderer { "" },
+					emission = slowEmission,
+					validator = validator,
+					queue = ActuatorCommandQueue(),
+					ring = ring,
+					budget = DeadlineTickBudget(timeoutMillis = 3_000L),
+					controller = RecordingController()
+				)
+
+			val record = runBlocking { loop.runTick() }!!
+
+			assertThat(record.actions).hasSize(1)
+			assertThat(record.actions[0].action).isEqualTo(DispatchAction.NoOp)
+			assertThat(record.actions[0].author).isEqualTo(ActionAuthor.TIMEOUT_NOOP)
+		}
+
 		@Test
 		@DisplayName("NoTimeoutBudget lets a slow strategy finish")
 		fun noTimeoutBudgetNeverCancels() {

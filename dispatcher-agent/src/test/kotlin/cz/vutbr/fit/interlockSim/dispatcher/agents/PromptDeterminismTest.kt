@@ -116,11 +116,17 @@ class PromptDeterminismTest {
 
 	private class NoOpController : cz.vutbr.fit.interlockSim.context.SimulationController {
 		override suspend fun awaitIfPaused() = Unit
+
 		override fun throttle(simDeltaSeconds: Double) = Unit
+
 		override fun isPaused(): Boolean = false
+
 		override fun pollStepEvent(): Boolean = false
+
 		override fun pollStepTime(): Double? = null
+
 		override fun requestPause() = Unit
+
 		override fun requestResume() = Unit
 	}
 }
