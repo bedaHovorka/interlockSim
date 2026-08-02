@@ -234,11 +234,12 @@ class ActionAttributionTest {
 		@Test
 		@DisplayName("reason defaults to empty string for backward compat")
 		fun reasonDefaultsToEmpty() {
-			val action = AttributedAction(
-				commandId = CommandId(1L),
-				tick = 1L,
-				action = DispatchAction.NoOp
-			)
+			val action =
+				AttributedAction(
+					commandId = CommandId(1L),
+					tick = 1L,
+					action = DispatchAction.NoOp
+				)
 			assertThat(action.reason).isEqualTo("")
 		}
 
