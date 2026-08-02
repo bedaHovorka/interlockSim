@@ -180,10 +180,11 @@ class TerminalFallbackGuardTest {
 	fun onAbandonedFiresOnce() {
 		var callbackCount = 0
 		var receivedReason: FailureReason? = null
-		val guard = TerminalFallbackGuard(threshold = 5) { reason ->
-			callbackCount++
-			receivedReason = reason
-		}
+		val guard =
+			TerminalFallbackGuard(threshold = 5) { reason ->
+				callbackCount++
+				receivedReason = reason
+			}
 		repeat(5) { guard.observe(record(ActionAuthor.TIMEOUT_NOOP)) }
 		assertThat(callbackCount).isEqualTo(1)
 		assertThat(receivedReason).isEqualTo(FailureReason.LLM_ABANDONED)

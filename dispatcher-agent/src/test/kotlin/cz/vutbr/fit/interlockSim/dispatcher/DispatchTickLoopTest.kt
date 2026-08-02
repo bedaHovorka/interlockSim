@@ -533,8 +533,11 @@ class DispatchTickLoopTest {
 			val obs = (1..5).map { i -> observation(tick = i.toLong(), simTime = i * 10.0) }
 			val emissionScript =
 				listOf(
-					null, null, null, null,          // ticks 1–4: TIMEOUT_NOOP (counter 1→4)
-					listOf(action(DispatchAction.NoOp, ActionAuthor.LLM))  // tick 5: LLM resets counter
+					null,
+					null,
+					null,
+					null, // ticks 1–4: TIMEOUT_NOOP (counter 1→4)
+					listOf(action(DispatchAction.NoOp, ActionAuthor.LLM)) // tick 5: LLM resets counter
 				)
 			val h = harness(obs, emissionScript)
 
@@ -552,8 +555,8 @@ class DispatchTickLoopTest {
 					observationScript = listOf(observation(tick = 1L), observation(tick = 2L, simTime = 20.0)),
 					emissionScript =
 						listOf(
-							null,  // tick 1: TIMEOUT_NOOP → guard engages (threshold=1)
-							listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_BASED))  // tick 2: clean tick
+							null, // tick 1: TIMEOUT_NOOP → guard engages (threshold=1)
+							listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_BASED)) // tick 2: clean tick
 						),
 					guard = guard
 				)
@@ -631,8 +634,8 @@ class DispatchTickLoopTest {
 					observationScript = listOf(observation(tick = 1L), observation(tick = 2L, simTime = 20.0)),
 					emissionScript =
 						listOf(
-							null,  // tick 1: TIMEOUT_NOOP → guard engages (threshold=1)
-							listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_BASED))  // tick 2: unused
+							null, // tick 1: TIMEOUT_NOOP → guard engages (threshold=1)
+							listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_BASED)) // tick 2: unused
 						),
 					guard = guard,
 					fallbackEmission = fallbackEmission
@@ -1215,11 +1218,12 @@ class DispatchTickLoopTest {
 		@Test
 		@DisplayName("the externally supplied guard and the loop report the same outcome")
 		fun outcomeIsDelegatedToTheGuard() {
-			val h =
-				harness(
-					listOf(observation()),
-					listOf(listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_FALLBACK)))
-				)
+			// SP2c.8 (#831): the guard now engages on a TIMEOUT_NOOP threshold, not on any
+			// particular action author, so a null emission (⇒ TIMEOUT_NOOP) with threshold=1
+			// is what actually drives engagement here (a RULE_FALLBACK action alone no longer
+			// fails the run — see [RunOutcome] "TIMEOUT_NOOP threshold" tests above).
+			val guard = TerminalFallbackGuard(threshold = 1)
+			val h = harness(listOf(observation()), listOf(null), guard = guard)
 
 			runBlocking { h.loop.runTick() }
 

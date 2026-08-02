@@ -28,8 +28,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.ReservationView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Unconditional fixed-tick perceive → decide → act control loop for the Goal 10 dispatcher
