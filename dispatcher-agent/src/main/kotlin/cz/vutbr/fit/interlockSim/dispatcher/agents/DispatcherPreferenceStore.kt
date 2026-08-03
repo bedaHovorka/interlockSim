@@ -99,7 +99,8 @@ class DispatcherPreferenceStore {
 
 	/**
 	 * `true` when no [ActionAuthor.RULE_FALLBACK] or [ActionAuthor.SAFETY_NET] actions have
-	 * been recorded for this run; `false` as soon as any such action is observed.
+	 * been recorded for this run; latched to `false` on the first such action and never
+	 * restored (records are append-only, so a violation cannot be un-observed).
 	 *
 	 * A `false` value means the C7 constraint was violated: the deterministic fallback or
 	 * forced-admission safety net stepped in, which should not happen in an autonomous LLM
@@ -107,14 +108,14 @@ class DispatcherPreferenceStore {
 	 * and a one-time WARN with the literal token `C7_VIOLATION` was already emitted at the
 	 * first violation (SP2c.20, Issue #843).
 	 *
+	 * O(1) read — latched by [observe] on the first violating tick, it does not rescan
+	 * records on every access (unlike the previous computed property, which was O(n) per
+	 * call and O(n²) per run).
+	 *
 	 * @since Issue #843 (SP2c.20 — Goal 10 action attribution + C7 violation gate)
 	 */
-	val c7Clean: Boolean
-		get() {
-			val counts = getAuthorCounts()
-			return (counts[ActionAuthor.RULE_FALLBACK] ?: 0L) == 0L &&
-				(counts[ActionAuthor.SAFETY_NET] ?: 0L) == 0L
-		}
+	var c7Clean: Boolean = true
+		private set
 
 	/**
 	 * Appends every [AttributedAction] in [record] to the internal attribution log.
@@ -140,14 +141,20 @@ class DispatcherPreferenceStore {
 				)
 			)
 		}
-		// C7 gate (SP2c.20): emit a one-time WARN on the first tick that introduces a
-		// RULE_FALLBACK or SAFETY_NET action.  Flood prevention: fires at most once per run.
+		// C7 gate (SP2c.20): latch c7Clean false on the first tick that introduces a
+		// RULE_FALLBACK or SAFETY_NET action, and emit a one-time WARN.  Flood prevention:
+		// the WARN fires at most once per run.
+		val violatingActions =
+			record.actions.filter {
+				it.author == ActionAuthor.RULE_FALLBACK || it.author == ActionAuthor.SAFETY_NET
+			}
+		if (violatingActions.isNotEmpty()) {
+			c7Clean = false
+		}
 		if (!c7ViolationLogged && !c7Clean) {
 			c7ViolationLogged = true
 			val violatingAuthors =
-				record.actions
-					.filter { it.author == ActionAuthor.RULE_FALLBACK || it.author == ActionAuthor.SAFETY_NET }
-					.joinToString(", ") { "${it.author.name}:${it.action.kind}" }
+				violatingActions.joinToString(", ") { "${it.author.name}:${it.action.kind}" }
 			logger.warn {
 				"C7_VIOLATION: deterministic component authored dispatching action(s) on tick ${record.tick} — $violatingAuthors"
 			}

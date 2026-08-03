@@ -83,6 +83,13 @@ enum class ApplyFailureCode {
 	 * Distinct from [CAP_EXCEEDED_APPLY], which fires when the capacity ceiling is hit before
 	 * the callback is invoked.
 	 *
+	 * **Not currently emitted in production** — `applyApproveTrain` only ever refuses with
+	 * [CAP_EXCEEDED_APPLY]; surfacing a richer refusal reason here requires a wider
+	 * `onApproveTrain` callback-signature change (the callback is `(String) -> Unit`, kept
+	 * that way for backward compatibility — see the [DispatchDecisionApplier] constructor
+	 * KDoc). Documented deferred follow-up to SP2c.20 (#843); the [ActionOutcomeAggregator]
+	 * pre-populates it with a zero count so it stays present in summaries.
+	 *
 	 * @since Issue #843 (SP2c.20)
 	 */
 	APPROVE_REJECTED,

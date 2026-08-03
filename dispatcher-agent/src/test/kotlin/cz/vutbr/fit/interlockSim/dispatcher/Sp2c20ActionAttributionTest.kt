@@ -101,10 +101,10 @@ class Sp2c20ActionAttributionTest {
 		outcomes = emptyList()
 	)
 
-	// ── C7 gate: c7Clean computed property ──────────────────────────────────
+	// ── C7 gate: c7Clean latched flag ────────────────────────────────────────
 
 	@Nested
-	@DisplayName("c7Clean computed property (SP2c.20)")
+	@DisplayName("c7Clean latched flag (SP2c.20)")
 	inner class C7Clean {
 		@Test
 		@DisplayName("c7Clean is true when no actions have been observed")

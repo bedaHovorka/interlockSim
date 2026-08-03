@@ -397,22 +397,7 @@ class DispatchDecisionApplier(
 					}
 					// SP2c.20 (#843): notify the action outcome sink with author attribution.
 					// No logging here — this runs on the sim thread and log calls inject latency.
-					if (actionOutcomeSink != null && decision !is DispatchDecision.NoAction) {
-						val authored =
-							AuthoredAction(
-								author = correlation?.author ?: ActionAuthor.LLM,
-								reason = correlation?.reason ?: "",
-								decisionKind = decision::class.simpleName ?: "Unknown",
-								tickIndex = correlation?.tickIndex ?: -1L
-							)
-						// applyFailure is now derived uniformly by applyDecision — SP2c.20 follow-up
-						// (Issue #843 AC #10): previously only ApproveTrain's CAP_EXCEEDED_APPLY was
-						// special-cased here; RequestRoute's AllPathsBlocked/Conflict/NoRouteExists
-						// are now correctly reported too, via ApplyResult.applyFailure.
-						val phase =
-							if (result.applyFailure != null) ActionPhase.APPLIED_THEN_FAILED else ActionPhase.APPLIED
-						actionOutcomeSink.onActionOutcome(ActionOutcome(phase, null, result.applyFailure, authored))
-					}
+					reportActionOutcome(decision, correlation, result.applyFailure)
 				} catch (e: IllegalArgumentException) {
 					logger.warn(e) {
 						"onControlStep: dropping decision ${decision::class.simpleName} — invalid " +
@@ -433,21 +418,41 @@ class DispatchDecisionApplier(
 					}
 					// SP2c.20 (#843): notify the action outcome sink about the drop.
 					// No logging here — this runs on the sim thread.
-					if (actionOutcomeSink != null) {
-						val authored =
-							AuthoredAction(
-								author = correlation?.author ?: ActionAuthor.LLM,
-								reason = correlation?.reason ?: "",
-								decisionKind = decision::class.simpleName ?: "Unknown",
-								tickIndex = correlation?.tickIndex ?: -1L
-							)
-						actionOutcomeSink.onActionOutcome(
-							ActionOutcome(ActionPhase.APPLIED_THEN_FAILED, null, ApplyFailureCode.DROPPED_INVALID, authored)
-						)
-					}
+					reportActionOutcome(decision, correlation, ApplyFailureCode.DROPPED_INVALID)
 				}
 			}
 		}
+	}
+
+	/**
+	 * SP2c.20 (#843): publishes the [ActionOutcome] for one applied/failed decision to
+	 * [actionOutcomeSink]. No-logging — runs on the sim thread; a log call here would
+	 * inject latency into the physics loop (see [ActionOutcomeSink] contract).
+	 *
+	 * No-op when [actionOutcomeSink] is null or [decision] is [DispatchDecision.NoAction]
+	 * — NoAction carries no author attribution. The [applyFailure] argument drives the
+	 * phase: `null` → [ActionPhase.APPLIED]; non-null → [ActionPhase.APPLIED_THEN_FAILED]
+	 * (with that code). The catch path passes [ApplyFailureCode.DROPPED_INVALID].
+	 *
+	 * Extracted from [onControlStep] to keep that method under the Sonar S3776
+	 * cognitive-complexity threshold (Issue #843 review).
+	 */
+	private fun reportActionOutcome(
+		decision: DispatchDecision,
+		correlation: CommandCorrelationMap.CommandAndTick?,
+		applyFailure: ApplyFailureCode?
+	) {
+		if (actionOutcomeSink == null || decision is DispatchDecision.NoAction) return
+		val authored =
+			AuthoredAction(
+				author = correlation?.author ?: ActionAuthor.LLM,
+				reason = correlation?.reason ?: "",
+				decisionKind = decision::class.simpleName ?: "Unknown",
+				tickIndex = correlation?.tickIndex ?: -1L
+			)
+		val phase =
+			if (applyFailure != null) ActionPhase.APPLIED_THEN_FAILED else ActionPhase.APPLIED
+		actionOutcomeSink.onActionOutcome(ActionOutcome(phase, null, applyFailure, authored))
 	}
 
 	/**
@@ -580,7 +585,7 @@ class DispatchDecisionApplier(
 			val liveCount = provider()
 			if (liveCount >= maxConcurrentTrains) {
 				logger.debug {
-					"ApproveTrain CAP_EXCEEDED at apply time: trainId=${decision.trainId} " +
+					"ApproveTrain CAP_EXCEEDED_APPLY at apply time: trainId=${decision.trainId} " +
 						"live=$liveCount max=$maxConcurrentTrains — admission refused"
 				}
 				if (correlation != null) {

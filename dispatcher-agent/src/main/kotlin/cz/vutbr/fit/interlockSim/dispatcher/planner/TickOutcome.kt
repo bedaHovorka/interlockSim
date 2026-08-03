@@ -61,7 +61,18 @@ enum class TickOutcome {
 	 */
 	TIMEOUT_NOOP,
 
-	/** Non-cancellation throwable from the LLM path (network error, invalid tool call, etc.). */
+	/**
+	 * Non-cancellation throwable from the LLM path (network error, invalid tool call, etc.).
+	 *
+	 * **Not currently emitted by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]**
+	 * — that adapter maps its generic-exception catch block to [RULE_FALLBACK] (the fallback
+	 * dispatcher's decisions are actually posted, so they must be attributed as a fallback,
+	 * not a no-op). This outcome is reserved for future producers and is reachable today only
+	 * via the legacy `FallbackReason.toTickOutcome` projection. Its [toActionAuthor] mapping to
+	 * [ActionAuthor.TIMEOUT_NOOP] is correct for attribution because, like [TIMEOUT_NOOP], it is
+	 * a no-dispatching-action degraded outcome — but no live producer pairs it with dispatching
+	 * actions, so the mapping is never exercised against a real tick (Issue #843 review).
+	 */
 	LLM_EXCEPTION,
 
 	/** Terminal fallback engaged; the LLM arm is retired for the rest of the run. */
