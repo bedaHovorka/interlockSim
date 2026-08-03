@@ -117,7 +117,7 @@ class TerminalFallbackGuard(
 	private var _engaged: Boolean = false
 
 	@Volatile
-	private var _reason: FailureReason? = null
+	private var engagedReason: FailureReason? = null
 
 	/**
 	 * Whether the guard has engaged (any of the three triggers has fired).
@@ -133,7 +133,7 @@ class TerminalFallbackGuard(
 	 * [Running] otherwise. Never reverts after [engaged] becomes `true`.
 	 */
 	val currentOutcome: RunOutcome
-		get() = if (_engaged) Failed(_reason ?: FailureReason.LLM_ABANDONED) else Running
+		get() = if (_engaged) Failed(engagedReason ?: FailureReason.LLM_ABANDONED) else Running
 
 	/**
 	 * Processes a completed [TickRecord].
@@ -201,7 +201,7 @@ class TerminalFallbackGuard(
 	private fun engage(reason: FailureReason) {
 		// Set the reason before publishing _engaged so currentOutcome observers never see
 		// _engaged == true with a null reason (visibility piggybacks on the volatile write).
-		_reason = reason
+		engagedReason = reason
 		_engaged = true
 		onAbandoned(reason)
 	}

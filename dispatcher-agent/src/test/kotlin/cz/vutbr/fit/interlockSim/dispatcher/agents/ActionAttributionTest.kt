@@ -11,7 +11,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNotEqualTo
+import assertk.assertions.isTrue
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
@@ -198,7 +200,9 @@ class ActionAttributionTest {
 		}
 
 		@Test
-		@DisplayName("a SAFETY_NET action engages the guard with SAFETY_NET_ENGAGED (RULE_BASED prior tick does not prevent it)")
+		@DisplayName(
+			"a SAFETY_NET action engages the guard with SAFETY_NET_ENGAGED (RULE_BASED prior tick does not prevent it)"
+		)
 		fun safetyNetEngagesAfterRuleBased() {
 			val guard = TerminalFallbackGuard()
 			// First tick: RULE_BASED (healthy)
