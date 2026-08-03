@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -129,7 +130,7 @@ class DispatcherPreferenceStore {
 	 * @return Count of non-`no_op` actions attributed to [author].
 	 */
 	fun getDispatchingActionCount(author: ActionAuthor): Long =
-		records.count { it.author == author && it.actionKind != "no_op" }.toLong()
+		records.count { it.author == author && it.actionKind != DispatchAction.NoOp.kind }.toLong()
 
 	/**
 	 * Logs an unconditional INFO-level per-run author-count summary.

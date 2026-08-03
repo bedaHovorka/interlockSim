@@ -25,9 +25,23 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  */
 enum class FailureReason {
 	/**
-	 * The [TerminalFallbackGuard] observed at least one tick where a [ActionAuthor.RULE_FALLBACK]
-	 * action was produced — meaning the LLM emission strategy failed mid-run and a rule-based
-	 * fallback took over. The loop is marked FAILED so no further LLM work proceeds.
+	 * The LLM emission strategy was judged to have abandoned the run. Engaged by
+	 * [TerminalFallbackGuard] on any of three triggers:
+	 *
+	 * 1. [ActionAuthor.TIMEOUT_NOOP] actions occur for [TerminalFallbackGuard.threshold]
+	 *    consecutive ticks (counter saturation — the LLM stopped emitting actionable output).
+	 * 2. An unhandled emission exception propagates out of
+	 *    [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop.runEmission], caught only when a
+	 *    fallback emission is configured (SP2c.8); [TerminalFallbackGuard.engageImmediately]
+	 *    then flips the outcome.
+	 * 3. A [ActionAuthor.RULE_FALLBACK] action co-appears with a [ActionAuthor.SAFETY_NET]
+	 *    action in the same tick record — RULE_FALLBACK takes priority over
+	 *    [SAFETY_NET_ENGAGED] in the both-appear case.
+	 *
+	 * Note that [ActionAuthor.RULE_FALLBACK] alone does **not** engage the guard: it is a
+	 * post-engagement author (set on the fallback emission strategy after the guard has already
+	 * engaged) and resets the TIMEOUT_NOOP counter rather than tripping it. The loop is marked
+	 * FAILED so no further LLM work proceeds.
 	 */
 	LLM_ABANDONED,
 
