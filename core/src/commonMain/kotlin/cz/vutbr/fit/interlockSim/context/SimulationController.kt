@@ -138,6 +138,16 @@ interface SimulationController {
 	 * ```
 	 * Calling [requestResume] when not paused is a harmless no-op.
 	 *
+	 * **Not refcounted (Important):** [requestPause]/[requestResume] are a **boolean flip, not a
+	 * refcounted pair** — a single resume clears the pause regardless of how many pausers requested
+	 * it. A caller using the `try { ... } finally { requestResume() }` pattern (e.g.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.PausedClockTickBudget]) therefore assumes
+	 * **exclusive ownership** of the pause for the duration of the bracketed work: a concurrent
+	 * external pauser (collision detection, operator hold) that paused in the same window would
+	 * have its pause **released prematurely** by the budget's resume. SP2c.10 scope assumes no
+	 * concurrent external pausers during an emission window; lifting that requires a refcounted
+	 * pause/resume on this interface (a separate change).
+	 *
 	 * @since Issue #872 (SP2c.26 follow-up I1)
 	 */
 	fun requestResume()

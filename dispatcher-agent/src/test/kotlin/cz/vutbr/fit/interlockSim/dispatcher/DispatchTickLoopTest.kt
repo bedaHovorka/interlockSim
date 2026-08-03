@@ -17,10 +17,14 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionCandidateEnumerator
@@ -45,11 +49,17 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
+import ch.qos.logback.classic.Logger as LogbackLogger
 
 /**
  * Unit coverage for [DispatchTickLoop] (SP2c.5, Issue #828) — the C2/A2 unconditional fixed-tick
@@ -429,6 +439,42 @@ class DispatchTickLoopTest {
 			val record = runBlocking { loop.runTick() }!!
 
 			assertThat(record.actions).hasSize(1)
+			assertThat(record.actions[0].author).isEqualTo(ActionAuthor.TIMEOUT_NOOP)
+		}
+
+		/**
+		 * Exercises issue #833's F2 acceptance criterion literally: the 3 s hard deadline
+		 * ([DeadlineTickBudget]'s documented default for LLM strategies) against a fake emission
+		 * that sleeps 5 s — i.e. the deadline is exceeded, not merely delayed past a tiny test
+		 * timeout as in [deadlineBudgetTimesOut] above. Runs for ~3 real seconds.
+		 */
+		@Test
+		@Tag("integration-test")
+		@DisplayName("F2: a 3 s hard deadline against a 5 s emission yields exactly one NoOp authored TIMEOUT_NOOP")
+		fun threeSecondDeadlineAgainstFiveSecondEmissionYieldsSingleTimeoutNoOp() {
+			val slowEmission =
+				EmissionStrategy { _, _ ->
+					delay(5_000L)
+					listOf(action(DispatchAction.ApproveTrain("T-1")))
+				}
+			val ring = TickRingBuffer()
+			val loop =
+				DispatchTickLoop(
+					observations = { observation() },
+					annotator = annotator,
+					renderer = ObservationRenderer { "" },
+					emission = slowEmission,
+					validator = validator,
+					queue = ActuatorCommandQueue(),
+					ring = ring,
+					budget = DeadlineTickBudget(timeoutMillis = 3_000L),
+					controller = RecordingController()
+				)
+
+			val record = runBlocking { loop.runTick() }!!
+
+			assertThat(record.actions).hasSize(1)
+			assertThat(record.actions[0].action).isEqualTo(DispatchAction.NoOp)
 			assertThat(record.actions[0].author).isEqualTo(ActionAuthor.TIMEOUT_NOOP)
 		}
 
@@ -1087,6 +1133,88 @@ class DispatchTickLoopTest {
 			}
 
 			assertThat(h.controller.awaitIfPausedCount).isEqualTo(2)
+		}
+	}
+
+	// ── F2 real-time ratio reporting (SP2c.10, Issue #833) ─────────────────────────────────
+
+	@Nested
+	@DisplayName("F2: real-time ratio is reported at debug level without gating the tick")
+	inner class RealTimeRatioReporting {
+		/**
+		 * Deterministically exercises the loop's own F2 ratio branch
+		 * (`if (emissionNanos > 0L && simDelta > 0.0) { logger.debug { "real-time ratio=..." } }`)
+		 * which is otherwise only covered non-deterministically by `TimingRegimesOllamaTest`
+		 * (that test recomputes the ratio outside the loop against a live Ollama call).
+		 *
+		 * A fake emission strategy sleeps briefly so `emissionNanos > 0`, and a first-tick
+		 * observation with `simTime = 10.0` (against the `prevSimTime = 0.0` initial) gives
+		 * `simDelta = 10.0 > 0.0`. The ratio log line is captured via a Logback `ListAppender`
+		 * after raising the `cz.vutbr.fit.interlockSim.dispatcher` package logger to DEBUG
+		 * (`logback-test.xml` pins it to WARN, which would otherwise suppress the line). The
+		 * ratio value is parsed and asserted finite and `> 0`, but NO exact value is asserted —
+		 * `emissionNanos` is wall-clock-timing-dependent.
+		 */
+		private lateinit var appender: ListAppender<ILoggingEvent>
+		private lateinit var rootLogger: LogbackLogger
+		private lateinit var dispatcherLogger: LogbackLogger
+		private var originalRootLevel: Level = Level.WARN
+		private var originalDispatcherLevel: Level = Level.WARN
+
+		@BeforeEach
+		fun attachAppender() {
+			rootLogger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as LogbackLogger
+			dispatcherLogger =
+				LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.dispatcher") as LogbackLogger
+			originalRootLevel = rootLogger.level
+			originalDispatcherLevel = dispatcherLogger.level
+			rootLogger.level = Level.DEBUG
+			dispatcherLogger.level = Level.DEBUG
+			appender = ListAppender()
+			rootLogger.addAppender(appender)
+			appender.start()
+		}
+
+		@AfterEach
+		fun detachAppender() {
+			rootLogger.detachAppender(appender)
+			rootLogger.level = originalRootLevel
+			dispatcherLogger.level = originalDispatcherLevel
+		}
+
+		private fun ratioLines(): List<String> =
+			appender.list.map { it.formattedMessage }.filter { it.contains("real-time ratio=") }
+
+		@Test
+		@DisplayName("a tick with a slow emission logs a finite, positive real-time ratio")
+		fun slowEmissionLogsFinitePositiveRatio() {
+			val slowEmission =
+				EmissionStrategy { _, _ ->
+					delay(50L)
+					emptyList()
+				}
+			val loop =
+				DispatchTickLoop(
+					observations = { observation(tick = 1L, simTime = 10.0) },
+					annotator = annotator,
+					renderer = ObservationRenderer { "" },
+					emission = slowEmission,
+					validator = validator,
+					queue = ActuatorCommandQueue(),
+					budget = NoTimeoutBudget,
+					controller = RecordingController()
+				)
+
+			runBlocking { loop.runTick() }
+
+			val lines = ratioLines()
+			assertThat(lines).isNotEmpty()
+			val ratioLine = lines.first()
+			val match = Regex("real-time ratio=([0-9]+\\.?[0-9]*)").find(ratioLine)
+			val ratio = match?.groupValues?.get(1)?.toDoubleOrNull()
+			assertThat(ratio).isNotNull()
+			assertThat(ratio!!.isFinite()).isTrue()
+			assertThat(ratio).isGreaterThan(0.0)
 		}
 	}
 
