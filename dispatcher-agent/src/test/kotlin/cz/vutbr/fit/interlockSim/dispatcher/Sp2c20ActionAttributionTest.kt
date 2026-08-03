@@ -13,8 +13,8 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
-import assertk.assertions.isFalse
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
@@ -72,7 +72,6 @@ import ch.qos.logback.classic.Logger as LogbackLogger
 @DisplayName("SP2c.20 — action attribution, rejection codes, C7 violation gate (#843)")
 @Timeout(10, unit = TimeUnit.SECONDS)
 class Sp2c20ActionAttributionTest {
-
 	// ── Test utilities ──────────────────────────────────────────────────────
 
 	private fun attributed(
@@ -106,7 +105,6 @@ class Sp2c20ActionAttributionTest {
 	@Nested
 	@DisplayName("c7Clean computed property (SP2c.20)")
 	inner class C7Clean {
-
 		@Test
 		@DisplayName("c7Clean is true when no actions have been observed")
 		fun freshStoreIsC7Clean() {
@@ -120,10 +118,11 @@ class Sp2c20ActionAttributionTest {
 			val store = DispatcherPreferenceStore()
 			store.observe(
 				record(
-					actions = listOf(
-						attributed(ActionAuthor.LLM, DispatchAction.ApproveTrain("T-1")),
-						attributed(ActionAuthor.LLM, DispatchAction.NoOp)
-					)
+					actions =
+						listOf(
+							attributed(ActionAuthor.LLM, DispatchAction.ApproveTrain("T-1")),
+							attributed(ActionAuthor.LLM, DispatchAction.NoOp)
+						)
 				)
 			)
 			assertThat(store.c7Clean).isTrue()
@@ -260,10 +259,11 @@ class Sp2c20ActionAttributionTest {
 
 			store.observe(
 				record(
-					actions = listOf(
-						attributed(ActionAuthor.LLM),
-						attributed(ActionAuthor.TIMEOUT_NOOP, DispatchAction.NoOp)
-					)
+					actions =
+						listOf(
+							attributed(ActionAuthor.LLM),
+							attributed(ActionAuthor.TIMEOUT_NOOP, DispatchAction.NoOp)
+						)
 				)
 			)
 			store.observe(record(tick = 2L, actions = listOf(attributed(ActionAuthor.LLM))))
@@ -384,12 +384,13 @@ class Sp2c20ActionAttributionTest {
 			// Record all outcomes, then check no logs were produced DURING onActionOutcome
 			val outcomes = mutableListOf<ActionOutcome>()
 			val logCountsAtCallTime = mutableListOf<Int>()
-			val sink = ActionOutcomeSink { outcome ->
-				// Capture log count at the moment of the call — a logging sink would increase it
-				logCountsAtCallTime.add(appender.list.size)
-				outcomes.add(outcome)
-				// Deliberately no logging here — this is the correct contract
-			}
+			val sink =
+				ActionOutcomeSink { outcome ->
+					// Capture log count at the moment of the call — a logging sink would increase it
+					logCountsAtCallTime.add(appender.list.size)
+					outcomes.add(outcome)
+					// Deliberately no logging here — this is the correct contract
+				}
 
 			val queue = ActuatorCommandQueue()
 			val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
@@ -462,7 +463,6 @@ class Sp2c20ActionAttributionTest {
 	@Nested
 	@DisplayName("ALL_PATHS_BLOCKED excluded from invalid-output rate (SP2c.20)")
 	inner class AllPathsBlockedNotInvalidOutput {
-
 		@Test
 		@DisplayName("APPLIED_THEN_FAILED / ALL_PATHS_BLOCKED is distinct from REJECTED_BY_VALIDATOR")
 		fun appliedThenFailedIsDistinctFromRejectedByValidator() {
@@ -509,7 +509,6 @@ class Sp2c20ActionAttributionTest {
 	@Nested
 	@DisplayName("ApplyFailureCode expanded entries (SP2c.20)")
 	inner class ApplyFailureCodeEntries {
-
 		@Test
 		@DisplayName("ApplyFailureCode has all required SP2c.20 entries")
 		fun applyFailureCodeHasAllRequiredEntries() {
@@ -536,13 +535,15 @@ class Sp2c20ActionAttributionTest {
 	@Nested
 	@DisplayName("New SP2c.20 types exist in dispatcher/planner/ package")
 	inner class PlannerPackageTypes {
-
 		@Test
 		@DisplayName("ActionPhase is in the planner package with the required enum values")
 		fun actionPhaseIsInPlannerPackage() {
 			val pkg = cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase::class.java.packageName
 			assertThat(pkg).contains("dispatcher.planner")
-			val names = cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase.entries.map { it.name }.toSet()
+			val names =
+				cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase.entries
+					.map { it.name }
+					.toSet()
 			assertThat(names.contains("EMITTED")).isTrue()
 			assertThat(names.contains("REJECTED_BY_VALIDATOR")).isTrue()
 			assertThat(names.contains("APPLIED")).isTrue()
@@ -576,7 +577,6 @@ class Sp2c20ActionAttributionTest {
 	@Nested
 	@DisplayName("TIMEOUT_NOOP dispatching actions count (P3-style check)")
 	inner class TimeoutNoopDispatchingCount {
-
 		@Test
 		@DisplayName("TIMEOUT_NOOP always has zero dispatching (non-no_op) actions")
 		fun timeoutNoopHasZeroDispatchingActions() {
@@ -599,7 +599,6 @@ class Sp2c20ActionAttributionTest {
 	@Nested
 	@DisplayName("CommandCorrelationMap.unattributedApplies counter (SP2c.20)")
 	inner class UnattributedApplies {
-
 		@Test
 		@DisplayName("unattributedApplies is zero when all decisions are registered")
 		fun unattributedIsZeroWhenAllRegistered() {

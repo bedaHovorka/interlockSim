@@ -215,7 +215,7 @@ class DispatcherPreferenceStore {
 			}
 		val prefix = if (!c7Clean) "!! C7_VIOLATION !! " else ""
 		logger.info {
-			"${prefix}[DispatcherPreferenceStore] final summary — totalActions=$total {$byAuthorStr}"
+			"$prefix[DispatcherPreferenceStore] final summary — totalActions=$total {$byAuthorStr}"
 		}
 	}
 }

@@ -333,7 +333,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 				)
 			assertThat(outcome.admitted).isFalse()
 			assertThat(outcome.reason).isNotNull()
-				assertThat(outcome.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
+			assertThat(outcome.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 		}
 
 		@Test
