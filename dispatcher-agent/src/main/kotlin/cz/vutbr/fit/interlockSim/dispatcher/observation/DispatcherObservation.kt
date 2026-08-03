@@ -244,7 +244,7 @@ sealed interface AppliedOutcome {
 	 *   (`ShuntingLoop.approveQueuedTrain`) was invoked. The callback itself is idempotent — an
 	 *   absent or already-active train is silently ignored — so `admitted = true` means the
 	 *   command was applied, not necessarily that a new train entered the sim.
-	 * - [admitted] = `false`, [reason] = [ApplyFailureCode.CAP_EXCEEDED]: the station was
+	 * - [admitted] = `false`, [reason] = [ApplyFailureCode.CAP_EXCEEDED_APPLY]: the station was
 	 *   already at full capacity when this command was drained.  The callback was **not**
 	 *   invoked.  The agent should wait for an active train to exit before retrying.
 	 *
@@ -254,7 +254,7 @@ sealed interface AppliedOutcome {
 	 * SP2c.18 moves the authoritative cap check onto the sim thread so two commands posted
 	 * in the same driver tick that both passed the stale-snapshot [ActionValidator] check
 	 * are resolved correctly in FIFO order: the first is admitted, the second receives
-	 * [ApplyFailureCode.CAP_EXCEEDED].
+	 * [ApplyFailureCode.CAP_EXCEEDED_APPLY].
 	 */
 	data class Approved(
 		val trainId: String,

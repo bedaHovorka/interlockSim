@@ -12,8 +12,11 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
@@ -252,5 +255,117 @@ class KoogAgentPlanAdapterTest {
 		assertThat(commandQueue.drain()).isEmpty()
 		// LLM acted via tools → fallback was NOT invoked
 		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	// ── tickListener (SP2c.20 follow-up, Issue #843) ──────────────────────────
+
+	@Test
+	@DisplayName("tickListener fires TickOutcome.LLM_ACTIONS when the LLM acts via tools")
+	fun `tickListener fires LLM_ACTIONS on tool emission success`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("tickListener fires TickOutcome.RULE_FALLBACK on the empty-no-tools fallback")
+	fun `tickListener fires RULE_FALLBACK on empty-no-tools fallback`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+	}
+
+	@Test
+	@DisplayName("tickListener fires TickOutcome.RULE_FALLBACK on timeout fallback")
+	fun `tickListener fires RULE_FALLBACK on timeout fallback`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			delay(500)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, Duration.ofMillis(50))
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+	}
+
+	@Test
+	@DisplayName("tickListener fires TickOutcome.RULE_FALLBACK on exception fallback")
+	fun `tickListener fires RULE_FALLBACK on exception fallback`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } throws RuntimeException("boom")
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+	}
+
+	@Test
+	@DisplayName("tickListener does not disturb cycleListener/MeasuringPlanAdapter — both fire independently")
+	fun `tickListener and cycleListener both fire without interfering`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+
+		var cycleListenerFired = false
+		planAdapter.cycleListener =
+			object : PlannerCycleListener {
+				override fun onLlmSuccess(simTime: Double) {
+					cycleListenerFired = true
+				}
+
+				override fun onFallback(
+					reason: FallbackReason,
+					simTime: Double
+				) {
+				}
+			}
+		val recorded = mutableListOf<TickRecord>()
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(cycleListenerFired).isTrue()
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
 	}
 }

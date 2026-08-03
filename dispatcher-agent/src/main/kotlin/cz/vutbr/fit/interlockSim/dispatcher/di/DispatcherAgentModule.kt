@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationSource
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
@@ -204,6 +205,12 @@ val dispatcherAgentModule: Module =
 			// thread) and is drained by DispatcherObservationProjector on the next captureOnSimThread
 			// call to populate DispatcherObservation.appliedOutcomes.
 			scoped<AppliedOutcomeChannel> { AppliedOutcomeChannel() }
+
+			// SP2c.20 follow-up (#843): ActionOutcomeAggregator (scoped per context)
+			// Production ActionOutcomeSink wired into DispatchDecisionApplier so per-action
+			// attribution data (author, phase, ApplyFailureCode) actually reaches a live consumer
+			// instead of only being observed by tests.
+			scoped<ActionOutcomeAggregator> { ActionOutcomeAggregator() }
 
 			// Goal 10 dispatcher-cannot-approve-trains fix: DispatchLoopSensorPort (scoped per
 			// context), backing KoogAgentFactory's queued_trains/block_inputs tools.

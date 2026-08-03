@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -75,9 +76,17 @@ class ActuatorCommandQueue(
 	 * Callers that need an exact count should drain the queue.
 	 *
 	 * @param decisions Decisions to post; may be empty.
+	 * @param author Attribution author for the decision (SP2c.20, Issue #843). Defaults to
+	 *   [ActionAuthor.LLM] for backwards-compatibility with pre-SP2c.20 callers.
+	 * @param reason Human-readable reason from the decision-maker (SP2c.20, Issue #843).
+	 *   Defaults to an empty string.
 	 * @return `true` if all decisions were accepted; `false` if backpressure rejected them.
 	 */
-	fun postAll(decisions: List<DispatchDecision>): Boolean {
+	fun postAll(
+		decisions: List<DispatchDecision>,
+		author: ActionAuthor = ActionAuthor.LLM,
+		reason: String = ""
+	): Boolean {
 		if (decisions.isEmpty()) {
 			return true
 		}
@@ -91,13 +100,13 @@ class ActuatorCommandQueue(
 				// sim thread can never drain a decision before its correlation entry exists. A
 				// post-then-register window would make correlate() return null on the sim thread
 				// and silently drop the outcome — the exact bug class SP2c.17 exists to eliminate.
-				correlationMap?.register(decisions)
+				correlationMap?.register(decisions, author, reason)
 				size.addAndGet(decisions.size)
 				queue.addAll(decisions)
 			}
 		} else {
 			// Same register-before-publish ordering as the bounded branch (see comment above).
-			correlationMap?.register(decisions)
+			correlationMap?.register(decisions, author, reason)
 			size.addAndGet(decisions.size)
 			queue.addAll(decisions)
 		}

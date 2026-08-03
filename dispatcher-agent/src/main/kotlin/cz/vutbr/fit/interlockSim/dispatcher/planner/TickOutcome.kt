@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+
 /**
  * Exhaustive taxonomy of what happened on a single dispatcher tick, replacing the legacy
  * two-way split ([PlannerCycleListener.onLlmSuccess] / [FallbackReason]) that could not tell
@@ -59,7 +61,18 @@ enum class TickOutcome {
 	 */
 	TIMEOUT_NOOP,
 
-	/** Non-cancellation throwable from the LLM path (network error, invalid tool call, etc.). */
+	/**
+	 * Non-cancellation throwable from the LLM path (network error, invalid tool call, etc.).
+	 *
+	 * **Not currently emitted by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]**
+	 * — that adapter maps its generic-exception catch block to [RULE_FALLBACK] (the fallback
+	 * dispatcher's decisions are actually posted, so they must be attributed as a fallback,
+	 * not a no-op). This outcome is reserved for future producers and is reachable today only
+	 * via the legacy `FallbackReason.toTickOutcome` projection. Its [toActionAuthor] mapping to
+	 * [ActionAuthor.TIMEOUT_NOOP] is correct for attribution because, like [TIMEOUT_NOOP], it is
+	 * a no-dispatching-action degraded outcome — but no live producer pairs it with dispatching
+	 * actions, so the mapping is never exercised against a real tick (Issue #843 review).
+	 */
 	LLM_EXCEPTION,
 
 	/** Terminal fallback engaged; the LLM arm is retired for the rest of the run. */
@@ -88,3 +101,26 @@ val TickOutcome.tickClass: TickClass
  */
 val TickOutcome.countsAsLlmSuccess: Boolean
 	get() = tickClass == TickClass.SUCCESS
+
+/**
+ * [ActionAuthor] that should be attributed to every decision posted this tick, given this
+ * [TickOutcome].
+ *
+ * Used by [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] to correctly attribute a
+ * live LLM-planner cycle's `commandQueue.postAll` call instead of the pre-SP2c.20-follow-up
+ * default of always tagging it [ActionAuthor.LLM] (SP2c.20 follow-up, Issue #843).
+ *
+ * - LLM-success outcomes ([TickOutcome.LLM_ACTIONS], [TickOutcome.LLM_NO_OP],
+ *   [TickOutcome.LLM_REPAIRED]) → [ActionAuthor.LLM].
+ * - No-dispatching-action outcomes ([TickOutcome.TIMEOUT_NOOP], [TickOutcome.LLM_EXCEPTION]) →
+ *   [ActionAuthor.TIMEOUT_NOOP].
+ * - Deterministic-fallback outcomes ([TickOutcome.LLM_ABANDONED], [TickOutcome.RULE_FALLBACK]) →
+ *   [ActionAuthor.RULE_FALLBACK] — the fallback dispatcher's decisions were actually posted.
+ */
+val TickOutcome.toActionAuthor: ActionAuthor
+	get() =
+		when (this) {
+			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED -> ActionAuthor.LLM
+			TickOutcome.TIMEOUT_NOOP, TickOutcome.LLM_EXCEPTION -> ActionAuthor.TIMEOUT_NOOP
+			TickOutcome.LLM_ABANDONED, TickOutcome.RULE_FALLBACK -> ActionAuthor.RULE_FALLBACK
+		}

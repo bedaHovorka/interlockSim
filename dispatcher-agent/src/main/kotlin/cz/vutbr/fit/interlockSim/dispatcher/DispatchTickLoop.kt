@@ -306,7 +306,9 @@ class DispatchTickLoop(
 			// Valid action: convert to DispatchDecision and post.
 			val decisions = toDispatchDecisions(attributedAction.action)
 			if (decisions.isNotEmpty()) {
-				val posted = queue.postAll(decisions)
+				// SP2c.20 (#843): pass author/reason to postAll so the correlation map can
+				// attribute the apply-time outcome back to the originating decision-maker.
+				val posted = queue.postAll(decisions, attributedAction.author, attributedAction.reason)
 				if (!posted) {
 					logger.warn {
 						"DispatchTickLoop: queue rejected ${decisions.size} decision(s) for " +

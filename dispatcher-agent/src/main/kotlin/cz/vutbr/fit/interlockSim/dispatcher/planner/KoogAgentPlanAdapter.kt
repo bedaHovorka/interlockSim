@@ -172,6 +172,22 @@ class KoogAgentPlanAdapter(
 	@Volatile
 	var cycleListener: PlannerCycleListener? = null
 
+	/**
+	 * Optional [PlannerTickListener] notified after every dispatch cycle with the full
+	 * [TickOutcome] taxonomy — the non-deprecated replacement for [cycleListener].
+	 *
+	 * Independent of [cycleListener]: setting this does not disturb [MeasuringPlanAdapter]'s
+	 * claim on [cycleListener], and both fire for the same cycle without interfering. `null` in
+	 * runs that don't need per-cycle attribution (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
+	 * sets it to attribute `commandQueue.postAll` calls correctly).
+	 *
+	 * `@Volatile` for the same safe-publication reason as [cycleListener].
+	 *
+	 * @since Issue #843 (SP2c.20 follow-up — Goal 10 action attribution)
+	 */
+	@Volatile
+	var tickListener: PlannerTickListener? = null
+
 	override val capabilities: PlannerCapabilities =
 		PlannerCapabilities(
 			name = PLANNER_NAME,
@@ -229,6 +245,7 @@ class KoogAgentPlanAdapter(
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
+				tickListener?.onTick(TickRecord(TickOutcome.LLM_ACTIONS, observation.snapshot.simTime))
 				decisions
 			} else {
 				// The LLM completed a cycle but neither acted via tools nor returned a decision —
@@ -239,6 +256,10 @@ class KoogAgentPlanAdapter(
 						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
 				}
 				cycleListener?.onFallback(FallbackReason.EMPTY_NO_TOOLS, observation.snapshot.simTime)
+				// SP2c.20 follow-up (#843): fallbackDispatcher.decide() actually runs here and its
+				// decisions are returned — this is a dispatching event, not a no-op, so it maps to
+				// RULE_FALLBACK (not TIMEOUT_NOOP) for correct ActionAuthor attribution.
+				tickListener?.onTick(TickRecord(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime))
 				fallbackDispatcher.decide(observation)
 			}
 		} catch (e: TimeoutCancellationException) {
@@ -247,6 +268,7 @@ class KoogAgentPlanAdapter(
 					"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
 			}
 			cycleListener?.onFallback(FallbackReason.TIMEOUT, observation.snapshot.simTime)
+			tickListener?.onTick(TickRecord(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime))
 			fallbackDispatcher.decide(observation)
 		} catch (e: CancellationException) {
 			// Parent coroutine was cancelled — propagate rather than swallow.
@@ -257,6 +279,7 @@ class KoogAgentPlanAdapter(
 					"(simTime=${observation.snapshot.simTime})"
 			}
 			cycleListener?.onFallback(FallbackReason.EXCEPTION, observation.snapshot.simTime)
+			tickListener?.onTick(TickRecord(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime))
 			fallbackDispatcher.decide(observation)
 		}
 	}

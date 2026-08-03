@@ -22,9 +22,25 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * tags for the lifetime of one simulation run and answers:
  * - "Who authored how many actions?" — via [getAuthorCounts]
  * - "Who decided this specific route?" — via [getRecords] (all per-tick records)
+ * - "Was the C7 constraint respected?" — via [c7Clean]
  *
  * At run end, [logFinalSummary] emits a structured INFO log with per-author action counts,
  * so B2's "why this route?" can also answer "who decided this?" without inspecting raw logs.
+ * When [c7Clean] is `false`, the summary line is prefixed `!! C7_VIOLATION !!` and a one-time
+ * WARN with the literal token `C7_VIOLATION` was already emitted at the first violation (SP2c.20).
+ *
+ * ## C7 gate (SP2c.20, Issue #843)
+ *
+ * C7 requires that every applied dispatching action originate from the LLM (or from an
+ * intentional rule-based run — [ActionAuthor.RULE_BASED]).  A C7 violation occurs when
+ * [ActionAuthor.RULE_FALLBACK] or [ActionAuthor.SAFETY_NET] actions appear, because those
+ * authors indicate that the LLM was absent or ineffective and the deterministic fallback
+ * stepped in to keep the simulation alive.
+ *
+ * Three signals make a C7 violation unmissable:
+ * 1. [c7Clean] — a single top-level boolean; `false` if any violation has been observed.
+ * 2. A WARN log with the literal token `C7_VIOLATION` on the **first** occurrence per run.
+ * 3. The [logFinalSummary] line is prefixed `!! C7_VIOLATION !!` when `!c7Clean`.
  *
  * ## Threading
  *
@@ -50,7 +66,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * SP2c effort). The store API and log format are stable and tested so the wiring is a
  * one-line addition once the loop is promoted.
  *
- * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance)
+ * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance);
+ *        [c7Clean] / C7 gate added Issue #843 (SP2c.20)
  */
 class DispatcherPreferenceStore {
 	companion object {
@@ -77,8 +94,35 @@ class DispatcherPreferenceStore {
 
 	private val records: MutableList<ActionAttributionRecord> = mutableListOf()
 
+	/** `true` if the one-time C7_VIOLATION WARN has already been emitted this run. */
+	private var c7ViolationLogged = false
+
+	/**
+	 * `true` when no [ActionAuthor.RULE_FALLBACK] or [ActionAuthor.SAFETY_NET] actions have
+	 * been recorded for this run; latched to `false` on the first such action and never
+	 * restored (records are append-only, so a violation cannot be un-observed).
+	 *
+	 * A `false` value means the C7 constraint was violated: the deterministic fallback or
+	 * forced-admission safety net stepped in, which should not happen in an autonomous LLM
+	 * run.  When `false`, [logFinalSummary] prefixes the summary line with `!! C7_VIOLATION !!`
+	 * and a one-time WARN with the literal token `C7_VIOLATION` was already emitted at the
+	 * first violation (SP2c.20, Issue #843).
+	 *
+	 * O(1) read — latched by [observe] on the first violating tick, it does not rescan
+	 * records on every access (unlike the previous computed property, which was O(n) per
+	 * call and O(n²) per run).
+	 *
+	 * @since Issue #843 (SP2c.20 — Goal 10 action attribution + C7 violation gate)
+	 */
+	var c7Clean: Boolean = true
+		private set
+
 	/**
 	 * Appends every [AttributedAction] in [record] to the internal attribution log.
+	 *
+	 * On the first tick that introduces a [ActionAuthor.RULE_FALLBACK] or
+	 * [ActionAuthor.SAFETY_NET] action, emits a one-time WARN with the literal token
+	 * `C7_VIOLATION` so the violation is unmissable in the log (SP2c.20, Issue #843).
 	 *
 	 * Intended to be called from [DispatchTickLoop] after each completed tick (same position
 	 * as [TerminalFallbackGuard.observe]).
@@ -96,6 +140,24 @@ class DispatcherPreferenceStore {
 					reason = action.reason
 				)
 			)
+		}
+		// C7 gate (SP2c.20): latch c7Clean false on the first tick that introduces a
+		// RULE_FALLBACK or SAFETY_NET action, and emit a one-time WARN.  Flood prevention:
+		// the WARN fires at most once per run.
+		val violatingActions =
+			record.actions.filter {
+				it.author == ActionAuthor.RULE_FALLBACK || it.author == ActionAuthor.SAFETY_NET
+			}
+		if (violatingActions.isNotEmpty()) {
+			c7Clean = false
+		}
+		if (!c7ViolationLogged && !c7Clean) {
+			c7ViolationLogged = true
+			val violatingAuthors =
+				violatingActions.joinToString(", ") { "${it.author.name}:${it.action.kind}" }
+			logger.warn {
+				"C7_VIOLATION: deterministic component authored dispatching action(s) on tick ${record.tick} — $violatingAuthors"
+			}
 		}
 	}
 
@@ -135,15 +197,21 @@ class DispatcherPreferenceStore {
 	/**
 	 * Logs an unconditional INFO-level per-run author-count summary.
 	 *
-	 * Format example:
+	 * Format example (c7Clean = true):
 	 * ```
 	 * [DispatcherPreferenceStore] final summary — totalActions=42 {LLM=30, TIMEOUT_NOOP=5, RULE_BASED=7, RULE_FALLBACK=0, SAFETY_NET=0, OPERATOR=0}
+	 * ```
+	 *
+	 * Format example (c7Clean = false — C7 violation occurred):
+	 * ```
+	 * !! C7_VIOLATION !! [DispatcherPreferenceStore] final summary — totalActions=42 {LLM=30, TIMEOUT_NOOP=5, RULE_BASED=0, RULE_FALLBACK=5, SAFETY_NET=2, OPERATOR=0}
 	 * ```
 	 *
 	 * Safe to call with zero recorded actions — the counts will all be zero.
 	 * Read-only: does not mutate any state, so it is safe to call more than once.
 	 *
-	 * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance)
+	 * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance);
+	 *        `!! C7_VIOLATION !!` prefix added Issue #843 (SP2c.20)
 	 */
 	fun logFinalSummary() {
 		val counts = getAuthorCounts()
@@ -152,8 +220,9 @@ class DispatcherPreferenceStore {
 			ActionAuthor.entries.joinToString(", ") { author ->
 				"${author.name}=${counts[author] ?: 0L}"
 			}
+		val prefix = if (!c7Clean) "!! C7_VIOLATION !! " else ""
 		logger.info {
-			"[DispatcherPreferenceStore] final summary — totalActions=$total {$byAuthorStr}"
+			"$prefix[DispatcherPreferenceStore] final summary — totalActions=$total {$byAuthorStr}"
 		}
 	}
 }
