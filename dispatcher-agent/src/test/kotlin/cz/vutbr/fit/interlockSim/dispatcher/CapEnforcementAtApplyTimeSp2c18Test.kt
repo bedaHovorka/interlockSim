@@ -48,9 +48,9 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * - AC: Cap enforced at apply time on the sim thread against live state.
  * - AC: Two `approve_train` calls in one tick against a cap of 2 with 1 active train ⇒
- *   exactly one admitted, one refused with [ApplyFailureCode.CAP_EXCEEDED].
+ *   exactly one admitted, one refused with [ApplyFailureCode.CAP_EXCEEDED_APPLY].
  * - AC: The refusal surfaces in the next tick's `applied_outcomes` block (SP2c.17 channel).
- * - AC: Apply-time refusal ([ApplyFailureCode.CAP_EXCEEDED]) and pre-queue rejection
+ * - AC: Apply-time refusal ([ApplyFailureCode.CAP_EXCEEDED_APPLY]) and pre-queue rejection
  *   ([RejectionCode.CAPACITY_FULL]) are separate types — distinguishable in metrics.
  * - AC: P3 — the component never originates an [DispatchDecision.ApproveTrain]; with a
  *   no-op queue (no LLM commands posted), zero admissions occur.
@@ -108,13 +108,13 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 		return queue to applier
 	}
 
-	// ── AC: Two approve_train calls in one tick — exactly one admitted, one CAP_EXCEEDED ──
+	// ── AC: Two approve_train calls in one tick — exactly one admitted, one CAP_EXCEEDED_APPLY ──
 
 	@Nested
 	@DisplayName("AC: Two approve_train calls in one tick with cap=2 and 1 active")
 	inner class TwoCallsOneSlot {
 		@Test
-		@DisplayName("exactly one train is admitted, the other receives CAP_EXCEEDED")
+		@DisplayName("exactly one train is admitted, the other receives CAP_EXCEEDED_APPLY")
 		fun twoApproveTrainCallsInOneTick_exactlyOneAdmittedOneCapExceeded() {
 			liveActiveCount.set(1) // 1 active already; cap = 2 → 1 slot free
 			correlationMap.newCycle()
@@ -142,7 +142,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			val second = outcomes[1] as AppliedOutcome.Approved
 			assertThat(second.trainId).isEqualTo("Train-B")
 			assertThat(second.admitted).isFalse()
-			assertThat(second.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+			assertThat(second.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 		}
 
 		@Test
@@ -164,7 +164,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			val outcomes = outcomeSink.drainSince(0L)
 			val refused = outcomes.first { (it as AppliedOutcome.Approved).admitted.not() } as AppliedOutcome.Approved
 			assertThat(refused.trainId).isEqualTo("Beta")
-			assertThat(refused.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+			assertThat(refused.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 		}
 
 		@Test
@@ -213,7 +213,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			outcomes.forEach { o ->
 				val approved = o as AppliedOutcome.Approved
 				assertThat(approved.admitted).isFalse()
-				assertThat(approved.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+				assertThat(approved.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 			}
 		}
 	}
@@ -221,10 +221,10 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 	// ── AC: Refusal surfaces in applied_outcomes (SP2c.17 channel) ────────────────────────
 
 	@Nested
-	@DisplayName("AC: CAP_EXCEEDED refusal surfaces in next tick's applied_outcomes")
+	@DisplayName("AC: CAP_EXCEEDED_APPLY refusal surfaces in next tick's applied_outcomes")
 	inner class RefusalSurfacesInChannel {
 		@Test
-		@DisplayName("CAP_EXCEEDED outcome appears in applied_outcomes with correct trainId and reason")
+		@DisplayName("CAP_EXCEEDED_APPLY outcome appears in applied_outcomes with correct trainId and reason")
 		fun capExceededRefusalSurfacesInAppliedOutcomes() {
 			liveActiveCount.set(2) // cap = 2, no slot
 			correlationMap.newCycle()
@@ -241,11 +241,11 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			outcome as AppliedOutcome.Approved
 			assertThat(outcome.trainId).isEqualTo("T-99")
 			assertThat(outcome.admitted).isFalse()
-			assertThat(outcome.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+			assertThat(outcome.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 		}
 
 		@Test
-		@DisplayName("CAP_EXCEEDED outcome renders as REFUSED(CAP_EXCEEDED) in the next tick's prompt")
+		@DisplayName("CAP_EXCEEDED_APPLY outcome renders as REFUSED(CAP_EXCEEDED_APPLY) in the next tick's prompt")
 		fun capExceededOutcomeRendersInPrompt() {
 			liveActiveCount.set(2)
 			correlationMap.newCycle()
@@ -271,7 +271,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			val rendered = CompactTextRenderer().render(ctx)
 			assertThat(rendered).isNotNull()
 			// Renders with the machine-readable reason code
-			val contains = rendered.contains("approve_train T-77 : REFUSED(CAP_EXCEEDED)")
+			val contains = rendered.contains("approve_train T-77 : REFUSED(CAP_EXCEEDED_APPLY)")
 			assertThat(contains).isTrue()
 		}
 
@@ -314,8 +314,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 		fun preQueueRejectionIsRejectionCode() {
 			// The pre-queue check produces RejectionCode.CAPACITY_FULL
 			val code = RejectionCode.CAPACITY_FULL
-			// The apply-time refusal produces ApplyFailureCode.CAP_EXCEEDED
-			val applyCode = ApplyFailureCode.CAP_EXCEEDED
+			// The apply-time refusal produces ApplyFailureCode.CAP_EXCEEDED_APPLY
+			val applyCode = ApplyFailureCode.CAP_EXCEEDED_APPLY
 			// These are distinct types — not related by inheritance or equality
 			assertThat(code::class).isNotEqualTo(applyCode::class)
 		}
@@ -327,13 +327,13 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 				AppliedOutcome.Approved(
 					trainId = "T-1",
 					admitted = false,
-					reason = ApplyFailureCode.CAP_EXCEEDED,
+					reason = ApplyFailureCode.CAP_EXCEEDED_APPLY,
 					id = CommandId(1L),
 					tickIndex = 1L
 				)
 			assertThat(outcome.admitted).isFalse()
 			assertThat(outcome.reason).isNotNull()
-			assertThat(outcome.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+				assertThat(outcome.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 		}
 
 		@Test
@@ -451,7 +451,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			assertThat(admittedTrains).isEqualTo(listOf("T-first"))
 			val outcomes = outcomeSink.drainSince(0L).map { it as AppliedOutcome.Approved }
 			assertThat(outcomes.map { it.admitted }).isEqualTo(listOf(true, false))
-			assertThat(outcomes[1].reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+			assertThat(outcomes[1].reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 		}
 
 		/**
@@ -608,7 +608,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 				)
 
 			assertThat(rendered.contains("approve_train T-in : ADMITTED")).isTrue()
-			assertThat(rendered.contains("approve_train T-out : REFUSED(CAP_EXCEEDED)")).isTrue()
+			assertThat(rendered.contains("approve_train T-out : REFUSED(CAP_EXCEEDED_APPLY)")).isTrue()
 		}
 	}
 
@@ -649,7 +649,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			assertThat(callbackEntries.get()).isEqualTo(0)
 			val refusal = outcomeSink.drainSince(0L)[0] as AppliedOutcome.Approved
 			assertThat(refusal.admitted).isFalse()
-			assertThat(refusal.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED)
+			assertThat(refusal.reason).isEqualTo(ApplyFailureCode.CAP_EXCEEDED_APPLY)
 		}
 	}
 

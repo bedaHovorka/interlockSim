@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import java.util.Collections
 import java.util.IdentityHashMap
@@ -68,12 +69,22 @@ class CommandCorrelationMap {
 		Collections.synchronizedMap(IdentityHashMap())
 
 	/**
-	 * A [CommandId] paired with the [tickIndex] at which the command was queued.
+	 * A [CommandId] paired with the [tickIndex] at which the command was queued, plus the
+	 * [author] and [reason] of the decision that produced it (SP2c.20, Issue #843).
+	 *
+	 * [author] and [reason] default to [ActionAuthor.LLM] / `""` for backwards-compatibility
+	 * with callers that do not supply attribution (e.g. the `SinkHolder` queue-posting wrapper
+	 * in [KoogAgentFactory][cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory]).
+	 *
 	 * The tick index is the value of the internal [cycleCounter] at registration time.
 	 */
 	data class CommandAndTick(
 		val id: CommandId,
-		val tickIndex: Long
+		val tickIndex: Long,
+		/** Attribution author for this command. Defaults to [ActionAuthor.LLM]. */
+		val author: ActionAuthor = ActionAuthor.LLM,
+		/** Human-readable reason from the decision-maker. Defaults to empty string. */
+		val reason: String = ""
 	)
 
 	/**
@@ -97,14 +108,21 @@ class CommandCorrelationMap {
 
 	/**
 	 * Issues a fresh [CommandId] for each decision in [decisions] and registers the
-	 * pair `(identity → CommandAndTick(id, currentCycleIndex))` in the map.
+	 * pair `(identity → CommandAndTick(id, currentCycleIndex, author, reason))` in the map.
 	 *
 	 * Called on the **driver thread** from [ActuatorCommandQueue.postAll].
+	 *
+	 * [author] and [reason] default to [ActionAuthor.LLM] / `""` for callers that do not
+	 * supply attribution (backwards-compatible with pre-SP2c.20 code).
 	 */
-	fun register(decisions: List<DispatchDecision>) {
+	fun register(
+		decisions: List<DispatchDecision>,
+		author: ActionAuthor = ActionAuthor.LLM,
+		reason: String = ""
+	) {
 		val tick = cycleCounter.get()
 		for (decision in decisions) {
-			map[decision] = CommandAndTick(CommandId(idCounter.incrementAndGet()), tick)
+			map[decision] = CommandAndTick(CommandId(idCounter.incrementAndGet()), tick, author, reason)
 		}
 	}
 

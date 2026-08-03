@@ -9,7 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeSink
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase
+import cz.vutbr.fit.interlockSim.dispatcher.planner.AuthoredAction
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
@@ -88,7 +93,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   returns the **live** number of currently approved trains. When non-null, the applier
  *   checks `activeTrainCountProvider() >= maxConcurrentTrains` before invoking [onApproveTrain]:
  *   if the cap is already reached, [onApproveTrain] is **not** called and an
- *   [AppliedOutcome.Approved] with `admitted = false` and reason [ApplyFailureCode.CAP_EXCEEDED]
+ *   [AppliedOutcome.Approved] with `admitted = false` and reason [ApplyFailureCode.CAP_EXCEEDED_APPLY]
  *   is published through [outcomeSink]. When `null` (the default), no apply-time cap check
  *   is performed — existing callers that rely on the inner [ShuntingLoop.approveQueuedTrain]
  *   guard are unaffected. The provider **must not throw** — an exception escapes into
@@ -201,7 +206,7 @@ class DispatchDecisionApplier(
 	 *
 	 * Dropped decisions (under [DispatcherMode.MANUAL]), [DispatchDecision.NoAction], and
 	 * apply-time refusals (an [DispatchDecision.ApproveTrain] refused with
-	 * [ApplyFailureCode.CAP_EXCEEDED] — see [applyApproveTrain]) do not trigger the listener:
+	 * [ApplyFailureCode.CAP_EXCEEDED_APPLY] — see [applyApproveTrain]) do not trigger the listener:
 	 * it fires only for decisions that were actually applied.
 	 *
 	 * @since Issue #561 (SP2b.6 — Goal 10)
@@ -231,7 +236,21 @@ class DispatchDecisionApplier(
 	 *
 	 * @since Issue #840 (SP2c.17 — correlated async outcome channel)
 	 */
-	private val outcomeSink: AppliedOutcomeSink? = null
+	private val outcomeSink: AppliedOutcomeSink? = null,
+	/**
+	 * SP2c.20: Optional sink notified (on the kDisco simulation thread) for each applied
+	 * or apply-failed [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction] with full
+	 * author attribution.
+	 *
+	 * **Must not log** — see [ActionOutcomeSink] contract. A log call on the sim thread
+	 * injects latency into the physics loop.
+	 *
+	 * When `null` (the default) no action outcomes are published — existing callers that
+	 * do not need attribution at apply granularity are unaffected.
+	 *
+	 * @since Issue #843 (SP2c.20 — Goal 10 action attribution + C7 violation gate)
+	 */
+	private val actionOutcomeSink: ActionOutcomeSink? = null
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -353,10 +372,23 @@ class DispatchDecisionApplier(
 					// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
 					// "Why this route?" panel can display the rationale. NoAction carries no
 					// rationale, and dropped/refused decisions (under MANUAL, or an apply-time
-					// CAP_EXCEEDED refusal — see applyApproveTrain) are not "applied", so
+					// CAP_EXCEEDED_APPLY refusal — see applyApproveTrain) are not "applied", so
 					// applyDecision returns false and the listener is not invoked.
 					if (applied) {
 						onDecisionApplied?.onDecisionApplied(decision)
+					}
+					// SP2c.20 (#843): notify the action outcome sink with author attribution.
+					// No logging here — this runs on the sim thread and log calls inject latency.
+					if (actionOutcomeSink != null && decision !is DispatchDecision.NoAction) {
+						val authored =
+							AuthoredAction(
+								author = correlation?.author ?: ActionAuthor.LLM,
+								reason = correlation?.reason ?: "",
+								decisionKind = decision::class.simpleName ?: "Unknown",
+								tickIndex = correlation?.tickIndex ?: -1L
+							)
+						val phase = if (applied) ActionPhase.APPLIED else ActionPhase.APPLIED_THEN_FAILED
+						actionOutcomeSink.onActionOutcome(ActionOutcome(phase, null, null, authored))
 					}
 				} catch (e: IllegalArgumentException) {
 					logger.warn(e) {
@@ -374,6 +406,20 @@ class DispatchDecisionApplier(
 								id = correlation.id,
 								tickIndex = correlation.tickIndex
 							)
+						)
+					}
+					// SP2c.20 (#843): notify the action outcome sink about the drop.
+					// No logging here — this runs on the sim thread.
+					if (actionOutcomeSink != null) {
+						val authored =
+							AuthoredAction(
+								author = correlation?.author ?: ActionAuthor.LLM,
+								reason = correlation?.reason ?: "",
+								decisionKind = decision::class.simpleName ?: "Unknown",
+								tickIndex = correlation?.tickIndex ?: -1L
+							)
+						actionOutcomeSink.onActionOutcome(
+							ActionOutcome(ActionPhase.APPLIED_THEN_FAILED, null, ApplyFailureCode.DROPPED_INVALID, authored)
 						)
 					}
 				}
@@ -431,7 +477,7 @@ class DispatchDecisionApplier(
 	// DispatchDecision type — adding a future subtype becomes a compile error here
 	// rather than a silently-dropped decision. Returns `true` when the decision was actually
 	// applied (so [onDecisionApplied] should fire); `false` for [DispatchDecision.NoAction]
-	// and for an [DispatchDecision.ApproveTrain] refused at apply time (CAP_EXCEEDED) —
+	// and for an [DispatchDecision.ApproveTrain] refused at apply time (CAP_EXCEEDED_APPLY) —
 	// those are not "applied" and must not surface to the GUI "Why this route?" observer.
 	private fun applyDecision(
 		decision: DispatchDecision,
@@ -471,7 +517,7 @@ class DispatchDecisionApplier(
 	/**
 	 * SP2c.18 (#841): Applies [decision] by checking the live active-train count (if
 	 * [activeTrainCountProvider] is wired) and either admitting the train or refusing
-	 * with [ApplyFailureCode.CAP_EXCEEDED].
+	 * with [ApplyFailureCode.CAP_EXCEEDED_APPLY].
 	 *
 	 * ## Cap enforcement at apply time
 	 *
@@ -480,7 +526,7 @@ class DispatchDecisionApplier(
 	 * the admission callback are on the same kDisco thread, two `ApproveTrain` commands
 	 * drained in the same tick see the updated count after the first admission: the first
 	 * command is admitted (count goes from N to N+1), and if N+1 equals [maxConcurrentTrains]
-	 * the second command receives [ApplyFailureCode.CAP_EXCEEDED] — the stale-snapshot race
+	 * the second command receives [ApplyFailureCode.CAP_EXCEEDED_APPLY] — the stale-snapshot race
 	 * that was possible with [ActionValidator]'s pre-queue check alone is closed.
 	 *
 	 * When [activeTrainCountProvider] is `null`, no apply-time cap check is performed and
@@ -490,7 +536,7 @@ class DispatchDecisionApplier(
 	 * @since Issue #841 (SP2c.18 — Goal 10 apply-time cap enforcement)
 	 *
 	 * @return `true` when the train was admitted ([onApproveTrain] invoked); `false` when the
-	 *   cap was already reached and the admission was refused with [ApplyFailureCode.CAP_EXCEEDED].
+	 *   cap was already reached and the admission was refused with [ApplyFailureCode.CAP_EXCEEDED_APPLY].
 	 *   The Boolean lets [onControlStep] skip [onDecisionApplied] for a refusal — a refused
 	 *   admission was not "applied" and must not surface to the GUI "Why this route?" observer.
 	 */
@@ -511,7 +557,7 @@ class DispatchDecisionApplier(
 						AppliedOutcome.Approved(
 							trainId = decision.trainId,
 							admitted = false,
-							reason = ApplyFailureCode.CAP_EXCEEDED,
+							reason = ApplyFailureCode.CAP_EXCEEDED_APPLY,
 							id = correlation.id,
 							tickIndex = correlation.tickIndex
 						)
