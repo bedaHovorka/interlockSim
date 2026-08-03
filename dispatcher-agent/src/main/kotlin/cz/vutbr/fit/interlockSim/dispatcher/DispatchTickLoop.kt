@@ -228,20 +228,10 @@ class DispatchTickLoop(
 		// empty list = strategy ran and decided there is nothing to do this tick; substitute a
 		// single NoOp authored by the strategy's own author (RULE_BASED / future LLM) so an idle
 		// tick records as a deliberate decision, not a degraded timeout (SP2c.19 / #829).
-		// Exception = LLM infrastructure failure; engage guard immediately (SP2c.8 / #831).
-		val emittedRaw: List<AttributedAction>? =
-			try {
-				budget.withBudget { currentEmission.emit(prompt, obs0) }
-			} catch (e: kotlinx.coroutines.CancellationException) {
-				throw e
-			} catch (e: Exception) {
-				logger.error(e) {
-					"DispatchTickLoop: unhandled exception from emission.emit at tick=${obs0.tick}; " +
-						"engaging terminal fallback immediately"
-				}
-				fallbackGuard.engageImmediately()
-				null
-			}
+		// Exception = LLM infrastructure failure. See [runEmission] for the SP2c.8/#831 vs
+		// SP2c.26/#849 reconciliation (swallow-and-engage when a fallback is configured, rethrow
+		// otherwise so the failure is diagnosable by the caller).
+		val emittedRaw: List<AttributedAction>? = runEmission(prompt, obs0)
 		val emitted =
 			when {
 				emittedRaw == null ->
@@ -340,6 +330,39 @@ class DispatchTickLoop(
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────────
+
+	/**
+	 * Invokes [currentEmission.emit] under [budget], reconciling SP2c.8 (#831) with SP2c.26 (#849).
+	 *
+	 * - When [fallbackEmission] is configured: an unhandled exception engages [fallbackGuard]
+	 *   immediately and returns `null` so the tick substitutes a TIMEOUT_NOOP and subsequent ticks
+	 *   run via [fallbackEmission] — the run reaches a terminating state for inspection
+	 *   (SP2c.8 / #831 terminal fallback with run-failure marking).
+	 * - When [fallbackEmission] is `null`: rethrows — the run cannot continue advancing, and
+	 *   surfacing the exception is the only way to make the failure diagnosable by the caller
+	 *   (SP2c.26 / #849 paused-clock propagation invariant; the spike harness exercises this case).
+	 *
+	 * [kotlinx.coroutines.CancellationException] is always rethrown for cooperative cancellation.
+	 */
+	private suspend fun runEmission(
+		prompt: String,
+		obs0: DispatcherObservation
+	): List<AttributedAction>? =
+		try {
+			budget.withBudget { currentEmission.emit(prompt, obs0) }
+		} catch (e: kotlinx.coroutines.CancellationException) {
+			throw e
+		} catch (e: Exception) {
+			if (fallbackEmission == null) {
+				throw e
+			}
+			logger.error(e) {
+				"DispatchTickLoop: unhandled exception from emission.emit at tick=${obs0.tick}; " +
+					"engaging terminal fallback immediately"
+			}
+			fallbackGuard.engageImmediately()
+			null
+		}
 
 	/**
 	 * Converts one validated [DispatchAction] into a list of [DispatchDecision]s to post.

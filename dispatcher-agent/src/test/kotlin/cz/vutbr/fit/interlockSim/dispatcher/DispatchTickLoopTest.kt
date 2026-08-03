@@ -20,6 +20,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionCandidateEnumerator
@@ -594,8 +595,44 @@ class DispatchTickLoopTest {
 		}
 
 		@Test
-		@DisplayName("unhandled exception from emission.emit immediately fails the run (SP2c.8 #831)")
-		fun exceptionFromEmissionImmediatelyFails() {
+		@DisplayName(
+			"unhandled exception from emission.emit immediately fails the run when fallback is configured (SP2c.8 #831)"
+		)
+		fun exceptionFromEmissionImmediatelyFailsWithFallback() {
+			val throwingEmission =
+				object : EmissionStrategy {
+					override suspend fun emit(
+						prompt: String,
+						observation: cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+					): List<AttributedAction>? = throw RuntimeException("simulated LLM crash")
+				}
+			val fallbackEmission =
+				object : EmissionStrategy {
+					override val author: ActionAuthor get() = ActionAuthor.RULE_FALLBACK
+
+					override suspend fun emit(
+						prompt: String,
+						observation: cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+					): List<AttributedAction>? = emptyList()
+				}
+			val h =
+				harness(
+					listOf(observation()),
+					emptyList(),
+					emissionOverride = throwingEmission,
+					fallbackEmission = fallbackEmission
+				)
+
+			runBlocking { h.loop.runTick() }
+
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Failed(FailureReason.LLM_ABANDONED))
+		}
+
+		@Test
+		@DisplayName(
+			"unhandled exception from emission.emit rethrows when no fallback is configured (SP2c.26 #849 invariant)"
+		)
+		fun exceptionFromEmissionRethrowsWithoutFallback() {
 			val throwingEmission =
 				object : EmissionStrategy {
 					override suspend fun emit(
@@ -610,9 +647,11 @@ class DispatchTickLoopTest {
 					emissionOverride = throwingEmission
 				)
 
-			runBlocking { h.loop.runTick() }
+			val thrown = runCatching { runBlocking { h.loop.runTick() } }.exceptionOrNull()
 
-			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Failed(FailureReason.LLM_ABANDONED))
+			assertThat(thrown is RuntimeException).isTrue()
+			// Guard was not engaged — the exception surfaced before engagement.
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Running)
 		}
 
 		@Test
