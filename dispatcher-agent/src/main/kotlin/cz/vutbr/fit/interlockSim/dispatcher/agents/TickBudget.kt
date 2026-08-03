@@ -101,6 +101,30 @@ class PausedClockTickBudget(
 	 * Calling [SimulationController.requestResume] when the simulation is not paused is a
 	 * harmless no-op, so a double-resume caused by an unusual call sequence will not corrupt state.
 	 *
+	 * ## Liveness gap — forever-suspending emission (Important)
+	 *
+	 * This budget enforces **no inner deadline**: unlike [DeadlineTickBudget] there is no
+	 * `withTimeoutOrNull` around [block]. A [block] that suspends forever (an LLM call that never
+	 * returns and never throws) neither completes nor throws, so the `finally` never runs and the
+	 * simulation stays paused **indefinitely** — C4 only covers the throwing and timed-out cases,
+	 * not the forever-suspended case. Production wiring MUST therefore provide an outer deadline or
+	 * cancellation around the [withBudget] call (e.g. `withTimeoutOrNull(deadline) { budget.withBudget { ... } }`,
+	 * or a future `DeadlineTickBudget(PausedClockTickBudget(...))` composition helper — not
+	 * implemented today; [withBudget] takes a `suspend () -> T?` block, not a nested budget). The
+	 * SP2c.26 ruling (`docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` §3.4 / §4 C4) records only the
+	 * throwing/timed-out cases; the forever-suspend case is a separate, still-open follow-up.
+	 *
+	 * ## Exclusive ownership of the pause (Important)
+	 *
+	 * [SimulationController.requestResume] is a **boolean flip, not refcounted** — "Calling
+	 * requestResume when not paused is a harmless no-op". The `finally { requestResume() }` here
+	 * therefore assumes **exclusive ownership** of the pause state for the duration of [block]: no
+	 * other component may pause the simulation concurrently with the emission window. A concurrent
+	 * external pauser (collision detection, operator hold, etc.) that paused during [block] would
+	 * have its pause **released prematurely** by this budget's resume. SP2c.10 scope assumes no
+	 * concurrent external pausers during emission; lifting that assumption requires a refcounted
+	 * pause/resume on [SimulationController] (a separate change).
+	 *
 	 * @return The result of [block]. Unlike [DeadlineTickBudget], this implementation never returns
 	 *   `null` from a deadline: there is no deadline. The only way to get `null` here is if [block]
 	 *   itself returns `null`.

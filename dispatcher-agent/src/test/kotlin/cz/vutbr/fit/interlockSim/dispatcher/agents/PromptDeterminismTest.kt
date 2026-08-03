@@ -77,11 +77,15 @@ class PromptDeterminismTest {
 	// ── PausedClockTickBudget wrapper does not alter the captured result ───────
 
 	/**
-	 * A prompt produced inside [PausedClockTickBudget.withBudget] equals the same prompt produced
-	 * outside — the budget wrapper does not mutate or delay the observation seen by the emission.
-	 *
-	 * This is the key F1-specific guarantee: the clock is paused *around* the emission, so no
-	 * sim-thread events can inject a different observation between capture and use.
+	 * Smoke test that the [PausedClockTickBudget] wrapper itself does not mutate the rendered
+	 * prompt: a prompt produced inside [PausedClockTickBudget.withBudget] equals the same prompt
+	 * produced outside it. With the [NoOpController] used here the call is near-tautological
+	 * (`render(ctx) == render(ctx)`), so this test does **not** by itself prove the F1 freeze —
+	 * the real F1 paused-clock evidence lives in `TimingRegimesOllamaTest` (a multi-second live
+	 * Ollama inference genuinely bracketed by pause/resume) and in the desktop-ui timing tests
+	 * (`PausedClockSimTimeInvarianceTest`, `PausedClockResumeOnFailureTest`), which assert sim
+	 * time is unchanged across a real slow emission. This test only guards against the wrapper
+	 * accidentally altering or delaying the observation handed to the emission strategy.
 	 */
 	@Test
 	@DisplayName("P8/F1: PausedClockTickBudget does not alter the prompt captured by the emission")

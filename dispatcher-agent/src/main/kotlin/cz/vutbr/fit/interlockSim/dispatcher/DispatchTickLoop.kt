@@ -342,6 +342,10 @@ class DispatchTickLoop(
 		// ratio = simDelta / emissionWallClockSeconds; < 1.0 means the emission was slower
 		// than the sim tick period (LLM falling behind). Reported at debug level, UNGATED —
 		// it does not fail the run. The rule-based arm is intrinsically ≥ 1× (synchronous).
+		// Pairing note: simDelta (prev→current tick sim advance) is paired with THIS tick's
+		// emissionNanos, so the ratio describes the tick just emitted — it is not a concurrent
+		// measurement of emission wall-clock against an advancing sim clock (F1 freezes the clock
+		// during emission anyway, so a concurrent measurement would always be 0 / undefined).
 		if (emissionNanos > 0L && simDelta > 0.0) {
 			val emissionWallClockSeconds = emissionNanos.toDouble() / NANOS_PER_SECOND
 			val realTimeRatio = simDelta / emissionWallClockSeconds
