@@ -252,7 +252,8 @@ class DispatchTickLoop(
 							commandId = CommandId(commandIdCounter.incrementAndGet()),
 							tick = obs0.tick,
 							action = DispatchAction.NoOp,
-							author = ActionAuthor.TIMEOUT_NOOP
+							author = ActionAuthor.TIMEOUT_NOOP,
+							reason = "deadline exceeded — budget exhausted, NoOp substituted"
 						)
 					)
 				emittedRaw.isEmpty() ->
@@ -261,7 +262,8 @@ class DispatchTickLoop(
 							commandId = CommandId(commandIdCounter.incrementAndGet()),
 							tick = obs0.tick,
 							action = DispatchAction.NoOp,
-							author = currentEmission.author
+							author = currentEmission.author,
+							reason = "no action warranted this tick"
 						)
 					)
 				else ->
