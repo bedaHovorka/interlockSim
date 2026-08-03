@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
@@ -34,6 +35,10 @@ import javax.swing.SwingUtilities
  * active [cz.vutbr.fit.interlockSim.context.SimulationContext]'s Koin scope (the
  * shuntingLoopAI example wiring — see ExampleRegistry.createShuntingLoopAIGuiExample), and
  * that it does nothing for contexts without one (every other example).
+ *
+ * Also verifies (SP2c.22, Issue #845) that [Frame] calls
+ * [DispatcherRunRecorder.finish] and [DispatcherRunRecorder.logFinalSummary] on STOPPED
+ * when a [DispatcherRunRecorder] is present in scope.
  *
  * Both tests drive the STOPPED transition via [Frame.stopSimulation] (manual stop). This is
  * intentionally the only path exercised here: Frame's `onStateChanged` lambda has a single
@@ -117,4 +122,52 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 
 		context.close()
 	}
+
+	// ── SP2c.22 (#845) — DispatcherRunRecorder integration ───────────────────
+
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("SP2c.22: finish and logFinalSummary called on DispatcherRunRecorder when simulation stops (MANUAL_STOP path)")
+	fun runRecorderFinishAndLogCalledOnStop() {
+		val started = CountDownLatch(1)
+		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		context.addPropertyChangeListener { _ -> started.countDown() }
+
+		val runRecorder = mockk<DispatcherRunRecorder>(relaxed = true)
+		context.scope.declare(runRecorder)
+
+		SwingUtilities.invokeAndWait {
+			frame.setContext(context)
+			frame.startSimulation()
+		}
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		SwingUtilities.invokeAndWait { frame.stopSimulation() }
+
+		verify(exactly = 1) { runRecorder.finish(any()) }
+		verify(exactly = 1) { runRecorder.logFinalSummary() }
+		confirmVerified(runRecorder)
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("SP2c.22: stopping without a DispatcherRunRecorder in scope does not throw")
+	fun noThrowWhenRunRecorderAbsent() {
+		val started = CountDownLatch(1)
+		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		context.addPropertyChangeListener { _ -> started.countDown() }
+
+		SwingUtilities.invokeAndWait {
+			frame.setContext(context)
+			frame.startSimulation()
+		}
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		// Must not throw even though context.scope has no DispatcherRunRecorder registered.
+		SwingUtilities.invokeAndWait { frame.stopSimulation() }
+
+		context.close()
+	}
 }
+

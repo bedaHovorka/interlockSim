@@ -14,7 +14,9 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
@@ -140,6 +142,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	// registers one; every other example leaves this null.
 	private var wiredMeasuringAdapter: MeasuringPlanAdapter? = null
 
+	// DispatcherRunRecorder wired to the active context's Koin scope, captured at RUNNING time
+	// (SP2c.22, Issue #845) so the STOPPED transition calls finish() and logFinalSummary() for
+	// the run that just ended. Present for any context that has one scoped (all contexts with
+	// the dispatcherAgentModule wired). Null for contexts without the dispatcher module.
+	private var wiredRunRecorder: DispatcherRunRecorder? = null
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -206,6 +214,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// Capture now so the STOPPED transition logs metrics for the run that just
 							// ended, not whatever context happens to be current when STOPPED fires.
 							wiredMeasuringAdapter = currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()
+							// SP2c.22 (#845): capture DispatcherRunRecorder at RUNNING so the STOPPED
+							// transition can call finish() and logFinalSummary() for this specific run.
+							wiredRunRecorder = currentSimulationContext?.scope?.getOrNull<DispatcherRunRecorder>()
 							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
 							wireDispatcherControlPanel()
 						}
@@ -232,6 +243,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// detach calls above.
 							wiredMeasuringAdapter?.logFinalSummary()
 							wiredMeasuringAdapter = null
+							// SP2c.22 (#845): finish the run recorder and log its final summary.
+							// MANUAL_STOP is the default cause here; natural completion drives the same
+							// STOPPED transition via SimulationController's monitor thread (see
+							// SimulationController.launchMonitorThread) and is indistinguishable at
+							// this call site — both reach the identical STOPPED emission.
+							wiredRunRecorder?.finish(RunEndCause.MANUAL_STOP)
+							wiredRunRecorder?.logFinalSummary()
+							wiredRunRecorder = null
 						}
 					}
 				}
