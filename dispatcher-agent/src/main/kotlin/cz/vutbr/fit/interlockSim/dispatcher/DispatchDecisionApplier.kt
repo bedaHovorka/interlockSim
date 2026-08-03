@@ -387,8 +387,13 @@ class DispatchDecisionApplier(
 								decisionKind = decision::class.simpleName ?: "Unknown",
 								tickIndex = correlation?.tickIndex ?: -1L
 							)
+						// When applied=false (only ApproveTrain with CAP_EXCEEDED_APPLY), carry
+						// the failure code so APPLIED_THEN_FAILED always has a non-null applyFailure.
+						val applyFailure =
+							if (!applied && decision is DispatchDecision.ApproveTrain) ApplyFailureCode.CAP_EXCEEDED_APPLY
+							else null
 						val phase = if (applied) ActionPhase.APPLIED else ActionPhase.APPLIED_THEN_FAILED
-						actionOutcomeSink.onActionOutcome(ActionOutcome(phase, null, null, authored))
+						actionOutcomeSink.onActionOutcome(ActionOutcome(phase, null, applyFailure, authored))
 					}
 				} catch (e: IllegalArgumentException) {
 					logger.warn(e) {
