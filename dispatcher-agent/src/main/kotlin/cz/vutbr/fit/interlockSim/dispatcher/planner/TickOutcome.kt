@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+
 /**
  * Exhaustive taxonomy of what happened on a single dispatcher tick, replacing the legacy
  * two-way split ([PlannerCycleListener.onLlmSuccess] / [FallbackReason]) that could not tell
@@ -88,3 +90,26 @@ val TickOutcome.tickClass: TickClass
  */
 val TickOutcome.countsAsLlmSuccess: Boolean
 	get() = tickClass == TickClass.SUCCESS
+
+/**
+ * [ActionAuthor] that should be attributed to every decision posted this tick, given this
+ * [TickOutcome].
+ *
+ * Used by [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] to correctly attribute a
+ * live LLM-planner cycle's `commandQueue.postAll` call instead of the pre-SP2c.20-follow-up
+ * default of always tagging it [ActionAuthor.LLM] (SP2c.20 follow-up, Issue #843).
+ *
+ * - LLM-success outcomes ([TickOutcome.LLM_ACTIONS], [TickOutcome.LLM_NO_OP],
+ *   [TickOutcome.LLM_REPAIRED]) → [ActionAuthor.LLM].
+ * - No-dispatching-action outcomes ([TickOutcome.TIMEOUT_NOOP], [TickOutcome.LLM_EXCEPTION]) →
+ *   [ActionAuthor.TIMEOUT_NOOP].
+ * - Deterministic-fallback outcomes ([TickOutcome.LLM_ABANDONED], [TickOutcome.RULE_FALLBACK]) →
+ *   [ActionAuthor.RULE_FALLBACK] — the fallback dispatcher's decisions were actually posted.
+ */
+val TickOutcome.toActionAuthor: ActionAuthor
+	get() =
+		when (this) {
+			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED -> ActionAuthor.LLM
+			TickOutcome.TIMEOUT_NOOP, TickOutcome.LLM_EXCEPTION -> ActionAuthor.TIMEOUT_NOOP
+			TickOutcome.LLM_ABANDONED, TickOutcome.RULE_FALLBACK -> ActionAuthor.RULE_FALLBACK
+		}

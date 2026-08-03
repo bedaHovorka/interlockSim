@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ConflictHintLatch
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
@@ -265,7 +266,8 @@ class ExampleRegistry {
 					context,
 					loop,
 					pacingController,
-					plannerOverride = aiPlanner
+					plannerOverride = aiPlanner,
+					plannerTickSource = koogAdapter
 				)
 				context.setMainProcess(loop)
 				context
@@ -391,7 +393,8 @@ class ExampleRegistry {
 					context,
 					loop,
 					context.scope.get<DelegatingSimulationController>(),
-					plannerOverride = aiPlanner
+					plannerOverride = aiPlanner,
+					plannerTickSource = koogAdapter
 				)
 				context.setMainProcess(loop)
 				context
@@ -440,7 +443,11 @@ class ExampleRegistry {
 		context: DefaultSimulationContext,
 		loop: ShuntingLoop,
 		controller: SimulationController,
-		plannerOverride: DispatcherPlanner? = null
+		plannerOverride: DispatcherPlanner? = null,
+		// SP2c.20 follow-up (#843): the un-wrapped KoogAgentPlanAdapter behind plannerOverride
+		// (when plannerOverride is a MeasuringPlanAdapter wrapping one), so AgentLoopDriver can
+		// attribute each cycle correctly via its tickListener. null for rule-based examples.
+		plannerTickSource: KoogAgentPlanAdapter? = null
 	) {
 		// Goal 10 dispatcher-cannot-approve-trains fix: resolve the SAME NetworkPerceptionPort /
 		// NetworkActuatorPort instances the Koin-scoped KoogAgentFactory uses for its tools,
@@ -477,6 +484,9 @@ class ExampleRegistry {
 		// applier falls back to fire-and-forget behaviour (pre-SP2c.17 compatibility).
 		val correlationMap = context.scope.getOrNull<CommandCorrelationMap>()
 		val outcomeSink = context.scope.getOrNull<AppliedOutcomeChannel>()
+		// SP2c.20 follow-up (#843): scoped ActionOutcomeAggregator so per-action attribution
+		// (author, phase, ApplyFailureCode) reaches a real consumer in production, not just tests.
+		val actionOutcomeAggregator = context.scope.getOrNull<ActionOutcomeAggregator>()
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
 		// NoOpSimulationController (rule-based console runs) has no speed cap, so an async planner
 		// cannot honour the 2x real-time limit there. The AI console run passes
@@ -501,7 +511,8 @@ class ExampleRegistry {
 				modeState = modeState,
 				semiAutoApprover = semiAutoGateway?.let { gw -> gw::approve },
 				correlationMap = correlationMap,
-				outcomeSink = outcomeSink
+				outcomeSink = outcomeSink,
+				actionOutcomeSink = actionOutcomeAggregator
 			)
 		// Evict the duplicate-suppression guard's entries for a train once any of its blocks
 		// releases — see DispatchDecisionApplier.evictReservationsFor for why this must not
@@ -537,7 +548,8 @@ class ExampleRegistry {
 				commandQueue = queue,
 				controller = controller,
 				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation),
-				snapshotSignal = driverSignal
+				snapshotSignal = driverSignal,
+				plannerTickSource = plannerTickSource
 			)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot

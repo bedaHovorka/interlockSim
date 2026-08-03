@@ -10,7 +10,12 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
+import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.toActionAuthor
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -112,7 +117,22 @@ class AgentLoopDriver(
 		DefaultDispatchLoopSensorPort {
 			ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
 		},
-	private val snapshotSignal: SnapshotSignal? = null
+	private val snapshotSignal: SnapshotSignal? = null,
+	/**
+	 * SP2c.20 follow-up (#843): the [KoogAgentPlanAdapter] driving [planner], when [planner]
+	 * is (possibly wrapped) LLM-backed — supplied explicitly by the wiring layer rather than
+	 * detected via `is` on a `by`-delegated wrapper such as [MeasuringPlanAdapter].
+	 *
+	 * When non-null, this driver installs a [PlannerTickListener] on it and attributes each
+	 * cycle's `commandQueue.postAll` call via [TickOutcome.toActionAuthor] on the tick
+	 * outcome most recently reported. When `null` (the default — a pure deterministic
+	 * planner such as [RuleBasedPlanAdapter]), every cycle is attributed
+	 * [ActionAuthor.RULE_BASED] — safe because a synchronous rule-based planner has no
+	 * internal LLM/fallback blend to distinguish.
+	 *
+	 * @since Issue #843 (SP2c.20 follow-up — Goal 10 action attribution)
+	 */
+	private val plannerTickSource: KoogAgentPlanAdapter? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -121,6 +141,23 @@ class AgentLoopDriver(
 	/** Simulation time at the end of the most recently completed cycle; 0.0 before the first cycle. */
 	private var prevSimTime: Double = 0.0
 	private var hasProcessedSnapshot: Boolean = false
+
+	/**
+	 * Most recent [TickOutcome] reported by [plannerTickSource]'s [PlannerTickListener], if any.
+	 * `@Volatile` even though both writer (the listener callback) and reader (this class) run
+	 * on the same driver thread/coroutine — matches this class's existing `@Volatile` usage
+	 * for defensive safe publication.
+	 */
+	@Volatile
+	private var lastTickOutcome: TickOutcome? = null
+
+	init {
+		// The listener fires synchronously inside plannerTickSource.plan()'s suspend body — all
+		// four call sites (LLM success, EMPTY_NO_TOOLS/TIMEOUT/EXCEPTION fallback) are inline in
+		// KoogAgentPlanAdapter.plan's try/catch, not in a spawned coroutine — so lastTickOutcome
+		// is always fresh by the time plan() returns below in runCycle().
+		plannerTickSource?.tickListener = PlannerTickListener { record -> lastTickOutcome = record.outcome }
+	}
 
 	private fun pauseUntilNextSnapshot() {
 		try {
@@ -224,10 +261,21 @@ class AgentLoopDriver(
 		val decisions = planner.plan(observation)
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
 
+		// SP2c.20 follow-up (#843): attribute this cycle's decisions correctly instead of
+		// silently defaulting to ActionAuthor.LLM (postAll's pre-fix default) regardless of
+		// which planner actually produced them.
+		val author =
+			if (plannerTickSource == null) {
+				ActionAuthor.RULE_BASED
+			} else {
+				lastTickOutcome?.toActionAuthor ?: ActionAuthor.LLM
+			}
+		val reason = lastTickOutcome?.name ?: ""
+
 		// 3. ACT — post decisions to the thread-safe handoff queue.
 		// The sim-thread DispatchDecisionApplier drains and applies them; this
 		// call never mutates simulation state on the driver thread.
-		val posted = commandQueue.postAll(decisions)
+		val posted = commandQueue.postAll(decisions, author, reason)
 		if (!posted) {
 			logger.warn {
 				"AgentLoopDriver: commandQueue rejected ${decisions.size} decision(s) " +

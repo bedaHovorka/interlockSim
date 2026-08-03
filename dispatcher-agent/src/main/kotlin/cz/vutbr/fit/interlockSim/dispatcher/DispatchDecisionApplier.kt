@@ -333,6 +333,24 @@ class DispatchDecisionApplier(
 	}
 
 	/**
+	 * Result of applying one [DispatchDecision] — decouples two independent signals that used
+	 * to be conflated into a single `Boolean` (SP2c.20 follow-up, Issue #843 acceptance
+	 * criterion #10):
+	 *
+	 * @property decisionApplied Whether [onDecisionApplied] should fire for this decision.
+	 *   Unchanged from the pre-refactor `Boolean` semantics — `false` only for
+	 *   [DispatchDecision.NoAction] and an [DispatchDecision.ApproveTrain] refused at apply
+	 *   time ([ApplyFailureCode.CAP_EXCEEDED_APPLY]).
+	 * @property applyFailure The [ApplyFailureCode] to report to [actionOutcomeSink], or `null`
+	 *   on success. Previously only ever set for `ApproveTrain`; now also correctly derived
+	 *   for `RequestRoute`'s `AllPathsBlocked`/`Conflict`/`NoRouteExists` results.
+	 */
+	private data class ApplyResult(
+		val decisionApplied: Boolean,
+		val applyFailure: ApplyFailureCode? = null
+	)
+
+	/**
 	 * Drains [queue] and applies each pending [DispatchDecision] via the actuator ports.
 	 *
 	 * Always called on the kDisco simulation thread from
@@ -368,13 +386,13 @@ class DispatchDecisionApplier(
 			val correlation = correlationMap?.correlate(decision)
 			if (shouldApply(decision)) {
 				try {
-					val applied = applyDecision(decision, correlation)
+					val result = applyDecision(decision, correlation)
 					// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
 					// "Why this route?" panel can display the rationale. NoAction carries no
 					// rationale, and dropped/refused decisions (under MANUAL, or an apply-time
 					// CAP_EXCEEDED_APPLY refusal — see applyApproveTrain) are not "applied", so
-					// applyDecision returns false and the listener is not invoked.
-					if (applied) {
+					// applyDecision returns decisionApplied=false and the listener is not invoked.
+					if (result.decisionApplied) {
 						onDecisionApplied?.onDecisionApplied(decision)
 					}
 					// SP2c.20 (#843): notify the action outcome sink with author attribution.
@@ -387,16 +405,13 @@ class DispatchDecisionApplier(
 								decisionKind = decision::class.simpleName ?: "Unknown",
 								tickIndex = correlation?.tickIndex ?: -1L
 							)
-						// When applied=false (only ApproveTrain with CAP_EXCEEDED_APPLY), carry
-						// the failure code so APPLIED_THEN_FAILED always has a non-null applyFailure.
-						val applyFailure =
-							if (!applied && decision is DispatchDecision.ApproveTrain) {
-								ApplyFailureCode.CAP_EXCEEDED_APPLY
-							} else {
-								null
-							}
-						val phase = if (applied) ActionPhase.APPLIED else ActionPhase.APPLIED_THEN_FAILED
-						actionOutcomeSink.onActionOutcome(ActionOutcome(phase, null, applyFailure, authored))
+						// applyFailure is now derived uniformly by applyDecision — SP2c.20 follow-up
+						// (Issue #843 AC #10): previously only ApproveTrain's CAP_EXCEEDED_APPLY was
+						// special-cased here; RequestRoute's AllPathsBlocked/Conflict/NoRouteExists
+						// are now correctly reported too, via ApplyResult.applyFailure.
+						val phase =
+							if (result.applyFailure != null) ActionPhase.APPLIED_THEN_FAILED else ActionPhase.APPLIED
+						actionOutcomeSink.onActionOutcome(ActionOutcome(phase, null, result.applyFailure, authored))
 					}
 				} catch (e: IllegalArgumentException) {
 					logger.warn(e) {
@@ -490,37 +505,45 @@ class DispatchDecisionApplier(
 	private fun applyDecision(
 		decision: DispatchDecision,
 		correlation: CommandCorrelationMap.CommandAndTick?
-	) = when (decision) {
-		is DispatchDecision.ApproveTrain -> applyApproveTrain(decision, correlation)
-		is DispatchDecision.ReservePath -> {
-			applyReservePath(decision)
-			true
+	): ApplyResult =
+		when (decision) {
+			is DispatchDecision.ApproveTrain -> {
+				val admitted = applyApproveTrain(decision, correlation)
+				ApplyResult(admitted, if (!admitted) ApplyFailureCode.CAP_EXCEEDED_APPLY else null)
+			}
+			is DispatchDecision.ReservePath -> {
+				applyReservePath(decision)
+				ApplyResult(true)
+			}
+			DispatchDecision.NoAction -> ApplyResult(false)
+			// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
+			is DispatchDecision.HoldTrain -> {
+				applyHoldTrain(decision)
+				ApplyResult(true)
+			}
+			// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
+			// SetSignalAspect and SetSwitchPosition still delegate to the shared helper in :core
+			// (no outcome type defined for them in SP2c.17). ReleaseRoute and RequestRoute are
+			// handled directly here so the outcome can be captured and published without touching
+			// :core's applyToolDrivenToActuator (zero :core changes, per SP2c.17 constraint C10).
+			is DispatchDecision.SetSignalAspect,
+			is DispatchDecision.SetSwitchPosition -> {
+				decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
+				ApplyResult(true)
+			}
+			is DispatchDecision.ReleaseRoute -> {
+				applyReleaseRoute(decision, correlation)
+				ApplyResult(true)
+			}
+			is DispatchDecision.RequestRoute -> {
+				val applyFailure = applyRequestRoute(decision, correlation)
+				// decisionApplied stays true regardless of RouteRequestResult: the actuator was
+				// reached and the attempt is surfaced to the GUI "Why this route?" observer either
+				// way (unchanged pre-SP2c.20-follow-up behaviour). Only applyFailure — which drives
+				// actionOutcomeSink's phase/code — now varies with the actual result.
+				ApplyResult(true, applyFailure)
+			}
 		}
-		DispatchDecision.NoAction -> false
-		// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
-		is DispatchDecision.HoldTrain -> {
-			applyHoldTrain(decision)
-			true
-		}
-		// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
-		// SetSignalAspect and SetSwitchPosition still delegate to the shared helper in :core
-		// (no outcome type defined for them in SP2c.17). ReleaseRoute and RequestRoute are
-		// handled directly here so the outcome can be captured and published without touching
-		// :core's applyToolDrivenToActuator (zero :core changes, per SP2c.17 constraint C10).
-		is DispatchDecision.SetSignalAspect,
-		is DispatchDecision.SetSwitchPosition -> {
-			decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
-			true
-		}
-		is DispatchDecision.ReleaseRoute -> {
-			applyReleaseRoute(decision, correlation)
-			true
-		}
-		is DispatchDecision.RequestRoute -> {
-			applyRequestRoute(decision, correlation)
-			true
-		}
-	}
 
 	/**
 	 * SP2c.18 (#841): Applies [decision] by checking the live active-train count (if
@@ -750,14 +773,14 @@ class DispatchDecisionApplier(
 	private fun applyRequestRoute(
 		decision: DispatchDecision.RequestRoute,
 		correlation: CommandCorrelationMap.CommandAndTick?
-	) {
+	): ApplyFailureCode? {
 		val reservationKey = "${decision.trainName}|${decision.fromEndpointName}|${decision.toEndpointName}"
 		if (reservationKey in appliedRequestRoutes) {
 			logger.debug {
 				"DispatchDecisionApplier: skipping duplicate RequestRoute: " +
 					"trainName=${decision.trainName} ${decision.fromEndpointName} → ${decision.toEndpointName} (already applied)"
 			}
-			return
+			return null
 		}
 		logger.debug {
 			"DispatchDecisionApplier: applying RequestRoute trainName=${decision.trainName}, " +
@@ -771,8 +794,10 @@ class DispatchDecisionApplier(
 					decision.toEndpointName
 				)
 		) {
-			is RouteRequestResult.Reserved ->
+			is RouteRequestResult.Reserved -> {
 				handleRequestRouteReserved(decision, result, reservationKey, correlation)
+				null
+			}
 			is RouteRequestResult.AllPathsBlocked -> {
 				logger.warn {
 					"DispatchDecisionApplier: RequestRoute all paths blocked for ${decision.trainName} " +
@@ -790,7 +815,7 @@ class DispatchDecisionApplier(
 						)
 					)
 				}
-				Unit
+				ApplyFailureCode.ALL_PATHS_BLOCKED
 			}
 			is RouteRequestResult.Conflict -> {
 				logger.warn {
@@ -810,7 +835,7 @@ class DispatchDecisionApplier(
 						)
 					)
 				}
-				Unit
+				ApplyFailureCode.CONFLICT
 			}
 			is RouteRequestResult.NoRouteExists -> {
 				logger.warn {
@@ -828,7 +853,7 @@ class DispatchDecisionApplier(
 						)
 					)
 				}
-				Unit
+				ApplyFailureCode.NO_ROUTE_EXISTS
 			}
 		}
 	}

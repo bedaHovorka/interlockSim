@@ -33,6 +33,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase
 import cz.vutbr.fit.interlockSim.dispatcher.planner.AuthoredAction
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -456,6 +457,73 @@ class Sp2c20ActionAttributionTest {
 			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")))
 			applier.onControlStep() // must not throw
 		}
+
+		@Test
+		@DisplayName(
+			"tickIndex is -1 when the correlation map has no entry for the drained decision " +
+				"(SP2c.20 follow-up, AC #4 end-to-end)"
+		)
+		fun tickIndexIsMinusOneWhenUnattributed() {
+			val outcomes = mutableListOf<ActionOutcome>()
+			val sink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
+			val correlationMap = CommandCorrelationMap()
+			// The queue is NOT wired with correlationMap, so postAll below never registers this
+			// decision — simulating a decision that reaches the applier without a correlation
+			// entry (e.g. posted without going through the registration path).
+			val queue = ActuatorCommandQueue()
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = mockk(relaxed = true),
+					onApproveTrain = {},
+					correlationMap = correlationMap,
+					actionOutcomeSink = sink
+				)
+
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")))
+			applier.onControlStep()
+
+			assertThat(outcomes).hasSize(1)
+			assertThat(outcomes.first().authored.tickIndex).isEqualTo(-1L)
+			assertThat(correlationMap.unattributedApplies).isGreaterThanOrEqualTo(1L)
+		}
+
+		@Test
+		@DisplayName(
+			"DROPPED_INVALID branch: the onActionOutcome sink call itself produces no log output " +
+				"(the preceding logger.warn is expected and allowed)"
+		)
+		fun droppedInvalidSinkCallProducesNoLogOutput() {
+			val outcomes = mutableListOf<ActionOutcome>()
+			val logCountsAtCallTime = mutableListOf<Int>()
+			val sink =
+				ActionOutcomeSink { outcome ->
+					logCountsAtCallTime.add(appender.list.size)
+					outcomes.add(outcome)
+				}
+			val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
+			every { networkActuator.requestRoute(any(), any(), any()) } throws
+				IllegalArgumentException("Unknown endpoint")
+			val queue = ActuatorCommandQueue()
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = {},
+					actionOutcomeSink = sink
+				)
+
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+			applier.onControlStep()
+
+			assertThat(outcomes).hasSize(1)
+			assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.DROPPED_INVALID)
+			// The applier's own logger.warn(e) fires BEFORE the sink call, so appender.list is
+			// non-empty by then — the invariant under test is that the sink call itself adds
+			// nothing on top: the log count at call time must equal the final log count.
+			assertThat(logCountsAtCallTime).hasSize(1)
+			assertThat(logCountsAtCallTime.first()).isEqualTo(appender.list.size)
+		}
 	}
 
 	// ── ALL_PATHS_BLOCKED vs invalid-output rate ─────────────────────────────
@@ -528,6 +596,22 @@ class Sp2c20ActionAttributionTest {
 			assertThat(names.contains("CAP_EXCEEDED")).isFalse()
 			assertThat(names.contains("CAP_EXCEEDED_APPLY")).isTrue()
 		}
+
+		@Test
+		@DisplayName("ApplyFailureCode has exactly the six SP2c.20 entries — no stray additions")
+		fun applyFailureCodeIsExactlyTheExpectedSet() {
+			val names = ApplyFailureCode.entries.map { it.name }.toSet()
+			assertThat(names).isEqualTo(
+				setOf(
+					"ALL_PATHS_BLOCKED",
+					"CONFLICT",
+					"NO_ROUTE_EXISTS",
+					"APPROVE_REJECTED",
+					"CAP_EXCEEDED_APPLY",
+					"DROPPED_INVALID"
+				)
+			)
+		}
 	}
 
 	// ── New planner types in correct package ─────────────────────────────────
@@ -591,6 +675,27 @@ class Sp2c20ActionAttributionTest {
 				)
 			}
 			assertThat(store.getDispatchingActionCount(ActionAuthor.TIMEOUT_NOOP)).isZero()
+		}
+
+		@Test
+		@DisplayName(
+			"P3 (SP2c.20 follow-up): an all-fallback run dispatches zero actions for every author, " +
+				"not just TIMEOUT_NOOP — the admission safety net is deleted (SP2c.8), so there is no " +
+				"author left that could originate a dispatching action outside LLM/RULE_BASED intent"
+		)
+		fun allFallbackRunHasZeroDispatchingActionsForEveryAuthor() {
+			val store = DispatcherPreferenceStore()
+			repeat(5) { i ->
+				store.observe(
+					record(
+						tick = i.toLong(),
+						actions = listOf(attributed(ActionAuthor.TIMEOUT_NOOP, DispatchAction.NoOp))
+					)
+				)
+			}
+			ActionAuthor.entries.forEach { author ->
+				assertThat(store.getDispatchingActionCount(author)).isZero()
+			}
 		}
 	}
 
