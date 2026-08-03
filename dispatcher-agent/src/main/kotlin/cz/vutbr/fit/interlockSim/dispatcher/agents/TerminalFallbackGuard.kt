@@ -13,60 +13,128 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome.Failed
 import cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome.Running
 
 /**
- * Monitors [TickRecord]s for [ActionAuthor.RULE_FALLBACK] actions and transitions the
- * [RunOutcome] to [Failed] when detected (SP2c.5, Issue #828).
+ * Monitors dispatcher ticks and engages a terminal fallback when the LLM has been absent
+ * for [threshold] consecutive ticks (SP2c.8, Issue #831).
+ *
+ * ## Counter semantics
+ *
+ * | Tick outcome | Counter |
+ * |---|---|
+ * | ≥ 1 action emitted (any author except [ActionAuthor.TIMEOUT_NOOP]) | **reset to 0** |
+ * | All emitted actions rejected — LLM produced valid output, being wrong is not abandonment | **reset to 0** |
+ * | Deadline miss → [ActionAuthor.TIMEOUT_NOOP] substituted | +1 |
+ * | Unhandled exception from `emission.emit` (via [engageImmediately]) | **immediate engage** |
+ *
+ * ## Why a no_op authored LLM resets the counter
+ *
+ * A correctly idle station — one where the LLM correctly decides nothing is needed — emits
+ * `no_op` with author [ActionAuthor.LLM]. If that did not reset the counter, a healthy
+ * idle station would trip the guard after five ticks and every healthy run would be marked
+ * FAILED. The counter measures **LLM absence** (timeout/exception), not LLM idleness.
  *
  * ## Why [ActionAuthor.RULE_BASED] does not trigger failure
  *
  * A run where all actions carry author [ActionAuthor.RULE_BASED] is a deliberate rule-based
- * run (e.g. the P10 gate determinism test). This guard must **not** mark such a run as
- * FAILED — otherwise every rule-based acceptance run would be incorrectly classified as a
- * failure.
- *
- * Only [ActionAuthor.RULE_FALLBACK] signals a terminal failure: it means the LLM emission
- * strategy was running but failed mid-turn and a rule-based strategy had to take over.
- * **That** is the C7 gate scenario (SP2c.20).
+ * run (e.g. the P10 gate determinism test). [ActionAuthor.RULE_BASED] actions reset the
+ * counter (they are not TIMEOUT_NOOP), so such a run stays [Running] for the entire
+ * simulation — by construction, not by accident.
  *
  * ## Usage
  *
  * ```kotlin
- * val guard = TerminalFallbackGuard()
+ * val guard = TerminalFallbackGuard(threshold = 5) { reason ->
+ *     // swap emission strategy to RuleBasedEmissionStrategy with RULE_FALLBACK author
+ * }
  * // inside DispatchTickLoop.runTick():
  * guard.observe(tickRecord)
+ * // on exception from emission.emit:
+ * guard.engageImmediately()
  * // after the tick:
  * val outcome: RunOutcome = guard.currentOutcome
  * ```
  *
- * The guard is single-use and immutable once a failure is detected. Once [RunOutcome.Failed]
- * is set it never reverts to [Running].
+ * The guard is single-use: once [engaged] is `true` it never reverts.
  *
- * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
+ * @param threshold Number of consecutive [ActionAuthor.TIMEOUT_NOOP] ticks before engagement.
+ *   Defaults to 5 (~15 s at ~3 s/tick). Must be ≥ 1.
+ * @param onAbandoned Callback invoked exactly once when the guard engages, with
+ *   [FailureReason.LLM_ABANDONED]. Runs synchronously on the calling thread (the driver
+ *   coroutine). Use it to swap the [cz.vutbr.fit.interlockSim.dispatcher.agents.EmissionStrategy]
+ *   in [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop].
+ *
+ * @since Issue #831 (SP2c.8 — Goal 10 terminal fallback guard redesign)
  */
-class TerminalFallbackGuard {
-	private var outcomeState: RunOutcome = Running
+class TerminalFallbackGuard(
+	private val threshold: Int = 5,
+	private val onAbandoned: (FailureReason) -> Unit = {}
+) {
+	init {
+		require(threshold >= 1) { "threshold must be >= 1, got $threshold" }
+	}
+
+	private var consecutiveTimeouts: Int = 0
+
+	@Volatile
+	private var _engaged: Boolean = false
+
+	/**
+	 * Whether the guard has engaged (the LLM has been absent for [threshold] consecutive
+	 * ticks, or [engageImmediately] was called).
+	 *
+	 * Once `true`, never reverts to `false`.
+	 */
+	val engaged: Boolean get() = _engaged
 
 	/**
 	 * The current [RunOutcome] as observed so far.
 	 *
-	 * Starts as [Running]; transitions to [Failed] the first time a tick record contains
-	 * a [ActionAuthor.RULE_FALLBACK] action. Never reverts after that.
+	 * Returns [Failed] with reason [FailureReason.LLM_ABANDONED] once [engaged] is `true`;
+	 * [Running] otherwise. Never reverts after [engaged] becomes `true`.
 	 */
-	val currentOutcome: RunOutcome get() = outcomeState
+	val currentOutcome: RunOutcome get() = if (_engaged) Failed(FailureReason.LLM_ABANDONED) else Running
 
 	/**
 	 * Processes a completed [TickRecord].
 	 *
-	 * If any [AttributedAction] in the record has [ActionAuthor.RULE_FALLBACK] and the
-	 * outcome has not yet failed, transitions [currentOutcome] to
-	 * [Failed] with reason [FailureReason.LLM_ABANDONED].
+	 * - If any action has author [ActionAuthor.TIMEOUT_NOOP], the consecutive-timeout
+	 *   counter increments; if it reaches [threshold], the guard engages.
+	 * - Otherwise (any non-TIMEOUT_NOOP author — including [ActionAuthor.LLM] no_op,
+	 *   [ActionAuthor.RULE_BASED], or all-rejected-but-emitted) the counter resets to 0.
+	 *
+	 * No-op once [engaged] is `true`.
 	 *
 	 * @param record The completed tick record to inspect.
 	 */
 	fun observe(record: TickRecord) {
-		if (outcomeState is Failed) return
-		val hasFallback = record.actions.any { it.author == ActionAuthor.RULE_FALLBACK }
-		if (hasFallback) {
-			outcomeState = Failed(FailureReason.LLM_ABANDONED)
+		if (_engaged) return
+		val isTimeout = record.actions.any { it.author == ActionAuthor.TIMEOUT_NOOP }
+		if (isTimeout) {
+			consecutiveTimeouts++
+			if (consecutiveTimeouts >= threshold) {
+				engage()
+			}
+		} else {
+			consecutiveTimeouts = 0
 		}
+	}
+
+	/**
+	 * Engages the guard immediately, bypassing the consecutive-timeout counter.
+	 *
+	 * Use this when [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] catches an
+	 * unhandled non-cancellation exception from
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.EmissionStrategy.emit] — the LLM is
+	 * immediately considered absent regardless of prior tick history.
+	 *
+	 * No-op once [engaged] is already `true`.
+	 */
+	fun engageImmediately() {
+		if (_engaged) return
+		engage()
+	}
+
+	private fun engage() {
+		_engaged = true
+		onAbandoned(FailureReason.LLM_ABANDONED)
 	}
 }

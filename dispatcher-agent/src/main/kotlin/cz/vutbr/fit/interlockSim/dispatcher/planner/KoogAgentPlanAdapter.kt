@@ -17,7 +17,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
-import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
@@ -59,27 +58,25 @@ import java.time.Duration
  *    the [sinkHolder] per-cycle emission counter — see the "How the LLM acted via tools is
  *    detected" section; actuator tools emit their [DispatchAction]s to the shared [sinkHolder],
  *    whose queue-posting wrapper converts them to [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s
- *    and posts them to [commandQueue] as a side effect) → use the result as-is, never fall back,
- *    and run the [maybeForceAdmission] safety net. An empty returned list with tool side effects
- *    is the *normal, successful* outcome once real Koog tool-calling is wired: a completed cycle
- *    whose `decideAsync` returns empty (it always does — see [KoogDispatchAgentImpl]) does not
- *    mean the LLM did nothing. Treating that case as failure and invoking [fallbackDispatcher]
- *    on top would double-dispatch: the LLM's tool-driven decision plus the rule engine's
- *    independently-decided one for the same train/hop, posted to the same queue in the same
- *    drain cycle — risking the duplicate-`ReservePath` train-freeze regression
- *    `DispatchDecisionApplier`'s own KDoc documents as a past incident (Issue #733 follow-up),
- *    from a new source. A deliberately emitted `no_op` also counts as "acted" (the LLM chose to
- *    do nothing), so the fallback does not run on top of an explicit no-op either (SP2c.19).
+ *    and posts them to [commandQueue] as a side effect) → use the result as-is, never fall back.
+ *    An empty returned list with tool side effects is the *normal, successful* outcome once real
+ *    Koog tool-calling is wired: a completed cycle whose `decideAsync` returns empty (it always
+ *    does — see [KoogDispatchAgentImpl]) does not mean the LLM did nothing. Treating that case
+ *    as failure and invoking [fallbackDispatcher] on top would double-dispatch: the LLM's
+ *    tool-driven decision plus the rule engine's independently-decided one for the same train/hop,
+ *    posted to the same queue in the same drain cycle — risking the duplicate-`ReservePath`
+ *    train-freeze regression `DispatchDecisionApplier`'s own KDoc documents as a past incident
+ *    (Issue #733 follow-up), from a new source. A deliberately emitted `no_op` also counts as
+ *    "acted" (the LLM chose to do nothing), so the fallback does not run on top of an explicit
+ *    no-op either (SP2c.19).
  * 2. LLM cycle completes **and the LLM invoked no actuator tool** (the LLM truly did nothing this
  *    cycle — `decideAsync` returned empty and the emission counter is zero) → fall back to
  *    [fallbackDispatcher]. Nothing was posted this cycle, so there is no double-dispatch risk;
  *    and because the LLM is stateless across cycles (a fresh `singleRunStrategy()` execution per
  *    [KoogDispatchAgent.decideAsync] — the agent itself is cached and reused; see
  *    [KoogAgentFactory]), a no-op cycle is not a preamble to a later routing cycle — not falling
- *    back would leave queued trains admitted (by the safety net) but never routed, stalled at
- *    their entry signal indefinitely. The fallback supplies both admission and routing, so the
- *    [maybeForceAdmission] safety net is intentionally NOT run on this path (the fallback's own
- *    admission decisions replace it).
+ *    back would leave queued trains never routed, stalled at their entry signal indefinitely.
+ *    The fallback supplies both admission and routing.
  * 3. LLM times out → fall back to [fallbackDispatcher]
  * 4. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
  *
@@ -129,17 +126,13 @@ import java.time.Duration
  * @param inferenceTimeout Maximum wall-clock time to wait for a single LLM response before
  *                       invoking the fallback. Defaults to 30 seconds (matches
  *                       [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig.DEFAULT_INFERENCE_TIMEOUT]).
- * @param commandQueue   Shared actuator command queue for this context, used by the admission
- *                       safety net (see [maybeForceAdmission]) to post a fire-and-forget
- *                       [DispatchDecision.ApproveTrain] exactly like the `approve_train` tool
- *                       itself does.
+ * @param commandQueue   Shared actuator command queue for this context. Used by this adapter to
+ *                       advance the correlation cycle before each LLM inference call via
+ *                       [ActuatorCommandQueue.advanceCorrelationCycle].
  * @param sinkHolder     Per-context [SinkHolder] shared with [KoogAgentFactory]. The factory
  *                       installs the queue-posting wrapper on its `current`; this adapter reads
  *                       its per-cycle emission counter to detect whether the LLM acted via tools
  *                       (see the "How the LLM acted via tools is detected" section).
- * @param maxConcurrentTrains Station capacity the safety net admits up to. Defaults to
- *                       [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], the same constant
- *                       the non-LLM dispatcher and `approve_train` tool use.
  * @param cycleListener  Optional [PlannerCycleListener] notified after every dispatch cycle
  *                       with either [PlannerCycleListener.onLlmSuccess] or
  *                       [PlannerCycleListener.onFallback].  Used by [MeasuringPlanAdapter]
@@ -156,8 +149,7 @@ class KoogAgentPlanAdapter(
 	private val fallbackDispatcher: Dispatcher,
 	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
 	private val commandQueue: ActuatorCommandQueue,
-	private val sinkHolder: SinkHolder,
-	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+	private val sinkHolder: SinkHolder
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -227,17 +219,16 @@ class KoogAgentPlanAdapter(
 			if (sinkHolder.actedThisCycle() || decisions.isNotEmpty()) {
 				// The LLM acted via its actuator tools (the emissions were already posted to the
 				// queue through sinkHolder.current) and/or returned decisions directly. Either way
-				// the LLM did its job this cycle — do NOT fall back (would double-dispatch) and run
-				// the admission safety net. An empty returned list with tool emissions is the
-				// normal, successful SP2c.6 outcome: decideAsync always returns empty (see
-				// KoogDispatchAgentImpl); the load-bearing signal is the emission counter.
+				// the LLM did its job this cycle — do NOT fall back (would double-dispatch). An
+				// empty returned list with tool emissions is the normal, successful SP2c.6 outcome:
+				// decideAsync always returns empty (see KoogDispatchAgentImpl); the load-bearing
+				// signal is the emission counter.
 				logger.debug {
 					"KoogAgentPlanAdapter: LLM cycle acted via tools " +
 						"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
-				maybeForceAdmission(observation)
 				decisions
 			} else {
 				// The LLM completed a cycle but neither acted via tools nor returned a decision —
@@ -268,34 +259,6 @@ class KoogAgentPlanAdapter(
 			cycleListener?.onFallback(FallbackReason.EXCEPTION, observation.snapshot.simTime)
 			fallbackDispatcher.decide(observation)
 		}
-	}
-
-	/**
-	 * Admission safety net (Goal 10 SP2b.9 follow-up).
-	 *
-	 * Each LLM dispatch cycle is a fresh, stateless Koog session with no memory of prior
-	 * cycles (see [KoogAgentFactory]/agent-architect analysis) — the LLM was observed to
-	 * successfully admit its first train, then stop calling `approve_train` for many
-	 * subsequent cycles despite free capacity remaining and trains queued.
-	 * [DispatchDecision.ApproveTrain] is documented idempotent (a no-op for an already-active
-	 * or nonexistent train — see `ApproveTrainTool`'s KDoc), so it is always safe to
-	 * force-admit the oldest queued train(s), FIFO, up to [maxConcurrentTrains], after every
-	 * completed (non-fallback) LLM cycle — mirroring [RuleBasedDispatcher]'s own unconditional
-	 * `decideAdmissions()` policy without taking over the rest of the cycle's decisions.
-	 *
-	 * Not invoked on the fallback path: [fallbackDispatcher] (typically [RuleBasedDispatcher])
-	 * already includes its own admission decisions in the list it returns.
-	 */
-	private fun maybeForceAdmission(observation: DispatchObservation) {
-		val freeSlots = maxConcurrentTrains - observation.approvedTrainCount
-		if (freeSlots <= 0) return
-		val toAdmit = observation.unapprovedTrains.take(freeSlots)
-		if (toAdmit.isEmpty()) return
-		logger.info {
-			"KoogAgentPlanAdapter: admission safety net — force-approving ${toAdmit.map { it.trainId }} " +
-				"(LLM left $freeSlots free slot(s) unused this cycle, simTime=${observation.snapshot.simTime})"
-		}
-		commandQueue.postAll(toAdmit.map { DispatchDecision.ApproveTrain(it.trainId) })
 	}
 
 	/**

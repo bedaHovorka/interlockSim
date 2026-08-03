@@ -20,8 +20,10 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.agents.FailureReason
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
+import cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
@@ -492,6 +494,9 @@ class MeasuringPlanAdapterTest {
 				.map { it.formattedMessage }
 				.filter { it.contains("[MeasuringPlanAdapter] final summary —") }
 
+		private fun failureBannerEvents(): List<ILoggingEvent> =
+			appender.list.filter { it.level == Level.WARN && it.formattedMessage.contains("FAILED") }
+
 		@Test
 		fun `logFinalSummary emits a line labeled 'final summary'`() {
 			val agent = mockk<KoogDispatchAgent>()
@@ -507,6 +512,36 @@ class MeasuringPlanAdapterTest {
 			assertThat(messages).isNotEmpty()
 			assertThat(messages.first()).contains("[MeasuringPlanAdapter] final summary —")
 			assertThat(messages.first()).contains("totalCycles=2")
+		}
+
+		@Test
+		@DisplayName("logFinalSummary with Failed(LLM_ABANDONED) emits prominent WARN banner (SP2c.8 #831)")
+		fun `logFinalSummary with Failed outcome emits WARN banner with tick number`() {
+			val agent = mockk<KoogDispatchAgent>()
+			val fallback = mockk<Dispatcher>()
+			val adapter = measuring(agent, fallback)
+
+			adapter.logFinalSummary(
+				runOutcome = RunOutcome.Failed(FailureReason.LLM_ABANDONED),
+				failedAtTick = 42L
+			)
+
+			val banners = failureBannerEvents()
+			assertThat(banners).isNotEmpty()
+			assertThat(banners.first().formattedMessage).contains("FAILED (LLM_ABANDONED)")
+			assertThat(banners.first().formattedMessage).contains("at tick 42")
+		}
+
+		@Test
+		@DisplayName("logFinalSummary with Running outcome does NOT emit WARN banner")
+		fun `logFinalSummary with Running outcome emits no WARN failure banner`() {
+			val agent = mockk<KoogDispatchAgent>()
+			val fallback = mockk<Dispatcher>()
+			val adapter = measuring(agent, fallback)
+
+			adapter.logFinalSummary(runOutcome = RunOutcome.Running)
+
+			assertThat(failureBannerEvents()).isEqualTo(emptyList<ILoggingEvent>())
 		}
 	}
 }

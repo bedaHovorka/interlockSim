@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.ReservationView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -68,19 +69,24 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * ## ActionAuthor and RunOutcome
  *
- * [TerminalFallbackGuard] observes each completed [TickRecord]. If any action has author
- * [ActionAuthor.RULE_FALLBACK], [runOutcome] transitions to [RunOutcome.Failed].
- * [ActionAuthor.RULE_BASED] actions never trigger this — a rule-based determinism run stays
+ * [TerminalFallbackGuard] observes each completed [TickRecord]. If the LLM is absent
+ * (deadline miss → [ActionAuthor.TIMEOUT_NOOP]) for [TerminalFallbackGuard.threshold] consecutive
+ * ticks, or if an unhandled exception is thrown by [EmissionStrategy.emit], [runOutcome]
+ * transitions to [RunOutcome.Failed] with reason [cz.vutbr.fit.interlockSim.dispatcher.agents.FailureReason.LLM_ABANDONED].
+ * After engagement, [fallbackEmission] is used for all subsequent ticks (if non-null).
+ * [ActionAuthor.RULE_BASED] actions never trigger failure — a rule-based determinism run stays
  * [RunOutcome.Running] for the entire simulation (P10 gate protection).
  *
  * @property runOutcome Current lifecycle outcome. Starts as [RunOutcome.Running]; transitions
- *   at most once to [RunOutcome.Failed] via [TerminalFallbackGuard] when a
- *   [ActionAuthor.RULE_FALLBACK] action is observed. Read-only for callers.
+ *   at most once to [RunOutcome.Failed] via [TerminalFallbackGuard] when the LLM is absent for
+ *   [threshold][TerminalFallbackGuard.threshold] consecutive ticks or on an unhandled exception.
+ *   Read-only for callers.
  *
  * @param observations Source of the most-recently-published [DispatcherObservation].
  * @param annotator Pre-evaluates the candidate action set into a flat [List]<[Affordance][cz.vutbr.fit.interlockSim.dispatcher.agents.Affordance]>.
  * @param renderer Converts a [RenderContext] into the USER-message prompt string.
- * @param emission Decision-making strategy (rule-based or LLM-backed).
+ * @param emission Decision-making strategy (rule-based or LLM-backed). Used on every tick until
+ *   [fallbackGuard] engages.
  * @param validator Pre-execution validator for each [DispatchAction]; called once per action.
  * @param queue Thread-safe handoff queue to the sim-thread [DispatchDecisionApplier].
  * @param ring Bounded ring buffer storing recent tick records for rendering context. Defaults to
@@ -89,9 +95,12 @@ import java.util.concurrent.atomic.AtomicLong
  *   [WorkingMemory.EMPTY] — a run normally starts with nothing remembered.
  * @param budget Deadline wrapper for [EmissionStrategy.emit]; returns `null` on timeout.
  * @param fallbackGuard Observes each completed [TickRecord] and sets [runOutcome] to
- *   [RunOutcome.Failed] when a [ActionAuthor.RULE_FALLBACK] action is detected. Defaults to a
- *   fresh guard: it is loop-private state with nothing to configure, so a caller only supplies
- *   one when it wants to inspect the guard directly rather than through [runOutcome].
+ *   [RunOutcome.Failed] after [threshold][TerminalFallbackGuard.threshold] consecutive
+ *   [ActionAuthor.TIMEOUT_NOOP] ticks (SP2c.8, #831). Defaults to a fresh guard.
+ * @param fallbackEmission Optional emission strategy to activate after [fallbackGuard] engages.
+ *   Typically [RuleBasedEmissionStrategy] with [cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor.RULE_FALLBACK]
+ *   so that post-engagement actions are distinguishable and the simulation can reach a terminating
+ *   state for inspection. When `null`, the original [emission] continues after engagement.
  * @param controller Pacing controller for pause/step and wall-clock throttling.
  * @param snapshotSignal Optional sim-to-driver wake signal (SP0.11c, Issue #746). When
  *   non-null, each tick blocks on [SnapshotSignal.await] instead of reading a potentially
@@ -115,6 +124,7 @@ class DispatchTickLoop(
 	workingMemory: WorkingMemory = WorkingMemory.EMPTY,
 	private val budget: TickBudget,
 	private val fallbackGuard: TerminalFallbackGuard = TerminalFallbackGuard(),
+	private val fallbackEmission: EmissionStrategy? = null,
 	private val controller: SimulationController,
 	private val snapshotSignal: SnapshotSignal? = null,
 	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK
@@ -144,10 +154,21 @@ class DispatchTickLoop(
 
 	/**
 	 * Current lifecycle outcome. Starts as [RunOutcome.Running]; transitions to
-	 * [RunOutcome.Failed] via [fallbackGuard] when a [ActionAuthor.RULE_FALLBACK] action
-	 * is observed. Never reverts to [RunOutcome.Running] once failed.
+	 * [RunOutcome.Failed] via [fallbackGuard] after [threshold][TerminalFallbackGuard.threshold]
+	 * consecutive [ActionAuthor.TIMEOUT_NOOP] ticks or on an unhandled emission exception.
+	 * Never reverts to [RunOutcome.Running] once failed.
 	 */
 	val runOutcome: RunOutcome get() = fallbackGuard.currentOutcome
+
+	/**
+	 * The emission strategy active for the current tick.
+	 *
+	 * After [fallbackGuard] engages, switches to [fallbackEmission] (if non-null) so that
+	 * post-engagement actions are authored [ActionAuthor.RULE_FALLBACK] and the simulation
+	 * can reach a terminating state for inspection.
+	 */
+	private val currentEmission: EmissionStrategy
+		get() = if (fallbackGuard.engaged && fallbackEmission != null) fallbackEmission else emission
 
 	// ── Tick execution ──────────────────────────────────────────────────────
 
@@ -207,7 +228,10 @@ class DispatchTickLoop(
 		// empty list = strategy ran and decided there is nothing to do this tick; substitute a
 		// single NoOp authored by the strategy's own author (RULE_BASED / future LLM) so an idle
 		// tick records as a deliberate decision, not a degraded timeout (SP2c.19 / #829).
-		val emittedRaw = budget.withBudget { emission.emit(prompt, obs0) }
+		// Exception = LLM infrastructure failure. See [runEmission] for the SP2c.8/#831 vs
+		// SP2c.26/#849 reconciliation (swallow-and-engage when a fallback is configured, rethrow
+		// otherwise so the failure is diagnosable by the caller).
+		val emittedRaw: List<AttributedAction>? = runEmission(prompt, obs0)
 		val emitted =
 			when {
 				emittedRaw == null ->
@@ -225,7 +249,7 @@ class DispatchTickLoop(
 							commandId = CommandId(commandIdCounter.incrementAndGet()),
 							tick = obs0.tick,
 							action = DispatchAction.NoOp,
-							author = emission.author
+							author = currentEmission.author
 						)
 					)
 				else ->
@@ -306,6 +330,39 @@ class DispatchTickLoop(
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────────
+
+	/**
+	 * Invokes [currentEmission.emit] under [budget], reconciling SP2c.8 (#831) with SP2c.26 (#849).
+	 *
+	 * - When [fallbackEmission] is configured: an unhandled exception engages [fallbackGuard]
+	 *   immediately and returns `null` so the tick substitutes a TIMEOUT_NOOP and subsequent ticks
+	 *   run via [fallbackEmission] — the run reaches a terminating state for inspection
+	 *   (SP2c.8 / #831 terminal fallback with run-failure marking).
+	 * - When [fallbackEmission] is `null`: rethrows — the run cannot continue advancing, and
+	 *   surfacing the exception is the only way to make the failure diagnosable by the caller
+	 *   (SP2c.26 / #849 paused-clock propagation invariant; the spike harness exercises this case).
+	 *
+	 * [kotlinx.coroutines.CancellationException] is always rethrown for cooperative cancellation.
+	 */
+	private suspend fun runEmission(
+		prompt: String,
+		obs0: DispatcherObservation
+	): List<AttributedAction>? =
+		try {
+			budget.withBudget { currentEmission.emit(prompt, obs0) }
+		} catch (e: kotlinx.coroutines.CancellationException) {
+			throw e
+		} catch (e: Exception) {
+			if (fallbackEmission == null) {
+				throw e
+			}
+			logger.error(e) {
+				"DispatchTickLoop: unhandled exception from emission.emit at tick=${obs0.tick}; " +
+					"engaging terminal fallback immediately"
+			}
+			fallbackGuard.engageImmediately()
+			null
+		}
 
 	/**
 	 * Converts one validated [DispatchAction] into a list of [DispatchDecision]s to post.

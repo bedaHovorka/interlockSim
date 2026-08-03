@@ -20,6 +20,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionCandidateEnumerator
@@ -232,31 +233,35 @@ class DispatchTickLoopTest {
 		signalScript: List<Boolean>? = null,
 		maxActionsPerTick: Int = DispatchTickLoop.DEFAULT_MAX_ACTIONS_PER_TICK,
 		queue: ActuatorCommandQueue = ActuatorCommandQueue(),
-		budget: cz.vutbr.fit.interlockSim.dispatcher.agents.TickBudget = NoTimeoutBudget
+		budget: cz.vutbr.fit.interlockSim.dispatcher.agents.TickBudget = NoTimeoutBudget,
+		guard: TerminalFallbackGuard = TerminalFallbackGuard(),
+		fallbackEmission: EmissionStrategy? = null,
+		emissionOverride: EmissionStrategy? = null
 	): Harness {
 		val observations = ScriptedObservations(observationScript)
-		val emission = ScriptedEmission(emissionScript)
+		val scriptedEmission = ScriptedEmission(emissionScript)
+		val activeEmission: EmissionStrategy = emissionOverride ?: scriptedEmission
 		val controller = RecordingController()
 		val ring = TickRingBuffer()
-		val guard = TerminalFallbackGuard()
 		val signal = signalScript?.let { ScriptedSignal(it) }
 		val loop =
 			DispatchTickLoop(
 				observations = observations,
 				annotator = annotator,
 				renderer = ObservationRenderer { ctx -> "tick=${ctx.observation.tick}" },
-				emission = emission,
+				emission = activeEmission,
 				validator = validator,
 				queue = queue,
 				ring = ring,
 				workingMemory = WorkingMemory.EMPTY,
 				budget = budget,
 				fallbackGuard = guard,
+				fallbackEmission = fallbackEmission,
 				controller = controller,
 				snapshotSignal = signal,
 				maxActionsPerTick = maxActionsPerTick
 			)
-		return Harness(loop, observations, emission, controller, queue, ring, guard, signal)
+		return Harness(loop, observations, scriptedEmission, controller, queue, ring, guard, signal)
 	}
 
 	private fun action(
@@ -457,12 +462,12 @@ class DispatchTickLoopTest {
 	// ── ActionAuthor / RunOutcome ─────────────────────────────────────────────────────────
 
 	@Nested
-	@DisplayName("RunOutcome: only RULE_FALLBACK is terminal")
+	@DisplayName("RunOutcome: TIMEOUT_NOOP threshold (threshold=5) drives terminal failure (SP2c.8 #831)")
 	inner class RunOutcomeTransitions {
 		/**
 		 * Conflating [ActionAuthor.RULE_BASED] with [ActionAuthor.RULE_FALLBACK] would mark every
 		 * P10 rule-based determinism run as FAILED. Would fail if [TerminalFallbackGuard.observe]
-		 * matched on `RULE_BASED` as well.
+		 * matched on `RULE_BASED` or `RULE_FALLBACK`.
 		 */
 		@Test
 		@DisplayName("a RULE_BASED action leaves the run Running")
@@ -479,8 +484,10 @@ class DispatchTickLoopTest {
 		}
 
 		@Test
-		@DisplayName("a RULE_FALLBACK action fails the run with LLM_ABANDONED")
-		fun ruleFallbackFailsRun() {
+		@DisplayName("a RULE_FALLBACK action alone does NOT fail the run (no longer terminal by author)")
+		fun ruleFallbackAloneDoesNotFailRun() {
+			// SP2c.8 (#831): RULE_FALLBACK is a post-engagement author, not the trigger for failure.
+			// The guard now counts TIMEOUT_NOOP ticks; a single RULE_FALLBACK resets the counter.
 			val h =
 				harness(
 					listOf(observation()),
@@ -489,20 +496,70 @@ class DispatchTickLoopTest {
 
 			runBlocking { h.loop.runTick() }
 
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Running)
+		}
+
+		@Test
+		@DisplayName("4 consecutive null emissions (TIMEOUT_NOOP) ⇒ still Running (below threshold=5)")
+		fun fourTimeoutsStillRunning() {
+			val obs = (1..4).map { i -> observation(tick = i.toLong(), simTime = i * 10.0) }
+			val h = harness(obs, obs.map { null })
+
+			runBlocking { obs.forEach { _ -> h.loop.runTick() } }
+
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Running)
+		}
+
+		@Test
+		@DisplayName("5 consecutive null emissions (TIMEOUT_NOOP) fail the run")
+		fun fiveTimeoutsFailRun() {
+			// Use a threshold=1 guard to avoid creating 5 observations
+			val guard = TerminalFallbackGuard(threshold = 1)
+			val h =
+				harness(
+					listOf(observation()),
+					listOf(null),
+					guard = guard
+				)
+
+			runBlocking { h.loop.runTick() }
+
 			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Failed(FailureReason.LLM_ABANDONED))
+		}
+
+		@Test
+		@DisplayName("4 TIMEOUT_NOOP then one LLM no_op resets counter and stays Running")
+		fun fourTimeoutsThenLlmNoOpResetsCounter() {
+			// 4 timeouts + 1 LLM no_op: counter resets on the LLM tick, stays below threshold
+			val obs = (1..5).map { i -> observation(tick = i.toLong(), simTime = i * 10.0) }
+			val emissionScript =
+				listOf(
+					null,
+					null,
+					null,
+					null, // ticks 1–4: TIMEOUT_NOOP (counter 1→4)
+					listOf(action(DispatchAction.NoOp, ActionAuthor.LLM)) // tick 5: LLM resets counter
+				)
+			val h = harness(obs, emissionScript)
+
+			runBlocking { obs.forEach { _ -> h.loop.runTick() } }
+
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Running)
 		}
 
 		@Test
 		@DisplayName("a Failed outcome never reverts on a subsequent clean tick")
 		fun failedNeverReverts() {
+			val guard = TerminalFallbackGuard(threshold = 1)
 			val h =
 				harness(
 					observationScript = listOf(observation(tick = 1L), observation(tick = 2L, simTime = 20.0)),
 					emissionScript =
 						listOf(
-							listOf(action(DispatchAction.ApproveTrain("T-1"), ActionAuthor.RULE_FALLBACK)),
-							listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_BASED))
-						)
+							null, // tick 1: TIMEOUT_NOOP → guard engages (threshold=1)
+							listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_BASED)) // tick 2: clean tick
+						),
+					guard = guard
 				)
 
 			runBlocking {
@@ -514,7 +571,7 @@ class DispatchTickLoopTest {
 		}
 
 		@Test
-		@DisplayName("a TIMEOUT_NOOP substitution does not fail the run")
+		@DisplayName("a TIMEOUT_NOOP substitution (single tick) does not fail the run")
 		fun timeoutNoOpDoesNotFailRun() {
 			val h = harness(listOf(observation()), listOf(null))
 
@@ -535,6 +592,101 @@ class DispatchTickLoopTest {
 			runBlocking { h.loop.runTick() }
 
 			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Running)
+		}
+
+		@Test
+		@DisplayName(
+			"unhandled exception from emission.emit immediately fails the run when fallback is configured (SP2c.8 #831)"
+		)
+		fun exceptionFromEmissionImmediatelyFailsWithFallback() {
+			val throwingEmission =
+				object : EmissionStrategy {
+					override suspend fun emit(
+						prompt: String,
+						observation: cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+					): List<AttributedAction>? = throw RuntimeException("simulated LLM crash")
+				}
+			val fallbackEmission =
+				object : EmissionStrategy {
+					override val author: ActionAuthor get() = ActionAuthor.RULE_FALLBACK
+
+					override suspend fun emit(
+						prompt: String,
+						observation: cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+					): List<AttributedAction>? = emptyList()
+				}
+			val h =
+				harness(
+					listOf(observation()),
+					emptyList(),
+					emissionOverride = throwingEmission,
+					fallbackEmission = fallbackEmission
+				)
+
+			runBlocking { h.loop.runTick() }
+
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Failed(FailureReason.LLM_ABANDONED))
+		}
+
+		@Test
+		@DisplayName(
+			"unhandled exception from emission.emit rethrows when no fallback is configured (SP2c.26 #849 invariant)"
+		)
+		fun exceptionFromEmissionRethrowsWithoutFallback() {
+			val throwingEmission =
+				object : EmissionStrategy {
+					override suspend fun emit(
+						prompt: String,
+						observation: cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+					): List<AttributedAction>? = throw RuntimeException("simulated LLM crash")
+				}
+			val h =
+				harness(
+					listOf(observation()),
+					emptyList(),
+					emissionOverride = throwingEmission
+				)
+
+			val thrown = runCatching { runBlocking { h.loop.runTick() } }.exceptionOrNull()
+
+			assertThat(thrown is RuntimeException).isTrue()
+			// Guard was not engaged — the exception surfaced before engagement.
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Running)
+		}
+
+		@Test
+		@DisplayName("after guard engagement, fallbackEmission is used and actions are authored RULE_FALLBACK")
+		fun afterEngagementFallbackEmissionIsUsed() {
+			val guard = TerminalFallbackGuard(threshold = 1)
+			// Fallback strategy uses RULE_FALLBACK author (RuleBasedEmissionStrategy in production)
+			val fallbackEmission =
+				object : EmissionStrategy {
+					override val author: ActionAuthor get() = ActionAuthor.RULE_FALLBACK
+
+					override suspend fun emit(
+						prompt: String,
+						observation: cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
+					): List<AttributedAction>? = emptyList()
+				}
+			val h =
+				harness(
+					observationScript = listOf(observation(tick = 1L), observation(tick = 2L, simTime = 20.0)),
+					emissionScript =
+						listOf(
+							null, // tick 1: TIMEOUT_NOOP → guard engages (threshold=1)
+							listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_BASED)) // tick 2: unused
+						),
+					guard = guard,
+					fallbackEmission = fallbackEmission
+				)
+
+			val tick1 = runBlocking { h.loop.runTick() }!!
+			assertThat(h.loop.runOutcome).isEqualTo(RunOutcome.Failed(FailureReason.LLM_ABANDONED))
+
+			val tick2 = runBlocking { h.loop.runTick() }!!
+			// After engagement, fallbackEmission produces empty list → idle-substituted NoOp
+			// authored by fallbackEmission.author = RULE_FALLBACK
+			assertThat(tick2.actions[0].author).isEqualTo(ActionAuthor.RULE_FALLBACK)
 		}
 	}
 
@@ -1105,11 +1257,12 @@ class DispatchTickLoopTest {
 		@Test
 		@DisplayName("the externally supplied guard and the loop report the same outcome")
 		fun outcomeIsDelegatedToTheGuard() {
-			val h =
-				harness(
-					listOf(observation()),
-					listOf(listOf(action(DispatchAction.NoOp, ActionAuthor.RULE_FALLBACK)))
-				)
+			// SP2c.8 (#831): the guard now engages on a TIMEOUT_NOOP threshold, not on any
+			// particular action author, so a null emission (⇒ TIMEOUT_NOOP) with threshold=1
+			// is what actually drives engagement here (a RULE_FALLBACK action alone no longer
+			// fails the run — see [RunOutcome] "TIMEOUT_NOOP threshold" tests above).
+			val guard = TerminalFallbackGuard(threshold = 1)
+			val h = harness(listOf(observation()), listOf(null), guard = guard)
 
 			runBlocking { h.loop.runTick() }
 

@@ -82,29 +82,35 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * ## `ActionAuthor`
  *
- * Every [AttributedAction] returned by this strategy has [ActionAuthor.RULE_BASED]. This tag is
- * what prevents [cz.vutbr.fit.interlockSim.dispatcher.agents.TerminalFallbackGuard] from marking
- * a rule-based determinism run as [cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome.Failed]
- * (only [ActionAuthor.RULE_FALLBACK] triggers that transition).
+ * Every [AttributedAction] returned by this strategy is tagged with [overrideAuthor].
+ * The default is [ActionAuthor.RULE_BASED], appropriate for normal rule-based (P10 gate) runs.
+ *
+ * When [TerminalFallbackGuard][cz.vutbr.fit.interlockSim.dispatcher.agents.TerminalFallbackGuard]
+ * engages after an LLM run, it constructs a new [RuleBasedEmissionStrategy] with
+ * `overrideAuthor = ActionAuthor.RULE_FALLBACK` so that post-engagement actions are
+ * distinguishable from normal rule-engine runs and are not scored as LLM work (SP2c.8, #831).
  *
  * @param dispatcher The [Dispatcher] to delegate to. [RuleBasedDispatcher][cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]
  *   for the P10 gate; can be any [Dispatcher] implementation for future use.
+ * @param overrideAuthor The [ActionAuthor] to stamp on every emitted [AttributedAction]. Defaults to
+ *   [ActionAuthor.RULE_BASED]. Pass [ActionAuthor.RULE_FALLBACK] when this strategy acts as the
+ *   post-engagement fallback after a terminal LLM failure.
  *
  * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 class RuleBasedEmissionStrategy(
-	private val dispatcher: Dispatcher
+	private val dispatcher: Dispatcher,
+	private val overrideAuthor: ActionAuthor = ActionAuthor.RULE_BASED
 ) : EmissionStrategy {
 	private val commandIdCounter: AtomicLong = AtomicLong(0L)
 
 	/**
-	 * [ActionAuthor.RULE_BASED] — the author the loop attributes an idle-substituted `no_op` to
-	 * when this strategy returns an empty list (the dispatcher emitted only [DispatchDecision.NoAction]).
-	 * Overridden explicitly to document that the rule engine's idle ticks are deliberate, not
-	 * degraded; the inherited interface default has the same value.
+	 * The author stamped on every emitted [AttributedAction] — [overrideAuthor] (defaults to
+	 * [ActionAuthor.RULE_BASED]). The loop also uses this for the idle-substituted `no_op` when
+	 * this strategy returns an empty list ([DispatchDecision.NoAction]).
 	 */
 	override val author: ActionAuthor
-		get() = ActionAuthor.RULE_BASED
+		get() = overrideAuthor
 
 	/**
 	 * Invokes [Dispatcher.decide] with a [DispatchObservation] built from [observation] and
@@ -202,7 +208,7 @@ class RuleBasedEmissionStrategy(
 					commandId = CommandId(commandIdCounter.incrementAndGet()),
 					tick = tick,
 					action = DispatchAction.ApproveTrain(trainId = decision.trainId),
-					author = ActionAuthor.RULE_BASED
+					author = overrideAuthor
 				)
 
 			is DispatchDecision.ReservePath ->
@@ -219,7 +225,7 @@ class RuleBasedEmissionStrategy(
 							// RouteScope's KDoc for why ActionValidator needs this discriminant.
 							scope = RouteScope.Section
 						),
-					author = ActionAuthor.RULE_BASED
+					author = overrideAuthor
 				)
 
 			// NoAction: return null → caller's mapNotNull produces an empty list, which DispatchTickLoop
