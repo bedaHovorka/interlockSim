@@ -63,6 +63,26 @@ internal class SimulationController(
 	var runner: SimulationRunner? = null
 		private set
 
+	/**
+	 * `true` when the most recent [SimulationStatus.STOPPED] emission was caused by the
+	 * simulation finishing naturally (monitor thread detected completion); `false` when it
+	 * was caused by an explicit [stop] call.
+	 *
+	 * Set synchronously, on the same thread that is about to invoke [onStateChanged] with
+	 * [SimulationStatus.STOPPED], immediately before that call. Callers that read this from
+	 * inside their [onStateChanged] callback — before doing any further thread-hopping (e.g.
+	 * `SwingUtilities.invokeLater`) — observe the value for the transition they are handling,
+	 * with no race: on the natural-completion path the field write and the [onStateChanged]
+	 * call happen sequentially on the monitor thread; any subsequent hand-off to another
+	 * thread (e.g. the EDT) is safe because it happens after the write completed.
+	 *
+	 * @since Issue #845 (SP2c.22 follow-up — distinguishing [RunEndCause] equivalents at the
+	 *   Frame level; see `Frame.kt`'s `onStateChanged` wiring)
+	 */
+	@Volatile
+	var lastStopWasNatural: Boolean = false
+		private set
+
 	/** Listener registered on the active runner for speed changes; removed on stop. */
 	private var speedListener: PropertyChangeListener? = null
 
@@ -205,6 +225,7 @@ internal class SimulationController(
 							speedControllable = null
 							detachAgentPacing()
 							onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
+							lastStopWasNatural = true
 							onStateChanged(SimulationStatus.STOPPED)
 							onCompleted()
 						}
@@ -229,6 +250,7 @@ internal class SimulationController(
 		speedControllable = null
 		detachAgentPacing()
 		onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
+		lastStopWasNatural = false
 		onStateChanged(SimulationStatus.STOPPED)
 	}
 

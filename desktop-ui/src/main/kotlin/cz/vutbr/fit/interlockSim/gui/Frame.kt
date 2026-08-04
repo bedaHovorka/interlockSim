@@ -205,6 +205,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	internal val simulationController: SimulationController =
 		SimulationController(
 			onStateChanged = { state ->
+				// Read synchronously, on the calling thread, before any hand-off to the EDT
+				// (see SimulationController.lastStopWasNatural kdoc for why this ordering is
+				// race-free): captures which RunEndCause produced this STOPPED transition.
+				val runEndCause =
+					if (simulationController.lastStopWasNatural) {
+						RunEndCause.NATURAL_COMPLETION
+					} else {
+						RunEndCause.MANUAL_STOP
+					}
 				runOnEdt {
 					when (state) {
 						SimulationController.SimulationStatus.RUNNING -> {
@@ -244,11 +253,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							wiredMeasuringAdapter?.logFinalSummary()
 							wiredMeasuringAdapter = null
 							// SP2c.22 (#845): finish the run recorder and log its final summary.
-							// MANUAL_STOP is the default cause here; natural completion drives the same
-							// STOPPED transition via SimulationController's monitor thread (see
-							// SimulationController.launchMonitorThread) and is indistinguishable at
-							// this call site — both reach the identical STOPPED emission.
-							wiredRunRecorder?.finish(RunEndCause.MANUAL_STOP)
+							// runEndCause was captured above, before this runOnEdt block, from
+							// SimulationController.lastStopWasNatural — see that property's kdoc for
+							// why the read is race-free with respect to which thread produced this
+							// STOPPED transition (manual stop() vs. the monitor thread's natural
+							// completion path both reach the identical STOPPED emission here).
+							wiredRunRecorder?.finish(runEndCause)
 							wiredRunRecorder?.logFinalSummary()
 							wiredRunRecorder = null
 						}
