@@ -16,6 +16,7 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl
@@ -61,7 +62,7 @@ class ConstrainedJsonMutualExclusivityTest {
 	@DisplayName("toolCapableModel declares LLMCapability.Tools")
 	fun toolCapableModelHasToolsCapability() {
 		val model = OllamaModelFactory.toolCapableModel("qwen2.5:7b-instruct", contextLength = 8192L)
-		assertThat(model.capabilities).contains(LLMCapability.Tools)
+		assertThat(model.capabilities).isNotNull().contains(LLMCapability.Tools)
 	}
 
 	@Test
@@ -69,7 +70,7 @@ class ConstrainedJsonMutualExclusivityTest {
 	fun constrainedJsonModelLacksToolsCapability() {
 		val model =
 			OllamaModelFactory.constrainedJsonCapableModel("qwen2.5:7b-instruct", contextLength = 8192L)
-		assertThat(model.capabilities).doesNotContain(LLMCapability.Tools)
+		assertThat(model.capabilities).isNotNull().doesNotContain(LLMCapability.Tools)
 	}
 
 	@Test
@@ -77,7 +78,7 @@ class ConstrainedJsonMutualExclusivityTest {
 	fun constrainedJsonModelHasJsonSchemaCapability() {
 		val model =
 			OllamaModelFactory.constrainedJsonCapableModel("qwen2.5:7b-instruct", contextLength = 8192L)
-		assertThat(model.capabilities).contains(LLMCapability.Schema.JSON.Basic)
+		assertThat(model.capabilities).isNotNull().contains(LLMCapability.Schema.JSON.Basic)
 	}
 
 	@Test
@@ -86,7 +87,7 @@ class ConstrainedJsonMutualExclusivityTest {
 		val toolModel = OllamaModelFactory.toolCapableModel("qwen2.5:7b-instruct", contextLength = 8192L)
 		val jsonModel =
 			OllamaModelFactory.constrainedJsonCapableModel("qwen2.5:7b-instruct", contextLength = 8192L)
-		assertThat(toolModel.capabilities).isEqualTo(jsonModel.capabilities + LLMCapability.Tools)
+		assertThat(toolModel.capabilities).isEqualTo((jsonModel.capabilities ?: emptyList()) + LLMCapability.Tools)
 	}
 
 	// ── Type-system separation ────────────────────────────────────────────────

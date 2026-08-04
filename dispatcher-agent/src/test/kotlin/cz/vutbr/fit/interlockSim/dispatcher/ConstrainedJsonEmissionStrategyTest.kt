@@ -14,8 +14,10 @@ import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -37,7 +39,9 @@ class ConstrainedJsonEmissionStrategyTest {
 	private val strategy =
 		ConstrainedJsonEmissionStrategy(
 			// config and seed are not used by the parsing methods under test
-			config = cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig(),
+			config =
+				cz.vutbr.fit.interlockSim.dispatcher.executor
+					.OllamaExecutorConfig(),
 			systemPrompt = "test system prompt",
 			seed = 42L
 		)
@@ -49,8 +53,8 @@ class ConstrainedJsonEmissionStrategyTest {
 	fun schemaToplevelIsObjectWithActionsArray() {
 		val schema = ConstrainedJsonEmissionStrategy.ACTION_BATCH_SCHEMA
 		assertThat(schema["type"]?.jsonPrimitive?.content).isEqualTo("object")
-		assertThat(schema["required"]?.jsonArray?.any { it.jsonPrimitive.content == "actions" }).isTrue()
-		assertThat(schema["properties"]?.jsonObject?.containsKey("actions")).isTrue()
+		assertThat(schema["required"]?.jsonArray?.any { it.jsonPrimitive.content == "actions" }).isNotNull().isTrue()
+		assertThat(schema["properties"]?.jsonObject?.containsKey("actions")).isNotNull().isTrue()
 	}
 
 	@Test
@@ -133,7 +137,8 @@ class ConstrainedJsonEmissionStrategyTest {
 	fun parseActionsRequestRouteRoundtrip() {
 		val raw =
 			"""{"actions":[{"action":"request_route","trainId":"T2",
-			|"fromEndpointName":"S1","toEndpointName":"OUT1","reason":"route clear"}]}""".trimMargin()
+			|"fromEndpointName":"S1","toEndpointName":"OUT1","reason":"route clear"}]}
+			""".trimMargin()
 		val result = strategy.parseActions(raw, tick = 7L)
 
 		assertThat(result.size).isEqualTo(1)
@@ -173,7 +178,8 @@ class ConstrainedJsonEmissionStrategyTest {
 			"""{"actions":[
 			|  {"action":"approve_train","trainId":"T1"},
 			|  {"action":"request_route","trainId":"T1","fromEndpointName":"IN1","toEndpointName":"OUT1"}
-			|]}""".trimMargin()
+			|]}
+			""".trimMargin()
 		val result = strategy.parseActions(raw, tick = 1L)
 
 		assertThat(result.size).isEqualTo(2)
@@ -222,6 +228,18 @@ class ConstrainedJsonEmissionStrategyTest {
 	@DisplayName("parseActions silently drops entries with missing 'action' field")
 	fun parseActionsMissingActionFieldDropped() {
 		val raw = """{"actions":[{"trainId":"T1"},{"action":"no_op"}]}"""
+		val result = strategy.parseActions(raw, tick = 0L)
+
+		assertThat(result.size).isEqualTo(1)
+		assertThat(result[0].action).isInstanceOf(DispatchAction.NoOp::class)
+	}
+
+	@Test
+	@DisplayName("parseActions silently drops a non-object entry in the actions array")
+	fun parseActionsNonObjectEntryDropped() {
+		// A bare string/number entry throws on element.jsonObject — must be caught and skipped,
+		// not propagated, so one malformed entry does not fail the whole batch.
+		val raw = """{"actions":["not_an_object",{"action":"no_op"}]}"""
 		val result = strategy.parseActions(raw, tick = 0L)
 
 		assertThat(result.size).isEqualTo(1)
