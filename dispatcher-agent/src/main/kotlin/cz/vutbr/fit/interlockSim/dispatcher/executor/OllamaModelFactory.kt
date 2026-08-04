@@ -38,6 +38,19 @@ object OllamaModelFactory {
 		listOf(LLMCapability.Temperature, LLMCapability.Schema.JSON.Basic, LLMCapability.Tools)
 
 	/**
+	 * Capabilities for constrained-JSON mode (SP2c.13, Issue #836): temperature control and
+	 * basic JSON-schema output, **without** native tool/function calling.
+	 *
+	 * The `Tools` capability is intentionally absent: the constrained-JSON arm uses Ollama's
+	 * `format` parameter instead of the `tools` field, so declaring `Tools` would be misleading
+	 * and could trigger Koog's tool-calling code path if this model were ever accidentally
+	 * passed to [ai.koog.agents.core.agent.AIAgent]. Keeping the two model descriptors separate
+	 * enforces the mutual-exclusivity-by-construction requirement from SP2c.13.
+	 */
+	private val CONSTRAINED_JSON_CAPABILITIES =
+		listOf(LLMCapability.Temperature, LLMCapability.Schema.JSON.Basic)
+
+	/**
 	 * Builds a tool-capable [LLModel] for the Ollama-hosted [modelName].
 	 *
 	 * @param modelName Ollama model tag, e.g. `"qwen2.5:7b-instruct"`.
@@ -53,6 +66,29 @@ object OllamaModelFactory {
 			provider = LLMProvider.Ollama,
 			id = modelName,
 			capabilities = TOOL_CAPABLE_CAPABILITIES,
+			contextLength = contextLength
+		)
+
+	/**
+	 * Builds a constrained-JSON-capable [LLModel] for the Ollama-hosted [modelName]
+	 * (SP2c.13, Issue #836).
+	 *
+	 * The returned model descriptor declares [LLMCapability.Schema.JSON.Basic] but **not**
+	 * [LLMCapability.Tools]. This makes the descriptor unsuitable for use with Koog's
+	 * `AIAgent` tool-calling loop, which requires `Tools` — mutual exclusivity with the
+	 * tool-calling arm is therefore enforced at the model-descriptor level.
+	 *
+	 * @param modelName Ollama model tag, e.g. `"qwen2.5:7b-instruct"`.
+	 * @param contextLength The model's real maximum context length in tokens.
+	 */
+	fun constrainedJsonCapableModel(
+		modelName: String,
+		contextLength: Long
+	): LLModel =
+		LLModel(
+			provider = LLMProvider.Ollama,
+			id = modelName,
+			capabilities = CONSTRAINED_JSON_CAPABILITIES,
 			contextLength = contextLength
 		)
 }
