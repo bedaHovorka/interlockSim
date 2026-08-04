@@ -47,8 +47,9 @@ import java.time.format.DateTimeFormatter
  *
  * @since Issue #846 (SP2c.23 — cross-run aggregator + Markdown report + Gradle task)
  */
-class RunReportAggregator(private val store: RunSnapshotStore) {
-
+class RunReportAggregator(
+	private val store: RunSnapshotStore
+) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
@@ -114,21 +115,24 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 
 		val latencies = snapshots.map { it.latencyP95Ms }.sorted()
 
-		val rejectionCounts = aggregateEnumCounts(
-			snapshots,
-			{ it.rejectionsByCodeTyped() },
-			RejectionCode.entries.toList()
-		)
-		val applyFailureCounts = aggregateEnumCounts(
-			snapshots,
-			{ it.applyFailuresByCodeTyped() },
-			ApplyFailureCode.entries.toList()
-		)
-		val authorCounts = aggregateEnumCounts(
-			snapshots,
-			{ it.actionsByAuthorTyped() },
-			ActionAuthor.entries.toList()
-		)
+		val rejectionCounts =
+			aggregateEnumCounts(
+				snapshots,
+				{ it.rejectionsByCodeTyped() },
+				RejectionCode.entries.toList()
+			)
+		val applyFailureCounts =
+			aggregateEnumCounts(
+				snapshots,
+				{ it.applyFailuresByCodeTyped() },
+				ApplyFailureCode.entries.toList()
+			)
+		val authorCounts =
+			aggregateEnumCounts(
+				snapshots,
+				{ it.actionsByAuthorTyped() },
+				ActionAuthor.entries.toList()
+			)
 
 		return ArmReport(
 			arm = arm,
@@ -189,11 +193,15 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 
 	// ── Table renderers ───────────────────────────────────────────────────────
 
-	private fun appendT1(sb: StringBuilder, reports: List<ArmReport>) {
+	private fun appendT1(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
 		sb.appendLine("## T1 Arm Comparison")
 		sb.appendLine()
 		sb.appendLine(
-			"| Arm | Runs | Passing | Gate | LLM Success (median) | NoOp (median) | validAt1 (median) | correctAt1 (median) | p95 latency ms | C7 clean |"
+			"| Arm | Runs | Passing | Gate | LLM Success (median) | NoOp (median) | " +
+				"validAt1 (median) | correctAt1 (median) | p95 latency ms | C7 clean |"
 		)
 		sb.appendLine(
 			"|---|---|---|---|---|---|---|---|---|---|"
@@ -215,11 +223,15 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 		sb.appendLine()
 	}
 
-	private fun appendT2(sb: StringBuilder, reports: List<ArmReport>) {
+	private fun appendT2(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
 		sb.appendLine("## T2 Per-Run Detail")
 		sb.appendLine()
 		sb.appendLine(
-			"| Arm | RunId | Ticks | LLM_ACTIONS | LLM_NO_OP | LLM_REPAIRED | TIMEOUT_NOOP | RULE_FALLBACK | End cause | C7 clean | Fallback tick |"
+			"| Arm | RunId | Ticks | LLM_ACTIONS | LLM_NO_OP | LLM_REPAIRED | TIMEOUT_NOOP | " +
+				"RULE_FALLBACK | End cause | C7 clean | Fallback tick |"
 		)
 		sb.appendLine(
 			"|---|---|---|---|---|---|---|---|---|---|---|"
@@ -245,7 +257,10 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 		sb.appendLine()
 	}
 
-	private fun appendT3(sb: StringBuilder, reports: List<ArmReport>) {
+	private fun appendT3(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
 		sb.appendLine("## T3 Failure Modes (Rejection Codes)")
 		sb.appendLine()
 		sb.appendLine(
@@ -261,15 +276,20 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 		sb.appendLine(separator)
 
 		for (code in codes) {
-			val row = "| $code | " + reports.joinToString(" | ") { r ->
-				"${r.rejectionCounts[code] ?: 0L}"
-			} + " |"
+			val row =
+				"| $code | " +
+					reports.joinToString(" | ") { r ->
+						"${r.rejectionCounts[code] ?: 0L}"
+					} + " |"
 			sb.appendLine(row)
 		}
 		sb.appendLine()
 	}
 
-	private fun appendT4(sb: StringBuilder, reports: List<ArmReport>) {
+	private fun appendT4(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
 		sb.appendLine("## T4 Apply Failures")
 		sb.appendLine()
 
@@ -280,15 +300,20 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 		sb.appendLine(separator)
 
 		for (code in codes) {
-			val row = "| $code | " + reports.joinToString(" | ") { r ->
-				"${r.applyFailureCounts[code] ?: 0L}"
-			} + " |"
+			val row =
+				"| $code | " +
+					reports.joinToString(" | ") { r ->
+						"${r.applyFailureCounts[code] ?: 0L}"
+					} + " |"
 			sb.appendLine(row)
 		}
 		sb.appendLine()
 	}
 
-	private fun appendT5(sb: StringBuilder, reports: List<ArmReport>) {
+	private fun appendT5(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
 		sb.appendLine("## T5 Author Attribution")
 		sb.appendLine()
 		sb.appendLine(
@@ -303,15 +328,20 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 		sb.appendLine(separator)
 
 		for (author in authors) {
-			val row = "| $author | " + reports.joinToString(" | ") { r ->
-				"${r.authorCounts[author] ?: 0L}"
-			} + " |"
+			val row =
+				"| $author | " +
+					reports.joinToString(" | ") { r ->
+						"${r.authorCounts[author] ?: 0L}"
+					} + " |"
 			sb.appendLine(row)
 		}
 		sb.appendLine()
 	}
 
-	private fun appendT6(sb: StringBuilder, reports: List<ArmReport>) {
+	private fun appendT6(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
 		sb.appendLine("## T6 Latency")
 		sb.appendLine()
 		sb.appendLine("| Arm | Tick period ms | p50 latency ms | p95 latency ms | Max latency ms | Deadline misses |")
@@ -323,9 +353,10 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 			val p95s = r.snapshots.map { it.latencyP95Ms }.sorted()
 			val maxes = r.snapshots.map { it.latencyMaxMs }.sorted()
 
-			val deadlineMisses = r.snapshots.sumOf { snap ->
-				snap.ticksByOutcome[TickOutcome.TIMEOUT_NOOP.name] ?: 0L
-			}
+			val deadlineMisses =
+				r.snapshots.sumOf { snap ->
+					snap.ticksByOutcome[TickOutcome.TIMEOUT_NOOP.name] ?: 0L
+				}
 
 			sb.appendLine(
 				"| ${r.arm} " +
@@ -339,11 +370,15 @@ class RunReportAggregator(private val store: RunSnapshotStore) {
 		sb.appendLine()
 	}
 
-	private fun appendT7(sb: StringBuilder, reports: List<ArmReport>) {
+	private fun appendT7(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
 		sb.appendLine("## T7 Parameter Sweep")
 		sb.appendLine()
 		sb.appendLine(
-			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Gate | LLM Success | validAt1 | correctAt1 | p95 latency ms |"
+			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Gate | " +
+				"LLM Success | validAt1 | correctAt1 | p95 latency ms |"
 		)
 		sb.appendLine("|---|---|---|---|---|---|---|---|---|---|---|---|")
 

@@ -32,11 +32,11 @@ import java.nio.file.Path
  * @since Issue #846 (SP2c.23 — cross-run aggregator + Markdown report + Gradle task)
  */
 class RunReportAggregatorTest {
-
-	private val store = mockk<RunSnapshotStore> {
-		every { readAll(any<Path>()) } returns emptyList()
-		every { write(any()) } throws UnsupportedOperationException("test-only store")
-	}
+	private val store =
+		mockk<RunSnapshotStore> {
+			every { readAll(any<Path>()) } returns emptyList()
+			every { write(any()) } throws UnsupportedOperationException("test-only store")
+		}
 	private val aggregator = RunReportAggregator(store)
 
 	// ── Gate logic ────────────────────────────────────────────────────────────
@@ -68,8 +68,9 @@ class RunReportAggregatorTest {
 	@Test
 	fun `gatePassed fails when fewer than 8 passing runs even at runCount 10`() {
 		// 7 passing + 3 failing (completedNaturally = false) → 7 < 8
-		val snapshots = (1..7).map { i -> snapshot(runId = "p$i", c7Clean = true) } +
-			(1..3).map { i -> snapshot(runId = "f$i", completedNaturally = false, c7Clean = true) }
+		val snapshots =
+			(1..7).map { i -> snapshot(runId = "p$i", c7Clean = true) } +
+				(1..3).map { i -> snapshot(runId = "f$i", completedNaturally = false, c7Clean = true) }
 		val report = aggregator.aggregate(snapshots)
 		assertThat(report.gatePassed).isFalse()
 		assertThat(report.passingRuns).isEqualTo(7)
@@ -78,8 +79,9 @@ class RunReportAggregatorTest {
 	@Test
 	fun `single non-c7Clean run fails entire arm even at 10 of 10 completions`() {
 		// 9 clean passing + 1 non-c7Clean (but completedNaturally) → gate must fail
-		val snapshots = (1..9).map { i -> snapshot(runId = "c$i", c7Clean = true) } +
-			listOf(snapshot(runId = "dirty", c7Clean = false))
+		val snapshots =
+			(1..9).map { i -> snapshot(runId = "c$i", c7Clean = true) } +
+				listOf(snapshot(runId = "dirty", c7Clean = false))
 		val report = aggregator.aggregate(snapshots)
 
 		assertThat(report.runCount).isEqualTo(10)
@@ -92,10 +94,11 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `allC7Clean is false when any snapshot has c7Clean false`() {
-		val snapshots = listOf(
-			snapshot(runId = "a", c7Clean = true),
-			snapshot(runId = "b", c7Clean = false)
-		)
+		val snapshots =
+			listOf(
+				snapshot(runId = "a", c7Clean = true),
+				snapshot(runId = "b", c7Clean = false)
+			)
 		val report = aggregator.aggregate(snapshots)
 		assertThat(report.allC7Clean).isFalse()
 	}
@@ -111,11 +114,12 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `aggregate computes median llmSuccessRate correctly`() {
-		val snapshots = listOf(
-			snapshot(runId = "r1", llmSuccessRate = 0.6),
-			snapshot(runId = "r2", llmSuccessRate = 0.8),
-			snapshot(runId = "r3", llmSuccessRate = 1.0)
-		)
+		val snapshots =
+			listOf(
+				snapshot(runId = "r1", llmSuccessRate = 0.6),
+				snapshot(runId = "r2", llmSuccessRate = 0.8),
+				snapshot(runId = "r3", llmSuccessRate = 1.0)
+			)
 		val report = aggregator.aggregate(snapshots)
 		// Sorted: [0.6, 0.8, 1.0] → median is 0.8
 		assertThat(report.medianLlmSuccessRate).isEqualTo(0.8)
@@ -175,10 +179,19 @@ class RunReportAggregatorTest {
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		// Check that common Czech words do not appear in the output
-		val czechPatterns = listOf(
-			"Jízdní", "jízdní", "cesty", "cesta", "volnost", "závěr",
-			"postaveno", "nástupník", "vlak", "stanice"
-		)
+		val czechPatterns =
+			listOf(
+				"Jízdní",
+				"jízdní",
+				"cesty",
+				"cesta",
+				"volnost",
+				"závěr",
+				"postaveno",
+				"nástupník",
+				"vlak",
+				"stanice"
+			)
 		for (pattern in czechPatterns) {
 			assertThat(md).doesNotContain(pattern)
 		}
@@ -212,12 +225,77 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `p95LatencyMs reflects 95th percentile of per-run latencyP95Ms`() {
-		val snapshots = (1..10).map { i ->
-			snapshot(runId = "lat$i", latencyP95Ms = (i * 100L))
-		}
+		val snapshots =
+			(1..10).map { i ->
+				snapshot(runId = "lat$i", latencyP95Ms = (i * 100L))
+			}
 		val report = aggregator.aggregate(snapshots)
 		// Sorted latencies: 100..1000; p95 index = (10-1)*95/100 = 8 → value at index 8 = 900
 		assertThat(report.p95LatencyMs).isGreaterThanOrEqualTo(800L)
+	}
+
+	@Test
+	fun `aggregate computes medianCorrectAt1 only from snapshots with oracle data`() {
+		val snapshots =
+			listOf(
+				snapshot(runId = "o1", correctAt1 = 0.5),
+				snapshot(runId = "o2", correctAt1 = 0.9)
+			)
+		val report = aggregator.aggregate(snapshots)
+		assertThat(report.medianCorrectAt1).isEqualTo(0.7)
+	}
+
+	@Test
+	fun `renderMarkdown shows correctAt1 value in T1 and T7 when oracle data present`() {
+		val report = aggregator.aggregate(listOf(snapshot(runId = "oracle1", correctAt1 = 0.75)))
+		val md = aggregator.renderMarkdown(listOf(report))
+		assertThat(md).transform("does not fall back to n/a") { !md.contains("n/a") }.isTrue()
+	}
+
+	@Test
+	fun `renderMarkdown shows non-zero rejection, apply-failure, and author counts and a dirty C7 arm`() {
+		val dirtySnapshot =
+			snapshot(
+				runId = "dirty1",
+				c7Clean = false,
+				rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 2L),
+				applyFailures = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED to 3L),
+				authorCounts = mapOf(ActionAuthor.LLM to 4L)
+			)
+		val report = aggregator.aggregate(listOf(dirtySnapshot))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		assertThat(md)
+			.transform("shows rejection count") { md.contains("| ${RejectionCode.UNKNOWN_TRAIN} | 2 |") }
+			.isTrue()
+		assertThat(md)
+			.transform("shows apply-failure count") { md.contains("| ${ApplyFailureCode.ALL_PATHS_BLOCKED} | 3 |") }
+			.isTrue()
+		assertThat(md).transform("shows author count") { md.contains("| ${ActionAuthor.LLM} | 4 |") }.isTrue()
+		assertThat(md).transform("shows C7-not-clean as no") { md.contains("| no |") }.isTrue()
+	}
+
+	@Test
+	fun `renderMarkdown falls back to placeholders for an arm report with no snapshots`() {
+		// aggregate(emptyList()) is what DispatcherReliabilityReportKt.main() feeds in for an arm
+		// with zero runs recorded yet — T6 and T7 must render defaults, not throw.
+		val emptyArmReport = aggregator.aggregate(emptyList())
+		val md = aggregator.renderMarkdown(listOf(emptyArmReport))
+
+		assertThat(md).transform("T7 falls back to rule-based") { md.contains("rule-based") }.isTrue()
+		assertThat(md).transform("T7 falls back to unset seed") { md.contains("unset") }.isTrue()
+	}
+
+	@Test
+	fun `renderMarkdown shows configured model and seed in T7`() {
+		val report =
+			aggregator.aggregate(
+				listOf(snapshot(runId = "params1", model = "qwen2.5:7b-instruct", seed = 42L))
+			)
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		assertThat(md).transform("shows model") { md.contains("qwen2.5:7b-instruct") }.isTrue()
+		assertThat(md).transform("shows seed") { md.contains("| 42 |") }.isTrue()
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -232,7 +310,10 @@ class RunReportAggregatorTest {
 		latencyP95Ms: Long = 200L,
 		rejections: Map<RejectionCode, Long> = emptyMap(),
 		applyFailures: Map<ApplyFailureCode, Long> = emptyMap(),
-		authorCounts: Map<ActionAuthor, Long> = emptyMap()
+		authorCounts: Map<ActionAuthor, Long> = emptyMap(),
+		correctAt1: Double? = null,
+		model: String = "",
+		seed: Long? = null
 	): DispatcherRunSnapshot {
 		val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
 		outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
@@ -240,14 +321,15 @@ class RunReportAggregatorTest {
 		return DispatcherRunSnapshot(
 			runId = runId,
 			arm = arm,
-			params = RunParameters(
-				tickPeriodMs = 500L,
-				historyN = 10,
-				temperature = 0.0,
-				maxActionsPerTick = 3,
-				model = "",
-				seed = null
-			),
+			params =
+				RunParameters(
+					tickPeriodMs = 500L,
+					historyN = 10,
+					temperature = 0.0,
+					maxActionsPerTick = 3,
+					model = model,
+					seed = seed
+				),
 			totalTicks = 1L,
 			ticksByOutcome = outcomes,
 			timeoutNoOpByCause = TimeoutNoOpCause.entries.associate { it.name to 0L },
@@ -259,7 +341,7 @@ class RunReportAggregatorTest {
 			rejectionsByCode = rejections.mapKeys { it.key.name },
 			applyFailuresByCode = applyFailures.mapKeys { it.key.name },
 			validAt1 = 1.0,
-			correctAt1 = null,
+			correctAt1 = correctAt1,
 			oracleAgreementAt1 = null,
 			latencyP50Ms = 100L,
 			latencyP95Ms = latencyP95Ms,
