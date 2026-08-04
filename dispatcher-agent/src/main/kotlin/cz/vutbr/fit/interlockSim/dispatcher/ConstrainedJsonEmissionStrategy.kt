@@ -18,14 +18,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -51,15 +46,11 @@ import java.util.concurrent.atomic.AtomicLong
  * ## Schema
  *
  * The constrained-JSON schema covers the same four actions as the tool-calling surface
- * (`approve_train`, `request_route`, `cancel_route`, `no_op`):
- *
- * ```json
- * {"type":"object","required":["actions"],"properties":{"actions":{"type":"array","maxItems":3,
- *  "items":{"type":"object","required":["action"],"properties":{
- *    "action":{"type":"string","enum":["approve_train","request_route","cancel_route","no_op"]},
- *    "trainId":{"type":"string"},"fromEndpointName":{"type":"string"},
- *    "toEndpointName":{"type":"string"},"reason":{"type":"string"}}}}}}
- * ```
+ * (`approve_train`, `request_route`, `cancel_route`, `no_op`). The canonical schema lives as
+ * plain JSON in the classpath resource `action_batch_schema.json` (see
+ * `dispatcher-agent/src/main/resources/cz/vutbr/fit/interlockSim/dispatcher/`), loaded at
+ * companion init by [ACTION_BATCH_SCHEMA] — keep that file as the single source of truth
+ * rather than restating the schema here.
  *
  * The schema deliberately does **not** express per-action conditional required-fields
  * (`if`/`then`): `Schema.JSON.Basic` is the simplified flavour of constrained decoding,
@@ -98,49 +89,36 @@ class ConstrainedJsonEmissionStrategy(
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
+		private val json =
+			Json {
+				ignoreUnknownKeys = true
+			}
+
 		/**
 		 * Ollama `format` schema constraining the model to emit a batch of up to 3 dispatch
 		 * actions over the four-action vocabulary.
+		 *
+		 * Loaded from the classpath resource `action_batch_schema.json` so the schema lives as
+		 * plain JSON (easier to read and diff against the Ollama `format` contract) rather than
+		 * an opaque `buildJsonObject` literal.
 		 *
 		 * Deliberately omits `if`/`then` conditionals for per-action required-fields — the
 		 * `Schema.JSON.Basic` flavour of constrained decoding does not support them reliably
 		 * in GBNF conversion. Missing fields are caught by [ActionValidator].
 		 */
-		val ACTION_BATCH_SCHEMA: JsonObject =
-			buildJsonObject {
-				put("type", "object")
-				putJsonArray("required") { add(JsonPrimitive("actions")) }
-				putJsonObject("properties") {
-					putJsonObject("actions") {
-						put("type", "array")
-						put("maxItems", 3)
-						putJsonObject("items") {
-							put("type", "object")
-							putJsonArray("required") { add(JsonPrimitive("action")) }
-							putJsonObject("properties") {
-								putJsonObject("action") {
-									put("type", "string")
-									putJsonArray("enum") {
-										add(JsonPrimitive("approve_train"))
-										add(JsonPrimitive("request_route"))
-										add(JsonPrimitive("cancel_route"))
-										add(JsonPrimitive("no_op"))
-									}
-								}
-								putJsonObject("trainId") { put("type", "string") }
-								putJsonObject("fromEndpointName") { put("type", "string") }
-								putJsonObject("toEndpointName") { put("type", "string") }
-								putJsonObject("reason") { put("type", "string") }
-							}
-						}
-					}
-				}
-			}
+		val ACTION_BATCH_SCHEMA: JsonObject = loadActionBatchSchema()
 
-		private val json =
-			Json {
-				ignoreUnknownKeys = true
-			}
+		private fun loadActionBatchSchema(): JsonObject {
+			val resourceText =
+				ConstrainedJsonEmissionStrategy::class.java
+					.getResourceAsStream("action_batch_schema.json")
+					?.bufferedReader()
+					?.use { it.readText() }
+					?: error(
+						"Missing classpath resource 'action_batch_schema.json' for ACTION_BATCH_SCHEMA"
+					)
+			return json.parseToJsonElement(resourceText).jsonObject
+		}
 	}
 
 	private val commandIdCounter: AtomicLong = AtomicLong(0L)
