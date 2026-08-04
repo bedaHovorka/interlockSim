@@ -25,7 +25,6 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
-import io.mockk.coAnswers
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -62,56 +61,58 @@ class Sp2c21MetricsRecorderTest {
 			snapshot = SimulationSnapshot.EMPTY,
 			unapprovedTrains = emptyList(),
 			innerBlockInputs = emptyList(),
-			outerBlockInputs = emptyList(),
+			outerBlockInputs = emptyList()
 		)
 
 	/** Helper: build an [AuthoredAction] with the given tick index. */
 	private fun authored(
 		author: ActionAuthor = ActionAuthor.LLM,
-		tickIndex: Long = 0L,
+		tickIndex: Long = 0L
 	) = AuthoredAction(
 		author = author,
 		reason = "test",
 		decisionKind = "RequestRoute",
-		tickIndex = tickIndex,
+		tickIndex = tickIndex
 	)
 
 	/** Helper: build an [ActionOutcome] with phase [ActionPhase.APPLIED]. */
-	private fun appliedOutcome(tickIndex: Long = 0L, author: ActionAuthor = ActionAuthor.LLM) =
-		ActionOutcome(
-			phase = ActionPhase.APPLIED,
-			rejection = null,
-			applyFailure = null,
-			authored = authored(author, tickIndex),
-		)
+	private fun appliedOutcome(
+		tickIndex: Long = 0L,
+		author: ActionAuthor = ActionAuthor.LLM
+	) = ActionOutcome(
+		phase = ActionPhase.APPLIED,
+		rejection = null,
+		applyFailure = null,
+		authored = authored(author, tickIndex)
+	)
 
 	/** Helper: build an [ActionOutcome] with phase [ActionPhase.APPLIED_THEN_FAILED]. */
 	private fun failedOutcome(
 		code: ApplyFailureCode,
 		tickIndex: Long = 0L,
-		author: ActionAuthor = ActionAuthor.LLM,
+		author: ActionAuthor = ActionAuthor.LLM
 	) = ActionOutcome(
 		phase = ActionPhase.APPLIED_THEN_FAILED,
 		rejection = null,
 		applyFailure = code,
-		authored = authored(author, tickIndex),
+		authored = authored(author, tickIndex)
 	)
 
 	/** Helper: build an [ActionOutcome] with phase [ActionPhase.REJECTED_BY_VALIDATOR]. */
 	private fun rejectedOutcome(
 		code: RejectionCode = RejectionCode.UNKNOWN_TRAIN,
-		tickIndex: Long = 0L,
+		tickIndex: Long = 0L
 	) = ActionOutcome(
 		phase = ActionPhase.REJECTED_BY_VALIDATOR,
 		rejection = code,
 		applyFailure = null,
-		authored = authored(ActionAuthor.LLM, tickIndex),
+		authored = authored(ActionAuthor.LLM, tickIndex)
 	)
 
 	/** Build a recorder with a stub inner planner and an oracle. */
 	private fun recorder(
 		innerDecisions: List<DispatchDecision> = listOf(DispatchDecision.NoAction),
-		oracleDecisions: List<DispatchDecision> = listOf(DispatchDecision.NoAction),
+		oracleDecisions: List<DispatchDecision> = listOf(DispatchDecision.NoAction)
 	): Sp2c21MetricsRecorder {
 		val inner = mockk<DispatcherPlanner>()
 		every { inner.capabilities } returns mockk(relaxed = true)
@@ -345,10 +346,11 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `AGREES verdict when LLM and oracle produce same normalised action set`() {
-			val rec = recorder(
-				innerDecisions = listOf(DispatchDecision.NoAction),
-				oracleDecisions = listOf(DispatchDecision.NoAction),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(DispatchDecision.NoAction),
+					oracleDecisions = listOf(DispatchDecision.NoAction)
+				)
 			runBlocking { rec.plan(observation) }
 
 			val comparisons = rec.getOracleComparisons()
@@ -358,10 +360,11 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `DIVERGES_SAFE when LLM differs from oracle but no hard failure`() {
-			val rec = recorder(
-				innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
-				oracleDecisions = listOf(DispatchDecision.NoAction),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
+					oracleDecisions = listOf(DispatchDecision.NoAction)
+				)
 			runBlocking { rec.plan(observation) }
 			rec.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 0.0), 0L)
 			// No hard failure reported for tick 0
@@ -374,10 +377,11 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `DIVERGES_UNSAFE when LLM differs from oracle AND tick had CONFLICT failure`() {
-			val rec = recorder(
-				innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
-				oracleDecisions = listOf(DispatchDecision.NoAction),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
+					oracleDecisions = listOf(DispatchDecision.NoAction)
+				)
 			runBlocking { rec.plan(observation) }
 			rec.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 0.0), 0L)
 			// Register a CONFLICT failure for tick 0
@@ -391,10 +395,11 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `DIVERGES_UNSAFE when LLM differs from oracle AND tick had NO_ROUTE_EXISTS failure`() {
-			val rec = recorder(
-				innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
-				oracleDecisions = listOf(DispatchDecision.NoAction),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
+					oracleDecisions = listOf(DispatchDecision.NoAction)
+				)
 			runBlocking { rec.plan(observation) }
 			rec.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 0.0), 0L)
 			rec.onActionOutcome(failedOutcome(ApplyFailureCode.NO_ROUTE_EXISTS, tickIndex = 0L))
@@ -407,10 +412,11 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `DIVERGES_SAFE divergence with ALL_PATHS_BLOCKED does not become UNSAFE`() {
-			val rec = recorder(
-				innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
-				oracleDecisions = listOf(DispatchDecision.NoAction),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
+					oracleDecisions = listOf(DispatchDecision.NoAction)
+				)
 			runBlocking { rec.plan(observation) }
 			rec.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 0.0), 0L)
 			// ALL_PATHS_BLOCKED is not a hard failure
@@ -428,10 +434,11 @@ class Sp2c21MetricsRecorderTest {
 			// → the normalised sets are equal → AGREES
 			val trainDecision = DispatchDecision.ApproveTrain("T1")
 			val noAction = DispatchDecision.NoAction
-			val rec = recorder(
-				innerDecisions = listOf(trainDecision, noAction),
-				oracleDecisions = listOf(noAction, trainDecision),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(trainDecision, noAction),
+					oracleDecisions = listOf(noAction, trainDecision)
+				)
 			runBlocking { rec.plan(observation) }
 
 			val comparisons = rec.getOracleComparisons()
@@ -440,10 +447,11 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `oracleAgreementAt1 = 1_0 when all ticks agree`() {
-			val rec = recorder(
-				innerDecisions = listOf(DispatchDecision.NoAction),
-				oracleDecisions = listOf(DispatchDecision.NoAction),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(DispatchDecision.NoAction),
+					oracleDecisions = listOf(DispatchDecision.NoAction)
+				)
 			repeat(3) { runBlocking { rec.plan(observation) } }
 
 			assertThat(rec.getMetricsSnapshot().oracleAgreementAt1).isEqualTo(1.0)
@@ -451,10 +459,11 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `oracleAgreementAt1 = 0_0 when all ticks diverge`() {
-			val rec = recorder(
-				innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
-				oracleDecisions = listOf(DispatchDecision.NoAction),
-			)
+			val rec =
+				recorder(
+					innerDecisions = listOf(DispatchDecision.ApproveTrain("T1")),
+					oracleDecisions = listOf(DispatchDecision.NoAction)
+				)
 			repeat(3) { runBlocking { rec.plan(observation) } }
 
 			assertThat(rec.getMetricsSnapshot().oracleAgreementAt1).isEqualTo(0.0)
@@ -488,7 +497,7 @@ class Sp2c21MetricsRecorderTest {
 			every { oracle.decide(any()) } returns
 				listOf(
 					DispatchDecision.ApproveTrain("T1"),
-					DispatchDecision.NoAction,
+					DispatchDecision.NoAction
 				)
 
 			val inner = mockk<DispatcherPlanner>()
@@ -515,10 +524,11 @@ class Sp2c21MetricsRecorderTest {
 	inner class NonInterference {
 		@Test
 		fun `decisions from inner planner are forwarded unchanged`() {
-			val expectedDecisions = listOf(
-				DispatchDecision.ApproveTrain("T99"),
-				DispatchDecision.NoAction,
-			)
+			val expectedDecisions =
+				listOf(
+					DispatchDecision.ApproveTrain("T99"),
+					DispatchDecision.NoAction
+				)
 			val inner = mockk<DispatcherPlanner>()
 			every { inner.capabilities } returns mockk(relaxed = true)
 			coEvery { inner.plan(any()) } returns expectedDecisions
@@ -562,9 +572,10 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `ReservePath normalises with all fields`() {
-			val key = Sp2c21MetricsRecorder.normaliseDecision(
-				DispatchDecision.ReservePath("T1", "semA", "semB")
-			)
+			val key =
+				Sp2c21MetricsRecorder.normaliseDecision(
+					DispatchDecision.ReservePath("T1", "semA", "semB")
+				)
 			assertThat(key).isEqualTo("ReservePath|T1|semA|semB")
 		}
 
@@ -576,9 +587,10 @@ class Sp2c21MetricsRecorderTest {
 
 		@Test
 		fun `RequestRoute normalises with all fields`() {
-			val key = Sp2c21MetricsRecorder.normaliseDecision(
-				DispatchDecision.RequestRoute("T1", "from", "to")
-			)
+			val key =
+				Sp2c21MetricsRecorder.normaliseDecision(
+					DispatchDecision.RequestRoute("T1", "from", "to")
+				)
 			assertThat(key).isEqualTo("RequestRoute|T1|from|to")
 		}
 
@@ -605,29 +617,71 @@ class Sp2c21MetricsRecorderTest {
 			// We verify this by inspecting the field via reflection on the property getter.
 			// The actual KDoc content is enforced by code review; this test confirms
 			// the property exists and computes a value (0 ticks = 0.0).
-			val snap = Sp2c21MetricsSnapshot(
-				validTickCount = 0L,
-				totalTickCount = 0L,
-				invalidTickCount = 0L,
-				correctTickCount = 0L,
-				runCompletedNaturally = null,
-				oracleAgreeTicks = 0L,
-				oracleCallableTicks = 0L,
-				divergeUnsafeCount = 0L,
-				latencyP50Ms = Double.NaN,
-				latencyP95Ms = Double.NaN,
-				latencyMaxMs = Double.NaN,
-			)
+			val snap =
+				Sp2c21MetricsSnapshot(
+					validTickCount = 0L,
+					totalTickCount = 0L,
+					invalidTickCount = 0L,
+					correctTickCount = 0L,
+					runCompletedNaturally = null,
+					oracleAgreeTicks = 0L,
+					oracleCallableTicks = 0L,
+					divergeUnsafeCount = 0L,
+					latencyP50Ms = Double.NaN,
+					latencyP95Ms = Double.NaN,
+					latencyMaxMs = Double.NaN
+				)
 			// correctAt1 returns 0.0 when no ticks exist
 			assertThat(snap.correctAt1).isEqualTo(0.0)
 			// runCompletedNaturally = null → correctAt1 = 0.0 (precondition not met)
-			val snapWithTicks = snap.copy(
-				validTickCount = 1L,
-				totalTickCount = 1L,
-				correctTickCount = 1L,
-				runCompletedNaturally = null,
-			)
+			val snapWithTicks =
+				snap.copy(
+					validTickCount = 1L,
+					totalTickCount = 1L,
+					correctTickCount = 1L,
+					runCompletedNaturally = null
+				)
 			assertThat(snapWithTicks.correctAt1).isEqualTo(0.0)
+		}
+	}
+
+	// ── Shadow oracle failure ──────────────────────────────────────────────────
+
+	@Nested
+	@DisplayName("shadow oracle failure")
+	inner class ShadowOracleFailure {
+		@Test
+		fun `oracle throwing during plan() yields ORACLE_UNAVAILABLE and does not affect the returned decisions`() {
+			val inner = mockk<DispatcherPlanner>()
+			every { inner.capabilities } returns mockk(relaxed = true)
+			val llmDecisions = listOf(DispatchDecision.NoAction)
+			coEvery { inner.plan(any()) } returns llmDecisions
+			val oracle = mockk<Dispatcher>()
+			every { oracle.decide(any()) } throws IllegalStateException("oracle boom")
+			val rec = Sp2c21MetricsRecorder(inner = inner, oracle = oracle)
+
+			val returned = runBlocking { rec.plan(observation) }
+
+			assertThat(returned).isEqualTo(llmDecisions)
+			val comparisons = rec.getOracleComparisons()
+			assertThat(comparisons).hasSize(1)
+			assertThat(comparisons.first().verdict).isEqualTo(OracleVerdict.ORACLE_UNAVAILABLE)
+		}
+
+		@Test
+		fun `ORACLE_UNAVAILABLE ticks are excluded from oracleAgreementAt1 denominator`() {
+			val inner = mockk<DispatcherPlanner>()
+			every { inner.capabilities } returns mockk(relaxed = true)
+			coEvery { inner.plan(any()) } returns listOf(DispatchDecision.NoAction)
+			val oracle = mockk<Dispatcher>()
+			every { oracle.decide(any()) } throws IllegalStateException("oracle boom")
+			val rec = Sp2c21MetricsRecorder(inner = inner, oracle = oracle)
+
+			runBlocking { rec.plan(observation) }
+
+			val snap = rec.getMetricsSnapshot()
+			assertThat(snap.oracleCallableTicks).isEqualTo(0L)
+			assertThat(snap.oracleAgreementAt1).isEqualTo(0.0)
 		}
 	}
 }

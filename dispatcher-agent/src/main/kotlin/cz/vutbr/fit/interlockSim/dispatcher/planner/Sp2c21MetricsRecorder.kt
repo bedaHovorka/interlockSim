@@ -84,8 +84,9 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class Sp2c21MetricsRecorder(
 	private val inner: DispatcherPlanner,
-	private val oracle: Dispatcher,
-) : DispatcherPlanner by inner, ActionOutcomeSink {
+	private val oracle: Dispatcher
+) : DispatcherPlanner by inner,
+	ActionOutcomeSink {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
@@ -240,7 +241,10 @@ class Sp2c21MetricsRecorder(
 	 * [KoogAgentPlanAdapter]; alternatively, callers may invoke this directly if the inner
 	 * planner does not expose a tick listener.
 	 */
-	fun onTick(record: TickRecord, tickIdx: Long) {
+	fun onTick(
+		record: TickRecord,
+		tickIdx: Long
+	) {
 		totalTicks.incrementAndGet()
 		if (record.outcome.countsAsLlmSuccess) {
 			validTicks.incrementAndGet()
@@ -283,9 +287,11 @@ class Sp2c21MetricsRecorder(
 		val correctT = validSet.count { idx -> !hardFailSet.contains(idx) }.toLong()
 
 		// divergeUnsafeCount = ticks that were DIVERGES_SAFE provisionally AND had a hard failure
-		val divergeUnsafe = provisionalComparisons.entries.count { (tickIdx, comparison) ->
-			comparison.verdict == OracleVerdict.DIVERGES_SAFE && hardFailSet.contains(tickIdx)
-		}.toLong()
+		val divergeUnsafe =
+			provisionalComparisons.entries
+				.count { (tickIdx, comparison) ->
+					comparison.verdict == OracleVerdict.DIVERGES_SAFE && hardFailSet.contains(tickIdx)
+				}.toLong()
 
 		val samples = getLatencyCopy().sorted()
 
@@ -300,7 +306,7 @@ class Sp2c21MetricsRecorder(
 			divergeUnsafeCount = divergeUnsafe,
 			latencyP50Ms = percentile(samples, 50.0),
 			latencyP95Ms = percentile(samples, 95.0),
-			latencyMaxMs = percentile(samples, 100.0),
+			latencyMaxMs = percentile(samples, 100.0)
 		)
 	}
 
@@ -345,7 +351,7 @@ class Sp2c21MetricsRecorder(
 	private fun runShadowOracle(
 		observation: DispatchObservation,
 		llmDecisions: List<DispatchDecision>,
-		thisTick: Long,
+		thisTick: Long
 	): OracleComparison {
 		val llmKinds = llmDecisions.map { normaliseDecision(it) }.toSortedSet().toList()
 
@@ -356,30 +362,31 @@ class Sp2c21MetricsRecorder(
 			val llmSet = llmKinds.toSet()
 			val oracleSet = oracleKinds.toSet()
 
-			val verdict = when {
-				llmSet == oracleSet -> OracleVerdict.AGREES
-				else -> {
-					// Check if divergence is unsafe: did any action that's in LLM but not oracle fail?
-					// (We don't yet have apply-time outcome for this tick — that arrives later on the
-					// sim thread.  We mark DIVERGES_SAFE provisionally and upgrade to DIVERGES_UNSAFE
-					// in a finalisation step if the tick is later recorded as having CONFLICT/NO_ROUTE.)
-					// For the initial comparison, record DIVERGES_SAFE; upgradeToUnsafeIfNeeded will
-					// be checked at snapshot time based on ticksWithHardFailure.
-					OracleVerdict.DIVERGES_SAFE
+			val verdict =
+				when {
+					llmSet == oracleSet -> OracleVerdict.AGREES
+					else -> {
+						// Check if divergence is unsafe: did any action that's in LLM but not oracle fail?
+						// (We don't yet have apply-time outcome for this tick — that arrives later on the
+						// sim thread.  We mark DIVERGES_SAFE provisionally and upgrade to DIVERGES_UNSAFE
+						// in a finalisation step if the tick is later recorded as having CONFLICT/NO_ROUTE.)
+						// For the initial comparison, record DIVERGES_SAFE; upgradeToUnsafeIfNeeded will
+						// be checked at snapshot time based on ticksWithHardFailure.
+						OracleVerdict.DIVERGES_SAFE
+					}
 				}
-			}
 
 			OracleComparison(
 				verdict = verdict,
 				oracleActionKinds = oracleKinds,
-				llmActionKinds = llmKinds,
+				llmActionKinds = llmKinds
 			)
 		} catch (e: Exception) {
 			logger.warn(e) { "[Sp2c21MetricsRecorder] shadow oracle threw at tick $thisTick — oracle unavailable" }
 			OracleComparison(
 				verdict = OracleVerdict.ORACLE_UNAVAILABLE,
 				oracleActionKinds = emptyList(),
-				llmActionKinds = llmKinds,
+				llmActionKinds = llmKinds
 			)
 		}
 	}
@@ -388,7 +395,10 @@ class Sp2c21MetricsRecorder(
 	 * Computes the p-th percentile of [sortedSamples] (0–100).
 	 * Returns [Double.NaN] when the list is empty.
 	 */
-	private fun percentile(sortedSamples: List<Double>, p: Double): Double {
+	private fun percentile(
+		sortedSamples: List<Double>,
+		p: Double
+	): Double {
 		if (sortedSamples.isEmpty()) return Double.NaN
 		if (sortedSamples.size == 1) return sortedSamples[0]
 		val index = (p / 100.0 * (sortedSamples.size - 1)).coerceIn(0.0, (sortedSamples.size - 1).toDouble())

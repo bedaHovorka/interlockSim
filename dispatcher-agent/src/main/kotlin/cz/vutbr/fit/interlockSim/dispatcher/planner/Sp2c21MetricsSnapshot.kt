@@ -73,7 +73,7 @@ data class Sp2c21MetricsSnapshot(
 	val divergeUnsafeCount: Long,
 	val latencyP50Ms: Double,
 	val latencyP95Ms: Double,
-	val latencyMaxMs: Double,
+	val latencyMaxMs: Double
 ) {
 	/**
 	 * Fraction of ticks where the first LLM output was valid (0.0–1.0).

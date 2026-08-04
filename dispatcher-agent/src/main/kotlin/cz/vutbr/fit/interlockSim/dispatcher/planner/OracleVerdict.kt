@@ -62,5 +62,5 @@ enum class OracleVerdict {
 	 *
 	 * This verdict is never counted toward [oracleAgreementAt1][Sp2c21MetricsSnapshot.oracleAgreementAt1].
 	 */
-	ORACLE_UNAVAILABLE,
+	ORACLE_UNAVAILABLE
 }

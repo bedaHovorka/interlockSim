@@ -39,5 +39,5 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 data class OracleComparison(
 	val verdict: OracleVerdict,
 	val oracleActionKinds: List<String>,
-	val llmActionKinds: List<String>,
+	val llmActionKinds: List<String>
 )
