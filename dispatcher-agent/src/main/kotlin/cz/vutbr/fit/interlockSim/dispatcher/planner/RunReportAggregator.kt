@@ -31,17 +31,17 @@ import java.time.format.DateTimeFormatter
  * A **single** non-`c7Clean` run fails the whole arm even at 10/10 completions.
  * C7 is a deterministic-component correctness gate, not a majority vote.
  *
- * ## Tables rendered
+ * ## Sections rendered
  *
- * | Table | Content |
+ * | Section | Content |
  * |---|---|
- * | T1 | Arm comparison: one row per arm, headline metrics |
- * | T2 | Per-run detail: one row per run, outcome histogram |
- * | T3 | Failure modes: [RejectionCode] × arm — most actionable for prompt iteration |
- * | T4 | Apply failures: [ApplyFailureCode] × arm |
- * | T5 | Author attribution: [ActionAuthor] × arm |
- * | T6 | Latency: arm × tick period, p50/p95/max and deadline-miss count |
- * | T7 | Parameter sweep: one row per [RunParameters] cell |
+ * | Arm Comparison | one row per arm, headline metrics |
+ * | Per-Run Detail | one row per run, outcome histogram |
+ * | Failure Modes | [RejectionCode] × arm — most actionable for prompt iteration |
+ * | Apply Failures | [ApplyFailureCode] × arm |
+ * | Author Attribution | [ActionAuthor] × arm |
+ * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
+ * | Parameter Sweep | one row per [RunParameters] cell |
  *
  * @param store Used to load per-run JSON snapshots for the Gradle task entry point.
  *
@@ -160,7 +160,7 @@ class RunReportAggregator(
 	/**
 	 * Renders a Markdown report from [reports] — one [ArmReport] per arm.
 	 *
-	 * Contains tables T1–T7 as specified in SP2c.23 (Issue #846).
+	 * Contains the seven sections specified in SP2c.23 (Issue #846).
 	 */
 	fun renderMarkdown(reports: List<ArmReport>): String {
 		val sb = StringBuilder()
@@ -171,13 +171,13 @@ class RunReportAggregator(
 		sb.appendLine("Generated: $ts UTC")
 		sb.appendLine()
 
-		appendT1(sb, reports)
-		appendT2(sb, reports)
-		appendT3(sb, reports)
-		appendT4(sb, reports)
-		appendT5(sb, reports)
-		appendT6(sb, reports)
-		appendT7(sb, reports)
+		appendArmComparison(sb, reports)
+		appendPerRunDetail(sb, reports)
+		appendFailureModes(sb, reports)
+		appendApplyFailures(sb, reports)
+		appendAuthorAttribution(sb, reports)
+		appendLatency(sb, reports)
+		appendParameterSweep(sb, reports)
 
 		return sb.toString()
 	}
@@ -193,11 +193,11 @@ class RunReportAggregator(
 
 	// ── Table renderers ───────────────────────────────────────────────────────
 
-	private fun appendT1(
+	private fun appendArmComparison(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		sb.appendLine("## T1 Arm Comparison")
+		sb.appendLine("## Arm Comparison")
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Runs | Passing | Gate | LLM Success (median) | NoOp (median) | " +
@@ -223,11 +223,11 @@ class RunReportAggregator(
 		sb.appendLine()
 	}
 
-	private fun appendT2(
+	private fun appendPerRunDetail(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		sb.appendLine("## T2 Per-Run Detail")
+		sb.appendLine("## Per-Run Detail")
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | RunId | Ticks | LLM_ACTIONS | LLM_NO_OP | LLM_REPAIRED | TIMEOUT_NOOP | " +
@@ -257,14 +257,14 @@ class RunReportAggregator(
 		sb.appendLine()
 	}
 
-	private fun appendT3(
+	private fun appendFailureModes(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		sb.appendLine("## T3 Failure Modes (Rejection Codes)")
+		sb.appendLine("## Failure Modes (Rejection Codes)")
 		sb.appendLine()
 		sb.appendLine(
-			"> Read T3 together with T4: a **high noOpRate with low ALL_PATHS_BLOCKED** is correct " +
+			"> Read Failure Modes together with Apply Failures: a **high noOpRate with low ALL_PATHS_BLOCKED** is correct " +
 				"restraint; a **low noOpRate with high ALL_PATHS_BLOCKED** is thrashing."
 		)
 		sb.appendLine()
@@ -286,11 +286,11 @@ class RunReportAggregator(
 		sb.appendLine()
 	}
 
-	private fun appendT4(
+	private fun appendApplyFailures(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		sb.appendLine("## T4 Apply Failures")
+		sb.appendLine("## Apply Failures")
 		sb.appendLine()
 
 		val codes = ApplyFailureCode.entries
@@ -310,11 +310,11 @@ class RunReportAggregator(
 		sb.appendLine()
 	}
 
-	private fun appendT5(
+	private fun appendAuthorAttribution(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		sb.appendLine("## T5 Author Attribution")
+		sb.appendLine("## Author Attribution")
 		sb.appendLine()
 		sb.appendLine(
 			"> Must be `{LLM: n, everything else: 0}` for a passing LLM arm."
@@ -338,11 +338,11 @@ class RunReportAggregator(
 		sb.appendLine()
 	}
 
-	private fun appendT6(
+	private fun appendLatency(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		sb.appendLine("## T6 Latency")
+		sb.appendLine("## Latency")
 		sb.appendLine()
 		sb.appendLine("| Arm | Tick period ms | p50 latency ms | p95 latency ms | Max latency ms | Deadline misses |")
 		sb.appendLine("|---|---|---|---|---|---|")
@@ -370,11 +370,11 @@ class RunReportAggregator(
 		sb.appendLine()
 	}
 
-	private fun appendT7(
+	private fun appendParameterSweep(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		sb.appendLine("## T7 Parameter Sweep")
+		sb.appendLine("## Parameter Sweep")
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Gate | " +

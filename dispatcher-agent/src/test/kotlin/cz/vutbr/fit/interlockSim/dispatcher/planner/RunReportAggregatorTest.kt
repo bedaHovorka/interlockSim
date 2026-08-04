@@ -163,13 +163,13 @@ class RunReportAggregatorTest {
 		val report = aggregator.aggregate(listOf(snapshot(runId = "tables")))
 		val md = aggregator.renderMarkdown(listOf(report))
 
-		assertThat(md).transform("contains T1") { md.contains("T1 Arm Comparison") }.isTrue()
-		assertThat(md).transform("contains T2") { md.contains("T2 Per-Run Detail") }.isTrue()
-		assertThat(md).transform("contains T3") { md.contains("T3 Failure Modes") }.isTrue()
-		assertThat(md).transform("contains T4") { md.contains("T4 Apply Failures") }.isTrue()
-		assertThat(md).transform("contains T5") { md.contains("T5 Author Attribution") }.isTrue()
-		assertThat(md).transform("contains T6") { md.contains("T6 Latency") }.isTrue()
-		assertThat(md).transform("contains T7") { md.contains("T7 Parameter Sweep") }.isTrue()
+		assertThat(md).transform("contains Arm Comparison") { md.contains("## Arm Comparison") }.isTrue()
+		assertThat(md).transform("contains Per-Run Detail") { md.contains("## Per-Run Detail") }.isTrue()
+		assertThat(md).transform("contains Failure Modes") { md.contains("## Failure Modes") }.isTrue()
+		assertThat(md).transform("contains Apply Failures") { md.contains("## Apply Failures") }.isTrue()
+		assertThat(md).transform("contains Author Attribution") { md.contains("## Author Attribution") }.isTrue()
+		assertThat(md).transform("contains Latency") { md.contains("## Latency") }.isTrue()
+		assertThat(md).transform("contains Parameter Sweep") { md.contains("## Parameter Sweep") }.isTrue()
 	}
 
 	@Test
@@ -246,7 +246,7 @@ class RunReportAggregatorTest {
 	}
 
 	@Test
-	fun `renderMarkdown shows correctAt1 value in T1 and T7 when oracle data present`() {
+	fun `renderMarkdown shows correctAt1 value in Arm Comparison and Parameter Sweep when oracle data present`() {
 		val report = aggregator.aggregate(listOf(snapshot(runId = "oracle1", correctAt1 = 0.75)))
 		val md = aggregator.renderMarkdown(listOf(report))
 		assertThat(md).transform("does not fall back to n/a") { !md.contains("n/a") }.isTrue()
@@ -278,16 +278,16 @@ class RunReportAggregatorTest {
 	@Test
 	fun `renderMarkdown falls back to placeholders for an arm report with no snapshots`() {
 		// aggregate(emptyList()) is what DispatcherReliabilityReportKt.main() feeds in for an arm
-		// with zero runs recorded yet — T6 and T7 must render defaults, not throw.
+		// with zero runs recorded yet — Latency and Parameter Sweep must render defaults, not throw.
 		val emptyArmReport = aggregator.aggregate(emptyList())
 		val md = aggregator.renderMarkdown(listOf(emptyArmReport))
 
-		assertThat(md).transform("T7 falls back to rule-based") { md.contains("rule-based") }.isTrue()
-		assertThat(md).transform("T7 falls back to unset seed") { md.contains("unset") }.isTrue()
+		assertThat(md).transform("Parameter Sweep falls back to rule-based") { md.contains("rule-based") }.isTrue()
+		assertThat(md).transform("Parameter Sweep falls back to unset seed") { md.contains("unset") }.isTrue()
 	}
 
 	@Test
-	fun `renderMarkdown shows configured model and seed in T7`() {
+	fun `renderMarkdown shows configured model and seed in Parameter Sweep`() {
 		val report =
 			aggregator.aggregate(
 				listOf(snapshot(runId = "params1", model = "qwen2.5:7b-instruct", seed = 42L))

@@ -47,7 +47,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * @property rejectionCounts Total rejection counts per [RejectionCode] across all runs.
  * @property applyFailureCounts Total apply-failure counts per [ApplyFailureCode] across all runs.
  * @property authorCounts Total action counts per [ActionAuthor] across all runs.
- * @property snapshots The raw snapshots used to build this report (for T2 per-run detail).
+ * @property snapshots The raw snapshots used to build this report (for Per-Run Detail).
  *
  * @since Issue #846 (SP2c.23 — cross-run aggregator + Markdown report + Gradle task)
  */
