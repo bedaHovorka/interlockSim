@@ -21,6 +21,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -294,6 +296,40 @@ class Sp2c21MetricsRecorderTest {
 			rec.signalRunCompleted(naturalCompletion = true)
 
 			// ALL_PATHS_BLOCKED is excluded from hard failures per SP2c.21 design
+			assertThat(rec.getMetricsSnapshot().correctAt1).isEqualTo(1.0)
+		}
+
+		@Test
+		fun `APPLIED_THEN_FAILED with a null applyFailure code is not treated as a hard failure`() {
+			val rec = recorder()
+			runBlocking { rec.plan(observation) }
+			rec.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 0.0), 0L)
+			// Legal per ActionOutcome's invariants (applyFailure may be null even for
+			// APPLIED_THEN_FAILED); the defensive null-check in onActionOutcome must not crash
+			// and must not register a hard failure for this tick.
+			rec.onActionOutcome(
+				ActionOutcome(
+					phase = ActionPhase.APPLIED_THEN_FAILED,
+					rejection = null,
+					applyFailure = null,
+					authored = authored(tickIndex = 0L)
+				)
+			)
+			rec.signalRunCompleted(naturalCompletion = true)
+
+			assertThat(rec.getMetricsSnapshot().correctAt1).isEqualTo(1.0)
+		}
+
+		@Test
+		fun `a hard failure with a negative tick index is not registered against any tick`() {
+			val rec = recorder()
+			runBlocking { rec.plan(observation) }
+			rec.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 0.0), 0L)
+			// tickIndex is not validated by AuthoredAction; the defensive `ti >= 0L` guard in
+			// onActionOutcome must reject this instead of corrupting the tick-0 hard-failure set.
+			rec.onActionOutcome(failedOutcome(ApplyFailureCode.CONFLICT, tickIndex = -1L))
+			rec.signalRunCompleted(naturalCompletion = true)
+
 			assertThat(rec.getMetricsSnapshot().correctAt1).isEqualTo(1.0)
 		}
 
@@ -603,6 +639,39 @@ class Sp2c21MetricsRecorderTest {
 			val withoutRationale =
 				Sp2c21MetricsRecorder.normaliseDecision(DispatchDecision.ApproveTrain("T1"))
 			assertThat(withRationale).isEqualTo(withoutRationale)
+		}
+
+		@Test
+		fun `HoldTrain normalises to HoldTrain pipe trainId`() {
+			val key =
+				Sp2c21MetricsRecorder.normaliseDecision(
+					DispatchDecision.HoldTrain("T1", holdDurationSeconds = 5.0)
+				)
+			assertThat(key).isEqualTo("HoldTrain|T1||")
+		}
+
+		@Test
+		fun `SetSignalAspect normalises to SetSignalAspect pipe semaphoreName`() {
+			val key =
+				Sp2c21MetricsRecorder.normaliseDecision(
+					DispatchDecision.SetSignalAspect("semA", Signal.STOP)
+				)
+			assertThat(key).isEqualTo("SetSignalAspect||semA|")
+		}
+
+		@Test
+		fun `SetSwitchPosition normalises to SetSwitchPosition pipe switchName`() {
+			val key =
+				Sp2c21MetricsRecorder.normaliseDecision(
+					DispatchDecision.SetSwitchPosition("swA", RailSwitch.Conf.MAIN)
+				)
+			assertThat(key).isEqualTo("SetSwitchPosition||swA|")
+		}
+
+		@Test
+		fun `ReleaseRoute normalises to ReleaseRoute pipe trainName`() {
+			val key = Sp2c21MetricsRecorder.normaliseDecision(DispatchDecision.ReleaseRoute("T1"))
+			assertThat(key).isEqualTo("ReleaseRoute|T1||")
 		}
 	}
 
