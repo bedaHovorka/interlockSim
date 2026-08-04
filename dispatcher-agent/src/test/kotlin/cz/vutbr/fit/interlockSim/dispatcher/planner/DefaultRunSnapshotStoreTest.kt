@@ -24,13 +24,16 @@ import java.nio.file.Path
  * Verifies:
  * - JSON round-trip: `write` → `readAll` → equal snapshot
  * - Schema versioning: snapshots with a higher schemaVersion are silently skipped
+ * - Corrupt/malformed JSON files are silently skipped without throwing
  * - Multiple snapshots from different arms land in the correct sub-directories
  *
  * @since Issue #845 (SP2c.22 — run identity and per-run JSON persistence)
  */
 class DefaultRunSnapshotStoreTest {
 	@Test
-	fun `write and readAll round-trips a snapshot with equality`(@TempDir tmpDir: Path) {
+	fun `write and readAll round-trips a snapshot with equality`(
+		@TempDir tmpDir: Path
+	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
 		val snapshot = buildSnapshot(runId = "round-trip-001", arm = DispatcherArm.RULE_BASED)
 
@@ -42,7 +45,9 @@ class DefaultRunSnapshotStoreTest {
 	}
 
 	@Test
-	fun `write creates a JSON file under arm sub-directory`(@TempDir tmpDir: Path) {
+	fun `write creates a JSON file under arm sub-directory`(
+		@TempDir tmpDir: Path
+	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
 		val snapshot = buildSnapshot(runId = "dir-test-001", arm = DispatcherArm.LLM_TOOL_CALLING)
 
@@ -55,13 +60,17 @@ class DefaultRunSnapshotStoreTest {
 	}
 
 	@Test
-	fun `readAll returns empty list when root does not exist`(@TempDir tmpDir: Path) {
+	fun `readAll returns empty list when root does not exist`(
+		@TempDir tmpDir: Path
+	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir.resolve("nonexistent"))
 		assertThat(store.readAll(tmpDir.resolve("nonexistent"))).hasSize(0)
 	}
 
 	@Test
-	fun `readAll skips a future-schema-version file without throwing`(@TempDir tmpDir: Path) {
+	fun `readAll skips a future-schema-version file without throwing`(
+		@TempDir tmpDir: Path
+	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
 		// Write a snapshot with the current version first (this will be read successfully)
 		val goodSnap = buildSnapshot(runId = "good-001")
@@ -80,7 +89,29 @@ class DefaultRunSnapshotStoreTest {
 	}
 
 	@Test
-	fun `readAll handles multiple snapshots from different arms`(@TempDir tmpDir: Path) {
+	fun `readAll skips a corrupt JSON file without throwing`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		// Write a snapshot with valid JSON first (this will be read successfully)
+		val goodSnap = buildSnapshot(runId = "good-002")
+		store.write(goodSnap)
+
+		// Manually write a file containing malformed JSON (not parseable at all)
+		val corruptDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(corruptDir)
+		Files.writeString(corruptDir.resolve("corrupt.json"), "{ this is not valid JSON ][")
+
+		// readAll must not throw and must return only the good snapshot
+		val results = store.readAll(tmpDir)
+		assertThat(results).hasSize(1)
+		assertThat(results.first().runId).isEqualTo("good-002")
+	}
+
+	@Test
+	fun `readAll handles multiple snapshots from different arms`(
+		@TempDir tmpDir: Path
+	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
 		store.write(buildSnapshot(runId = "a001", arm = DispatcherArm.RULE_BASED))
 		store.write(buildSnapshot(runId = "b001", arm = DispatcherArm.LLM_TOOL_CALLING))
@@ -91,7 +122,9 @@ class DefaultRunSnapshotStoreTest {
 	}
 
 	@Test
-	fun `round-trip preserves totalTicks and ticksByOutcome invariant`(@TempDir tmpDir: Path) {
+	fun `round-trip preserves totalTicks and ticksByOutcome invariant`(
+		@TempDir tmpDir: Path
+	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
 		val snapshot = buildSnapshot(runId = "inv-test-001", totalTicks = 5L)
 
@@ -109,9 +142,12 @@ class DefaultRunSnapshotStoreTest {
 		totalTicks: Long = 3L
 	): DispatcherRunSnapshot {
 		val outcomes =
-			TickOutcome.entries.associateWith { 0L }.toMutableMap().also { map ->
-				map[TickOutcome.LLM_ACTIONS] = totalTicks
-			}.mapKeys { it.key.name }
+			TickOutcome.entries
+				.associateWith { 0L }
+				.toMutableMap()
+				.also { map ->
+					map[TickOutcome.LLM_ACTIONS] = totalTicks
+				}.mapKeys { it.key.name }
 		return DispatcherRunSnapshot(
 			runId = runId,
 			arm = arm,
@@ -153,9 +189,14 @@ class DefaultRunSnapshotStoreTest {
 	/** Builds a raw JSON string with a schemaVersion higher than the current one. */
 	private fun buildFutureSchemaJson(runId: String): String {
 		val snap = buildSnapshot(runId = runId)
-		// Inline substitution: replace "schemaVersion" : 1 with a higher value
-		return kotlinx.serialization.json.Json { prettyPrint = true }
-			.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		// encodeDefaults = true is required: schemaVersion equals its default value (1), and
+		// kotlinx.serialization omits default-valued fields unless told otherwise. Without this,
+		// the field would never appear in the JSON and the replace() below would be a silent no-op.
+		return kotlinx.serialization.json
+			.Json {
+				prettyPrint = true
+				encodeDefaults = true
+			}.encodeToString(DispatcherRunSnapshot.serializer(), snap)
 			.replace("\"schemaVersion\": 1", "\"schemaVersion\": 9999")
 	}
 }
