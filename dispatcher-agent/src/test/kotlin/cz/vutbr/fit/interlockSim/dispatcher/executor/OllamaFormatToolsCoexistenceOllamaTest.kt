@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.OllamaTestSeeds
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -241,7 +242,7 @@ class OllamaFormatToolsCoexistenceOllamaTest {
 	fun formatArmAnswersTheUnrelatedSchema() {
 		val content =
 			json
-				.parseToJsonElement(chat(seed = 1, withFormat = true))
+				.parseToJsonElement(chat(seed = OllamaTestSeeds.PRIMARY.toInt(), withFormat = true))
 				.jsonObject["message"]
 				?.jsonObject
 				?.get("content")
@@ -262,8 +263,10 @@ class OllamaFormatToolsCoexistenceOllamaTest {
 	@Tag("ollama-test")
 	@DisplayName("both arms are well-formed requests Ollama accepts")
 	fun bothArmsAreAcceptedRequests() {
-		val toolsOnly = json.parseToJsonElement(chat(seed = 1, withFormat = false)).jsonObject
-		val withFormat = json.parseToJsonElement(chat(seed = 1, withFormat = true)).jsonObject
+		val toolsOnly =
+			json.parseToJsonElement(chat(seed = OllamaTestSeeds.PRIMARY.toInt(), withFormat = false)).jsonObject
+		val withFormat =
+			json.parseToJsonElement(chat(seed = OllamaTestSeeds.PRIMARY.toInt(), withFormat = true)).jsonObject
 
 		assertThat(toolsOnly["error"]).isEqualTo(null)
 		assertThat(withFormat["error"]).isEqualTo(null)

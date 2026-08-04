@@ -15,6 +15,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.OllamaTestSeeds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -259,10 +260,11 @@ class OllamaRuntimeContractOllamaTest {
 		@Tag("ollama-test")
 		@DisplayName("a minimal chat completion reports a non-zero prompt_eval_count")
 		fun chatCompletionReportsPromptEvalCount() {
+			val seed = OllamaTestSeeds.PRIMARY
 			val body =
 				"""
 				{"model":"${config.modelName}","messages":[{"role":"user","content":"Reply with the single word: ok"}],
-				"stream":false,"options":{"num_ctx":${config.contextWindowTokens},"temperature":0,"seed":7}}
+				"stream":false,"options":{"num_ctx":${config.contextWindowTokens},"temperature":0,"seed":$seed}}
 				""".trimIndent()
 
 			val promptEvalCount =
@@ -280,10 +282,11 @@ class OllamaRuntimeContractOllamaTest {
 		@Tag("ollama-test")
 		@DisplayName("a completion using the production num_ctx is accepted, not rejected")
 		fun productionContextWindowIsAccepted() {
+			val seed = OllamaTestSeeds.PRIMARY
 			val body =
 				"""
 				{"model":"${config.modelName}","messages":[{"role":"user","content":"Reply with the single word: ok"}],
-				"stream":false,"options":{"num_ctx":${config.contextWindowTokens},"temperature":0,"seed":7}}
+				"stream":false,"options":{"num_ctx":${config.contextWindowTokens},"temperature":0,"seed":$seed}}
 				""".trimIndent()
 
 			val response = json.parseToJsonElement(post("/api/chat", body)).jsonObject

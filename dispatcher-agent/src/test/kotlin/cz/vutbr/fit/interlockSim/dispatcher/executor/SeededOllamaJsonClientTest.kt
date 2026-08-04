@@ -14,6 +14,7 @@ import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.OllamaTestSeeds
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -56,14 +57,14 @@ class SeededOllamaJsonClientTest {
 				systemPrompt = "system text",
 				userPrompt = "user text",
 				jsonSchema = null,
-				seed = 42L
+				seed = OllamaTestSeeds.PRIMARY
 			)
 
 		// The whole point of this class: seed must be a sibling of temperature/num_ctx inside
 		// "options", which is exactly where Koog's OllamaClient never puts it (Spike 1 finding).
 		assertThat(body).contains("\"options\":{")
 		val optionsIndex = body.indexOf("\"options\":{")
-		val seedIndex = body.indexOf("\"seed\":42")
+		val seedIndex = body.indexOf("\"seed\":${OllamaTestSeeds.PRIMARY}")
 		assertThat(seedIndex > optionsIndex).isTrue()
 	}
 
@@ -77,7 +78,7 @@ class SeededOllamaJsonClientTest {
 				systemPrompt = null,
 				userPrompt = "hello",
 				jsonSchema = null,
-				seed = 1L
+				seed = OllamaTestSeeds.PRIMARY
 			)
 
 		assertThat(body).contains("\"qwen2.5:7b-instruct\"")
@@ -94,7 +95,7 @@ class SeededOllamaJsonClientTest {
 				systemPrompt = null,
 				userPrompt = "hello",
 				jsonSchema = null,
-				seed = 1L
+				seed = OllamaTestSeeds.PRIMARY
 			)
 
 		assertThat(body).contains("\"role\":\"user\"")
@@ -111,7 +112,7 @@ class SeededOllamaJsonClientTest {
 				systemPrompt = null,
 				userPrompt = "hello",
 				jsonSchema = schema,
-				seed = 1L
+				seed = OllamaTestSeeds.PRIMARY
 			)
 
 		assertThat(body).contains("\"format\":{\"type\":\"object\"")
@@ -134,7 +135,7 @@ class SeededOllamaJsonClientTest {
 		val config = OllamaExecutorConfig.forLocalTesting()
 		val systemPrompt = "Reply with strict JSON only, matching the schema. Do not add commentary."
 		val userPrompt = "Describe a single railway dispatch action for a train named T1 going from A to B."
-		val seed = 12345L
+		val seed = OllamaTestSeeds.PRIMARY
 
 		val first =
 			runBlocking {
@@ -166,7 +167,13 @@ class SeededOllamaJsonClientTest {
 		val runs =
 			(1..3).map {
 				runBlocking {
-					SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, seed = 4242L)
+					SeededOllamaJsonClient.requestJson(
+						config,
+						systemPrompt,
+						userPrompt,
+						schema,
+						seed = OllamaTestSeeds.PRIMARY
+					)
 				}
 			}
 
@@ -192,7 +199,7 @@ class SeededOllamaJsonClientTest {
 					systemPrompt = "Reply with strict JSON only, matching the schema. Do not add commentary.",
 					userPrompt = "Name one railway dispatch action.",
 					jsonSchema = schema,
-					seed = 99L
+					seed = OllamaTestSeeds.PRIMARY
 				)
 			}
 
@@ -213,9 +220,13 @@ class SeededOllamaJsonClientTest {
 		val userPrompt = "Name one railway dispatch action."
 
 		val first =
-			runBlocking { SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, 1L) }
+			runBlocking {
+				SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, OllamaTestSeeds.PRIMARY)
+			}
 		val second =
-			runBlocking { SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, 2L) }
+			runBlocking {
+				SeededOllamaJsonClient.requestJson(config, systemPrompt, userPrompt, schema, OllamaTestSeeds.SECONDARY)
+			}
 
 		assertThat(Json.parseToJsonElement(first).jsonObject.containsKey("action")).isTrue()
 		assertThat(Json.parseToJsonElement(second).jsonObject.containsKey("action")).isTrue()
@@ -235,7 +246,7 @@ class SeededOllamaJsonClientTest {
 					systemPrompt = null,
 					userPrompt = "Reply with the single word: ok",
 					jsonSchema = null,
-					seed = 5L
+					seed = OllamaTestSeeds.PRIMARY
 				)
 			}
 
@@ -252,9 +263,10 @@ class SeededOllamaJsonClientTest {
 	fun `the configured contextWindowTokens is accepted as num_ctx by the live model`() {
 		val config = OllamaExecutorConfig.forLocalTesting()
 
+		val requestBody = SeededOllamaJsonClient.buildRequestBody(config, null, "ok", null, OllamaTestSeeds.PRIMARY)
 		val numCtx =
 			Json
-				.parseToJsonElement(SeededOllamaJsonClient.buildRequestBody(config, null, "ok", null, 1L))
+				.parseToJsonElement(requestBody)
 				.jsonObject["options"]
 				?.jsonObject
 				?.get("num_ctx")
@@ -265,7 +277,13 @@ class SeededOllamaJsonClientTest {
 
 		val content =
 			runBlocking {
-				SeededOllamaJsonClient.requestJson(config, null, "Reply with the single word: ok", null, 1L)
+				SeededOllamaJsonClient.requestJson(
+					config,
+					null,
+					"Reply with the single word: ok",
+					null,
+					OllamaTestSeeds.PRIMARY
+				)
 			}
 
 		assertThat(content.isNotBlank()).isTrue()
