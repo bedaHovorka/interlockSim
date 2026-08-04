@@ -32,11 +32,13 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  *
  * ## Latency
  *
- * Latency is measured wall-clock via `System.nanoTime` from just before the LLM call to result
- * available.  Both `firstCallLatencyMs` (prompt-cost analysis) and total-including-repair are
- * captured per tick.  [latencyP50Ms], [latencyP95Ms], and [latencyMaxMs] are computed over
- * **all** samples without reservoir sampling (tick counts are in the tens-to-hundreds, so all
- * samples fit in memory).
+ * Latency is measured wall-clock via `System.nanoTime` around the inner `plan` call — i.e. the
+ * total time for the inner planner to produce its decision list, which includes any internal
+ * repair attempt.  The first-call (prompt-cost-only) latency is NOT decomposed separately
+ * here; that decomposition is deferred until the inner planner exposes a repair-attempt
+ * boundary (see [Sp2c21MetricsRecorder.plan]).  [latencyP50Ms], [latencyP95Ms], and
+ * [latencyMaxMs] are computed over **all** samples without reservoir sampling (tick counts are
+ * in the tens-to-hundreds, so all samples fit in memory).
  *
  * @property validTickCount  Number of ticks where the LLM output was valid (parsed + validated).
  * @property totalTickCount  Total ticks observed (denominator for rate metrics).
@@ -51,11 +53,12 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * @property oracleCallableTicks Number of ticks where the oracle was actually called
  *   (excludes [OracleVerdict.ORACLE_UNAVAILABLE] ticks — the denominator for [oracleAgreementAt1]).
  * @property divergeUnsafeCount Number of [OracleVerdict.DIVERGES_UNSAFE] events.
- * @property latencyP50Ms p50 of per-tick first-call LLM latency in milliseconds.
+ * @property latencyP50Ms p50 of per-tick total LLM plan latency (wall-clock around the inner
+ *   `plan` call, including any repair attempt) in milliseconds.  `Double.NaN` when no samples
+ *   are available.
+ * @property latencyP95Ms p95 of per-tick total LLM plan latency in milliseconds.
  *   `Double.NaN` when no samples are available.
- * @property latencyP95Ms p95 of per-tick first-call LLM latency in milliseconds.
- *   `Double.NaN` when no samples are available.
- * @property latencyMaxMs Maximum per-tick first-call LLM latency in milliseconds.
+ * @property latencyMaxMs Maximum per-tick total LLM plan latency in milliseconds.
  *   `Double.NaN` when no samples are available.
  *
  * @see Sp2c21MetricsRecorder

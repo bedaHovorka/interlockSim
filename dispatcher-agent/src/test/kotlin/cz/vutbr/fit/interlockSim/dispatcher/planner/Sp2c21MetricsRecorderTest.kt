@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -528,13 +529,10 @@ class Sp2c21MetricsRecorderTest {
 	@DisplayName("purity: oracle called twice yields identical normalised kinds")
 	inner class OraclePurity {
 		@Test
-		fun `calling oracle twice on same observation produces identical normalised kinds`() {
-			val oracle = mockk<Dispatcher>()
-			every { oracle.decide(any()) } returns
-				listOf(
-					DispatchDecision.ApproveTrain("T1"),
-					DispatchDecision.NoAction
-				)
+		fun `real RuleBasedDispatcher called twice on the same observation produces identical normalised kinds`() {
+			// Use the REAL rule-based oracle (not a mock) so the test asserts actual oracle
+			// determinism, not a tautological stub returning the same list twice.
+			val oracle = RuleBasedDispatcher()
 
 			val inner = mockk<DispatcherPlanner>()
 			every { inner.capabilities } returns mockk(relaxed = true)
@@ -550,6 +548,14 @@ class Sp2c21MetricsRecorderTest {
 			val c2 = rec2.getOracleComparisons()
 
 			assertThat(c1[0].oracleActionKinds).isEqualTo(c2[0].oracleActionKinds)
+
+			// PathReservationRegistry purity is structural: RuleBasedDispatcher.decide() is a
+			// pure decision function (reshaped by SP0.7 / Issue #729) — it holds no registry
+			// reference and cannot mutate it. Only DispatchDecisionApplier mutates the registry,
+			// and the shadow-oracle path discards decide()'s result without applying it. Hence
+			// there is nothing to assert beyond the determinism shown above; a full
+			// registry-unchanged assertion belongs at integration level (see
+			// RuleBasedDispatcherDeterminismRunner), which already drives a real registry.
 		}
 	}
 

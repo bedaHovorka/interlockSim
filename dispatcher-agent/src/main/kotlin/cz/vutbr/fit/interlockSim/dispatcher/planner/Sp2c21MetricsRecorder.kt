@@ -161,6 +161,14 @@ class Sp2c21MetricsRecorder(
 	 * [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue.advanceCorrelationCycle] which
 	 * is called by [KoogAgentPlanAdapter].  This counter is independent — it counts [plan]
 	 * invocations on this recorder, not the inner adapter's cycle counter.
+	 *
+	 * **Invariant the DIVERGES_UNSAFE upgrade depends on:** this counter must stay aligned
+	 * with [AuthoredAction.tickIndex] (sourced from the same `advanceCorrelationCycle`). Both
+	 * start at 0 and increment exactly once per [plan] call, so `provisionalComparisons` keys
+	 * (this counter) match [ticksWithHardFailure] entries (`AuthoredAction.tickIndex`). If the
+	 * inner planner ever advanced the queue cycle more than once per [plan] (e.g. a retry
+	 * path), the lazy upgrade in [getMetricsSnapshot] would silently stop matching — keep them
+	 * in lockstep.
 	 */
 	private val tickIndex = AtomicLong(0L)
 
@@ -234,12 +242,16 @@ class Sp2c21MetricsRecorder(
 	// ── Tick validity tracking ────────────────────────────────────────────────
 
 	/**
-	 * Called by the wiring layer (or [Sp2c21MetricsRecorder] itself) once per tick with the
-	 * full [TickRecord].  Tracks total tick count and validity.
+	 * Called once per tick with the full [TickRecord]; tracks total tick count and validity.
 	 *
-	 * Typically wired via [KoogAgentPlanAdapter.tickListener] when the inner planner is a
-	 * [KoogAgentPlanAdapter]; alternatively, callers may invoke this directly if the inner
-	 * planner does not expose a tick listener.
+	 * This method takes the tick index explicitly because it does NOT implement
+	 * [PlannerTickListener] (whose `onTick(record)` signature carries no index) — the
+	 * [tickIndex]-keyed correlation between tick validity and oracle comparisons requires the
+	 * index. The wiring layer bridges the inner planner's single-arg tick listener to this
+	 * two-arg call, passing the same index this recorder uses in [plan]
+	 * (the [tickIndex] counter, which mirrors
+	 * [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue.advanceCorrelationCycle]).
+	 * Callers may also invoke this directly when the inner planner exposes no tick listener.
 	 */
 	fun onTick(
 		record: TickRecord,
@@ -314,8 +326,13 @@ class Sp2c21MetricsRecorder(
 	 * Returns a snapshot of all oracle comparisons with [OracleVerdict.DIVERGES_UNSAFE]
 	 * correctly applied (upgraded from [OracleVerdict.DIVERGES_SAFE] when the tick also had
 	 * a hard apply failure).
+	 *
+	 * Not `@Synchronized`: [provisionalComparisons] and [ticksWithHardFailure] are
+	 * [ConcurrentHashMap], so iteration is weakly consistent and safe under concurrent
+	 * [plan]/[onActionOutcome] writers — which do not lock `this` anyway, so a method-level
+	 * `@Synchronized` would give a false impression of a lock-ordering guarantee without
+	 * actually providing one. Mirrors [getMetricsSnapshot], which is likewise unsynchronised.
 	 */
-	@Synchronized
 	fun getOracleComparisons(): List<OracleComparison> = computeFinalComparisons()
 
 	/**
