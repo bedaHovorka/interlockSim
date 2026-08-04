@@ -25,8 +25,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationSource
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultDispatcherRunRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -40,6 +44,7 @@ import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
 import org.koin.dsl.module
+import java.util.UUID
 
 /**
  * Koin DI module for `:dispatcher-agent` SP0.5-new, SP1-new, SP1.3-new, and SP1.5-new components.
@@ -302,6 +307,28 @@ val dispatcherAgentModule: Module =
 					commandQueue = get(), // Scoped to this context (SP1.7)
 					dispatchLoopSensorPort = get(), // Scoped to this context (Goal 10 tool-registration fix)
 					sinkHolder = get() // Scoped to this context (SP2c.6 — shared with KoogAgentPlanAdapter)
+				)
+			}
+
+			// SP2c.22 (#845): DispatcherRunRecorder (scoped per context)
+			// One run recorder per simulation context — the Koin scope boundary replaces any
+			// need for a reset() method. Each context gets an independent recorder with its own
+			// counters and runId; singletons would merge counters across concurrent simulations.
+			// RunParameters are seeded with conservative defaults matching the rule-based arm;
+			// LLM arms will override them when they wire a KoogAgentPlanAdapter.
+			scoped<DispatcherRunRecorder> {
+				DefaultDispatcherRunRecorder(
+					runId = UUID.randomUUID().toString(),
+					arm = DispatcherArm.RULE_BASED,
+					params =
+						RunParameters(
+							tickPeriodMs = 500L,
+							historyN = 10,
+							temperature = 0.0,
+							maxActionsPerTick = 3,
+							model = "",
+							seed = null
+						)
 				)
 			}
 
