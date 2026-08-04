@@ -127,7 +127,9 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
-	@DisplayName("SP2c.22: finish and logFinalSummary called on DispatcherRunRecorder when simulation stops (MANUAL_STOP path)")
+	@DisplayName(
+		"SP2c.22: finish and logFinalSummary called on DispatcherRunRecorder when simulation stops (MANUAL_STOP path)"
+	)
 	fun runRecorderFinishAndLogCalledOnStop() {
 		val started = CountDownLatch(1)
 		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
@@ -170,4 +172,3 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		context.close()
 	}
 }
-

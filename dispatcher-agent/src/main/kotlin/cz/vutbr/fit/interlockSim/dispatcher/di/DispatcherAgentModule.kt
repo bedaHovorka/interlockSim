@@ -320,14 +320,15 @@ val dispatcherAgentModule: Module =
 				DefaultDispatcherRunRecorder(
 					runId = UUID.randomUUID().toString(),
 					arm = DispatcherArm.RULE_BASED,
-					params = RunParameters(
-						tickPeriodMs = 500L,
-						historyN = 10,
-						temperature = 0.0,
-						maxActionsPerTick = 3,
-						model = "",
-						seed = null
-					)
+					params =
+						RunParameters(
+							tickPeriodMs = 500L,
+							historyN = 10,
+							temperature = 0.0,
+							maxActionsPerTick = 3,
+							model = "",
+							seed = null
+						)
 				)
 			}
 

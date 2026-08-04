@@ -90,7 +90,8 @@ class DefaultRunSnapshotStore(
 						val snapshot = json.decodeFromString(DispatcherRunSnapshot.serializer(), text)
 						if (snapshot.schemaVersion > DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION) {
 							logger.warn {
-								"[RunSnapshotStore] skipping $file: schemaVersion=${snapshot.schemaVersion} > current=${DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION}"
+								"[RunSnapshotStore] skipping $file: schemaVersion=${snapshot.schemaVersion} " +
+									"> current=${DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION}"
 							}
 						} else {
 							results.add(snapshot)
