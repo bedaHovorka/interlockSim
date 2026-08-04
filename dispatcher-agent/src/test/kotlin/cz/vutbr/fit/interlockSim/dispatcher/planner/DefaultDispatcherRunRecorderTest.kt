@@ -188,6 +188,16 @@ class DefaultDispatcherRunRecorderTest {
 	}
 
 	@Test
+	fun `c7Clean is false when both RULE_FALLBACK and SAFETY_NET actions were observed`() {
+		val r = recorder()
+		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.RULE_FALLBACK))
+		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.SAFETY_NET))
+
+		val snap = r.snapshot()
+		assertThat(snap.c7Clean).isFalse()
+	}
+
+	@Test
 	fun `c7Clean stays false in the frozen finish snapshot once a violation is observed`() {
 		val r = recorder()
 		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.SAFETY_NET))
