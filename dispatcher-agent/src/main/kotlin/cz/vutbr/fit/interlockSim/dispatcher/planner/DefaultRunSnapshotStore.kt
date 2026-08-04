@@ -13,6 +13,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -36,9 +37,9 @@ import java.time.format.DateTimeFormatter
  *
  * ## Thread safety
  *
- * Thread-safe: [write] uses atomic `Files.writeString` semantics (write to temp then rename
- * not implemented here; `writeString` is effectively atomic on most file systems for the sizes
- * involved). [readAll] is read-only.
+ * Thread-safe: [write] writes to a temp file then atomically moves it into place
+ * ([java.nio.file.StandardCopyOption.ATOMIC_MOVE]), so a crash mid-write leaves no partial
+ * JSON file that [readAll] would silently skip. [readAll] is read-only.
  *
  * @param root The base directory under which arm sub-directories are created.  Created on first
  *   write if absent.
@@ -68,11 +69,25 @@ class DefaultRunSnapshotStore(
 		Files.createDirectories(armDir)
 
 		val timestamp = LocalDateTime.now().format(TIMESTAMP_FMT)
-		val fileName = "$timestamp-${snapshot.runId}.json"
+		// Sanitise runId before interpolating it into the filename: the default producer is a
+		// UUID (safe), but a custom runId containing "/" or ".." would otherwise escape the
+		// arm directory. Defence in depth.
+		val safeRunId = snapshot.runId.replace(Regex("[^A-Za-z0-9._-]"), "_")
+		val fileName = "$timestamp-$safeRunId.json"
 		val file = armDir.resolve(fileName)
 
 		val jsonText = json.encodeToString(DispatcherRunSnapshot.serializer(), snapshot)
-		Files.writeString(file, jsonText)
+		// Write to a temp file then atomically move into place so a crash mid-write leaves no
+		// partial JSON file that readAll would silently skip. ATOMIC_MOVE guarantees readers
+		// never observe a half-written file.
+		val tmp = Files.createTempFile(armDir, "run-", ".json.tmp")
+		try {
+			Files.writeString(tmp, jsonText)
+			Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+		} catch (e: Exception) {
+			Files.deleteIfExists(tmp)
+			throw e
+		}
 		logger.info { "[RunSnapshotStore] written: $file" }
 		return file
 	}

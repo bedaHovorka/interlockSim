@@ -58,7 +58,10 @@ class DefaultDispatcherRunRecorder(
 
 	// ── Tick counters ────────────────────────────────────────────────────────
 
-	private val totalTicks = AtomicLong(0L)
+	// totalTicks is deliberately NOT a separate counter: onTick updates totalTicks and the
+	// per-bucket counter in two atomic steps, so buildSnapshot reading both could observe a
+	// tick in flight and trip the DispatcherRunSnapshot.init invariant (sum == total). The
+	// snapshot's total is derived from the outcome-bucket sum in buildSnapshot instead.
 
 	private val ticksByOutcome: ConcurrentHashMap<String, AtomicLong> =
 		ConcurrentHashMap<String, AtomicLong>().also { map ->
@@ -105,7 +108,6 @@ class DefaultDispatcherRunRecorder(
 	// ── DispatcherRunRecorder implementation ─────────────────────────────────
 
 	override fun onTick(record: TickRecord) {
-		totalTicks.incrementAndGet()
 		ticksByOutcome.getValue(record.outcome.name).incrementAndGet()
 		record.timeoutNoOpCause?.let { cause -> timeoutNoOpByCause.getValue(cause.name).incrementAndGet() }
 	}
@@ -168,9 +170,16 @@ class DefaultDispatcherRunRecorder(
 	// ── Internal helpers ──────────────────────────────────────────────────────
 
 	private fun buildSnapshot(endCause: RunEndCause?): DispatcherRunSnapshot {
-		val total = totalTicks.get()
 		val byOutcome: Map<String, Long> = ticksByOutcome.mapValues { it.value.get() }
 		val byCause: Map<String, Long> = timeoutNoOpByCause.mapValues { it.value.get() }
+		// Derive total from the outcome-bucket sum so the snapshot is self-consistent under
+		// concurrent onTick calls: the per-bucket counters are updated atomically and only
+		// ever grow, so their sum cannot be observed mid-update. A separate totalTicks
+		// counter would be updated in a different atomic step and could race a tick in flight,
+		// tripping the DispatcherRunSnapshot.init invariant (sum(byOutcome) == total). The
+		// snapshot reports state at the call moment (in-flight tick caveat): a tick whose
+		// bucket has not yet been incremented is not counted, which matches that caveat.
+		val total = byOutcome.values.sum()
 
 		val successCount =
 			byOutcome.entries
