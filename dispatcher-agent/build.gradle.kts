@@ -257,6 +257,27 @@ val heavyTest by tasks.registering(Test::class) {
 }
 
 // ===========================================
+// dispatcherReliabilityReport task (SP2c.23, Issue #846)
+// ===========================================
+//
+// Aggregates per-run JSON snapshots from build/reports/dispatcher-runs/ into a Markdown
+// report at build/reports/dispatcher-runs/report.md.
+//
+// Usage: ./gradlew dispatcherReliabilityReport
+//
+// No simulation is re-run; the task reads existing JSON files only.
+
+val dispatcherReliabilityReport by tasks.registering(JavaExec::class) {
+    group = "reporting"
+    description = "Aggregate dispatcher run JSONs into build/reports/dispatcher-runs/report.md (no simulation re-run)"
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherReliabilityReportKt")
+
+    dependsOn(tasks.named("classes"))
+}
+
+// ===========================================
 // checkKdisco dependency
 // ===========================================
 
