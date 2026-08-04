@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
@@ -32,14 +31,15 @@ import org.junit.jupiter.api.Test
  * @since Issue #845 (SP2c.22 — run identity and per-run JSON persistence)
  */
 class DefaultDispatcherRunRecorderTest {
-	private val defaultParams = RunParameters(
-		tickPeriodMs = 500L,
-		historyN = 10,
-		temperature = 0.0,
-		maxActionsPerTick = 3,
-		model = "",
-		seed = null
-	)
+	private val defaultParams =
+		RunParameters(
+			tickPeriodMs = 500L,
+			historyN = 10,
+			temperature = 0.0,
+			maxActionsPerTick = 3,
+			model = "",
+			seed = null
+		)
 
 	private fun recorder(): DefaultDispatcherRunRecorder =
 		DefaultDispatcherRunRecorder(
@@ -137,7 +137,9 @@ class DefaultDispatcherRunRecorderTest {
 	@Test
 	fun `onActionOutcome counts apply failure correctly`() {
 		val r = recorder()
-		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED_THEN_FAILED, applyFailure = ApplyFailureCode.ALL_PATHS_BLOCKED))
+		r.onActionOutcome(
+			makeOutcome(phase = ActionPhase.APPLIED_THEN_FAILED, applyFailure = ApplyFailureCode.ALL_PATHS_BLOCKED)
+		)
 
 		val snap = r.snapshot()
 		assertThat(snap.applyFailuresByCode[ApplyFailureCode.ALL_PATHS_BLOCKED.name] ?: 0L).isEqualTo(1L)
@@ -155,6 +157,43 @@ class DefaultDispatcherRunRecorderTest {
 		)
 		val snap = r.snapshot()
 		assertThat(snap.unattributedApplies).isEqualTo(1L)
+	}
+
+	@Test
+	fun `c7Clean is true when no RULE_FALLBACK or SAFETY_NET actions were observed`() {
+		val r = recorder()
+		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.LLM))
+		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.RULE_BASED))
+
+		val snap = r.snapshot()
+		assertThat(snap.c7Clean).isTrue()
+	}
+
+	@Test
+	fun `c7Clean is false when a RULE_FALLBACK action was observed`() {
+		val r = recorder()
+		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.RULE_FALLBACK))
+
+		val snap = r.snapshot()
+		assertThat(snap.c7Clean).isFalse()
+	}
+
+	@Test
+	fun `c7Clean is false when a SAFETY_NET action was observed`() {
+		val r = recorder()
+		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.SAFETY_NET))
+
+		val snap = r.snapshot()
+		assertThat(snap.c7Clean).isFalse()
+	}
+
+	@Test
+	fun `c7Clean stays false in the frozen finish snapshot once a violation is observed`() {
+		val r = recorder()
+		r.onActionOutcome(makeOutcome(phase = ActionPhase.APPLIED, author = ActionAuthor.SAFETY_NET))
+
+		val snap = r.finish(RunEndCause.MANUAL_STOP)
+		assertThat(snap.c7Clean).isFalse()
 	}
 
 	@Test
@@ -181,7 +220,8 @@ class DefaultDispatcherRunRecorderTest {
 		val r = recorder()
 		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0)) // success
 		r.onTick(TickRecord(TickOutcome.LLM_NO_OP, simTime = 2.0)) // success
-		r.onTick(TickRecord(TickOutcome.TIMEOUT_NOOP, simTime = 3.0, timeoutNoOpCause = TimeoutNoOpCause.DEADLINE_MISS)) // not success
+		// not a success
+		r.onTick(TickRecord(TickOutcome.TIMEOUT_NOOP, simTime = 3.0, timeoutNoOpCause = TimeoutNoOpCause.DEADLINE_MISS))
 
 		val snap = r.snapshot()
 		// 2 successes out of 3 ticks
@@ -225,11 +265,12 @@ class DefaultDispatcherRunRecorderTest {
 			phase = phase,
 			rejection = rejection,
 			applyFailure = applyFailure,
-			authored = AuthoredAction(
-				author = author,
-				reason = "test",
-				decisionKind = "RequestRoute",
-				tickIndex = tickIndex
-			)
+			authored =
+				AuthoredAction(
+					author = author,
+					reason = "test",
+					decisionKind = "RequestRoute",
+					tickIndex = tickIndex
+				)
 		)
 }

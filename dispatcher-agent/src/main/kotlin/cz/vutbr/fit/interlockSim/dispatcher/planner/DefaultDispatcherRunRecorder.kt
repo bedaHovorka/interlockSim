@@ -172,9 +172,10 @@ class DefaultDispatcherRunRecorder(
 		val byOutcome: Map<String, Long> = ticksByOutcome.mapValues { it.value.get() }
 		val byCause: Map<String, Long> = timeoutNoOpByCause.mapValues { it.value.get() }
 
-		val successCount = byOutcome.entries
-			.filter { (k, _) -> TickOutcome.valueOf(k).countsAsLlmSuccess }
-			.sumOf { it.value }
+		val successCount =
+			byOutcome.entries
+				.filter { (k, _) -> TickOutcome.valueOf(k).countsAsLlmSuccess }
+				.sumOf { it.value }
 		val noOpCount = byOutcome[TickOutcome.LLM_NO_OP.name] ?: 0L
 		val timeoutNoOpCount = byOutcome[TickOutcome.TIMEOUT_NOOP.name] ?: 0L
 		val repairedCount = byOutcome[TickOutcome.LLM_REPAIRED.name] ?: 0L
@@ -187,6 +188,11 @@ class DefaultDispatcherRunRecorder(
 		val latencyP50 = 0L
 		val latencyP95 = 0L
 		val latencyMax = 0L
+
+		val byAuthor: Map<String, Long> = actionsByAuthor.mapValues { it.value.get() }
+		val c7Clean =
+			(byAuthor[ActionAuthor.RULE_FALLBACK.name] ?: 0L) == 0L &&
+				(byAuthor[ActionAuthor.SAFETY_NET.name] ?: 0L) == 0L
 
 		return DispatcherRunSnapshot(
 			runId = runId,
@@ -208,11 +214,11 @@ class DefaultDispatcherRunRecorder(
 			latencyP50Ms = latencyP50,
 			latencyP95Ms = latencyP95,
 			latencyMaxMs = latencyMax,
-			actionsByAuthor = actionsByAuthor.mapValues { it.value.get() },
+			actionsByAuthor = byAuthor,
 			unattributedApplies = unattributedApplies.get(),
 			terminalFallbackEngaged = false, // wired in SP2c.22 follow-up
 			terminalFallbackTickIndex = null,
-			c7Clean = true, // wired in SP2c.22 follow-up
+			c7Clean = c7Clean,
 			completedNaturally = endCause == RunEndCause.NATURAL_COMPLETION,
 			endCause = endCause
 		)
