@@ -88,15 +88,21 @@ class CancelRouteTool(
 				?.trainPositions
 				?.map { it.trainId }
 				?.toSet()
-		if (activeTrainIds != null && trainId !in activeTrainIds) {
-			return ToolResult.Error(
-				"Unknown trainId '$trainId' — active trains are: " +
-					activeTrainIds.sorted().joinToString(", ").ifEmpty { "(none active)" }
-			)
-		}
+		// Emit the canonical id, never the raw argument — see resolveTrainId for why the bare
+		// ordinal ("1" for "Train #1") has to be accepted at all.
+		val resolvedTrainId =
+			if (activeTrainIds == null) {
+				trainId
+			} else {
+				resolveTrainId(trainId, activeTrainIds)
+					?: return ToolResult.Error(
+						"Unknown trainId '$trainId' — active trains are: " +
+							activeTrainIds.sorted().joinToString(", ").ifEmpty { "(none active)" }
+					)
+			}
 
-		logger.debug { "CancelRouteTool.execute: trainId=$trainId" }
-		sinkHolder.emit(DispatchAction.CancelRoute(trainId))
-		return ToolResult.Success("emitted cancel_route train=$trainId")
+		logger.debug { "CancelRouteTool.execute: trainId=$resolvedTrainId (raw='$trainId')" }
+		sinkHolder.emit(DispatchAction.CancelRoute(resolvedTrainId))
+		return ToolResult.Success("emitted cancel_route train=$resolvedTrainId")
 	}
 }

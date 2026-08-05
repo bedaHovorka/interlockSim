@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -95,6 +96,19 @@ class KoogAgentFactoryTest {
 				)
 		}
 
+	/**
+	 * Issue #847 round 2: `approve_train` and `request_route` now consult
+	 * [DispatchLoopSensorPort.getQueuedTrains] for their in-turn train-id pre-check, so a bare
+	 * `mockk<DispatchLoopSensorPort>()` throws `MockKException` as soon as either is exercised.
+	 * Reports [queuedTrainIds] as queued — defaults to `"T1"`, the id every
+	 * `SinkHolderWrapperMapping` test in this file uses.
+	 */
+	private fun fakeSensorPort(queuedTrainIds: List<String> = listOf("T1")): DispatchLoopSensorPort =
+		mockk<DispatchLoopSensorPort> {
+			every { getQueuedTrains() } returns
+				queuedTrainIds.map { QueuedTrainObservation(trainId = it, destinationInOutName = "B") }
+		}
+
 	private fun loadShuntingLoopContext(): DefaultSimulationContext =
 		TestFixtures.loadShuntingXml().use { xmlStream ->
 			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
@@ -133,7 +147,7 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = fakePerceptionPort(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					dispatchLoopSensorPort = fakeSensorPort(),
 					sinkHolder = SinkHolder()
 				)
 
@@ -159,7 +173,7 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = fakePerceptionPort(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					dispatchLoopSensorPort = fakeSensorPort(),
 					sinkHolder = SinkHolder()
 				)
 
@@ -182,7 +196,7 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = fakePerceptionPort(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					dispatchLoopSensorPort = fakeSensorPort(),
 					sinkHolder = SinkHolder()
 				)
 
@@ -207,7 +221,7 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = fakePerceptionPort(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					dispatchLoopSensorPort = fakeSensorPort(),
 					sinkHolder = SinkHolder()
 				)
 
@@ -235,7 +249,7 @@ class KoogAgentFactoryTest {
 					agentService = agentService,
 					perceptionPort = fakePerceptionPort(),
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+					dispatchLoopSensorPort = fakeSensorPort(),
 					sinkHolder = SinkHolder()
 				)
 
@@ -273,7 +287,7 @@ class KoogAgentFactoryTest {
 				agentService = agentService,
 				perceptionPort = fakePerceptionPort(),
 				commandQueue = commandQueue,
-				dispatchLoopSensorPort = mockk<DispatchLoopSensorPort>(),
+				dispatchLoopSensorPort = fakeSensorPort(),
 				sinkHolder = sinkHolder
 			)
 		loadShuntingLoopContext().use { context -> runBlocking { factory.createAgent(context) } }

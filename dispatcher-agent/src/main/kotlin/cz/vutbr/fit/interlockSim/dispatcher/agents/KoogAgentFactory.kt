@@ -79,16 +79,21 @@ class KoogAgentFactory(
 				"The only actuator tools available are approve_train, request_route, cancel_route, " +
 				"and no_op — there is no tool to set a signal aspect or switch position directly; " +
 				"signals and switches change only as a side effect of request_route/cancel_route. " +
-				"request_route's fromEndpointName/toEndpointName arguments accept only InOut or Signal " +
-				"names — never a Block ID from the Blocks list (Block IDs are for block_occupancy / " +
-				"all_block_occupancies only, not for request_route). " +
+				"request_route's fromEndpointName/toEndpointName arguments accept both InOut and Signal " +
+				"names — never a Block ID from the Blocks list, which names a piece of track rather than " +
+				"a route endpoint. Routing between two Signals reserves a single section and is usually " +
+				"preferable to an InOut-to-InOut route, which holds every block in between and so blocks " +
+				"other trains. " +
 				"request_route only reserves interlocking resources for a train — it does not let the " +
 				"train depart; a queued train stays parked, holding its reservation indefinitely, until " +
 				"you separately call approve_train for it. " +
+				"You have no tool for querying state: every train id, count and position you may act on is " +
+				"already written in the cycle message you are given. Only ever pass a train id that appears " +
+				"there verbatim — never one taken from an example, and never one you inferred. " +
 				"On every turn, admission comes first, exactly like a real interlocking's admission " +
-				"control: check queued_trains and all_train_positions; if there are queued (unapproved) " +
-				"trains and fewer than ${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} trains are " +
-				"currently active, call approve_train for the oldest queued trains first, up to " +
+				"control: read the queued and active train lists in that message; if there are queued " +
+				"(unapproved) trains and fewer than ${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} " +
+				"trains are currently active, call approve_train for the oldest queued trains first, up to " +
 				"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} total active, before doing anything " +
 				"else. Call approve_train for every queued train you intend to dispatch, in addition to " +
 				"requesting its route. When there is nothing to do, call no_op with a brief reason."
@@ -151,10 +156,18 @@ class KoogAgentFactory(
 				commandQueue.postAll(decisions)
 			}
 
-		// Assemble the four-tool actuator surface for this context. perceptionPort is passed
-		// through so CancelRouteTool can pre-validate trainId in-turn (Issue #847 cleanup pass) —
-		// reuses the existing off-thread-safe port, not a new LLM-facing tool.
-		val tools = toolRegistry.assembleAllTools(validEndpointNames, sinkHolder, perceptionPort)
+		// Assemble the four-tool actuator surface for this context. Both ports are passed through so
+		// the actuator tools can pre-validate train ids in-turn (Issue #847): perceptionPort supplies
+		// the active trains, dispatchLoopSensorPort the queued ones. Both are existing internal ports
+		// — reusing them adds no LLM-facing query tool, and ActuatorToolSurface.assertExactly below
+		// still holds the surface at four.
+		val tools =
+			toolRegistry.assembleAllTools(
+				validEndpointNames,
+				sinkHolder,
+				perceptionPort,
+				dispatchLoopSensorPort
+			)
 		ActuatorToolSurface.assertExactly(tools)
 
 		// SP2b.8 (Issue #695): serialize static topology into the system prompt once.

@@ -98,6 +98,15 @@ object StationTopologySerializer {
 	private const val MAX_ROUTES_PER_PAIR = 16
 
 	/**
+	 * Stand-in for the train-name argument in the worked examples (Issue #847 round 2).
+	 *
+	 * Deliberately shaped so it cannot be mistaken for, or copied as, a real train id: it is
+	 * unquoted and angle-bracketed, unlike every genuine name in this prompt, which is quoted.
+	 * See [appendWorkedExample] for why a concrete placeholder name here deadlocked a whole run.
+	 */
+	private const val TRAIN_NAME_PLACEHOLDER = "<exact train id from this cycle's message>"
+
+	/**
 	 * Extracts the static [StationTopology] from a live simulation environment.
 	 *
 	 * Reads only static structure (grid cells and graph edges) and the purely topological route
@@ -162,6 +171,20 @@ object StationTopologySerializer {
 	 * 3. A worked example using this network's own (and specifically confusable, if any) names is
 	 *    appended, giving the model something to pattern-match against instead of only an abstract
 	 *    rule.
+	 *
+	 * ## Endpoint vocabulary must match [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory]'s
+	 * ## `validEndpointNames` (Issue #847 round 2 — regression fix)
+	 *
+	 * The first cut of the formatting above labelled *only* the InOuts as valid `request_route`
+	 * names. That was wrong and actively harmful: `KoogAgentFactory` builds the accepted set as
+	 * **InOuts ∪ Signals**, the system prompt and both `request_route` parameter descriptions say
+	 * "InOuts or Signals", and `PathReservationService` accepts any [DynamicPathSeparator] — so
+	 * semaphores are first-class endpoints. Advertising two of eight legal names left the model
+	 * only whole-loop end-to-end routes, instead of the section-by-section semaphore hops
+	 * `RuleBasedEmissionStrategy` emits, which massively over-reserved blocks and produced a
+	 * `ReservationConflict` flood with no train getting through. The two lists are therefore now
+	 * rendered under one shared "valid request_route endpoint names" heading, still labelled by
+	 * kind, and the worked example shows a signal-to-signal hop alongside the end-to-end route.
 	 */
 	fun toPromptText(topology: StationTopology): String {
 		val sb = StringBuilder()
@@ -171,14 +194,15 @@ object StationTopologySerializer {
 				"similar to an InOut name (e.g. \"kA\" vs InOut \"A\") is still NOT a valid " +
 				"request_route argument.\n"
 		)
-		sb.append("InOuts (entry/exit) — valid request_route names: ").append(joinQuoted(topology.inOuts)).append('\n')
-		sb.append("Signals: ").append(joinQuoted(topology.signals.map { it.name })).append('\n')
+		sb.append("Valid request_route endpoint names — BOTH lists below are accepted:\n")
+		sb.append("  InOuts (entry/exit): ").append(joinQuoted(topology.inOuts)).append('\n')
+		sb.append("  Signals (section boundaries): ").append(joinQuoted(topology.signals.map { it.name })).append('\n')
 		sb
 			.append("Switches: ")
 			.append(joinOrNone(topology.switches.map { "${it.id.name}[${it.type}]" }))
 			.append('\n')
 		sb
-			.append("Blocks (block_occupancy/all_block_occupancies ONLY — never request_route): ")
+			.append("Blocks (path context only — never valid as a request_route endpoint): ")
 			.append(joinQuoted(topology.blocks.map { it.name }))
 			.append('\n')
 		// Note the per-pair cap so the agent cannot mistake a capped list for an exhaustive one
@@ -205,10 +229,28 @@ object StationTopologySerializer {
 	}
 
 	/**
-	 * Appends a worked `request_route` example using this network's own InOut names — and, when
+	 * Appends worked `request_route` examples using this network's own endpoint names — and, when
 	 * available, a real Block ID to contrast against — so the model has a concrete pattern to
 	 * match instead of only the abstract anti-hallucination rule. No-op when the topology doesn't
 	 * have at least two InOuts to build an example from (e.g. an empty test topology).
+	 *
+	 * ## The train-name slot must never contain a copyable name (Issue #847 round 2)
+	 *
+	 * The first cut of this example wrote a literal placeholder train name (`"T1"`) into the
+	 * `trainName` argument. Because this text lives in the *system* prompt it is present on every
+	 * cycle, and the model duly copied it: `request_route(trainName="T1", …)` reached
+	 * `reservePath("T1", …)` — `RequestRouteTool` validated only the endpoints, and `ActionValidator`
+	 * (which owns `UNKNOWN_TRAIN`) is not on the live wiring path — reserving real blocks for a
+	 * train that does not exist. Nothing could release them: no `Train` is named `"T1"`, so the
+	 * tail-clearing release never fires; `ShuntingLoop` has no orphan-reservation sweeper; and
+	 * `CancelRouteTool` rejects the id precisely because no such train is active. One copied
+	 * placeholder therefore deadlocked an entire run.
+	 *
+	 * Train names are dynamic and unknowable here — this text is rendered once at agent
+	 * construction — so the slot is now an explicit, syntactically non-copyable placeholder that
+	 * points at the per-cycle message ([cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl]
+	 * renders both the queued and the active train lists there). Do not reintroduce a concrete
+	 * name here, however illustrative.
 	 */
 	private fun appendWorkedExample(
 		sb: StringBuilder,
@@ -218,22 +260,52 @@ object StationTopologySerializer {
 		val exampleFrom = topology.inOuts[0]
 		val exampleTo = topology.inOuts[1]
 		sb
-			.append("\n\nEXAMPLE: to route a train named \"T1\" from \"")
+			.append("\n\nEXAMPLE (end-to-end route). Never invent a train name: use an id copied from ")
+			.append("the \"Queued\" or \"Active\" train list in this cycle's message, shown here as ")
+			.append(TRAIN_NAME_PLACEHOLDER)
+			.append(". To route that train from \"")
 			.append(exampleFrom)
 			.append("\" to \"")
 			.append(exampleTo)
-			.append("\", call request_route(trainName=\"T1\", fromEndpointName=\"")
+			.append("\", call request_route(trainName=")
+			.append(TRAIN_NAME_PLACEHOLDER)
+			.append(", fromEndpointName=\"")
 			.append(exampleFrom)
 			.append("\", toEndpointName=\"")
 			.append(exampleTo)
 			.append("\").")
+		appendSectionHopExample(sb, topology)
 		val exampleWrongBlock = topology.blocks.firstOrNull { it.name != exampleFrom && it.name != exampleTo }
 		if (exampleWrongBlock != null) {
 			sb
 				.append(" Do NOT pass \"")
 				.append(exampleWrongBlock.name)
-				.append("\" as an endpoint — it is a Block ID, only valid for block_occupancy.")
+				.append("\" as an endpoint — it is a Block ID, which names a piece of track, not a route endpoint.")
 		}
+	}
+
+	/**
+	 * Appends a second example routing between two *signals*, so the model sees that a route need
+	 * not span the whole network from InOut to InOut. Reserving one section at a time is what the
+	 * rule-based dispatcher does
+	 * ([cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy]) and it holds far fewer
+	 * blocks per train, which is what keeps concurrent trains from conflicting. No-op when the
+	 * network has fewer than two signals.
+	 */
+	private fun appendSectionHopExample(
+		sb: StringBuilder,
+		topology: StationTopology
+	) {
+		if (topology.signals.size < 2) return
+		sb
+			.append(" EXAMPLE (single section — usually preferable, because it holds fewer blocks): ")
+			.append("request_route(trainName=")
+			.append(TRAIN_NAME_PLACEHOLDER)
+			.append(", fromEndpointName=\"")
+			.append(topology.signals[0].name)
+			.append("\", toEndpointName=\"")
+			.append(topology.signals[1].name)
+			.append("\").")
 	}
 
 	/**
