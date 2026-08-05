@@ -218,9 +218,16 @@ class KoogAgentPlanAdapter(
 	 * @param observation Read-only snapshot of the current railway network state.
 	 * @return Non-null list of decisions; may be the rule-based fallback result.
 	 */
-	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> {
-		val a = getOrCreateAgent()
-		return try {
+	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> =
+		try {
+			// Agent creation is INSIDE the try (Issue #847 round 4, R4-2). createAgent runs
+			// OllamaModelPrewarmer.warmUp — real network I/O that can fail — and when this call sat
+			// outside the try its exception escaped plan() altogether, propagating out of
+			// AgentLoopDriver.runCycle() into a daemon thread with no uncaught-exception handler and
+			// killing the dispatcher for the rest of the run. A creation failure is now an ordinary
+			// counted fallback like any other LLM failure, and `agent` stays null so the next cycle
+			// retries rather than the whole run being demoted to rule-based by one transient fault.
+			val a = getOrCreateAgent()
 			// Advance the correlation-map cycle counter before the LLM cycle so every decision
 			// posted by actuator tools during decideAsync receives the correct tick index, and
 			// zero the per-cycle emission counter so actedThisCycle() reflects only this cycle.
@@ -282,7 +289,6 @@ class KoogAgentPlanAdapter(
 			tickListener?.onTick(TickRecord(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime))
 			fallbackDispatcher.decide(observation)
 		}
-	}
 
 	/**
 	 * Returns the cached [KoogDispatchAgent], creating it lazily on the first call.

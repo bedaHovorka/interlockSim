@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsAll
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
@@ -108,12 +109,40 @@ class StationTopologySerializerTest {
 			val prompt = StationTopologySerializer.serialize(context)
 
 			assertThat(prompt).contains("STATION TOPOLOGY")
-			assertThat(prompt).contains("InOuts (entry/exit): A, B")
 			assertThat(prompt).contains("vA[SIMPLE_RIGHT_FALSE]")
 			assertThat(prompt).contains("vB[SIMPLE_LEFT_TRUE]")
 			assertThat(prompt).contains("doA1")
 			assertThat(prompt).contains("A->B")
 			assertThat(prompt).contains("NOT valid request_route arguments")
+			// Issue #847 cleanup pass: anti-hallucination warning + worked example.
+			assertThat(prompt).contains("A Block ID that looks similar to an InOut name")
+			assertThat(prompt).contains("EXAMPLE (end-to-end route)")
+
+			// Issue #847 round 2: signals are as valid as InOuts for request_route, and the prompt
+			// must say so — advertising InOuts only left the model unable to reserve single sections
+			// and drove it into whole-loop reservations that deadlocked the network.
+			assertThat(prompt).contains("Valid request_route endpoint names — BOTH lists below are accepted:")
+			assertThat(prompt).contains("InOuts (entry/exit): \"A\", \"B\"")
+			assertThat(prompt).contains(
+				"Signals (section boundaries): \"doA1\", \"doA2\", \"doB1\", \"doB2\", \"zA\", \"zB\""
+			)
+			assertThat(prompt).contains("EXAMPLE (single section")
+		}
+	}
+
+	@Test
+	@DisplayName("prompt text contains no concrete train name for the model to copy (Issue #847 round 2)")
+	fun promptCarriesNoCopyableTrainName() {
+		loadShuntingLoopContext().use { context ->
+			val prompt = StationTopologySerializer.serialize(context)
+
+			// A literal train name here (the first cut used "T1") is copied verbatim by the model.
+			// Because nothing on the live path validates trainName, that reserves real blocks for a
+			// train that does not exist, and no code path can ever release them — one copied name
+			// deadlocked an entire run. The slot must stay a non-copyable placeholder.
+			assertThat(prompt).contains("trainName=<exact train id from this cycle's message>")
+			assertThat(prompt).doesNotContain("trainName=\"")
+			assertThat(prompt).doesNotContain("\"T1\"")
 		}
 	}
 
@@ -132,13 +161,15 @@ class StationTopologySerializerTest {
 		val text = StationTopologySerializer.toPromptText(empty)
 
 		assertThat(text).contains("InOuts (entry/exit): none")
-		assertThat(text).contains("Signals: none")
+		assertThat(text).contains("Signals (section boundaries): none")
 		assertThat(text).contains("Switches: none")
 		assertThat(text).contains(
-			"Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): none"
+			"Blocks (path context only — never valid as a request_route endpoint): none"
 		)
 		assertThat(text).contains("Routes (path context only; block IDs shown are NOT valid request_route arguments;")
 		assertThat(text).contains(": none")
+		// Fewer than two InOuts: no worked example to build (Issue #847 cleanup pass).
+		assertThat(text.contains("EXAMPLE:")).isEqualTo(false)
 	}
 
 	@Test
@@ -155,12 +186,39 @@ class StationTopologySerializerTest {
 
 		val text = StationTopologySerializer.toPromptText(topology)
 
-		assertThat(text).contains("Signals: L1")
+		assertThat(text).contains("Signals (section boundaries): \"L1\"")
 		assertThat(text).contains("Switches: V7[SIMPLE_LEFT_TRUE]")
 		assertThat(text).contains(
-			"Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): U3, U4"
+			"Blocks (path context only — never valid as a request_route endpoint): \"U3\", \"U4\""
 		)
 		assertThat(text).contains("A->B: U3, U4")
+		// Issue #847 cleanup pass: worked example, with a real Block ID contrasted against it.
+		assertThat(text).contains("from \"A\" to \"B\"")
+		assertThat(text).contains("Do NOT pass \"U3\" as an endpoint")
+		// Issue #847 round 2: a single signal cannot form a section hop, so only the end-to-end
+		// example is emitted here — the section example needs two signals.
+		assertThat(text).contains("EXAMPLE (end-to-end route)")
+		assertThat(text.contains("EXAMPLE (single section")).isEqualTo(false)
+	}
+
+	@Test
+	@DisplayName("toPromptText() adds a signal-to-signal example once two signals exist (Issue #847 round 2)")
+	fun toPromptTextRendersSectionHopExample() {
+		val topology =
+			StationTopology(
+				inOuts = listOf("A", "B"),
+				signals = listOf(SignalId("L1"), SignalId("L2")),
+				switches = emptyList(),
+				blocks = emptyList(),
+				routes = emptyList()
+			)
+
+		val text = StationTopologySerializer.toPromptText(topology)
+
+		// Signal-to-signal routing reserves one section; InOut-to-InOut holds every block between,
+		// which is what starved concurrent trains before this round.
+		assertThat(text).contains("EXAMPLE (single section")
+		assertThat(text).contains("fromEndpointName=\"L1\", toEndpointName=\"L2\"")
 	}
 
 	@Test

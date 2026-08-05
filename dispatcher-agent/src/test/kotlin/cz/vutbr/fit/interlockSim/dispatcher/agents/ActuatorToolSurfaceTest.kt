@@ -116,16 +116,24 @@ class ActuatorToolSurfaceTest {
 	 */
 	private fun loadDomainToolClassesInPackage(packageName: String): List<KClass<*>> {
 		val resourcePath = packageName.replace('.', '/')
-		val resource =
-			Thread.currentThread().contextClassLoader?.getResource(resourcePath)
-				?: javaClass.classLoader.getResource(resourcePath)
-				?: error("Could not resolve package $packageName on the classpath (resource $resourcePath)")
-		val dir = File(resource.toURI())
-		check(dir.isDirectory) { "Package resource $resource is not a directory: $dir" }
+		// Every classpath root, not just the first (Issue #847 round 4). `getResource` returns one
+		// URL, and for this package that is the *test* classes directory, which shadowed the main
+		// one — so the scan silently read whichever root happened to win. It found zero classes once
+		// that directory existed but was empty, and would equally have missed a fifth tool added to
+		// the main sources. The guard has to see the union to mean what its KDoc says.
+		val loader = Thread.currentThread().contextClassLoader ?: javaClass.classLoader
+		val roots = loader.getResources(resourcePath).toList()
+		check(roots.isNotEmpty()) {
+			"Could not resolve package $packageName on the classpath (resource $resourcePath)"
+		}
+		val classFiles =
+			roots.flatMap { resource ->
+				val dir = File(resource.toURI())
+				check(dir.isDirectory) { "Package resource $resource is not a directory: $dir" }
+				dir.listFiles { f -> f.isFile && f.name.endsWith(".class") }.orEmpty().toList()
+			}
 
-		return dir
-			.listFiles { f -> f.isFile && f.name.endsWith(".class") }
-			.orEmpty()
+		return classFiles
 			.mapNotNull { file ->
 				val simpleName = file.name.removeSuffix(".class")
 				// Companion objects and other nested classes ("Foo$Companion") are not DomainTools;

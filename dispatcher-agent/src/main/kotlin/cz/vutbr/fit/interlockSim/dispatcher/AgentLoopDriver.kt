@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 import cz.vutbr.fit.interlockSim.dispatcher.planner.toActionAuthor
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -132,7 +133,25 @@ class AgentLoopDriver(
 	 *
 	 * @since Issue #843 (SP2c.20 follow-up — Goal 10 action attribution)
 	 */
-	private val plannerTickSource: KoogAgentPlanAdapter? = null
+	private val plannerTickSource: KoogAgentPlanAdapter? = null,
+	/**
+	 * Optional observer receiving every [TickRecord] produced by [plannerTickSource].
+	 *
+	 * Exists because this class *overwrites* `plannerTickSource.tickListener` in its `init` block,
+	 * so a caller that installed its own listener beforehand had it silently discarded — there was
+	 * no seam at all onto which a run recorder could be wired, which is why
+	 * `DispatcherRunRecorder.onTick` had no production caller and every per-run JSON reported
+	 * `totalTicks = 0` (Issue #847 round 4, R4-5).
+	 *
+	 * Invoked on the dispatcher-agent driver thread, synchronously inside `planner.plan()`.
+	 * Implementations must be cheap and non-blocking; `DefaultDispatcherRunRecorder.onTick` is a
+	 * counter increment.
+	 *
+	 * `null` for wirings with no recorder — the rule-based baseline included.
+	 *
+	 * @since Issue #847 round 4 (PR #891)
+	 */
+	private val onTickRecord: ((TickRecord) -> Unit)? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -156,7 +175,11 @@ class AgentLoopDriver(
 		// four call sites (LLM success, EMPTY_NO_TOOLS/TIMEOUT/EXCEPTION fallback) are inline in
 		// KoogAgentPlanAdapter.plan's try/catch, not in a spawned coroutine — so lastTickOutcome
 		// is always fresh by the time plan() returns below in runCycle().
-		plannerTickSource?.tickListener = PlannerTickListener { record -> lastTickOutcome = record.outcome }
+		plannerTickSource?.tickListener =
+			PlannerTickListener { record ->
+				lastTickOutcome = record.outcome
+				onTickRecord?.invoke(record)
+			}
 	}
 
 	private fun pauseUntilNextSnapshot() {

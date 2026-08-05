@@ -26,11 +26,13 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationPro
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationSource
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultDispatcherRunRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -306,9 +308,20 @@ val dispatcherAgentModule: Module =
 					perceptionPort = get(), // Scoped to this context (SP1.4 — live port)
 					commandQueue = get(), // Scoped to this context (SP1.7)
 					dispatchLoopSensorPort = get(), // Scoped to this context (Goal 10 tool-registration fix)
-					sinkHolder = get() // Scoped to this context (SP2c.6 — shared with KoogAgentPlanAdapter)
+					sinkHolder = get(), // Scoped to this context (SP2c.6 — shared with KoogAgentPlanAdapter)
+					// Issue #847 round 4: resolved lazily per rejection, not captured here.
+					// ExampleRegistry declares the correctly-armed recorder AFTER resolving this
+					// factory, so an eagerly-captured instance would be the default rule-based one.
+					runRecorderProvider = { getOrNull<DispatcherRunRecorder>() }
 				)
 			}
+
+			// SP2c.22 (#845) / Issue #847 round 4 (R4-5): per-run JSON sink.
+			// Until round 4 this had no binding and no production caller at all, so
+			// build/reports/dispatcher-runs/ was never created and SP2c.23's aggregator (#846) had
+			// no producer — dispatcherReliabilityReport always rendered an all-zero report over an
+			// empty directory. Scoped rather than single so it shares the recorder's lifetime.
+			scoped<RunSnapshotStore> { DefaultRunSnapshotStore() }
 
 			// SP2c.22 (#845): DispatcherRunRecorder (scoped per context)
 			// One run recorder per simulation context — the Koin scope boundary replaces any

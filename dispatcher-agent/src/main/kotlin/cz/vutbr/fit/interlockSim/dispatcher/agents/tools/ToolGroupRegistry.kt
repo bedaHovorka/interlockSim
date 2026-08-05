@@ -11,6 +11,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -46,19 +48,34 @@ class ToolGroupRegistry {
 	 *
 	 * @param validEndpointNames Exact InOut/Signal names `request_route` validates against.
 	 * @param sinkHolder Shared sink holder for this agent instance; all four tools emit to it.
-	 * @return Four actuator tools.
+	 * @param perceptionPort Optional off-thread-safe perception port supplying the **active**
+	 *   trains for in-turn `trainId`/`trainName` validation in [CancelRouteTool] (Issue #847
+	 *   cleanup pass) and [RequestRouteTool] (Issue #847 round 2); `null` (the default) preserves
+	 *   the prior no-pre-check behavior.
+	 * @param blockIds Static Block IDs, letting [RequestRouteTool] classify a rejected endpoint as
+	 *   `ENDPOINT_IS_BLOCK_ID` rather than `UNKNOWN_ENDPOINT` (Issue #847 round 4) — the `kA` vs `A`
+	 *   confusion the anti-hallucination work targets, which must be countable on its own.
+	 * @param sensorPort Optional dispatch-loop sensor port supplying the **queued** trains, for
+	 *   the same validation in [ApproveTrainTool] and [RequestRouteTool] (Issue #847 round 2);
+	 *   `null` (the default) preserves the prior no-pre-check behavior.
+	 * @return Four actuator tools. Neither port is an LLM-facing tool — the four-tool actuator
+	 *   surface is unchanged, as [cz.vutbr.fit.interlockSim.dispatcher.agents.ActuatorToolSurface]
+	 *   asserts at agent construction.
 	 *
 	 * @since Issue #548 (SP1.3 skeleton); SP2c.6 (#829) reduces to the 4-tool surface
 	 */
 	fun assembleAllTools(
 		validEndpointNames: Set<String>,
-		sinkHolder: SinkHolder = SinkHolder()
+		sinkHolder: SinkHolder = SinkHolder(),
+		perceptionPort: NetworkPerceptionPort? = null,
+		sensorPort: DispatchLoopSensorPort? = null,
+		blockIds: Set<String> = emptySet()
 	): List<DomainTool> {
 		logger.debug { "ToolGroupRegistry.assembleAllTools: assembling 4-tool actuator surface (SP2c.6)" }
 		return listOf(
-			ApproveTrainTool(sinkHolder),
-			RequestRouteTool(sinkHolder, validEndpointNames),
-			CancelRouteTool(sinkHolder),
+			ApproveTrainTool(sinkHolder, sensorPort, perceptionPort),
+			RequestRouteTool(sinkHolder, validEndpointNames, perceptionPort, sensorPort, blockIds),
+			CancelRouteTool(sinkHolder, perceptionPort),
 			NoOpTool(sinkHolder)
 		)
 	}

@@ -59,6 +59,57 @@ internal fun trainIdParameter(description: String): DomainToolParameter =
 internal fun Map<String, Any?>.stringParam(name: String): String? = (this[name] as? String)?.takeIf { it.isNotBlank() }
 
 /**
+ * Resolves a model-supplied train id against the [known] ids, tolerating the one abbreviation
+ * the LLM demonstrably produces, and returns `null` when it cannot be resolved unambiguously.
+ *
+ * ## Why tolerate anything at all (Issue #847 round 2)
+ *
+ * Trains are named `"Train #1"`, `"Train #2"`, … (`Train.kt`), and the per-cycle message lists
+ * those ids verbatim. The model nonetheless keeps sending the bare ordinal: in a 600 s
+ * verification run **every one** of the 90 rejected train arguments was the literal `"1"` for
+ * `"Train #1"` — 56 on `request_route`, 34 on `approve_train`. Zero trains completed as a result,
+ * against 28 for the rule-based dispatcher on the identical scenario.
+ *
+ * Normally the answer would be to let the tool's error teach the model. That channel does exist —
+ * an earlier version of this KDoc claimed it did not, citing Koog's Ollama converter as dropping
+ * `MessagePart.Tool.Result` entirely at `OllamaConverters.kt:115`. That was a misreading, corrected
+ * in round 3. `Prompt.toOllamaChatMessages` emits every tool-result part as its own
+ * `OllamaChatMessageDTO(role = "tool", …)` (lines 37-44); line 115 is inside a helper that
+ * assembles only the *text* half of a user turn and therefore skips tool parts by design, logging
+ * a "Skipping unsupported message part" WARN that is noise rather than data loss.
+ * `KoogRealOllamaToolCallingTest.a rejected tool argument is corrected on a later call` settles it
+ * empirically: a token appearing nowhere but in a tool's error text comes back in the model's next
+ * call.
+ *
+ * The channel is nonetheless thin, which is why resolution rather than strict rejection is still
+ * the right call here. Ollama's message DTO carries no `tool_name` and no `is_error`, so with four
+ * actuators on the surface a rejection arrives anonymous and unflagged.
+ * [cz.vutbr.fit.interlockSim.dispatcher.executor.ToolResultInliningPromptExecutor] now restores
+ * both, but a 7B-class model correcting an id it has already re-sent 90 times in one run is a
+ * prompt-compliance gamble, and every failed cycle is a dispatch opportunity lost. Resolving a
+ * single unambiguous abbreviation costs nothing and cannot mis-target.
+ *
+ * So this resolves the abbreviation, conservatively:
+ * - exact match always wins;
+ * - otherwise, an input matches a known id only if that id ends with `"#<input>"`, and only when
+ *   **exactly one** known id does — an ambiguous or unrecognized input still returns `null` and
+ *   the caller still rejects it.
+ *
+ * This is deliberately narrow. It does not accept prefixes, fuzzy matches, or anything that could
+ * silently retarget an action onto the wrong train — the failure this whole round exists to
+ * prevent. Callers must emit the returned canonical id, never the raw input, so nothing
+ * downstream ever sees the abbreviated form.
+ */
+internal fun resolveTrainId(
+	raw: String,
+	known: Set<String>
+): String? {
+	if (raw in known) return raw
+	val suffix = "#$raw"
+	return known.filter { it.endsWith(suffix) }.singleOrNull()
+}
+
+/**
  * Returns the enum value of [name] in this args map parsed case-insensitively against
  * [E]'s entries, or `null` if the entry is absent, not a [String], blank, or not a valid
  * [E] name. Using `enumValues<E>()` (reified) keeps parsing in lockstep with the domain
