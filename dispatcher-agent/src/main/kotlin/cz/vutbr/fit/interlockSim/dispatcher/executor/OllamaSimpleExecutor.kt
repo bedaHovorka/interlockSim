@@ -137,7 +137,12 @@ class OllamaSimpleExecutor(
 				baseUrl = config.ollamaEndpoint,
 				contextWindowStrategy = ContextWindowStrategy.Companion.Fixed(config.contextWindowTokens)
 			)
-		val result = MultiLLMPromptExecutor(LLMProvider.Ollama to client)
+		// Issue #847 round 3: fold tool results into named, error-flagged user text before they
+		// reach the transport. They do reach the model without this (PR #891's round-2 comment
+		// claimed otherwise and was wrong), but Ollama's message DTO carries no tool_name and no
+		// is_error field, so the model cannot tell which of the four actuators answered or whether
+		// it was rejected. See ToolResultInliningPromptExecutor's KDoc.
+		val result = ToolResultInliningPromptExecutor(MultiLLMPromptExecutor(LLMProvider.Ollama to client))
 		executorInitialized = true // set only after construction succeeds
 		result
 	}

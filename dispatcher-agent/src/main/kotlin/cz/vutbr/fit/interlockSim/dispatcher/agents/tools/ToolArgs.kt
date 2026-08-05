@@ -70,13 +70,26 @@ internal fun Map<String, Any?>.stringParam(name: String): String? = (this[name] 
  * `"Train #1"` — 56 on `request_route`, 34 on `approve_train`. Zero trains completed as a result,
  * against 28 for the rule-based dispatcher on the identical scenario.
  *
- * Normally the answer would be to let the tool's error teach the model. That does not work here:
- * Koog's Ollama converter drops `MessagePart.Tool.Result` entirely
- * (`OllamaConverters.kt:115`, "Skipping unsupported message part"), so tool errors never reach the
- * model and it retries the identical call until `maxAgentIterations` is exhausted. With no
- * feedback channel, strict rejection cannot converge — it just fails every cycle.
+ * Normally the answer would be to let the tool's error teach the model. That channel does exist —
+ * an earlier version of this KDoc claimed it did not, citing Koog's Ollama converter as dropping
+ * `MessagePart.Tool.Result` entirely at `OllamaConverters.kt:115`. That was a misreading, corrected
+ * in round 3. `Prompt.toOllamaChatMessages` emits every tool-result part as its own
+ * `OllamaChatMessageDTO(role = "tool", …)` (lines 37-44); line 115 is inside a helper that
+ * assembles only the *text* half of a user turn and therefore skips tool parts by design, logging
+ * a "Skipping unsupported message part" WARN that is noise rather than data loss.
+ * `KoogRealOllamaToolCallingTest.a rejected tool argument is corrected on a later call` settles it
+ * empirically: a token appearing nowhere but in a tool's error text comes back in the model's next
+ * call.
  *
- * So this resolves the abbreviation instead, conservatively:
+ * The channel is nonetheless thin, which is why resolution rather than strict rejection is still
+ * the right call here. Ollama's message DTO carries no `tool_name` and no `is_error`, so with four
+ * actuators on the surface a rejection arrives anonymous and unflagged.
+ * [cz.vutbr.fit.interlockSim.dispatcher.executor.ToolResultInliningPromptExecutor] now restores
+ * both, but a 7B-class model correcting an id it has already re-sent 90 times in one run is a
+ * prompt-compliance gamble, and every failed cycle is a dispatch opportunity lost. Resolving a
+ * single unambiguous abbreviation costs nothing and cannot mis-target.
+ *
+ * So this resolves the abbreviation, conservatively:
  * - exact match always wins;
  * - otherwise, an input matches a known id only if that id ends with `"#<input>"`, and only when
  *   **exactly one** known id does — an ambiguous or unrecognized input still returns `null` and

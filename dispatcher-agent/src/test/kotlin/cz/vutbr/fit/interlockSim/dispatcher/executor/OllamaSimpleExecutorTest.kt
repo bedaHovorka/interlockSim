@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
 import assertk.assertThat
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameAs
 import org.junit.jupiter.api.Tag
@@ -62,6 +63,23 @@ class OllamaSimpleExecutorTest {
 		// Second call returns cached executor (same instance — reference identity)
 		val koogExecutor2 = executor.getExecutor()
 		assertThat(koogExecutor2).isSameAs(koogExecutor)
+	}
+
+	/**
+	 * Issue #847 round 3: every Koog agent must see tool results as named, error-flagged text.
+	 * Without the [ToolResultInliningPromptExecutor] wrapper here, tool results still reach Ollama
+	 * (contrary to PR #891's round-2 comment) but arrive anonymous and unflagged, because
+	 * `OllamaChatMessageDTO` has no `tool_name`/`is_error` field — and each one also produces a
+	 * spurious empty `role="user"` turn plus a `"Skipping unsupported message part"` WARN.
+	 *
+	 * Wiring it here rather than at the [cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService]
+	 * call site means no agent can be built that bypasses it.
+	 */
+	@Test
+	fun `getExecutor wraps the executor so tool results reach the model named and flagged`() {
+		val executor = OllamaSimpleExecutor(OllamaExecutorConfig.forLocalTesting())
+
+		assertThat(executor.getExecutor()).isInstanceOf(ToolResultInliningPromptExecutor::class)
 	}
 
 	@Test

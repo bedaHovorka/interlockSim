@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ConflictHintLatch
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
@@ -567,10 +568,29 @@ class ExampleRegistry {
 		// above) but calls controlStepListener AFTER. Signalling any earlier would let the
 		// driver wake and read a stale TickObservation from the previous tick — confirmed via
 		// a reproduced conflictEventCount regression during development of this fix.
+		// Issue #847 round 3 (PR #891 defect B): reclaim routes nothing else can release — a
+		// reservation owned by a train id the model invented, or one granted to a real train that
+		// never travels it. Both are permanent otherwise: every release path in
+		// PathReservationRegistry requires the train to consume the route, and the registry has no
+		// timestamps, sweeper or TTL. MultiTrainLoop has releaseFreeResources() as its per-iteration
+		// safety net; ShuntingLoop has no equivalent, which is why one round-2 run deadlocked with
+		// Train #1 holding k1 and kA reserved and unoccupied for the rest of the run.
+		// Declared in scope so the end-of-run summary can report its counters.
+		val orphanSweeper =
+			OrphanReservationSweeper(
+				perceptionPort = perceptionPort,
+				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation),
+				actuatorPort = actuatorPort
+			)
+		context.scope.declare(orphanSweeper)
+
 		loop.controlStepListener =
 			ControlStepListener {
 				driverSignal.signal()
 				applier.onControlStep()
+				// After the applier, so a route requested this tick is not judged stale before it
+				// has had a single tick to be travelled.
+				orphanSweeper.sweep()
 			}
 		loop.agentDriverAction = {
 			while (loop.isSimActive()) {
