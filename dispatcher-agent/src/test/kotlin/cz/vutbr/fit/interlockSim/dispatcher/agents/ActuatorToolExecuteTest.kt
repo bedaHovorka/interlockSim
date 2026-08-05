@@ -19,6 +19,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.CancelRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.NoOpTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
@@ -108,6 +111,89 @@ class ActuatorToolExecuteTest {
 		assertThat(emitted.single()).isInstanceOf<DispatchAction.CancelRoute>()
 		assertThat((emitted.single() as DispatchAction.CancelRoute).trainId).isEqualTo("T1")
 	}
+
+	/**
+	 * Issue #847 cleanup pass: [CancelRouteTool] pre-validates `trainId` against
+	 * [NetworkPerceptionPort.snapshot] when a port is supplied, mirroring
+	 * [RequestRouteTool]'s in-turn endpoint-name validation.
+	 */
+	@Test
+	fun `cancel_route with a perception port emits when trainId matches an active train`() {
+		val port = stubPerceptionPort(activeTrainIds = listOf("T1"))
+		val result =
+			runBlocking { CancelRouteTool(sinkHolder, port).execute(mapOf("trainId" to "T1")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Success>()
+		assertThat(emitted).hasSize(1)
+	}
+
+	@Test
+	fun `cancel_route with a perception port rejects an unknown trainId without emitting`() {
+		val port = stubPerceptionPort(activeTrainIds = listOf("T1"))
+		val result =
+			runBlocking { CancelRouteTool(sinkHolder, port).execute(mapOf("trainId" to "GhostTrain")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		val message = (result as ToolResult.Error).message
+		assertThat(message).contains("GhostTrain")
+		assertThat(message).contains("T1")
+		assertThat(emitted).hasSize(0)
+	}
+
+	@Test
+	fun `cancel_route without a perception port skips the trainId pre-check`() {
+		// No port supplied (default null) -- preserves pre-#847 behavior: any non-blank
+		// trainId is accepted at the tool layer; ActionValidator remains the systemic gate.
+		val result =
+			runBlocking { CancelRouteTool(sinkHolder).execute(mapOf("trainId" to "GhostTrain")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Success>()
+		assertThat(emitted).hasSize(1)
+	}
+
+	/** Minimal [NetworkPerceptionPort] stub exposing only [snapshot], as [CancelRouteTool] needs. */
+	private class StubPerceptionPort(activeTrainIds: List<String>) : NetworkPerceptionPort {
+		private val fixedSnapshot =
+			SimulationSnapshot.EMPTY.copy(
+				trainPositions =
+					activeTrainIds.map {
+						TrainPositionReading(
+							trainId = it,
+							velocity = 0.0,
+							acceleration = 0.0,
+							totalDistance = 0.0,
+							frontSectionName = null
+						)
+					}
+			)
+
+		override fun signalAspect(semaphoreName: String) = null
+
+		override fun allSignalAspects() = emptyList<Nothing>()
+
+		override fun blockOccupancy(blockId: String) = null
+
+		override fun allBlockOccupancies() = emptyList<Nothing>()
+
+		override fun trainPosition(trainId: String) = fixedSnapshot.trainPositions.find { it.trainId == trainId }
+
+		override fun allTrainPositions() = fixedSnapshot.trainPositions
+
+		override fun trainTimetable(trainId: String) = null
+
+		override fun allTrainTimetables() = emptyList<Nothing>()
+
+		override fun trainPerception(trainId: String) = null
+
+		override fun allTrainPerceptions() = emptyList<Nothing>()
+
+		override fun snapshot() = fixedSnapshot
+
+		override fun captureSnapshot() = fixedSnapshot
+	}
+
+	private fun stubPerceptionPort(activeTrainIds: List<String>): NetworkPerceptionPort =
+		StubPerceptionPort(activeTrainIds)
 
 	/**
 	 * SP2c.6 receipt-string contract (#829 M2): `no_op` emits a [DispatchAction.NoOp] and returns

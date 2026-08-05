@@ -108,12 +108,15 @@ class StationTopologySerializerTest {
 			val prompt = StationTopologySerializer.serialize(context)
 
 			assertThat(prompt).contains("STATION TOPOLOGY")
-			assertThat(prompt).contains("InOuts (entry/exit): A, B")
+			assertThat(prompt).contains("InOuts (entry/exit) — valid request_route names: \"A\", \"B\"")
 			assertThat(prompt).contains("vA[SIMPLE_RIGHT_FALSE]")
 			assertThat(prompt).contains("vB[SIMPLE_LEFT_TRUE]")
 			assertThat(prompt).contains("doA1")
 			assertThat(prompt).contains("A->B")
 			assertThat(prompt).contains("NOT valid request_route arguments")
+			// Issue #847 cleanup pass: anti-hallucination warning + worked example.
+			assertThat(prompt).contains("A Block ID that looks similar to an InOut name")
+			assertThat(prompt).contains("EXAMPLE: to route a train named \"T1\"")
 		}
 	}
 
@@ -131,14 +134,16 @@ class StationTopologySerializerTest {
 
 		val text = StationTopologySerializer.toPromptText(empty)
 
-		assertThat(text).contains("InOuts (entry/exit): none")
+		assertThat(text).contains("InOuts (entry/exit) — valid request_route names: none")
 		assertThat(text).contains("Signals: none")
 		assertThat(text).contains("Switches: none")
 		assertThat(text).contains(
-			"Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): none"
+			"Blocks (block_occupancy/all_block_occupancies ONLY — never request_route): none"
 		)
 		assertThat(text).contains("Routes (path context only; block IDs shown are NOT valid request_route arguments;")
 		assertThat(text).contains(": none")
+		// Fewer than two InOuts: no worked example to build (Issue #847 cleanup pass).
+		assertThat(text.contains("EXAMPLE:")).isEqualTo(false)
 	}
 
 	@Test
@@ -155,12 +160,15 @@ class StationTopologySerializerTest {
 
 		val text = StationTopologySerializer.toPromptText(topology)
 
-		assertThat(text).contains("Signals: L1")
+		assertThat(text).contains("Signals: \"L1\"")
 		assertThat(text).contains("Switches: V7[SIMPLE_LEFT_TRUE]")
 		assertThat(text).contains(
-			"Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): U3, U4"
+			"Blocks (block_occupancy/all_block_occupancies ONLY — never request_route): \"U3\", \"U4\""
 		)
 		assertThat(text).contains("A->B: U3, U4")
+		// Issue #847 cleanup pass: worked example, with a real Block ID contrasted against it.
+		assertThat(text).contains("EXAMPLE: to route a train named \"T1\" from \"A\" to \"B\"")
+		assertThat(text).contains("Do NOT pass \"U3\" as an endpoint")
 	}
 
 	@Test

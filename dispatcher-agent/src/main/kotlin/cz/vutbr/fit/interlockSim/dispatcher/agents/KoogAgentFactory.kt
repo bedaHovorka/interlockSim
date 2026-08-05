@@ -151,8 +151,10 @@ class KoogAgentFactory(
 				commandQueue.postAll(decisions)
 			}
 
-		// Assemble the four-tool actuator surface for this context.
-		val tools = toolRegistry.assembleAllTools(validEndpointNames, sinkHolder)
+		// Assemble the four-tool actuator surface for this context. perceptionPort is passed
+		// through so CancelRouteTool can pre-validate trainId in-turn (Issue #847 cleanup pass) —
+		// reuses the existing off-thread-safe port, not a new LLM-facing tool.
+		val tools = toolRegistry.assembleAllTools(validEndpointNames, sinkHolder, perceptionPort)
 		ActuatorToolSurface.assertExactly(tools)
 
 		// SP2b.8 (Issue #695): serialize static topology into the system prompt once.

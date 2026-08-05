@@ -148,19 +148,38 @@ object StationTopologySerializer {
 
 	/**
 	 * Renders the topology into a compact, ID-only text block suitable for a system prompt.
+	 *
+	 * ## Anti-hallucination formatting (Issue #847 cleanup pass — agent-architect review finding)
+	 *
+	 * A live `shuntingLoopAI` run showed the LLM hallucinating endpoint names by confusing them
+	 * with visually similar Block IDs (e.g. `"kA"` vs InOut `"A"`) — a real trap in networks like
+	 * `vyhybna.xml` where Block IDs are literally `"k" + <InOut name>`. Three changes address this
+	 * directly, rather than relying solely on the general instruction in the system prompt:
+	 * 1. The anti-hallucination warning is repeated here, at the point of use, naming the specific
+	 *    confusable pattern instead of only appearing once, upstream, in the system prompt.
+	 * 2. Each name in the InOuts/Signals/Blocks lists is quoted ([joinQuoted]) so the model has an
+	 *    unambiguous boundary for "copy this exact string," instead of relying on comma-splitting.
+	 * 3. A worked example using this network's own (and specifically confusable, if any) names is
+	 *    appended, giving the model something to pattern-match against instead of only an abstract
+	 *    rule.
 	 */
 	fun toPromptText(topology: StationTopology): String {
 		val sb = StringBuilder()
-		sb.append("=== STATION TOPOLOGY (static; refer to elements by ID only) ===\n")
-		sb.append("InOuts (entry/exit): ").append(joinOrNone(topology.inOuts)).append('\n')
-		sb.append("Signals: ").append(joinOrNone(topology.signals.map { it.name })).append('\n')
+		sb.append("=== STATION TOPOLOGY (static) ===\n")
+		sb.append(
+			"Copy names character-for-character from the lists below. A Block ID that looks " +
+				"similar to an InOut name (e.g. \"kA\" vs InOut \"A\") is still NOT a valid " +
+				"request_route argument.\n"
+		)
+		sb.append("InOuts (entry/exit) — valid request_route names: ").append(joinQuoted(topology.inOuts)).append('\n')
+		sb.append("Signals: ").append(joinQuoted(topology.signals.map { it.name })).append('\n')
 		sb
 			.append("Switches: ")
 			.append(joinOrNone(topology.switches.map { "${it.id.name}[${it.type}]" }))
 			.append('\n')
 		sb
-			.append("Blocks (IDs for block_occupancy/all_block_occupancies only — NOT valid request_route arguments): ")
-			.append(joinOrNone(topology.blocks.map { it.name }))
+			.append("Blocks (block_occupancy/all_block_occupancies ONLY — never request_route): ")
+			.append(joinQuoted(topology.blocks.map { it.name }))
 			.append('\n')
 		// Note the per-pair cap so the agent cannot mistake a capped list for an exhaustive one
 		// (Issue #695 review, Important #1).
@@ -181,7 +200,40 @@ object StationTopologySerializer {
 					.append(joinOrNone(route.blocks.map { it.name }))
 			}
 		}
+		appendWorkedExample(sb, topology)
 		return sb.toString()
+	}
+
+	/**
+	 * Appends a worked `request_route` example using this network's own InOut names — and, when
+	 * available, a real Block ID to contrast against — so the model has a concrete pattern to
+	 * match instead of only the abstract anti-hallucination rule. No-op when the topology doesn't
+	 * have at least two InOuts to build an example from (e.g. an empty test topology).
+	 */
+	private fun appendWorkedExample(
+		sb: StringBuilder,
+		topology: StationTopology
+	) {
+		if (topology.inOuts.size < 2) return
+		val exampleFrom = topology.inOuts[0]
+		val exampleTo = topology.inOuts[1]
+		sb
+			.append("\n\nEXAMPLE: to route a train named \"T1\" from \"")
+			.append(exampleFrom)
+			.append("\" to \"")
+			.append(exampleTo)
+			.append("\", call request_route(trainName=\"T1\", fromEndpointName=\"")
+			.append(exampleFrom)
+			.append("\", toEndpointName=\"")
+			.append(exampleTo)
+			.append("\").")
+		val exampleWrongBlock = topology.blocks.firstOrNull { it.name != exampleFrom && it.name != exampleTo }
+		if (exampleWrongBlock != null) {
+			sb
+				.append(" Do NOT pass \"")
+				.append(exampleWrongBlock.name)
+				.append("\" as an endpoint — it is a Block ID, only valid for block_occupancy.")
+		}
 	}
 
 	/**
@@ -239,4 +291,11 @@ object StationTopologySerializer {
 		}
 
 	private fun joinOrNone(items: List<String>): String = if (items.isEmpty()) "none" else items.joinToString(", ")
+
+	/**
+	 * Like [joinOrNone] but quotes each name (Issue #847 cleanup pass) so the model has an
+	 * unambiguous "copy exactly this" boundary instead of relying on comma-splitting prose.
+	 */
+	private fun joinQuoted(items: List<String>): String =
+		if (items.isEmpty()) "none" else items.joinToString(", ") { "\"$it\"" }
 }

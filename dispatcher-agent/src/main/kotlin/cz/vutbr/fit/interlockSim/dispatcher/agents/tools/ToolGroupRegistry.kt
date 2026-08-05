@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -46,19 +47,24 @@ class ToolGroupRegistry {
 	 *
 	 * @param validEndpointNames Exact InOut/Signal names `request_route` validates against.
 	 * @param sinkHolder Shared sink holder for this agent instance; all four tools emit to it.
+	 * @param perceptionPort Optional off-thread-safe perception port passed through to
+	 *   [CancelRouteTool] for in-turn `trainId` validation (Issue #847 cleanup pass); `null`
+	 *   (the default) preserves the prior no-pre-check behavior. Not a new LLM-facing tool —
+	 *   the four-tool actuator surface is unchanged.
 	 * @return Four actuator tools.
 	 *
 	 * @since Issue #548 (SP1.3 skeleton); SP2c.6 (#829) reduces to the 4-tool surface
 	 */
 	fun assembleAllTools(
 		validEndpointNames: Set<String>,
-		sinkHolder: SinkHolder = SinkHolder()
+		sinkHolder: SinkHolder = SinkHolder(),
+		perceptionPort: NetworkPerceptionPort? = null
 	): List<DomainTool> {
 		logger.debug { "ToolGroupRegistry.assembleAllTools: assembling 4-tool actuator surface (SP2c.6)" }
 		return listOf(
 			ApproveTrainTool(sinkHolder),
 			RequestRouteTool(sinkHolder, validEndpointNames),
-			CancelRouteTool(sinkHolder),
+			CancelRouteTool(sinkHolder, perceptionPort),
 			NoOpTool(sinkHolder)
 		)
 	}

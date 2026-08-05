@@ -269,6 +269,14 @@ class ExampleRegistry {
 					plannerOverride = aiPlanner,
 					plannerTickSource = koogAdapter
 				)
+				// Issue #847 cleanup pass: declare under the SimulationController supertype so
+				// Main.runExample() can retrieve and pass the SAME instance to context.run().
+				// Without this, run() defaults to NoOpSimulationController, and pacingController
+				// only ever paces the AgentLoopDriver thread — never the kDisco kernel loop it was
+				// built to be paced against. assertPlannerPacingCompatible checks that the
+				// controller TYPE can pace; nothing previously checked that the SAME INSTANCE
+				// reaches the simulation kernel.
+				context.scope.declare<SimulationController>(pacingController)
 				context.setMainProcess(loop)
 				context
 			}

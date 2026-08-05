@@ -41,6 +41,21 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * simulation thread, where the live active-train count is available. The [ActionValidator] now
  * handles early rejection at the validation step.
  *
+ * ## Train-id validation gap (Issue #847 cleanup pass — agent-architect review finding)
+ *
+ * Unlike [CancelRouteTool] (which validates `trainId` against
+ * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.snapshot]'s active-train list),
+ * this tool cannot pre-validate `trainId` in-turn: [NetworkPerceptionPort] only exposes
+ * *active* trains, never the pending-admission *queue* this tool approves from, and the
+ * `queued_trains` sensor tool that once exposed queue membership was deliberately removed
+ * from the LLM tool surface in SP2c.6 (Issue #829) — perception now flows only through the
+ * single sim-thread-captured observation projector. Adding queue visibility back would mean
+ * introducing a new LLM-facing query capability, which is out of this cleanup pass's scope
+ * (see the Goal 10 SP2c re-plan's "no new query tool" decision). A hallucinated `trainId`
+ * here is therefore still only caught out-of-turn, by
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator]'s `UNKNOWN_TRAIN` rejection — this
+ * is a known, accepted limitation, not an oversight.
+ *
  * @param sinkHolder Shared sink holder for this agent instance; [DispatchAction.ApproveTrain]
  *   is emitted to the active sink on every successful execution.
  *
@@ -62,7 +77,7 @@ class ApproveTrainTool(
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(
-			trainIdParameter("Identifier of the train to approve (non-blank; as returned by queued_trains)")
+			trainIdParameter("Identifier of the queued train to approve (non-blank)")
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {

@@ -14,9 +14,11 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -128,8 +130,14 @@ class Main {
 			val context = exampleFactory(simulationContextFactory, args)
 			val reporter = TextReporter(Verbosity.DEFAULT)
 			context.addPropertyChangeListener(reporter)
+			// Issue #847 cleanup pass: an example may declare its own SimulationController in
+			// scope (e.g. createShuntingLoopAIExample's ThrottlingSimulationController, needed
+			// to pace the async LLM planner). Without retrieving it here, run() would silently
+			// default to NoOpSimulationController and the declared controller would never reach
+			// the kDisco kernel loop it was built to pace.
+			val controller = context.scope.getOrNull<SimulationController>() ?: NoOpSimulationController
 			context.use {
-				it.run()
+				it.run(controller)
 				reporter.printSummary()
 			} // context closed after simulation
 		} catch (e: ContextCreationException) {
