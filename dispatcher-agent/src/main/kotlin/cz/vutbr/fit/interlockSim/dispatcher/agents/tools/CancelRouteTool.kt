@@ -82,7 +82,12 @@ class CancelRouteTool(
 		val trainId =
 			args.stringParam(TRAIN_ID_PARAM) ?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG)
 
-		val activeTrainIds = perceptionPort?.snapshot()?.trainPositions?.map { it.trainId }?.toSet()
+		val activeTrainIds =
+			perceptionPort
+				?.snapshot()
+				?.trainPositions
+				?.map { it.trainId }
+				?.toSet()
 		if (activeTrainIds != null && trainId !in activeTrainIds) {
 			return ToolResult.Error(
 				"Unknown trainId '$trainId' — active trains are: " +

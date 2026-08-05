@@ -152,7 +152,9 @@ class ActuatorToolExecuteTest {
 	}
 
 	/** Minimal [NetworkPerceptionPort] stub exposing only [snapshot], as [CancelRouteTool] needs. */
-	private class StubPerceptionPort(activeTrainIds: List<String>) : NetworkPerceptionPort {
+	private class StubPerceptionPort(
+		activeTrainIds: List<String>
+	) : NetworkPerceptionPort {
 		private val fixedSnapshot =
 			SimulationSnapshot.EMPTY.copy(
 				trainPositions =
