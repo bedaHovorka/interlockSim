@@ -10,11 +10,13 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -72,7 +74,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  */
 class ApproveTrainTool(
 	private val sinkHolder: SinkHolder,
-	private val sensorPort: DispatchLoopSensorPort? = null
+	private val sensorPort: DispatchLoopSensorPort? = null,
+	/**
+	 * Optional perception port supplying the **active** trains, used only to tell a hallucinated id
+	 * apart from a real train that is simply already admitted (Issue #847 round 4).
+	 *
+	 * Without it every non-queued id is reported as `Unknown trainId` with
+	 * [RejectionCode.UNKNOWN_TRAIN], which conflates two very different failures — see [execute].
+	 * `null` keeps the previous, coarser behaviour.
+	 */
+	private val perceptionPort: NetworkPerceptionPort? = null
 ) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -93,7 +104,8 @@ class ApproveTrainTool(
 
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainId =
-			args.stringParam(TRAIN_ID_PARAM) ?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG)
+			args.stringParam(TRAIN_ID_PARAM)
+				?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG, rejection = RejectionCode.BLANK_ARGUMENT)
 
 		val queuedTrainIds = sensorPort?.getQueuedTrains()?.map { it.trainId }?.toSet()
 		// Emit the canonical id, never the raw argument — see resolveTrainId for why the bare
@@ -102,16 +114,56 @@ class ApproveTrainTool(
 			if (queuedTrainIds == null) {
 				trainId
 			} else {
-				resolveTrainId(trainId, queuedTrainIds)
-					?: return ToolResult.Error(
-						"Unknown trainId '$trainId' — approve_train only accepts a train currently queued " +
-							"for admission. Queued trains are: " +
-							queuedTrainIds.sorted().joinToString(", ").ifEmpty { "(none queued)" }
-					)
+				resolveTrainId(trainId, queuedTrainIds) ?: return rejectNonQueued(trainId, queuedTrainIds)
 			}
 
 		logger.debug { "ApproveTrainTool.execute: trainId=$resolvedTrainId (raw='$trainId')" }
 		sinkHolder.emit(DispatchAction.ApproveTrain(resolvedTrainId))
 		return ToolResult.Success("emitted approve_train trainId=$resolvedTrainId")
+	}
+
+	/**
+	 * Explains why a non-queued id was refused, distinguishing the two cases that used to be one.
+	 *
+	 * ## Why the distinction matters (Issue #847 round 4)
+	 *
+	 * Every non-queued id used to come back as `Unknown trainId` / [RejectionCode.UNKNOWN_TRAIN].
+	 * But a model calling `approve_train("Train #1")` for a train **already running on the network**
+	 * has not invented anything — the id is real and is listed in the cycle message. It has made a
+	 * *procedural* error: admitting a train that is already admitted.
+	 *
+	 * Round 4's mid-run prompt harness surfaced exactly this, three times in six cycles, and the
+	 * old classification would have scored it as hallucination — inflating the very metric #847's
+	 * sweep uses to judge whether the anti-hallucination prompt work is doing anything.
+	 * [RejectionCode.TRAIN_ALREADY_ACTIVE] already existed for this case; nothing produced it.
+	 *
+	 * The message is corrected alongside the code: telling a model that a train it can see is
+	 * "unknown" invites it to retry with a different *name*, which is precisely the wrong lesson.
+	 */
+	private fun rejectNonQueued(
+		trainId: String,
+		queuedTrainIds: Set<String>
+	): ToolResult.Error {
+		val activeTrainIds =
+			perceptionPort
+				?.snapshot()
+				?.trainPositions
+				?.map { it.trainId }
+				?.toSet()
+				.orEmpty()
+		val queuedList = queuedTrainIds.sorted().joinToString(", ").ifEmpty { "(none queued)" }
+		if (resolveTrainId(trainId, activeTrainIds) != null) {
+			return ToolResult.Error(
+				"Train '$trainId' is already active on the network — approve_train admits a train from " +
+					"the queue and does nothing for one that is already running. Queued trains are: " +
+					queuedList,
+				rejection = RejectionCode.TRAIN_ALREADY_ACTIVE
+			)
+		}
+		return ToolResult.Error(
+			"Unknown trainId '$trainId' — approve_train only accepts a train currently queued " +
+				"for admission. Queued trains are: " + queuedList,
+			rejection = RejectionCode.UNKNOWN_TRAIN
+		)
 	}
 }

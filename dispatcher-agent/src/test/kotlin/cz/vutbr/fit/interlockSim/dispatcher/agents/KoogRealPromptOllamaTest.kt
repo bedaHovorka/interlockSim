@@ -15,11 +15,14 @@ import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaPrewarmExtension
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
@@ -66,28 +69,64 @@ import org.koin.core.context.stopKoin
  * is what round 2 changed. Rejections are counted by wrapping each real tool and classifying the
  * [ToolResult.Error] messages the tools themselves produce.
  *
- * ## Honest limits: this is a smoke test, not a regression test
+ * ## Why the scenario is mid-run (Issue #847 round 4, finding R4-4)
  *
- * These tests were checked against deliberately reverted prompts and **did not fail**. Three
- * separate reverts were tried on round 3: dropping the Signals list from
- * [StationTopologySerializer.toPromptText]; presenting the Blocks list unlabelled, without the
- * "never valid as a request_route endpoint" disqualifier; and restoring round 1's literal
- * `request_route(trainName="T1", …)` worked example to [KoogAgentFactory]'s system prompt — the
- * exact defect that poisoned the reservation registry. All three stayed green over six cycles.
+ * Round 3 recorded these tests as **non-discriminating** and said so plainly: three deliberate
+ * reverts of the very fixes they claim to guard — dropping the Signals list from
+ * [StationTopologySerializer.toPromptText], presenting the Blocks list without its "never valid as
+ * a request_route endpoint" disqualifier, and restoring round 1's literal
+ * `request_route(trainName="T1", …)` worked example to [KoogAgentFactory]'s system prompt — all
+ * stayed green over six cycles.
  *
- * The reason is that this harness's scenario is too easy: one queued train bound for "B", no active
- * trains, no occupied blocks, no competing reservations. Round 2's 86 endpoint and 90 train-id
- * rejections accumulated over hundreds of cycles of a live 600 s run, where trains hold blocks,
- * routes conflict, and the per-cycle observation is far richer. That state cannot be faked here.
+ * The diagnosis was the scenario, not the assertions: one queued train bound for "B", no active
+ * trains, no occupied blocks, no competing reservations. With nothing on the network there is
+ * almost nothing for the model to mis-name, so a broken prompt and a correct one produce the same
+ * result. Round 2's 86 endpoint and 90 train-id rejections accumulated over hundreds of cycles of a
+ * live run in which trains hold blocks and routes conflict.
  *
- * So: treat these as a live smoke test that the production prompt and the real four-tool surface
- * work end to end against a real model. The authoritative regression evidence for round 2's prompt
- * fixes is elsewhere — the offline prompt-text assertions in [KoogAgentFactoryTest] and
- * [StationTopologySerializerTest], and the rejected-call counts measured over full 600 s runs.
- * Do not add assertions here that claim to guard a prompt property without first checking they can
- * be made to fail by removing it.
+ * Round 4 therefore replaces the scenario rather than the assertions. Each cycle now presents:
  *
- * @since Issue #847 (round 3)
+ * - **two** trains active on the network, on real block ids read from `vyhybna.xml` itself;
+ * - blocks in genuinely mixed states — OCCUPIED under a train, RESERVED ahead of it, FREE;
+ * - a queue that changes between cycles, so the set of legal train ids is never constant;
+ * - a **different** observation on every cycle, instead of the same one replayed six times.
+ *
+ * The block ids come from [StationTopologySerializer.describe] rather than being hand-written, so
+ * the names in play are exactly the `kA`/`k1` family that collides with the InOut names `A`/`B` —
+ * the confusion the prompt fixes exist to prevent, and the one the model has to resolve here.
+ *
+ * ## Measured discrimination — 1 of 3, not 3 of 3
+ *
+ * The same three reverts were re-run against the mid-run scenario. Stated plainly rather than
+ * rounded up:
+ *
+ * | Revert | Round 3 | Round 4 |
+ * |---|---|---|
+ * | Blocks list stripped of its "never valid as an endpoint" label | passed | **failed** — detected |
+ * | Signals list dropped from [StationTopologySerializer.toPromptText] | passed | passed |
+ * | Round 1's literal `request_route(trainName="T1", …)` restored | passed | passed |
+ *
+ * The Signals revert is **not a valid probe**, and that is a finding about the probe rather than
+ * about the test: [StationTopologySerializer]'s section-hop example independently prints
+ * `signals[0]` and `signals[1]` by name, so deleting the list still leaves two real signal names in
+ * the prompt. There is no single edit that removes signal names from the prompt, so that property
+ * cannot be probed this way at all.
+ *
+ * The `"T1"` revert stays undetected for a quantitative reason: round 2's poisoning accumulated
+ * over hundreds of cycles of a 600 s run, and six cycles against a prompt that now also names real
+ * ids every cycle is not enough for the literal to win. The offline guard in [KoogAgentFactoryTest]
+ * — which asserts the system prompt contains no concrete train name — is the load-bearing
+ * regression test for that fix, and it is deterministic.
+ *
+ * ## The standing rule for this file
+ *
+ * An assertion belongs here only if it has been **observed to fail** with the prompt property it
+ * guards removed. That is the discipline [KoogRealOllamaToolCallingTest] follows with its
+ * unforgeable `QX7` token, and it is what round 3 found missing here. A green test whose failure
+ * mode has never been demonstrated is a claim, not evidence — so these remain a live smoke test
+ * plus one genuinely discriminating case, not three regression tests.
+ *
+ * @since Issue #847 (round 3); scenario rebuilt mid-run in round 4
  */
 @ExtendWith(OllamaPrewarmExtension::class)
 @DisplayName("The production prompt keeps a real model inside the real network's vocabulary")
@@ -95,14 +134,19 @@ class KoogRealPromptOllamaTest {
 	private val xmlContextFactory = XMLContextFactory()
 	private val processFactory = DefaultSimulationProcessFactory()
 
-	/** The one queued train the model is asked to dispatch. Matches `Train`'s real naming. */
+	/** Trains on the network. Matches `Train`'s real `"Train #<n>"` naming. */
 	private val queuedTrainId = "Train #1"
+	private val secondTrainId = "Train #2"
+	private val thirdTrainId = "Train #3"
 
 	private val testTimeoutMillis = 300_000L
 
 	private companion object {
 		/** Dispatch cycles per test — see [runCycles] for why one is not enough. */
 		const val DEFAULT_CYCLES = 6
+
+		/** Enough blocks for two trains plus a reservation ahead of one of them, without overlap. */
+		const val MIN_BLOCKS_FOR_MID_RUN = 4
 	}
 
 	@BeforeEach
@@ -115,12 +159,41 @@ class KoogRealPromptOllamaTest {
 		stopKoin()
 	}
 
-	/** Records every real-tool invocation and classifies the rejections the tools returned. */
+	/**
+	 * Records every real-tool invocation and classifies the rejections the tools returned.
+	 *
+	 * Classification reads [ToolResult.Error.rejection] — the typed code round 4 added — rather
+	 * than matching on the message prose it used to `startsWith`. Prose matching silently
+	 * misclassifies the moment a message is reworded, and that is not a hypothetical: round 4
+	 * reworded `approve_train`'s rejection of an already-active train precisely because the old
+	 * wording ("Unknown trainId") described the wrong failure.
+	 *
+	 * **Hallucination and procedural error are counted separately.** A model naming a train that
+	 * exists but is already running has not invented anything; it has sequenced badly. Only the
+	 * first is a prompt-vocabulary failure, and only the first is what these tests assert on.
+	 */
 	private class RejectionRecorder {
 		val calls: MutableList<Pair<String, Map<String, Any?>>> = mutableListOf()
+
+		/** The model named an endpoint that does not exist, or a Block ID where one is never valid. */
 		val unknownEndpointRejections: MutableList<String> = mutableListOf()
+
+		/** The model named a train that no train on the network bears. */
 		val unknownTrainRejections: MutableList<String> = mutableListOf()
+
+		/** Real names, wrong moment — e.g. approving a train that is already active. */
+		val proceduralRejections: MutableList<String> = mutableListOf()
+
 		val otherRejections: MutableList<String> = mutableListOf()
+
+		/**
+		 * Cycles that threw instead of completing — in practice Koog's 20-iteration cap.
+		 *
+		 * Recorded, not asserted on: production answers such a cycle with the rule-based fallback
+		 * and carries on, so a test about prompt vocabulary must not fail on it. Worth reporting
+		 * because the mid-run scenario reaches the cap where round 3's empty one never did.
+		 */
+		val failedCycles: MutableList<String> = mutableListOf()
 
 		fun record(
 			toolName: String,
@@ -130,13 +203,12 @@ class KoogRealPromptOllamaTest {
 			calls.add(toolName to args)
 			if (result !is ToolResult.Error) return
 			val message = result.message
-			when {
-				// RequestRouteTool's endpoint rejections.
-				message.startsWith("Unknown fromEndpointName") || message.startsWith("Unknown toEndpointName") ->
+			when (result.rejection) {
+				RejectionCode.UNKNOWN_ENDPOINT, RejectionCode.ENDPOINT_IS_BLOCK_ID ->
 					unknownEndpointRejections.add(message)
-				// ApproveTrainTool / RequestRouteTool / CancelRouteTool train-id rejections.
-				message.startsWith("Unknown trainId") || message.startsWith("Unknown trainName") ->
-					unknownTrainRejections.add(message)
+				RejectionCode.UNKNOWN_TRAIN -> unknownTrainRejections.add(message)
+				RejectionCode.TRAIN_ALREADY_ACTIVE, RejectionCode.TRAIN_NOT_QUEUED ->
+					proceduralRejections.add(message)
 				else -> otherRejections.add(message)
 			}
 		}
@@ -178,18 +250,82 @@ class KoogRealPromptOllamaTest {
 			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 		}
 
-	/** No trains running yet; the model's job this cycle is to admit and route the queued one. */
-	private fun perceptionPort(): NetworkPerceptionPort =
-		mockk<NetworkPerceptionPort> {
-			every { snapshot() } returns
-				SimulationSnapshot.EMPTY.copy(trainPositions = emptyList<TrainPositionReading>())
-		}
+	/**
+	 * One cycle's worth of live state: what the ports report and what the observation carries.
+	 *
+	 * Kept together because the two must agree — the tools validate train ids against the ports
+	 * while the prompt is rendered from the observation, and a harness where they disagree would
+	 * reject calls the prompt legitimately invited.
+	 */
+	private data class Cycle(
+		val snapshot: SimulationSnapshot,
+		val queued: List<QueuedTrainObservation>
+	)
 
-	private fun sensorPort(): DispatchLoopSensorPort =
-		mockk<DispatchLoopSensorPort> {
-			every { getQueuedTrains() } returns
-				listOf(QueuedTrainObservation(trainId = queuedTrainId, destinationInOutName = "B"))
+	/**
+	 * Builds a mid-run sequence over the network's own block ids (Issue #847 round 4, R4-4).
+	 *
+	 * Every cycle differs: trains advance from one block to the next, the queue drains and refills,
+	 * and the mix of OCCUPIED/RESERVED/FREE blocks changes underneath. That is what round 3's
+	 * single replayed observation could not offer, and why a broken prompt survived it.
+	 *
+	 * Block ids are read from the real topology, so the names the model must avoid confusing with
+	 * the InOuts `A`/`B` are the genuine `kA`/`k1` family rather than plausible-looking inventions.
+	 */
+	private fun midRunCycles(
+		blockIds: List<String>,
+		cycles: Int
+	): List<Cycle> {
+		require(blockIds.size >= MIN_BLOCKS_FOR_MID_RUN) {
+			"vyhybna.xml is expected to have at least $MIN_BLOCKS_FOR_MID_RUN blocks, got ${blockIds.size}"
 		}
+		return (0 until cycles).map { cycle ->
+			// Two trains walking along the block list, one behind the other, wrapping around.
+			val leadAt = cycle % blockIds.size
+			val followAt = (cycle + 2) % blockIds.size
+			val leadAhead = (leadAt + 1) % blockIds.size
+			val blocks =
+				blockIds.mapIndexed { index, id ->
+					when (index) {
+						leadAt -> BlockOccupancyReading(id, TrackFacility.State.OCCUPIED, queuedTrainId)
+						leadAhead -> BlockOccupancyReading(id, TrackFacility.State.RESERVED, queuedTrainId)
+						followAt -> BlockOccupancyReading(id, TrackFacility.State.OCCUPIED, secondTrainId)
+						else -> BlockOccupancyReading(id, TrackFacility.State.FREE, null)
+					}
+				}
+			Cycle(
+				snapshot =
+					SimulationSnapshot.EMPTY.copy(
+						simTime = cycle * 2.0,
+						blocks = blocks,
+						trainPositions =
+							listOf(
+								trainAt(queuedTrainId, blockIds[leadAt]),
+								trainAt(secondTrainId, blockIds[followAt])
+							)
+					),
+				// The queue alternates, so the legal train-id set is never constant across cycles —
+				// a model copying an id from an earlier turn is wrong on the next one.
+				queued =
+					if (cycle % 2 == 0) {
+						listOf(QueuedTrainObservation(trainId = thirdTrainId, destinationInOutName = "B"))
+					} else {
+						emptyList()
+					}
+			)
+		}
+	}
+
+	private fun trainAt(
+		trainId: String,
+		sectionName: String
+	) = TrainPositionReading(
+		trainId = trainId,
+		velocity = 0.0,
+		acceleration = 0.0,
+		totalDistance = 0.0,
+		frontSectionName = sectionName
+	)
 
 	/**
 	 * Runs [cycles] real dispatch cycles through the production agent and returns what the tools
@@ -205,27 +341,48 @@ class KoogRealPromptOllamaTest {
 		val recorder = RejectionRecorder()
 		loadShuntingLoopContext().use { context ->
 			val config = OllamaExecutorConfig.forLocalTesting()
+			val blockIds = StationTopologySerializer.describe(context).blocks.map { it.name }
+			val script = midRunCycles(blockIds, cycles)
+			// The ports read whichever cycle the run is currently on, so tool-side validation sees
+			// exactly the state the prompt described for that cycle.
+			var current = script.first()
+			val perceptionPort = mockk<NetworkPerceptionPort> { every { snapshot() } answers { current.snapshot } }
+			val sensorPort = mockk<DispatchLoopSensorPort> { every { getQueuedTrains() } answers { current.queued } }
 			val factory =
 				KoogAgentFactory(
 					toolRegistry = ToolGroupRegistry(),
 					ollamaConfig = config,
 					agentService = RecordingAgentService(DefaultAgentService(OllamaSimpleExecutor(config), config), recorder),
-					perceptionPort = perceptionPort(),
+					perceptionPort = perceptionPort,
 					commandQueue = ActuatorCommandQueue(),
-					dispatchLoopSensorPort = sensorPort(),
+					dispatchLoopSensorPort = sensorPort,
 					sinkHolder = SinkHolder()
-				)
-			val observation =
-				DispatchObservation(
-					snapshot = SimulationSnapshot.EMPTY,
-					unapprovedTrains = listOf(QueuedTrainObservation(trainId = queuedTrainId, destinationInOutName = "B")),
-					innerBlockInputs = emptyList(),
-					outerBlockInputs = emptyList()
 				)
 			runBlocking {
 				withTimeout(testTimeoutMillis) {
 					val agent = factory.createAgent(context)
-					repeat(cycles) { agent.decideAsync(observation) }
+					script.forEach { cycle ->
+						current = cycle
+						// Production tolerates a failed cycle: KoogAgentPlanAdapter catches it,
+						// counts a FallbackReason.EXCEPTION and answers with the rule-based
+						// dispatcher, so the run continues. This harness calls the agent directly,
+						// so it has to tolerate it the same way — otherwise a cycle that exhausts
+						// Koog's 20-iteration cap would fail an assertion about *vocabulary*, which
+						// is not what it measures. The cap is not raised: round 3 established that
+						// its budget is real and AgentBuildContractTest hard-asserts 20.
+						try {
+							agent.decideAsync(
+								DispatchObservation(
+									snapshot = cycle.snapshot,
+									unapprovedTrains = cycle.queued,
+									innerBlockInputs = emptyList(),
+									outerBlockInputs = emptyList()
+								)
+							)
+						} catch (e: Exception) {
+							recorder.failedCycles.add(e::class.simpleName ?: "Exception")
+						}
+					}
 				}
 			}
 		}
@@ -238,8 +395,8 @@ class KoogRealPromptOllamaTest {
 	 * InOuts, leaving the model reaching for block names (86 rejected endpoint calls in one run, 48
 	 * naming the block `k1`).
 	 *
-	 * **Verified non-discriminating**: still green with the Signals list removed, and with the
-	 * Blocks list stripped of its disqualifying label. See the class KDoc — this is a smoke test.
+	 * Round 4 rebuilt the scenario mid-run so this can actually discriminate — see the class KDoc.
+	 * The revert probes and their verdicts are recorded on the PR.
 	 */
 	@Test
 	@Tag("ollama-test")
@@ -280,10 +437,16 @@ class KoogRealPromptOllamaTest {
 	 * else" — tools deleted in SP2c.6 (#869). The live surface is exactly four actuators, and a
 	 * queued train departs only when `approve_train` is called for it.
 	 *
-	 * Asserts only that the model acted at all and that nothing it did was rejected; which of the
-	 * four actuators it reaches for first is an LLM-quality question, not a prompt-correctness one.
-	 * The broadest of the three, and the one most likely to catch a genuine surface break — an
+	 * Asserts only that the model acted at all and that nothing it *named* was invented; which of
+	 * the four actuators it reaches for first is an LLM-quality question, not a prompt-correctness
+	 * one. The broadest of the three, and the one most likely to catch a genuine surface break — an
 	 * argument the tools cannot parse at all shows up here as an `otherRejections` entry.
+	 *
+	 * **Procedural rejections are deliberately not asserted on** (Issue #847 round 4). The mid-run
+	 * scenario puts trains on the network, and a 7B model reliably tries to `approve_train` one that
+	 * is already running — a real id at the wrong moment. That is a sequencing weakness for
+	 * SP2c.11's prompt rebuild (#834) to address, not a vocabulary failure, and folding it into
+	 * these counts would make them fail for a reason they do not claim to measure.
 	 */
 	@Test
 	@Tag("ollama-test")

@@ -16,7 +16,9 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
@@ -24,14 +26,21 @@ import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
+import cz.vutbr.fit.interlockSim.dispatcher.RegistryPartialRouteReleaser
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ConflictHintLatch
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CompositeActionOutcomeSink
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultDispatcherRunRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
@@ -51,6 +60,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
+import java.util.UUID
 
 /**
  * Registry of available simulation examples.
@@ -195,6 +205,31 @@ class ExampleRegistry {
 	}
 
 	/**
+	 * Builds the [RunParameters] recorded for an LLM-arm run from the executor config that run
+	 * actually uses (Issue #847 round 4, R4-5).
+	 *
+	 * Two fields have no live counterpart and are recorded as [PARAM_NOT_APPLICABLE] rather than
+	 * guessed: `historyN` and `maxActionsPerTick` are `DispatchTickLoop`/`ActionValidator` settings,
+	 * and neither of those is constructed in production — the live path is `AgentLoopDriver`, which
+	 * has no history ring buffer and no per-tick action cap. Recording a plausible-looking number
+	 * here would put a parameter into #847's sweep grid that nothing in the run honours, which is
+	 * worse than recording that it does not apply.
+	 *
+	 * `tickPeriodMs` is likewise not a configured wall-clock period on this path: ticks are
+	 * signal-driven from `ShuntingLoop`, one control step per 2.0 simulated seconds, and the
+	 * wall-clock spacing follows from `ThrottlingSimulationController`'s speed multiplier.
+	 */
+	private fun llmRunParameters(config: OllamaExecutorConfig): RunParameters =
+		RunParameters(
+			tickPeriodMs = PARAM_NOT_APPLICABLE.toLong(),
+			historyN = PARAM_NOT_APPLICABLE,
+			temperature = config.temperature.toDouble(),
+			maxActionsPerTick = PARAM_NOT_APPLICABLE,
+			model = config.modelName,
+			seed = null
+		)
+
+	/**
 	 * Creates a headless shunting loop AI simulation example for console mode (Issue #873).
 	 *
 	 * Identical to [createShuntingLoopAIGuiExample] in planner construction but wires the
@@ -219,6 +254,7 @@ class ExampleRegistry {
 	 *
 	 * @since Issue #873 (SP2c.26 follow-up I2 — headless pacing controller)
 	 */
+
 	private fun createShuntingLoopAIExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
@@ -259,6 +295,19 @@ class ExampleRegistry {
 				// Register in scope so callers outside this factory can retrieve it after the run
 				// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
 				context.scope.declare(aiPlanner)
+				// Issue #847 round 4 (R4-5): DispatcherAgentModule binds the recorder with
+				// arm = RULE_BASED and model = "" for EVERY context, with a comment saying LLM arms
+				// would override it — nothing ever did. Left as-is, every LLM run would be written to
+				// dispatcher-runs/rule_based/ under an empty model name, silently merging the two arms
+				// whose comparison is the whole point of A4. Override with what this example actually
+				// runs, so the per-run JSON identifies its own arm and parameters.
+				context.scope.declare<DispatcherRunRecorder>(
+					DefaultDispatcherRunRecorder(
+						runId = UUID.randomUUID().toString(),
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						params = llmRunParameters(context.scope.get<OllamaExecutorConfig>())
+					)
+				)
 				val pacingController =
 					ThrottlingSimulationController(
 						initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
@@ -496,6 +545,17 @@ class ExampleRegistry {
 		// SP2c.20 follow-up (#843): scoped ActionOutcomeAggregator so per-action attribution
 		// (author, phase, ApplyFailureCode) reaches a real consumer in production, not just tests.
 		val actionOutcomeAggregator = context.scope.getOrNull<ActionOutcomeAggregator>()
+		// Issue #847 round 4 (R4-5): the applier accepts exactly one ActionOutcomeSink and production
+		// had already spent it on the aggregator, so DispatcherRunRecorder.onActionOutcome — which
+		// fills emittedByActionType, rejectionsByCode, applyFailuresByCode and actionsByAuthor in the
+		// per-run JSON — had no production caller at all, and every recorded snapshot was zeroes.
+		// Fan out to both instead of choosing.
+		val runRecorder = context.scope.getOrNull<DispatcherRunRecorder>()
+		val actionOutcomeSink =
+			CompositeActionOutcomeSink.of(
+				actionOutcomeAggregator,
+				runRecorder?.let { it::onActionOutcome }
+			)
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
 		// NoOpSimulationController (rule-based console runs) has no speed cap, so an async planner
 		// cannot honour the 2x real-time limit there. The AI console run passes
@@ -521,7 +581,7 @@ class ExampleRegistry {
 				semiAutoApprover = semiAutoGateway?.let { gw -> gw::approve },
 				correlationMap = correlationMap,
 				outcomeSink = outcomeSink,
-				actionOutcomeSink = actionOutcomeAggregator
+				actionOutcomeSink = actionOutcomeSink
 			)
 		// Evict the duplicate-suppression guard's entries for a train once any of its blocks
 		// releases — see DispatchDecisionApplier.evictReservationsFor for why this must not
@@ -548,7 +608,11 @@ class ExampleRegistry {
 		// Thread.sleep(1) wall-clock poll. AgentLoopDriver.runCycle() blocks on it instead
 		// of polling, eliminating the pacing race that could stall admission entirely
 		// under NoOpSimulationController (headless runs) — see SnapshotSignal's KDoc.
+		// Declared in scope (Issue #847 round 4, R4-1) so the end-of-run summary can report how many
+		// control ticks were coalesced away while the driver was busy inside an inference. That
+		// number is the whole of round 3's unreconciled "301 control ticks vs 20-29 planner cycles".
 		val driverSignal = DefaultSnapshotSignal()
+		context.scope.declare(driverSignal)
 
 		val driver =
 			AgentLoopDriver(
@@ -558,7 +622,13 @@ class ExampleRegistry {
 				controller = controller,
 				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation),
 				snapshotSignal = driverSignal,
-				plannerTickSource = plannerTickSource
+				plannerTickSource = plannerTickSource,
+				// Issue #847 round 4 (R4-5): DispatcherRunRecorder.onTick fills totalTicks and
+				// ticksByOutcome — every tick-shaped field of the per-run JSON, and the one the
+				// snapshot's own `ticksByOutcome.values.sum() == totalTicks` invariant is written
+				// against. It previously had no production caller, so a recorded run reported zero
+				// ticks no matter how long it ran.
+				onTickRecord = runRecorder?.let { it::onTick }
 			)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
@@ -580,7 +650,16 @@ class ExampleRegistry {
 			OrphanReservationSweeper(
 				perceptionPort = perceptionPort,
 				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation),
-				actuatorPort = actuatorPort
+				actuatorPort = actuatorPort,
+				// Issue #847 round 4 (R4-3): reclaim the case round 3 measured most often and could
+				// never release — a train stopped ON a block while holding the next one RESERVED and
+				// empty ahead of it. releaseRoute cannot do it (its finally drops the occupied block
+				// too), so the tail is released block by block from the public reservation API.
+				partialReleaser =
+					RegistryPartialRouteReleaser(
+						registry = context.scope.get<PathReservationRegistry>(),
+						pathReservationService = context.getRoutingServices().getPathReservationService()
+					)
 			)
 		context.scope.declare(orphanSweeper)
 
@@ -592,11 +671,21 @@ class ExampleRegistry {
 				// has had a single tick to be travelled.
 				orphanSweeper.sweep()
 			}
-		loop.agentDriverAction = {
-			while (loop.isSimActive()) {
-				driver.runCycle()
-			}
-		}
+		// Issue #847 round 4 (R4-2): the driver action used to be a bare
+		// `while (loop.isSimActive()) { driver.runCycle() }`. platformStartDaemonThread runs it as
+		// `Thread { runBlocking { action() } }` with no uncaught-exception handler, so a single
+		// escaped exception killed the dispatcher silently while the kernel — which knows nothing
+		// about this thread — ticked on to the requested end time and the run still exited 0. Round
+		// 3's run 1 went quiet after simTime=216s for exactly this reason. AgentDriverLoop counts and
+		// logs each failure, survives transient ones, and gives up loudly on a persistent one.
+		// Declared in scope so the end-of-run summary reports its counters.
+		val driverLoop =
+			AgentDriverLoop(
+				isActive = loop::isSimActive,
+				runCycle = driver::runCycle
+			)
+		context.scope.declare(driverLoop)
+		loop.agentDriverAction = { driverLoop.run() }
 	}
 
 	/**
@@ -723,5 +812,17 @@ class ExampleRegistry {
 				context.setMainProcess(process)
 				context
 			}
+	}
+
+	companion object {
+		/**
+		 * Sentinel for a [RunParameters] field the live wiring genuinely has no value for.
+		 *
+		 * Negative so it can never be mistaken for a real setting by #847's parameter grid or
+		 * #846's aggregator, both of which group runs by these values.
+		 *
+		 * @since Issue #847 round 4 (PR #891)
+		 */
+		private const val PARAM_NOT_APPLICABLE: Int = -1
 	}
 }

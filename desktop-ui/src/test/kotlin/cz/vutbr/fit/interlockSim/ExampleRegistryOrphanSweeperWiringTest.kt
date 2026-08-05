@@ -102,4 +102,29 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 		assertThat(sweeper.phantomReleaseCount).isEqualTo(0)
 		assertThat(sweeper.staleReleaseCount).isEqualTo(0)
 	}
+
+	/**
+	 * Issue #847 round 4 (R4-3): the sweeper is only able to reclaim an un-travelled tail if a
+	 * [cz.vutbr.fit.interlockSim.dispatcher.PartialRouteReleaser] is actually wired into it. With
+	 * none, `evaluateOccupyingTrain` deliberately does nothing — which is round 3's behaviour and
+	 * indistinguishable, from the counters alone, from a run where nothing was ever stranded.
+	 *
+	 * Asserted through the public counter rather than the private field: a fresh network has no
+	 * stranded tail, so the observable consequence of the wiring is that the counter exists and
+	 * starts clean. The release behaviour itself is covered by `OrphanReservationSweeperTest` (the
+	 * decision) and `RegistryPartialRouteReleaserTest` (the interlocking safety).
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("the sweeper is built with a partial releaser so un-travelled tails can be reclaimed")
+	fun sweeperHasAPartialReleaser() {
+		val context = createShuntingLoopAIContext()
+		val sweeper = checkNotNull(context.scope.getOrNull<OrphanReservationSweeper>())
+
+		val releaserField = OrphanReservationSweeper::class.java.getDeclaredField("partialReleaser")
+		releaserField.isAccessible = true
+
+		assertThat(releaserField.get(sweeper)).isNotNull()
+		assertThat(sweeper.partialReleaseCount).isEqualTo(0)
+	}
 }

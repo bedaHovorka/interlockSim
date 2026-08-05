@@ -21,7 +21,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
-import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.TextReporter
@@ -167,16 +166,32 @@ class Main {
 			// default to NoOpSimulationController and the declared controller would never reach
 			// the kDisco kernel loop it was built to pace.
 			val controller = context.scope.getOrNull<SimulationController>() ?: NoOpSimulationController
+			var outcome = RunOutcome.NOT_STARTED
 			context.use {
 				it.run(controller)
 				reporter.printSummary()
-				// Issue #847 round 3: report what the orphan-reservation sweeper reclaimed, so its
-				// effect on a run is measurable rather than inferred from scattered WARN lines.
-				// Read inside `use` — the scope is gone once the context closes. Absent for
-				// examples that wire no dispatcher agent.
-				it.scope.getOrNull<OrphanReservationSweeper>()?.logSummary()
+				outcome = classifyRun(simTimeTracker.lastSimTime, requestedEndTime)
+				// Issue #847 rounds 3 and 4: report what the dispatcher actually did — routes the
+				// orphan sweeper reclaimed, the planner's final cycle counts, and the
+				// control-tick-to-decision chain. Read inside `use`: the scope is gone once the
+				// context closes. Examples that wire no dispatcher agent report nothing.
+				//
+				// Round 4 (R4-2): logFinalSummary() previously had exactly one caller, the GUI
+				// Frame, so a headless run emitted only the modulo-10 periodic lines — two per run
+				// at the observed cycle counts, and none at the end. #847's sweep is headless by
+				// definition, so every per-run number it needs has to be produced here.
+				DispatcherRunSummaries.log(it.scope)
+				// Round 4 (R4-5): persist the run as JSON so SP2c.23's aggregator (#846) has a
+				// producer. SP2c.22 (#845) deferred the headless finish() to "the sweep driver",
+				// but that driver is #847 — the task blocked on this pipeline producing anything —
+				// so build/reports/dispatcher-runs/ was never created by any run at all.
+				//
+				// TERMINATED_EARLY maps to TIMEOUT_ABORT: a run that stopped short of its requested
+				// horizon is not a natural completion, and #846's pass criterion is
+				// `completedNaturally && !terminalFallbackEngaged && c7Clean`.
+				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause())
 			} // context closed after simulation
-			classifyRun(simTimeTracker.lastSimTime, requestedEndTime)
+			outcome
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Example context creation failed" }
 			RunOutcome.NOT_STARTED

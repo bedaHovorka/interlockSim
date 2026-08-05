@@ -168,4 +168,42 @@ class SnapshotSignalTest {
 			executor.shutdownNow()
 		}
 	}
+
+	/**
+	 * Issue #847 round 4 (R4-1): make the coalescing loss measurable.
+	 *
+	 * Round 3 reported ~301 control ticks against 20-29 planner cycles per run and could not
+	 * reconcile them. The gap is this class's at-most-one-pending-permit rule, which is correct and
+	 * deliberate — but while the driver is blocked in a 10-25 s inference, every tick that elapses
+	 * silently overwrites the previous permit and vanishes without a trace.
+	 *
+	 * Counting the drained permits turns "I could not reconcile the counters" into a number the
+	 * end-of-run summary can print, which is what #847's sweep needs to judge decision rate.
+	 */
+	@Test
+	@DisplayName("signals dropped by coalescing are counted so the tick-to-cycle gap is measurable")
+	fun coalescedSignalsAreCounted() {
+		val signal = DefaultSnapshotSignal()
+
+		// Four ticks elapse while the driver is busy; only the last one survives as a permit.
+		repeat(4) { signal.signal() }
+
+		assertThat(signal.signalCount, "signalCount").isEqualTo(4L)
+		assertThat(signal.coalescedCount, "coalescedCount").isEqualTo(3L)
+		assertThat(signal.await(), "the surviving permit still wakes the driver").isTrue()
+	}
+
+	@Test
+	@DisplayName("a signal consumed before the next one drops nothing")
+	fun consumedSignalsAreNotCountedAsCoalesced() {
+		val signal = DefaultSnapshotSignal()
+
+		repeat(3) {
+			signal.signal()
+			signal.await()
+		}
+
+		assertThat(signal.signalCount, "signalCount").isEqualTo(3L)
+		assertThat(signal.coalescedCount, "coalescedCount").isEqualTo(0L)
+	}
 }

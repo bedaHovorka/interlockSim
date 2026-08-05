@@ -11,6 +11,9 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
@@ -57,6 +60,8 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("OrphanReservationSweeper reclaims routes nothing else can release")
 class OrphanReservationSweeperTest {
+	private val train = "Train #1"
+
 	/**
 	 * `releaseRoute` returns `true` when it actually released something. The sweeper only calls it
 	 * for a train the snapshot shows holding blocks, so the real port returns `true` there; a
@@ -91,7 +96,8 @@ class OrphanReservationSweeperTest {
 	 */
 	private fun sweepAll(
 		staleAfterSimSeconds: Double = 60.0,
-		ticks: List<Tick>
+		ticks: List<Tick>,
+		partialReleaser: PartialRouteReleaser? = null
 	): OrphanReservationSweeper {
 		val perceptionPort = mockk<NetworkPerceptionPort>()
 		val sensorPort = mockk<DispatchLoopSensorPort>()
@@ -100,7 +106,8 @@ class OrphanReservationSweeperTest {
 				perceptionPort = perceptionPort,
 				dispatchLoopSensorPort = sensorPort,
 				actuatorPort = actuatorPort,
-				staleAfterSimSeconds = staleAfterSimSeconds
+				staleAfterSimSeconds = staleAfterSimSeconds,
+				partialReleaser = partialReleaser
 			)
 		for (tick in ticks) {
 			every { perceptionPort.snapshot() } returns
@@ -363,5 +370,180 @@ class OrphanReservationSweeperTest {
 		verify(exactly = 1) { actuatorPort.releaseRoute("Train #1") }
 		verify(exactly = 0) { actuatorPort.releaseRoute("Train #2") }
 		assertThat(sweeper.staleReleaseCount).isEqualTo(1)
+	}
+
+	// ── Partial release of an un-travelled tail (Issue #847 round 4, R4-3) ────────────────────
+
+	/**
+	 * Records what the sweeper asked to be partially released, without touching real track objects.
+	 * The sweeper's job is to decide *which* blocks qualify and *when*; whether the release itself
+	 * is interlocking-safe is [cz.vutbr.fit.interlockSim.dispatcher.RegistryPartialRouteReleaser]'s
+	 * concern and is covered by its own test against a real reserved path.
+	 */
+	private class RecordingPartialReleaser(
+		private val releaseResult: (List<String>) -> List<String> = { it }
+	) : PartialRouteReleaser {
+		val calls = mutableListOf<Pair<String, List<String>>>()
+
+		override fun releaseUntravelledTail(
+			trainId: String,
+			blockIds: List<String>
+		): List<String> {
+			calls += trainId to blockIds
+			return releaseResult(blockIds)
+		}
+	}
+
+	/**
+	 * The case round 3 measured most often and could not reclaim: a train stopped **on** a block it
+	 * occupies while holding the next block RESERVED and empty ahead of it. Round 1 of the run ended
+	 * with `Train #1` occupying `kB` and holding `kA`; 301 sweeps reclaimed nothing, because any
+	 * occupied block aborts the whole-route path — and it must, since `releasePath` ends in
+	 * `registry.unregister(trainId)`, which would drop the block the train is standing on.
+	 *
+	 * Only the un-travelled tail may go.
+	 */
+	@Test
+	@DisplayName("a stopped train's un-travelled tail is released while the block it stands on is kept")
+	fun untravelledTailIsReleasedButOccupiedBlockIsKept() {
+		val releaser = RecordingPartialReleaser()
+		val held = listOf(occupied("kB", train), reserved("kA", train))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(simTime = 0.0, blocks = held, activeTrains = listOf(train)),
+						Tick(simTime = 70.0, blocks = held, activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").hasSize(1)
+		assertThat(releaser.calls.single().first, "train").isEqualTo(train)
+		assertThat(releaser.calls.single().second, "blocks offered for release").containsExactly("kA")
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(1)
+		// The whole-route paths must not have fired: one would have dropped the occupied block.
+		assertThat(sweeper.staleReleaseCount, "staleReleaseCount").isEqualTo(0)
+		assertThat(sweeper.phantomReleaseCount, "phantomReleaseCount").isEqualTo(0)
+	}
+
+	@Test
+	@DisplayName("a tail held for less than the staleness threshold is left alone")
+	fun freshTailIsNotReleased() {
+		val releaser = RecordingPartialReleaser()
+		val held = listOf(occupied("kB", train), reserved("kA", train))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(simTime = 0.0, blocks = held, activeTrains = listOf(train)),
+						Tick(simTime = 30.0, blocks = held, activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").isEmpty()
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
+	}
+
+	/**
+	 * A train that is moving through its route re-enters blocks and changes which ones it holds.
+	 * Every change restarts the clock, so a merely slow train is never mistaken for a stalled one.
+	 */
+	@Test
+	@DisplayName("a train that advances into its tail restarts the clock instead of being swept")
+	fun advancingTrainRestartsTheClock() {
+		val releaser = RecordingPartialReleaser()
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(0.0, listOf(occupied("kB", train), reserved("kA", train)), activeTrains = listOf(train)),
+						// Train moved up: kA is now the occupied one, k1 is the new tail.
+						Tick(50.0, listOf(occupied("kA", train), reserved("k1", train)), activeTrains = listOf(train)),
+						Tick(80.0, listOf(occupied("kA", train), reserved("k1", train)), activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").isEmpty()
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
+	}
+
+	@Test
+	@DisplayName("a train holding only the block it occupies has no tail to release")
+	fun noTailMeansNoRelease() {
+		val releaser = RecordingPartialReleaser()
+		val held = listOf(occupied("kB", train))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(0.0, held, activeTrains = listOf(train)),
+						Tick(90.0, held, activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").isEmpty()
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
+	}
+
+	/**
+	 * Round 3 shipped without a partial releaser and must keep working exactly as it did: with none
+	 * wired, an occupying train is simply skipped, never whole-route released.
+	 */
+	@Test
+	@DisplayName("with no partial releaser wired, an occupying train is skipped as before")
+	fun withoutReleaserOccupyingTrainIsSkipped() {
+		val held = listOf(occupied("kB", train), reserved("kA", train))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(0.0, held, activeTrains = listOf(train)),
+						Tick(90.0, held, activeTrains = listOf(train))
+					)
+			)
+
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
+		assertThat(sweeper.staleReleaseCount, "staleReleaseCount").isEqualTo(0)
+		verify(exactly = 0) { actuatorPort.releaseRoute(any()) }
+	}
+
+	/**
+	 * The releaser is the authority on what could actually be released — it refuses anything whose
+	 * interlocking state cannot be made safe. The counter must reflect blocks actually reclaimed,
+	 * not blocks offered, or the end-of-run summary would overstate what the sweeper achieved.
+	 */
+	@Test
+	@DisplayName("a release the releaser refuses is not counted")
+	fun refusedReleaseIsNotCounted() {
+		val releaser = RecordingPartialReleaser(releaseResult = { emptyList() })
+		val held = listOf(occupied("kB", train), reserved("kA", train))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(0.0, held, activeTrains = listOf(train)),
+						Tick(90.0, held, activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").hasSize(1)
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
 	}
 }

@@ -12,9 +12,14 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaModelPrewarmer
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase
+import cz.vutbr.fit.interlockSim.dispatcher.planner.AuthoredAction
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
@@ -62,7 +67,28 @@ class KoogAgentFactory(
 	private val perceptionPort: NetworkPerceptionPort,
 	private val commandQueue: ActuatorCommandQueue,
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort,
-	private val sinkHolder: SinkHolder
+	private val sinkHolder: SinkHolder,
+	/**
+	 * Optional per-run recorder receiving every coded in-turn tool rejection.
+	 *
+	 * Issue #847 round 4: the live path rejects arguments at the tool boundary and nowhere else —
+	 * `ActionValidator` is reached only from the test-only `DispatchTickLoop` — so without this the
+	 * per-run JSON's `rejectionsByCode` was structurally always empty and rounds 2 and 3 had to
+	 * count rejected calls by grepping the log.
+	 *
+	 * Resolved **lazily, per rejection** rather than captured at construction. `ExampleRegistry`
+	 * overrides the scoped recorder with the correct arm *after* it has already resolved this
+	 * factory (it needs the factory to build the planner first), so a field captured in the
+	 * constructor would hold the module's default rule-based recorder — a different instance from
+	 * the one the run actually persists, and rejections would be counted into an object nobody ever
+	 * writes. A provider makes the wiring order irrelevant.
+	 *
+	 * Returns `null` for agents built outside a run (tests, tooling); the tool surface is unaffected
+	 * either way.
+	 *
+	 * @since Issue #847 round 4 (PR #891)
+	 */
+	private val runRecorderProvider: () -> DispatcherRunRecorder? = { null }
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -166,9 +192,14 @@ class KoogAgentFactory(
 				validEndpointNames,
 				sinkHolder,
 				perceptionPort,
-				dispatchLoopSensorPort
+				dispatchLoopSensorPort,
+				topology.blocks.map { it.name }.toSet()
 			)
+		// Assert the surface on the REAL tools, before decoration — the decorator is transparent
+		// (it forwards name/description/parameters) but asserting first keeps the four-tool contract
+		// checked against what the registry actually built.
 		ActuatorToolSurface.assertExactly(tools)
+		val instrumentedTools = tools.map { tool -> RejectionRecordingTool(tool, ::recordRejection) }
 
 		// SP2b.8 (Issue #695): serialize static topology into the system prompt once.
 		val topologyPrompt = StationTopologySerializer.toPromptText(topology)
@@ -177,11 +208,42 @@ class KoogAgentFactory(
 		val agent =
 			agentService.createDispatchAgent(
 				modelName = ollamaConfig.modelName,
-				tools = tools,
+				tools = instrumentedTools,
 				systemPrompt = systemPrompt
 			)
 
-		logger.debug { "KoogAgentFactory: created agent with ${tools.size} tools (SP2c.6 4-tool surface)" }
+		logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }
 		return agent
+	}
+
+	/**
+	 * Records one coded in-turn tool rejection on the per-run recorder (Issue #847 round 4).
+	 *
+	 * Phase is [ActionPhase.REJECTED_BY_VALIDATOR] — the action never reached the applier, so it is
+	 * a validator-stage rejection in every sense the snapshot distinguishes.
+	 *
+	 * `tickIndex` is `0`, deliberately **not** `-1`: the recorder treats `-1` as "the correlation
+	 * map had no entry" and counts it in `unattributedApplies`, which is a statement about applied
+	 * actions. A rejected call was never applied and never correlated, so borrowing that sentinel
+	 * would corrupt an unrelated metric.
+	 */
+	private fun recordRejection(
+		toolName: String,
+		code: RejectionCode
+	) {
+		runRecorderProvider()?.onActionOutcome(
+			ActionOutcome(
+				phase = ActionPhase.REJECTED_BY_VALIDATOR,
+				rejection = code,
+				applyFailure = null,
+				authored =
+					AuthoredAction(
+						author = ActionAuthor.LLM,
+						reason = "tool_rejected",
+						decisionKind = toolName,
+						tickIndex = 0L
+					)
+			)
+		)
 	}
 }

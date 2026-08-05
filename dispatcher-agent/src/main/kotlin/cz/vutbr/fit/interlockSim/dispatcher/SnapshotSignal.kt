@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Sim-to-driver pacing signal: wakes [AgentLoopDriver] exactly once per simulation
@@ -142,8 +143,34 @@ class DefaultSnapshotSignal(
 ) : SnapshotSignal {
 	private val semaphore = Semaphore(0)
 
+	private val signals = AtomicLong(0L)
+	private val coalesced = AtomicLong(0L)
+
+	/**
+	 * Total [signal] calls — one per control tick in the production wiring.
+	 *
+	 * @since Issue #847 round 4 (R4-1 — making the tick-to-cycle gap measurable)
+	 */
+	val signalCount: Long get() = signals.get()
+
+	/**
+	 * Signals discarded by the at-most-one-pending rule: ticks that fired while the driver was
+	 * still busy with an earlier cycle and were overwritten before it could wake.
+	 *
+	 * This is the whole of the "301 control ticks but only 20-29 planner cycles" gap that round 3
+	 * reported and could not reconcile. The coalescing itself is correct — a dispatcher that
+	 * recomputes from scratch each cycle gains nothing from a backlog of stale wake-ups — but it
+	 * used to be invisible, so the decision rate looked like a defect rather than a consequence of
+	 * inference latency. `signalCount - coalescedCount` is the number of ticks that actually
+	 * reached the driver.
+	 *
+	 * @since Issue #847 round 4 (R4-1)
+	 */
+	val coalescedCount: Long get() = coalesced.get()
+
 	override fun signal() {
-		semaphore.drainPermits()
+		signals.incrementAndGet()
+		coalesced.addAndGet(semaphore.drainPermits().toLong())
 		semaphore.release()
 	}
 

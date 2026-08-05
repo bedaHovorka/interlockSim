@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -119,5 +120,20 @@ class RunCompletionCheckTest {
 		assertThat(RunOutcome.COMPLETED.exitCode).isEqualTo(0)
 		assertThat(RunOutcome.TERMINATED_EARLY.exitCode).isEqualTo(1)
 		assertThat(RunOutcome.NOT_STARTED.exitCode).isEqualTo(2)
+	}
+
+	/**
+	 * Issue #847 round 4 (R4-5): the persisted run JSON records a [RunEndCause], and #846's
+	 * aggregator passes a run only when `completedNaturally` — which it derives from that cause. A
+	 * deadlocked run mapped to `NATURAL_COMPLETION` would be counted as a **passing** data point,
+	 * which is precisely the measurement-validity failure round 3's exit-code work set out to
+	 * prevent, reintroduced one layer up.
+	 */
+	@Test
+	@DisplayName("only a completed run maps to NATURAL_COMPLETION")
+	fun outcomeMapsToRunEndCause() {
+		assertThat(RunOutcome.COMPLETED.toRunEndCause()).isEqualTo(RunEndCause.NATURAL_COMPLETION)
+		assertThat(RunOutcome.TERMINATED_EARLY.toRunEndCause()).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(RunOutcome.NOT_STARTED.toRunEndCause()).isEqualTo(RunEndCause.CRASH)
 	}
 }

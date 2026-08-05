@@ -368,4 +368,85 @@ class KoogAgentPlanAdapterTest {
 		assertThat(recorded).hasSize(1)
 		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
 	}
+
+	/**
+	 * Issue #847 round 4 (R4-2): agent creation used to sit **outside** `plan()`'s `try`, so a
+	 * failure inside [KoogAgentFactory.createAgent] — which runs `OllamaModelPrewarmer.warmUp`, i.e.
+	 * real network I/O — escaped `plan()` entirely.
+	 *
+	 * That mattered far more than a lost cycle: the exception propagated out of
+	 * `AgentLoopDriver.runCycle()` into a bare `while (isSimActive())` loop running on a daemon
+	 * thread with no uncaught-exception handler, killing the dispatcher for the rest of the run
+	 * while the simulation ticked on to its requested end time and still exited 0.
+	 *
+	 * A creation failure must behave like every other LLM failure: counted as a fallback, reported
+	 * to both listeners, and answered with rule-based decisions.
+	 */
+	@Test
+	fun `agent creation failure falls back to rule-based instead of escaping plan`() {
+		val agentFactory = mockk<KoogAgentFactory>()
+		coEvery { agentFactory.createAgent(any()) } throws IllegalStateException("Ollama unreachable")
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val planAdapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				Duration.ofSeconds(30),
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+		val fallbackReasons = mutableListOf<FallbackReason>()
+		planAdapter.cycleListener =
+			object : PlannerCycleListener {
+				override fun onLlmSuccess(simTime: Double) = Unit
+
+				override fun onFallback(
+					reason: FallbackReason,
+					simTime: Double
+				) {
+					fallbackReasons.add(reason)
+				}
+			}
+		val recorded = mutableListOf<TickRecord>()
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(result, "decisions returned").isEqualTo(fallbackDecisions)
+		assertThat(fallbackReasons, "fallback reasons recorded").containsExactly(FallbackReason.EXCEPTION)
+		assertThat(recorded, "tick records").hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+	}
+
+	/**
+	 * A creation failure must not poison the adapter: the next cycle retries. Without this, one
+	 * transient Ollama hiccup at startup would demote a whole 600 s measurement run to rule-based.
+	 */
+	@Test
+	fun `a later cycle retries agent creation after an earlier failure`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val agentFactory = mockk<KoogAgentFactory>()
+		coEvery { agentFactory.createAgent(any()) } throws IllegalStateException("transient") andThen koogAgent
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns emptyList()
+		val planAdapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				Duration.ofSeconds(30),
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+
+		val first = runBlocking { planAdapter.plan(observation) }
+		val second = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(first, "first cycle uses the rule-based fallback").isEmpty()
+		assertThat(second, "second cycle reaches the LLM").containsExactly(DispatchDecision.NoAction)
+	}
 }

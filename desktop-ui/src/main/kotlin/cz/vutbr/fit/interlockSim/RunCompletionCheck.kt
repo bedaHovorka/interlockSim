@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim
 
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+
 /**
  * How a headless simulation run ended, and the process exit code that reports it.
  *
@@ -40,6 +42,29 @@ enum class RunOutcome(
 	 */
 	NOT_STARTED(2)
 }
+
+/**
+ * Maps a headless [RunOutcome] onto the [RunEndCause] recorded in the run's persisted JSON.
+ *
+ * #846's aggregator passes a run only when `completedNaturally`, which it derives from this cause.
+ * Mapping a deadlocked run to [RunEndCause.NATURAL_COMPLETION] would therefore score it as a
+ * **passing** data point — the same measurement-validity failure round 3's exit-code work removed,
+ * reintroduced one layer up.
+ *
+ * - [RunOutcome.COMPLETED] → [RunEndCause.NATURAL_COMPLETION]
+ * - [RunOutcome.TERMINATED_EARLY] → [RunEndCause.TIMEOUT_ABORT] — the run stopped short of its
+ *   requested horizon; #847's own design already names this cause for a run it had to cut off.
+ * - [RunOutcome.NOT_STARTED] → [RunEndCause.CRASH] — setup failed, so no simulation ran.
+ *   Unreachable in practice, since nothing is persisted when no context was built.
+ *
+ * @since Issue #847 round 4 (PR #891)
+ */
+fun RunOutcome.toRunEndCause(): RunEndCause =
+	when (this) {
+		RunOutcome.COMPLETED -> RunEndCause.NATURAL_COMPLETION
+		RunOutcome.TERMINATED_EARLY -> RunEndCause.TIMEOUT_ABORT
+		RunOutcome.NOT_STARTED -> RunEndCause.CRASH
+	}
 
 /**
  * Decides whether a headless run actually finished (Issue #847 round 3, PR #891 defect C).

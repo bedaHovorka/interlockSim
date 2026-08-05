@@ -110,7 +110,13 @@ class OrphanReservationSweeper(
 	private val perceptionPort: NetworkPerceptionPort,
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort,
 	private val actuatorPort: NetworkActuatorPort,
-	private val staleAfterSimSeconds: Double = DEFAULT_STALE_AFTER_SIM_SECONDS
+	private val staleAfterSimSeconds: Double = DEFAULT_STALE_AFTER_SIM_SECONDS,
+	/**
+	 * Optional releaser for the un-travelled tail of a route whose train occupies the rest of it
+	 * (Issue #847 round 4, R4-3). `null` restores round 3's behaviour exactly: a train holding any
+	 * occupied block is skipped entirely.
+	 */
+	private val partialReleaser: PartialRouteReleaser? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -137,7 +143,8 @@ class OrphanReservationSweeper(
 	fun summaryLine(): String =
 		"OrphanReservationSweeper: $sweepCount sweeps, " +
 			"${phantomReleaseCount + staleReleaseCount} route(s) reclaimed " +
-			"($phantomReleaseCount phantom-owner, $staleReleaseCount stale)"
+			"($phantomReleaseCount phantom-owner, $staleReleaseCount stale), " +
+			"$partialReleaseCount un-travelled tail(s) reclaimed"
 
 	/** Emits [summaryLine] at INFO. Call once, after the run has ended. */
 	fun logSummary() {
@@ -158,6 +165,17 @@ class OrphanReservationSweeper(
 
 	/** Routes cancelled because they were held un-travelled past [staleAfterSimSeconds]. */
 	var staleReleaseCount: Int = 0
+		private set
+
+	/**
+	 * Un-travelled tails reclaimed from trains that occupy the rest of their route
+	 * (Issue #847 round 4, R4-3) — the case round 3 measured most often and could reclaim never.
+	 *
+	 * Counts tails actually released, not tails offered: [PartialRouteReleaser] may refuse a block
+	 * whose interlocking state it cannot make safe, and a summary that counted attempts would
+	 * overstate what the sweeper achieved.
+	 */
+	var partialReleaseCount: Int = 0
 		private set
 
 	/**
@@ -223,9 +241,11 @@ class OrphanReservationSweeper(
 		blocks: List<BlockOccupancyReading>,
 		simTime: Double
 	) {
-		// Any occupied block means the train is on its route and consuming it.
+		// A train standing on part of its route may still be stranded, holding the rest un-travelled
+		// ahead of it. That case has its own path (Issue #847 round 4, R4-3) — it must never reach
+		// the whole-route release below, which would drop the occupied block too.
 		if (blocks.any { it.state == TrackFacility.State.OCCUPIED }) {
-			holdings.remove(owner)
+			evaluateOccupyingTrain(owner, blocks, simTime)
 			return
 		}
 
@@ -245,6 +265,59 @@ class OrphanReservationSweeper(
 		}
 		if (actuatorPort.releaseRoute(owner)) {
 			staleReleaseCount++
+		}
+		holdings.remove(owner)
+	}
+
+	/**
+	 * Handles a train that occupies part of its route: releases the un-travelled remainder once it
+	 * has stood unchanged past [staleAfterSimSeconds], and leaves the occupied part alone.
+	 *
+	 * With no [partialReleaser] wired this is exactly round 3's behaviour — forget the holding and
+	 * do nothing — because the only alternative available then was a whole-route release that would
+	 * have freed the block the train is standing on.
+	 */
+	private fun evaluateOccupyingTrain(
+		owner: String,
+		blocks: List<BlockOccupancyReading>,
+		simTime: Double
+	) {
+		val releaser = partialReleaser
+		if (releaser == null) {
+			holdings.remove(owner)
+			return
+		}
+
+		// The tail is everything the train holds but is not standing on. RESERVED specifically:
+		// a block in any other state is not a reservation this sweeper may reclaim.
+		val tailIds = blocks.filter { it.state == TrackFacility.State.RESERVED }.map { it.blockId }.sorted()
+		if (tailIds.isEmpty()) {
+			holdings.remove(owner)
+			return
+		}
+
+		val previous = holdings[owner]
+		if (previous == null || previous.blockIds != tailIds) {
+			// First sight, or the train advanced and now holds a different tail — restart the clock
+			// so a merely slow train is never mistaken for a stalled one.
+			holdings[owner] = Holding(tailIds, simTime)
+			return
+		}
+
+		if (simTime - previous.sinceSimTime < staleAfterSimSeconds) return
+
+		logger.warn {
+			"OrphanReservationSweeper: releasing un-travelled tail of '$owner' — held unchanged for " +
+				"${simTime - previous.sinceSimTime}s of simulated time (threshold " +
+				"${staleAfterSimSeconds}s) while the train stands on the rest of its route. " +
+				"Tail: ${tailIds.joinToString(", ")}"
+		}
+		val released = releaser.releaseUntravelledTail(owner, tailIds)
+		if (released.isNotEmpty()) {
+			partialReleaseCount++
+			logger.warn {
+				"OrphanReservationSweeper: reclaimed ${released.joinToString(", ")} from '$owner'"
+			}
 		}
 		holdings.remove(owner)
 	}

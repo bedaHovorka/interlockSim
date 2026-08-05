@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
@@ -80,7 +81,8 @@ class CancelRouteTool(
 
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainId =
-			args.stringParam(TRAIN_ID_PARAM) ?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG)
+			args.stringParam(TRAIN_ID_PARAM)
+				?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG, rejection = RejectionCode.BLANK_ARGUMENT)
 
 		val activeTrainIds =
 			perceptionPort
@@ -97,7 +99,8 @@ class CancelRouteTool(
 				resolveTrainId(trainId, activeTrainIds)
 					?: return ToolResult.Error(
 						"Unknown trainId '$trainId' — active trains are: " +
-							activeTrainIds.sorted().joinToString(", ").ifEmpty { "(none active)" }
+							activeTrainIds.sorted().joinToString(", ").ifEmpty { "(none active)" },
+						rejection = RejectionCode.UNKNOWN_TRAIN
 					)
 			}
 

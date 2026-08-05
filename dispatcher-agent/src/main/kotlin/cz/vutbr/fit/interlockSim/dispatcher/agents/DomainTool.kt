@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
+
 /**
  * Base interface for domain tools exposed to Koog agents (SP1 skeleton, Issue #547).
  *
@@ -143,7 +145,31 @@ sealed interface ToolResult {
 	 */
 	data class Error(
 		val message: String,
-		val cause: Throwable? = null
+		val cause: Throwable? = null,
+		/**
+		 * Machine-readable classification of an in-turn argument rejection, or `null` for a
+		 * failure that is not an argument rejection (a port error, an unavailable sensor).
+		 *
+		 * ## Why (Issue #847 round 4)
+		 *
+		 * Rounds 2 and 3 reported their headline "86 rejected endpoint calls" / "0 rejected"
+		 * figures by grepping the run log. #847's sweep is unattended and writes one JSON per run,
+		 * so it cannot grep — and `DispatcherRunSnapshot.rejectionsByCode`, the field #846's
+		 * aggregator renders its "Failure Modes" table from, was structurally always empty: the
+		 * only `ActionOutcome` constructed in production passes `rejection = null`, and
+		 * `ActionValidator` — the component that produces these codes — is reached only from the
+		 * test-only `DispatchTickLoop`.
+		 *
+		 * The tools already reject these calls and already explain why in prose. Carrying the code
+		 * alongside the prose makes the rate countable without parsing English, and keeps the
+		 * guarantee in a validation layer the model cannot talk around rather than in prompt text
+		 * it can ignore.
+		 *
+		 * [message] remains what the LLM sees; this field never reaches it.
+		 *
+		 * @since Issue #847 round 4 (PR #891)
+		 */
+		val rejection: RejectionCode? = null
 	) : ToolResult
 }
 

@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
@@ -67,6 +68,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   trains for the [trainName] pre-check; `null` skips the pre-check.
  * @param sensorPort Optional dispatch-loop sensor port supplying trains queued for admission for
  *   the [trainName] pre-check; `null` skips the pre-check.
+ * @param blockIds Static Block IDs of this network, used only to classify a rejected endpoint as
+ *   [RejectionCode.ENDPOINT_IS_BLOCK_ID] rather than [RejectionCode.UNKNOWN_ENDPOINT]
+ *   (Issue #847 round 4). Static topology, so it is correct from the first cycle — unlike the live
+ *   snapshot, which carries no blocks until the simulation has captured one. Empty disables only
+ *   the finer classification, never the rejection itself.
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to [SinkHolder] in Issue #829 (SP2c.6);
  *   train-name pre-check added in Issue #847 round 2
@@ -75,7 +81,8 @@ class RequestRouteTool(
 	private val sinkHolder: SinkHolder,
 	private val validEndpointNames: Set<String>,
 	private val perceptionPort: NetworkPerceptionPort? = null,
-	private val sensorPort: DispatchLoopSensorPort? = null
+	private val sensorPort: DispatchLoopSensorPort? = null,
+	private val blockIds: Set<String> = emptySet()
 ) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -128,24 +135,35 @@ class RequestRouteTool(
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainName =
 			args.stringParam("trainName")
-				?: return ToolResult.Error("trainName parameter is required and must be a non-blank string")
+				?: return ToolResult.Error(
+					"trainName parameter is required and must be a non-blank string",
+					rejection = RejectionCode.BLANK_ARGUMENT
+				)
 		val fromEndpointName =
 			args.stringParam("fromEndpointName")
-				?: return ToolResult.Error("fromEndpointName parameter is required and must be a non-blank string")
+				?: return ToolResult.Error(
+					"fromEndpointName parameter is required and must be a non-blank string",
+					rejection = RejectionCode.BLANK_ARGUMENT
+				)
 		val toEndpointName =
 			args.stringParam("toEndpointName")
-				?: return ToolResult.Error("toEndpointName parameter is required and must be a non-blank string")
+				?: return ToolResult.Error(
+					"toEndpointName parameter is required and must be a non-blank string",
+					rejection = RejectionCode.BLANK_ARGUMENT
+				)
 
 		if (fromEndpointName !in validEndpointNames) {
 			return ToolResult.Error(
 				"Unknown fromEndpointName '$fromEndpointName' — valid names are: " +
-					validEndpointNames.sorted().joinToString(", ")
+					validEndpointNames.sorted().joinToString(", "),
+				rejection = classifyBadEndpoint(fromEndpointName)
 			)
 		}
 		if (toEndpointName !in validEndpointNames) {
 			return ToolResult.Error(
 				"Unknown toEndpointName '$toEndpointName' — valid names are: " +
-					validEndpointNames.sorted().joinToString(", ")
+					validEndpointNames.sorted().joinToString(", "),
+				rejection = classifyBadEndpoint(toEndpointName)
 			)
 		}
 		// Emit the canonical id, never the raw argument — see resolveTrainId for why the bare
@@ -156,7 +174,8 @@ class RequestRouteTool(
 					?: return ToolResult.Error(
 						"Unknown trainName '$trainName' — routes can only be requested for a train that is " +
 							"queued or active. Those trains are: " +
-							known.sorted().joinToString(", ").ifEmpty { "(no trains queued or active)" }
+							known.sorted().joinToString(", ").ifEmpty { "(no trains queued or active)" },
+						rejection = RejectionCode.UNKNOWN_TRAIN
 					)
 			} ?: trainName
 
@@ -183,5 +202,33 @@ class RequestRouteTool(
 		val active = perceptionPort.snapshot().trainPositions.map { it.trainId }
 		val queued = sensorPort.getQueuedTrains().map { it.trainId }
 		return (active + queued).toSet()
+	}
+
+	/**
+	 * Classifies a rejected endpoint name: a real Block ID passed where an endpoint was expected, or
+	 * a name that exists nowhere in the network (Issue #847 round 4).
+	 *
+	 * The two say different things and must not be counted together. `vyhybna.xml` names its blocks
+	 * `k1`/`kA`/`kB` and its InOuts `A`/`B`, and one round-2 run produced 48 rejected calls naming
+	 * block `k1` — a model that has read the topology and picked the wrong list from it. A wholly
+	 * invented name is a different failure, addressed by different prompt work. Folding both into
+	 * `UNKNOWN_ENDPOINT` would hide the one this PR's prompt changes actually target.
+	 *
+	 * Falls back to [RejectionCode.UNKNOWN_ENDPOINT] when no perception port is wired: without the
+	 * block list the distinction cannot be drawn, and the weaker classification is honest.
+	 */
+	private fun classifyBadEndpoint(name: String): RejectionCode {
+		if (name in blockIds) return RejectionCode.ENDPOINT_IS_BLOCK_ID
+		// Fallback for callers that supply no static block list: the live snapshot carries the same
+		// ids once the simulation has captured one. Static [blockIds] is preferred because it is
+		// available from the very first cycle, before any capture has happened.
+		val liveBlockIds =
+			perceptionPort
+				?.snapshot()
+				?.blocks
+				?.map { it.blockId }
+				?.toSet()
+				.orEmpty()
+		return if (name in liveBlockIds) RejectionCode.ENDPOINT_IS_BLOCK_ID else RejectionCode.UNKNOWN_ENDPOINT
 	}
 }
