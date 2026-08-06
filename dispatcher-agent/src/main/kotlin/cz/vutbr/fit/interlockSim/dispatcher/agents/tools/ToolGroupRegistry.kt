@@ -58,6 +58,9 @@ class ToolGroupRegistry {
 	 * @param sensorPort Optional dispatch-loop sensor port supplying the **queued** trains, for
 	 *   the same validation in [ApproveTrainTool] and [RequestRouteTool] (Issue #847 round 2);
 	 *   `null` (the default) preserves the prior no-pre-check behavior.
+	 * @param inOutNames Static InOut names, letting [RequestRouteTool] reject an end-to-end route
+	 *   aimed at the wrong end of the station while still allowing Signal-to-Signal section hops.
+	 *   Empty (the default) disables that check.
 	 * @return Four actuator tools. Neither port is an LLM-facing tool — the four-tool actuator
 	 *   surface is unchanged, as [cz.vutbr.fit.interlockSim.dispatcher.agents.ActuatorToolSurface]
 	 *   asserts at agent construction.
@@ -69,12 +72,13 @@ class ToolGroupRegistry {
 		sinkHolder: SinkHolder = SinkHolder(),
 		perceptionPort: NetworkPerceptionPort? = null,
 		sensorPort: DispatchLoopSensorPort? = null,
-		blockIds: Set<String> = emptySet()
+		blockIds: Set<String> = emptySet(),
+		inOutNames: Set<String> = emptySet()
 	): List<DomainTool> {
 		logger.debug { "ToolGroupRegistry.assembleAllTools: assembling 4-tool actuator surface (SP2c.6)" }
 		return listOf(
 			ApproveTrainTool(sinkHolder, sensorPort, perceptionPort),
-			RequestRouteTool(sinkHolder, validEndpointNames, perceptionPort, sensorPort, blockIds),
+			RequestRouteTool(sinkHolder, validEndpointNames, perceptionPort, sensorPort, blockIds, inOutNames),
 			CancelRouteTool(sinkHolder, perceptionPort),
 			NoOpTool(sinkHolder)
 		)

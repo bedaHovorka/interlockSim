@@ -181,7 +181,17 @@ class KoogRealPromptOllamaTest {
 		/** The model named a train that no train on the network bears. */
 		val unknownTrainRejections: MutableList<String> = mutableListOf()
 
-		/** Real names, wrong moment — e.g. approving a train that is already active. */
+		/**
+		 * Real names, wrong moment or wrong direction — e.g. approving a train that is already
+		 * active, or routing one against its timetable.
+		 *
+		 * The direction codes belong here for the same reason
+		 * [RejectionCode.TRAIN_ALREADY_ACTIVE] does: `request_route`'s guards against a route
+		 * aimed at the wrong end of the station, or starting somewhere the train is not, reject
+		 * arguments that are all real names used badly. That is a planning weakness of a 7B model,
+		 * measured by the SP2c A/B metrics, not the prompt-vocabulary failure these tests assert
+		 * on — and folding it in would fail them for a reason they do not claim to measure.
+		 */
 		val proceduralRejections: MutableList<String> = mutableListOf()
 
 		val otherRejections: MutableList<String> = mutableListOf()
@@ -207,7 +217,10 @@ class KoogRealPromptOllamaTest {
 				RejectionCode.UNKNOWN_ENDPOINT, RejectionCode.ENDPOINT_IS_BLOCK_ID ->
 					unknownEndpointRejections.add(message)
 				RejectionCode.UNKNOWN_TRAIN -> unknownTrainRejections.add(message)
-				RejectionCode.TRAIN_ALREADY_ACTIVE, RejectionCode.TRAIN_NOT_QUEUED ->
+				RejectionCode.TRAIN_ALREADY_ACTIVE,
+				RejectionCode.TRAIN_NOT_QUEUED,
+				RejectionCode.TARGET_NOT_TRAIN_DESTINATION,
+				RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION ->
 					proceduralRejections.add(message)
 				else -> otherRejections.add(message)
 			}
@@ -446,7 +459,9 @@ class KoogRealPromptOllamaTest {
 	 * scenario puts trains on the network, and a 7B model reliably tries to `approve_train` one that
 	 * is already running — a real id at the wrong moment. That is a sequencing weakness for
 	 * SP2c.11's prompt rebuild (#834) to address, not a vocabulary failure, and folding it into
-	 * these counts would make them fail for a reason they do not claim to measure.
+	 * these counts would make them fail for a reason they do not claim to measure. The same now
+	 * applies to `request_route`'s direction guards: the model routing a train against its
+	 * timetable is real names used badly, counted as procedural for exactly the same reason.
 	 */
 	@Test
 	@Tag("ollama-test")

@@ -193,7 +193,8 @@ class KoogAgentFactory(
 				sinkHolder,
 				perceptionPort,
 				dispatchLoopSensorPort,
-				topology.blocks.map { it.name }.toSet()
+				topology.blocks.map { it.name }.toSet(),
+				topology.inOuts.toSet()
 			)
 		// Assert the surface on the REAL tools, before decoration — the decorator is transparent
 		// (it forwards name/description/parameters) but asserting first keeps the four-tool contract

@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import io.mockk.every
@@ -61,18 +62,41 @@ import org.junit.jupiter.api.Test
 class ToolRejectionCodeTest {
 	private val endpoints = setOf("A", "B", "doA1", "doB1")
 
+	/** The InOut subset of [endpoints] — `doA1`/`doB1` are signals, not entry/exit points. */
+	private val inOuts = setOf("A", "B")
+
 	private fun perceptionPort(
 		activeTrains: List<String> = emptyList(),
-		blockIds: List<String> = listOf("k1", "kA", "kB")
+		blockIds: List<String> = listOf("k1", "kA", "kB"),
+		activeDestination: String = "",
+		activeSignalAhead: String? = null,
+		activeVelocity: Double = 0.0
 	): NetworkPerceptionPort =
 		mockk<NetworkPerceptionPort>(relaxed = true).also { port ->
 			every { port.snapshot() } returns
 				SimulationSnapshot.EMPTY.copy(
+					trainPerceptions =
+						activeTrains.map {
+							TrainPerceptionReading(
+								trainId = it,
+								signalAheadName = activeSignalAhead,
+								signalAheadAspect = null,
+								distanceToSignalAheadMetres = 0.0,
+								currentSpeedLimitMps = 24.0,
+								velocity = activeVelocity,
+								acceleration = 0.0,
+								totalDistance = 0.0,
+								frontSectionName = null,
+								destinationInOutName = activeDestination,
+								scheduledArrivalTime = 0.0,
+								isDwelling = activeVelocity == 0.0
+							)
+						},
 					trainPositions =
 						activeTrains.map {
 							TrainPositionReading(
 								trainId = it,
-								velocity = 0.0,
+								velocity = activeVelocity,
 								acceleration = 0.0,
 								totalDistance = 0.0,
 								frontSectionName = null
@@ -85,16 +109,34 @@ class ToolRejectionCodeTest {
 				)
 		}
 
-	private fun sensorPort(queued: List<String>): DispatchLoopSensorPort =
+	private fun sensorPort(
+		queued: List<String>,
+		destination: String = "B"
+	): DispatchLoopSensorPort =
 		mockk<DispatchLoopSensorPort>(relaxed = true).also { port ->
 			every { port.getQueuedTrains() } returns
-				queued.map { QueuedTrainObservation(trainId = it, destinationInOutName = "B") }
+				queued.map { QueuedTrainObservation(trainId = it, destinationInOutName = destination) }
 		}
 
 	private fun requestRouteTool(
 		active: List<String> = emptyList(),
-		queued: List<String> = emptyList()
-	) = RequestRouteTool(SinkHolder(), endpoints, perceptionPort(active), sensorPort(queued))
+		queued: List<String> = emptyList(),
+		destination: String = "B",
+		activeDestination: String = "",
+		activeSignalAhead: String? = null,
+		activeVelocity: Double = 0.0
+	) = RequestRouteTool(
+		SinkHolder(),
+		endpoints,
+		perceptionPort(
+			active,
+			activeDestination = activeDestination,
+			activeSignalAhead = activeSignalAhead,
+			activeVelocity = activeVelocity
+		),
+		sensorPort(queued, destination),
+		inOutNames = inOuts
+	)
 
 	private fun errorOf(result: ToolResult): ToolResult.Error {
 		assertThat(result).isInstanceOf(ToolResult.Error::class)
@@ -150,6 +192,179 @@ class ToolRejectionCodeTest {
 			}
 
 		assertThat(errorOf(result).rejection, "rejection code").isEqualTo(RejectionCode.UNKNOWN_TRAIN)
+	}
+
+	/**
+	 * The backwards-route defect, observed live on `exampleGui shuntingLoopAI 333`.
+	 *
+	 * Train #1's timetable is `B → A`; the model asked for `A → B`, and nothing on the live tool
+	 * path checked it. `ActionValidator` has exactly this rule
+	 * ([RejectionCode.TARGET_NOT_TRAIN_DESTINATION]) but is only ever reached from
+	 * `DispatchTickLoop`, which is never constructed in production — so the request went straight
+	 * to `reservePath`, which reserved all seven blocks from the wrong end. The train, standing at
+	 * B, then could not find a free path because **it** owned every block, and only moved once the
+	 * `OrphanReservationSweeper` cancelled its own reservation 60 simulated seconds later.
+	 */
+	@Test
+	@DisplayName("a route to the wrong InOut is TARGET_NOT_TRAIN_DESTINATION")
+	fun backwardsRouteIsRejected() {
+		// Origin deliberately a Signal, not "A": the live call was both errors at once
+		// (from=A, to=B for a train bound for A) and the origin rule fires first, so isolating
+		// the destination rule needs a from-endpoint that is not the destination.
+		val result =
+			runBlocking {
+				requestRouteTool(queued = listOf("Train #1"), destination = "A")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "B"))
+			}
+
+		assertThat(errorOf(result).rejection, "rejection code")
+			.isEqualTo(RejectionCode.TARGET_NOT_TRAIN_DESTINATION)
+	}
+
+	/**
+	 * The bare ordinal is the form the model actually used for Train #1 in the live run
+	 * (`trainName: "1"`), and [RequestRouteTool.resolveTrainId] accepts it. The destination check
+	 * must run against the RESOLVED id, or the very call that exposed the defect still slips past.
+	 */
+	@Test
+	@DisplayName("a backwards route named by bare ordinal is rejected too")
+	fun backwardsRouteByBareOrdinalIsRejected() {
+		val result =
+			runBlocking {
+				requestRouteTool(queued = listOf("Train #1"), destination = "A")
+					.execute(mapOf("trainName" to "1", "fromEndpointName" to "doB1", "toEndpointName" to "B"))
+			}
+
+		assertThat(errorOf(result).rejection, "rejection code")
+			.isEqualTo(RejectionCode.TARGET_NOT_TRAIN_DESTINATION)
+	}
+
+	/**
+	 * The second shape of the same mistake, and the one the model produced live once the
+	 * end-to-end form was rejected: `from=A, to=doA1` for a train running `B → A`. The target is a
+	 * Signal, so the destination check does not apply — but a train still cannot depart from the
+	 * place it is trying to reach.
+	 */
+	@Test
+	@DisplayName("departing FROM the train's destination is ORIGIN_NOT_AT_TRAIN_POSITION")
+	fun departingFromDestinationIsRejected() {
+		val result =
+			runBlocking {
+				requestRouteTool(queued = listOf("Train #1"), destination = "A")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "A", "toEndpointName" to "doA1"))
+			}
+
+		assertThat(errorOf(result).rejection, "rejection code")
+			.isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+	}
+
+	/**
+	 * The case the queued-only first attempt missed. `approve_train` then `request_route` is the
+	 * intended order, so by the time the route is requested the train has already left the queue —
+	 * which is exactly what happened in the live run: `from=A, to=doA1` for a train bound for A was
+	 * GRANTED because the destination lookup found nothing. The destination must therefore also be
+	 * read from the (off-thread-safe) snapshot's active-train list.
+	 */
+	@Test
+	@DisplayName("an already-approved train is checked too, via the snapshot")
+	fun activeTrainDirectionIsChecked() {
+		val result =
+			runBlocking {
+				requestRouteTool(active = listOf("Train #1"), activeDestination = "A")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "A", "toEndpointName" to "doA1"))
+			}
+
+		assertThat(errorOf(result).rejection, "rejection code")
+			.isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+	}
+
+	/**
+	 * The remaining half of the deadlock, seen once the direction was corrected: a correctly
+	 * *directed* route can still be reserved in the wrong *place*. `doA1 → A` was granted for a
+	 * train standing at kB; it holds blocks, releases nobody, and the orphan sweeper reclaims it
+	 * 60 simulated seconds later.
+	 */
+	@Test
+	@DisplayName("a route that does not start at the signal a stopped train waits at is rejected")
+	fun originAwayFromStoppedTrainIsRejected() {
+		val result =
+			runBlocking {
+				requestRouteTool(
+					active = listOf("Train #1"),
+					activeDestination = "A",
+					activeSignalAhead = "doB1",
+					activeVelocity = 0.0
+				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doA1", "toEndpointName" to "A"))
+			}
+
+		assertThat(errorOf(result).rejection, "rejection code")
+			.isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+	}
+
+	@Test
+	@DisplayName("a route starting at the signal the stopped train waits at is accepted")
+	fun originAtStoppedTrainIsAccepted() {
+		val result =
+			runBlocking {
+				requestRouteTool(
+					active = listOf("Train #1"),
+					activeDestination = "A",
+					activeSignalAhead = "doB1",
+					activeVelocity = 0.0
+				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	/**
+	 * A moving train's signal ahead changes under the dispatcher's feet, so the origin rule must
+	 * not apply to it — otherwise a legitimate look-ahead reservation is rejected for having been
+	 * computed one tick ago. Mirrors `ActionValidator` gating its equivalent rule on `HELD`.
+	 */
+	@Test
+	@DisplayName("a moving train's origin is not pinned to its signal ahead")
+	fun movingTrainOriginIsNotChecked() {
+		val result =
+			runBlocking {
+				requestRouteTool(
+					active = listOf("Train #1"),
+					activeDestination = "A",
+					activeSignalAhead = "doB1",
+					activeVelocity = 12.0
+				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doA1", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	/**
+	 * A Signal target is a section hop, not a claim about where the train finishes — the tool's own
+	 * description recommends it over an InOut-to-InOut route. Only InOut targets are checked, so
+	 * this must still pass.
+	 */
+	@Test
+	@DisplayName("a section route to a Signal is not checked against the destination")
+	fun sectionRouteToSignalIsAllowed() {
+		val result =
+			runBlocking {
+				requestRouteTool(queued = listOf("Train #1"), destination = "A")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "B", "toEndpointName" to "doB1"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	@Test
+	@DisplayName("a route to the train's declared destination is accepted")
+	fun correctlyDirectedRouteIsAccepted() {
+		val result =
+			runBlocking {
+				requestRouteTool(queued = listOf("Train #1"), destination = "A")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "B", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
 	}
 
 	@Test
