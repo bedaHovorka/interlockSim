@@ -16,6 +16,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.RouteScope
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ApproveTrainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.CancelRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.NoOpTool
@@ -68,6 +69,33 @@ class ActuatorToolExecuteTest {
 		assertThat(action.trainId).isEqualTo("T1")
 		assertThat(action.fromEndpointName).isEqualTo("zA")
 		assertThat(action.toEndpointName).isEqualTo("doA1")
+	}
+
+	@Test
+	fun `request_route sets scope EndToEnd for an InOut target and Section for a Signal target`() {
+		// No ports => the declared-destination direction check is skipped, so both targets emit and
+		// only the scope differs. inOutNames = {A, B} distinguishes the end-to-end target from the
+		// Signal section hop; validEndpointNames must include every name used.
+		val inOutNames = setOf("A", "B")
+		val valid = setOf("A", "B", "zA", "doA1")
+
+		val endToEndResult =
+			runBlocking {
+				RequestRouteTool(sinkHolder, valid, inOutNames = inOutNames).execute(
+					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "A")
+				)
+			}
+		assertThat(endToEndResult).isInstanceOf<ToolResult.Success>()
+		assertThat((emitted.last() as DispatchAction.RequestRoute).scope).isEqualTo(RouteScope.EndToEnd)
+
+		val sectionResult =
+			runBlocking {
+				RequestRouteTool(sinkHolder, valid, inOutNames = inOutNames).execute(
+					mapOf("trainName" to "T1", "fromEndpointName" to "zA", "toEndpointName" to "doA1")
+				)
+			}
+		assertThat(sectionResult).isInstanceOf<ToolResult.Success>()
+		assertThat((emitted.last() as DispatchAction.RequestRoute).scope).isEqualTo(RouteScope.Section)
 	}
 
 	@Test

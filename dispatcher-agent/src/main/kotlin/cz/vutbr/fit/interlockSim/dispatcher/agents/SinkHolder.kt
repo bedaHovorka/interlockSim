@@ -64,7 +64,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * the agent driver thread that reads it inside tool `execute()`. [emissionCount] and
  * [actionCount] are [AtomicInteger]s for the same cross-thread visibility; only the driver thread
  * mutates them during a cycle, but the planner reads them after the cycle from a potentially
- * different context.
+ * different context. The per-cycle cap in [tryEmit] is enforced with a `compareAndSet` loop on
+ * [actionCount], so the check-then-increment is atomic and the cap holds even if a future change
+ * allows concurrent tool execution.
  *
  * @param initial Initial sink, defaults to [EmittedActionSink.NO_OP].
  * @param maxActionsPerTick Maximum non-NoOp emissions accepted per cycle. Defaults to
@@ -107,26 +109,49 @@ class SinkHolder(
 	 * callers that must emit unconditionally.
 	 */
 	fun emit(action: DispatchAction) {
-		current.emit(action)
-		emissionCount.incrementAndGet()
 		if (action !is DispatchAction.NoOp) {
 			actionCount.incrementAndGet()
 		}
+		emitInternal(action)
+	}
+
+	/**
+	 * Sink delegation + cycle bookkeeping without the [actionCount] increment, so [tryEmit] can
+	 * reserve its cap slot via CAS *before* emitting and then delegate without double-counting.
+	 */
+	private fun emitInternal(action: DispatchAction) {
+		current.emit(action)
+		emissionCount.incrementAndGet()
 		emittedThisCycle.add(action)
 	}
 
 	/**
 	 * Emits [action] unless it would exceed [maxActionsPerTick].
 	 *
+	 * The cap check and the [actionCount] increment are one atomic CAS step: a non-NoOp action
+	 * reserves its slot with `compareAndSet` before delegating, so two concurrent emitters cannot
+	 * both pass the cap. Under the current single-driver-thread model this is uncontended, but the
+	 * holder's fields are atomic/`@Volatile` for cross-thread visibility, so the cap is enforced
+	 * against the same visibility contract rather than relying on a single-writer assumption.
+	 *
 	 * @return `true` if the action was emitted, `false` if the per-cycle cap refused it. A
 	 *   [DispatchAction.NoOp] is always emitted and never counts against the cap.
 	 */
 	fun tryEmit(action: DispatchAction): Boolean {
-		if (action !is DispatchAction.NoOp && actionCount.get() >= maxActionsPerTick) {
-			return false
+		if (action is DispatchAction.NoOp) {
+			emitInternal(action)
+			return true
 		}
-		emit(action)
-		return true
+		while (true) {
+			val currentCount = actionCount.get()
+			if (currentCount >= maxActionsPerTick) {
+				return false
+			}
+			if (actionCount.compareAndSet(currentCount, currentCount + 1)) {
+				emitInternal(action)
+				return true
+			}
+		}
 	}
 
 	/** `true` iff [emit] was called at least once since the last [resetCycleEmissionCount]. */

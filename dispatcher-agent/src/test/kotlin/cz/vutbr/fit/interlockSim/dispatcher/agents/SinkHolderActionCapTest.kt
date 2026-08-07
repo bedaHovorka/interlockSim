@@ -18,6 +18,8 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Unit tests for the per-cycle action cap and emission log added to [SinkHolder] (SP2c.24, #847).
@@ -109,5 +111,39 @@ class SinkHolderActionCapTest {
 		holder.tryEmit(DispatchAction.NoOp)
 
 		assertThat(holder.actedThisCycle()).isTrue()
+	}
+
+	@Test
+	@DisplayName("the cap holds under concurrent tryEmit — check-then-increment is atomic")
+	fun capHoldsUnderConcurrency() {
+		// The holder's fields are atomic/@Volatile for cross-thread visibility; tryEmit enforces the
+		// cap with a CAS loop so that a future change allowing concurrent tool execution cannot let a
+		// (cap+1)-th non-NoOp emission through. Under the single-driver-thread model this is
+		// uncontended, so this test guards the invariant the contract now claims.
+		val cap = 8
+		val holder = SinkHolder(EmittedActionSink { }, maxActionsPerTick = cap)
+		val accepted = AtomicInteger(0)
+		val threads = 32
+		val attemptsPerThread = 200
+		val pool = Executors.newFixedThreadPool(threads)
+		try {
+			val futures =
+				(1..threads).map {
+					pool.submit {
+						repeat(attemptsPerThread) {
+							if (holder.tryEmit(DispatchAction.ApproveTrain("T"))) {
+								accepted.incrementAndGet()
+							}
+						}
+					}
+				}
+			futures.forEach { it.get() }
+		} finally {
+			pool.shutdown()
+		}
+		// Every accepted emission incremented actionCount exactly once via CAS; a refused one did not.
+		// Both must therefore equal the cap exactly — never cap+1.
+		assertThat(accepted.get()).isEqualTo(cap)
+		assertThat(holder.actionsThisCycle()).isEqualTo(cap)
 	}
 }

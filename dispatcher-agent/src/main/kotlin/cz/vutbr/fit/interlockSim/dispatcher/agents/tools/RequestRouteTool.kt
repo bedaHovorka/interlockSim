@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
+import cz.vutbr.fit.interlockSim.dispatcher.RouteScope
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
@@ -249,7 +250,11 @@ class RequestRouteTool(
 			}
 		}
 
-		val action = DispatchAction.RequestRoute(resolvedTrainName, fromEndpointName, toEndpointName)
+		// A Signal target (not an InOut) is a section hop toward the destination, not the
+		// end-to-end route -- mirror RuleBasedEmissionStrategy's scope so ActionValidator, if ever
+		// wired onto the live path, does not reject these as TARGET_NOT_TRAIN_DESTINATION.
+		val scope = if (toEndpointName in inOutNames) RouteScope.EndToEnd else RouteScope.Section
+		val action = DispatchAction.RequestRoute(resolvedTrainName, fromEndpointName, toEndpointName, scope)
 		logger.debug {
 			"RequestRouteTool.execute: emitting action trainName=$resolvedTrainName (raw='$trainName'), " +
 				"from=$fromEndpointName, to=$toEndpointName"
