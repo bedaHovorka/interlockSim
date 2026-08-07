@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -21,6 +20,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.AfterEach
@@ -110,6 +111,18 @@ class SwitchBlindTargetSelectionTest : KoinTestBase() {
 			?.let { simulationContext.toDynamic(it) }
 			?: throw IllegalStateException("Separator '$name' not found in vyhybna.xml")
 
+	/** The single block whose two ends are exactly [a] and [b]. */
+	private fun blockBetween(
+		a: DynamicPathSeparator,
+		b: DynamicPathSeparator
+	): DynamicTrackBlock =
+		simulationContext
+			.getGraph()
+			.values()
+			.filterIsInstance<DynamicTrackBlock>()
+			.firstOrNull { block -> block.ends().toSet() == setOf(a, b) }
+			?: throw IllegalStateException("No block found between $a and $b")
+
 	@AfterEach
 	fun tearDown() {
 		simulationContext.close()
@@ -119,12 +132,19 @@ class SwitchBlindTargetSelectionTest : KoinTestBase() {
 	@Timeout(30, unit = TimeUnit.SECONDS)
 	@DisplayName("occupied k1 does not steer the target to the free k2 — doB1 is falsely 'available'")
 	fun occupiedK1IsFalselyAvailableSoFreeK2IsNeverSelected() {
-		// Occupy ONLY the k1 block (doA1 → doB1, the single 100-unit track). This leaves the
-		// shared zA→vA stub, the entire k2 leg (doA2/k2/doB2) and the doB1↔vB connector FREE —
-		// exactly the state in which the opposing train #11 sits in k1 at the gridlock.
-		val blocker = service.reservePath("blocker_k1", semaphoreDoA1, semaphoreDoB1)
-		assertThat(blocker, name = "occupy k1")
-			.isInstanceOf<PathReservationService.ReservationResult.Success>()
+		// Occupy ONLY the k1 block (doA1 → doB1, the single 100-unit track) directly at the
+		// block level, bypassing reservePath. doA1 and doB1 both face OUTWARD from k1 (doA1
+		// governs entry into the vA-doA1 block for B->A travel; doB1 governs entry into the
+		// doB1-vB connector for A->B travel -- neither governs entry INTO k1 itself), so no
+		// reservePath(start, target) pair spanning exactly k1 has a legitimately-facing START:
+		// Issue #893 task A1 (G4) correctly rejects a rear-facing one, in either direction. This
+		// leaves the shared zA→vA stub, the entire k2 leg (doA2/k2/doB2) and the doB1↔vB
+		// connector FREE — exactly the state in which the opposing train #11 sits in k1 at the
+		// gridlock.
+		val k1 = blockBetween(semaphoreDoA1, semaphoreDoB1)
+		k1.setUpPath(semaphoreDoA1, "blocker_k1")
+		assertThat(k1.getState(), name = "occupy k1")
+			.isEqualTo(TrackFacility.State.RESERVED)
 
 		// Ground truth: the FREE parallel track k2 is genuinely reservable from zA.
 		assertThat(service.isPathAvailable(semaphoreZA, semaphoreDoB2), name = "isPathAvailable(zA, doB2)")

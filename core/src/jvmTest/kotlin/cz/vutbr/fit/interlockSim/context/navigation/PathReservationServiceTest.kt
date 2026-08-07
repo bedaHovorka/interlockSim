@@ -2588,11 +2588,16 @@ class PathReservationServiceTest : KoinTestBase() {
 		/**
 		 * Pins ruling P4(ii): a train with no footprint anywhere passes vacuously, whatever
 		 * its start. Tightening this arm would break every train-entry caller.
+		 *
+		 * Uses doA1 -> zA rather than doA1 -> doB1: doA1 faces B->A (see
+		 * [SignalReleaseTests] / [StartDirectionTests]), so a doA1 -> doB1 request is rejected
+		 * by the unrelated G4 rear-facing-START guard (Issue #893 task A1) regardless of
+		 * contiguity, which would confound this test's own concern.
 		 */
 		@Test
 		fun `a train with no footprint at all passes vacuously`() {
 			val result =
-				service.reservePath("phantom-train", findSemaphoreByName("doA1"), findSemaphoreByName("doB1"))
+				service.reservePath("phantom-train", findSemaphoreByName("doA1"), findSemaphoreByName("zA"))
 
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		}
@@ -2638,6 +2643,188 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		/**
 		 * Put [trainId] physically on [block] without touching the registry — the state a
+		 * train admitted before any route was granted is in.
+		 */
+		private fun occupy(
+			block: DynamicTrackBlock,
+			trainId: String
+		) {
+			block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
+			block.enter(
+				object : TrackOccupant {
+					override val name: String = trainId
+
+					override fun distanceToSemaphore(): Double = 0.0
+
+					override fun nextSemaphore(): OrientedPathSeparator? = null
+				}
+			)
+		}
+	}
+
+	/**
+	 * G4 (Issue #893, task A1): reject a route whose START semaphore faces away from the
+	 * requested direction of travel.
+	 *
+	 * ## Domain ruling (traffic-simulation-expert R2; binding)
+	 *
+	 * A rear-facing START is the same malformation class as a non-contiguous request (A-R1,
+	 * see [ContiguityTests]) and must be rejected outright, not silently left dark: granting
+	 * a route with no proceed authority at its origin would be a #566-class stall for a
+	 * train standing at that signal. The intermediate-semaphore rear-facing SKIP (PR #892,
+	 * see [SignalReleaseTests]) stays exactly as-is -- a train never waits on a semaphore it
+	 * passes from behind; only the START is authority-defining.
+	 *
+	 * Topology facts (`vyhybna.xml`): `zA`, `doB1`, `doB2` face A->B; `doA1`, `doA2`, `zB`
+	 * face B->A (see [DefaultPathReservationService.facesDirectionOfTravel]).
+	 */
+	@Nested
+	inner class StartDirectionTests {
+		@Test
+		fun `reservePath rejects a route whose START semaphore faces away from it`() {
+			// doA1 faces B->A (it governs entry into the vA-doA1 block). Requesting doA1 as
+			// the START of a route towards doB1 asks it to authorise the OPPOSITE
+			// direction -- the block it would need to clear (doA1-doB1) lies behind its
+			// facing, not ahead of it.
+			val doA1 = findSemaphoreByName("doA1")
+			val doB1 = findSemaphoreByName("doB1")
+
+			// Give the train a footprint so the A-R1 contiguity predicate (Step 0 of
+			// reservePath) passes and the request reaches signal configuration: physically
+			// place it on the block on doA1's LEGITIMATE side (vA-doA1) -- a train standing
+			// behind the signal, exactly the scenario the domain ruling describes.
+			val vaDoA1 = blockBetween("vA", "doA1")
+			occupy(vaDoA1, "rearTrain")
+
+			assertThat(doA1.signal).isEqualTo(Signal.STOP)
+
+			// maxDepth=2 restricts topological search to the single direct doA1-doB1 block
+			// (depth 1). Without the cap, BFS also finds a second, much longer candidate
+			// around vyhybna's sibling branch (doA1 -> vA -> doA2 -> doB2 -> vB -> doB1)
+			// whose first forward block is not even adjacent to doA1 -- an unrelated edge
+			// case this test does not intend to exercise.
+			val result = service.reservePath("rearTrain", doA1, doB1, maxDepth = 2)
+
+			assertThat(result)
+				.withMessage("a rear-facing START must not be granted a route")
+				.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+
+			assertThat(registry.getBlocks("rearTrain"))
+				.withMessage("a rejected start must reserve nothing")
+				.isEmpty()
+			val k1 = blockBetween("doA1", "doB1")
+			assertThat(k1.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(k1.trainName).isNull()
+
+			assertThat(doA1.signal)
+				.withMessage("a rejected START must not be left showing proceed")
+				.isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		fun `reservePath still succeeds and lights the START when it faces the travel direction`() {
+			// Liveness twin (anti-#566): the SAME semaphore, used in the direction it
+			// actually faces (B->A, towards zA/A), must still succeed and light up.
+			val doA1 = findSemaphoreByName("doA1")
+			val zA = findSemaphoreByName("zA")
+
+			val result = service.reservePath("liveTrain", doA1, zA)
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doA1.signal.isAllowing())
+				.withMessage("a legitimately-facing START must still be cleared")
+				.isTrue()
+			val (_, authorizedTo) = doA1.authorizedDirection()
+			assertThat(authorizedTo)
+				.withMessage("a proceed aspect must only ever be shown in the direction the semaphore faces")
+				.isEqualTo(doA1.direction())
+		}
+
+		@Test
+		fun `re-requesting an already-owned sub-route does not re-light a rear-facing START`() {
+			// Early-return branch (blocks.isNotEmpty() but forwardBlocks.isEmpty()): reserve
+			// the full A->B route first (governed by zA/doB1; doA1 is intermediate and
+			// rear-facing for this direction, so PR #892's guard already leaves it at STOP --
+			// see SignalReleaseTests."reservePath never clears a semaphore the route passes
+			// from behind"). Then re-request the doA1->doB1 sub-route, which the train
+			// already fully owns: this is the SAME rear-facing doA1/doB1 pairing as the
+			// rejection test above, but reached through the early-return branch instead of
+			// the main candidate loop.
+			val doA1 = findSemaphoreByName("doA1")
+			val doB1 = findSemaphoreByName("doB1")
+
+			// Named explicitly (rather than the class-level inOut1/inOut2, whose A/B identity
+			// is an implementation detail of InOut declaration order) to pin down the A->B
+			// direction this test's reasoning depends on.
+			val full = service.reservePath("t1", inOutNamed("A"), inOutNamed("B"))
+			assertThat(full).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doA1.signal)
+				.withMessage("doA1 is rear-facing on this A->B route; it must start at STOP")
+				.isEqualTo(Signal.STOP)
+
+			val reRequest = service.reservePath("t1", doA1, doB1)
+
+			// Grant stands per current early-return semantics -- there is nothing to roll
+			// back and the train's authority over this sub-route already exists.
+			assertThat(reRequest).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doA1.signal)
+				.withMessage(
+					"the early-return branch must not re-light a semaphore the route passes " +
+						"from behind, even for an already-owned sub-route"
+				).isEqualTo(Signal.STOP)
+			// Whether the (re-)clearing is internally "recorded" for later reset is not
+			// inspectable from outside DefaultPathReservationService; the signal staying at
+			// STOP is the observable proof that no re-light was attempted.
+		}
+
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid[Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
+		}
+
+		private fun inOutNamed(name: String): DynamicPathSeparator =
+			simulationContext
+				.getInOuts()
+				.map { simulationContext.toDynamic(it) }
+				.filterIsInstance<DynamicInOut>()
+				.single { it.name == name }
+
+		/** Name of a separator, whatever concrete dynamic cell type it is; `null` if unnamed. */
+		private fun separatorNameOf(separator: PathSeparator): String? =
+			when (separator) {
+				is DynamicRailSemaphore -> separator.name
+				is DynamicRailSwitch -> separator.name
+				is DynamicInOut -> separator.name
+				else -> null
+			}
+
+		/**
+		 * The single block whose two ends are the separators named [first] and [second].
+		 * `vyhybna.xml` blocks carry no XML name of their own, so they are addressed by
+		 * their endpoints, same identity convention as [ContiguityTests.blockBetween].
+		 */
+		private fun blockBetween(
+			first: String,
+			second: String
+		): DynamicTrackBlock =
+			simulationContext
+				.getGraph()
+				.values()
+				.filterIsInstance<DynamicTrackBlock>()
+				.firstOrNull { block ->
+					block.ends().mapNotNull { separatorNameOf(it) }.toSet() == setOf(first, second)
+				} ?: throw IllegalStateException("No block found between $first and $second")
+
+		/**
+		 * Put [trainId] physically on [block] without touching the registry -- the state a
 		 * train admitted before any route was granted is in.
 		 */
 		private fun occupy(

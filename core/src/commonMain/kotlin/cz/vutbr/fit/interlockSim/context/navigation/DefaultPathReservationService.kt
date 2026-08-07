@@ -451,24 +451,7 @@ class DefaultPathReservationService(
 				// Configure START semaphore before returning (may be from different position)
 				// configureSemaphoreSignal is idempotent, safe to call multiple times
 				if (blocks.isNotEmpty()) {
-					when {
-						start is DynamicRailSemaphore -> {
-							environment.configureSemaphoreSignal(start, blocks.first())
-							recordClearedSemaphore(trainId, start)
-						}
-						start is DynamicInOut -> {
-							val firstBlock = blocks.first()
-							val maxSpeed = firstBlock.maxSpeed(start)
-							start.inSemaphore.setUpSpeed(
-								from = start.direction(),
-								to =
-									cz.vutbr.fit.interlockSim.objects.core
-										.anti(start.direction()),
-								allowedSpeed = maxSpeed
-							)
-							recordClearedSemaphore(trainId, start.inSemaphore)
-						}
-					}
+					configureAlreadyOwnedStartSignal(trainId, start, blocks)
 				}
 				// FIX (Goal 10 SP2b.9 follow-up): a redundant re-request for a route this train
 				// already holds to the same target (e.g. a stateless per-cycle LLM dispatcher
@@ -2109,6 +2092,56 @@ class DefaultPathReservationService(
 	}
 
 	/**
+	 * Configure (or skip) the START separator's signal for the already-owned early-return
+	 * branch of [reservePath]: every block in the requested path is already owned by [trainId],
+	 * so there is nothing to reserve, only the START signal to (re-)confirm.
+	 *
+	 * Extracted from [reservePath] so the candidate-loop body stays under the cyclomatic
+	 * complexity threshold (mirrors [configureStartSignal]'s extraction for the same reason).
+	 *
+	 * - START is a [DynamicRailSemaphore] that faces away from [blocks]' first entry (Issue
+	 *   #893 task A1, G4): SKIP -- the grant already exists and there is nothing to roll back,
+	 *   so unlike [configureStartSignal]'s rejection this only leaves the semaphore un-lit.
+	 * - START is a [DynamicRailSemaphore] facing the travel direction: configure it, idempotent.
+	 * - START is a [DynamicInOut]: configure its embedded `inSemaphore`, idempotent.
+	 * - Any other START type: nothing to configure.
+	 *
+	 * @param start The candidate's start separator (semaphore or InOut).
+	 * @param blocks The already-owned path's full block list (first one drives the signal).
+	 * @since Issue #893 task A1 (extracted alongside the G4 rear-facing-START guard)
+	 */
+	private fun configureAlreadyOwnedStartSignal(
+		trainId: String,
+		start: DynamicPathSeparator,
+		blocks: List<DynamicTrackBlock>
+	) {
+		when {
+			start is DynamicRailSemaphore && !startFacesTravelDirection(start, blocks.first()) -> {
+				logger.debug {
+					"reservePath: Left already-owned START semaphore ${start.name} at STOP for " +
+						"$trainId - the route passes it from behind"
+				}
+			}
+			start is DynamicRailSemaphore -> {
+				environment.configureSemaphoreSignal(start, blocks.first())
+				recordClearedSemaphore(trainId, start)
+			}
+			start is DynamicInOut -> {
+				val firstBlock = blocks.first()
+				val maxSpeed = firstBlock.maxSpeed(start)
+				start.inSemaphore.setUpSpeed(
+					from = start.direction(),
+					to =
+						cz.vutbr.fit.interlockSim.objects.core
+							.anti(start.direction()),
+					allowedSpeed = maxSpeed
+				)
+				recordClearedSemaphore(trainId, start.inSemaphore)
+			}
+		}
+	}
+
+	/**
 	 * Configure the START separator's signal for a freshly reserved candidate (Step 2g).
 	 *
 	 * Extracted from [reservePath] so the candidate-loop body stays under the cyclomatic
@@ -2137,18 +2170,33 @@ class DefaultPathReservationService(
 		when {
 			// Case 1: START is a semaphore -> configure it (train departing from semaphore)
 			start is DynamicRailSemaphore -> {
-				try {
-					environment.configureSemaphoreSignal(start, forwardBlocks.first())
-					recordClearedSemaphore(trainId, start)
+				// Issue #893 task A1 (G4): a START that faces away from the requested direction
+				// of travel has no proceed authority to give -- the block the train needs to
+				// enter lies behind the semaphore's facing, not ahead of it. Unlike an
+				// intermediate semaphore (configureIntermediateSemaphores, PR #892), the START
+				// is authority-defining: granting the route anyway would strand the train with
+				// no signal it is entitled to obey, a #566-class stall. Reject before
+				// configuring/recording anything, so the caller's rollback has nothing to undo.
+				if (!startFacesTravelDirection(start, forwardBlocks.first())) {
 					logger.debug {
-						"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
-					}
-					true
-				} catch (e: Exception) {
-					logger.warn(e) {
-						"reservePath: Semaphore signal configuration failed - rolling back reservation"
+						"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
+							"away from the requested direction of travel toward ${forwardBlocks.first()}"
 					}
 					false
+				} else {
+					try {
+						environment.configureSemaphoreSignal(start, forwardBlocks.first())
+						recordClearedSemaphore(trainId, start)
+						logger.debug {
+							"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
+						}
+						true
+					} catch (e: Exception) {
+						logger.warn(e) {
+							"reservePath: Semaphore signal configuration failed - rolling back reservation"
+						}
+						false
+					}
 				}
 			}
 			// Case 2: START is InOut -> configure inSemaphore (train entering from external network)
@@ -2469,6 +2517,40 @@ class DefaultPathReservationService(
 		val towards = context.getSegment(semaphore, nextBlock, null) ?: return true
 		return towards == semaphore.direction()
 	}
+
+	/**
+	 * [facesDirectionOfTravel], tolerant of [nextBlock] not being structurally adjacent to
+	 * [semaphore] (Issue #893 task A1).
+	 *
+	 * The START-signal call sites ([configureStartSignal] and the already-owned early-return
+	 * branch of [reservePath]) can be handed a `nextBlock` that is several hops away from
+	 * [semaphore]: a route **extension** re-invokes `reservePath` with the ORIGINAL start
+	 * separator, and once every block immediately adjacent to that start is already owned, the
+	 * remaining `forwardBlocks`/`blocks.first()` is the first genuinely NEW block further down
+	 * the path -- not [semaphore]'s own neighbour. [DefaultSimulationContext.getSegment] is only
+	 * defined for a block actually bounded by the separator; for a non-adjacent pair it throws
+	 * `SimulationException[FATAL]` instead of returning `null`, so [facesDirectionOfTravel]'s own
+	 * `?: return true` fallback never gets a chance to run.
+	 *
+	 * This wrapper extends the exact same fail-open philosophy ("cannot resolve -> proceed,
+	 * never strand the route") to that thrown case, without changing
+	 * [facesDirectionOfTravel]'s contract or its callers within [configureIntermediateSemaphores]
+	 * (which only ever passes a genuinely adjacent pair and so never hits this branch).
+	 */
+	private fun startFacesTravelDirection(
+		semaphore: DynamicRailSemaphore,
+		nextBlock: DynamicTrackBlock
+	): Boolean =
+		try {
+			facesDirectionOfTravel(semaphore, nextBlock)
+		} catch (e: Exception) {
+			logger.debug(e) {
+				"reservePath: Could not resolve whether START semaphore ${semaphore.name} faces " +
+					"$nextBlock (likely non-adjacent, e.g. a route extension); treating as facing " +
+					"the travel direction"
+			}
+			true
+		}
 
 	/**
 	 * Configure the signal for every semaphore that lies at the junction between
