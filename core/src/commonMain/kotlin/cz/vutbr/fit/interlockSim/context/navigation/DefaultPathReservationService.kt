@@ -313,7 +313,9 @@ class DefaultPathReservationService(
 		try {
 			semaphore.signal = Signal.STOP
 			semaphoreClearedFor.remove(semaphore)
-			clearedSemaphores[trainId]?.remove(semaphore)
+			val owned = clearedSemaphores[trainId]
+			owned?.remove(semaphore)
+			if (owned != null && owned.isEmpty()) clearedSemaphores.remove(trainId)
 			logger.debug {
 				"resetUnrecordedStartSignal: Reset partially-written START semaphore " +
 					"${semaphore.name} to STOP for '$trainId'"
@@ -944,8 +946,9 @@ class DefaultPathReservationService(
 
 	/**
 	 * See [PathReservationService.hasClearedSignals]. `clearedSemaphores` never holds an
-	 * empty set for a key -- every removal path ([resetClearedSemaphores], [resetSemaphoreSet])
-	 * deletes the map entry once its set empties -- so a key-presence check alone is exact.
+	 * empty set for a key -- every removal path ([resetClearedSemaphores], [resetSemaphoreSet],
+	 * [resetUnrecordedStartSignal]) deletes the map entry once its set empties -- so a
+	 * key-presence check alone is exact.
 	 */
 	override fun hasClearedSignals(trainId: String): Boolean = clearedSemaphores.containsKey(trainId)
 
@@ -2594,6 +2597,10 @@ class DefaultPathReservationService(
 	 * identical to [releasePath]/[unregister]: a semaphore since re-cleared for another train is
 	 * left alone.
 	 *
+	 * See the interface KDoc for this call's proven-safe scope (suffix/rearmost releases on a
+	 * non-revisiting route) -- this method performs no route-position validation of its own, so a
+	 * caller outside that scope is responsible for the risk described there.
+	 *
 	 * @since Issue #893 (phase alpha, task A3)
 	 */
 	override fun resetSemaphoresForReleasedBlocks(
@@ -2744,6 +2751,18 @@ class DefaultPathReservationService(
 	 * never strand the route") to that thrown case, without changing
 	 * [facesDirectionOfTravel]'s contract or its callers within [configureIntermediateSemaphores]
 	 * (which only ever passes a genuinely adjacent pair and so never hits this branch).
+	 *
+	 * ## Limitation: inactive by design on route extensions
+	 *
+	 * On the extension shape described above, this guard does not actually evaluate direction --
+	 * it catches the thrown exception and falls open every time, because
+	 * [DefaultSimulationContext.getSegment] has no defined answer for a non-adjacent
+	 * start/first-forward-block pair. Direction correctness for an extension's origin is therefore
+	 * NOT enforced here; it is instead the job of the A-R1 contiguity predicate
+	 * ([rejectNonContiguousStart]), which runs earlier in [reservePath] and rejects any `start` that
+	 * does not bound one of the requesting train's current footprint blocks. Making this wrapper
+	 * fail CLOSED instead would reject every legitimate extension outright, since the extension
+	 * shape is exactly what always lands in the thrown-exception branch.
 	 */
 	private fun startFacesTravelDirection(
 		semaphore: DynamicRailSemaphore,

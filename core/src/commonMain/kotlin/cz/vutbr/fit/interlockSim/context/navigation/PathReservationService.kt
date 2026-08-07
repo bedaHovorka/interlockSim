@@ -677,6 +677,21 @@ interface PathReservationService {
 	 * tail's blocks (`cancelPathSetup` + [unregisterBlock]), call this once over those blocks so no
 	 * released block is left reachable through a signal still showing proceed.
 	 *
+	 * ## Proven-safe scope
+	 *
+	 * This is proven safe for **suffix / rearmost releases on a non-revisiting route**: the
+	 * un-travelled tail of a route the train will never traverse again. It is NOT proven safe for
+	 * an arbitrary mid-route subset of [blocks] -- the semaphore governing a released block can also
+	 * be the one a DIFFERENT, still-reserved downstream block on the same route depends on (e.g. an
+	 * intermediate boundary shared with a block further along the route that remains reserved). A
+	 * route that loops back and becomes adjacent to a released block again has the same exposure:
+	 * the semaphore this call resets may be the one that governs re-entry into the loop.
+	 *
+	 * The failure direction is always fail-safe, never fail-unsafe:
+	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP] authorises nothing, so the worst outcome
+	 * of an over-eager reset outside the proven-safe scope above is a train stalled behind a signal
+	 * it still needed -- never a train permitted to move where it should not be.
+	 *
 	 * @param trainId The train the released [blocks] belonged to.
 	 * @param blocks The blocks being released -- a full route, or an un-travelled tail of one.
 	 * @since Issue #893 (phase alpha, task A3)
