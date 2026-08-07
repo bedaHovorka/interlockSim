@@ -18,6 +18,7 @@ import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
@@ -128,7 +129,8 @@ class KoogAgentFactoryTest {
 			modelName: String,
 			tools: List<DomainTool>,
 			systemPrompt: String?,
-			cycleHistory: CycleHistory
+			cycleHistory: CycleHistory,
+			outcomeFeed: AppliedOutcomeFeed?
 		): KoogDispatchAgent {
 			capturedTools = tools
 			capturedSystemPrompt = systemPrompt

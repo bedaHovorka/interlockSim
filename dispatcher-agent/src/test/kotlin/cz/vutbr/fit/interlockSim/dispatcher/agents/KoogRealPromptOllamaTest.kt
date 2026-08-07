@@ -15,6 +15,7 @@ import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
@@ -256,13 +257,15 @@ class KoogRealPromptOllamaTest {
 			modelName: String,
 			tools: List<DomainTool>,
 			systemPrompt: String?,
-			cycleHistory: CycleHistory
+			cycleHistory: CycleHistory,
+			outcomeFeed: AppliedOutcomeFeed?
 		): KoogDispatchAgent =
 			delegate.createDispatchAgent(
 				modelName = modelName,
 				tools = tools.map { RecordingTool(it, recorder) },
 				systemPrompt = systemPrompt,
-				cycleHistory = cycleHistory
+				cycleHistory = cycleHistory,
+				outcomeFeed = outcomeFeed
 			)
 	}
 

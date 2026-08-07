@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
@@ -58,7 +59,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   detect via the per-cycle emission counter whether the LLM acted via tools (and therefore the
  *   rule-based fallback must not double-dispatch).
  *
- * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549), SP1.7 (#774), SP2c.6 (#829)
+ * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549), SP1.7 (#774), SP2c.6 (#829); `outcomeFeed`
+ *   added in Issue #893 (phase beta, task B0)
  */
 class KoogAgentFactory(
 	private val toolRegistry: ToolGroupRegistry,
@@ -100,7 +102,16 @@ class KoogAgentFactory(
 	 *
 	 * @since Issue #847 (SP2c.24)
 	 */
-	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0)
+	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
+	/**
+	 * Optional per-context feed of previously-applied outcomes, threaded straight through to
+	 * [AgentService.createDispatchAgent] exactly like [cycleHistory] above (same per-context
+	 * scoped-sharing rationale). `null` by default so agents built outside a run (tests, tooling)
+	 * behave as they did before task B0.
+	 *
+	 * @since Issue #893 (phase beta, task B0)
+	 */
+	private val outcomeFeed: AppliedOutcomeFeed? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -223,7 +234,8 @@ class KoogAgentFactory(
 				modelName = ollamaConfig.modelName,
 				tools = instrumentedTools,
 				systemPrompt = systemPrompt,
-				cycleHistory = cycleHistory
+				cycleHistory = cycleHistory,
+				outcomeFeed = outcomeFeed
 			)
 
 		logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }

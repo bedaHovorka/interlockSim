@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import ai.koog.agents.core.agent.AIAgent
 import ai.koog.agents.core.tools.ToolRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaModelFactory
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -49,7 +50,8 @@ class DefaultAgentService(
 		modelName: String,
 		tools: List<DomainTool>,
 		systemPrompt: String?,
-		cycleHistory: CycleHistory
+		cycleHistory: CycleHistory,
+		outcomeFeed: AppliedOutcomeFeed?
 	): KoogDispatchAgent {
 		logger.debug {
 			"DefaultAgentService.createDispatchAgent: modelName=$modelName, tools=${tools.size}, " +
@@ -70,6 +72,6 @@ class DefaultAgentService(
 			)
 
 		logger.debug { "DefaultAgentService: created AIAgent with ${tools.size} Koog-wrapped tools" }
-		return KoogDispatchAgentImpl(aiAgent, cycleHistory)
+		return KoogDispatchAgentImpl(aiAgent, cycleHistory, outcomeFeed)
 	}
 }
