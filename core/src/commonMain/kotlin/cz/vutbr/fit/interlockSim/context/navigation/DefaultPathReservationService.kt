@@ -128,7 +128,12 @@ class DefaultPathReservationService(
 	//
 	// Only the SUCCESS path records here. Every rollback helper (rollbackReservation,
 	// rollbackUnconfigurableCandidate) runs strictly BEFORE step 2g/2h signal configuration --
-	// a rolled-back candidate has therefore cleared nothing and needs no reset.
+	// a rolled-back candidate has therefore cleared nothing and needs no reset. The one exception
+	// is the bypass-rollback in `reservePathToAnyNextSemaphore`, which runs AFTER a fully
+	// successful `reservePath` has already configured the candidate's signals; it resets exactly
+	// the semaphores that candidate cleared (the before/after delta of this map) via
+	// `resetSemaphoreSet`, never the whole per-train set, so a pre-existing reservation's signals
+	// stay lit.
 	//
 	// Ownership is last-writer-wins, mirroring PathReservationRegistry.blockToTrain: if a
 	// semaphore is re-cleared for another train, that train becomes its owner and the earlier
@@ -184,6 +189,52 @@ class DefaultPathReservationService(
 		}
 		logger.debug {
 			"resetClearedSemaphores: Returned ${owned.size} semaphore(s) to STOP for '$trainId'"
+		}
+	}
+
+	/**
+	 * Return only the semaphores in [toReset] still owned by [trainId] to [Signal.STOP] and forget
+	 * them, leaving every other semaphore the train still holds cleared untouched.
+	 *
+	 * Subset analogue of [resetClearedSemaphores]. Used by the bypass-rollback in
+	 * [reservePathToAnyNextSemaphore]: that rollback runs *after* a successful [reservePath] has
+	 * already cleared the candidate's semaphores, so resetting the whole per-train set would also
+	 * drop signals the train still needs for a live reservation. The caller passes the before/after
+	 * delta of [clearedSemaphores] -- exactly what this candidate cleared -- so a pre-existing
+	 * reservation's signals are preserved.
+	 *
+	 * Same ownership semantics as [resetClearedSemaphores]: a semaphore since re-cleared for another
+	 * train is skipped (see [semaphoreClearedFor]).
+	 */
+	private fun resetSemaphoreSet(
+		trainId: String,
+		toReset: Set<DynamicRailSemaphore>
+	) {
+		if (toReset.isEmpty()) return
+		val owned = clearedSemaphores[trainId] ?: return
+		var resetCount = 0
+		toReset.forEach { semaphore ->
+			if (semaphoreClearedFor[semaphore] != trainId) {
+				logger.debug {
+					"resetSemaphoreSet: ${semaphore.name} was re-cleared for " +
+						"'${semaphoreClearedFor[semaphore]}'; leaving it lit for that train"
+				}
+				return@forEach
+			}
+			semaphoreClearedFor.remove(semaphore)
+			owned.remove(semaphore)
+			try {
+				semaphore.signal = Signal.STOP
+				resetCount++
+			} catch (e: Exception) {
+				logger.warn(e) {
+					"resetSemaphoreSet: Failed to reset semaphore ${semaphore.name} for '$trainId'"
+				}
+			}
+		}
+		if (owned.isEmpty()) clearedSemaphores.remove(trainId)
+		logger.debug {
+			"resetSemaphoreSet: Returned $resetCount of ${toReset.size} semaphore(s) to STOP for '$trainId'"
 		}
 	}
 
@@ -757,6 +808,11 @@ class DefaultPathReservationService(
 				"reservePathToAnyNextSemaphore: Attempting reservation to $semaphore (attempt $attemptCount/${semaphores.size})"
 			}
 
+			// Capture the semaphores this train already has cleared before this attempt, so a
+			// bypass-rollback can reset only what THIS candidate cleared (the before/after delta)
+			// and not a pre-existing reservation's signals.
+			val clearedBefore = clearedSemaphores[trainId]?.toSet() ?: emptySet()
+
 			val result = reservePath(trainId, start, semaphore)
 
 			when (result) {
@@ -767,6 +823,15 @@ class DefaultPathReservationService(
 						logger.debug {
 							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"
 						}
+						// reservePath already cleared this candidate's semaphores
+						// (configureStartSignal / configureIntermediateSemaphores). Releasing the
+						// blocks without resetting them would leave a proceed aspect standing over
+						// freed track -- the evergreen-aspect defect #847 fixes on the other release
+						// paths. Reset exactly the semaphores this candidate cleared (the delta),
+						// never the train's whole set, which may still hold a live reservation.
+						val clearedByThisCandidate =
+							(clearedSemaphores[trainId] ?: emptySet()) - clearedBefore
+						resetSemaphoreSet(trainId, clearedByThisCandidate)
 						// Release the wrongly reserved path
 						result.reservedBlocks.forEach { block ->
 							try {
