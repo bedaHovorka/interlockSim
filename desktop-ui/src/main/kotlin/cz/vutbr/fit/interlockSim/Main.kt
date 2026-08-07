@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.AiSweepDriver
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGrid
@@ -174,7 +175,12 @@ class Main {
 			context.use {
 				it.run(controller)
 				reporter.printSummary()
-				outcome = classifyRun(simTimeTracker.lastSimTime, requestedEndTime)
+				// A dispatcher that gave up (AgentDriverLoop.stoppedByFailures) leaves the kDisco
+				// kernel ticking on to the horizon with nobody dispatching, so sim-time alone
+				// would report COMPLETED and the aggregator would count a dead run as a passing
+				// data point. Read inside `use` -- the scope is gone once the context closes.
+				val dispatcherGaveUp = it.scope.getOrNull<AgentDriverLoop>()?.stoppedByFailures == true
+				outcome = classifyRun(simTimeTracker.lastSimTime, requestedEndTime, dispatcherGaveUp)
 				// Issue #847 rounds 3 and 4: report what the dispatcher actually did — routes the
 				// orphan sweeper reclaimed, the planner's final cycle counts, and the
 				// control-tick-to-decision chain. Read inside `use`: the scope is gone once the
@@ -262,10 +268,30 @@ class Main {
 		return true
 	}
 
-	private fun classifyRun(
+	/**
+	 * Classifies a finished headless run into the [RunOutcome] that becomes the process exit code.
+	 *
+	 * @param reachedSimTime Simulated time the kDisco kernel actually reached.
+	 * @param requestedEndTime Horizon asked for on the command line, or `null` when none was given.
+	 * @param dispatcherStoppedByFailures `true` when the agent driver abandoned the run after
+	 *   persistent cycle failures. This outranks sim-time: the kernel keeps ticking to the horizon
+	 *   with nothing dispatching, so the run reaches its end time while having measured nothing.
+	 *   Reporting that as [RunOutcome.COMPLETED] would feed the sweep aggregator a passing data
+	 *   point for a dispatcher that died -- exactly the silent death #847 exists to surface.
+	 */
+	internal fun classifyRun(
 		reachedSimTime: Double,
-		requestedEndTime: Double?
+		requestedEndTime: Double?,
+		dispatcherStoppedByFailures: Boolean = false
 	): RunOutcome {
+		if (dispatcherStoppedByFailures) {
+			logger.error {
+				"Dispatcher driver stopped after persistent cycle failures; simulated time reached " +
+					"${reachedSimTime}s of a requested ${requestedEndTime}s, but nothing was " +
+					"dispatching. Exiting ${RunOutcome.TERMINATED_EARLY.exitCode}."
+			}
+			return RunOutcome.TERMINATED_EARLY
+		}
 		if (requestedEndTime == null || requestedEndTime <= 0.0) {
 			// Nothing to compare against; the factory would already have rejected a bad argument.
 			return RunOutcome.COMPLETED
