@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
@@ -1689,6 +1690,99 @@ class PathReservationServiceTest : KoinTestBase() {
 					"$litEastbound (A→B) and $litWestbound (B→A) share a semaphore - a proceed " +
 						"aspect cleared for one direction must never also stand for the opposite one"
 				).isEmpty()
+		}
+
+		@Test
+		fun `extending a route never re-lights semaphores between blocks the train already owns`() {
+			// Step 1: reserve a partial route from zA to zB. This is the only topological path
+			// between these two separators (zA -> vA -> doA1 -> doB1 -> vB -> zB), so it
+			// deterministically owns doB1 as an INTERNAL boundary (both its neighbouring blocks,
+			// doA1-doB1 and doB1-vB, are part of this same reservation) rather than as the route's
+			// start or target. doB1 faces the direction of travel (unlike doA1 -- see "reservePath
+			// never clears a semaphore the route passes from behind" above) so it gets lit here.
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val partial = service.reservePath("t1", zA, findSemaphoreByName("zB"))
+			assertThat(partial).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val partialSuccess = partial as PathReservationService.ReservationResult.Success
+
+			val clearedByPartial =
+				semaphoresBounding(partialSuccess.reservedBlocks).filter { it.signal.isAllowing() }
+			// Guard: if nothing was cleared, the "stays at STOP" assertion below would pass vacuously.
+			assertThat(clearedByPartial).isNotEmpty()
+			assertThat(clearedByPartial.map { it.name }).contains(doB1.name)
+
+			// Step 2: simulate head passage -- exactly what Train.semaphoreAction does when a
+			// train passes a facing semaphore: hold(1.0); semaphore.signal = Signal.STOP.
+			clearedByPartial.forEach { it.signal = Signal.STOP }
+
+			// Step 3: extend the SAME route all the way to B, reusing the original start. The
+			// recomputed candidate spans the blocks t1 already owns (zA..zB) plus one new block
+			// (zB..B). The service is expected to filter the already-owned blocks into
+			// forwardBlocks internally and only configure signals for the new portion.
+			val extended = service.reservePath("t1", zA, inOutNamed("B"))
+			assertThat(extended).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Assert: every semaphore strictly between two blocks the train already owned --
+			// doB1 in particular, sitting between the doA1-doB1 block and the doB1-vB block,
+			// both already owned before the extension -- must still be at STOP. The route
+			// extension must not re-light a semaphore behind the train's head.
+			clearedByPartial.forEach { semaphore ->
+				assertThat(semaphore.signal)
+					.withMessage(
+						"Semaphore ${semaphore.name} was re-lit to ${semaphore.signal} by the route " +
+							"extension even though the train already passed it and returned it to STOP"
+					).isEqualTo(Signal.STOP)
+			}
+		}
+
+		@Test
+		fun `extending a route lights the boundary from the last owned block into the first new block`() {
+			// Step 1: reserve a partial route from zA to doB1 -- ending EXACTLY at doB1, not past
+			// it. A destination separator is never configured as an intermediate boundary (there
+			// is no "next block" beyond it in this partial's block list), so doB1 starts at STOP.
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val partial = service.reservePath("t1", zA, doB1)
+			assertThat(partial).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Guard: doB1 must start unlit, otherwise the "becomes lit" assertion below would be
+			// meaningless (it might already have been lit for an unrelated reason).
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("Semaphore doB1 is the partial route's destination; it must start at STOP")
+				.isFalse()
+
+			// Step 2: extend the SAME route all the way to B, reusing the original start. The
+			// recomputed candidate spans the blocks t1 already owns (zA..doB1) plus new blocks
+			// beyond doB1 (doB1..B). doB1 is now a genuine owned -> new transition: the last
+			// block the train already owns (doA1-doB1) leads into the first NEW block
+			// (doB1-vB), so the train still needs doB1 lit to proceed into the extension.
+			val extended = service.reservePath("t1", zA, inOutNamed("B"))
+			assertThat(extended).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			assertThat(doB1.signal.isAllowing())
+				.withMessage(
+					"Semaphore doB1 governs the boundary between the block the train already owns " +
+						"(doA1-doB1) and the first newly reserved block (doB1-vB); the extension must " +
+						"light it so the train can proceed"
+				).isTrue()
+		}
+
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell =
+						grid[
+							cz.vutbr.fit.interlockSim.util
+								.Point(x, y)
+						]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
 		}
 
 		private fun inOutNamed(name: String): DynamicPathSeparator =

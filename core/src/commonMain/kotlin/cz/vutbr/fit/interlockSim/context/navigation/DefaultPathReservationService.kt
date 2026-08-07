@@ -458,7 +458,10 @@ class DefaultPathReservationService(
 					// configure them here.  Without this, a train entering a multi-block path
 					// will travel through the first block, stop at the intermediate semaphore
 					// (signal=STOP) and wait forever.
-					configureIntermediateSemaphores(trainId, blocks)
+					// forwardBlocks is passed separately so a route EXTENSION (blocks the train
+					// already owns, plus new ones) only lights boundaries that lead into a new
+					// block -- see [configureIntermediateSemaphores].
+					configureIntermediateSemaphores(trainId, blocks, forwardBlocks.toSet())
 
 					// Step 2i: Register PathInfo metadata (Issue #295/#296 Phase 4; moved here by
 					// Issue #742). Registration happens only after switches AND signals configured
@@ -2344,20 +2347,41 @@ class DefaultPathReservationService(
 	 * A semaphore the route passes from behind is deliberately left at STOP — see
 	 * [facesDirectionOfTravel].
 	 *
+	 * A route **extension** (this train already owns a prefix of [blocks] from an earlier
+	 * [reservePath] call, and this call adds new blocks beyond it) must not touch a boundary
+	 * strictly between two blocks the train already owns: the train may already have passed
+	 * that semaphore and returned it to STOP itself ([cz.vutbr.fit.interlockSim.sim.Train]'s
+	 * `semaphoreAction` does exactly that on facing passage). Re-lighting it here would
+	 * resurrect a proceed aspect behind the train's head — authorising nobody, since the train
+	 * never reads a semaphore it has already passed, while an opposing movement might. Only a
+	 * boundary whose next block is still part of the *new* portion of the route is eligible for
+	 * configuration; [forwardBlocks] is exactly that new portion, as computed by [reservePath]
+	 * (blocks not already owned by [trainId]).
+	 *
 	 * @param trainId Train the aspects are cleared on behalf of, recorded so
 	 *                [resetClearedSemaphores] can return them to STOP when the route is released.
 	 * @param blocks Ordered list of [DynamicTrackBlock] objects from path start to target.
 	 *               Must be in traversal order (the order produced by
 	 *               [extractUniqueBlocks] from a BFS/DFS path).
+	 * @param forwardBlocks The subset of [blocks] not already owned by [trainId] (the newly
+	 *                      reserved portion of the route). A boundary is only configured when
+	 *                      the block it leads into is a member of this set.
 	 */
 	private fun configureIntermediateSemaphores(
 		trainId: String,
-		blocks: List<DynamicTrackBlock>
+		blocks: List<DynamicTrackBlock>,
+		forwardBlocks: Set<DynamicTrackBlock>
 	) {
 		if (blocks.size < 2) return
 		for (i in 0 until blocks.size - 1) {
 			val currentBlock = blocks[i]
 			val nextBlock = blocks[i + 1]
+			// The boundary leads into a block the train already owns -- it sits strictly
+			// between two blocks this train already holds, so it must be left exactly as it
+			// is (the train may already have passed it and returned it to STOP itself).
+			if (nextBlock !in forwardBlocks) {
+				continue
+			}
 			// Find the shared end-point between the two consecutive blocks.
 			// DynamicTrackBlock.ends() returns Array<PathSeparator> whose elements
 			// are the DynamicPathSeparator instances shared across the graph.
