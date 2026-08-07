@@ -2396,9 +2396,23 @@ class DefaultPathReservationService(
 	 * Removes the block from registry if it is FREE (no occupant).
 	 * Called by Train's Tail process after leaving a block.
 	 *
+	 * On success, also resets the released block's governing semaphores via
+	 * [resetSemaphoresForReleasedBlocks] -- see the interface KDoc for why this is safe on this
+	 * per-block tail-clearance call site (every boundary of a released block is behind the train's
+	 * head).
+	 *
+	 * On the production `Train.Tail.separatorAction` call site, [block]'s `reservedFrom` is always
+	 * null by the time this runs: a block can only be left after
+	 * [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.enter] has run for it (the
+	 * `Front` occupies it before the `Tail` can leave it), and `enter()` unconditionally nulls
+	 * `reservedFrom`. [resetSemaphoresForReleasedBlocks]'s `reservedFrom` candidate source is
+	 * therefore dead code on this call site -- `block.ends()` alone (a structural superset here)
+	 * carries the coverage.
+	 *
 	 * @param trainId The train identifier
 	 * @param block The block to unregister
 	 * @return true if block was unregistered, false if still occupied or not owned
+	 * @since Issue #893 (phase alpha, task A4) -- added the [resetSemaphoresForReleasedBlocks] call
 	 */
 	override fun unregisterBlock(
 		trainId: String,
@@ -2407,6 +2421,7 @@ class DefaultPathReservationService(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			emitBlockReleased(block, trainId, currentSimulationTime())
+			resetSemaphoresForReleasedBlocks(trainId, listOf(block))
 		}
 		return released
 	}

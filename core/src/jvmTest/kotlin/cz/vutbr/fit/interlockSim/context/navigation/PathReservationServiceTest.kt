@@ -1704,6 +1704,140 @@ class PathReservationServiceTest : KoinTestBase() {
 				.isTrue()
 		}
 
+		/**
+		 * [PathReservationService.unregisterBlock] (Issue #893, task A4) is the production
+		 * tail-clearance path: `Train.Tail.separatorAction` calls it once per block as a train's
+		 * tail leaves it. Before this task it only updated the registry -- it never returned the
+		 * released block's semaphores to [Signal.STOP], leaving them lit forever exactly like the
+		 * pre-A3 `releasePath`/`unregister` defect this file's header documents, except on the
+		 * per-block tail path instead of a full route release.
+		 */
+		@Test
+		fun `unregisterBlock returns the semaphores guarding the released block to STOP`() {
+			val result = service.reservePath("t1", inOutNamed("A"), inOutNamed("B"))
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val firstBlock = blocks.first()
+
+			val releasedBoundary = firstBlock.ends().filterIsInstance<DynamicRailSemaphore>()
+			val litReleasedBoundary = releasedBoundary.filter { it.signal.isAllowing() }
+			// Guard: if nothing bounding the released block was actually cleared, the STOP
+			// assertion below would pass vacuously.
+			assertThat(litReleasedBoundary).isNotEmpty()
+
+			val stillHeldBoundary =
+				blocks
+					.drop(1)
+					.flatMap { it.ends().toList() }
+					.filterIsInstance<DynamicRailSemaphore>()
+					.distinctBy { it.name }
+					.filter { it !in releasedBoundary }
+			val litStillHeld = stillHeldBoundary.filter { it.signal.isAllowing() }
+			// Guard: the "stays lit" half of the assertion needs at least one genuinely lit
+			// semaphore bounding only still-held blocks, or it would pass vacuously too.
+			assertThat(litStillHeld).isNotEmpty()
+
+			// Genuinely free the first block (occupant == null && FREE), the same precondition
+			// PathReservationRegistry.unregisterBlock enforces and the existing
+			// resetSemaphoresForReleasedBlocks test above satisfies the same way.
+			firstBlock.reservedFrom?.let { firstBlock.cancelPathSetup(it) }
+			assertThat(service.unregisterBlock("t1", firstBlock)).isTrue()
+
+			litReleasedBoundary.forEach { semaphore ->
+				assertThat(semaphore.signal, "semaphore ${semaphore.name} bounding the released block")
+					.isEqualTo(Signal.STOP)
+			}
+			litStillHeld.forEach { semaphore ->
+				assertThat(semaphore.signal.isAllowing())
+					.withMessage(
+						"semaphore ${semaphore.name} bounds only still-held blocks; unregisterBlock " +
+							"of the first block must not touch it"
+					).isTrue()
+			}
+		}
+
+		/**
+		 * Gemma4-mandated boundary-transition test. Replays the full choreography this task's
+		 * fix participates in: head passage ([Train.semaphoreAction], `Train.kt`, drops a facing
+		 * semaphore to STOP as the front passes it) followed later by tail clearance
+		 * (`Train.Tail.separatorAction` -> [PathReservationService.unregisterBlock]).
+		 *
+		 * ## What this test is, and is not
+		 *
+		 * Assertions (i)-(ii) below are a **forward-invariant safety guard**, not a test that
+		 * discriminates this task's change: reverting the single `resetSemaphoresForReleasedBlocks`
+		 * call this task adds to `unregisterBlock` leaves (i)-(ii) passing, because `zA` was already
+		 * forced to STOP by the manual head-passage simulation in step (a), and `doB1` is never
+		 * touched by releasing the first block either way. This was confirmed by running this test
+		 * against the pre-fix code during RED -- it already passed. The historical G2 defect (a
+		 * released block's governing semaphore staying lit forever) is discriminated by
+		 * `unregisterBlock returns the semaphores guarding the released block to STOP` above; that
+		 * is the test that actually fails without the fix.
+		 *
+		 * Assertion (iii) is the genuine discriminator this test adds on top: with no second train
+		 * ever reclaiming `zA`, last-writer-wins ownership cannot rescue it the way it does in the
+		 * `resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone...` test above
+		 * -- only the bookkeeping purge protects it. [Signal.STOP] is idempotent so a stale re-touch
+		 * is invisible while `zA` sits at STOP; (iii) forces `zA` to a distinguishable aspect first
+		 * so a later stale reset becomes observable.
+		 *
+		 * Every boundary of a tail-cleared block is behind the head by definition (the
+		 * traffic-simulation-expert R3 ruling this task implements): the block the tail just left
+		 * cannot bound anything the train still needs in front of it.
+		 */
+		@Test
+		fun `unregisterBlock never drops the signal ahead of the train (forward-invariant guard, purge check)`() {
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val result = service.reservePath("t1", zA, findSemaphoreByName("zB"))
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val firstBlock = blocks.first()
+			assertThat(firstBlock.ends().toList()).contains(zA)
+
+			// Guards: both semaphores must start lit, or the assertions below are vacuous.
+			assertThat(zA.signal.isAllowing()).isTrue()
+			assertThat(doB1.signal.isAllowing()).isTrue()
+
+			// (a) Head passes zA, the route's first facing semaphore -- simulate exactly what
+			// Train.semaphoreAction does at the end of its hold(1.0): drop the aspect to STOP.
+			zA.signal = Signal.STOP
+
+			// (b) Tail clears the first block -- free it and unregister it, as in the previous test.
+			firstBlock.reservedFrom?.let { firstBlock.cancelPathSetup(it) }
+			assertThat(service.unregisterBlock("t1", firstBlock)).isTrue()
+
+			// (i) zA is STOP -- head passage already guaranteed that; this assertion alone cannot
+			// discriminate the fix (see the class KDoc above). It documents the choreography's
+			// end state before the genuine discriminator in (iii).
+			assertThat(zA.signal, "zA immediately after the tail clears its block").isEqualTo(Signal.STOP)
+
+			// (ii) The signal AHEAD of the train -- doB1, bounding blocks t1 still holds -- must
+			// stay lit. This is the core safety claim: releasing the REARMOST block can never drop
+			// authority ahead of the head, because every boundary of a tail-cleared block is behind
+			// it. unregisterBlock never touches doB1 either way, so this also doesn't discriminate
+			// the fix -- it is the invariant this whole task exists to protect, checked directly
+			// rather than only asserted in prose.
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 governs a still-held block ahead of the train; it must stay lit")
+				.isTrue()
+
+			// (iii) Genuine discriminator. Nobody reclaims zA for another train here, so
+			// semaphoreClearedFor[zA] is still "t1" the whole time -- the ownership guard that
+			// protects a re-claimed semaphore in the sibling resetSemaphoresForReleasedBlocks test
+			// does not apply. Force zA to a distinguishable allowing aspect (standing in for any
+			// later, unrelated signal change; STOP is idempotent and would otherwise mask a stale
+			// re-touch), then run a later, independent releasePath(t1) over the rest of the route.
+			// Without this task's purge, t1's bookkeeping still lists zA as its own and
+			// resetClearedSemaphores (which releasePath calls unconditionally, before it even looks
+			// at block state) stomps it back to STOP; with the purge, zA is no longer in that set
+			// and is left alone.
+			zA.signal = Signal.S80
+			service.releasePath("t1")
+			assertThat(zA.signal, "zA after a later releasePath(t1), with nobody having reclaimed it")
+				.isEqualTo(Signal.S80)
+		}
+
 		@Test
 		fun `reservePath never clears a semaphore the route passes from behind`() {
 			// A semaphore facing against the direction of travel governs the OPPOSING movement.

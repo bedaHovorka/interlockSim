@@ -554,6 +554,17 @@ interface PathReservationService {
 	 * This is called automatically when a train's Tail leaves a block, ensuring
 	 * blocks are cleaned up as soon as they become available for subsequent trains.
 	 *
+	 * On a successful release this also calls [resetSemaphoresForReleasedBlocks] for the single
+	 * released [block], returning any semaphore this service recorded as cleared for [trainId] and
+	 * governing it back to [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP]. This is the
+	 * bookkeeping safety net for the tail-clearance path: head passage
+	 * ([cz.vutbr.fit.interlockSim.sim.Train]'s `semaphoreAction`) already drops the aspect a train
+	 * physically read on the way through, but does not purge this service's `clearedSemaphores` /
+	 * `semaphoreClearedFor` bookkeeping, and cannot reach a governing semaphore the front never
+	 * read. Safe by construction for this per-block call site: every boundary of a released block
+	 * is behind the train's head by definition, so the reset can never drop a signal the train
+	 * still needs ahead of it.
+	 *
 	 * ## Use Case
 	 *
 	 * Called by Train's Tail process after calling block.leave():
@@ -565,6 +576,7 @@ interface PathReservationService {
 	 * @param trainId The train identifier
 	 * @param block The block to unregister
 	 * @return true if block was unregistered, false if block is still occupied or not owned
+	 * @since Issue #893 (phase alpha, task A4) -- added the [resetSemaphoresForReleasedBlocks] call
 	 */
 	fun unregisterBlock(
 		trainId: String,
