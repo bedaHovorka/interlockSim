@@ -449,14 +449,82 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("returns false when no blocks were released")
+		@DisplayName("returns false when no blocks were released and no signal was cleared")
 		fun falseWhenNothingReleased() {
 			val svc = mockk<PathReservationService>(relaxed = true)
 			every { svc.releasePath("T99") } returns emptyList()
+			every { svc.hasClearedSignals("T99") } returns false
 
 			val p = port(reservationService = svc)
 
 			assertThat(p.releaseRoute("T99")).isFalse()
+		}
+
+		/**
+		 * Issue #893 task A7 (G7): `DefaultPathReservationService.releasePath` resets a train's
+		 * cleared signals even when it has zero blocks left to give back (reachable after a
+		 * partial release reclaimed the train's un-travelled tail, tasks A3/A4). Before this fix,
+		 * `releaseRoute` reported `false` here despite the signal genuinely being reset --
+		 * `OrphanReservationSweeper` never counted the reclaim and retried the same owner every
+		 * sweep. Per the binding traffic-simulation-expert R5 ruling, `releaseRoute` means "the
+		 * train's route state is now clear": `true` whenever blocks OR signals were released.
+		 */
+		@Test
+		@DisplayName("returns true when only a signal was cleared, even with zero blocks released")
+		fun trueWhenOnlySignalCleared() {
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePath("T50") } returns emptyList()
+			every { svc.hasClearedSignals("T50") } returns true
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRoute("T50")).isTrue()
+		}
+
+		/**
+		 * `hasClearedSignals` is read BEFORE `releasePath` is called, since `releasePath` purges
+		 * that very bookkeeping as part of resetting the signal (see
+		 * `PathReservationService.hasClearedSignals` KDoc). A stub that only returns `true` when
+		 * queried while the train's registered blocks are still intact catches an implementation
+		 * that accidentally reordered the two calls.
+		 */
+		@Test
+		@DisplayName("hasClearedSignals is queried before releasePath purges its bookkeeping")
+		fun hasClearedSignalsQueriedBeforeReleasePath() {
+			var released = false
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.hasClearedSignals("T51") } answers { !released }
+			every { svc.releasePath("T51") } answers {
+				released = true
+				emptyList()
+			}
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRoute("T51")).isTrue()
+		}
+
+		/**
+		 * Deliberate scope boundary of task A7 (G7): a train that holds neither a block nor a
+		 * cleared signal still reports `false`. This is NOT a "genuine failure" masked as one --
+		 * it is the case `DispatchDecisionApplier` surfaces to the LLM dispatcher as a distinct
+		 * `NO_RESERVATION` outcome (see `AppliedOutcomeChannelSp2c17Test.releaseRouteNoReservationRendered`
+		 * in `:dispatcher-agent`), which collapsing into the same `true` as a genuine release would
+		 * erase for no gain: `OrphanReservationSweeper` never calls `releaseRoute` for a train with
+		 * zero footprint in the first place (it only visits owners the snapshot already shows
+		 * holding a block), so widening `true` to this case fixes no reachable defect and would
+		 * only remove a working diagnostic signal.
+		 */
+		@Test
+		@DisplayName("stays false (not forced idempotent-true) when neither blocks nor a signal existed")
+		fun falseWhenNeitherBlocksNorSignalExisted() {
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePath("T52") } returns emptyList()
+			every { svc.hasClearedSignals("T52") } returns false
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRoute("T52")).isFalse()
 		}
 	}
 

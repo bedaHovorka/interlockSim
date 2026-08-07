@@ -245,6 +245,30 @@ interface PathReservationService {
 	fun releasePath(trainId: String): List<DynamicTrackBlock>
 
 	/**
+	 * Whether this service currently owns at least one semaphore recorded as cleared for
+	 * [trainId] -- a proceed aspect [trainId] obtained through [reservePath] that [releasePath]
+	 * (or [resetSemaphoresForReleasedBlocks]) has not yet returned to
+	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP].
+	 *
+	 * ## Why this exists (Issue #893, task A7)
+	 *
+	 * [releasePath] resets a train's cleared signals even when it has zero blocks left to give
+	 * back -- a train can legitimately reach that state after a partial release reclaimed its
+	 * un-travelled tail (tasks A3/A4), leaving it holding no blocks but still governed by an
+	 * earlier cleared START signal. [releasePath]'s own return value (the released block list)
+	 * cannot report that: the signal-clearing side effect and the block list are independent.
+	 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.releaseRoute] calls this
+	 * BEFORE [releasePath] -- which purges the bookkeeping this reads as part of its own reset --
+	 * so a signals-only release can be reported truthfully instead of being masked as "nothing
+	 * happened".
+	 *
+	 * @param trainId The train to check.
+	 * @return `true` if this service currently owns at least one cleared semaphore for [trainId].
+	 * @since Issue #893 (phase alpha, task A7)
+	 */
+	fun hasClearedSignals(trainId: String): Boolean
+
+	/**
 	 * Emit [BlockEvent.ReservationConflictDetected] for every blocked-path contention
 	 * that is still unresolved when the simulation ends. This is the "unresolved by
 	 * end of run" signal for genuine, never-clearing contention (e.g. a real deadlock),

@@ -176,8 +176,22 @@ class DefaultNetworkActuatorPort(
 
 	override fun releaseRoute(trainName: String): Boolean {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }
-		val released = pathReservationService.releasePath(trainName)
-		return released.isNotEmpty()
+		// Issue #893 task A7: read BEFORE releasePath, which purges this bookkeeping as a side
+		// effect of resetting the signals it recorded -- see PathReservationService.hasClearedSignals.
+		val hadClearedSignals = pathReservationService.hasClearedSignals(trainName)
+		val releasedBlocks = pathReservationService.releasePath(trainName)
+		// Truthful per the traffic-simulation-expert R5 ruling: "the train's route state is now
+		// clear" is true whenever EITHER blocks or signals were actually released. Before this fix,
+		// a train holding cleared signals but zero blocks (reachable after a partial release
+		// reclaimed its un-travelled tail, tasks A3/A4) had its signals genuinely reset here while
+		// this method reported `false` -- OrphanReservationSweeper then never counted the reclaim
+		// and, worse, treated the still-visible holding as unresolved on every subsequent sweep.
+		// Deliberately NOT forced to `true` when NEITHER blocks nor signals existed: that case is
+		// "trainName held no reservation at all", which DispatchDecisionApplier surfaces to the LLM
+		// dispatcher as a distinct NO_RESERVATION outcome (AppliedOutcomeChannel) -- collapsing it
+		// into the same `true` as a genuine release would erase that diagnostic signal for no gain,
+		// since OrphanReservationSweeper never calls this method for a train with zero footprint.
+		return releasedBlocks.isNotEmpty() || hadClearedSignals
 	}
 
 	override fun setSwitchPosition(

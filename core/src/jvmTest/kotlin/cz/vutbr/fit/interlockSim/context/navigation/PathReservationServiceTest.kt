@@ -1973,6 +1973,33 @@ class PathReservationServiceTest : KoinTestBase() {
 				).isTrue()
 		}
 
+		/**
+		 * Direct unit coverage of [PathReservationService.hasClearedSignals] (Issue #893, task
+		 * A7): [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.releaseRoute] reads
+		 * this before calling [PathReservationService.releasePath] (which purges the same
+		 * bookkeeping as a side effect of its own reset), so this method's truthfulness matters
+		 * on its own, independent of that caller.
+		 */
+		@Test
+		fun `hasClearedSignals reports true only while the train still owns a cleared semaphore`() {
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("t1 has not reserved anything yet")
+				.isFalse()
+
+			val result = service.reservePath("t1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("reservePath must have cleared at least the START signal")
+				.isTrue()
+
+			service.releasePath("t1")
+
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("releasePath resets and forgets every cleared signal for the train")
+				.isFalse()
+		}
+
 		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
 			val grid = simulationContext.getRailWayNetGrid()
 			for (x in 0 until grid.cols) {

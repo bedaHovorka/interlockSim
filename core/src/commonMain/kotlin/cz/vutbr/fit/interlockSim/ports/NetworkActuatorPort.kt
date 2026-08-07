@@ -112,16 +112,46 @@ interface NetworkActuatorPort {
 	): RouteRequestResult
 
 	/**
-	 * Release all track blocks reserved for [trainName].
+	 * Release all track blocks -- and any signal still cleared on its behalf -- reserved for
+	 * [trainName].
 	 *
 	 * The symmetric counterpart of [requestRoute]: when a train completes its journey or
 	 * reverses, the dispatcher releases the route so the blocks return to the free pool.
-	 * The operation is **idempotent** — calling it when [trainName] holds no reservation is
-	 * a no-op and returns `false`.  Blocks transition RESERVED → FREE.
+	 * The operation is **idempotent** — calling it when [trainName] holds no reservation and no
+	 * cleared signal is a no-op and returns `false`.  Blocks transition RESERVED → FREE.
+	 *
+	 * ## Truthful return value (Issue #893, task A7 -- binding traffic-simulation-expert R5 ruling)
+	 *
+	 * `true` covers every case where this call actually changed [trainName]'s registry/signal
+	 * state, including a **signals-only** release: a train can hold a cleared signal with zero
+	 * blocks reserved (e.g. after a partial release reclaimed its un-travelled tail), and that
+	 * reset is just as real a state change as a block returning to FREE. `false` is reserved for
+	 * the genuine no-op — [trainName] held neither a block nor a cleared signal — which callers
+	 * may use to distinguish "nothing to release" from "released".
+	 *
+	 * Two guarantees callers may rely on:
+	 *
+	 * 1. **`false` is never a failure indicator, and no caller may retry on it.** It reports one
+	 *    thing only: [trainName] had no block and no cleared signal to give back *at the moment
+	 *    this method was called*. It never means "the release attempt failed" -- there is no
+	 *    failure mode this method can report via its return value (see guarantee 2). A caller
+	 *    that retries `releaseRoute` because it saw `false`, hoping a later call will succeed
+	 *    where this one "failed", is retrying on a state that will not change on its own: if
+	 *    nothing changes between calls, [trainName] still holds nothing and `false` recurs
+	 *    forever. Treat `false` purely as **information** ("there was nothing here"), never as a
+	 *    **command to retry**.
+	 * 2. **`true` reports a registry/signal STATE CHANGE, not per-element success.** The
+	 *    reference implementation ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.releasePath])
+	 *    catches, logs, and swallows individual element failures internally -- a block whose
+	 *    `cancelPathSetup` throws, or a switch whose `unlock` throws, is logged at WARN and
+	 *    skipped, never surfaced to the caller. `releaseRoute` still reports `true` in that case,
+	 *    because the registry/signal bookkeeping this train owned was still cleared (or attempted
+	 *    to be cleared) as a whole -- the return value answers "did I have something to release
+	 *    and did I act on it", not "did every underlying element operation individually succeed".
 	 *
 	 * @param trainName Name of the train whose route should be released (non-blank).
-	 * @return `true` if at least one block was released; `false` if the train held no
-	 *   reservation.
+	 * @return `true` if at least one block or one cleared signal was released; `false` if the
+	 *   train held neither. Never a failure signal either way -- see the two guarantees above.
 	 * @throws IllegalArgumentException if [trainName] is blank.
 	 */
 	fun releaseRoute(trainName: String): Boolean

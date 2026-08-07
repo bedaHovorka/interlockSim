@@ -943,6 +943,13 @@ class DefaultPathReservationService(
 	}
 
 	/**
+	 * See [PathReservationService.hasClearedSignals]. `clearedSemaphores` never holds an
+	 * empty set for a key -- every removal path ([resetClearedSemaphores], [resetSemaphoreSet])
+	 * deletes the map entry once its set empties -- so a key-presence check alone is exact.
+	 */
+	override fun hasClearedSignals(trainId: String): Boolean = clearedSemaphores.containsKey(trainId)
+
+	/**
 	 * Check if a path is currently available.
 	 *
 	 * ## Implementation
