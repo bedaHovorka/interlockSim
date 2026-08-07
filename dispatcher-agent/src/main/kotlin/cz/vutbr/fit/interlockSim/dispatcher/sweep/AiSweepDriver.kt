@@ -155,13 +155,16 @@ class AiSweepDriver(
 		mainClass: String,
 		timeoutSeconds: Long
 	): SweepRunOutcome {
+		val logDir = outputRoot.resolve(RUN_LOG_DIR)
+		Files.createDirectories(logDir)
 		val request =
 			SweepProcessRequest(
 				mainClass = mainClass,
 				exampleName = run.cell.example,
 				endTimeSeconds = run.endTimeSeconds,
 				systemProperties = run.cell.systemProperties(run.runId, outputRoot.toString()),
-				timeoutSeconds = timeoutSeconds
+				timeoutSeconds = timeoutSeconds,
+				logFile = logDir.resolve("${run.runId}.log")
 			)
 
 		val result =
@@ -261,6 +264,9 @@ class AiSweepDriver(
 	private companion object {
 		private const val NANOS_PER_SECOND: Long = 1_000_000_000L
 
+		/** Sub-directory of the output root holding one log file per run. */
+		private const val RUN_LOG_DIR: String = "logs"
+
 		/** `<yyyyMMdd-HHmmss>-<runId>.json`, as written by `DefaultRunSnapshotStore`. */
 		private val RUN_FILE_NAME = Regex("""\d{8}-\d{6}-(.+)\.json""")
 	}
@@ -295,13 +301,21 @@ data class SweepSummary(
 	val aborted: Int
 )
 
-/** Everything a runner needs to launch one run. */
+/**
+ * Everything a runner needs to launch one run.
+ *
+ * @property logFile Where the child's output is written. Each run gets its own file: the default
+ *   logging configuration emits several hundred megabytes per 600 s run, so inheriting twenty of
+ *   them into one stream is not viable, and `logback.xml`'s shared append-mode
+ *   `logs/interlockSim.log` would merge every run of the sweep into a single unbounded file.
+ */
 data class SweepProcessRequest(
 	val mainClass: String,
 	val exampleName: String,
 	val endTimeSeconds: Long,
 	val systemProperties: Map<String, String>,
-	val timeoutSeconds: Long
+	val timeoutSeconds: Long,
+	val logFile: Path
 )
 
 /**
@@ -334,6 +348,11 @@ class ForkedJvmSweepProcessRunner : SweepProcessRunner {
 				add(javaBinary())
 				add("-cp")
 				add(System.getProperty("java.class.path"))
+				// Quietens the per-train-per-tick INFO logging that would otherwise make an
+				// unattended sweep produce gigabytes, and keeps the child off logback.xml's
+				// shared append-mode logs/interlockSim.log. See logback-sweep.xml for what is
+				// deliberately left at INFO.
+				add("-D$LOGBACK_CONFIG_PROPERTY=$SWEEP_LOGBACK_CONFIG")
 				request.systemProperties.forEach { (key, value) -> add("-D$key=$value") }
 				add(request.mainClass)
 				add("example")
@@ -345,7 +364,7 @@ class ForkedJvmSweepProcessRunner : SweepProcessRunner {
 		val process =
 			ProcessBuilder(command)
 				.redirectErrorStream(true)
-				.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+				.redirectOutput(request.logFile.toFile())
 				.start()
 
 		val finished = process.waitFor(request.timeoutSeconds, TimeUnit.SECONDS)
@@ -367,6 +386,10 @@ class ForkedJvmSweepProcessRunner : SweepProcessRunner {
 
 	private companion object {
 		private const val DESTROY_GRACE_SECONDS: Long = 10L
+		private const val LOGBACK_CONFIG_PROPERTY: String = "logback.configurationFile"
+
+		/** Classpath resource in `:desktop-ui`; see its own header comment for the rationale. */
+		private const val SWEEP_LOGBACK_CONFIG: String = "logback-sweep.xml"
 	}
 }
 
