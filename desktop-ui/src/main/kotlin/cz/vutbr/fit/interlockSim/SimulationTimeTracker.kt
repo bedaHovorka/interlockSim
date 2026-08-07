@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.sim.SimulationEvent
  */
 class SimulationTimeTracker : ContextPropertyChangeListener {
 	/** Highest simulated time observed so far; `0.0` if no simulation event has arrived. */
+	@Volatile
 	var lastSimTime: Double = 0.0
 		private set
 

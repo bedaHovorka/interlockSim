@@ -22,7 +22,7 @@ import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 
 /**
- * Static description of one switch (výhybka) in the controlled area.
+ * Static description of one switch (výhybka, turnout) in the controlled area.
  *
  * @property id   Compact switch identifier (SP3.2, e.g. `V7`).
  * @property type Switch [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type] name, e.g.

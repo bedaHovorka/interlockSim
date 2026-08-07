@@ -124,6 +124,11 @@ object RunCompletionCheck {
 	/**
 	 * Classifies a finished run.
 	 *
+	 * The tolerance model assumes a sweep-range horizon (>= ~10 s): for a sub-second
+	 * [requestedEndTime] the [MIN_TOLERANCE_SECONDS] floor dominates, so any non-negative
+	 * [reachedSimTime] returns [RunOutcome.COMPLETED]. The sweep grid uses 600 s, so this
+	 * boundary is not exercised in practice.
+	 *
 	 * @param reachedSimTime Highest simulated time observed during the run.
 	 * @param requestedEndTime End time the run was launched with; must be positive.
 	 * @param toleranceSeconds Shortfall tolerated as complete; must not be negative. Defaults to

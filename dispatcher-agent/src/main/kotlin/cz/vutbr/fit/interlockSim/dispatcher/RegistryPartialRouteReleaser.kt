@@ -98,7 +98,15 @@ class RegistryPartialRouteReleaser(
 			try {
 				block.cancelPathSetup(reservedFrom)
 				// Fail-safe before the block becomes available to anyone else.
-				(reservedFrom as? DynamicRailSemaphore)?.signal = Signal.STOP
+				val semaphore = reservedFrom as? DynamicRailSemaphore
+				if (semaphore != null) {
+					semaphore.signal = Signal.STOP
+				} else {
+					logger.debug {
+						"RegistryPartialRouteReleaser: separator ${reservedFrom::class.simpleName} is not a " +
+							"semaphore; no signal to drive to STOP for block '$id'"
+					}
+				}
 				if (pathReservationService.unregisterBlock(trainId, block)) {
 					released += id
 				} else {
