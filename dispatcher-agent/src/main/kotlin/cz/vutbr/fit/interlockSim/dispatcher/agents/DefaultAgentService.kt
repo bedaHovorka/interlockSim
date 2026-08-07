@@ -48,7 +48,8 @@ class DefaultAgentService(
 	override suspend fun createDispatchAgent(
 		modelName: String,
 		tools: List<DomainTool>,
-		systemPrompt: String?
+		systemPrompt: String?,
+		cycleHistory: CycleHistory
 	): KoogDispatchAgent {
 		logger.debug {
 			"DefaultAgentService.createDispatchAgent: modelName=$modelName, tools=${tools.size}, " +
@@ -69,6 +70,6 @@ class DefaultAgentService(
 			)
 
 		logger.debug { "DefaultAgentService: created AIAgent with ${tools.size} Koog-wrapped tools" }
-		return KoogDispatchAgentImpl(aiAgent)
+		return KoogDispatchAgentImpl(aiAgent, cycleHistory)
 	}
 }

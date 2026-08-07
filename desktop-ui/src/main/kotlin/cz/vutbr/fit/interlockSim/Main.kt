@@ -21,6 +21,10 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.sweep.AiSweepDriver
+import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGrid
+import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGridException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.TextReporter
@@ -207,6 +211,57 @@ class Main {
 		}
 	}
 
+	/**
+	 * Runs an unattended parameter sweep over the headless examples (SP2c.24, Issue #847).
+	 *
+	 * The mode itself is thin on purpose: it parses flags, loads the grid and hands both to
+	 * [AiSweepDriver], which lives in `:dispatcher-agent` next to the run recorder and the
+	 * aggregator it drives. The child process's main class is passed in from here rather than
+	 * hardcoded there, so `:dispatcher-agent` keeps knowing nothing about `:desktop-ui`.
+	 *
+	 * ## Exit status
+	 *
+	 * A sweep whose runs *fail* is a successful measurement of a failing arm — that is precisely
+	 * what A4's amended "measured success rate" asks for — so failing runs do not fail the
+	 * process. Only a sweep that could not be *performed* (unreadable or invalid grid, bad flags)
+	 * exits non-zero. The verdict lives in `report.md`, not in `$?`.
+	 *
+	 * @return `true` if the sweep ran, `false` if the command line or grid file was rejected.
+	 */
+	fun runAiSweep(args: Array<String>): Boolean {
+		val command =
+			try {
+				AiSweepCommand.parse(args)
+			} catch (e: AiSweepUsageException) {
+				logger.error { "${e.message}\n${AiSweepCommand.USAGE}" }
+				return false
+			}
+
+		val grid =
+			try {
+				SweepGrid.load(command.gridFile).let { loaded ->
+					loaded.copy(
+						repeat = command.repeatOverride ?: loaded.repeat,
+						perRunTimeoutSeconds = command.timeoutOverride ?: loaded.perRunTimeoutSeconds
+					)
+				}
+			} catch (e: SweepGridException) {
+				logger.error(e) { "Cannot start sweep: ${e.message}" }
+				return false
+			} catch (e: IllegalArgumentException) {
+				logger.error(e) { "Cannot start sweep: ${e.message}" }
+				return false
+			}
+
+		AiSweepDriver(store = DefaultRunSnapshotStore(command.outputRoot)).run(
+			grid = grid,
+			outputRoot = command.outputRoot,
+			mainClass = CHILD_MAIN_CLASS,
+			dryRun = command.dryRun
+		)
+		return true
+	}
+
 	private fun classifyRun(
 		reachedSimTime: Double,
 		requestedEndTime: Double?
@@ -363,6 +418,17 @@ class Main {
 private const val MSG_CONTEXT_CREATION_FAILED = "Context creation failed"
 
 /**
+ * Main class the sweep driver launches each child run with (Issue #847).
+ *
+ * A string rather than a class reference because it is handed to `:dispatcher-agent`, which must
+ * not depend on `:desktop-ui`; Kotlin compiles top-level `main` in `Main.kt` into `MainKt`.
+ */
+private const val CHILD_MAIN_CLASS = "cz.vutbr.fit.interlockSim.MainKt"
+
+/** Exit status when `aiSweep` was invoked incorrectly or its grid file could not be used. */
+private const val SWEEP_USAGE_EXIT_CODE = 2
+
+/**
  * Parses the command mode from the argument list.
  *
  * Returns the first argument if it is a recognized mode string, or `null` if the
@@ -377,7 +443,7 @@ internal fun parseMode(args: Array<String>): String? {
 	return args[0].takeIf { it in VALID_MODES }
 }
 
-private val VALID_MODES = setOf("sim", "simgui", "edit", "example", "exampleGui")
+private val VALID_MODES = setOf("sim", "simgui", "edit", "example", "exampleGui", "aiSweep")
 
 /**
  * @param args
@@ -432,6 +498,12 @@ fun main(args: Array<String>) {
 			}
 		}
 		"exampleGui" -> main.runExampleGui(args)
+		// Issue #847 (SP2c.24): unattended parameter sweep. Non-zero exit means the sweep could
+		// not be performed at all — never that its runs failed, which is a measurement result.
+		"aiSweep" ->
+			if (!main.runAiSweep(args)) {
+				exitProcess(SWEEP_USAGE_EXIT_CODE)
+			}
 		"edit" -> main.loadGui(args)
 		else ->
 			logger.error {

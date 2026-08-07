@@ -181,7 +181,8 @@ class MainArgumentParsingTest {
 		@Test
 		@DisplayName("parseMode recognises all supported modes")
 		fun `parseMode recognises all supported modes`() {
-			for (mode in listOf("sim", "simgui", "edit", "example", "exampleGui")) {
+			// aiSweep added in Issue #847 (SP2c.24 — headless N-run sweep driver).
+			for (mode in listOf("sim", "simgui", "edit", "example", "exampleGui", "aiSweep")) {
 				assertThat(parseMode(arrayOf(mode))).isEqualTo(mode)
 			}
 		}

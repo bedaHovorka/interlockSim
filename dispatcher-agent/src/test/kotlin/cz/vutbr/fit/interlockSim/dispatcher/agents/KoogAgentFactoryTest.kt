@@ -121,14 +121,18 @@ class KoogAgentFactoryTest {
 			private set
 		var capturedSystemPrompt: String? = null
 			private set
+		var capturedCycleHistory: CycleHistory? = null
+			private set
 
 		override suspend fun createDispatchAgent(
 			modelName: String,
 			tools: List<DomainTool>,
-			systemPrompt: String?
+			systemPrompt: String?,
+			cycleHistory: CycleHistory
 		): KoogDispatchAgent {
 			capturedTools = tools
 			capturedSystemPrompt = systemPrompt
+			capturedCycleHistory = cycleHistory
 			return object : KoogDispatchAgent {
 				override suspend fun decideAsync(observation: DispatchObservation): List<DispatchDecision> = emptyList()
 			}

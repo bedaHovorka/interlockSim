@@ -105,7 +105,7 @@ class CancelRouteTool(
 			}
 
 		logger.debug { "CancelRouteTool.execute: trainId=$resolvedTrainId (raw='$trainId')" }
-		sinkHolder.emit(DispatchAction.CancelRoute(resolvedTrainId))
+		emitOrRejectForCap(sinkHolder, DispatchAction.CancelRoute(resolvedTrainId))?.let { return it }
 		return ToolResult.Success("emitted cancel_route train=$resolvedTrainId")
 	}
 }

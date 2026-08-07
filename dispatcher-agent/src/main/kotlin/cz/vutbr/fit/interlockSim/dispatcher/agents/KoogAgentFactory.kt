@@ -88,7 +88,19 @@ class KoogAgentFactory(
 	 *
 	 * @since Issue #847 round 4 (PR #891)
 	 */
-	private val runRecorderProvider: () -> DispatcherRunRecorder? = { null }
+	private val runRecorderProvider: () -> DispatcherRunRecorder? = { null },
+	/**
+	 * Bounded per-cycle history handed to the built agent and written by
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] after each cycle
+	 * (#822 C5). Shared per context exactly like [sinkHolder], and for the same reason: the
+	 * writer and the reader are two different objects on the same driver thread.
+	 *
+	 * Defaults to a disabled history so agents built outside a run behave as they did before
+	 * Issue #847.
+	 *
+	 * @since Issue #847 (SP2c.24)
+	 */
+	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0)
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -210,7 +222,8 @@ class KoogAgentFactory(
 			agentService.createDispatchAgent(
 				modelName = ollamaConfig.modelName,
 				tools = instrumentedTools,
-				systemPrompt = systemPrompt
+				systemPrompt = systemPrompt,
+				cycleHistory = cycleHistory
 			)
 
 		logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }

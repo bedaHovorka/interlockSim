@@ -254,7 +254,7 @@ class RequestRouteTool(
 			"RequestRouteTool.execute: emitting action trainName=$resolvedTrainName (raw='$trainName'), " +
 				"from=$fromEndpointName, to=$toEndpointName"
 		}
-		sinkHolder.emit(action)
+		emitOrRejectForCap(sinkHolder, action)?.let { return it }
 		return ToolResult.Success(
 			"emitted request_route train=$resolvedTrainName from=$fromEndpointName to=$toEndpointName"
 		)

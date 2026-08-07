@@ -15,7 +15,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
+import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
@@ -46,6 +48,7 @@ import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
 import org.koin.dsl.module
+import java.nio.file.Path
 import java.util.UUID
 
 /**
@@ -148,10 +151,28 @@ val dispatcherAgentModule: Module =
 		// No Spring Boot: uses lightweight Koin DI instead.
 		single<AgentService> { DefaultAgentService(get(), get()) } // OllamaSimpleExecutor, OllamaExecutorConfig
 
+		// Issue #847 (SP2c.24): per-run knobs read from -D system properties, so the sweep driver
+		// can vary them between forked runs. Absent properties reproduce the previous defaults
+		// exactly, so a plain `java -jar … example shuntingLoopAI 600` is unchanged.
+		single<DispatcherRunConfig> { DispatcherRunConfig.fromProperties() }
+
 		// SP1.3: Ollama executor configuration (singleton)
 		// All agents share the same Ollama endpoint, model, and inference parameters.
 		// The config is immutable and stateless, safe for global sharing.
-		single<OllamaExecutorConfig> { OllamaExecutorConfig.default() }
+		//
+		// Issue #847: model and temperature are the two grid axes that were already live; they are
+		// overridden here rather than in OllamaExecutorConfig.default() so the environment-variable
+		// contract (OLLAMA_BASE_URL — machine configuration) stays separate from the sweep's
+		// per-run contract (-D properties — measurement parameters).
+		single<OllamaExecutorConfig> {
+			val runConfig = get<DispatcherRunConfig>()
+			OllamaExecutorConfig.default().let { base ->
+				base.copy(
+					modelName = runConfig.model ?: base.modelName,
+					temperature = runConfig.temperature ?: base.temperature
+				)
+			}
+		}
 
 		// SP1.5: Ollama executor backend (singleton, Issue #550)
 		// Wraps Koog's simpleOllamaAIExecutor for local LLM inference.
@@ -295,7 +316,14 @@ val dispatcherAgentModule: Module =
 			// `current` at agent construction; KoogAgentPlanAdapter reads its per-cycle emission
 			// counter to decide whether the LLM acted via tools (and thus whether the rule-based
 			// fallback must run). Defaults to EmittedActionSink.NO_OP until the factory wires it.
-			scoped<SinkHolder> { SinkHolder() }
+			// Issue #847: maxActionsPerTick becomes real here. Before it, §5.5's 0–3 cap existed
+			// only inside the test-only ActionValidator and the model could emit without bound.
+			scoped<SinkHolder> { SinkHolder(maxActionsPerTick = get<DispatcherRunConfig>().maxActionsPerTick) }
+
+			// Issue #847: bounded per-cycle history (#822 C5) on the live path. One per context,
+			// written by KoogAgentPlanAdapter and read by the agent it built — the same
+			// two-objects-one-thread sharing pattern as SinkHolder above.
+			scoped<CycleHistory> { CycleHistory(capacity = get<DispatcherRunConfig>().historyN) }
 
 			// SP1.3: KoogAgentFactory (per-context builder, receives tools/config)
 			// Factory is scoped because it receives context-scoped dependencies (ports from SP1.4, tools in SP1.4+).
@@ -312,7 +340,8 @@ val dispatcherAgentModule: Module =
 					// Issue #847 round 4: resolved lazily per rejection, not captured here.
 					// ExampleRegistry declares the correctly-armed recorder AFTER resolving this
 					// factory, so an eagerly-captured instance would be the default rule-based one.
-					runRecorderProvider = { getOrNull<DispatcherRunRecorder>() }
+					runRecorderProvider = { getOrNull<DispatcherRunRecorder>() },
+					cycleHistory = get() // Scoped to this context (Issue #847 — shared with KoogAgentPlanAdapter)
 				)
 			}
 
@@ -321,7 +350,13 @@ val dispatcherAgentModule: Module =
 			// build/reports/dispatcher-runs/ was never created and SP2c.23's aggregator (#846) had
 			// no producer — dispatcherReliabilityReport always rendered an all-zero report over an
 			// empty directory. Scoped rather than single so it shares the recorder's lifetime.
-			scoped<RunSnapshotStore> { DefaultRunSnapshotStore() }
+			// Issue #847: the sweep driver points runs at its own output directory so a sweep's
+			// gate is computed over that sweep's runs only, and not over whatever earlier
+			// diagnostic runs happen to be lying in the default directory.
+			scoped<RunSnapshotStore> {
+				val root = get<DispatcherRunConfig>().runsRoot
+				if (root == null) DefaultRunSnapshotStore() else DefaultRunSnapshotStore(Path.of(root))
+			}
 
 			// SP2c.22 (#845): DispatcherRunRecorder (scoped per context)
 			// One run recorder per simulation context — the Koin scope boundary replaces any
@@ -331,14 +366,22 @@ val dispatcherAgentModule: Module =
 			// LLM arms will override them when they wire a KoogAgentPlanAdapter.
 			scoped<DispatcherRunRecorder> {
 				DefaultDispatcherRunRecorder(
-					runId = UUID.randomUUID().toString(),
+					// Issue #847 (SP2c.24): honour a sweep-assigned run id here too, not only in the
+					// LLM example's override — the rule-based baseline is a grid cell like any other
+					// and its runs have to be resumable by the same file-name scan.
+					runId = get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
 					arm = DispatcherArm.RULE_BASED,
+					// Issue #847 (SP2c.24): report what this run was actually given, not the
+					// hardcoded 500/10 that predated any of these knobs being real. `tickPeriodMs`
+					// genuinely applies to the rule-based arm too — it also runs through
+					// AgentLoopDriver. `temperature`/`model` stay empty because a rule-based run
+					// has neither, which is what the report's "rule-based" label means.
 					params =
 						RunParameters(
-							tickPeriodMs = 500L,
-							historyN = 10,
+							tickPeriodMs = get<DispatcherRunConfig>().tickPeriodMs,
+							historyN = get<DispatcherRunConfig>().historyN,
 							temperature = 0.0,
-							maxActionsPerTick = 3,
+							maxActionsPerTick = get<DispatcherRunConfig>().maxActionsPerTick,
 							model = "",
 							seed = null
 						)

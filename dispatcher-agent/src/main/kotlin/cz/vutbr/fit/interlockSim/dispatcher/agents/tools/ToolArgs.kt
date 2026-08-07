@@ -9,8 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
+import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 
 // Argument-extraction helpers for DomainTool implementations (SP1.6, Issue #551).
 //
@@ -57,6 +61,38 @@ internal fun trainIdParameter(description: String): DomainToolParameter =
  * cases so a single `?: return ToolResult.Error(...)` handles both.
  */
 internal fun Map<String, Any?>.stringParam(name: String): String? = (this[name] as? String)?.takeIf { it.isNotBlank() }
+
+/**
+ * Emits [action] through [sinkHolder], or returns the shared per-cycle-cap rejection.
+ *
+ * ## Why (Issue #847, SP2c.24)
+ *
+ * §5.5 caps a step at 0–3 actions, but the only implementation of that cap lived in
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator], which production never constructs — so
+ * on the live tool path the model could emit as many actions per cycle as it liked, and
+ * `maxActionsPerTick` was recorded as the `-1` "not applicable" sentinel in every run JSON.
+ * Routing all three mutating actuators through this one helper makes the cap real, keeps the
+ * LLM-facing wording identical across them, and produces one
+ * [RejectionCode.ACTION_LIMIT_EXCEEDED] the run recorder already knows how to count.
+ *
+ * [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp] is deliberately not routed here:
+ * `no_op` is a first-class decision (C6) and is exempt from the cap, exactly as in
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator.validateBatch].
+ *
+ * @return `null` when the action was emitted; a [ToolResult.Error] to return verbatim otherwise.
+ */
+internal fun emitOrRejectForCap(
+	sinkHolder: SinkHolder,
+	action: DispatchAction
+): ToolResult.Error? {
+	if (sinkHolder.tryEmit(action)) return null
+	return ToolResult.Error(
+		"Per-tick action limit (${sinkHolder.maxActionsPerTick}) reached — this action was not " +
+			"applied. Emit no more than ${sinkHolder.maxActionsPerTick} actions per dispatch cycle; " +
+			"the rest of this situation can be handled on the next cycle.",
+		rejection = RejectionCode.ACTION_LIMIT_EXCEEDED
+	)
+}
 
 /**
  * Resolves a model-supplied train id against the [known] ids, tolerating the one abbreviation

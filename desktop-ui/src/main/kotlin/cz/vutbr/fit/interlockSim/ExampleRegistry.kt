@@ -25,9 +25,11 @@ import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
 import cz.vutbr.fit.interlockSim.dispatcher.RegistryPartialRouteReleaser
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ConflictHintLatch
+import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
@@ -205,26 +207,30 @@ class ExampleRegistry {
 	}
 
 	/**
-	 * Builds the [RunParameters] recorded for an LLM-arm run from the executor config that run
-	 * actually uses (Issue #847 round 4, R4-5).
+	 * Builds the [RunParameters] recorded for an LLM-arm run from the settings that run actually
+	 * uses (Issue #847 round 4, R4-5; completed in SP2c.24).
 	 *
-	 * Two fields have no live counterpart and are recorded as [PARAM_NOT_APPLICABLE] rather than
-	 * guessed: `historyN` and `maxActionsPerTick` are `DispatchTickLoop`/`ActionValidator` settings,
-	 * and neither of those is constructed in production — the live path is `AgentLoopDriver`, which
-	 * has no history ring buffer and no per-tick action cap. Recording a plausible-looking number
-	 * here would put a parameter into #847's sweep grid that nothing in the run honours, which is
-	 * worse than recording that it does not apply.
+	 * Round 4 recorded `tickPeriodMs`, `historyN` and `maxActionsPerTick` as
+	 * [PARAM_NOT_APPLICABLE] because nothing in production honoured them — they were
+	 * `DispatchTickLoop` / `ActionValidator` settings and neither of those classes is ever
+	 * constructed outside tests. SP2c.24 made all three live on the `AgentLoopDriver` path
+	 * (a wall-clock cycle floor, a [cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory],
+	 * and a [cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder] cap respectively), so they
+	 * are now recorded as what the run was given.
 	 *
-	 * `tickPeriodMs` is likewise not a configured wall-clock period on this path: ticks are
-	 * signal-driven from `ShuntingLoop`, one control step per 2.0 simulated seconds, and the
-	 * wall-clock spacing follows from `ThrottlingSimulationController`'s speed multiplier.
+	 * `seed` stays `null`, and that is not an oversight: Koog 1.1.1 has no path from
+	 * [OllamaExecutorConfig] to Ollama's `seed` option, so pinning one is impossible here and
+	 * recording a value would claim a reproducibility guarantee the run does not have.
 	 */
-	private fun llmRunParameters(config: OllamaExecutorConfig): RunParameters =
+	private fun llmRunParameters(
+		config: OllamaExecutorConfig,
+		runConfig: DispatcherRunConfig
+	): RunParameters =
 		RunParameters(
-			tickPeriodMs = PARAM_NOT_APPLICABLE.toLong(),
-			historyN = PARAM_NOT_APPLICABLE,
+			tickPeriodMs = runConfig.tickPeriodMs,
+			historyN = runConfig.historyN,
 			temperature = config.temperature.toDouble(),
-			maxActionsPerTick = PARAM_NOT_APPLICABLE,
+			maxActionsPerTick = runConfig.maxActionsPerTick,
 			model = config.modelName,
 			seed = null
 		)
@@ -289,7 +295,10 @@ class ExampleRegistry {
 						context = context,
 						fallbackDispatcher = RuleBasedDispatcher(),
 						commandQueue = context.scope.get<ActuatorCommandQueue>(),
-						sinkHolder = context.scope.get<SinkHolder>()
+						sinkHolder = context.scope.get<SinkHolder>(),
+						// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
+						// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
+						cycleHistory = context.scope.get<CycleHistory>()
 					)
 				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 				// Register in scope so callers outside this factory can retrieve it after the run
@@ -303,9 +312,16 @@ class ExampleRegistry {
 				// runs, so the per-run JSON identifies its own arm and parameters.
 				context.scope.declare<DispatcherRunRecorder>(
 					DefaultDispatcherRunRecorder(
-						runId = UUID.randomUUID().toString(),
+						// Issue #847 (SP2c.24): the sweep driver assigns a deterministic run id per grid
+						// cell and passes it in, so an interrupted sweep can tell from the file names
+						// which cells already have a result and resume instead of restarting.
+						runId = context.scope.get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
 						arm = DispatcherArm.LLM_TOOL_CALLING,
-						params = llmRunParameters(context.scope.get<OllamaExecutorConfig>())
+						params =
+							llmRunParameters(
+								context.scope.get<OllamaExecutorConfig>(),
+								context.scope.get<DispatcherRunConfig>()
+							)
 					)
 				)
 				val pacingController =
@@ -440,7 +456,10 @@ class ExampleRegistry {
 						context = context,
 						fallbackDispatcher = RuleBasedDispatcher(),
 						commandQueue = context.scope.get<ActuatorCommandQueue>(),
-						sinkHolder = context.scope.get<SinkHolder>()
+						sinkHolder = context.scope.get<SinkHolder>(),
+						// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
+						// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
+						cycleHistory = context.scope.get<CycleHistory>()
 					)
 				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 				// Register in scope so callers outside this factory (e.g. Frame's
@@ -628,7 +647,10 @@ class ExampleRegistry {
 				// snapshot's own `ticksByOutcome.values.sum() == totalTicks` invariant is written
 				// against. It previously had no production caller, so a recorded run reported zero
 				// ticks no matter how long it ran.
-				onTickRecord = runRecorder?.let { it::onTick }
+				onTickRecord = runRecorder?.let { it::onTick },
+				// Issue #847 (SP2c.24): the grid's tickPeriodMs axis. Zero by default, so a run
+				// that does not set the property paces exactly as it did before.
+				tickPeriodMs = context.scope.get<DispatcherRunConfig>().tickPeriodMs
 			)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
@@ -812,17 +834,5 @@ class ExampleRegistry {
 				context.setMainProcess(process)
 				context
 			}
-	}
-
-	companion object {
-		/**
-		 * Sentinel for a [RunParameters] field the live wiring genuinely has no value for.
-		 *
-		 * Negative so it can never be mistaken for a real setting by #847's parameter grid or
-		 * #846's aggregator, both of which group runs by these values.
-		 *
-		 * @since Issue #847 round 4 (PR #891)
-		 */
-		private const val PARAM_NOT_APPLICABLE: Int = -1
 	}
 }

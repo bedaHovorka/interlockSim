@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.delay
 
 /**
  * Drives the dispatcher sense→decide→act loop from outside the kDisco kernel,
@@ -151,15 +152,33 @@ class AgentLoopDriver(
 	 *
 	 * @since Issue #847 round 4 (PR #891)
 	 */
-	private val onTickRecord: ((TickRecord) -> Unit)? = null
+	private val onTickRecord: ((TickRecord) -> Unit)? = null,
+	/**
+	 * Minimum wall-clock spacing between the end of one cycle and the end of the next, in
+	 * milliseconds. `0` (the default) imposes nothing and reproduces the pre-#847 cadence.
+	 *
+	 * See [awaitMinimumCyclePeriod] for why this is a wall-clock floor rather than the
+	 * simulated-time period #822 §5.5 describes.
+	 *
+	 * @since Issue #847 (SP2c.24 — parameter grid)
+	 */
+	private val tickPeriodMs: Long = DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		private const val NANOS_PER_MILLI: Long = 1_000_000L
 	}
 
 	/** Simulation time at the end of the most recently completed cycle; 0.0 before the first cycle. */
 	private var prevSimTime: Double = 0.0
 	private var hasProcessedSnapshot: Boolean = false
+
+	/**
+	 * Wall clock at the end of the most recently completed cycle, or `null` before the first.
+	 * Driver-thread-confined, like [prevSimTime].
+	 */
+	private var lastCycleEndNanos: Long? = null
 
 	/**
 	 * Most recent [TickOutcome] reported by [plannerTickSource]'s [PlannerTickListener], if any.
@@ -310,8 +329,50 @@ class AgentLoopDriver(
 		controller.awaitIfPaused()
 		val simDelta = snapshot.simTime - prevSimTime
 		controller.throttle(simDelta)
+		awaitMinimumCyclePeriod()
 		prevSimTime = snapshot.simTime
 		hasProcessedSnapshot = true
 		return true
+	}
+
+	/**
+	 * Holds the driver until at least [tickPeriodMs] of wall clock has passed since the previous
+	 * cycle ended (Issue #847, SP2c.24). No-op at the default `0`.
+	 *
+	 * ## Why wall clock and not simulated time
+	 *
+	 * #822 §5.5 specifies a tick period in *simulated* seconds, and on the synchronous
+	 * [DispatchTickLoop] path that is what it means. This driver is the asynchronous path, and its
+	 * cadence is not its own to choose: ticks arrive from [SnapshotSignal], which the sim thread
+	 * fires once per `ShuntingLoop` control step. Reinterpreting the parameter as a simulated-time
+	 * period here would mean changing that control step — which lives in `core/` and is off limits
+	 * (C10). The only period this driver can actually impose is a wall-clock floor between cycles,
+	 * so that is what it imposes, and the run JSON records it as such.
+	 *
+	 * ## What it can and cannot do
+	 *
+	 * It can only ever make the loop *slower*. At the 10–25 s inference latency measured on
+	 * `qwen2.5:7b-instruct`, any value below p95 latency is inert — the cycle already took longer
+	 * than the floor. It is honoured, recorded and sweepable; whether it is *useful* at a given
+	 * model's latency is exactly the sort of thing the #847 grid exists to answer, and the answer
+	 * for a 7B on this station is "not below ~25 s".
+	 *
+	 * [kotlinx.coroutines.delay] rather than `Thread.sleep`: the driver runs inside `runBlocking`
+	 * on a daemon thread shared with nothing else, but suspending keeps this consistent with
+	 * [SimulationController.awaitIfPaused] above and leaves the thread interruptible.
+	 */
+	private suspend fun awaitMinimumCyclePeriod() {
+		if (tickPeriodMs <= 0L) return
+		val now = System.nanoTime()
+		val previous = lastCycleEndNanos
+		lastCycleEndNanos = now
+		if (previous == null) return
+		val elapsedMs = (now - previous) / NANOS_PER_MILLI
+		val remainingMs = tickPeriodMs - elapsedMs
+		if (remainingMs > 0) {
+			logger.debug { "AgentLoopDriver: holding ${remainingMs}ms to honour tickPeriodMs=$tickPeriodMs" }
+			delay(remainingMs)
+			lastCycleEndNanos = System.nanoTime()
+		}
 	}
 }

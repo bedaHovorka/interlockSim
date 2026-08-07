@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
@@ -149,7 +150,17 @@ class KoogAgentPlanAdapter(
 	private val fallbackDispatcher: Dispatcher,
 	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
 	private val commandQueue: ActuatorCommandQueue,
-	private val sinkHolder: SinkHolder
+	private val sinkHolder: SinkHolder,
+	/**
+	 * Bounded history of previous cycles, rendered into the next cycle's prompt by the agent
+	 * (#822 C5). This adapter is its only writer: it is the one place that knows both what the
+	 * agent emitted (via [sinkHolder]) and how the cycle was classified.
+	 *
+	 * Defaults to a disabled history, reproducing the pre-#847 stateless-per-cycle behaviour.
+	 *
+	 * @since Issue #847 (SP2c.24)
+	 */
+	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0)
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -252,7 +263,7 @@ class KoogAgentPlanAdapter(
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
-				tickListener?.onTick(TickRecord(TickOutcome.LLM_ACTIONS, observation.snapshot.simTime))
+				reportTick(TickOutcome.LLM_ACTIONS, observation.snapshot.simTime)
 				decisions
 			} else {
 				// The LLM completed a cycle but neither acted via tools nor returned a decision —
@@ -266,7 +277,7 @@ class KoogAgentPlanAdapter(
 				// SP2c.20 follow-up (#843): fallbackDispatcher.decide() actually runs here and its
 				// decisions are returned — this is a dispatching event, not a no-op, so it maps to
 				// RULE_FALLBACK (not TIMEOUT_NOOP) for correct ActionAuthor attribution.
-				tickListener?.onTick(TickRecord(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime))
+				reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
 				fallbackDispatcher.decide(observation)
 			}
 		} catch (e: TimeoutCancellationException) {
@@ -275,7 +286,7 @@ class KoogAgentPlanAdapter(
 					"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
 			}
 			cycleListener?.onFallback(FallbackReason.TIMEOUT, observation.snapshot.simTime)
-			tickListener?.onTick(TickRecord(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime))
+			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
 			fallbackDispatcher.decide(observation)
 		} catch (e: CancellationException) {
 			// Parent coroutine was cancelled — propagate rather than swallow.
@@ -286,9 +297,29 @@ class KoogAgentPlanAdapter(
 					"(simTime=${observation.snapshot.simTime})"
 			}
 			cycleListener?.onFallback(FallbackReason.EXCEPTION, observation.snapshot.simTime)
-			tickListener?.onTick(TickRecord(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime))
+			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
 			fallbackDispatcher.decide(observation)
 		}
+
+	/**
+	 * Publishes one completed cycle to the tick listener and to [cycleHistory] (Issue #847).
+	 *
+	 * A single funnel rather than a call pair at each of the four cycle endings: the history and
+	 * the tick taxonomy must never disagree about how a cycle ended, and they cannot drift if
+	 * there is only one place that reports both.
+	 *
+	 * The recorded actions are read from [sinkHolder], so they are what the **agent** emitted.
+	 * On a `RULE_FALLBACK` cycle that list is normally empty even though the fallback dispatcher
+	 * did act — deliberately: [cycleHistory] is the model's memory of its own behaviour, and the
+	 * outcome name already tells it the cycle was taken over.
+	 */
+	private fun reportTick(
+		outcome: TickOutcome,
+		simTime: Double
+	) {
+		tickListener?.onTick(TickRecord(outcome, simTime))
+		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
+	}
 
 	/**
 	 * Returns the cached [KoogDispatchAgent], creating it lazily on the first call.

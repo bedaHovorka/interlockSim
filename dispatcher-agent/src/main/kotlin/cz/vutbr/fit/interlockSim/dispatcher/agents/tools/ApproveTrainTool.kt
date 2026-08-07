@@ -118,7 +118,7 @@ class ApproveTrainTool(
 			}
 
 		logger.debug { "ApproveTrainTool.execute: trainId=$resolvedTrainId (raw='$trainId')" }
-		sinkHolder.emit(DispatchAction.ApproveTrain(resolvedTrainId))
+		emitOrRejectForCap(sinkHolder, DispatchAction.ApproveTrain(resolvedTrainId))?.let { return it }
 		return ToolResult.Success("emitted approve_train trainId=$resolvedTrainId")
 	}
 

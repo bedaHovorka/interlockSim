@@ -48,15 +48,19 @@ interface AgentService {
 	 * @param tools Domain tools this agent can invoke (e.g. perception/actuator port adapters)
 	 * @param systemPrompt Optional system message to seed the agent's personality and
 	 *   domain knowledge. Defaults to a reasonable railway dispatch prompt if not provided.
+	 * @param cycleHistory Bounded record of previous cycles rendered into each per-cycle prompt
+	 *   (#822 C5). Defaults to a disabled history, which is the pre-#847 stateless behaviour.
 	 *
 	 * @return A configured Koog agent, ready for dispatch decisions
 	 *
-	 * @since Issue #547 (SP1.2 — skeleton); full implementation in Issue #551 (SP1.6)
+	 * @since Issue #547 (SP1.2 — skeleton); full implementation in Issue #551 (SP1.6);
+	 *   [cycleHistory] added in Issue #847 (SP2c.24)
 	 */
 	suspend fun createDispatchAgent(
 		modelName: String,
 		tools: List<DomainTool>,
-		systemPrompt: String? = null
+		systemPrompt: String? = null,
+		cycleHistory: CycleHistory = CycleHistory(capacity = 0)
 	): KoogDispatchAgent
 }
 

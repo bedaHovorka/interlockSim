@@ -34,11 +34,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param aiAgent The real Koog agent, pre-wired with the Ollama executor, model, tool registry,
  *   and system prompt (topology + dispatcher persona) at construction time in
  *   [DefaultAgentService.createDispatchAgent].
+ * @param cycleHistory Bounded record of the previous N cycles, rendered into the per-cycle prompt
+ *   ahead of the current state (#822 C5 / §5.4). Defaults to a disabled history, which reproduces
+ *   the stateless-per-cycle behaviour that existed before Issue #847.
  *
- * @since Issue #547 (SP1.2 — Goal 10 skeleton); real Koog wiring added in Issue #566 (SP2b.9)
+ * @since Issue #547 (SP1.2 — Goal 10 skeleton); real Koog wiring added in Issue #566 (SP2b.9);
+ *   cycle history added in Issue #847 (SP2c.24)
  */
 class KoogDispatchAgentImpl(
-	private val aiAgent: AIAgent<String, String>
+	private val aiAgent: AIAgent<String, String>,
+	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0)
 ) : KoogDispatchAgent {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -106,6 +111,10 @@ class KoogDispatchAgentImpl(
 	 */
 	private fun buildUserPrompt(observation: DispatchObservation): String =
 		buildString {
+			// #822 §5.4 (lost-in-the-middle): history first, current state last — closest to
+			// generation. Empty string when historyN = 0, so the disabled arm renders nothing at
+			// all rather than a bare header (Issue #847, SP2c.24).
+			append(cycleHistory.renderPromptBlock())
 			appendLine("Dispatch cycle at simTime=${observation.snapshot.simTime}.")
 			// Goal 10 SP2b.9 follow-up: state the active count/cap directly so the admission
 			// precondition can be evaluated in one shot — this stateless cycle has no memory of

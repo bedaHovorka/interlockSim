@@ -191,6 +191,12 @@ class KoogRealPromptOllamaTest {
 		 * arguments that are all real names used badly. That is a planning weakness of a 7B model,
 		 * measured by the SP2c A/B metrics, not the prompt-vocabulary failure these tests assert
 		 * on — and folding it in would fail them for a reason they do not claim to measure.
+		 *
+		 * [RejectionCode.ACTION_LIMIT_EXCEEDED] joins them in Issue #847 (SP2c.24), and it is a
+		 * measurement in its own right: the cap was made live on this path by that issue, and the
+		 * very first live run against it rejected two calls — so `qwen2.5:7b-instruct` does emit
+		 * more than three actions in a cycle on this station. Every name in such a call is real
+		 * and the action is legal; only the budget is spent. Reported on #834 as prompt work.
 		 */
 		val proceduralRejections: MutableList<String> = mutableListOf()
 
@@ -220,7 +226,8 @@ class KoogRealPromptOllamaTest {
 				RejectionCode.TRAIN_ALREADY_ACTIVE,
 				RejectionCode.TRAIN_NOT_QUEUED,
 				RejectionCode.TARGET_NOT_TRAIN_DESTINATION,
-				RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION ->
+				RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION,
+				RejectionCode.ACTION_LIMIT_EXCEEDED ->
 					proceduralRejections.add(message)
 				else -> otherRejections.add(message)
 			}
@@ -248,12 +255,14 @@ class KoogRealPromptOllamaTest {
 		override suspend fun createDispatchAgent(
 			modelName: String,
 			tools: List<DomainTool>,
-			systemPrompt: String?
+			systemPrompt: String?,
+			cycleHistory: CycleHistory
 		): KoogDispatchAgent =
 			delegate.createDispatchAgent(
 				modelName = modelName,
 				tools = tools.map { RecordingTool(it, recorder) },
-				systemPrompt = systemPrompt
+				systemPrompt = systemPrompt,
+				cycleHistory = cycleHistory
 			)
 	}
 
