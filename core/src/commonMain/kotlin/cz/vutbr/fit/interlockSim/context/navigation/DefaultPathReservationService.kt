@@ -238,6 +238,123 @@ class DefaultPathReservationService(
 		}
 	}
 
+	/**
+	 * Every [DynamicTrackBlock] edge in this context's graph, read once on first use.
+	 *
+	 * The graph's edges are static for the lifetime of a simulation context — blocks are never
+	 * added or removed at runtime — so the list is built lazily once and never invalidated; only
+	 * the live state read off those references ([DynamicTrackBlock.occupant]) changes. Mirrors
+	 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]'s block cache.
+	 *
+	 * Lazy rather than eager: this service is constructed inside the per-context Koin scope, and
+	 * touching the graph at construction time would couple service creation to graph readiness.
+	 *
+	 * @since Issue #893 (task A-R1) — backing store of the contiguity predicate's occupancy arm
+	 */
+	private val allBlocksCache: List<DynamicTrackBlock> by lazy {
+		environment
+			.getGraph()
+			.values()
+			.filterIsInstance<DynamicTrackBlock>()
+			.toList()
+	}
+
+	/**
+	 * Every block that constitutes [trainId]'s current authority: those the registry records as
+	 * reserved for it, plus those it physically occupies.
+	 *
+	 * The occupancy arm is a **graph scan**, not [PathReservationRegistry.getOccupiedBlocks].
+	 * That method filters the registry's own `trainToBlocks` map and is therefore blind to a
+	 * train admitted onto the network without a registered route — precisely the state that
+	 * produced Issue #893's stall at t=17, where a train stood on block `kB` with an empty
+	 * registry entry.
+	 */
+	private fun footprintOf(trainId: String): Set<DynamicTrackBlock> =
+		registry.getBlocks(trainId).toSet() +
+			allBlocksCache.filter { it.occupant?.name == trainId }
+
+	/**
+	 * Name of [separator] for diagnostics, falling back to its `toString()` when it has none.
+	 */
+	private fun separatorLabel(separator: PathSeparator): String =
+		when (separator) {
+			is DynamicRailSemaphore -> separator.name.takeIf { it.isNotBlank() }
+			is DynamicInOut -> separator.name.takeIf { it.isNotBlank() }
+			is DynamicRailSwitch -> separator.name.takeIf { it.isNotBlank() }
+			else -> null
+		} ?: separator.toString()
+
+	/**
+	 * The contiguity invariant (Issue #893, task A-R1): a route may only start where the
+	 * requesting train actually is.
+	 *
+	 * Returns `null` when [start] is an acceptable origin for [trainId], or the
+	 * [PathReservationService.ReservationResult.NonContiguousStart] to return otherwise.
+	 *
+	 * ## Rules
+	 *
+	 * - **Empty footprint passes vacuously.** A train that holds and occupies nothing is still
+	 *   outside the network; every production caller in that state supplies an entry InOut
+	 *   ([cz.vutbr.fit.interlockSim.sim.MultiTrainLoop], [cz.vutbr.fit.interlockSim.sim.InOutWorker],
+	 *   and the interlocking facade, whose endpoints the request tool pre-validates). Rejecting
+	 *   here would break train entry and buy no safety.
+	 * - **Otherwise [start] must bound one of the footprint blocks.** Membership of
+	 *   `block.ends()`, nothing more.
+	 *
+	 * ## Why no direction restriction
+	 *
+	 * Mid-transition a train occupies two blocks at once, so "the" forward boundary is genuinely
+	 * ambiguous and any attempt to pick one would reject legitimate look-ahead extensions.
+	 * Direction is a separate concern, already covered by the backwards-route guards on the
+	 * request path.
+	 *
+	 * ## ⚠ What this does NOT cover: the queued-train half
+	 *
+	 * The vacuous arm is exactly why this kernel check closes only **half** of the Issue #893
+	 * malformation. It stops a route wrongly placed relative to a train that is *on* the network.
+	 * It cannot stop `reservePath("T", doB1, "A")` for a train still queued for admission —
+	 * that train's footprint is empty, so the request passes vacuously even though a queued train
+	 * can only ever start at its entry InOut.
+	 *
+	 * That half is guarded **only at the tool layer**, by
+	 * `RequestRouteTool.queuedOriginError`, which self-disables when the tool is built with no
+	 * InOut-name set or with no `DispatchLoopSensorPort`. Any future caller reaching this service
+	 * outside that tool therefore has no protection against the queued-train form.
+	 *
+	 * This split is the binding traffic-simulation-expert ruling, not an oversight: tightening the
+	 * vacuous arm would reject every legitimate train-entry reservation
+	 * ([cz.vutbr.fit.interlockSim.sim.MultiTrainLoop], [cz.vutbr.fit.interlockSim.sim.InOutWorker]),
+	 * which use an entry InOut with an empty footprint by design.
+	 */
+	private fun rejectNonContiguousStart(
+		trainId: String,
+		start: DynamicPathSeparator
+	): PathReservationService.ReservationResult.NonContiguousStart? {
+		val footprint = footprintOf(trainId)
+		if (footprint.isEmpty()) {
+			logger.debug {
+				"reservePath: '$trainId' holds and occupies no block; contiguity check passes " +
+					"vacuously for start ${separatorLabel(start)}"
+			}
+			return null
+		}
+		if (footprint.any { block -> start in block.ends() }) return null
+
+		val legalStarts =
+			footprint
+				.flatMap { it.ends().toList() }
+				.map { separatorLabel(it) }
+				.distinct()
+				.sorted()
+		val startName = separatorLabel(start)
+		val reason =
+			"Route origin '$startName' is not contiguous with train '$trainId': the train holds or " +
+				"occupies ${footprint.size} block(s), none of which is bounded by '$startName'. " +
+				"Legal origins for this train are: ${legalStarts.joinToString(", ")}."
+		logger.warn { "reservePath: rejected non-contiguous start — $reason" }
+		return PathReservationService.ReservationResult.NonContiguousStart(startName, reason)
+	}
+
 	private fun findCandidatePaths(
 		trainId: String,
 		start: DynamicPathSeparator,
@@ -270,6 +387,8 @@ class DefaultPathReservationService(
 	 * For other separator types (e.g. semaphore-to-InOut), BFS topology paths from
 	 * [TopologyNavigator] are used instead.
 	 *
+	 * 0. Reject a [start] that is not contiguous with the train's own footprint (Issue #893) —
+	 *    see [rejectNonContiguousStart]
 	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise)
 	 * 2. For each path in priority order (cheapest cost first for InOut routes):
 	 *    a. Extract unique DynamicTrackBlocks from TrackSections
@@ -281,6 +400,7 @@ class DefaultPathReservationService(
 	 *
 	 * ## Error Handling
 	 *
+	 * - Start not contiguous with the train's footprint → return NonContiguousStart
 	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
 	 * - IllegalStateException from registry → return Conflict result
@@ -294,6 +414,12 @@ class DefaultPathReservationService(
 		target: DynamicPathSeparator,
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
+		// Step 0 (Issue #893, task A-R1): a route may only start where the train actually is.
+		// Checked BEFORE candidate-path discovery so it also governs the already-owned
+		// early-return branch further down, which would otherwise report Success for a route
+		// this train can never reach.
+		rejectNonContiguousStart(trainId, start)?.let { return it }
+
 		val candidatePaths = findCandidatePaths(trainId, start, target, maxDepth)
 
 		if (candidatePaths.isEmpty()) {
@@ -889,6 +1015,16 @@ class DefaultPathReservationService(
 					lastResult = PathReservationService.ReservationResult.NoPathExists
 					continue
 				}
+				is PathReservationService.ReservationResult.NonContiguousStart -> {
+					// The start itself is unusable for this train (Issue #893). Every remaining
+					// candidate shares that same start, so trying them would produce the identical
+					// rejection -- abort and surface the reason to the caller.
+					logger.warn {
+						"reservePathToAnyNextSemaphore: aborting, start is not contiguous with " +
+							"'$trainId': ${result.reason}"
+					}
+					return result
+				}
 			}
 		}
 
@@ -1283,6 +1419,15 @@ class DefaultPathReservationService(
 					// Abort immediately - don't try other targets
 					logger.warn {
 						"reservePathToAny: Conflict detected at ${result.conflictingBlock}, aborting"
+					}
+					return result
+				}
+				is PathReservationService.ReservationResult.NonContiguousStart -> {
+					// The start is unusable for this train (Issue #893); every remaining target
+					// shares it, so continuing would repeat the same rejection once per target
+					// and each repetition costs a full candidate-path enumeration.
+					logger.warn {
+						"reservePathToAny: aborting, start is not contiguous with '$trainId': ${result.reason}"
 					}
 					return result
 				}

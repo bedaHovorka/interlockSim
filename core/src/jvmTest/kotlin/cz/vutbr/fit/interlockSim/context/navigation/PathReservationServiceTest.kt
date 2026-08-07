@@ -31,8 +31,11 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
@@ -43,6 +46,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -2481,6 +2485,175 @@ class PathReservationServiceTest : KoinTestBase() {
 			switches.forEach { switch ->
 				assertThat(switch.locked).isFalse()
 			}
+		}
+	}
+
+	/**
+	 * Contiguity invariant on the route start (Issue #893, task A-R1).
+	 *
+	 * A route request whose start separator is not contiguous with the requesting train's
+	 * current authority reserves track somewhere the train is not, holds it against every
+	 * other train, and releases nobody. `reservePath` must reject it outright.
+	 *
+	 * The train's "authority" (its footprint) is the union of two independent sources:
+	 * the blocks the registry records for it, and the blocks whose physical `occupant`
+	 * carries its name. The second arm matters because a train can be admitted and
+	 * physically present with **no** registry state at all — the t=17 admission flow —
+	 * and a registry-only predicate would be blind to it.
+	 *
+	 * A train with an empty footprint passes vacuously: every production caller that reaches
+	 * `reservePath` for such a train supplies an InOut start (train entry), so the strict arm
+	 * would buy no safety and invalidate the entry flow.
+	 *
+	 * Topology note (`vyhybna.xml`): block `kB` spans InOut `B` ↔ semaphore `zB`, so `zB` is
+	 * its legal forward boundary. `doB1` is two hops further on (`k1`'s boundary) and is NOT
+	 * a boundary of `kB`.
+	 */
+	@Nested
+	inner class ContiguityTests {
+		@Test
+		fun `reservePath from a boundary of a block the train already holds succeeds`() {
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val zB = findSemaphoreByName("zB")
+
+			val initial = service.reservePath("t1", zA, doB1)
+			assertThat(initial).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// doB1 bounds the last block reserved above, so extending from it is contiguous.
+			val extension = service.reservePath("t1", doB1, zB)
+
+			assertThat(extension).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+
+		@Test
+		fun `reservePath from a separator on no held block boundary is rejected and reserves nothing`() {
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val doA2 = findSemaphoreByName("doA2")
+			val doB2 = findSemaphoreByName("doB2")
+
+			assertThat(service.reservePath("t1", zA, doB1))
+				.isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val heldBefore = registry.getBlocks("t1").toSet()
+			// Guard: the assertion below is only meaningful if doA2 really is off the held route.
+			assertThat(heldBefore.flatMap { it.ends().toList() }.contains(doA2))
+				.withMessage("doA2 must not bound any block t1 holds, or this fixture proves nothing")
+				.isFalse()
+
+			val result = service.reservePath("t1", doA2, doB2)
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+			assertThat(registry.getBlocks("t1").toSet())
+				.withMessage("a rejected request must not add or remove any block")
+				.isEqualTo(heldBefore)
+			val k2 = blockBetween("doA2", "doB2")
+			assertThat(k2.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(k2.trainName).isNull()
+		}
+
+		/**
+		 * The t=17 admission flow: a train admitted onto `kB` before any route was granted
+		 * has zero registry state, so only the graph-scan occupancy arm can see it.
+		 */
+		@Test
+		fun `a physically occupied block is a footprint even with no registry state`() {
+			val kB = blockBetween("B", "zB")
+			occupy(kB, "T-17")
+			assertThat(registry.getBlocks("T-17"))
+				.withMessage("this test only exercises the occupancy arm if the registry is empty")
+				.isEmpty()
+
+			val result = service.reservePath("T-17", findSemaphoreByName("zB"), findSemaphoreByName("doB1"))
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+
+		@Test
+		fun `a start away from the occupied block is rejected even with no registry state`() {
+			val kB = blockBetween("B", "zB")
+			occupy(kB, "T-17")
+			assertThat(registry.getBlocks("T-17")).isEmpty()
+
+			// doA1 is at the far end of the station — it bounds no block T-17 occupies.
+			val result = service.reservePath("T-17", findSemaphoreByName("doA1"), findSemaphoreByName("doB1"))
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+			assertThat(registry.getBlocks("T-17")).isEmpty()
+			val k1 = blockBetween("doA1", "doB1")
+			assertThat(k1.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(k1.trainName).isNull()
+		}
+
+		/**
+		 * Pins ruling P4(ii): a train with no footprint anywhere passes vacuously, whatever
+		 * its start. Tightening this arm would break every train-entry caller.
+		 */
+		@Test
+		fun `a train with no footprint at all passes vacuously`() {
+			val result =
+				service.reservePath("phantom-train", findSemaphoreByName("doA1"), findSemaphoreByName("doB1"))
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid[Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
+		}
+
+		/** Name of a separator, whatever concrete dynamic cell type it is; `null` if unnamed. */
+		private fun separatorNameOf(separator: PathSeparator): String? =
+			when (separator) {
+				is DynamicRailSemaphore -> separator.name
+				is DynamicRailSwitch -> separator.name
+				is DynamicInOut -> separator.name
+				else -> null
+			}
+
+		/**
+		 * The single block whose two ends are the separators named [first] and [second].
+		 * `vyhybna.xml` blocks carry no XML name of their own, so they are addressed by
+		 * their endpoints (the same identity `ShuntingLoop` labels `kA`/`kB`/`k1`/`k2`).
+		 */
+		private fun blockBetween(
+			first: String,
+			second: String
+		): DynamicTrackBlock =
+			simulationContext
+				.getGraph()
+				.values()
+				.filterIsInstance<DynamicTrackBlock>()
+				.firstOrNull { block ->
+					block.ends().mapNotNull { separatorNameOf(it) }.toSet() == setOf(first, second)
+				} ?: throw IllegalStateException("No block found between $first and $second")
+
+		/**
+		 * Put [trainId] physically on [block] without touching the registry — the state a
+		 * train admitted before any route was granted is in.
+		 */
+		private fun occupy(
+			block: DynamicTrackBlock,
+			trainId: String
+		) {
+			block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
+			block.enter(
+				object : TrackOccupant {
+					override val name: String = trainId
+
+					override fun distanceToSemaphore(): Double = 0.0
+
+					override fun nextSemaphore(): OrientedPathSeparator? = null
+				}
+			)
 		}
 	}
 

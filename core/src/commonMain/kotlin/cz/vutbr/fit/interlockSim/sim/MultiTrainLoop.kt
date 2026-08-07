@@ -342,6 +342,15 @@ open class MultiTrainLoop(
 								"${result.conflictingBlock.name ?: "unnamed"} owned by ${result.existingOwner}"
 						}
 					}
+					is PathReservationService.ReservationResult.NonContiguousStart -> {
+						// Issue #893: not expected here -- this call reserves from the train's own
+						// entry InOut while it still has no footprint, so the check passes
+						// vacuously. Logged at WARN rather than retried silently: retrying an
+						// origin the train can never use would spin for the rest of the run.
+						logger.warn {
+							"MultiTrainLoop: non-contiguous origin for ${train.name}: ${result.reason}"
+						}
+					}
 				}
 			} finally {
 				for (resource in acquired) {

@@ -84,6 +84,7 @@ interface PathReservationService {
 	 * - **NoPathExists**: No topological route exists between start and target
 	 * - **AllPathsBlocked**: Route(s) exist but all are occupied/reserved
 	 * - **Conflict**: Attempted to reserve block already owned by different train
+	 * - **NonContiguousStart**: The start separator is nowhere near the requesting train
 	 */
 	sealed class ReservationResult {
 		/**
@@ -124,10 +125,63 @@ interface PathReservationService {
 			val conflictingBlock: DynamicTrackBlock,
 			val existingOwner: String
 		) : ReservationResult()
+
+		/**
+		 * The requested `start` separator is not contiguous with the requesting train's current
+		 * authority: it bounds none of the blocks the train holds in the
+		 * [PathReservationRegistry] and none of the blocks it physically occupies.
+		 *
+		 * Reserving such a route would lock track somewhere the train is not. The train cannot
+		 * reach it, so it never occupies and never releases those blocks; every other train is
+		 * held out of them until an orphan sweeper (if any) reclaims the reservation. Observed
+		 * live on `exampleGui shuntingLoopAI 333`, where a correctly *directed* but wrongly
+		 * *placed* route stalled the whole station (Issue #893).
+		 *
+		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention and a
+		 * caller should simply retry next tick, whereas this one will never succeed while the
+		 * train stays where it is — the caller (or the LLM dispatcher behind it) has to ask for
+		 * a different origin. Collapsing the two hides a dispatcher-output defect inside a
+		 * routine-traffic counter.
+		 *
+		 * A train with **no** footprint at all (neither registered nor occupied blocks) is not
+		 * subject to this check: that is a train still waiting outside the network, whose route
+		 * legitimately starts at an entry InOut.
+		 *
+		 * ## ⚠ Half the malformation, by ruling
+		 *
+		 * That exemption is why this result covers only trains that are already **on** the
+		 * network. The other half of Issue #893 — a route requested from a mid-station Signal for
+		 * a train still **queued** for admission — has an empty footprint and passes vacuously
+		 * here. It is guarded solely at the tool layer, by
+		 * `RequestRouteTool.queuedOriginError`, which itself self-disables when that tool is
+		 * built with no InOut-name set or with no `DispatchLoopSensorPort`. Callers reaching
+		 * `reservePath` by any other route get no protection against the queued-train form.
+		 *
+		 * Tightening the vacuous arm to close it would reject every legitimate train-entry
+		 * reservation, so the split is deliberate (binding traffic-simulation-expert ruling).
+		 *
+		 * @property startName Name of the offending start separator (or its `toString()` when
+		 *   the separator carries no name).
+		 * @property reason English explanation naming the start and, when the train has a
+		 *   footprint, the separators that *would* have been legal starts.
+		 * @since Issue #893 (phase alpha, task A-R1)
+		 */
+		data class NonContiguousStart(
+			val startName: String,
+			val reason: String
+		) : ReservationResult()
 	}
 
 	/**
 	 * Find and reserve a free path from start to target separator.
+	 *
+	 * ## Contiguity precondition (Issue #893)
+	 *
+	 * [start] must be contiguous with the requesting train's current authority: it must bound
+	 * one of the blocks the train holds in the [PathReservationRegistry] or physically occupies.
+	 * A request that fails this is rejected with [ReservationResult.NonContiguousStart] before
+	 * any path finding happens — reserving elsewhere would lock track the train cannot reach.
+	 * A train with no footprint at all (still outside the network) is exempt.
 	 *
 	 * ## Algorithm
 	 *

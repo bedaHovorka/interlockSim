@@ -135,6 +135,10 @@ fun DispatchDecision.applyToolDrivenToActuator(
 					toolDrivenLogger.warn {
 						"$logPrefix: RequestRoute no route exists $fromEndpointName → $toEndpointName for $trainName"
 					}
+				is RouteRequestResult.OriginNotContiguous ->
+					toolDrivenLogger.warn {
+						"$logPrefix: RequestRoute origin not contiguous for $trainName — ${result.reason}"
+					}
 			}
 		}
 		DispatchDecision.NoAction,

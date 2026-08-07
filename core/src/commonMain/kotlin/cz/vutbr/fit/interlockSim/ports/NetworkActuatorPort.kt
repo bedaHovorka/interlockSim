@@ -242,4 +242,36 @@ sealed class RouteRequestResult {
 		val blockName: String?,
 		val existingOwner: String
 	) : RouteRequestResult()
+
+	/**
+	 * The requested origin is not contiguous with the train's current position: it bounds none
+	 * of the blocks the train holds or occupies, so the train could never reach the route.
+	 *
+	 * Maps from
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart].
+	 *
+	 * Distinct from [AllPathsBlocked] on purpose. `AllPathsBlocked` says "not right now, try
+	 * later"; this says "not from there, ever" — retrying the identical request while the train
+	 * stays put will always fail, and counting it as contention would hide a dispatcher-output
+	 * defect inside a routine-traffic metric (Issue #893).
+	 *
+	 * ## ⚠ Only produced on the legacy/no-facade path
+	 *
+	 * [DefaultNetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]
+	 * constructs this **only** when no [cz.vutbr.fit.interlockSim.sim.InterlockingFacade] is wired
+	 * (`:fast-sim`, DI-less tests). With the facade wired — which production dispatcher-agent runs
+	 * always do — every `RouteResponse.Denied` collapses to [AllPathsBlocked] `(0)` before reaching
+	 * a caller, so this subtype never appears there. The route is still refused; only the
+	 * discriminant is lost. Threading a structured denial reason through the facade is the
+	 * **A-R1b follow-on (ledgered)**.
+	 *
+	 * @property fromEndpointName The rejected origin name, as requested.
+	 * @property reason English explanation naming the origin and the legal origins for this
+	 *   train, suitable for dispatcher display and for feeding back to an LLM dispatcher.
+	 * @since Issue #893 (phase alpha, task A-R1)
+	 */
+	data class OriginNotContiguous(
+		val fromEndpointName: String,
+		val reason: String
+	) : RouteRequestResult()
 }

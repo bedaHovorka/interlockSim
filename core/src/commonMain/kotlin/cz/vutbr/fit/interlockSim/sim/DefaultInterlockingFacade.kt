@@ -281,6 +281,14 @@ class DefaultInterlockingFacade(
 					"Block $blockName occupied by train ${result.existingOwner}"
 				)
 			}
+			is PathReservationService.ReservationResult.NonContiguousStart -> {
+				// Issue #893: the requested origin is nowhere near this train. The reason string
+				// already names the origin and the legal alternatives, so it is forwarded as-is.
+				logger.info {
+					"Route DENIED for trainId=$trainId: non-contiguous origin ($fromEndpointName): ${result.reason}"
+				}
+				InterlockingFacade.RouteResponse.Denied(result.reason)
+			}
 		}
 	}
 

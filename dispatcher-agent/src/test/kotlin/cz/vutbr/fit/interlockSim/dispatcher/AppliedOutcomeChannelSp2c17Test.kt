@@ -501,6 +501,50 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 	}
 
+	/**
+	 * Issue #893 (task A-R1): a `request_route` refused because its origin is not contiguous with
+	 * the train's own position must reach the agent through the same channel as every other
+	 * apply-time refusal.
+	 *
+	 * Without this the worst error class the dispatcher can produce — a route reserved somewhere
+	 * the train is not, which locks track and releases nobody — would be the *only*
+	 * `applyRequestRoute` failure publishing no [AppliedOutcome], i.e. the agent would be told
+	 * less about it than about routine contention. The reason string is carried through because
+	 * it already names the offending origin and the legal alternatives.
+	 */
+	@Nested
+	@DisplayName("request_route OriginNotContiguous correlation (Issue #893 A-R1)")
+	inner class RequestRouteOriginNotContiguous {
+		@Test
+		@DisplayName(
+			"request_route refused as OriginNotContiguous is published with the train, endpoints and reason"
+		)
+		fun requestRouteOriginNotContiguousIsPublished() {
+			every {
+				networkActuator.requestRoute("T-087", "doA1", "InOut-B")
+			} returns
+				RouteRequestResult.OriginNotContiguous(
+					fromEndpointName = "doA1",
+					reason = "Route origin 'doA1' is not contiguous with train 'T-087'"
+				)
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "doA1", "InOut-B")))
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L)
+			assertThat(outcomes).hasSize(1)
+			val outcome = outcomes[0]
+			assertThat(outcome).isInstanceOf(AppliedOutcome.OriginNotContiguous::class)
+			outcome as AppliedOutcome.OriginNotContiguous
+			assertThat(outcome.trainId).isEqualTo("T-087")
+			assertThat(outcome.fromEndpointName).isEqualTo("doA1")
+			assertThat(outcome.toEndpointName).isEqualTo("InOut-B")
+			assertThat(outcome.reason).contains("not contiguous")
+		}
+	}
+
 	// ── AC: ring-buffer overflow eviction ─────────────────────────────────────
 
 	@Nested

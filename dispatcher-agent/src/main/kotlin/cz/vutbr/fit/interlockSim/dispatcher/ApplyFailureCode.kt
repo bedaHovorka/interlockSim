@@ -118,6 +118,34 @@ enum class ApplyFailureCode {
 	CAP_EXCEEDED_APPLY,
 
 	/**
+	 * The requested route origin was not contiguous with the train's actual position: it bounds
+	 * none of the blocks the train holds or occupies, so the train could never reach the route.
+	 *
+	 * Maps to `RouteRequestResult.OriginNotContiguous` (`:core`).
+	 *
+	 * **Is** an LLM failure, unlike [ALL_PATHS_BLOCKED]. Contention clears on its own and a retry
+	 * eventually succeeds; a wrongly *placed* route never will while the train stays put — the
+	 * dispatcher has to ask for a different origin. Counting the two together would hide exactly
+	 * the defect this code exists to measure (Issue #893: a correctly directed but wrongly placed
+	 * route reserved the whole line against its own train and no train completed a journey).
+	 *
+	 * ## ⚠ Currently unreachable in a dispatcher-agent run
+	 *
+	 * This code **only fires on the legacy/no-facade actuator path** (`:fast-sim`, DI-less tests).
+	 * `DefaultNetworkActuatorPort.requestRoute` collapses *every*
+	 * `InterlockingFacade.RouteResponse.Denied` to `RouteRequestResult.AllPathsBlocked(0)`, and
+	 * `DispatcherAgentModule` wires the facade unconditionally — so in a real agent run a
+	 * non-contiguous origin is still refused (the safety fix is unaffected) but arrives here as
+	 * [ALL_PATHS_BLOCKED], which `Sp2c21MetricsRecorder` in turn excludes from hard failures.
+	 * Threading a structured denial reason through the facade is the **A-R1b follow-on
+	 * (ledgered)**. Until it lands, do not read a zero count for this code as evidence that the
+	 * defect is absent.
+	 *
+	 * @since Issue #893 (phase alpha, task A-R1)
+	 */
+	ORIGIN_NOT_CONTIGUOUS,
+
+	/**
 	 * A command was dropped at apply time because it was structurally invalid in a way that
 	 * the driver-thread [ActionValidator] did not (or could not) detect.
 	 *

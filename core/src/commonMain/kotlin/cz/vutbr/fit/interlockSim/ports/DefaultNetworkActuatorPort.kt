@@ -161,6 +161,16 @@ class DefaultNetworkActuatorPort(
 					existingOwner = result.existingOwner
 				)
 			}
+			is PathReservationService.ReservationResult.NonContiguousStart -> {
+				// The train is nowhere near fromEndpointName; reserving would lock track it can
+				// never reach. Surfaced as its own result rather than folded into AllPathsBlocked
+				// so the caller can tell "ask again later" from "ask for a different origin".
+				logger.warn {
+					"requestRoute: non-contiguous origin for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${result.reason}"
+				}
+				RouteRequestResult.OriginNotContiguous(fromEndpointName, result.reason)
+			}
 		}
 	}
 
