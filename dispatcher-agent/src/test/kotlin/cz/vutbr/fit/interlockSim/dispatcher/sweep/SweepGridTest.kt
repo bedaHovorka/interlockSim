@@ -14,7 +14,9 @@ import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -151,6 +153,36 @@ class SweepGridTest {
 		val runId = cell.runId(1)
 		assertThat(runId).contains("qwen2.5-7b-instruct")
 		assertThat(runId).isEqualTo(runId.replace(Regex("[^A-Za-z0-9._-]"), "_"))
+	}
+
+	@Test
+	@DisplayName("a run id survives the store's own sanitiser and the driver's file-name scan intact")
+	fun runIdSurvivesStoreRoundTrip() {
+		// [runIdsAreFileNameSafe] checks SweepCell's alphabet against the store's regex in isolation.
+		// This drives the actual round trip the resumption logic depends on: the id goes into a real
+		// DefaultRunSnapshotStore write, comes back out of the written file name, and must be
+		// byte-identical. The two sanitisers use different replacement characters ("-" here, "_" in
+		// the store), so a widened alphabet on either side would silently break resumption -- the
+		// driver would stop recognising its own completed runs and re-execute the entire grid.
+		val cell =
+			SweepGrid
+				.load(
+					gridFile(
+						"""{ "repeat": 1, "axes": { "model": ["qwen2.5:7b-instruct"], "temperature": [0.2] } }"""
+					)
+				).axes
+				.cells()
+				.single()
+		val runId = cell.runId(1)
+
+		val written =
+			DefaultRunSnapshotStore(tempDir.resolve("runs")).write(
+				abortedSnapshot(runId, cell.arm, cell.runParameters(), RunEndCause.NATURAL_COMPLETION)
+			)
+
+		// Exactly how AiSweepDriver.existingRunIds recovers an id: strip the timestamp prefix.
+		val recovered = Regex("""\d{8}-\d{6}-(.+)\.json""").matchEntire(written.fileName.toString())
+		assertThat(recovered?.groupValues?.get(1)).isEqualTo(runId)
 	}
 
 	@Test

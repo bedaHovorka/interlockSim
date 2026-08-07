@@ -13,7 +13,6 @@ import assertk.assertThat
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
@@ -231,7 +230,7 @@ class RunReportAggregatorTest {
 			}
 		val report = aggregator.aggregate(snapshots)
 		// Sorted latencies: 100..1000; p95 index = (10-1)*95/100 = 8 → value at index 8 = 900
-		assertThat(report.p95LatencyMs).isGreaterThanOrEqualTo(800L)
+		assertThat(report.p95LatencyMs).isEqualTo(900L)
 	}
 
 	@Test
