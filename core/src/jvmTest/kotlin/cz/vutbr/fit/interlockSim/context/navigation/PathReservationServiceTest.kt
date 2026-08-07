@@ -1637,6 +1637,73 @@ class PathReservationServiceTest : KoinTestBase() {
 				.isNotEmpty()
 		}
 
+		/**
+		 * [PathReservationService.resetSemaphoresForReleasedBlocks] (Issue #893, task A3) is the
+		 * ownership-aware block-scoped reset a partial (tail) release uses. It must respect the
+		 * same last-writer-wins ownership as [releasePath]/[unregister]: once a semaphore it would
+		 * otherwise reset has been re-cleared for a DIFFERENT train, it must be left alone -- both
+		 * by the API itself and by a later full [releasePath] of the original train.
+		 */
+		@Test
+		fun `resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone, and a later releasePath does too`() {
+			// t1 reserves the only path from zA to zB: zA (start) and doB1 (an internal boundary
+			// between two blocks t1 owns) both end up cleared; zB (the destination) stays at STOP.
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val zB = findSemaphoreByName("zB")
+			val result = service.reservePath("t1", zA, zB)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val blocks = service.getReservedBlocks("t1")
+
+			// Guard: doB1 must actually be lit for t1 before testing that resetting it works at all.
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 must be an internal boundary of the zA->zB route, lit for t1")
+				.isTrue()
+
+			// The un-travelled tail: every block from doB1 onward. The block just before doB1 stays
+			// "retained" together with zA -- exactly the shape a partial (occupied-head) release
+			// works on, without needing an actual occupied block for this service-level test.
+			val doB1Index = blocks.indexOfFirst { doB1 in it.ends() }
+			assertThat(doB1Index).isGreaterThanOrEqualTo(0)
+			val tail = blocks.subList(doB1Index + 1, blocks.size)
+			assertThat(tail, "tail blocks beyond doB1").isNotEmpty()
+
+			// Genuinely free the tail (cancelPathSetup + unregisterBlock), then reset the semaphores
+			// it governed -- exactly what a partial release does.
+			tail.forEach { block ->
+				block.reservedFrom?.let { block.cancelPathSetup(it) }
+				service.unregisterBlock("t1", block)
+			}
+			service.resetSemaphoresForReleasedBlocks("t1", tail)
+
+			assertThat(doB1.signal, "doB1 after the tail release").isEqualTo(Signal.STOP)
+			assertThat(zA.signal.isAllowing())
+				.withMessage("zA governs the retained head, outside the released tail; it must stay lit")
+				.isTrue()
+
+			// A second train reserves the freed track from doB1 onward, re-clearing doB1 for itself.
+			val secondResult = service.reservePath("t2", doB1, zB)
+			assertThat(secondResult).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 must be lit for t2 after its own reservation")
+				.isTrue()
+
+			// Ownership hygiene #1: re-invoking the API for t1 over the SAME (now-foreign) blocks
+			// must leave t2's live signal alone.
+			service.resetSemaphoresForReleasedBlocks("t1", tail)
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 belongs to t2 now; a stale reset for t1 must not touch it")
+				.isTrue()
+
+			// Ownership hygiene #2: releasing t1's remaining (retained) route must reset t1's own
+			// signal (zA) but must not disturb t2's doB1.
+			service.releasePath("t1")
+			assertThat(zA.signal, "zA after releasePath(t1)").isEqualTo(Signal.STOP)
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("releasePath(t1) must not reset doB1, which now belongs to t2")
+				.isTrue()
+		}
+
 		@Test
 		fun `reservePath never clears a semaphore the route passes from behind`() {
 			// A semaphore facing against the direction of travel governs the OPPOSING movement.

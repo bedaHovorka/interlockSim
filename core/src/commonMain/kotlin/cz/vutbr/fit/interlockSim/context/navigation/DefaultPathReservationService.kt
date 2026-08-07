@@ -2411,6 +2411,42 @@ class DefaultPathReservationService(
 		return released
 	}
 
+	/**
+	 * Reset every semaphore this service recorded as cleared for [trainId] that governs one of
+	 * [blocks]. See the interface KDoc for why candidates come from both `ends()` and
+	 * `reservedFrom` -- the two sources cover, respectively, an INTERMEDIATE boundary between two
+	 * blocks of the same reservation, and the route's START (including its InOut form), neither of
+	 * which the other source can recover on its own for a multi-block route.
+	 *
+	 * Delegates the actual reset to [resetSemaphoreSet], so ownership (last-writer-wins) is
+	 * identical to [releasePath]/[unregister]: a semaphore since re-cleared for another train is
+	 * left alone.
+	 *
+	 * @since Issue #893 (phase alpha, task A3)
+	 */
+	override fun resetSemaphoresForReleasedBlocks(
+		trainId: String,
+		blocks: Collection<DynamicTrackBlock>
+	) {
+		if (blocks.isEmpty()) return
+		val candidates = mutableSetOf<DynamicRailSemaphore>()
+		blocks.forEach { block ->
+			block.ends().forEach { end ->
+				when (end) {
+					is DynamicRailSemaphore -> candidates.add(end)
+					is DynamicInOut -> candidates.add(end.inSemaphore)
+					else -> Unit
+				}
+			}
+			when (val reservedFrom = block.reservedFrom) {
+				is DynamicRailSemaphore -> candidates.add(reservedFrom)
+				is DynamicInOut -> candidates.add(reservedFrom.inSemaphore)
+				else -> Unit
+			}
+		}
+		resetSemaphoreSet(trainId, candidates)
+	}
+
 	override fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
 		registry.addBlockOccupancyListener(listener)
 	}

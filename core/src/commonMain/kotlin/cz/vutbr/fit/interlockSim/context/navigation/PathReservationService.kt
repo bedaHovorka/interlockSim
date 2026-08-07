@@ -572,6 +572,48 @@ interface PathReservationService {
 	): Boolean
 
 	/**
+	 * Reset (to [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP]) every semaphore this service
+	 * recorded as cleared for [trainId] that governs one of [blocks]: a semaphore that is an
+	 * `ends()` member of the block, the block's `reservedFrom` when that is itself a semaphore, or
+	 * the `inSemaphore` of an InOut that is either an `ends()` member of the block or the block's
+	 * `reservedFrom`.
+	 *
+	 * ## Why more than one source
+	 *
+	 * `reservePath`'s atomic reservation step sets every reserved block's `reservedFrom` to the
+	 * ROUTE-START separator, not to the separator locally adjacent to that particular block. So for
+	 * a multi-block route, only the first block's `reservedFrom` is genuinely next to it -- every
+	 * later block's `reservedFrom` still points at the far-away start:
+	 * - The `ends()` source recovers the correct INTERMEDIATE semaphore for those later blocks: it
+	 *   is a structural property of the block (the separators that bound it), so it is always
+	 *   genuinely adjacent, regardless of the `reservedFrom` behaviour above.
+	 * - The `reservedFrom` source recovers the START separator itself -- including the InOut case,
+	 *   where every block in the route (again due to the behaviour above) still carries the route's
+	 *   origin InOut in `reservedFrom`, letting a release reach that InOut's `inSemaphore` even when
+	 *   the InOut itself borders only the very first block (typically the one still retained and
+	 *   occupied, not part of what is being released).
+	 *
+	 * ## Ownership
+	 *
+	 * Reuses the same last-writer-wins ownership tracking as [releasePath]/[unregister]: a semaphore
+	 * since re-cleared for a different train is left alone.
+	 *
+	 * ## Use Case
+	 *
+	 * A dispatcher reclaiming the un-travelled tail of a stalled reservation: after freeing the
+	 * tail's blocks (`cancelPathSetup` + [unregisterBlock]), call this once over those blocks so no
+	 * released block is left reachable through a signal still showing proceed.
+	 *
+	 * @param trainId The train the released [blocks] belonged to.
+	 * @param blocks The blocks being released -- a full route, or an un-travelled tail of one.
+	 * @since Issue #893 (phase alpha, task A3)
+	 */
+	fun resetSemaphoresForReleasedBlocks(
+		trainId: String,
+		blocks: Collection<DynamicTrackBlock>
+	)
+
+	/**
 	 * Subscribe an external agent to block occupancy/release events.
 	 *
 	 * Events are emitted whenever a block's reservation or occupancy state changes.
