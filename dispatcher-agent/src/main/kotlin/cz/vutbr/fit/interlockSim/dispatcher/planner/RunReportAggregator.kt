@@ -370,19 +370,50 @@ class RunReportAggregator(
 		sb.appendLine()
 	}
 
+	/**
+	 * One row per distinct `(arm, params)` combination — the grid cells, not the arms.
+	 *
+	 * ## Why this is not one row per arm (Issue #847, SP2c.24)
+	 *
+	 * [aggregate] takes `params` from `snapshots.first()`, and [DispatcherReliabilityReport]
+	 * groups runs by arm alone. A sweep over, say, two temperatures therefore rendered a **single**
+	 * `LLM_TOOL_CALLING` row, labelled with whichever cell's parameters happened to be read first
+	 * and with medians pooled across configurations that were never meant to be pooled. A section
+	 * called "Parameter Sweep" that cannot show two parameter values is worse than absent: it
+	 * reports a number for a configuration that was never run.
+	 *
+	 * Re-grouping happens here rather than in the caller so every producer of a report — the
+	 * Gradle task, the sweep driver, a test — gets it, and so [ArmReport] keeps its "one arm,
+	 * one configuration" meaning everywhere else.
+	 */
 	private fun appendParameterSweep(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
 		sb.appendLine("## Parameter Sweep")
 		sb.appendLine()
+		sb.appendLine("> One row per distinct parameter cell. `Runs`/`Passing` are that cell's own.")
+		sb.appendLine()
 		sb.appendLine(
-			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Gate | " +
+			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Runs | Passing | Gate | " +
 				"LLM Success | validAt1 | correctAt1 | p95 latency ms |"
 		)
-		sb.appendLine("|---|---|---|---|---|---|---|---|---|---|---|---|")
+		sb.appendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
 
-		for (r in reports) {
+		val cellReports =
+			reports.flatMap { report ->
+				if (report.snapshots.isEmpty()) {
+					listOf(report)
+				} else {
+					report.snapshots
+						.groupBy { it.params }
+						.entries
+						.sortedBy { it.key.toString() }
+						.map { (_, cellSnapshots) -> aggregate(cellSnapshots) }
+				}
+			}
+
+		for (r in cellReports) {
 			val p = r.params
 			sb.appendLine(
 				"| ${r.arm} " +
@@ -392,6 +423,8 @@ class RunReportAggregator(
 					"| ${p.historyN} " +
 					"| ${p.maxActionsPerTick} " +
 					"| ${p.seed ?: "unset"} " +
+					"| ${r.runCount} " +
+					"| ${r.passingRuns} " +
 					"| ${gateSymbol(r.gatePassed)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
 					"| ${fmtRate(r.medianValidAt1)} " +

@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -28,6 +29,7 @@ import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.koin.core.scope.Scope
 import java.awt.BorderLayout
 import java.awt.Toolkit
 import java.awt.event.ComponentAdapter
@@ -148,6 +150,16 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	// the dispatcherAgentModule wired). Null for contexts without the dispatcher module.
 	private var wiredRunRecorder: DispatcherRunRecorder? = null
 
+	/**
+	 * Koin scope of the run captured at RUNNING, used at STOPPED to persist the run snapshot.
+	 *
+	 * Captured alongside [wiredRunRecorder] and for the same reason: the current context may have
+	 * changed by the time STOPPED fires, and the snapshot must belong to the run that just ended.
+	 *
+	 * @since Issue #847 round 4 (PR #891 — R4-5)
+	 */
+	private var wiredRunScope: Scope? = null
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -226,6 +238,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// SP2c.22 (#845): capture DispatcherRunRecorder at RUNNING so the STOPPED
 							// transition can call finish() and logFinalSummary() for this specific run.
 							wiredRunRecorder = currentSimulationContext?.scope?.getOrNull<DispatcherRunRecorder>()
+							// Issue #847 round 4 (R4-5): capture the scope alongside the recorder so
+							// STOPPED can also persist the run snapshot. Until round 4 the GUI called
+							// finish() but nothing ever wrote the result, and nothing fed onTick or
+							// onActionOutcome — so what it froze and discarded was an all-zero snapshot.
+							wiredRunScope = currentSimulationContext?.scope
 							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
 							wireDispatcherControlPanel()
 						}
@@ -258,9 +275,23 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// why the read is race-free with respect to which thread produced this
 							// STOPPED transition (manual stop() vs. the monitor thread's natural
 							// completion path both reach the identical STOPPED emission here).
-							wiredRunRecorder?.finish(runEndCause)
-							wiredRunRecorder?.logFinalSummary()
+							// Round 4 (R4-5): finishAndPersist performs finish() + logFinalSummary() and
+							// then writes the snapshot under build/reports/dispatcher-runs/<arm>/, giving
+							// SP2c.23's aggregator (#846) a producer. Until round 4 the GUI called finish()
+							// but nothing wrote the result, and nothing fed onTick/onActionOutcome, so the
+							// frozen snapshot was all zeroes and was then discarded. It is a no-op for a
+							// context that wired no dispatcher, and idempotent per run.
+							val runScope = wiredRunScope
+							if (runScope != null) {
+								DispatcherRunSummaries.finishAndPersist(runScope, runEndCause)
+							} else {
+								// No scope captured (a context set outside the RUNNING transition): fall back to
+								// the recorder alone so the run is still finished and summarised.
+								wiredRunRecorder?.finish(runEndCause)
+								wiredRunRecorder?.logFinalSummary()
+							}
 							wiredRunRecorder = null
+							wiredRunScope = null
 						}
 					}
 				}

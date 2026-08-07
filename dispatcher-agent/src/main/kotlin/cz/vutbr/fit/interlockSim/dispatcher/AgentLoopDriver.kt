@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 import cz.vutbr.fit.interlockSim.dispatcher.planner.toActionAuthor
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -23,6 +24,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.delay
 
 /**
  * Drives the dispatcher sense→decide→act loop from outside the kDisco kernel,
@@ -132,15 +134,51 @@ class AgentLoopDriver(
 	 *
 	 * @since Issue #843 (SP2c.20 follow-up — Goal 10 action attribution)
 	 */
-	private val plannerTickSource: KoogAgentPlanAdapter? = null
+	private val plannerTickSource: KoogAgentPlanAdapter? = null,
+	/**
+	 * Optional observer receiving every [TickRecord] produced by [plannerTickSource].
+	 *
+	 * Exists because this class *overwrites* `plannerTickSource.tickListener` in its `init` block,
+	 * so a caller that installed its own listener beforehand had it silently discarded — there was
+	 * no seam at all onto which a run recorder could be wired, which is why
+	 * `DispatcherRunRecorder.onTick` had no production caller and every per-run JSON reported
+	 * `totalTicks = 0` (Issue #847 round 4, R4-5).
+	 *
+	 * Invoked on the dispatcher-agent driver thread, synchronously inside `planner.plan()`.
+	 * Implementations must be cheap and non-blocking; `DefaultDispatcherRunRecorder.onTick` is a
+	 * counter increment.
+	 *
+	 * `null` for wirings with no recorder — the rule-based baseline included.
+	 *
+	 * @since Issue #847 round 4 (PR #891)
+	 */
+	private val onTickRecord: ((TickRecord) -> Unit)? = null,
+	/**
+	 * Minimum wall-clock spacing between the end of one cycle and the end of the next, in
+	 * milliseconds. `0` (the default) imposes nothing and reproduces the pre-#847 cadence.
+	 *
+	 * See [awaitMinimumCyclePeriod] for why this is a wall-clock floor rather than the
+	 * simulated-time period #822 §5.5 describes.
+	 *
+	 * @since Issue #847 (SP2c.24 — parameter grid)
+	 */
+	private val tickPeriodMs: Long = DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		private const val NANOS_PER_MILLI: Long = 1_000_000L
 	}
 
 	/** Simulation time at the end of the most recently completed cycle; 0.0 before the first cycle. */
 	private var prevSimTime: Double = 0.0
 	private var hasProcessedSnapshot: Boolean = false
+
+	/**
+	 * Wall clock at the end of the most recently completed cycle, or `null` before the first.
+	 * Driver-thread-confined, like [prevSimTime].
+	 */
+	private var lastCycleEndNanos: Long? = null
 
 	/**
 	 * Most recent [TickOutcome] reported by [plannerTickSource]'s [PlannerTickListener], if any.
@@ -156,7 +194,11 @@ class AgentLoopDriver(
 		// four call sites (LLM success, EMPTY_NO_TOOLS/TIMEOUT/EXCEPTION fallback) are inline in
 		// KoogAgentPlanAdapter.plan's try/catch, not in a spawned coroutine — so lastTickOutcome
 		// is always fresh by the time plan() returns below in runCycle().
-		plannerTickSource?.tickListener = PlannerTickListener { record -> lastTickOutcome = record.outcome }
+		plannerTickSource?.tickListener =
+			PlannerTickListener { record ->
+				lastTickOutcome = record.outcome
+				onTickRecord?.invoke(record)
+			}
 	}
 
 	private fun pauseUntilNextSnapshot() {
@@ -287,8 +329,50 @@ class AgentLoopDriver(
 		controller.awaitIfPaused()
 		val simDelta = snapshot.simTime - prevSimTime
 		controller.throttle(simDelta)
+		awaitMinimumCyclePeriod()
 		prevSimTime = snapshot.simTime
 		hasProcessedSnapshot = true
 		return true
+	}
+
+	/**
+	 * Holds the driver until at least [tickPeriodMs] of wall clock has passed since the previous
+	 * cycle ended (Issue #847, SP2c.24). No-op at the default `0`.
+	 *
+	 * ## Why wall clock and not simulated time
+	 *
+	 * #822 §5.5 specifies a tick period in *simulated* seconds, and on the synchronous
+	 * [DispatchTickLoop] path that is what it means. This driver is the asynchronous path, and its
+	 * cadence is not its own to choose: ticks arrive from [SnapshotSignal], which the sim thread
+	 * fires once per `ShuntingLoop` control step. Reinterpreting the parameter as a simulated-time
+	 * period here would mean changing that control step — which lives in `core/` and is off limits
+	 * (C10). The only period this driver can actually impose is a wall-clock floor between cycles,
+	 * so that is what it imposes, and the run JSON records it as such.
+	 *
+	 * ## What it can and cannot do
+	 *
+	 * It can only ever make the loop *slower*. At the 10–25 s inference latency measured on
+	 * `qwen2.5:7b-instruct`, any value below p95 latency is inert — the cycle already took longer
+	 * than the floor. It is honoured, recorded and sweepable; whether it is *useful* at a given
+	 * model's latency is exactly the sort of thing the #847 grid exists to answer, and the answer
+	 * for a 7B on this station is "not below ~25 s".
+	 *
+	 * [kotlinx.coroutines.delay] rather than `Thread.sleep`: the driver runs inside `runBlocking`
+	 * on a daemon thread shared with nothing else, but suspending keeps this consistent with
+	 * [SimulationController.awaitIfPaused] above and leaves the thread interruptible.
+	 */
+	private suspend fun awaitMinimumCyclePeriod() {
+		if (tickPeriodMs <= 0L) return
+		val now = System.nanoTime()
+		val previous = lastCycleEndNanos
+		lastCycleEndNanos = now
+		if (previous == null) return
+		val elapsedMs = (now - previous) / NANOS_PER_MILLI
+		val remainingMs = tickPeriodMs - elapsedMs
+		if (remainingMs > 0) {
+			logger.debug { "AgentLoopDriver: holding ${remainingMs}ms to honour tickPeriodMs=$tickPeriodMs" }
+			delay(remainingMs)
+			lastCycleEndNanos = System.nanoTime()
+		}
 	}
 }

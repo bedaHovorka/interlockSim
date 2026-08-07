@@ -1445,7 +1445,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `reservePath configures every semaphore along a full InOut-to-InOut path, not just START`() {
+		fun `reservePath configures every governing semaphore along a full InOut-to-InOut path, not just START`() {
 			// Act - reserve a full InOut-to-InOut route, spanning the intermediate semaphores
 			// at the vA/vB switch junctions (doA1/doA2, doB1/doB2) in addition to the
 			// START/target boundary semaphores.
@@ -1454,9 +1454,21 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val success = result as PathReservationService.ReservationResult.Success
 
-			// Every semaphore bounding a reserved block must be configured to allow movement --
-			// one left at STOP means a train halts there forever (Issue #296 Phase 4 / Step 2h
+			// Every semaphore that GOVERNS this movement must be configured to allow it -- one
+			// left at STOP means a train halts there forever (Issue #296 Phase 4 / Step 2h
 			// configureIntermediateSemaphores, and configureStartSignal for the START boundary).
+			//
+			// "Governs" is the load-bearing word. This assertion originally covered every
+			// semaphore bounding a reserved block, including the ones the route passes from
+			// behind. vyhybna.xml is bidirectional: an A→B route is governed by zA and doB1,
+			// and runs past doA1 and zB, which govern the OPPOSING B→A movement. Clearing those
+			// two authorised a train coming the other way and produced an aspect that never
+			// returned to danger -- Train.separatorAction skips a rear-passed separator, so the
+			// reset at the end of semaphoreAction never ran for it. See
+			// DefaultPathReservationService.facesDirectionOfTravel.
+			//
+			// The stall this test guards against is unaffected: a train never waits on a
+			// semaphore it passes from behind, so leaving that one at STOP cannot halt it.
 			val semaphoresOnPath =
 				success.reservedBlocks
 					.flatMap { it.ends().toList() }
@@ -1464,11 +1476,14 @@ class PathReservationServiceTest : KoinTestBase() {
 					.distinctBy { it.name }
 
 			assertThat(semaphoresOnPath).isNotEmpty()
-			semaphoresOnPath.forEach { semaphore ->
-				assertThat(semaphore.signal)
-					.withMessage("Semaphore ${semaphore.name} must not remain at STOP after path grant")
-					.isNotEqualTo(Signal.STOP)
-			}
+
+			// The original point of this test: clearing reaches PAST the START boundary. START
+			// here is inOut1 (an InOut, absent from semaphoresOnPath), so more than one cleared
+			// named semaphore means Step 2h ran, not just Step 2g.
+			val governing = semaphoresOnPath.filter { it.signal.isAllowing() }
+			assertThat(governing.map { it.name })
+				.withMessage("intermediate semaphores must be cleared, not only the START boundary")
+				.hasSize(2)
 		}
 
 		@Test
@@ -1543,6 +1558,166 @@ class PathReservationServiceTest : KoinTestBase() {
 			val blocks = service.getReservedBlocks("train2")
 			assertThat(blocks).isNotNull()
 			assertThat(blocks.isEmpty()).isFalse()
+		}
+	}
+
+	/**
+	 * Signal clearing and route release must be symmetric: a proceed aspect may not outlive
+	 * the reservation that produced it.
+	 *
+	 * ## The defect these tests pin down
+	 *
+	 * `reservePath` clears the START separator ([DefaultPathReservationService.configureStartSignal])
+	 * and every semaphore between two consecutive reserved blocks
+	 * (`configureIntermediateSemaphores`).  Until this suite was added, **no** release path
+	 * undid that: `releasePath` and `unregister` cancelled blocks and unlocked switches but
+	 * never touched a semaphore, so every aspect they cleared stayed lit forever.
+	 *
+	 * Observed live on `exampleGui shuntingLoopAI 333`: an `A → B` route granted at t=26.0
+	 * cleared `zA`, `doA1` and `doB1`; the `OrphanReservationSweeper` cancelled the stale
+	 * route at t=88.0; all three were still showing S80 at the end of the run. A standing
+	 * proceed aspect with no route behind it authorises an opposing train onto track that
+	 * the interlocking believes is free — the failure mode a signal returning to danger
+	 * exists to prevent.
+	 *
+	 * `Signal.STOP` is always the fail-safe direction: it authorises nothing, so resetting
+	 * too eagerly can only ever be over-restrictive.
+	 */
+	@Nested
+	inner class SignalReleaseTests {
+		@Test
+		fun `releasePath returns every semaphore it cleared to STOP`() {
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+
+			val semaphoresOnPath = semaphoresBounding(success.reservedBlocks)
+			// Guard: if nothing was cleared the assertion below would pass vacuously.
+			assertThat(semaphoresOnPath.filter { it.signal.isAllowing() }).isNotEmpty()
+
+			service.releasePath("train1")
+
+			assertAllBackAtStop(semaphoresOnPath)
+		}
+
+		@Test
+		fun `unregister returns every semaphore it cleared to STOP`() {
+			// unregister() is the production train-completion path (Train -> releaseTrainReservations).
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+
+			val semaphoresOnPath = semaphoresBounding(success.reservedBlocks)
+			assertThat(semaphoresOnPath.filter { it.signal.isAllowing() }).isNotEmpty()
+
+			service.unregister("train1")
+
+			assertAllBackAtStop(semaphoresOnPath)
+		}
+
+		@Test
+		fun `releasing one train's route leaves another train's cleared signals lit`() {
+			// The reset must be scoped to the releasing train: a shared semaphore still
+			// protecting a live reservation may not be dropped to STOP under the other train.
+			val first = service.reservePath("train1", inOut1, inOut2)
+			assertThat(first).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// train2 gets no route (the network is a single loop, train1 holds it), so the
+			// release below must not disturb anything train1 still owns.
+			service.releasePath("train2")
+
+			val stillHeld = semaphoresBounding(service.getReservedBlocks("train1"))
+			assertThat(stillHeld.filter { it.signal.isAllowing() })
+				.withMessage("train1 still holds its route; its signals must stay cleared")
+				.isNotEmpty()
+		}
+
+		@Test
+		fun `reservePath never clears a semaphore the route passes from behind`() {
+			// A semaphore facing against the direction of travel governs the OPPOSING movement.
+			// The train does not consult it -- Train.separatorAction only invokes semaphoreAction
+			// when isSeparatorInDirection() holds -- so clearing it authorises nobody useful while
+			// inviting a train coming the other way onto the route. It is also the aspect that
+			// then never returns to danger, because the reset at the end of semaphoreAction is on
+			// exactly the path that was skipped.
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+
+			val lit = semaphoresBounding(success.reservedBlocks).filter { it.signal.isAllowing() }
+
+			// The route must still be traversable -- F2 must not resurrect the Issue #566 stall
+			// where a granted route could never be driven because a semaphore stayed at STOP.
+			assertThat(lit)
+				.withMessage("a granted route must clear the semaphores that govern it")
+				.isNotEmpty()
+
+			lit.forEach { semaphore ->
+				val (_, authorizedTo) = semaphore.authorizedDirection()
+				assertThat(authorizedTo)
+					.withMessage(
+						"Semaphore ${semaphore.name} was cleared for travel towards $authorizedTo, " +
+							"but it faces ${semaphore.direction()} - a proceed aspect must only ever be " +
+							"shown in the direction the semaphore faces"
+					).isEqualTo(semaphore.direction())
+			}
+		}
+
+		@Test
+		fun `opposite routes over the same track clear disjoint sets of semaphores`() {
+			// The sharpest statement of the rule, and one that needs no hard-coded knowledge of
+			// which semaphore faces which way: a signal governs ONE direction. Run the loop both
+			// ways and the two cleared sets must not overlap.
+			//
+			// Without the rear-traversal guard both routes clear every semaphore bounding the
+			// same seven blocks, so the two sets come out identical instead of disjoint - which
+			// is precisely the defect: an A→B route lighting the signals that authorise B→A.
+			val aToB = service.reservePath("eastbound", inOutNamed("A"), inOutNamed("B"))
+			assertThat(aToB).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val litEastbound = litSemaphoreNames((aToB as PathReservationService.ReservationResult.Success))
+
+			service.releasePath("eastbound")
+
+			val bToA = service.reservePath("westbound", inOutNamed("B"), inOutNamed("A"))
+			assertThat(bToA).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val litWestbound = litSemaphoreNames((bToA as PathReservationService.ReservationResult.Success))
+
+			assertThat(litEastbound).isNotEmpty()
+			assertThat(litWestbound).isNotEmpty()
+			assertThat(litEastbound.intersect(litWestbound))
+				.withMessage(
+					"$litEastbound (A→B) and $litWestbound (B→A) share a semaphore - a proceed " +
+						"aspect cleared for one direction must never also stand for the opposite one"
+				).isEmpty()
+		}
+
+		private fun inOutNamed(name: String): DynamicPathSeparator =
+			simulationContext
+				.getInOuts()
+				.map { simulationContext.toDynamic(it) }
+				.filterIsInstance<DynamicInOut>()
+				.single { it.name == name }
+
+		private fun litSemaphoreNames(success: PathReservationService.ReservationResult.Success): Set<String> =
+			semaphoresBounding(success.reservedBlocks)
+				.filter { it.signal.isAllowing() }
+				.mapNotNull { it.name }
+				.toSet()
+
+		private fun semaphoresBounding(blocks: Collection<DynamicTrackBlock>): List<DynamicRailSemaphore> =
+			blocks
+				.flatMap { it.ends().toList() }
+				.filterIsInstance<DynamicRailSemaphore>()
+				.distinctBy { it.name }
+
+		private fun assertAllBackAtStop(semaphores: List<DynamicRailSemaphore>) {
+			semaphores.forEach { semaphore ->
+				assertThat(semaphore.signal)
+					.withMessage(
+						"Semaphore ${semaphore.name} still shows ${semaphore.signal} after its route was " +
+							"released - a proceed aspect must not outlive the reservation that cleared it"
+					).isEqualTo(Signal.STOP)
+			}
 		}
 	}
 

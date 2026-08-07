@@ -401,6 +401,43 @@ These limits are Gradle-enforced via the `junit.jupiter.params.repeat.maxCount` 
 @RepeatedTest(1000)
 ```
 
+### Manual-only dispatcher sweep (`aiSweep`) — never in CI
+
+`aiSweep` is a CLI mode, not a Gradle task, and it belongs in the same **manual-only** category as
+`heavyTest`: it needs a live Ollama, forks one JVM per run, and a full grid takes hours. Nothing in
+`test`, `integrationTest`, `build` or CI invokes it, and nothing should.
+
+It exists because Goal 10's amended A4 acceptance criterion (#822 §7) is a *measured* success rate
+over N ≥ 10 runs — a claim that cannot be made without actually performing those runs and recording
+each one.
+
+```bash
+./gradlew :desktop-ui:shadowJar
+
+# Check the grid without launching anything
+java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
+  --grid docs/measurement/sp2c24-sweep-grid.json --dry-run
+
+# The real thing (hours; resumable — re-invoke after an interrupt and it continues)
+java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
+  --grid docs/measurement/sp2c24-sweep-grid.json \
+  --out build/reports/dispatcher-sweep
+
+# The rule-based baseline, into the same directory so one report compares both arms (~30 s)
+java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
+  --grid docs/measurement/sp2c24-baseline-grid.json \
+  --out build/reports/dispatcher-sweep
+```
+
+Each run writes one JSON under `<out>/<arm>/`, and the sweep renders `<out>/report.md` when it
+finishes. A run that exceeds `perRunTimeoutSeconds` is killed and recorded as `TIMEOUT_ABORT` rather
+than left absent — an absent failed run would silently improve the arm's measured rate.
+
+Grid files live in `docs/measurement/`. The swept axes are `example`, `model`, `temperature`,
+`tickPeriodMs`, `historyN` and `maxActionsPerTick`; there is deliberately no `seed` axis, because
+Koog 1.1.1 has no path to Ollama's `seed` option. Results and interpretation:
+`docs/GOAL_10_SP2C24_SWEEP_REPORT.md`.
+
 **Test coverage (February 2026):**
 - **1840 tests total** (1836 passing, 4 skipped, 0 failing)
 - **51% code coverage** (8,824/17,070 instructions)
@@ -500,6 +537,7 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 - `GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` - LLM model comparison for the Goal 10 DISPATCHER agent (Issue #534, SP3.1; TRAIN agents are algorithmic-only, never LLM)
 - `GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` - Ollama/Koog capability audit: seed reachability, format+tools coexistence, num_ctx right-sizing, maxIterations tripwire (Issue #850, SP2c.27)
 - `GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` - Recorded traffic-simulation-expert ruling on the F1 paused-clock timing regime and the R8 headless-pacing question (Issue #849, SP2c.26)
+- `GOAL_10_SP2C24_SWEEP_REPORT.md` - Measured A4 reliability sweep: `aiSweep` results, the gate verdict, and which grid axes are live (Issue #847, SP2c.24)
 
 ## Known Issues
 

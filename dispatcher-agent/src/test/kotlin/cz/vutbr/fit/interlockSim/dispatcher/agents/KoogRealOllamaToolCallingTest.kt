@@ -123,6 +123,15 @@ class KoogRealOllamaToolCallingTest {
 	 */
 	private val testTimeoutMillis = 60_000L
 
+	private companion object {
+		/**
+		 * Point name for `a rejected tool argument is corrected on a later call`. Deliberately an
+		 * arbitrary token that appears in no prompt anywhere in this file, so the only way the
+		 * model can emit it is by having read the tool error that names it.
+		 */
+		const val REQUIRED_POINT = "QX7"
+	}
+
 	@Test
 	@Tag("ollama-test")
 	fun `decideAsync drives a real tool-calling round trip through local Ollama`() {
@@ -269,6 +278,98 @@ class KoogRealOllamaToolCallingTest {
 			callCount.incrementAndGet()
 			return ToolResult.Error("sensor temporarily unavailable")
 		}
+	}
+
+	/**
+	 * Rejects the **first** call whatever it carries, naming [requiredPoint] as the only legal
+	 * value, and accepts [requiredPoint] thereafter. Records every value it was asked for, in order.
+	 *
+	 * Rejecting unconditionally is what makes the experiment airtight: [requiredPoint] is chosen by
+	 * the caller to be a token that appears nowhere in the prompt, so the model has no way to
+	 * produce it except by reading the error text this tool returned.
+	 */
+	private class FirstCallRejectingTool(
+		private val requiredPoint: String
+	) : DomainTool {
+		val requestedPoints: MutableList<String> = mutableListOf()
+
+		override val name: String = "reserve_point"
+		override val description: String = "Reserve a named track point for a train."
+		override val parameters: List<DomainToolParameter> =
+			listOf(DomainToolParameter("point", "Name of the point to reserve", DomainToolParameterType.String))
+
+		override suspend fun execute(args: Map<String, Any?>): ToolResult {
+			val point = args["point"]?.toString().orEmpty()
+			val isFirstCall = requestedPoints.isEmpty()
+			requestedPoints.add(point)
+			return if (!isFirstCall && point == requiredPoint) {
+				ToolResult.Success("reserved $point")
+			} else {
+				ToolResult.Error("Unknown point '$point' — the only valid point name is: $requiredPoint")
+			}
+		}
+	}
+
+	/**
+	 * Settles, empirically, whether a tool's error message reaches the model (Issue #847 round 3).
+	 *
+	 * PR #891's round-2 comment and [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.resolveTrainId]'s
+	 * KDoc both assert that Koog 1.1.1 "drops `MessagePart.Tool.Result` entirely
+	 * (`OllamaConverters.kt:115`)", so a tool error can never teach the model and strict rejection
+	 * can never converge. Reading the 1.1.1 sources contradicts that: `Prompt.toOllamaChatMessages`
+	 * emits every tool-result part as its own `OllamaChatMessageDTO(role = "tool", …)` at lines
+	 * 37-44, and line 115 is in a helper that assembles only the *text* half of a user turn and
+	 * therefore skips tool parts by design.
+	 *
+	 * Source reading alone cannot settle it, because what matters is whether the model actually
+	 * acts on what arrives. The experiment: the required point name [REQUIRED_POINT] appears
+	 * **nowhere in the prompt** — the tool rejects the first call whatever it carries and names
+	 * that token in its error text. So a later call carrying it is proof the error text reached
+	 * the model; the model cannot have guessed it. If tool results were dropped, the model would
+	 * keep re-sending its original guess until the iteration budget ran out — exactly the failure
+	 * mode the round-2 comment describes.
+	 *
+	 * Deliberately tolerant: it does not require the correction to be immediate, nor that the model
+	 * stops retrying, only that the token is reached at all.
+	 */
+	@Test
+	@Tag("ollama-test")
+	fun `a rejected tool argument is corrected on a later call`() {
+		val tool = FirstCallRejectingTool(requiredPoint = REQUIRED_POINT)
+		val config = OllamaExecutorConfig.forLocalTesting()
+		val service = DefaultAgentService(OllamaSimpleExecutor(config), config)
+
+		// Names no point at all: the model must obtain one from the tool's error message.
+		val systemPrompt =
+			"You are a railway dispatcher test harness. Reserve a track point by calling the " +
+				"reserve_point tool. If a call comes back with an error, read the error text, take " +
+				"the point name it says is valid, and call reserve_point again with that name. " +
+				"Stop once a call succeeds."
+
+		runBlocking {
+			withTimeout(testTimeoutMillis) {
+				service
+					.createDispatchAgent(
+						modelName = config.modelName,
+						tools = listOf(tool),
+						systemPrompt = systemPrompt
+					).decideAsync(
+						DispatchObservation(
+							snapshot = SimulationSnapshot.EMPTY,
+							unapprovedTrains = emptyList(),
+							innerBlockInputs = emptyList(),
+							outerBlockInputs = emptyList()
+						)
+					)
+			}
+		}
+
+		assertThat(tool.requestedPoints, "points the model asked for").isNotEmpty()
+		assertThat(
+			tool.requestedPoints.drop(1).any { it == REQUIRED_POINT },
+			"model used the point name that appeared only in the rejected call's error text; " +
+				"actual call sequence: ${tool.requestedPoints}"
+		).isTrue()
 	}
 
 	/**

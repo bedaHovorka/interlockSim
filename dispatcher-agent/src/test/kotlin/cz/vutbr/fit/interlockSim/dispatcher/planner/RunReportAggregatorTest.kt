@@ -13,7 +13,6 @@ import assertk.assertThat
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
@@ -231,7 +230,7 @@ class RunReportAggregatorTest {
 			}
 		val report = aggregator.aggregate(snapshots)
 		// Sorted latencies: 100..1000; p95 index = (10-1)*95/100 = 8 → value at index 8 = 900
-		assertThat(report.p95LatencyMs).isGreaterThanOrEqualTo(800L)
+		assertThat(report.p95LatencyMs).isEqualTo(900L)
 	}
 
 	@Test
@@ -298,6 +297,56 @@ class RunReportAggregatorTest {
 		assertThat(md).transform("shows seed") { md.contains("| 42 |") }.isTrue()
 	}
 
+	@Test
+	fun `Parameter Sweep renders one row per parameter cell, not one per arm`() {
+		// Issue #847 (SP2c.24): a sweep over two temperatures used to collapse into a single
+		// LLM_TOOL_CALLING row labelled with whichever cell was read first — a "Parameter Sweep"
+		// section that could not show two parameter values.
+		val cold =
+			listOf(
+				snapshot(runId = "cold1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
+				snapshot(runId = "cold2", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28)
+			)
+		val hot =
+			listOf(snapshot(runId = "hot1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.5))
+		val report = aggregator.aggregate(cold + hot)
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val sweepSection = md.substringAfter("## Parameter Sweep")
+		assertThat(sweepSection).transform("shows the 0.28 cell") { it.contains("| 0.28 |") }.isTrue()
+		assertThat(sweepSection).transform("shows the 0.5 cell") { it.contains("| 0.5 |") }.isTrue()
+		assertThat(sweepSection)
+			.transform("counts runs per cell, not per arm") {
+				val dataRows = it.lines().filter { line -> line.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+				dataRows.size == 2
+			}.isTrue()
+	}
+
+	@Test
+	fun `Parameter Sweep row reports that cell's own run count`() {
+		val report =
+			aggregator.aggregate(
+				listOf(
+					snapshot(runId = "a1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
+					snapshot(runId = "a2", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
+					snapshot(runId = "b1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.9)
+				)
+			)
+		val sweepSection = aggregator.renderMarkdown(listOf(report)).substringAfter("## Parameter Sweep")
+		val rows =
+			sweepSection
+				.lines()
+				.filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+
+		// Pooling the three runs into one row would report "3" against a single configuration.
+		assertThat(rows.first { it.contains("| 0.28 |") })
+			.transform("0.28 cell has 2 runs") { it.contains("| 2 | 2 |") }
+			.isTrue()
+		assertThat(rows.first { it.contains("| 0.9 |") })
+			.transform("0.9 cell has 1 run") { it.contains("| 1 | 1 |") }
+			.isTrue()
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	private fun snapshot(
@@ -313,7 +362,8 @@ class RunReportAggregatorTest {
 		authorCounts: Map<ActionAuthor, Long> = emptyMap(),
 		correctAt1: Double? = null,
 		model: String = "",
-		seed: Long? = null
+		seed: Long? = null,
+		temperature: Double = 0.0
 	): DispatcherRunSnapshot {
 		val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
 		outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
@@ -325,7 +375,7 @@ class RunReportAggregatorTest {
 				RunParameters(
 					tickPeriodMs = 500L,
 					historyN = 10,
-					temperature = 0.0,
+					temperature = temperature,
 					maxActionsPerTick = 3,
 					model = model,
 					seed = seed

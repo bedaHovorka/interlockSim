@@ -274,6 +274,16 @@ val dispatcherReliabilityReport by tasks.registering(JavaExec::class) {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherReliabilityReportKt")
 
+    // Issue #847 round 4: read the runs where headless runs actually write them.
+    // DefaultRunSnapshotStore.DEFAULT_ROOT is a RELATIVE path ("build/reports/dispatcher-runs"),
+    // so it resolves against the working directory. `java -jar interlockSim.jar example ...` is
+    // launched from the repository root and writes there, while a JavaExec task defaults its
+    // working directory to the *module* directory and would read
+    // dispatcher-agent/build/reports/dispatcher-runs -- a different, empty directory. The task then
+    // succeeds and renders an all-zero report, which is indistinguishable from "no runs were
+    // recorded" and is exactly the silent-empty-measurement failure #847 cannot afford.
+    workingDir = rootProject.projectDir
+
     dependsOn(tasks.named("classes"))
 }
 

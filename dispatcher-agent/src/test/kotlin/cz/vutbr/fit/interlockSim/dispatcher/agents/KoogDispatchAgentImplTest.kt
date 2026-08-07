@@ -199,6 +199,55 @@ class KoogDispatchAgentImplTest {
 	}
 
 	@Test
+	fun `decideAsync lists active train ids so the model never has to invent one`() {
+		// Issue #847 round 2: with the perception tools gone, active trains were reported only as
+		// a count, so the model had no id to use for a running train and invented one (a live run
+		// produced trainId=4 and an approve_train for '1').
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		runBlocking { agent.decideAsync(observation(approvedTrainCount = 2)) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> prompt.contains("- active-0 (active)") && prompt.contains("- active-1 (active)") },
+				null
+			)
+		}
+	}
+
+	@Test
+	fun `decideAsync never renders a train's block position, which is not a valid route endpoint`() {
+		// Issue #847 round 2 regression guard. The first cut of the active-train list rendered
+		// `front at <frontSectionName>` — a *block* name — and the model promptly reused those
+		// block names as request_route endpoints (48 rejected calls naming block "k1" in one run),
+		// plus 18 more copying the literal "unknown section" null-fallback string. Never put a name
+		// the actuator tools cannot accept into the live message.
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val withBlockPosition =
+			observation(approvedTrainCount = 1).let { base ->
+				base.copy(
+					snapshot =
+						base.snapshot.copy(
+							trainPositions = base.snapshot.trainPositions.map { it.copy(frontSectionName = "k1") }
+						)
+				)
+			}
+
+		runBlocking { agent.decideAsync(withBlockPosition) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> !prompt.contains("k1") && !prompt.contains("unknown section") },
+				null
+			)
+		}
+	}
+
+	@Test
 	fun `decideAsync propagates exceptions from agent run instead of swallowing them`() {
 		val aiAgent = mockk<AIAgent<String, String>>()
 		coEvery { aiAgent.run(any(), null) } throws RuntimeException("boom")
