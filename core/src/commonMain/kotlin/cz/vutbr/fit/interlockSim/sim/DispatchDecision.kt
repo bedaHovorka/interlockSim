@@ -206,14 +206,26 @@ sealed class DispatchDecision {
 	 *
 	 * @property semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
 	 * @property signal Target signal aspect.
+	 * @property trainName Identifier of the train this write is made on behalf of, or `null`
+	 *   when the command carries no train attribution. Populated by [PathCommandTranslator]
+	 *   (which always has a `trainId` in scope) so
+	 *   [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]'s attributed
+	 *   `setSignalAspect` overload can record the write with
+	 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.recordExternalClearedSemaphore] --
+	 *   closing the tracking-contract hole an untracked signal write would otherwise leave (G5,
+	 *   Issue #893 task A6). Attribution-only: no production code currently constructs a
+	 *   [SetSignalAspect] decision that reaches an applier (`PathCommandTranslator.translate` has
+	 *   no production caller), so this property changes no live behavior.
 	 * @property rationale Rule-evaluation strings explaining this signal command
 	 *   (empty for dispatchers that do not record rationale).
 	 *
-	 * @since Issue #774 (SP1.7 — Goal 10 threading contract)
+	 * @since Issue #774 (SP1.7 — Goal 10 threading contract); [trainName] added in Issue #893
+	 *   (phase alpha, task A6 -- G5 attribution slice)
 	 */
 	data class SetSignalAspect(
 		val semaphoreName: String,
 		val signal: Signal,
+		val trainName: String? = null,
 		override val rationale: List<String> = emptyList()
 	) : DispatchDecision()
 

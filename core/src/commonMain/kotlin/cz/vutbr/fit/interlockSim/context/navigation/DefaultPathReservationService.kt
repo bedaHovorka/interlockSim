@@ -950,6 +950,19 @@ class DefaultPathReservationService(
 	override fun hasClearedSignals(trainId: String): Boolean = clearedSemaphores.containsKey(trainId)
 
 	/**
+	 * See [PathReservationService.recordExternalClearedSemaphore]. Delegates directly to the
+	 * same [recordClearedSemaphore] used internally by [reservePath], so an external caller's
+	 * write is folded into the single ledger this service already maintains -- see the interface
+	 * KDoc for why this is the fix for Issue #893's task A6 (G6 single signal ledger).
+	 */
+	override fun recordExternalClearedSemaphore(
+		trainId: String,
+		semaphore: DynamicRailSemaphore
+	) {
+		recordClearedSemaphore(trainId, semaphore)
+	}
+
+	/**
 	 * Check if a path is currently available.
 	 *
 	 * ## Implementation

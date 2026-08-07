@@ -189,6 +189,7 @@ object PathCommandTranslator {
 					DispatchDecision.SetSignalAspect(
 						semaphoreName = start.name,
 						signal = Signal.FREE,
+						trainName = trainId,
 						rationale = listOf("SP2b.3: entry signal on selected path for $trainId")
 					)
 				else -> {
@@ -197,6 +198,7 @@ object PathCommandTranslator {
 						DispatchDecision.SetSignalAspect(
 							semaphoreName = staticCell.getName(),
 							signal = Signal.FREE,
+							trainName = trainId,
 							rationale = listOf("SP2b.3: entry signal on selected path for $trainId")
 						)
 					} else {

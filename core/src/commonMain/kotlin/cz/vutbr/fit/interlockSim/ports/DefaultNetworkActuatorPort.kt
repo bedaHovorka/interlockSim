@@ -221,6 +221,31 @@ class DefaultNetworkActuatorPort(
 	override fun setSignalAspect(
 		semaphoreName: String,
 		signal: Signal
+	): Boolean = setSignalAspect(semaphoreName, signal, trainName = null)
+
+	/**
+	 * Attributed overload of [setSignalAspect]: identical write, but the caller supplies the
+	 * [trainName] the write is made on behalf of. A successful write to a proceed aspect is
+	 * then recorded with [PathReservationService.recordExternalClearedSemaphore] -- closing the
+	 * tracking-contract hole an untracked [DispatchDecision.SetSignalAspect] write would
+	 * otherwise leave (G5, Issue #893 task A6): without this, a later
+	 * [releaseRoute] for [trainName] would have no way to know this semaphore needs resetting.
+	 *
+	 * [trainName] `null` (equivalent to the plain 2-arg [setSignalAspect] above) intentionally
+	 * records nothing -- there is no train to attribute the write to.
+	 *
+	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
+	 * @param signal Target signal aspect.
+	 * @param trainName The train this write is made on behalf of, or `null` for an unattributed
+	 *   write.
+	 * @return `true` if the semaphore now displays [signal]; `false` if no semaphore with that
+	 *   name exists, or if the semaphore is constant and [signal] differs from its fixed aspect.
+	 * @since Issue #893 (phase alpha, task A6 -- G5 attribution slice)
+	 */
+	fun setSignalAspect(
+		semaphoreName: String,
+		signal: Signal,
+		trainName: String?
 	): Boolean {
 		val sem =
 			semaphoreByName[semaphoreName] ?: run {
@@ -234,7 +259,11 @@ class DefaultNetworkActuatorPort(
 		// requested — constant semaphores must stay constant.  Setting the semaphore to its
 		// current aspect is a no-op that returns true.
 		sem.signal = signal
-		return sem.signal == signal
+		val success = sem.signal == signal
+		if (success && trainName != null) {
+			pathReservationService.recordExternalClearedSemaphore(trainName, sem)
+		}
+		return success
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────

@@ -631,5 +631,61 @@ class DefaultNetworkActuatorPortTest {
 			assertThat(p.setSignalAspect("zA", Signal.S40)).isTrue()
 			assertThat(sem.signal).isEqualTo(Signal.S40)
 		}
+
+		/**
+		 * G5 attribution slice (Issue #893, task A6): the plain 2-arg [DefaultNetworkActuatorPort.setSignalAspect]
+		 * stays untracked (no trainId to attribute the write to) -- only the attributed 3-arg
+		 * overload records the write with [PathReservationService.recordExternalClearedSemaphore],
+		 * closing the tracking-contract hole a naive write would otherwise leave for any future
+		 * caller. [svc] mirrors just enough of `DefaultPathReservationService`'s cleared-signal
+		 * ledger to prove the round trip end-to-end: the attributed write must be reset by a
+		 * later [DefaultNetworkActuatorPort.releaseRoute] for the same train.
+		 */
+		@Test
+		@DisplayName("attributed overload records the write so releaseRoute(trainName) resets it")
+		fun attributedWriteIsResetByReleaseRoute() {
+			val sem = realDynamicSemaphore("zA", Signal.STOP)
+			val cleared = mutableMapOf<String, MutableSet<DynamicRailSemaphore>>()
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.recordExternalClearedSemaphore(any(), any()) } answers {
+				val trainId = firstArg<String>()
+				val s = secondArg<DynamicRailSemaphore>()
+				if (s.signal.isAllowing()) cleared.getOrPut(trainId) { mutableSetOf() }.add(s)
+			}
+			every { svc.hasClearedSignals(any()) } answers { cleared[firstArg<String>()]?.isNotEmpty() == true }
+			every { svc.releasePath(any()) } answers {
+				cleared.remove(firstArg<String>())?.forEach { it.signal = Signal.STOP }
+				emptyList()
+			}
+			val p = port(cells = mapOf((0 to 0) to sem), reservationService = svc)
+
+			val writeResult = p.setSignalAspect("zA", Signal.FREE, trainName = "T1")
+
+			assertThat(writeResult).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
+
+			val releaseResult = p.releaseRoute("T1")
+
+			assertThat(releaseResult).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		@DisplayName("plain (unattributed) write is not reset by a later releaseRoute for any train")
+		fun unattributedWriteIsNotTrackedByReleaseRoute() {
+			val sem = realDynamicSemaphore("zA", Signal.STOP)
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.hasClearedSignals(any()) } returns false
+			every { svc.releasePath(any()) } returns emptyList()
+			val p = port(cells = mapOf((0 to 0) to sem), reservationService = svc)
+
+			assertThat(p.setSignalAspect("zA", Signal.FREE)).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
+
+			// No trainId was ever attributed, so no release call can know to reset it.
+			p.releaseRoute("T1")
+
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
+		}
 	}
 }

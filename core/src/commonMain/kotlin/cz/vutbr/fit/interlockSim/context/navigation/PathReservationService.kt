@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -267,6 +268,42 @@ interface PathReservationService {
 	 * @since Issue #893 (phase alpha, task A7)
 	 */
 	fun hasClearedSignals(trainId: String): Boolean
+
+	/**
+	 * Record that [semaphore] now shows a proceed aspect on [trainId]'s behalf via an EXTERNAL
+	 * clearing path -- i.e. a caller outside this service's own [reservePath] wrote the aspect
+	 * directly -- so [releasePath], [hasClearedSignals], and [resetSemaphoresForReleasedBlocks]
+	 * see it exactly as though [reservePath] itself had cleared it.
+	 *
+	 * ## Why this exists (Issue #893, task A6 -- G6 single signal ledger)
+	 *
+	 * Before this method, only [reservePath]'s own internal recording populated this service's
+	 * cleared-signal ledger. Any OTHER code path that lit a semaphore directly --
+	 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade]'s block-list form of
+	 * `requestRoute` chief among them -- left this service's ledger blind to it, so a release
+	 * routed through this service (the `OrphanReservationSweeper`, via
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRoute]) never reset a
+	 * facade-granted entry signal: it stayed lit forever after a sweep. This method closes that
+	 * hole by giving external callers a SUPPORTED way to register their write with the single
+	 * ledger this service already maintains, instead of each caller inventing its own parallel
+	 * bookkeeping.
+	 *
+	 * Delegates to the exact same recording [reservePath] uses internally, so the "is it
+	 * actually lit as a result of this call?" filter and last-writer-wins ownership semantics
+	 * are IDENTICAL: a write that leaves [semaphore] at
+	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP] (or a constant semaphore's no-op
+	 * write) records nothing, and a semaphore already owned by a different train under this
+	 * service is simply reassigned to [trainId] (mirroring [PathReservationRegistry.blockToTrain]'s
+	 * last-writer-wins semantics elsewhere in this service).
+	 *
+	 * @param trainId The train the write was made on behalf of.
+	 * @param semaphore The semaphore that was just written by the external caller.
+	 * @since Issue #893 (phase alpha, task A6)
+	 */
+	fun recordExternalClearedSemaphore(
+		trainId: String,
+		semaphore: DynamicRailSemaphore
+	)
 
 	/**
 	 * Emit [BlockEvent.ReservationConflictDetected] for every blocked-path contention
