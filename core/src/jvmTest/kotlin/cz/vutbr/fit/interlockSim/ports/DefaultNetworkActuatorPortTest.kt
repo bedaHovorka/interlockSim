@@ -385,6 +385,39 @@ class DefaultNetworkActuatorPortTest {
 			assertThat((result as RouteRequestResult.AllPathsBlocked).attemptedPaths).isEqualTo(0)
 		}
 
+		/**
+		 * Task A-R1b (Issue #893): the facade branch must not collapse EVERY denial to
+		 * `AllPathsBlocked(0)` -- a denial the kernel specifically flagged as
+		 * `originNotContiguous` (mapped from
+		 * `PathReservationService.ReservationResult.NonContiguousStart` by
+		 * `DefaultInterlockingFacade.requestRouteByEndpoints`) must surface as
+		 * `RouteRequestResult.OriginNotContiguous`, reason preserved verbatim, exactly as the
+		 * legacy/no-facade branch already does. Before this fix `DefaultNetworkActuatorPort`
+		 * ignored the discriminant entirely and this always produced `AllPathsBlocked(0)`.
+		 */
+		@Test
+		@DisplayName(
+			"Denied response with originNotContiguous=true maps to RouteRequestResult.OriginNotContiguous, " +
+				"reason preserved"
+		)
+		fun deniedWithNonContiguousOriginMapsToOriginNotContiguous() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val facade = mockk<InterlockingFacade>()
+			val reason = "T1 holds no block bounded by 'A'; legal origins: X, Y"
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied(reason, originNotContiguous = true)
+
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.OriginNotContiguous>()
+			result as RouteRequestResult.OriginNotContiguous
+			assertThat(result.fromEndpointName).isEqualTo("A")
+			assertThat(result.reason).isEqualTo(reason)
+		}
+
 		@Test
 		@DisplayName("unknown endpoint throws IllegalArgumentException even when facade is wired")
 		fun unknownEndpointThrowsWithFacade() {

@@ -129,17 +129,13 @@ enum class ApplyFailureCode {
 	 * the defect this code exists to measure (Issue #893: a correctly directed but wrongly placed
 	 * route reserved the whole line against its own train and no train completed a journey).
 	 *
-	 * ## ⚠ Currently unreachable in a dispatcher-agent run
+	 * ## Live on both actuator paths since task A-R1b
 	 *
-	 * This code **only fires on the legacy/no-facade actuator path** (`:fast-sim`, DI-less tests).
-	 * `DefaultNetworkActuatorPort.requestRoute` collapses *every*
-	 * `InterlockingFacade.RouteResponse.Denied` to `RouteRequestResult.AllPathsBlocked(0)`, and
-	 * `DispatcherAgentModule` wires the facade unconditionally — so in a real agent run a
-	 * non-contiguous origin is still refused (the safety fix is unaffected) but arrives here as
-	 * [ALL_PATHS_BLOCKED], which `Sp2c21MetricsRecorder` in turn excludes from hard failures.
-	 * Threading a structured denial reason through the facade is the **A-R1b follow-on
-	 * (ledgered)**. Until it lands, do not read a zero count for this code as evidence that the
-	 * defect is absent.
+	 * `DefaultNetworkActuatorPort.requestRoute`'s facade branch now maps a
+	 * `RouteResponse.Denied.originNotContiguous` flag (threaded through by
+	 * `DefaultInterlockingFacade.requestRouteByEndpoints`) to `RouteRequestResult.OriginNotContiguous`,
+	 * so this code fires on the production dispatcher-agent path too, not only the legacy/no-facade
+	 * one. A zero count is now meaningful evidence.
 	 *
 	 * @since Issue #893 (phase alpha, task A-R1)
 	 */

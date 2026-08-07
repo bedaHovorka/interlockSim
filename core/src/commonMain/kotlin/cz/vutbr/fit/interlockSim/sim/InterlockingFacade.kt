@@ -88,9 +88,20 @@ interface InterlockingFacade {
 		 *                 genuinely untranslatable railway technical terms — see the project
 		 *                 CLAUDE.md "Language: English Only" rule.
 		 *                 Suitable for dispatcher operator display and agent LLM context.
+		 * @property originNotContiguous `true` when this denial is specifically
+		 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
+		 *   surfaced through [requestRouteByEndpoints] — the requested origin bounds none of the
+		 *   blocks the train holds or occupies, so it could never reach the route no matter how
+		 *   long it waits. [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort] consults
+		 *   this flag on its facade branch to map the denial to
+		 *   [cz.vutbr.fit.interlockSim.ports.RouteRequestResult.OriginNotContiguous] instead of the
+		 *   default `AllPathsBlocked(0)` collapse. `false` (the default) for every other denial
+		 *   reason, which still collapses on the facade branch — widening that is a spin-off
+		 *   candidate, not part of this fix (Issue #893, task A-R1b).
 		 */
 		data class Denied(
-			val reason: String
+			val reason: String,
+			val originNotContiguous: Boolean = false
 		) : RouteResponse
 	}
 

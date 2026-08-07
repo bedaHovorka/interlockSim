@@ -285,15 +285,15 @@ sealed class RouteRequestResult {
 	 * stays put will always fail, and counting it as contention would hide a dispatcher-output
 	 * defect inside a routine-traffic metric (Issue #893).
 	 *
-	 * ## ⚠ Only produced on the legacy/no-facade path
+	 * ## Produced on both the facade and the legacy/no-facade path (task A-R1b)
 	 *
 	 * [DefaultNetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]
-	 * constructs this **only** when no [cz.vutbr.fit.interlockSim.sim.InterlockingFacade] is wired
-	 * (`:fast-sim`, DI-less tests). With the facade wired — which production dispatcher-agent runs
-	 * always do — every `RouteResponse.Denied` collapses to [AllPathsBlocked] `(0)` before reaching
-	 * a caller, so this subtype never appears there. The route is still refused; only the
-	 * discriminant is lost. Threading a structured denial reason through the facade is the
-	 * **A-R1b follow-on (ledgered)**.
+	 * constructs this on the legacy/no-facade path directly from
+	 * `ReservationResult.NonContiguousStart`, and on the facade path (production dispatcher-agent
+	 * runs) from `RouteResponse.Denied.originNotContiguous` -- the discriminant
+	 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through from the same
+	 * kernel result. Every other denial reason still collapses to [AllPathsBlocked] `(0)` on the
+	 * facade path (Issue #893, task A-R1b).
 	 *
 	 * @property fromEndpointName The rejected origin name, as requested.
 	 * @property reason English explanation naming the origin and the legal origins for this

@@ -117,9 +117,24 @@ class DefaultNetworkActuatorPort(
 						"requestRoute: denied by interlocking for $trainName " +
 							"($fromEndpointName → $toEndpointName): ${response.reason}"
 					}
-					// All interlocking denials collapse to AllPathsBlocked(0); callers retry
-					// on the next tick. The specific reason is logged above and in the facade.
-					RouteRequestResult.AllPathsBlocked(0)
+					if (response.originNotContiguous) {
+						// Issue #893 (task A-R1b): the kernel identified this specifically as a
+						// non-contiguous-origin rejection (ReservationResult.NonContiguousStart),
+						// surfaced by DefaultInterlockingFacade.requestRouteByEndpoints via the
+						// originNotContiguous flag. Map it the same way the legacy/no-facade branch
+						// below does, reason string preserved verbatim.
+						logger.warn {
+							"requestRoute: non-contiguous origin for $trainName " +
+								"($fromEndpointName → $toEndpointName): ${response.reason}"
+						}
+						RouteRequestResult.OriginNotContiguous(fromEndpointName, response.reason)
+					} else {
+						// Every other interlocking denial still collapses to AllPathsBlocked(0);
+						// callers retry on the next tick. The specific reason is logged above and
+						// in the facade. Widening this to other RouteResponse.Denied causes is a
+						// spin-off candidate, not part of task A-R1b.
+						RouteRequestResult.AllPathsBlocked(0)
+					}
 				}
 			}
 		}
