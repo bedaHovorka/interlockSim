@@ -313,8 +313,18 @@ class DefaultNetworkPerceptionPort(
 	 * Captures a fresh, consistent [SimulationSnapshot] of the complete observable
 	 * network state on the kDisco thread and publishes it to [latestCaptured].
 	 *
+	 * ## Eager capture policy
+	 *
+	 * Every facet is materialized here, on the simulation thread. Do not make an
+	 * individual facet lazy: [snapshot] is consumed off-thread, where resolving a
+	 * lazy value could read mutable simulation state. The rule-based dispatcher only
+	 * needs train-count data, but the dispatcher observation used to diagnose Issue
+	 * #893 consumes signals, blocks, and train perceptions. The Issue #751 benchmark
+	 * measured this complete capture at 0.36 ms (0.1% of a 342 ms `shuntingLoop 300`
+	 * run), so retaining the complete, thread-safe snapshot is intentional.
+	 *
 	 * Calls each `allXxx()` bulk query in sequence.  Because kDisco runs on a single
-	 * simulation thread, all four calls observe the same simulation state — no events
+	 * simulation thread, all five calls observe the same simulation state — no events
 	 * interleave between them during a normal tick. The result is published via
 	 * [latestCaptured] so off-thread [snapshot] callers see a consistent picture.
 	 *
