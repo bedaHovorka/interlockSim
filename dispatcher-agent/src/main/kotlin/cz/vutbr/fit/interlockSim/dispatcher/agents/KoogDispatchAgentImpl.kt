@@ -171,11 +171,9 @@ class KoogDispatchAgentImpl(
 			// see KoogRealOllamaToolCallingTest's failing-tool harness.
 			appendLine(
 				"The two lists above are the complete set of trains you may name this cycle; pass a " +
-					"trainId/trainName exactly as written there, never one you inferred. Then use the " +
-					"tools available to you to reserve routes, release routes, or approve queued trains " +
-					"as needed. Switch and signal aspects change as a side effect of requesting and " +
-					"canceling routes — there is no tool to set them directly. Respond with plain text " +
-					"when finished."
+					"trainId/trainName exactly as written there, never one you inferred. Switch and " +
+					"signal aspects change as a side effect of requesting and canceling routes — " +
+					"there is no tool to set them directly."
 			)
 			if (observation.unapprovedTrains.isNotEmpty()) {
 				appendLine(
@@ -183,6 +181,15 @@ class KoogDispatchAgentImpl(
 						"approve_train(trainId) for each queued train above once you want it to depart."
 				)
 			}
+			// Issue #893 iteration 3: replaces the legacy "Then use the tools available to you to
+			// reserve routes, release routes, or approve queued trains as needed. ... Respond with
+			// plain text when finished." boilerplate, which never told the model a tick has a hard
+			// end. Deliberately the LAST line appended -- closest to generation, and unconditional
+			// so it lands after the reminder above too.
+			appendLine(
+				"When your actions for this tick are done, finish with one short plain-text sentence " +
+					"and no further tool calls."
+			)
 		}
 
 	/**

@@ -257,8 +257,9 @@ class RequestRouteTool(
 				return ToolResult.Error(
 					"Train '$resolvedTrainName' is standing at signal '$signalAhead', so its route must " +
 						"start there: fromEndpointName must be '$signalAhead', not '$fromEndpointName'. " +
-						"A route reserved somewhere else does not release this train. Do not retry with " +
-						"the same origin.",
+						"A route reserved somewhere else does not release this train. Do not send another " +
+						"origin of your own. Use exactly the from/to pair printed on this train's NEXT " +
+						"SECTION line, or make no route request for this train this tick.",
 					rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
 				)
 			}

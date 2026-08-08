@@ -487,6 +487,67 @@ class KoogAgentFactoryTest {
 		}
 	}
 
+	// ── Issue #893 iteration 3: turn-termination affordance ────────────────────────────────
+	// Measured defect: the model never emits a final plain-text message, so cycles die of
+	// Koog iteration exhaustion instead of ending cleanly. These two rules tell the model
+	// explicitly how a tick ends (a plain-text reply, nothing else) and to stop churning on a
+	// train that keeps getting rejected.
+
+	@Test
+	@DisplayName("createAgent's system prompt tells the model how to end a tick with a plain-text reply")
+	fun createAgentSystemPromptTellsModelHowToEndTick() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val sinkHolder = SinkHolder()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = sinkHolder
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains(
+				"When you have taken the actions this tick needs — never more than " +
+					"${sinkHolder.maxActionsPerTick} — end the tick: reply with one short plain-text " +
+					"sentence and make no further tool calls. When no action is needed this tick, call " +
+					"no_op once and then reply the same way. Only a plain-text reply ends the tick."
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt tells the model to stop acting on a train after two rejections")
+	fun createAgentSystemPromptTellsModelToStopAfterTwoRejections() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains(
+				"If a tool call for a train is rejected twice in one tick, stop acting on that train " +
+					"and move on or reply."
+			)
+		}
+	}
+
 	// ── SinkHolder queue-posting wrapper (SP2c.6, Issue #829) ──────────────────
 
 	/**

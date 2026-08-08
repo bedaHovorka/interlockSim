@@ -204,39 +204,61 @@ class KoogAgentFactory(
 						"reserved nothing and needs no cancel_route."
 				)
 				appendLine("- Otherwise, call no_op with a brief reason.")
-				appendLine("Rules that never bend:")
-				appendLine(
-					"- Reservation is not movement: request_route only reserves interlocking " +
-						"resources for a train that is already active — it never admits a queued " +
-						"train; only approve_train does that."
-				)
-				appendLine(
-					"- Copy every name character-for-character from STATION TOPOLOGY or a NEXT " +
-						"SECTION line — never a Block ID."
-				)
-				appendLine(
-					"- Reserving a section that is not directly in front of a train does not " +
-						"release anything that train already holds; it only locks that track " +
-						"against other trains."
-				)
-				appendLine(
-					"- This cycle's message always supersedes anything recorded earlier: where " +
-						"they disagree, trust this cycle."
-				)
-				appendLine(
-					"- Never call approve_train for a train already listed as active — " +
-						"approve_train applies only to a queued train."
-				)
-				appendLine(
-					"- Once the per-tick action budget is spent, end your turn: further tool " +
-						"calls this tick are refused."
-				)
-				appendLine(
-					"no_op is a correct and frequent answer, not a failure to act — most ticks " +
-						"have nothing new to do. Repeating an action already in force is refused, " +
-						"wastes the tick, and tells the next tick nothing new."
-				)
+				appendNonNegotiableRules(maxActions)
 			}.trimEnd('\n')
+		}
+
+		/**
+		 * Appends the "Rules that never bend:" section to [buildSystemPrompt]'s [StringBuilder],
+		 * factored out purely to keep [buildSystemPrompt] under detekt's `LongMethod` threshold — the
+		 * wording and ordering are unchanged from when this lived inline.
+		 *
+		 * @since Issue #893 iteration 3 (extraction); rules themselves date to phase beta task B2 and
+		 *   iteration 2/3 additions
+		 */
+		private fun StringBuilder.appendNonNegotiableRules(maxActions: Int) {
+			appendLine("Rules that never bend:")
+			appendLine(
+				"- Reservation is not movement: request_route only reserves interlocking " +
+					"resources for a train that is already active — it never admits a queued " +
+					"train; only approve_train does that."
+			)
+			appendLine(
+				"- Copy every name character-for-character from STATION TOPOLOGY or a NEXT " +
+					"SECTION line — never a Block ID."
+			)
+			appendLine(
+				"- Reserving a section that is not directly in front of a train does not " +
+					"release anything that train already holds; it only locks that track " +
+					"against other trains."
+			)
+			appendLine(
+				"- This cycle's message always supersedes anything recorded earlier: where " +
+					"they disagree, trust this cycle."
+			)
+			appendLine(
+				"- Never call approve_train for a train already listed as active — " +
+					"approve_train applies only to a queued train."
+			)
+			appendLine(
+				"- Once the per-tick action budget is spent, end your turn: further tool " +
+					"calls this tick are refused."
+			)
+			appendLine(
+				"- When you have taken the actions this tick needs — never more than $maxActions " +
+					"— end the tick: reply with one short plain-text sentence and make no further " +
+					"tool calls. When no action is needed this tick, call no_op once and then reply " +
+					"the same way. Only a plain-text reply ends the tick."
+			)
+			appendLine(
+				"- If a tool call for a train is rejected twice in one tick, stop acting on that " +
+					"train and move on or reply."
+			)
+			appendLine(
+				"no_op is a correct and frequent answer, not a failure to act — most ticks " +
+					"have nothing new to do. Repeating an action already in force is refused, " +
+					"wastes the tick, and tells the next tick nothing new."
+			)
 		}
 	}
 

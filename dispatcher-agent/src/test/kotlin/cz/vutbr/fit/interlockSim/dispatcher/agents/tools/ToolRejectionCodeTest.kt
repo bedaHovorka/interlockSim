@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
@@ -300,12 +301,19 @@ class ToolRejectionCodeTest {
 
 		val error = errorOf(result)
 		assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
-		// Round-1 review fix (Issue #893 iteration 2): this message also already names the
-		// concrete correct origin ("fromEndpointName must be 'doB1'"), so it must carry the same
-		// do-not-retry directive as queuedOriginError — otherwise the two ORIGIN_NOT_AT_TRAIN_POSITION
-		// sites mitigate the identical retry-churn failure mode non-uniformly.
-		assertThat(error.message, "message tells the model not to retry with the same origin")
-			.contains("Do not retry with the same origin.")
+		// Issue #893 iteration 3: this train is active, so its NEXT SECTION line (rendered by
+		// KoogDispatchAgentImpl.renderActiveTrainLine) names exactly one legal from/to pair --
+		// pointing the model at it beats the bare "do not retry" directive from iteration 2.
+		// queuedOriginError below stays on the older wording: a queued train never gets a NEXT
+		// SECTION line at all (renderQueuedTrainLine is approve-only), so there is nothing to
+		// point at yet.
+		assertThat(error.message, "message points the model at this train's NEXT SECTION line")
+			.contains(
+				"Do not send another origin of your own. Use exactly the from/to pair printed on " +
+					"this train's NEXT SECTION line, or make no route request for this train this tick."
+			)
+		assertThat(error.message, "legacy do-not-retry wording is gone")
+			.doesNotContain("Do not retry with the same origin.")
 	}
 
 	@Test

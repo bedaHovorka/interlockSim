@@ -516,6 +516,80 @@ class KoogDispatchAgentImplTest {
 		}
 	}
 
+	// ── Issue #893 iteration 3: turn-termination affordance ────────────────────────────────
+	// Measured defect: the model never emits a final plain-text message, so cycles die of Koog
+	// iteration exhaustion. The legacy trailing boilerplate never told the model a tick has a
+	// hard end; it is replaced with a tail line that must be the LAST thing in the prompt.
+
+	@Test
+	fun `decideAsync passes a prompt with the turn-termination tail line as the very last line`() {
+		// Reminder block present (queued train "T1") -- the tail line must still land after it.
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val tailLine =
+			"When your actions for this tick are done, finish with one short plain-text sentence and " +
+				"no further tool calls."
+
+		runBlocking { agent.decideAsync(observation("T1")) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> prompt.trimEnd().endsWith(tailLine) },
+				null
+			)
+		}
+	}
+
+	@Test
+	fun `decideAsync passes a prompt with the tail line last even when no trains are queued`() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val tailLine =
+			"When your actions for this tick are done, finish with one short plain-text sentence and " +
+				"no further tool calls."
+		val emptyObservation =
+			DispatchObservation(
+				snapshot = SimulationSnapshot.EMPTY,
+				unapprovedTrains = emptyList(),
+				innerBlockInputs = emptyList(),
+				outerBlockInputs = emptyList()
+			)
+
+		runBlocking { agent.decideAsync(emptyObservation) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> prompt.trimEnd().endsWith(tailLine) },
+				null
+			)
+		}
+	}
+
+	@Test
+	fun `decideAsync passes a prompt that drops the legacy tool-usage boilerplate`() {
+		// "Then use the tools available to you ... Respond with plain text when finished." never
+		// told the model a tick has a hard end -- superseded by the tail line above. The
+		// switch/signal side-effect sentence between them is untouched, still locked by
+		// `decideAsync passes a prompt that does not offer a direct set-switches-or-signals action`.
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		runBlocking { agent.decideAsync(observation("T1")) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					!prompt.contains("Then use the tools available to you") &&
+						!prompt.contains("Respond with plain text when finished.")
+				},
+				null
+			)
+		}
+	}
+
 	@Test
 	fun `decideAsync propagates exceptions from agent run instead of swallowing them`() {
 		val aiAgent = mockk<AIAgent<String, String>>()
