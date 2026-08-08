@@ -230,4 +230,56 @@ class KoogDispatchAgentImplPromptTest {
 		// Sanity: the block is non-trivial (both outcomes rendered, in publish order).
 		assertThat(blockA.indexOf("T-1") in 0 until blockA.indexOf("T-2")).isEqualTo(true)
 	}
+
+	// ── AC6: Released renders the current tool name, not the retired one (Issue #893
+	// final-review wave, F1) ──────────────────────────────────────────────────
+
+	/**
+	 * `release_route` was retired in SP2c.6 (Issue #829); the four-tool actuator surface is
+	 * `approve_train, request_route, cancel_route, no_op` (see `CancelRouteTool` KDoc). The
+	 * [AppliedOutcome.Released] branch of [KoogDispatchAgentImpl]'s outcomes-block renderer
+	 * still spelled out the retired name, so a model reading its own action history would see
+	 * a tool name it can no longer call.
+	 */
+	@Test
+	@DisplayName("a Released outcome (anyReleased=true) names the current tool cancel_route, not release_route")
+	fun releasedOutcomeAnyReleasedTrueNamesCancelRoute() {
+		val channel = AppliedOutcomeChannel()
+		channel.publish(
+			AppliedOutcome.Released(
+				trainId = "T-rel",
+				anyReleased = true,
+				id = CommandId(1L),
+				tickIndex = 1L
+			)
+		)
+		val (agent, prompts) = agentCapturingPrompts(channel)
+
+		runBlocking { agent.decideAsync(emptyObservation()) }
+
+		assertThat(prompts).hasSize(1)
+		assertThat(prompts[0]).contains("cancel_route for \"T-rel\": applied.")
+		assertThat(prompts[0]).doesNotContain("release_route")
+	}
+
+	@Test
+	@DisplayName("a Released outcome (anyReleased=false) names the current tool cancel_route, not release_route")
+	fun releasedOutcomeAnyReleasedFalseNamesCancelRoute() {
+		val channel = AppliedOutcomeChannel()
+		channel.publish(
+			AppliedOutcome.Released(
+				trainId = "T-rel",
+				anyReleased = false,
+				id = CommandId(1L),
+				tickIndex = 1L
+			)
+		)
+		val (agent, prompts) = agentCapturingPrompts(channel)
+
+		runBlocking { agent.decideAsync(emptyObservation()) }
+
+		assertThat(prompts).hasSize(1)
+		assertThat(prompts[0]).contains("cancel_route for \"T-rel\": applied — no reservation was held.")
+		assertThat(prompts[0]).doesNotContain("release_route")
+	}
 }

@@ -224,6 +224,11 @@ class DefaultPathReservationService(
 		val owned = clearedSemaphores[trainId] ?: return
 		var resetCount = 0
 		toReset.forEach { semaphore ->
+			// Forget this semaphore in the CALLER's ledger entry regardless of which branch
+			// runs below -- ownership having moved on means trainId doesn't hold it any more
+			// either way, so leaving it in `owned` would strand a stale entry that keeps
+			// hasClearedSignals(trainId) reporting true forever (Issue #893 final-review F2).
+			owned.remove(semaphore)
 			if (semaphoreClearedFor[semaphore] != trainId) {
 				logger.debug {
 					"resetSemaphoreSet: ${semaphore.name} was re-cleared for " +
@@ -232,7 +237,6 @@ class DefaultPathReservationService(
 				return@forEach
 			}
 			semaphoreClearedFor.remove(semaphore)
-			owned.remove(semaphore)
 			try {
 				semaphore.signal = Signal.STOP
 				resetCount++

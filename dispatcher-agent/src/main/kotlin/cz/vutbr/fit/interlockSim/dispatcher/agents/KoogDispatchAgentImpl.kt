@@ -332,9 +332,9 @@ class KoogDispatchAgentImpl(
 
 			is AppliedOutcome.Released ->
 				if (outcome.anyReleased) {
-					"release_route for \"${outcome.trainId}\": applied."
+					"cancel_route for \"${outcome.trainId}\": applied."
 				} else {
-					"release_route for \"${outcome.trainId}\": applied — no reservation was held."
+					"cancel_route for \"${outcome.trainId}\": applied — no reservation was held."
 				}
 
 			is AppliedOutcome.Approved ->

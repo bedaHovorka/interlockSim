@@ -2000,6 +2000,62 @@ class PathReservationServiceTest : KoinTestBase() {
 				.isFalse()
 		}
 
+		/**
+		 * Regression test for the F2 final-review finding on Issue #893: [resetSemaphoreSet]'s
+		 * ownership-skip branch (`semaphoreClearedFor[semaphore] != trainId`) returned before
+		 * removing the semaphore from the CALLER's own [clearedSemaphores] entry, so once a
+		 * semaphore's ownership moved on to another train, the original train's ledger kept
+		 * listing it forever. Because [hasClearedSignals] is a pure key-presence check (see its
+		 * KDoc: "clearedSemaphores never holds an empty set for a key"), the leak made it report
+		 * `true` for a train holding nothing at all -- and
+		 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.releaseRoute] reads exactly
+		 * this flag BEFORE calling [PathReservationService.releasePath] to decide whether a
+		 * release genuinely happened, so a caller could see a false "released" verdict.
+		 *
+		 * [resetClearedSemaphores] (the whole-route release path) does not share this defect: it
+		 * removes the entire per-train map entry up front (`clearedSemaphores.remove(trainId)`),
+		 * so the key is already gone before the ownership check runs, whichever branch it takes.
+		 * The leak is specific to [resetSemaphoreSet], the block-scoped reset used by
+		 * [resetSemaphoresForReleasedBlocks] (tail/partial releases).
+		 */
+		@Test
+		fun `resetSemaphoresForReleasedBlocks purges a semaphore from the ledger even when its ownership already moved on`() {
+			val zA = findSemaphoreByName("zA")
+			val zB = findSemaphoreByName("zB")
+			val result = service.reservePath("t1", zA, zB)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val reservedBlocks = service.getReservedBlocks("t1")
+
+			// Guards: zA must genuinely be t1's cleared START signal, or the rest is vacuous.
+			assertThat(zA.signal.isAllowing()).isTrue()
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("reservePath must have cleared at least the START signal")
+				.isTrue()
+
+			// t2 re-clears the SAME semaphore t1 holds -- last-writer-wins ownership transfer,
+			// exactly what reservePath's own internal recording does when a route is re-granted
+			// through a previously-cleared boundary. clearedSemaphores["t1"] is untouched by
+			// this call -- only the new owner's side of the ledger changes, which is the root of
+			// the leak this test targets.
+			service.recordExternalClearedSemaphore("t2", zA)
+
+			// t2 releases -- this purges t2's own ledger entry AND removes semaphoreClearedFor[zA]
+			// entirely, so zA is now owned by nobody.
+			service.releasePath("t2")
+
+			// t1's own block-scoped reset runs over its full reserved set, which still lists zA
+			// (never removed by the ownership transfer above). Ownership no longer matches t1
+			// (it matches nobody), so the physical aspect write is correctly skipped -- but the
+			// stale ledger ENTRY for zA under t1 must still be purged.
+			service.resetSemaphoresForReleasedBlocks("t1", reservedBlocks)
+
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage(
+					"zA's ownership moved on and was released by its new owner; t1's ledger must " +
+						"not still claim it"
+				).isFalse()
+		}
+
 		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
 			val grid = simulationContext.getRailWayNetGrid()
 			for (x in 0 until grid.cols) {

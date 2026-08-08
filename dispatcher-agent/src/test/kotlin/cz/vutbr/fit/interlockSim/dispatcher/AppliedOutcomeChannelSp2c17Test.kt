@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -331,13 +332,13 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 	}
 
-	// ── AC: release_route correlation ──────────────────────────────────────────
+	// ── AC: cancel_route correlation ──────────────────────────────────────────
 
 	@Nested
-	@DisplayName("release_route correlation (AC)")
+	@DisplayName("cancel_route correlation (AC)")
 	inner class ReleaseRouteCorrelation {
 		@Test
-		@DisplayName("release_route that returns true renders as RELEASED")
+		@DisplayName("cancel_route that returns true renders as RELEASED")
 		fun releaseRouteReleasedRendered() {
 			every { networkActuator.releaseRoute("T-087") } returns true
 
@@ -356,7 +357,7 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 
 		@Test
-		@DisplayName("release_route that returns false renders as NO_RESERVATION")
+		@DisplayName("cancel_route that returns false renders as NO_RESERVATION, never as the retired release_route")
 		fun releaseRouteNoReservationRendered() {
 			every { networkActuator.releaseRoute("T-087") } returns false
 
@@ -370,7 +371,10 @@ class AppliedOutcomeChannelSp2c17Test {
 			val ctx = buildRenderContext(observation)
 			val rendered = CompactTextRenderer().render(ctx)
 
-			assertThat(rendered).contains("release_route T-087 : NO_RESERVATION")
+			// release_route was retired in SP2c.6 (Issue #829); the live actuator surface is
+			// approve_train, request_route, cancel_route, no_op (see CancelRouteTool KDoc).
+			assertThat(rendered).contains("cancel_route T-087 : NO_RESERVATION")
+			assertThat(rendered).doesNotContain("release_route")
 		}
 	}
 

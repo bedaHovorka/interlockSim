@@ -211,7 +211,7 @@ class KoogAgentFactory(
 		/**
 		 * Appends the "Rules that never bend:" section to [buildSystemPrompt]'s [StringBuilder],
 		 * factored out purely to keep [buildSystemPrompt] under detekt's `LongMethod` threshold — the
-		 * wording and ordering are unchanged from when this lived inline.
+		 * pre-existing wording and ordering are unchanged from when this lived inline.
 		 *
 		 * @since Issue #893 iteration 3 (extraction); rules themselves date to phase beta task B2 and
 		 *   iteration 2/3 additions
