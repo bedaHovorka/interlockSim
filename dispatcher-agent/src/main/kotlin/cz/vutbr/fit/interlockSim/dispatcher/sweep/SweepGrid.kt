@@ -176,6 +176,16 @@ data class SweepAxes(
 		require(tickPeriodMs.all { it >= 0 }) { "axes.tickPeriodMs values must be >= 0" }
 		require(historyN.all { it >= 0 }) { "axes.historyN values must be >= 0" }
 		require(maxActionsPerTick.all { it >= 1 }) { "axes.maxActionsPerTick values must be >= 1" }
+		// Issue #893 review (Copilot): only the UNSET sentinel (-1) means "omitted axis". Any
+		// other non-positive value is a configuration mistake that `cells()`'s `takeIf { it > 0 }`
+		// would otherwise silently collapse to `null` — indistinguishable from an omitted axis
+		// (same `it-default` slug, same 30 s run). Reject it here so invalid grids fail at load.
+		require(
+			inferenceTimeoutSeconds.all { it == UNSET_INFERENCE_TIMEOUT_SECONDS || it >= 1 }
+		) {
+			"axes.inferenceTimeoutSeconds values must be $UNSET_INFERENCE_TIMEOUT_SECONDS " +
+				"(unset) or >= 1, was $inferenceTimeoutSeconds"
+		}
 	}
 
 	/** The cartesian product, in axis-declaration order. */

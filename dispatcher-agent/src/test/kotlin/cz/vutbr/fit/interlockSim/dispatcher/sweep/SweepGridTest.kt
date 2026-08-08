@@ -196,6 +196,28 @@ class SweepGridTest {
 		assertThat(cells.single { it.inferenceTimeoutSeconds == 90L }.slug).contains("90")
 	}
 
+	/**
+	 * Issue #893 review (Copilot): a non-positive `inferenceTimeoutSeconds` value must not be
+	 * silently collapsed to `null` by `cells()`'s `takeIf { it > 0 }` — that would make an
+	 * invalid grid indistinguishable from an omitted axis (same `it-default` slug, same 30 s
+	 * run). Only the `-1` UNSET sentinel means "omitted"; any other non-positive value is a
+	 * configuration mistake and must fail loud at load time.
+	 */
+	@Test
+	@DisplayName("a zero inferenceTimeoutSeconds value is rejected, not silently treated as omitted")
+	fun zeroInferenceTimeoutIsRejected() {
+		val grid = gridFile("""{ "repeat": 1, "axes": { "inferenceTimeoutSeconds": [0] } }""")
+		val ex = assertThrows<SweepGridException> { SweepGrid.load(grid) }
+		assertThat(ex.message ?: "").contains("inferenceTimeoutSeconds")
+	}
+
+	@Test
+	@DisplayName("a negative non-sentinel inferenceTimeoutSeconds value is rejected, not silently omitted")
+	fun negativeNonSentinelInferenceTimeoutIsRejected() {
+		val grid = gridFile("""{ "repeat": 1, "axes": { "inferenceTimeoutSeconds": [-2] } }""")
+		assertThrows<SweepGridException> { SweepGrid.load(grid) }
+	}
+
 	@Test
 	@DisplayName("run ids are file-name safe, so a substring scan of the output directory is exact")
 	fun runIdsAreFileNameSafe() {

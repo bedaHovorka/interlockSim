@@ -73,7 +73,10 @@ class DispatchDecisionMetadataTest {
 		private fun decisionsWithExpected(): List<Triple<DispatchDecision, String, String>> =
 			listOf(
 				Triple(DispatchDecision.RequestRoute("T-1", "zA", "InOut-B"), "request_route", "T-1"),
-				Triple(DispatchDecision.ReleaseRoute("T-2"), "release_route", "T-2"),
+				// The LLM speaks `cancel_route` (SP2c.6, Issue #829); the rule engine speaks
+				// `ReleaseRoute`. commandTypeName() projects the LLM-facing tool name, so it must
+				// return "cancel_route" — not the retired "release_route".
+				Triple(DispatchDecision.ReleaseRoute("T-2"), "cancel_route", "T-2"),
 				Triple(DispatchDecision.ApproveTrain("T-3"), "approve_train", "T-3"),
 				Triple(DispatchDecision.ReservePath("T-4", "zA", "InOut-B"), "reserve_path", "T-4"),
 				Triple(DispatchDecision.HoldTrain("T-5", 1.0), "hold_train", "T-5"),

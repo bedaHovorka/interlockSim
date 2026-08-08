@@ -986,7 +986,11 @@ class DispatchDecisionApplier(
 internal fun DispatchDecision.commandTypeName(): String =
 	when (this) {
 		is DispatchDecision.RequestRoute -> "request_route"
-		is DispatchDecision.ReleaseRoute -> "release_route"
+		// The LLM-facing tool name is `cancel_route` (SP2c.6, Issue #829 — see CancelRouteTool).
+		// This projection feeds AppliedOutcome.DroppedInvalid.commandType, which both renderers
+		// emit verbatim to the model, so it must speak the current tool name — not the retired
+		// `release_route` (final-review F1 follow-up, Issue #893).
+		is DispatchDecision.ReleaseRoute -> "cancel_route"
 		is DispatchDecision.ApproveTrain -> "approve_train"
 		is DispatchDecision.ReservePath -> "reserve_path"
 		is DispatchDecision.HoldTrain -> "hold_train"

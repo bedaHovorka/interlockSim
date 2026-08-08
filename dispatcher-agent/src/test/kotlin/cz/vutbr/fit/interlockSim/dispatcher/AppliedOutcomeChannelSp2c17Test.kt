@@ -376,6 +376,29 @@ class AppliedOutcomeChannelSp2c17Test {
 			assertThat(rendered).contains("cancel_route T-087 : NO_RESERVATION")
 			assertThat(rendered).doesNotContain("release_route")
 		}
+
+		@Test
+		@DisplayName("a dropped cancel_route renders as DROPPED with the current tool name, never the retired release_route")
+		fun droppedCancelRouteRenderedAsDropped() {
+			// The DroppedInvalid path builds commandType from commandTypeName(); before the fix
+			// that still mapped ReleaseRoute -> "release_route", leaking the retired tool name
+			// to the LLM. The final-review F1 fix (a10c2ded) covered the Released renderer
+			// branches but missed this dynamic commandType path.
+			every { networkActuator.releaseRoute("T-087") } throws IllegalArgumentException("no such train: T-087")
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")))
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L)
+			val observation = DispatcherObservation.EMPTY.copy(appliedOutcomes = outcomes)
+			val ctx = buildRenderContext(observation)
+			val rendered = CompactTextRenderer().render(ctx)
+
+			assertThat(rendered).contains("cancel_route T-087 : DROPPED")
+			assertThat(rendered).doesNotContain("release_route")
+		}
 	}
 
 	// ── AC: No new tool registered ──────────────────────────────────────────────

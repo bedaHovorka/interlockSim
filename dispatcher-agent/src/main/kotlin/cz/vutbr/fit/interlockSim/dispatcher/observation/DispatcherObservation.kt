@@ -251,7 +251,7 @@ sealed interface AppliedOutcome {
 		override val tickIndex: Long
 	) : AppliedOutcome
 
-	/** `release_route` completed; [anyReleased] is `true` if at least one block was released. */
+	/** `cancel_route` completed; [anyReleased] is `true` if at least one block was released. */
 	data class Released(
 		val trainId: String,
 		val anyReleased: Boolean,
@@ -298,7 +298,7 @@ sealed interface AppliedOutcome {
 	 * doesn't exist in this station). The command was **not** applied.
 	 */
 	data class DroppedInvalid(
-		/** Tool name that produced the command (e.g. `"request_route"`, `"release_route"`). */
+		/** Tool name that produced the command (e.g. `"request_route"`, `"cancel_route"`). */
 		val commandType: String,
 		val trainId: String,
 		val message: String,
