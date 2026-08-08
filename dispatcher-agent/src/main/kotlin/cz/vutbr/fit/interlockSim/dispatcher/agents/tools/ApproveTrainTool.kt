@@ -156,7 +156,9 @@ class ApproveTrainTool(
 			return ToolResult.Error(
 				"Train '$trainId' is already active on the network — approve_train admits a train from " +
 					"the queue and does nothing for one that is already running. Queued trains are: " +
-					queuedList,
+					queuedList +
+					" Train '$trainId' is already ACTIVE. approve_train applies only to queued trains. " +
+					"Do not retry this call.",
 				rejection = RejectionCode.TRAIN_ALREADY_ACTIVE
 			)
 		}

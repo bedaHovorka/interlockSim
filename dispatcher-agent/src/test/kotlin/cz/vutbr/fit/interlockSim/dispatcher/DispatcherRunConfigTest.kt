@@ -39,6 +39,9 @@ class DispatcherRunConfigTest {
 		assertThat(config.maxActionsPerTick).isEqualTo(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK)
 		assertThat(config.runId).isNull()
 		assertThat(config.runsRoot).isNull()
+		// Issue #893 iteration 2: production default stays 30s — only the grid may raise it.
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(30L)
 	}
 
 	@Test
@@ -51,7 +54,8 @@ class DispatcherRunConfigTest {
 				DispatcherRunConfig.PROP_HISTORY_N to "0",
 				DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK to "1",
 				DispatcherRunConfig.PROP_RUN_ID to "sweep-cell-r01",
-				DispatcherRunConfig.PROP_RUNS_ROOT to "build/reports/dispatcher-sweep"
+				DispatcherRunConfig.PROP_RUNS_ROOT to "build/reports/dispatcher-sweep",
+				DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "90"
 			)
 
 		assertThat(config.model).isEqualTo("llama3.1:8b")
@@ -61,6 +65,7 @@ class DispatcherRunConfigTest {
 		assertThat(config.maxActionsPerTick).isEqualTo(1)
 		assertThat(config.runId).isEqualTo("sweep-cell-r01")
 		assertThat(config.runsRoot).isEqualTo("build/reports/dispatcher-sweep")
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(90L)
 	}
 
 	@Test
@@ -73,7 +78,8 @@ class DispatcherRunConfigTest {
 				DispatcherRunConfig.PROP_TICK_PERIOD_MS to "soon",
 				DispatcherRunConfig.PROP_HISTORY_N to "3.5",
 				DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK to "0",
-				DispatcherRunConfig.PROP_TEMPERATURE to "warm"
+				DispatcherRunConfig.PROP_TEMPERATURE to "warm",
+				DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "soon"
 			)
 
 		assertThat(config.tickPeriodMs).isEqualTo(DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS)
@@ -81,6 +87,16 @@ class DispatcherRunConfigTest {
 		// 0 is out of range for a cap, not merely unparseable — same treatment.
 		assertThat(config.maxActionsPerTick).isEqualTo(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK)
 		assertThat(config.temperature).isNull()
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
+	}
+
+	@Test
+	@DisplayName("a non-positive inferenceTimeoutSeconds is rejected as a value, not accepted as 'no timeout'")
+	fun nonPositiveInferenceTimeoutRejected() {
+		assertThat(configOf(DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "0").inferenceTimeoutSeconds)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
+		assertThat(configOf(DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "-5").inferenceTimeoutSeconds)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
 	}
 
 	@Test

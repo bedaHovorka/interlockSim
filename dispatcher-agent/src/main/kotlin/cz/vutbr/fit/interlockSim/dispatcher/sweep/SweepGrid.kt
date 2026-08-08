@@ -151,7 +151,18 @@ data class SweepAxes(
 	val temperature: List<Double> = listOf(-1.0),
 	val tickPeriodMs: List<Long> = listOf(DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS),
 	val historyN: List<Int> = listOf(DispatcherRunConfig.DEFAULT_HISTORY_N),
-	val maxActionsPerTick: List<Int> = listOf(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK)
+	val maxActionsPerTick: List<Int> = listOf(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK),
+	/**
+	 * Per-cycle LLM inference deadline in seconds, or the [UNSET_INFERENCE_TIMEOUT_SECONDS]
+	 * sentinel meaning "leave [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]'s
+	 * own default (30s) in place" — mirrors [model]/[temperature]'s "omitted axis" pattern rather
+	 * than [tickPeriodMs]/[historyN]/[maxActionsPerTick]'s "always pass the production default"
+	 * pattern, because the whole point (Issue #893 iteration 2) is that the production default
+	 * stays 30s and only the sweep grid may ask for something else, such as 90s.
+	 *
+	 * @since Issue #893 iteration 2
+	 */
+	val inferenceTimeoutSeconds: List<Long> = listOf(UNSET_INFERENCE_TIMEOUT_SECONDS)
 ) {
 	init {
 		require(example.isNotEmpty()) { "axes.example must not be empty" }
@@ -160,6 +171,7 @@ data class SweepAxes(
 		require(tickPeriodMs.isNotEmpty()) { "axes.tickPeriodMs must not be empty" }
 		require(historyN.isNotEmpty()) { "axes.historyN must not be empty" }
 		require(maxActionsPerTick.isNotEmpty()) { "axes.maxActionsPerTick must not be empty" }
+		require(inferenceTimeoutSeconds.isNotEmpty()) { "axes.inferenceTimeoutSeconds must not be empty" }
 		require(example.all { it.isNotBlank() }) { "axes.example must not contain a blank name" }
 		require(tickPeriodMs.all { it >= 0 }) { "axes.tickPeriodMs values must be >= 0" }
 		require(historyN.all { it >= 0 }) { "axes.historyN values must be >= 0" }
@@ -173,15 +185,18 @@ data class SweepAxes(
 				temperature.flatMap { temp ->
 					tickPeriodMs.flatMap { period ->
 						historyN.flatMap { history ->
-							maxActionsPerTick.map { maxActions ->
-								SweepCell(
-									example = exampleName,
-									model = modelName.takeIf { it.isNotBlank() },
-									temperature = temp.takeIf { it >= 0.0 },
-									tickPeriodMs = period,
-									historyN = history,
-									maxActionsPerTick = maxActions
-								)
+							maxActionsPerTick.flatMap { maxActions ->
+								inferenceTimeoutSeconds.map { timeout ->
+									SweepCell(
+										example = exampleName,
+										model = modelName.takeIf { it.isNotBlank() },
+										temperature = temp.takeIf { it >= 0.0 },
+										tickPeriodMs = period,
+										historyN = history,
+										maxActionsPerTick = maxActions,
+										inferenceTimeoutSeconds = timeout.takeIf { it > 0 }
+									)
+								}
 							}
 						}
 					}
@@ -191,6 +206,9 @@ data class SweepAxes(
 
 	companion object {
 		const val DEFAULT_EXAMPLE: String = "shuntingLoopAI"
+
+		/** Marks "no inferenceTimeoutSeconds axis value" — mirrors [temperature]'s `-1.0` sentinel. */
+		const val UNSET_INFERENCE_TIMEOUT_SECONDS: Long = -1L
 	}
 }
 

@@ -151,6 +151,10 @@ class RequestRouteToolTest {
 		assertThat(error.message, "message").contains("must start at its entry point")
 		// The remaining InOut is the only place a train bound for A can have been queued.
 		assertThat(error.message, "message names the legal origin").contains("B")
+		// Issue #893 iteration 2: the message already names the right origin, so retrying with the
+		// same (wrong) one wastes a call in an already-scarce tool-calling budget.
+		assertThat(error.message, "message tells the model not to retry with the same origin")
+			.contains("Do not retry with the same origin.")
 	}
 
 	/** The same call with the entry InOut as origin is the legitimate one and must pass. */

@@ -257,7 +257,8 @@ class RequestRouteTool(
 				return ToolResult.Error(
 					"Train '$resolvedTrainName' is standing at signal '$signalAhead', so its route must " +
 						"start there: fromEndpointName must be '$signalAhead', not '$fromEndpointName'. " +
-						"A route reserved somewhere else does not release this train.",
+						"A route reserved somewhere else does not release this train. Do not retry with " +
+						"the same origin.",
 					rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
 				)
 			}
@@ -344,7 +345,8 @@ class RequestRouteTool(
 			"Train '$trainId' has not entered the network yet, so its route must start at its entry " +
 				"point — an InOut, not signal '$fromEndpointName'. Use fromEndpointName=" +
 				legalOrigins.joinToString(" or ") { "'$it'" } +
-				". A route reserved elsewhere locks track this train cannot reach and releases nobody.",
+				". A route reserved elsewhere locks track this train cannot reach and releases nobody. " +
+				"Do not retry with the same origin.",
 			rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
 		)
 	}

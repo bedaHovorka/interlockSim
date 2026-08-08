@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
@@ -297,8 +298,14 @@ class ToolRejectionCodeTest {
 				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doA1", "toEndpointName" to "A"))
 			}
 
-		assertThat(errorOf(result).rejection, "rejection code")
-			.isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		val error = errorOf(result)
+		assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		// Round-1 review fix (Issue #893 iteration 2): this message also already names the
+		// concrete correct origin ("fromEndpointName must be 'doB1'"), so it must carry the same
+		// do-not-retry directive as queuedOriginError — otherwise the two ORIGIN_NOT_AT_TRAIN_POSITION
+		// sites mitigate the identical retry-churn failure mode non-uniformly.
+		assertThat(error.message, "message tells the model not to retry with the same origin")
+			.contains("Do not retry with the same origin.")
 	}
 
 	@Test
@@ -412,5 +419,26 @@ class ToolRejectionCodeTest {
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)
 		assertThat((result as? ToolResult.Error)?.rejection, "rejection code on success").isNull()
+	}
+
+	/**
+	 * Issue #893 iteration 2: the per-cycle action cap rejection must tell the model to stop calling
+	 * actuator tools this tick rather than retrying — every retry after the cap is refused is a
+	 * wasted call in an already-exhausted 20-iteration budget.
+	 */
+	@Test
+	@DisplayName("the action-limit rejection tells the model to stop calling tools and end its turn")
+	fun actionLimitRejectionTellsModelToStop() {
+		val sinkHolder = SinkHolder(maxActionsPerTick = 1)
+		val tool = ApproveTrainTool(sinkHolder, sensorPort(listOf("Train #1", "Train #2")))
+		runBlocking { tool.execute(mapOf("trainId" to "Train #1")) }
+
+		val result = runBlocking { tool.execute(mapOf("trainId" to "Train #2")) }
+
+		val error = errorOf(result)
+		assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.ACTION_LIMIT_EXCEEDED)
+		assertThat(error.message, "message").contains(
+			"Action budget for this cycle is exhausted. Do not call any more actuator tools. End your turn now."
+		)
 	}
 }

@@ -11,9 +11,11 @@ package cz.vutbr.fit.interlockSim.dispatcher.sweep
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
@@ -197,6 +199,44 @@ class AiSweepDriverTest {
 		assertThat(runIds.toSet()).hasSize(2)
 		assertThat(runner.launched.all { it.systemProperties["interlocksim.dispatcher.runsRoot"] == outputRoot.toString() })
 			.isTrue()
+	}
+
+	/**
+	 * Issue #893 iteration 2: `inferenceTimeoutSeconds` flows from the grid JSON through
+	 * [SweepCell.systemProperties] into the child's `-D` flags exactly like `temperature` does above
+	 * — this is the sweep-side half of making the LLM's per-cycle deadline grid-drivable.
+	 */
+	@Test
+	@DisplayName("a grid-supplied inferenceTimeoutSeconds reaches the child as a -D property")
+	fun inferenceTimeoutSecondsReachesTheChild() {
+		val runner = RecordingRunner()
+		val grid =
+			SweepGrid(
+				endTimeSeconds = 60,
+				repeat = 1,
+				perRunTimeoutSeconds = 30,
+				axes = SweepAxes(inferenceTimeoutSeconds = listOf(90L))
+			)
+		driverWith(runner).run(grid, outputRoot, mainClass)
+
+		val values =
+			runner.launched.map { it.systemProperties.getValue("interlocksim.dispatcher.inferenceTimeoutSeconds") }
+		assertThat(values).containsExactly("90")
+	}
+
+	/** The mirror case: an axis the grid never mentions must not appear in the child's -D flags at all. */
+	@Test
+	@DisplayName("an omitted inferenceTimeoutSeconds axis passes no -D property, so the child keeps its own default")
+	fun omittedInferenceTimeoutSecondsReachesNoChildProperty() {
+		val runner = RecordingRunner()
+		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val hasProperty =
+			runner.launched
+				.single()
+				.systemProperties
+				.containsKey("interlocksim.dispatcher.inferenceTimeoutSeconds")
+		assertThat(hasProperty).isFalse()
 	}
 
 	@Test

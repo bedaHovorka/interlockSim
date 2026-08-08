@@ -62,6 +62,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
+import java.time.Duration
 import java.util.UUID
 
 /**
@@ -294,6 +295,8 @@ class ExampleRegistry {
 						agentFactory = context.scope.get<KoogAgentFactory>(),
 						context = context,
 						fallbackDispatcher = RuleBasedDispatcher(),
+						inferenceTimeout =
+							Duration.ofSeconds(context.scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
 						commandQueue = context.scope.get<ActuatorCommandQueue>(),
 						sinkHolder = context.scope.get<SinkHolder>(),
 						// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
@@ -455,6 +458,8 @@ class ExampleRegistry {
 						agentFactory = context.scope.get<KoogAgentFactory>(),
 						context = context,
 						fallbackDispatcher = RuleBasedDispatcher(),
+						inferenceTimeout =
+							Duration.ofSeconds(context.scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
 						commandQueue = context.scope.get<ActuatorCommandQueue>(),
 						sinkHolder = context.scope.get<SinkHolder>(),
 						// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders

@@ -382,6 +382,62 @@ class KoogAgentFactoryTest {
 		}
 	}
 
+	/**
+	 * Issue #893 iteration 2: two new non-negotiable-rules lines mirroring the terminal-rejection
+	 * directives added to the tools themselves (D3) — telling the model up front what the tool
+	 * errors otherwise have to teach it reactively, one rejected call at a time.
+	 */
+	@Test
+	@DisplayName("createAgent's system prompt tells the model never to approve_train an already-active train")
+	fun createAgentSystemPromptWarnsAgainstApprovingAnActiveTrain() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			// A specific, contiguous phrase — not three loose fragments any one of which could
+			// already be satisfied by unrelated existing text (e.g. "already in force is refused").
+			assertThat(systemPrompt).contains("Never call approve_train for a train already listed as active")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt tells the model to end its turn once the action budget is spent")
+	fun createAgentSystemPromptWarnsToEndTurnWhenBudgetSpent() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains(
+				"Once the per-tick action budget is spent, end your turn: further tool calls this " +
+					"tick are refused."
+			)
+		}
+	}
+
 	@Test
 	@DisplayName("createAgent's system prompt's routing step references the NEXT SECTION line")
 	fun createAgentSystemPromptRoutingStepReferencesNextSection() {

@@ -53,8 +53,16 @@ private val logger = KotlinLogging.logger {}
  *   have a result file.
  * @property runsRoot Directory the per-run JSON is written under; `null` keeps
  *   [cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore.DEFAULT_ROOT].
+ * @property inferenceTimeoutSeconds Maximum wall-clock time a single LLM cycle may take before
+ *   [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] gives up and falls back
+ *   to the rule-based dispatcher for that cycle. Defaults to
+ *   [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS]
+ *   (30s), reproducing the pre-Issue-#893-iteration-2 behaviour — the production default is
+ *   unchanged; a longer budget (e.g. 90s) is a grid-only measurement value, never a production
+ *   default (traffic-simulation-expert + agent-architect ruling, Issue #893).
  *
- * @since Issue #847 (SP2c.24 — headless N-run sweep driver and parameter grid)
+ * @since Issue #847 (SP2c.24 — headless N-run sweep driver and parameter grid);
+ *   `inferenceTimeoutSeconds` added in Issue #893 iteration 2
  */
 data class DispatcherRunConfig(
 	val model: String? = null,
@@ -63,12 +71,16 @@ data class DispatcherRunConfig(
 	val historyN: Int = DEFAULT_HISTORY_N,
 	val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK,
 	val runId: String? = null,
-	val runsRoot: String? = null
+	val runsRoot: String? = null,
+	val inferenceTimeoutSeconds: Long = DEFAULT_INFERENCE_TIMEOUT_SECONDS
 ) {
 	init {
 		require(tickPeriodMs >= 0) { "tickPeriodMs must be >= 0, was $tickPeriodMs" }
 		require(historyN >= 0) { "historyN must be >= 0, was $historyN" }
 		require(maxActionsPerTick >= 1) { "maxActionsPerTick must be >= 1, was $maxActionsPerTick" }
+		require(inferenceTimeoutSeconds >= 1) {
+			"inferenceTimeoutSeconds must be >= 1, was $inferenceTimeoutSeconds"
+		}
 	}
 
 	companion object {
@@ -82,6 +94,7 @@ data class DispatcherRunConfig(
 		const val PROP_MAX_ACTIONS_PER_TICK: String = "${PREFIX}maxActionsPerTick"
 		const val PROP_RUN_ID: String = "${PREFIX}runId"
 		const val PROP_RUNS_ROOT: String = "${PREFIX}runsRoot"
+		const val PROP_INFERENCE_TIMEOUT_SECONDS: String = "${PREFIX}inferenceTimeoutSeconds"
 
 		/**
 		 * No enforced spacing. The snapshot signal already paces the driver at one cycle per
@@ -95,6 +108,13 @@ data class DispatcherRunConfig(
 
 		/** Matches [ActionValidator]'s default and §5.5's "0–3 actions per step". */
 		const val DEFAULT_MAX_ACTIONS_PER_TICK: Int = 3
+
+		/**
+		 * Matches [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS].
+		 * The production default is unchanged by Issue #893 iteration 2 — only the sweep grid may
+		 * override it, per the traffic-simulation-expert + agent-architect ruling.
+		 */
+		const val DEFAULT_INFERENCE_TIMEOUT_SECONDS: Long = 30L
 
 		/**
 		 * Reads the configuration from JVM system properties.
@@ -125,7 +145,13 @@ data class DispatcherRunConfig(
 						DEFAULT_MAX_ACTIONS_PER_TICK
 					) { it.toIntOrNull()?.takeIf { parsed -> parsed >= 1 } },
 				runId = properties(PROP_RUN_ID)?.takeIf { it.isNotBlank() },
-				runsRoot = properties(PROP_RUNS_ROOT)?.takeIf { it.isNotBlank() }
+				runsRoot = properties(PROP_RUNS_ROOT)?.takeIf { it.isNotBlank() },
+				inferenceTimeoutSeconds =
+					parseOrDefault(
+						properties(PROP_INFERENCE_TIMEOUT_SECONDS),
+						PROP_INFERENCE_TIMEOUT_SECONDS,
+						DEFAULT_INFERENCE_TIMEOUT_SECONDS
+					) { it.toLongOrNull()?.takeIf { parsed -> parsed >= 1 } }
 			)
 
 		private fun <T> parseOrDefault(

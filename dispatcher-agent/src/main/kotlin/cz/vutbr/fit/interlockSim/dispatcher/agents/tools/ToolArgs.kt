@@ -89,7 +89,8 @@ internal fun emitOrRejectForCap(
 	return ToolResult.Error(
 		"Per-tick action limit (${sinkHolder.maxActionsPerTick}) reached — this action was not " +
 			"applied. Emit no more than ${sinkHolder.maxActionsPerTick} actions per dispatch cycle; " +
-			"the rest of this situation can be handled on the next cycle.",
+			"the rest of this situation can be handled on the next cycle. Action budget for this " +
+			"cycle is exhausted. Do not call any more actuator tools. End your turn now.",
 		rejection = RejectionCode.ACTION_LIMIT_EXCEEDED
 	)
 }

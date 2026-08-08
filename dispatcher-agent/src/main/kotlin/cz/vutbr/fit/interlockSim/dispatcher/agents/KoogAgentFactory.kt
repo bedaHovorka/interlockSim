@@ -224,6 +224,14 @@ class KoogAgentFactory(
 						"they disagree, trust this cycle."
 				)
 				appendLine(
+					"- Never call approve_train for a train already listed as active — " +
+						"approve_train applies only to a queued train."
+				)
+				appendLine(
+					"- Once the per-tick action budget is spent, end your turn: further tool " +
+						"calls this tick are refused."
+				)
+				appendLine(
 					"no_op is a correct and frequent answer, not a failure to act — most ticks " +
 						"have nothing new to do. Repeating an action already in force is refused, " +
 						"wastes the tick, and tells the next tick nothing new."
