@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -116,8 +117,14 @@ class KoogAgentFactoryTest {
 			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 		}
 
-	/** Captures the tool list handed to [AgentService.createDispatchAgent] without touching Ollama. */
-	private class CapturingAgentService : AgentService {
+	/**
+	 * Captures the tool list handed to [AgentService.createDispatchAgent] without touching Ollama.
+	 *
+	 * `internal` (not `private`) so [LivePromptNoMenuTest]'s system-prompt surface (Issue #893,
+	 * phase beta, task B3) can drive [KoogAgentFactory.createAgent] through the identical seam
+	 * rather than duplicating a second capturing fake.
+	 */
+	internal class CapturingAgentService : AgentService {
 		var capturedTools: List<DomainTool>? = null
 			private set
 		var capturedSystemPrompt: String? = null
@@ -266,6 +273,161 @@ class KoogAgentFactoryTest {
 				"The only actuator tools available are approve_train, request_route, cancel_route, and no_op"
 			)
 			assertThat(systemPrompt).contains("there is no tool to set a signal aspect or switch position directly")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt states no tool for querying state and verbatim-only train ids")
+	fun createAgentSystemPromptStatesNoStateQueryAndVerbatimTrainIdsOnly() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("no tool for querying state")
+			assertThat(systemPrompt).contains("Only ever pass a train id that appears there verbatim")
+		}
+	}
+
+	// ── B2 prompt rebuild (Issue #893, phase beta, task B2) — RED before the rewrite ─────────
+
+	@Test
+	@DisplayName("createAgent's system prompt states the per-tick action budget from the SAME value SinkHolder enforces")
+	fun createAgentSystemPromptStatesBudgetFromSinkHolderValue() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			// A non-default cap (2, not DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK's 3) proves
+			// the prompt reads the budget from this SinkHolder instance rather than a hardcoded 3.
+			val sinkHolder = SinkHolder(maxActionsPerTick = 2)
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = sinkHolder
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("At most ${sinkHolder.maxActionsPerTick} actions besides no_op")
+			// The default-cap case (3), matching the brief's worked example verbatim.
+			assertThat(systemPrompt).doesNotContain("At most 3 actions besides no_op")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt states the default per-tick action budget when SinkHolder uses its default")
+	fun createAgentSystemPromptStatesDefaultBudget() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val sinkHolder = SinkHolder()
+
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = sinkHolder
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("At most ${sinkHolder.maxActionsPerTick} actions besides no_op")
+			assertThat(systemPrompt).contains("At most 3 actions besides no_op")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt states no_op is a correct and frequent answer")
+	fun createAgentSystemPromptStatesNoOpIsCorrectAndFrequent() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("no_op is a correct and frequent answer")
+			assertThat(systemPrompt).contains(
+				"Repeating an action already in force is refused, wastes the tick, and tells the next tick nothing new"
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt's routing step references the NEXT SECTION line")
+	fun createAgentSystemPromptRoutingStepReferencesNextSection() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("NEXT SECTION")
+		}
+	}
+
+	@Test
+	@DisplayName(
+		"createAgent's system prompt explicitly states a train with no NEXT SECTION line gets no route request " +
+			"(gemma4-mandated)"
+	)
+	fun createAgentSystemPromptStatesNoNextSectionMeansNoRouteRequest() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("a train with no NEXT SECTION line gets no route request this tick")
 		}
 	}
 

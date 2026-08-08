@@ -154,54 +154,43 @@ class ObservationRendererTest {
 	@Nested
 	@DisplayName("AC5 — no-menu (C9): no numbered options, no menu verbs")
 	inner class NoMenuConstraint {
-		private val numberedOptionPattern = Regex("""^\s*\d+[.)]\s""", RegexOption.MULTILINE)
+		// Issue #893 (phase beta, task B3): checks below delegate to the shared NoMenuAssertions
+		// util so the identical rule also covers the live prompt surfaces (LivePromptNoMenuTest).
 
 		@Test
 		@DisplayName("CompactTextRenderer output contains no numbered-option lines")
 		fun compactTextNoNumberedOptions() {
-			val output = CompactTextRenderer().render(ctx)
-			assertThat(numberedOptionPattern.containsMatchIn(output)).isEqualTo(false)
+			NoMenuAssertions.assertNoNumberedOptionLines(CompactTextRenderer().render(ctx))
 		}
 
 		@Test
 		@DisplayName("DeltaRenderer output contains no numbered-option lines")
 		fun deltaNoNumberedOptions() {
-			val output = DeltaRenderer().render(ctx)
-			assertThat(numberedOptionPattern.containsMatchIn(output)).isEqualTo(false)
+			NoMenuAssertions.assertNoNumberedOptionLines(DeltaRenderer().render(ctx))
 		}
 
 		@Test
 		@DisplayName("SchematicRenderer output contains no numbered-option lines")
 		fun schematicNoNumberedOptions() {
-			val output = SchematicRenderer(topology).render(ctx)
-			assertThat(numberedOptionPattern.containsMatchIn(output)).isEqualTo(false)
+			NoMenuAssertions.assertNoNumberedOptionLines(SchematicRenderer(topology).render(ctx))
 		}
 
 		@Test
 		@DisplayName("CompactTextRenderer output contains no 'option' / 'choose one' / 'select' token")
 		fun compactTextNoMenuVerbs() {
-			val output = CompactTextRenderer().render(ctx).lowercase()
-			assertThat(output).doesNotContain("option")
-			assertThat(output).doesNotContain("choose one")
-			assertThat(output).doesNotContain("select")
+			NoMenuAssertions.assertNoMenuVerbs(CompactTextRenderer().render(ctx))
 		}
 
 		@Test
 		@DisplayName("DeltaRenderer output contains no 'option' / 'choose one' / 'select' token")
 		fun deltaNoMenuVerbs() {
-			val output = DeltaRenderer().render(ctx).lowercase()
-			assertThat(output).doesNotContain("option")
-			assertThat(output).doesNotContain("choose one")
-			assertThat(output).doesNotContain("select")
+			NoMenuAssertions.assertNoMenuVerbs(DeltaRenderer().render(ctx))
 		}
 
 		@Test
 		@DisplayName("SchematicRenderer output contains no 'option' / 'choose one' / 'select' token")
 		fun schematicNoMenuVerbs() {
-			val output = SchematicRenderer(topology).render(ctx).lowercase()
-			assertThat(output).doesNotContain("option")
-			assertThat(output).doesNotContain("choose one")
-			assertThat(output).doesNotContain("select")
+			NoMenuAssertions.assertNoMenuVerbs(SchematicRenderer(topology).render(ctx))
 		}
 	}
 
