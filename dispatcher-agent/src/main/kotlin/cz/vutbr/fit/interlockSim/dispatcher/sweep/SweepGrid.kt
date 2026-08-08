@@ -140,9 +140,11 @@ data class SweepGrid(
  * [cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory] and
  * [cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder] respectively).
  *
- * There is deliberately **no `seed` axis**. Koog 1.1.1 exposes no path from this project's
- * executor configuration to Ollama's `seed` option, so a seed column would be a value the runs do
- * not actually use — and P8's reproducibility claim rests on the pinned seed being real.
+ * There is deliberately **no `seed` axis**. SP2c.27 (Issue #850) and #894 established that Koog
+ * 1.1.1's `OllamaClient` is `final` with `internal` DTOs and provides no path to seed the Ollama
+ * sampler from the production tool-calling path — a seed column would claim a reproducibility
+ * guarantee the runs cannot have. P8's guarantee is therefore scoped to the prompt half only:
+ * same recorded snapshot sequence ⇒ byte-identical prompt sequence.
  */
 @kotlinx.serialization.Serializable
 data class SweepAxes(
