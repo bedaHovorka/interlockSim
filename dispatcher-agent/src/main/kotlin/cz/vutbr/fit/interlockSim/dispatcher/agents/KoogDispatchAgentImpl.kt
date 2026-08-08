@@ -118,6 +118,17 @@ class KoogDispatchAgentImpl(
 	 * can actually consume — the *signal ahead* of the train is both a legal `request_route`
 	 * endpoint and what `ActionValidator.ORIGIN_NOT_AT_TRAIN_POSITION` expects — and never a bare
 	 * placeholder string that can be copied verbatim.
+	 *
+	 * ## NEXT SECTION facts (Issue #893, phase beta, task B1)
+	 *
+	 * Phase alpha (task A-R1) taught the kernel to reject a queued train's route when the
+	 * requested origin is not where the train actually stands — a "correctly directed, wrongly
+	 * placed" request. That closes the gate but does not tell the model where the *right* request
+	 * is. Each active-train row here now also renders the one forward route request
+	 * [NextHopResolver] computes as eligible right now (see [renderActiveTrainLine]), sourced
+	 * exclusively from [DispatchObservation.innerBlockInputs]/[DispatchObservation.outerBlockInputs]
+	 * and [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot.trainPerceptions] — never a block id
+	 * (same rule as above).
 	 */
 	private fun buildUserPrompt(observation: DispatchObservation): String =
 		buildString {
@@ -142,13 +153,15 @@ class KoogDispatchAgentImpl(
 			)
 			// Ids only — deliberately no position. See "Never render a name the model cannot use"
 			// in this method's KDoc: TrainPositionReading.frontSectionName is a *block* name, and
-			// rendering it here got it copied straight back as a request_route endpoint.
+			// rendering it here got it copied straight back as a request_route endpoint. The NEXT
+			// SECTION clause added here (Issue #893, phase beta, task B1) uses signal/InOut names
+			// only — see renderActiveTrainLine.
 			observation.snapshot.trainPositions.forEach {
-				appendLine("- ${it.trainId} (active)")
+				appendLine(renderActiveTrainLine(it.trainId, observation))
 			}
 			appendLine("Queued (unapproved) trains: ${observation.unapprovedTrains.size}")
 			observation.unapprovedTrains.forEach {
-				appendLine("- ${it.trainId} (queued) -> exit via ${it.destinationInOutName}")
+				appendLine(renderQueuedTrainLine(it.trainId))
 			}
 			// Constrains the *data* the model may name, and keeps the switch/signal side-effect rule
 			// (SP2b.9, PR #811 Minor #1). It deliberately makes no claim about which tools exist:
@@ -171,6 +184,83 @@ class KoogDispatchAgentImpl(
 				)
 			}
 		}
+
+	/**
+	 * Renders one active train's row in the current-state train list, appending the NEXT SECTION
+	 * fact so the model can name the one route request that helps this train this cycle
+	 * (Issue #893, phase beta, task B1).
+	 *
+	 * ## Field style, quoted names, never a block id
+	 *
+	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toSeparatorName] come from
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName]/
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName] — signal or InOut
+	 * names, both legal `request_route` endpoints — never
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.blockId]. See this class's
+	 * [buildUserPrompt] KDoc ("Never render a name the model cannot use as an argument") for why
+	 * that distinction matters.
+	 *
+	 * ## `toSeparatorName == null` is never "blocked" or "occupied"
+	 *
+	 * Per [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName]'s own contract, a
+	 * `null` next separator means "no forward-reservation target applies", not "the track ahead is
+	 * occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must never claim
+	 * otherwise, and must never invite a route request the kernel has no target for.
+	 *
+	 * ## Standing at a signal reads the same perception field the tool guard reads
+	 *
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool]'s own origin guard is
+	 * `velocity == 0.0 && signalAheadName != null` off
+	 * [cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading] — the same field read here — so the
+	 * prompt's "standing at signal" clause and the tool's rejection can never disagree about
+	 * whether a train is stopped in front of a named signal.
+	 */
+	private fun renderActiveTrainLine(
+		trainId: String,
+		observation: DispatchObservation
+	): String {
+		val perception = observation.snapshot.trainPerceptions.firstOrNull { it.trainId == trainId }
+		val clauses = mutableListOf<String>()
+		perception?.destinationInOutName?.takeIf { it.isNotBlank() }?.let {
+			clauses += "exit via \"$it\""
+		}
+		if (perception != null && perception.velocity == 0.0 && !perception.signalAheadName.isNullOrBlank()) {
+			clauses += "standing at signal \"${perception.signalAheadName}\" (STOP)"
+		}
+		clauses += renderNextHopClause(NextHopResolver.resolve(trainId, observation))
+		return "- $trainId (active) -> ${clauses.joinToString("; ")}"
+	}
+
+	/**
+	 * Renders the tail clause of an active train's line for [outcome], exhaustively over the
+	 * sealed [NextHopOutcome] type — the compiler enforces coverage here the same way
+	 * [renderAppliedOutcome] does over [AppliedOutcome].
+	 */
+	private fun renderNextHopClause(outcome: NextHopOutcome): String =
+		when (outcome) {
+			is NextHopOutcome.Hop ->
+				"NEXT SECTION to reserve: from \"${outcome.fromSignalName}\" to \"${outcome.toSeparatorName}\" " +
+					"— the one route request that helps this train now."
+
+			NextHopOutcome.RouteAlreadySet -> "route already set — needs nothing this cycle."
+
+			NextHopOutcome.NoSectionReservable ->
+				"no section ahead is reservable this cycle — make no route request for this train; it waits."
+		}
+
+	/**
+	 * Renders one queued train's row: approve-only, deliberately naming no topology endpoint at
+	 * all (Issue #893, phase beta, task B1). A queued train cannot legally start a route from
+	 * anywhere yet —
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool]'s queued-origin guard
+	 * rejects every non-InOut origin for it, and the entry InOut itself is not exposed on
+	 * [cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation] — so printing its destination here
+	 * only invited a `request_route` call the tool would refuse. The sole legal action this cycle
+	 * is `approve_train`.
+	 */
+	private fun renderQueuedTrainLine(trainId: String): String =
+		"- $trainId (queued) -> needs approve_train only — its first route is offered on a later " +
+			"cycle, once it is running."
 
 	/**
 	 * Renders the "OUTCOMES OF YOUR PREVIOUS ACTIONS" block from [outcomes], or the empty string
