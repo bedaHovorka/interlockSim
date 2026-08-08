@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
@@ -30,8 +31,11 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
@@ -42,6 +46,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -1632,6 +1637,207 @@ class PathReservationServiceTest : KoinTestBase() {
 				.isNotEmpty()
 		}
 
+		/**
+		 * [PathReservationService.resetSemaphoresForReleasedBlocks] (Issue #893, task A3) is the
+		 * ownership-aware block-scoped reset a partial (tail) release uses. It must respect the
+		 * same last-writer-wins ownership as [releasePath]/[unregister]: once a semaphore it would
+		 * otherwise reset has been re-cleared for a DIFFERENT train, it must be left alone -- both
+		 * by the API itself and by a later full [releasePath] of the original train.
+		 */
+		@Test
+		fun `resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone, and a later releasePath does too`() {
+			// t1 reserves the only path from zA to zB: zA (start) and doB1 (an internal boundary
+			// between two blocks t1 owns) both end up cleared; zB (the destination) stays at STOP.
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val zB = findSemaphoreByName("zB")
+			val result = service.reservePath("t1", zA, zB)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val blocks = service.getReservedBlocks("t1")
+
+			// Guard: doB1 must actually be lit for t1 before testing that resetting it works at all.
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 must be an internal boundary of the zA->zB route, lit for t1")
+				.isTrue()
+
+			// The un-travelled tail: every block from doB1 onward. The block just before doB1 stays
+			// "retained" together with zA -- exactly the shape a partial (occupied-head) release
+			// works on, without needing an actual occupied block for this service-level test.
+			val doB1Index = blocks.indexOfFirst { doB1 in it.ends() }
+			assertThat(doB1Index).isGreaterThanOrEqualTo(0)
+			val tail = blocks.subList(doB1Index + 1, blocks.size)
+			assertThat(tail, "tail blocks beyond doB1").isNotEmpty()
+
+			// Genuinely free the tail (cancelPathSetup + unregisterBlock), then reset the semaphores
+			// it governed -- exactly what a partial release does.
+			tail.forEach { block ->
+				block.reservedFrom?.let { block.cancelPathSetup(it) }
+				service.unregisterBlock("t1", block)
+			}
+			service.resetSemaphoresForReleasedBlocks("t1", tail)
+
+			assertThat(doB1.signal, "doB1 after the tail release").isEqualTo(Signal.STOP)
+			assertThat(zA.signal.isAllowing())
+				.withMessage("zA governs the retained head, outside the released tail; it must stay lit")
+				.isTrue()
+
+			// A second train reserves the freed track from doB1 onward, re-clearing doB1 for itself.
+			val secondResult = service.reservePath("t2", doB1, zB)
+			assertThat(secondResult).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 must be lit for t2 after its own reservation")
+				.isTrue()
+
+			// Ownership hygiene #1: re-invoking the API for t1 over the SAME (now-foreign) blocks
+			// must leave t2's live signal alone.
+			service.resetSemaphoresForReleasedBlocks("t1", tail)
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 belongs to t2 now; a stale reset for t1 must not touch it")
+				.isTrue()
+
+			// Ownership hygiene #2: releasing t1's remaining (retained) route must reset t1's own
+			// signal (zA) but must not disturb t2's doB1.
+			service.releasePath("t1")
+			assertThat(zA.signal, "zA after releasePath(t1)").isEqualTo(Signal.STOP)
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("releasePath(t1) must not reset doB1, which now belongs to t2")
+				.isTrue()
+		}
+
+		/**
+		 * [PathReservationService.unregisterBlock] (Issue #893, task A4) is the production
+		 * tail-clearance path: `Train.Tail.separatorAction` calls it once per block as a train's
+		 * tail leaves it. Before this task it only updated the registry -- it never returned the
+		 * released block's semaphores to [Signal.STOP], leaving them lit forever exactly like the
+		 * pre-A3 `releasePath`/`unregister` defect this file's header documents, except on the
+		 * per-block tail path instead of a full route release.
+		 */
+		@Test
+		fun `unregisterBlock returns the semaphores guarding the released block to STOP`() {
+			val result = service.reservePath("t1", inOutNamed("A"), inOutNamed("B"))
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val firstBlock = blocks.first()
+
+			val releasedBoundary = firstBlock.ends().filterIsInstance<DynamicRailSemaphore>()
+			val litReleasedBoundary = releasedBoundary.filter { it.signal.isAllowing() }
+			// Guard: if nothing bounding the released block was actually cleared, the STOP
+			// assertion below would pass vacuously.
+			assertThat(litReleasedBoundary).isNotEmpty()
+
+			val stillHeldBoundary =
+				blocks
+					.drop(1)
+					.flatMap { it.ends().toList() }
+					.filterIsInstance<DynamicRailSemaphore>()
+					.distinctBy { it.name }
+					.filter { it !in releasedBoundary }
+			val litStillHeld = stillHeldBoundary.filter { it.signal.isAllowing() }
+			// Guard: the "stays lit" half of the assertion needs at least one genuinely lit
+			// semaphore bounding only still-held blocks, or it would pass vacuously too.
+			assertThat(litStillHeld).isNotEmpty()
+
+			// Genuinely free the first block (occupant == null && FREE), the same precondition
+			// PathReservationRegistry.unregisterBlock enforces and the existing
+			// resetSemaphoresForReleasedBlocks test above satisfies the same way.
+			firstBlock.reservedFrom?.let { firstBlock.cancelPathSetup(it) }
+			assertThat(service.unregisterBlock("t1", firstBlock)).isTrue()
+
+			litReleasedBoundary.forEach { semaphore ->
+				assertThat(semaphore.signal, "semaphore ${semaphore.name} bounding the released block")
+					.isEqualTo(Signal.STOP)
+			}
+			litStillHeld.forEach { semaphore ->
+				assertThat(semaphore.signal.isAllowing())
+					.withMessage(
+						"semaphore ${semaphore.name} bounds only still-held blocks; unregisterBlock " +
+							"of the first block must not touch it"
+					).isTrue()
+			}
+		}
+
+		/**
+		 * Gemma4-mandated boundary-transition test. Replays the full choreography this task's
+		 * fix participates in: head passage ([Train.semaphoreAction], `Train.kt`, drops a facing
+		 * semaphore to STOP as the front passes it) followed later by tail clearance
+		 * (`Train.Tail.separatorAction` -> [PathReservationService.unregisterBlock]).
+		 *
+		 * ## What this test is, and is not
+		 *
+		 * Assertions (i)-(ii) below are a **forward-invariant safety guard**, not a test that
+		 * discriminates this task's change: reverting the single `resetSemaphoresForReleasedBlocks`
+		 * call this task adds to `unregisterBlock` leaves (i)-(ii) passing, because `zA` was already
+		 * forced to STOP by the manual head-passage simulation in step (a), and `doB1` is never
+		 * touched by releasing the first block either way. This was confirmed by running this test
+		 * against the pre-fix code during RED -- it already passed. The historical G2 defect (a
+		 * released block's governing semaphore staying lit forever) is discriminated by
+		 * `unregisterBlock returns the semaphores guarding the released block to STOP` above; that
+		 * is the test that actually fails without the fix.
+		 *
+		 * Assertion (iii) is the genuine discriminator this test adds on top: with no second train
+		 * ever reclaiming `zA`, last-writer-wins ownership cannot rescue it the way it does in the
+		 * `resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone...` test above
+		 * -- only the bookkeeping purge protects it. [Signal.STOP] is idempotent so a stale re-touch
+		 * is invisible while `zA` sits at STOP; (iii) forces `zA` to a distinguishable aspect first
+		 * so a later stale reset becomes observable.
+		 *
+		 * Every boundary of a tail-cleared block is behind the head by definition (the
+		 * traffic-simulation-expert R3 ruling this task implements): the block the tail just left
+		 * cannot bound anything the train still needs in front of it.
+		 */
+		@Test
+		fun `unregisterBlock never drops the signal ahead of the train (forward-invariant guard, purge check)`() {
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val result = service.reservePath("t1", zA, findSemaphoreByName("zB"))
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val firstBlock = blocks.first()
+			assertThat(firstBlock.ends().toList()).contains(zA)
+
+			// Guards: both semaphores must start lit, or the assertions below are vacuous.
+			assertThat(zA.signal.isAllowing()).isTrue()
+			assertThat(doB1.signal.isAllowing()).isTrue()
+
+			// (a) Head passes zA, the route's first facing semaphore -- simulate exactly what
+			// Train.semaphoreAction does at the end of its hold(1.0): drop the aspect to STOP.
+			zA.signal = Signal.STOP
+
+			// (b) Tail clears the first block -- free it and unregister it, as in the previous test.
+			firstBlock.reservedFrom?.let { firstBlock.cancelPathSetup(it) }
+			assertThat(service.unregisterBlock("t1", firstBlock)).isTrue()
+
+			// (i) zA is STOP -- head passage already guaranteed that; this assertion alone cannot
+			// discriminate the fix (see the class KDoc above). It documents the choreography's
+			// end state before the genuine discriminator in (iii).
+			assertThat(zA.signal, "zA immediately after the tail clears its block").isEqualTo(Signal.STOP)
+
+			// (ii) The signal AHEAD of the train -- doB1, bounding blocks t1 still holds -- must
+			// stay lit. This is the core safety claim: releasing the REARMOST block can never drop
+			// authority ahead of the head, because every boundary of a tail-cleared block is behind
+			// it. unregisterBlock never touches doB1 either way, so this also doesn't discriminate
+			// the fix -- it is the invariant this whole task exists to protect, checked directly
+			// rather than only asserted in prose.
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("doB1 governs a still-held block ahead of the train; it must stay lit")
+				.isTrue()
+
+			// (iii) Genuine discriminator. Nobody reclaims zA for another train here, so
+			// semaphoreClearedFor[zA] is still "t1" the whole time -- the ownership guard that
+			// protects a re-claimed semaphore in the sibling resetSemaphoresForReleasedBlocks test
+			// does not apply. Force zA to a distinguishable allowing aspect (standing in for any
+			// later, unrelated signal change; STOP is idempotent and would otherwise mask a stale
+			// re-touch), then run a later, independent releasePath(t1) over the rest of the route.
+			// Without this task's purge, t1's bookkeeping still lists zA as its own and
+			// resetClearedSemaphores (which releasePath calls unconditionally, before it even looks
+			// at block state) stomps it back to STOP; with the purge, zA is no longer in that set
+			// and is left alone.
+			zA.signal = Signal.S80
+			service.releasePath("t1")
+			assertThat(zA.signal, "zA after a later releasePath(t1), with nobody having reclaimed it")
+				.isEqualTo(Signal.S80)
+		}
+
 		@Test
 		fun `reservePath never clears a semaphore the route passes from behind`() {
 			// A semaphore facing against the direction of travel governs the OPPOSING movement.
@@ -1689,6 +1895,182 @@ class PathReservationServiceTest : KoinTestBase() {
 					"$litEastbound (A→B) and $litWestbound (B→A) share a semaphore - a proceed " +
 						"aspect cleared for one direction must never also stand for the opposite one"
 				).isEmpty()
+		}
+
+		@Test
+		fun `extending a route never re-lights semaphores between blocks the train already owns`() {
+			// Step 1: reserve a partial route from zA to zB. This is the only topological path
+			// between these two separators (zA -> vA -> doA1 -> doB1 -> vB -> zB), so it
+			// deterministically owns doB1 as an INTERNAL boundary (both its neighbouring blocks,
+			// doA1-doB1 and doB1-vB, are part of this same reservation) rather than as the route's
+			// start or target. doB1 faces the direction of travel (unlike doA1 -- see "reservePath
+			// never clears a semaphore the route passes from behind" above) so it gets lit here.
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val partial = service.reservePath("t1", zA, findSemaphoreByName("zB"))
+			assertThat(partial).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val partialSuccess = partial as PathReservationService.ReservationResult.Success
+
+			val clearedByPartial =
+				semaphoresBounding(partialSuccess.reservedBlocks).filter { it.signal.isAllowing() }
+			// Guard: if nothing was cleared, the "stays at STOP" assertion below would pass vacuously.
+			assertThat(clearedByPartial).isNotEmpty()
+			assertThat(clearedByPartial.map { it.name }).contains(doB1.name)
+
+			// Step 2: simulate head passage -- exactly what Train.semaphoreAction does when a
+			// train passes a facing semaphore: hold(1.0); semaphore.signal = Signal.STOP.
+			clearedByPartial.forEach { it.signal = Signal.STOP }
+
+			// Step 3: extend the SAME route all the way to B, reusing the original start. The
+			// recomputed candidate spans the blocks t1 already owns (zA..zB) plus one new block
+			// (zB..B). The service is expected to filter the already-owned blocks into
+			// forwardBlocks internally and only configure signals for the new portion.
+			val extended = service.reservePath("t1", zA, inOutNamed("B"))
+			assertThat(extended).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Assert: every semaphore strictly between two blocks the train already owned --
+			// doB1 in particular, sitting between the doA1-doB1 block and the doB1-vB block,
+			// both already owned before the extension -- must still be at STOP. The route
+			// extension must not re-light a semaphore behind the train's head.
+			clearedByPartial.forEach { semaphore ->
+				assertThat(semaphore.signal)
+					.withMessage(
+						"Semaphore ${semaphore.name} was re-lit to ${semaphore.signal} by the route " +
+							"extension even though the train already passed it and returned it to STOP"
+					).isEqualTo(Signal.STOP)
+			}
+		}
+
+		@Test
+		fun `extending a route lights the boundary from the last owned block into the first new block`() {
+			// Step 1: reserve a partial route from zA to doB1 -- ending EXACTLY at doB1, not past
+			// it. A destination separator is never configured as an intermediate boundary (there
+			// is no "next block" beyond it in this partial's block list), so doB1 starts at STOP.
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val partial = service.reservePath("t1", zA, doB1)
+			assertThat(partial).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Guard: doB1 must start unlit, otherwise the "becomes lit" assertion below would be
+			// meaningless (it might already have been lit for an unrelated reason).
+			assertThat(doB1.signal.isAllowing())
+				.withMessage("Semaphore doB1 is the partial route's destination; it must start at STOP")
+				.isFalse()
+
+			// Step 2: extend the SAME route all the way to B, reusing the original start. The
+			// recomputed candidate spans the blocks t1 already owns (zA..doB1) plus new blocks
+			// beyond doB1 (doB1..B). doB1 is now a genuine owned -> new transition: the last
+			// block the train already owns (doA1-doB1) leads into the first NEW block
+			// (doB1-vB), so the train still needs doB1 lit to proceed into the extension.
+			val extended = service.reservePath("t1", zA, inOutNamed("B"))
+			assertThat(extended).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			assertThat(doB1.signal.isAllowing())
+				.withMessage(
+					"Semaphore doB1 governs the boundary between the block the train already owns " +
+						"(doA1-doB1) and the first newly reserved block (doB1-vB); the extension must " +
+						"light it so the train can proceed"
+				).isTrue()
+		}
+
+		/**
+		 * Direct unit coverage of [PathReservationService.hasClearedSignals] (Issue #893, task
+		 * A7): [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.releaseRoute] reads
+		 * this before calling [PathReservationService.releasePath] (which purges the same
+		 * bookkeeping as a side effect of its own reset), so this method's truthfulness matters
+		 * on its own, independent of that caller.
+		 */
+		@Test
+		fun `hasClearedSignals reports true only while the train still owns a cleared semaphore`() {
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("t1 has not reserved anything yet")
+				.isFalse()
+
+			val result = service.reservePath("t1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("reservePath must have cleared at least the START signal")
+				.isTrue()
+
+			service.releasePath("t1")
+
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("releasePath resets and forgets every cleared signal for the train")
+				.isFalse()
+		}
+
+		/**
+		 * Regression test for the F2 final-review finding on Issue #893: [resetSemaphoreSet]'s
+		 * ownership-skip branch (`semaphoreClearedFor[semaphore] != trainId`) returned before
+		 * removing the semaphore from the CALLER's own [clearedSemaphores] entry, so once a
+		 * semaphore's ownership moved on to another train, the original train's ledger kept
+		 * listing it forever. Because [hasClearedSignals] is a pure key-presence check (see its
+		 * KDoc: "clearedSemaphores never holds an empty set for a key"), the leak made it report
+		 * `true` for a train holding nothing at all -- and
+		 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.releaseRoute] reads exactly
+		 * this flag BEFORE calling [PathReservationService.releasePath] to decide whether a
+		 * release genuinely happened, so a caller could see a false "released" verdict.
+		 *
+		 * [resetClearedSemaphores] (the whole-route release path) does not share this defect: it
+		 * removes the entire per-train map entry up front (`clearedSemaphores.remove(trainId)`),
+		 * so the key is already gone before the ownership check runs, whichever branch it takes.
+		 * The leak is specific to [resetSemaphoreSet], the block-scoped reset used by
+		 * [resetSemaphoresForReleasedBlocks] (tail/partial releases).
+		 */
+		@Test
+		fun `resetSemaphoresForReleasedBlocks purges a semaphore from the ledger even when its ownership already moved on`() {
+			val zA = findSemaphoreByName("zA")
+			val zB = findSemaphoreByName("zB")
+			val result = service.reservePath("t1", zA, zB)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val reservedBlocks = service.getReservedBlocks("t1")
+
+			// Guards: zA must genuinely be t1's cleared START signal, or the rest is vacuous.
+			assertThat(zA.signal.isAllowing()).isTrue()
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage("reservePath must have cleared at least the START signal")
+				.isTrue()
+
+			// t2 re-clears the SAME semaphore t1 holds -- last-writer-wins ownership transfer,
+			// exactly what reservePath's own internal recording does when a route is re-granted
+			// through a previously-cleared boundary. clearedSemaphores["t1"] is untouched by
+			// this call -- only the new owner's side of the ledger changes, which is the root of
+			// the leak this test targets.
+			service.recordExternalClearedSemaphore("t2", zA)
+
+			// t2 releases -- this purges t2's own ledger entry AND removes semaphoreClearedFor[zA]
+			// entirely, so zA is now owned by nobody.
+			service.releasePath("t2")
+
+			// t1's own block-scoped reset runs over its full reserved set, which still lists zA
+			// (never removed by the ownership transfer above). Ownership no longer matches t1
+			// (it matches nobody), so the physical aspect write is correctly skipped -- but the
+			// stale ledger ENTRY for zA under t1 must still be purged.
+			service.resetSemaphoresForReleasedBlocks("t1", reservedBlocks)
+
+			assertThat(service.hasClearedSignals("t1"))
+				.withMessage(
+					"zA's ownership moved on and was released by its new owner; t1's ledger must " +
+						"not still claim it"
+				).isFalse()
+		}
+
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell =
+						grid[
+							cz.vutbr.fit.interlockSim.util
+								.Point(x, y)
+						]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
 		}
 
 		private fun inOutNamed(name: String): DynamicPathSeparator =
@@ -2387,6 +2769,362 @@ class PathReservationServiceTest : KoinTestBase() {
 			switches.forEach { switch ->
 				assertThat(switch.locked).isFalse()
 			}
+		}
+	}
+
+	/**
+	 * Contiguity invariant on the route start (Issue #893, task A-R1).
+	 *
+	 * A route request whose start separator is not contiguous with the requesting train's
+	 * current authority reserves track somewhere the train is not, holds it against every
+	 * other train, and releases nobody. `reservePath` must reject it outright.
+	 *
+	 * The train's "authority" (its footprint) is the union of two independent sources:
+	 * the blocks the registry records for it, and the blocks whose physical `occupant`
+	 * carries its name. The second arm matters because a train can be admitted and
+	 * physically present with **no** registry state at all — the t=17 admission flow —
+	 * and a registry-only predicate would be blind to it.
+	 *
+	 * A train with an empty footprint passes vacuously: every production caller that reaches
+	 * `reservePath` for such a train supplies an InOut start (train entry), so the strict arm
+	 * would buy no safety and invalidate the entry flow.
+	 *
+	 * Topology note (`vyhybna.xml`): block `kB` spans InOut `B` ↔ semaphore `zB`, so `zB` is
+	 * its legal forward boundary. `doB1` is two hops further on (`k1`'s boundary) and is NOT
+	 * a boundary of `kB`.
+	 */
+	@Nested
+	inner class ContiguityTests {
+		@Test
+		fun `reservePath from a boundary of a block the train already holds succeeds`() {
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val zB = findSemaphoreByName("zB")
+
+			val initial = service.reservePath("t1", zA, doB1)
+			assertThat(initial).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// doB1 bounds the last block reserved above, so extending from it is contiguous.
+			val extension = service.reservePath("t1", doB1, zB)
+
+			assertThat(extension).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+
+		@Test
+		fun `reservePath from a separator on no held block boundary is rejected and reserves nothing`() {
+			val zA = findSemaphoreByName("zA")
+			val doB1 = findSemaphoreByName("doB1")
+			val doA2 = findSemaphoreByName("doA2")
+			val doB2 = findSemaphoreByName("doB2")
+
+			assertThat(service.reservePath("t1", zA, doB1))
+				.isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val heldBefore = registry.getBlocks("t1").toSet()
+			// Guard: the assertion below is only meaningful if doA2 really is off the held route.
+			assertThat(heldBefore.flatMap { it.ends().toList() }.contains(doA2))
+				.withMessage("doA2 must not bound any block t1 holds, or this fixture proves nothing")
+				.isFalse()
+
+			val result = service.reservePath("t1", doA2, doB2)
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+			assertThat(registry.getBlocks("t1").toSet())
+				.withMessage("a rejected request must not add or remove any block")
+				.isEqualTo(heldBefore)
+			val k2 = blockBetween("doA2", "doB2")
+			assertThat(k2.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(k2.trainName).isNull()
+		}
+
+		/**
+		 * The t=17 admission flow: a train admitted onto `kB` before any route was granted
+		 * has zero registry state, so only the graph-scan occupancy arm can see it.
+		 */
+		@Test
+		fun `a physically occupied block is a footprint even with no registry state`() {
+			val kB = blockBetween("B", "zB")
+			occupy(kB, "T-17")
+			assertThat(registry.getBlocks("T-17"))
+				.withMessage("this test only exercises the occupancy arm if the registry is empty")
+				.isEmpty()
+
+			val result = service.reservePath("T-17", findSemaphoreByName("zB"), findSemaphoreByName("doB1"))
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+
+		@Test
+		fun `a start away from the occupied block is rejected even with no registry state`() {
+			val kB = blockBetween("B", "zB")
+			occupy(kB, "T-17")
+			assertThat(registry.getBlocks("T-17")).isEmpty()
+
+			// doA1 is at the far end of the station — it bounds no block T-17 occupies.
+			val result = service.reservePath("T-17", findSemaphoreByName("doA1"), findSemaphoreByName("doB1"))
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+			assertThat(registry.getBlocks("T-17")).isEmpty()
+			val k1 = blockBetween("doA1", "doB1")
+			assertThat(k1.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(k1.trainName).isNull()
+		}
+
+		/**
+		 * Pins ruling P4(ii): a train with no footprint anywhere passes vacuously, whatever
+		 * its start. Tightening this arm would break every train-entry caller.
+		 *
+		 * Uses doA1 -> zA rather than doA1 -> doB1: doA1 faces B->A (see
+		 * [SignalReleaseTests] / [StartDirectionTests]), so a doA1 -> doB1 request is rejected
+		 * by the unrelated G4 rear-facing-START guard (Issue #893 task A1) regardless of
+		 * contiguity, which would confound this test's own concern.
+		 */
+		@Test
+		fun `a train with no footprint at all passes vacuously`() {
+			val result =
+				service.reservePath("phantom-train", findSemaphoreByName("doA1"), findSemaphoreByName("zA"))
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid[Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
+		}
+
+		/** Name of a separator, whatever concrete dynamic cell type it is; `null` if unnamed. */
+		private fun separatorNameOf(separator: PathSeparator): String? =
+			when (separator) {
+				is DynamicRailSemaphore -> separator.name
+				is DynamicRailSwitch -> separator.name
+				is DynamicInOut -> separator.name
+				else -> null
+			}
+
+		/**
+		 * The single block whose two ends are the separators named [first] and [second].
+		 * `vyhybna.xml` blocks carry no XML name of their own, so they are addressed by
+		 * their endpoints (the same identity `ShuntingLoop` labels `kA`/`kB`/`k1`/`k2`).
+		 */
+		private fun blockBetween(
+			first: String,
+			second: String
+		): DynamicTrackBlock =
+			simulationContext
+				.getGraph()
+				.values()
+				.filterIsInstance<DynamicTrackBlock>()
+				.firstOrNull { block ->
+					block.ends().mapNotNull { separatorNameOf(it) }.toSet() == setOf(first, second)
+				} ?: throw IllegalStateException("No block found between $first and $second")
+
+		/**
+		 * Put [trainId] physically on [block] without touching the registry — the state a
+		 * train admitted before any route was granted is in.
+		 */
+		private fun occupy(
+			block: DynamicTrackBlock,
+			trainId: String
+		) {
+			block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
+			block.enter(
+				object : TrackOccupant {
+					override val name: String = trainId
+
+					override fun distanceToSemaphore(): Double = 0.0
+
+					override fun nextSemaphore(): OrientedPathSeparator? = null
+				}
+			)
+		}
+	}
+
+	/**
+	 * G4 (Issue #893, task A1): reject a route whose START semaphore faces away from the
+	 * requested direction of travel.
+	 *
+	 * ## Domain ruling (traffic-simulation-expert R2; binding)
+	 *
+	 * A rear-facing START is the same malformation class as a non-contiguous request (A-R1,
+	 * see [ContiguityTests]) and must be rejected outright, not silently left dark: granting
+	 * a route with no proceed authority at its origin would be a #566-class stall for a
+	 * train standing at that signal. The intermediate-semaphore rear-facing SKIP (PR #892,
+	 * see [SignalReleaseTests]) stays exactly as-is -- a train never waits on a semaphore it
+	 * passes from behind; only the START is authority-defining.
+	 *
+	 * Topology facts (`vyhybna.xml`): `zA`, `doB1`, `doB2` face A->B; `doA1`, `doA2`, `zB`
+	 * face B->A (see [DefaultPathReservationService.facesDirectionOfTravel]).
+	 */
+	@Nested
+	inner class StartDirectionTests {
+		@Test
+		fun `reservePath rejects a route whose START semaphore faces away from it`() {
+			// doA1 faces B->A (it governs entry into the vA-doA1 block). Requesting doA1 as
+			// the START of a route towards doB1 asks it to authorise the OPPOSITE
+			// direction -- the block it would need to clear (doA1-doB1) lies behind its
+			// facing, not ahead of it.
+			val doA1 = findSemaphoreByName("doA1")
+			val doB1 = findSemaphoreByName("doB1")
+
+			// Give the train a footprint so the A-R1 contiguity predicate (Step 0 of
+			// reservePath) passes and the request reaches signal configuration: physically
+			// place it on the block on doA1's LEGITIMATE side (vA-doA1) -- a train standing
+			// behind the signal, exactly the scenario the domain ruling describes.
+			val vaDoA1 = blockBetween("vA", "doA1")
+			occupy(vaDoA1, "rearTrain")
+
+			assertThat(doA1.signal).isEqualTo(Signal.STOP)
+
+			// maxDepth=2 restricts topological search to the single direct doA1-doB1 block
+			// (depth 1). Without the cap, BFS also finds a second, much longer candidate
+			// around vyhybna's sibling branch (doA1 -> vA -> doA2 -> doB2 -> vB -> doB1)
+			// whose first forward block is not even adjacent to doA1 -- an unrelated edge
+			// case this test does not intend to exercise.
+			val result = service.reservePath("rearTrain", doA1, doB1, maxDepth = 2)
+
+			assertThat(result)
+				.withMessage("a rear-facing START must not be granted a route")
+				.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+
+			assertThat(registry.getBlocks("rearTrain"))
+				.withMessage("a rejected start must reserve nothing")
+				.isEmpty()
+			val k1 = blockBetween("doA1", "doB1")
+			assertThat(k1.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(k1.trainName).isNull()
+
+			assertThat(doA1.signal)
+				.withMessage("a rejected START must not be left showing proceed")
+				.isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		fun `reservePath still succeeds and lights the START when it faces the travel direction`() {
+			// Liveness twin (anti-#566): the SAME semaphore, used in the direction it
+			// actually faces (B->A, towards zA/A), must still succeed and light up.
+			val doA1 = findSemaphoreByName("doA1")
+			val zA = findSemaphoreByName("zA")
+
+			val result = service.reservePath("liveTrain", doA1, zA)
+
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doA1.signal.isAllowing())
+				.withMessage("a legitimately-facing START must still be cleared")
+				.isTrue()
+			val (_, authorizedTo) = doA1.authorizedDirection()
+			assertThat(authorizedTo)
+				.withMessage("a proceed aspect must only ever be shown in the direction the semaphore faces")
+				.isEqualTo(doA1.direction())
+		}
+
+		@Test
+		fun `re-requesting an already-owned sub-route does not re-light a rear-facing START`() {
+			// Early-return branch (blocks.isNotEmpty() but forwardBlocks.isEmpty()): reserve
+			// the full A->B route first (governed by zA/doB1; doA1 is intermediate and
+			// rear-facing for this direction, so PR #892's guard already leaves it at STOP --
+			// see SignalReleaseTests."reservePath never clears a semaphore the route passes
+			// from behind"). Then re-request the doA1->doB1 sub-route, which the train
+			// already fully owns: this is the SAME rear-facing doA1/doB1 pairing as the
+			// rejection test above, but reached through the early-return branch instead of
+			// the main candidate loop.
+			val doA1 = findSemaphoreByName("doA1")
+			val doB1 = findSemaphoreByName("doB1")
+
+			// Named explicitly (rather than the class-level inOut1/inOut2, whose A/B identity
+			// is an implementation detail of InOut declaration order) to pin down the A->B
+			// direction this test's reasoning depends on.
+			val full = service.reservePath("t1", inOutNamed("A"), inOutNamed("B"))
+			assertThat(full).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doA1.signal)
+				.withMessage("doA1 is rear-facing on this A->B route; it must start at STOP")
+				.isEqualTo(Signal.STOP)
+
+			val reRequest = service.reservePath("t1", doA1, doB1)
+
+			// Grant stands per current early-return semantics -- there is nothing to roll
+			// back and the train's authority over this sub-route already exists.
+			assertThat(reRequest).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(doA1.signal)
+				.withMessage(
+					"the early-return branch must not re-light a semaphore the route passes " +
+						"from behind, even for an already-owned sub-route"
+				).isEqualTo(Signal.STOP)
+			// Whether the (re-)clearing is internally "recorded" for later reset is not
+			// inspectable from outside DefaultPathReservationService; the signal staying at
+			// STOP is the observable proof that no re-light was attempted.
+		}
+
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid[Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
+		}
+
+		private fun inOutNamed(name: String): DynamicPathSeparator =
+			simulationContext
+				.getInOuts()
+				.map { simulationContext.toDynamic(it) }
+				.filterIsInstance<DynamicInOut>()
+				.single { it.name == name }
+
+		/** Name of a separator, whatever concrete dynamic cell type it is; `null` if unnamed. */
+		private fun separatorNameOf(separator: PathSeparator): String? =
+			when (separator) {
+				is DynamicRailSemaphore -> separator.name
+				is DynamicRailSwitch -> separator.name
+				is DynamicInOut -> separator.name
+				else -> null
+			}
+
+		/**
+		 * The single block whose two ends are the separators named [first] and [second].
+		 * `vyhybna.xml` blocks carry no XML name of their own, so they are addressed by
+		 * their endpoints, same identity convention as [ContiguityTests.blockBetween].
+		 */
+		private fun blockBetween(
+			first: String,
+			second: String
+		): DynamicTrackBlock =
+			simulationContext
+				.getGraph()
+				.values()
+				.filterIsInstance<DynamicTrackBlock>()
+				.firstOrNull { block ->
+					block.ends().mapNotNull { separatorNameOf(it) }.toSet() == setOf(first, second)
+				} ?: throw IllegalStateException("No block found between $first and $second")
+
+		/**
+		 * Put [trainId] physically on [block] without touching the registry -- the state a
+		 * train admitted before any route was granted is in.
+		 */
+		private fun occupy(
+			block: DynamicTrackBlock,
+			trainId: String
+		) {
+			block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
+			block.enter(
+				object : TrackOccupant {
+					override val name: String = trainId
+
+					override fun distanceToSemaphore(): Double = 0.0
+
+					override fun nextSemaphore(): OrientedPathSeparator? = null
+				}
+			)
 		}
 	}
 

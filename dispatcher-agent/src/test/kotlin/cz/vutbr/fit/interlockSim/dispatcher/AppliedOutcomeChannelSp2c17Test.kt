@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -331,13 +332,13 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 	}
 
-	// ── AC: release_route correlation ──────────────────────────────────────────
+	// ── AC: cancel_route correlation ──────────────────────────────────────────
 
 	@Nested
-	@DisplayName("release_route correlation (AC)")
+	@DisplayName("cancel_route correlation (AC)")
 	inner class ReleaseRouteCorrelation {
 		@Test
-		@DisplayName("release_route that returns true renders as RELEASED")
+		@DisplayName("cancel_route that returns true renders as RELEASED")
 		fun releaseRouteReleasedRendered() {
 			every { networkActuator.releaseRoute("T-087") } returns true
 
@@ -356,7 +357,7 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 
 		@Test
-		@DisplayName("release_route that returns false renders as NO_RESERVATION")
+		@DisplayName("cancel_route that returns false renders as NO_RESERVATION, never as the retired release_route")
 		fun releaseRouteNoReservationRendered() {
 			every { networkActuator.releaseRoute("T-087") } returns false
 
@@ -370,7 +371,33 @@ class AppliedOutcomeChannelSp2c17Test {
 			val ctx = buildRenderContext(observation)
 			val rendered = CompactTextRenderer().render(ctx)
 
-			assertThat(rendered).contains("release_route T-087 : NO_RESERVATION")
+			// release_route was retired in SP2c.6 (Issue #829); the live actuator surface is
+			// approve_train, request_route, cancel_route, no_op (see CancelRouteTool KDoc).
+			assertThat(rendered).contains("cancel_route T-087 : NO_RESERVATION")
+			assertThat(rendered).doesNotContain("release_route")
+		}
+
+		@Test
+		@DisplayName("a dropped cancel_route renders as DROPPED with the current tool name, never the retired release_route")
+		fun droppedCancelRouteRenderedAsDropped() {
+			// The DroppedInvalid path builds commandType from commandTypeName(); before the fix
+			// that still mapped ReleaseRoute -> "release_route", leaking the retired tool name
+			// to the LLM. The final-review F1 fix (a10c2ded) covered the Released renderer
+			// branches but missed this dynamic commandType path.
+			every { networkActuator.releaseRoute("T-087") } throws IllegalArgumentException("no such train: T-087")
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")))
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L)
+			val observation = DispatcherObservation.EMPTY.copy(appliedOutcomes = outcomes)
+			val ctx = buildRenderContext(observation)
+			val rendered = CompactTextRenderer().render(ctx)
+
+			assertThat(rendered).contains("cancel_route T-087 : DROPPED")
+			assertThat(rendered).doesNotContain("release_route")
 		}
 	}
 
@@ -498,6 +525,50 @@ class AppliedOutcomeChannelSp2c17Test {
 			val rendered = CompactTextRenderer().render(ctx)
 
 			assertThat(rendered).contains("request_route T-087 -> InOut-B : NO_ROUTE")
+		}
+	}
+
+	/**
+	 * Issue #893 (task A-R1): a `request_route` refused because its origin is not contiguous with
+	 * the train's own position must reach the agent through the same channel as every other
+	 * apply-time refusal.
+	 *
+	 * Without this the worst error class the dispatcher can produce — a route reserved somewhere
+	 * the train is not, which locks track and releases nobody — would be the *only*
+	 * `applyRequestRoute` failure publishing no [AppliedOutcome], i.e. the agent would be told
+	 * less about it than about routine contention. The reason string is carried through because
+	 * it already names the offending origin and the legal alternatives.
+	 */
+	@Nested
+	@DisplayName("request_route OriginNotContiguous correlation (Issue #893 A-R1)")
+	inner class RequestRouteOriginNotContiguous {
+		@Test
+		@DisplayName(
+			"request_route refused as OriginNotContiguous is published with the train, endpoints and reason"
+		)
+		fun requestRouteOriginNotContiguousIsPublished() {
+			every {
+				networkActuator.requestRoute("T-087", "doA1", "InOut-B")
+			} returns
+				RouteRequestResult.OriginNotContiguous(
+					fromEndpointName = "doA1",
+					reason = "Route origin 'doA1' is not contiguous with train 'T-087'"
+				)
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "doA1", "InOut-B")))
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L)
+			assertThat(outcomes).hasSize(1)
+			val outcome = outcomes[0]
+			assertThat(outcome).isInstanceOf(AppliedOutcome.OriginNotContiguous::class)
+			outcome as AppliedOutcome.OriginNotContiguous
+			assertThat(outcome.trainId).isEqualTo("T-087")
+			assertThat(outcome.fromEndpointName).isEqualTo("doA1")
+			assertThat(outcome.toEndpointName).isEqualTo("InOut-B")
+			assertThat(outcome.reason).contains("not contiguous")
 		}
 	}
 

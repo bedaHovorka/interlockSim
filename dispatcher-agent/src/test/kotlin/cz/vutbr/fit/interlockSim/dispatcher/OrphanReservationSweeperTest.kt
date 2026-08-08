@@ -15,8 +15,12 @@ import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -197,6 +201,101 @@ class OrphanReservationSweeperTest {
 	}
 
 	/**
+	 * Issue #893 task A7 review round 1, CRITICAL 2: every other test in this file stubs
+	 * `releaseRoute` to always return `true`, so nothing previously exercised the sweeper's own
+	 * call sites with a `false` result. Per [NetworkActuatorPort.releaseRoute]'s contract, `false`
+	 * is never a failure indicator and must never itself trigger a retry -- this pins that at the
+	 * sweeper boundary: a `false` result does not bump the reclaim counter, AND the owner is not
+	 * revisited on the very next sweep (`holdings.remove(owner)` in `evaluateKnownTrain` runs
+	 * unconditionally, outside the `if (releaseRoute(...))` counter check, so a `false` result
+	 * still forgets the holding and restarts its staleness clock exactly like a `true` one would).
+	 *
+	 * TDD discriminator (recorded in the task A7 fix report): confirmed to FAIL when
+	 * `holdings.remove(owner)` was temporarily moved *inside* the `if (actuatorPort.releaseRoute(owner))`
+	 * block in `evaluateKnownTrain` -- with that change, a `false` result leaves the stale
+	 * `Holding` in place, so the very next sweep (still past the now-doubly-stale threshold)
+	 * immediately re-attempts the release, calling `releaseRoute` a second time. Reverted after
+	 * capturing the failure; production code is unconditional `holdings.remove(owner)` as before.
+	 */
+	@Test
+	@DisplayName("releaseRoute returning false is not a failure: no counter bump, and no retry next sweep")
+	fun falseReleaseRouteResultDoesNotBumpCounterOrRetryNextSweep() {
+		val neverSucceedsActuator = mockk<NetworkActuatorPort>()
+		every { neverSucceedsActuator.releaseRoute(any()) } returns false
+		val held = listOf(reserved("k1", "Train #1"))
+		val perceptionPort = mockk<NetworkPerceptionPort>()
+		val sensorPort = mockk<DispatchLoopSensorPort>()
+		every { sensorPort.getQueuedTrains() } returns emptyList()
+		val sweeper =
+			OrphanReservationSweeper(
+				perceptionPort = perceptionPort,
+				dispatchLoopSensorPort = sensorPort,
+				actuatorPort = neverSucceedsActuator,
+				staleAfterSimSeconds = 60.0
+			)
+
+		every { perceptionPort.snapshot() } returns
+			SimulationSnapshot.EMPTY.copy(
+				simTime = 10.0,
+				blocks = held,
+				trainPositions =
+					listOf(
+						TrainPositionReading(
+							trainId = "Train #1",
+							velocity = 0.0,
+							acceleration = 0.0,
+							totalDistance = 0.0,
+							frontSectionName = null
+						)
+					)
+			)
+		sweeper.sweep() // First sight: the staleness clock starts.
+
+		every { perceptionPort.snapshot() } returns
+			SimulationSnapshot.EMPTY.copy(
+				simTime = 70.0,
+				blocks = held,
+				trainPositions =
+					listOf(
+						TrainPositionReading(
+							trainId = "Train #1",
+							velocity = 0.0,
+							acceleration = 0.0,
+							totalDistance = 0.0,
+							frontSectionName = null
+						)
+					)
+			)
+		sweeper.sweep() // Past the threshold: releaseRoute is called and returns false.
+
+		assertThat(sweeper.staleReleaseCount, "staleReleaseCount must not bump on a false result").isEqualTo(0)
+		verify(exactly = 1) { neverSucceedsActuator.releaseRoute("Train #1") }
+
+		// Same block, unchanged -- "the very next sweep". holdings forgot the owner regardless of
+		// the false result above, so this restarts a fresh staleness clock rather than an
+		// immediate retry: releaseRoute must NOT be called again yet.
+		every { perceptionPort.snapshot() } returns
+			SimulationSnapshot.EMPTY.copy(
+				simTime = 71.0,
+				blocks = held,
+				trainPositions =
+					listOf(
+						TrainPositionReading(
+							trainId = "Train #1",
+							velocity = 0.0,
+							acceleration = 0.0,
+							totalDistance = 0.0,
+							frontSectionName = null
+						)
+					)
+			)
+		sweeper.sweep()
+
+		assertThat(sweeper.staleReleaseCount, "staleReleaseCount must still be 0").isEqualTo(0)
+		verify(exactly = 1) { neverSucceedsActuator.releaseRoute("Train #1") }
+	}
+
+	/**
 	 * The safety constraint, not merely a conservative choice.
 	 *
 	 * `releaseRoute` delegates to `DefaultPathReservationService.releasePath`, which ends in a
@@ -288,6 +387,94 @@ class OrphanReservationSweeperTest {
 		)
 
 		verify(exactly = 1) { actuatorPort.releaseRoute("Train #1") }
+	}
+
+	/**
+	 * Issue #893 task A7 (G7): before the fix, `DefaultNetworkActuatorPort.releaseRoute` reported
+	 * `false` for a release that only reset a cleared signal (zero blocks), because
+	 * `DefaultPathReservationService.releasePath` resets cleared signals unconditionally but
+	 * `releaseRoute` only looked at the released-block list. The sweeper's counters never
+	 * incremented for that case, and because nothing else in the sweeper distinguishes "released"
+	 * from "genuine failure", a still-visible holding would have been retried on every subsequent
+	 * sweep. This wires the REAL [DefaultNetworkActuatorPort] (not a hand-rolled fake) against a
+	 * [PathReservationService] stub that models exactly that shape -- zero released blocks, one
+	 * cleared signal -- so the test fails before the task A7 fix exactly as production would, and
+	 * pins the fixed contract at the sweeper's own boundary: a `releaseRoute` that is `true` only
+	 * because a signal was cleared is counted exactly like a block release, and once the release
+	 * is reflected in a later snapshot the owner is not revisited.
+	 */
+	@Test
+	@DisplayName("a signals-only reclaim (zero blocks released) is still counted and is not retried")
+	fun signalsOnlyReclaimIsCountedAndNotRetried() {
+		val reservationService = mockk<PathReservationService>(relaxed = true)
+		every { reservationService.hasClearedSignals("Train #1") } returns true
+		every { reservationService.releasePath("Train #1") } returns emptyList<DynamicTrackBlock>()
+		val env = mockk<SimulationEnvironment>(relaxed = true)
+		val actuator = DefaultNetworkActuatorPort(env = env, pathReservationService = reservationService)
+
+		val held = listOf(reserved("k1", "Train #1"))
+		val perceptionPort = mockk<NetworkPerceptionPort>()
+		val sensorPort = mockk<DispatchLoopSensorPort>()
+		every { sensorPort.getQueuedTrains() } returns emptyList()
+		val sweeper =
+			OrphanReservationSweeper(
+				perceptionPort = perceptionPort,
+				dispatchLoopSensorPort = sensorPort,
+				actuatorPort = actuator,
+				staleAfterSimSeconds = 60.0
+			)
+
+		every { perceptionPort.snapshot() } returns
+			SimulationSnapshot.EMPTY.copy(
+				simTime = 10.0,
+				blocks = held,
+				trainPositions =
+					listOf(
+						TrainPositionReading(
+							trainId = "Train #1",
+							velocity = 0.0,
+							acceleration = 0.0,
+							totalDistance = 0.0,
+							frontSectionName = null
+						)
+					)
+			)
+		sweeper.sweep() // First sight: the staleness clock starts, nothing released yet.
+
+		every { perceptionPort.snapshot() } returns
+			SimulationSnapshot.EMPTY.copy(
+				simTime = 70.0,
+				blocks = held,
+				trainPositions =
+					listOf(
+						TrainPositionReading(
+							trainId = "Train #1",
+							velocity = 0.0,
+							acceleration = 0.0,
+							totalDistance = 0.0,
+							frontSectionName = null
+						)
+					)
+			)
+		sweeper.sweep() // Past the threshold: releaseRoute is called -- a signals-only reclaim.
+
+		assertThat(sweeper.staleReleaseCount, "staleReleaseCount after the signals-only reclaim").isEqualTo(1)
+
+		// The release has taken effect: the block is FREE and unowned again, and this train has
+		// nothing left to release (both stubs now report empty/false, the state releaseRoute left
+		// it in).
+		every { reservationService.hasClearedSignals("Train #1") } returns false
+		every { perceptionPort.snapshot() } returns
+			SimulationSnapshot.EMPTY.copy(
+				simTime = 71.0,
+				blocks = listOf(reading("k1", null, TrackFacility.State.FREE))
+			)
+		sweeper.sweep()
+
+		assertThat(sweeper.staleReleaseCount, "staleReleaseCount must not double count").isEqualTo(1)
+		// The owner no longer appears in the snapshot at all (its block is FREE), so the sweeper
+		// never revisits it -- releaseRoute is called exactly once across all three sweeps.
+		verify(exactly = 1) { reservationService.releasePath("Train #1") }
 	}
 
 	@Test

@@ -140,6 +140,84 @@ class SweepGridTest {
 			)
 	}
 
+	/**
+	 * Issue #893 iteration 2: `inferenceTimeoutSeconds` is optional exactly like `model`/`temperature`
+	 * — an omitted axis means "leave KoogAgentPlanAdapter's own default (30s) in place", not "sweep
+	 * some particular value". A grid that never mentions it must not pass a `-D` for it at all, so
+	 * the child keeps the production default.
+	 */
+	@Test
+	@DisplayName("an omitted inferenceTimeoutSeconds axis means 'leave the adapter default', not a value")
+	fun omittedInferenceTimeoutAxisMeansUnchanged() {
+		val cell =
+			SweepGrid
+				.load(gridFile("""{ "repeat": 1 }"""))
+				.axes
+				.cells()
+				.single()
+
+		assertThat(cell.inferenceTimeoutSeconds).isNull()
+		assertThat(cell.systemProperties("run-1", "out").keys)
+			.isEqualTo(
+				setOf(
+					"interlocksim.dispatcher.tickPeriodMs",
+					"interlocksim.dispatcher.historyN",
+					"interlocksim.dispatcher.maxActionsPerTick",
+					"interlocksim.dispatcher.runId",
+					"interlocksim.dispatcher.runsRoot"
+				)
+			)
+	}
+
+	@Test
+	@DisplayName("an explicit inferenceTimeoutSeconds axis is swept into the cell and the -D properties")
+	fun explicitInferenceTimeoutAxisIsSwept() {
+		val cells =
+			SweepGrid
+				.load(gridFile("""{ "repeat": 1, "axes": { "inferenceTimeoutSeconds": [30, 90] } }"""))
+				.axes
+				.cells()
+
+		assertThat(cells.map { it.inferenceTimeoutSeconds }.toSet()).isEqualTo(setOf(30L, 90L))
+		val propsFor90 = cells.single { it.inferenceTimeoutSeconds == 90L }.systemProperties("run-1", "out")
+		assertThat(propsFor90["interlocksim.dispatcher.inferenceTimeoutSeconds"]).isEqualTo("90")
+	}
+
+	@Test
+	@DisplayName("inferenceTimeoutSeconds appears in the cell slug, so runs stay distinguishable")
+	fun inferenceTimeoutAxisAppearsInSlug() {
+		val cells =
+			SweepGrid
+				.load(gridFile("""{ "repeat": 1, "axes": { "inferenceTimeoutSeconds": [30, 90] } }"""))
+				.axes
+				.cells()
+
+		assertThat(cells.map { it.slug }.toSet()).hasSize(2)
+		assertThat(cells.single { it.inferenceTimeoutSeconds == 90L }.slug).contains("90")
+	}
+
+	/**
+	 * Issue #893 review (Copilot): a non-positive `inferenceTimeoutSeconds` value must not be
+	 * silently collapsed to `null` by `cells()`'s `takeIf { it > 0 }` — that would make an
+	 * invalid grid indistinguishable from an omitted axis (same `it-default` slug, same 30 s
+	 * run). Only the `-1` UNSET sentinel means "omitted"; any other non-positive value is a
+	 * configuration mistake and must fail loud at load time.
+	 */
+	@Test
+	@DisplayName("a zero inferenceTimeoutSeconds value is rejected, not silently treated as omitted")
+	fun zeroInferenceTimeoutIsRejected() {
+		val grid = gridFile("""{ "repeat": 1, "axes": { "inferenceTimeoutSeconds": [0] } }""")
+		val ex = assertThrows<SweepGridException> { SweepGrid.load(grid) }
+		assertThat(ex.message ?: "").contains("inferenceTimeoutSeconds")
+	}
+
+	@Test
+	@DisplayName("a negative non-sentinel inferenceTimeoutSeconds value is rejected, not silently omitted")
+	fun negativeNonSentinelInferenceTimeoutIsRejected() {
+		val grid = gridFile("""{ "repeat": 1, "axes": { "inferenceTimeoutSeconds": [-2] } }""")
+		assertThrows<SweepGridException> { SweepGrid.load(grid) }
+	}
+
 	@Test
 	@DisplayName("run ids are file-name safe, so a substring scan of the output directory is exact")
 	fun runIdsAreFileNameSafe() {

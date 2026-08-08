@@ -12,12 +12,14 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
@@ -115,8 +117,14 @@ class KoogAgentFactoryTest {
 			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 		}
 
-	/** Captures the tool list handed to [AgentService.createDispatchAgent] without touching Ollama. */
-	private class CapturingAgentService : AgentService {
+	/**
+	 * Captures the tool list handed to [AgentService.createDispatchAgent] without touching Ollama.
+	 *
+	 * `internal` (not `private`) so [LivePromptNoMenuTest]'s system-prompt surface (Issue #893,
+	 * phase beta, task B3) can drive [KoogAgentFactory.createAgent] through the identical seam
+	 * rather than duplicating a second capturing fake.
+	 */
+	internal class CapturingAgentService : AgentService {
 		var capturedTools: List<DomainTool>? = null
 			private set
 		var capturedSystemPrompt: String? = null
@@ -128,7 +136,8 @@ class KoogAgentFactoryTest {
 			modelName: String,
 			tools: List<DomainTool>,
 			systemPrompt: String?,
-			cycleHistory: CycleHistory
+			cycleHistory: CycleHistory,
+			outcomeFeed: AppliedOutcomeFeed?
 		): KoogDispatchAgent {
 			capturedTools = tools
 			capturedSystemPrompt = systemPrompt
@@ -264,6 +273,278 @@ class KoogAgentFactoryTest {
 				"The only actuator tools available are approve_train, request_route, cancel_route, and no_op"
 			)
 			assertThat(systemPrompt).contains("there is no tool to set a signal aspect or switch position directly")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt states no tool for querying state and verbatim-only train ids")
+	fun createAgentSystemPromptStatesNoStateQueryAndVerbatimTrainIdsOnly() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("no tool for querying state")
+			assertThat(systemPrompt).contains("Only ever pass a train id that appears there verbatim")
+		}
+	}
+
+	// ── B2 prompt rebuild (Issue #893, phase beta, task B2) — RED before the rewrite ─────────
+
+	@Test
+	@DisplayName("createAgent's system prompt states the per-tick action budget from the SAME value SinkHolder enforces")
+	fun createAgentSystemPromptStatesBudgetFromSinkHolderValue() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			// A non-default cap (2, not DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK's 3) proves
+			// the prompt reads the budget from this SinkHolder instance rather than a hardcoded 3.
+			val sinkHolder = SinkHolder(maxActionsPerTick = 2)
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = sinkHolder
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("At most ${sinkHolder.maxActionsPerTick} actions besides no_op")
+			// The default-cap case (3), matching the brief's worked example verbatim.
+			assertThat(systemPrompt).doesNotContain("At most 3 actions besides no_op")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt states the default per-tick action budget when SinkHolder uses its default")
+	fun createAgentSystemPromptStatesDefaultBudget() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val sinkHolder = SinkHolder()
+
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = sinkHolder
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("At most ${sinkHolder.maxActionsPerTick} actions besides no_op")
+			assertThat(systemPrompt).contains("At most 3 actions besides no_op")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt states no_op is a correct and frequent answer")
+	fun createAgentSystemPromptStatesNoOpIsCorrectAndFrequent() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("no_op is a correct and frequent answer")
+			assertThat(systemPrompt).contains(
+				"Repeating an action already in force is refused, wastes the tick, and tells the next tick nothing new"
+			)
+		}
+	}
+
+	/**
+	 * Issue #893 iteration 2: two new non-negotiable-rules lines mirroring the terminal-rejection
+	 * directives added to the tools themselves (D3) — telling the model up front what the tool
+	 * errors otherwise have to teach it reactively, one rejected call at a time.
+	 */
+	@Test
+	@DisplayName("createAgent's system prompt tells the model never to approve_train an already-active train")
+	fun createAgentSystemPromptWarnsAgainstApprovingAnActiveTrain() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			// A specific, contiguous phrase — not three loose fragments any one of which could
+			// already be satisfied by unrelated existing text (e.g. "already in force is refused").
+			assertThat(systemPrompt).contains("Never call approve_train for a train already listed as active")
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt tells the model to end its turn once the action budget is spent")
+	fun createAgentSystemPromptWarnsToEndTurnWhenBudgetSpent() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains(
+				"Once the per-tick action budget is spent, end your turn: further tool calls this " +
+					"tick are refused."
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt's routing step references the NEXT SECTION line")
+	fun createAgentSystemPromptRoutingStepReferencesNextSection() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("NEXT SECTION")
+		}
+	}
+
+	@Test
+	@DisplayName(
+		"createAgent's system prompt explicitly states a train with no NEXT SECTION line gets no route request " +
+			"(gemma4-mandated)"
+	)
+	fun createAgentSystemPromptStatesNoNextSectionMeansNoRouteRequest() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains("a train with no NEXT SECTION line gets no route request this tick")
+		}
+	}
+
+	// ── Issue #893 iteration 3: turn-termination affordance ────────────────────────────────
+	// Measured defect: the model never emits a final plain-text message, so cycles die of
+	// Koog iteration exhaustion instead of ending cleanly. These two rules tell the model
+	// explicitly how a tick ends (a plain-text reply, nothing else) and to stop churning on a
+	// train that keeps getting rejected.
+
+	@Test
+	@DisplayName("createAgent's system prompt tells the model how to end a tick with a plain-text reply")
+	fun createAgentSystemPromptTellsModelHowToEndTick() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val sinkHolder = SinkHolder()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = sinkHolder
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains(
+				"When you have taken the actions this tick needs — never more than " +
+					"${sinkHolder.maxActionsPerTick} — end the tick: reply with one short plain-text " +
+					"sentence and make no further tool calls. When no action is needed this tick, call " +
+					"no_op once and then reply the same way. Only a plain-text reply ends the tick."
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("createAgent's system prompt tells the model to stop acting on a train after two rejections")
+	fun createAgentSystemPromptTellsModelToStopAfterTwoRejections() {
+		loadShuntingLoopContext().use { context ->
+			val agentService = CapturingAgentService()
+			val factory =
+				KoogAgentFactory(
+					toolRegistry = ToolGroupRegistry(),
+					ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+					agentService = agentService,
+					perceptionPort = fakePerceptionPort(),
+					commandQueue = ActuatorCommandQueue(),
+					dispatchLoopSensorPort = fakeSensorPort(),
+					sinkHolder = SinkHolder()
+				)
+
+			runBlocking { factory.createAgent(context) }
+
+			val systemPrompt = requireNotNull(agentService.capturedSystemPrompt)
+			assertThat(systemPrompt).contains(
+				"If a tool call for a train is rejected twice in one tick, stop acting on that train " +
+					"and move on or reply."
+			)
 		}
 	}
 

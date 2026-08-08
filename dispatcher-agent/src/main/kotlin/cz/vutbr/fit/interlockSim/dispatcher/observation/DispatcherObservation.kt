@@ -229,7 +229,29 @@ sealed interface AppliedOutcome {
 		override val tickIndex: Long
 	) : AppliedOutcome
 
-	/** `release_route` completed; [anyReleased] is `true` if at least one block was released. */
+	/**
+	 * `request_route` failed because the requested origin is not contiguous with the train's own
+	 * position: it bounds none of the blocks the train holds or occupies, so the train could
+	 * never have reached the route (Issue #893).
+	 *
+	 * Unlike [Blocked], retrying the identical request is futile while the train stays put — the
+	 * agent has to name a different origin, which is why [reason] is carried verbatim from
+	 * `DefaultPathReservationService`: it already names the offending origin and every legal
+	 * alternative for this train.
+	 *
+	 * @since Issue #893 (phase alpha, task A-R1)
+	 */
+	data class OriginNotContiguous(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		/** English explanation from the reservation kernel, naming the legal origins. */
+		val reason: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/** `cancel_route` completed; [anyReleased] is `true` if at least one block was released. */
 	data class Released(
 		val trainId: String,
 		val anyReleased: Boolean,
@@ -276,7 +298,7 @@ sealed interface AppliedOutcome {
 	 * doesn't exist in this station). The command was **not** applied.
 	 */
 	data class DroppedInvalid(
-		/** Tool name that produced the command (e.g. `"request_route"`, `"release_route"`). */
+		/** Tool name that produced the command (e.g. `"request_route"`, `"cancel_route"`). */
 		val commandType: String,
 		val trainId: String,
 		val message: String,

@@ -296,6 +296,26 @@ class ActuatorToolExecuteTest {
 	}
 
 	/**
+	 * Issue #893 iteration 2: TRAIN_ALREADY_ACTIVE is a procedural error the model cannot fix by
+	 * retrying the same call — this is the terminal-rejection directive telling it so.
+	 */
+	@Test
+	fun `approve_train rejects an already-active trainId with a do-not-retry directive`() {
+		val port = stubSensorPort(queuedTrainIds = listOf("Train #2"))
+		val perceptionPort = stubPerceptionPort(activeTrainIds = listOf("Train #1"))
+		val result =
+			runBlocking { ApproveTrainTool(sinkHolder, port, perceptionPort).execute(mapOf("trainId" to "Train #1")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
+		val message = (result as ToolResult.Error).message
+		assertThat(message).contains("Train #1")
+		assertThat(message).contains(
+			"is already ACTIVE. approve_train applies only to queued trains. Do not retry this call."
+		)
+		assertThat(emitted).hasSize(0)
+	}
+
+	/**
 	 * Issue #847 round 2: the model writes the bare ordinal `"1"` for `"Train #1"` — in one 600 s
 	 * run *every* rejected train argument took that form (90 of them), and zero trains completed
 	 * against 28 for the rule-based dispatcher. Koog drops tool results before they reach Ollama,

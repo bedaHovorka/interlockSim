@@ -117,9 +117,24 @@ class DefaultNetworkActuatorPort(
 						"requestRoute: denied by interlocking for $trainName " +
 							"($fromEndpointName → $toEndpointName): ${response.reason}"
 					}
-					// All interlocking denials collapse to AllPathsBlocked(0); callers retry
-					// on the next tick. The specific reason is logged above and in the facade.
-					RouteRequestResult.AllPathsBlocked(0)
+					if (response.originNotContiguous) {
+						// Issue #893 (task A-R1b): the kernel identified this specifically as a
+						// non-contiguous-origin rejection (ReservationResult.NonContiguousStart),
+						// surfaced by DefaultInterlockingFacade.requestRouteByEndpoints via the
+						// originNotContiguous flag. Map it the same way the legacy/no-facade branch
+						// below does, reason string preserved verbatim.
+						logger.warn {
+							"requestRoute: non-contiguous origin for $trainName " +
+								"($fromEndpointName → $toEndpointName): ${response.reason}"
+						}
+						RouteRequestResult.OriginNotContiguous(fromEndpointName, response.reason)
+					} else {
+						// Every other interlocking denial still collapses to AllPathsBlocked(0);
+						// callers retry on the next tick. The specific reason is logged above and
+						// in the facade. Widening this to other RouteResponse.Denied causes is a
+						// spin-off candidate, not part of task A-R1b.
+						RouteRequestResult.AllPathsBlocked(0)
+					}
 				}
 			}
 		}
@@ -161,13 +176,37 @@ class DefaultNetworkActuatorPort(
 					existingOwner = result.existingOwner
 				)
 			}
+			is PathReservationService.ReservationResult.NonContiguousStart -> {
+				// The train is nowhere near fromEndpointName; reserving would lock track it can
+				// never reach. Surfaced as its own result rather than folded into AllPathsBlocked
+				// so the caller can tell "ask again later" from "ask for a different origin".
+				logger.warn {
+					"requestRoute: non-contiguous origin for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${result.reason}"
+				}
+				RouteRequestResult.OriginNotContiguous(fromEndpointName, result.reason)
+			}
 		}
 	}
 
 	override fun releaseRoute(trainName: String): Boolean {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }
-		val released = pathReservationService.releasePath(trainName)
-		return released.isNotEmpty()
+		// Issue #893 task A7: read BEFORE releasePath, which purges this bookkeeping as a side
+		// effect of resetting the signals it recorded -- see PathReservationService.hasClearedSignals.
+		val hadClearedSignals = pathReservationService.hasClearedSignals(trainName)
+		val releasedBlocks = pathReservationService.releasePath(trainName)
+		// Truthful per the traffic-simulation-expert R5 ruling: "the train's route state is now
+		// clear" is true whenever EITHER blocks or signals were actually released. Before this fix,
+		// a train holding cleared signals but zero blocks (reachable after a partial release
+		// reclaimed its un-travelled tail, tasks A3/A4) had its signals genuinely reset here while
+		// this method reported `false` -- OrphanReservationSweeper then never counted the reclaim
+		// and, worse, treated the still-visible holding as unresolved on every subsequent sweep.
+		// Deliberately NOT forced to `true` when NEITHER blocks nor signals existed: that case is
+		// "trainName held no reservation at all", which DispatchDecisionApplier surfaces to the LLM
+		// dispatcher as a distinct NO_RESERVATION outcome (AppliedOutcomeChannel) -- collapsing it
+		// into the same `true` as a genuine release would erase that diagnostic signal for no gain,
+		// since OrphanReservationSweeper never calls this method for a train with zero footprint.
+		return releasedBlocks.isNotEmpty() || hadClearedSignals
 	}
 
 	override fun setSwitchPosition(
@@ -197,6 +236,31 @@ class DefaultNetworkActuatorPort(
 	override fun setSignalAspect(
 		semaphoreName: String,
 		signal: Signal
+	): Boolean = setSignalAspect(semaphoreName, signal, trainName = null)
+
+	/**
+	 * Attributed overload of [setSignalAspect]: identical write, but the caller supplies the
+	 * [trainName] the write is made on behalf of. A successful write to a proceed aspect is
+	 * then recorded with [PathReservationService.recordExternalClearedSemaphore] -- closing the
+	 * tracking-contract hole an untracked [DispatchDecision.SetSignalAspect] write would
+	 * otherwise leave (G5, Issue #893 task A6): without this, a later
+	 * [releaseRoute] for [trainName] would have no way to know this semaphore needs resetting.
+	 *
+	 * [trainName] `null` (equivalent to the plain 2-arg [setSignalAspect] above) intentionally
+	 * records nothing -- there is no train to attribute the write to.
+	 *
+	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
+	 * @param signal Target signal aspect.
+	 * @param trainName The train this write is made on behalf of, or `null` for an unattributed
+	 *   write.
+	 * @return `true` if the semaphore now displays [signal]; `false` if no semaphore with that
+	 *   name exists, or if the semaphore is constant and [signal] differs from its fixed aspect.
+	 * @since Issue #893 (phase alpha, task A6 -- G5 attribution slice)
+	 */
+	fun setSignalAspect(
+		semaphoreName: String,
+		signal: Signal,
+		trainName: String?
 	): Boolean {
 		val sem =
 			semaphoreByName[semaphoreName] ?: run {
@@ -210,7 +274,11 @@ class DefaultNetworkActuatorPort(
 		// requested — constant semaphores must stay constant.  Setting the semaphore to its
 		// current aspect is a no-op that returns true.
 		sem.signal = signal
-		return sem.signal == signal
+		val success = sem.signal == signal
+		if (success && trainName != null) {
+			pathReservationService.recordExternalClearedSemaphore(trainName, sem)
+		}
+		return success
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────

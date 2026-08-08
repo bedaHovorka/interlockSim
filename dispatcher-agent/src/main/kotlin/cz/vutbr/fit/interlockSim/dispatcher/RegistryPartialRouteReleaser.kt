@@ -11,8 +11,6 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -41,11 +39,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   considered, and the whole operation is refused unless the train really does occupy part of its
  *   route — a train occupying nothing is the whole-route sweeper's case, not this one.
  * - **No released block is left reachable through a permissive signal.** `cancelPathSetup` on a
- *   *block* frees the block but does not touch the semaphore that authorised entry to it, so the
- *   separator the block was reserved from is driven to [Signal.STOP]. That is the fail-safe
- *   direction: a STOP signal authorises nothing, so this can only ever be over-restrictive, never
- *   permissive. The train is by definition stalled — it has held this tail unchanged for at least
- *   the staleness threshold — so the restriction costs nothing it was using.
+ *   *block* frees the block but does not touch the semaphore that authorised entry to it. Every
+ *   semaphore governing a released block is driven to STOP via
+ *   [PathReservationService.resetSemaphoresForReleasedBlocks] (Issue #893, task A3) -- the
+ *   ownership-aware, `ends()`/`reservedFrom`-scoped reset that also reaches an INTERMEDIATE
+ *   semaphore between two released blocks and, for a route that started at a `DynamicInOut`, that
+ *   InOut's `inSemaphore`, neither of which a per-block `reservedFrom as? DynamicRailSemaphore`
+ *   cast alone can recover. STOP is always the fail-safe direction: it authorises nothing, so this
+ *   can only ever be over-restrictive, never permissive. The train is by definition stalled — it
+ *   has held this tail unchanged for at least the staleness threshold — so the restriction costs
+ *   nothing it was using.
  * - **Switches are deliberately left locked.** Nothing available here says which switch belongs to
  *   the released tail rather than the retained head, and `unregisterSwitch` on a switch the train
  *   still needs would unlock a route under a standing train. An over-locked switch merely blocks
@@ -86,27 +89,28 @@ class RegistryPartialRouteReleaser(
 		}
 
 		val requested = blockIds.toSet()
-		val released = mutableListOf<String>()
-		for (block in held) {
-			val id = BlockIdentity.stableBlockId(block)
-			if (id !in requested) continue
-			// Re-checked against live state, not trusted from the caller's snapshot: the sweeper's
-			// reading is one control step old and the train may have entered this block since.
-			if (block.isOccupied() || block.getState() != TrackFacility.State.RESERVED) continue
-			val reservedFrom = block.reservedFrom ?: continue
+		// Re-checked against live state, not trusted from the caller's snapshot: the sweeper's
+		// reading is one control step old and the train may have entered a block since.
+		val eligible =
+			held.filter { block ->
+				BlockIdentity.stableBlockId(block) in requested &&
+					!block.isOccupied() &&
+					block.getState() == TrackFacility.State.RESERVED
+			}
+		if (eligible.isEmpty()) return emptyList()
 
+		// Fail-safe BEFORE any block becomes available to anyone else, and BEFORE cancelPathSetup
+		// (below) clears each block's `reservedFrom` -- resetSemaphoresForReleasedBlocks needs that
+		// field live to recover the governing semaphore/InOut for blocks whose `reservedFrom` is the
+		// route's far-away START rather than a separator locally adjacent to them.
+		pathReservationService.resetSemaphoresForReleasedBlocks(trainId, eligible)
+
+		val released = mutableListOf<String>()
+		for (block in eligible) {
+			val id = BlockIdentity.stableBlockId(block)
+			val reservedFrom = block.reservedFrom ?: continue
 			try {
 				block.cancelPathSetup(reservedFrom)
-				// Fail-safe before the block becomes available to anyone else.
-				val semaphore = reservedFrom as? DynamicRailSemaphore
-				if (semaphore != null) {
-					semaphore.signal = Signal.STOP
-				} else {
-					logger.debug {
-						"RegistryPartialRouteReleaser: separator ${reservedFrom::class.simpleName} is not a " +
-							"semaphore; no signal to drive to STOP for block '$id'"
-					}
-				}
 				if (pathReservationService.unregisterBlock(trainId, block)) {
 					released += id
 				} else {

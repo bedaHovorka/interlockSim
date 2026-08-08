@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
+
 /**
  * Service for creating and managing Koog-based dispatch agents (SP1 skeleton, Issue #547).
  *
@@ -50,17 +52,22 @@ interface AgentService {
 	 *   domain knowledge. Defaults to a reasonable railway dispatch prompt if not provided.
 	 * @param cycleHistory Bounded record of previous cycles rendered into each per-cycle prompt
 	 *   (#822 C5). Defaults to a disabled history, which is the pre-#847 stateless behaviour.
+	 * @param outcomeFeed Optional source of previously-applied outcomes, rendered as the
+	 *   "OUTCOMES OF YOUR PREVIOUS ACTIONS" block on every subsequent cycle (Issue #893, phase
+	 *   beta, task B0). Defaults to `null`, which renders no block — the pre-task-B0 behaviour.
 	 *
 	 * @return A configured Koog agent, ready for dispatch decisions
 	 *
 	 * @since Issue #547 (SP1.2 — skeleton); full implementation in Issue #551 (SP1.6);
-	 *   [cycleHistory] added in Issue #847 (SP2c.24)
+	 *   [cycleHistory] added in Issue #847 (SP2c.24); [outcomeFeed] added in Issue #893 (phase
+	 *   beta, task B0)
 	 */
 	suspend fun createDispatchAgent(
 		modelName: String,
 		tools: List<DomainTool>,
 		systemPrompt: String? = null,
-		cycleHistory: CycleHistory = CycleHistory(capacity = 0)
+		cycleHistory: CycleHistory = CycleHistory(capacity = 0),
+		outcomeFeed: AppliedOutcomeFeed? = null
 	): KoogDispatchAgent
 }
 

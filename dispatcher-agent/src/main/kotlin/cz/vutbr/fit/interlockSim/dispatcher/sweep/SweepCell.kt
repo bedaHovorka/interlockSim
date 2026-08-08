@@ -23,6 +23,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
  * @property tickPeriodMs Minimum wall-clock spacing between driver cycles.
  * @property historyN Number of previous cycles rendered into each prompt; `0` disables the block.
  * @property maxActionsPerTick Per-cycle cap on non-NoOp actuator emissions.
+ * @property inferenceTimeoutSeconds Per-cycle LLM inference deadline in seconds, or `null` to leave
+ *   [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]'s own default (30s) in
+ *   place — the grid says "unchanged", not "some particular value that happens to match today's
+ *   default", exactly like [model]/[temperature] (Issue #893 iteration 2).
  */
 data class SweepCell(
 	val example: String,
@@ -30,7 +34,8 @@ data class SweepCell(
 	val temperature: Double?,
 	val tickPeriodMs: Long,
 	val historyN: Int,
-	val maxActionsPerTick: Int
+	val maxActionsPerTick: Int,
+	val inferenceTimeoutSeconds: Long? = null
 ) {
 	/**
 	 * Filename- and run-id-safe identifier for this cell.
@@ -50,7 +55,8 @@ data class SweepCell(
 				"t-${sanitise(temperature?.toString() ?: "default")}",
 				"p-$tickPeriodMs",
 				"h-$historyN",
-				"a-$maxActionsPerTick"
+				"a-$maxActionsPerTick",
+				"it-${inferenceTimeoutSeconds ?: "default"}"
 			).joinToString("_")
 
 	/** Deterministic run id for the [repeatIndex]-th repetition of this cell (1-based). */
@@ -75,6 +81,7 @@ data class SweepCell(
 			put(DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK, maxActionsPerTick.toString())
 			put(DispatcherRunConfig.PROP_RUN_ID, runId)
 			put(DispatcherRunConfig.PROP_RUNS_ROOT, runsRoot)
+			inferenceTimeoutSeconds?.let { put(DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS, it.toString()) }
 		}
 
 	/**

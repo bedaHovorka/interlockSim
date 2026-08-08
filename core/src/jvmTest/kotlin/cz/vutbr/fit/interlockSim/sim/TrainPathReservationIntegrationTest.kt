@@ -485,6 +485,13 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 				is PathReservationService.ReservationResult.NoPathExists -> {
 					logger.info { "No alternative path exists (network topology)" }
 				}
+
+				is PathReservationService.ReservationResult.NonContiguousStart -> {
+					// Issue #893: the second train has no footprint here, so this branch is not
+					// reachable in this scenario -- but it is still a legitimate "did not reserve"
+					// outcome, which is all this test asserts.
+					logger.info { "Train #8 rejected: ${result2.reason}" }
+				}
 			}
 
 			// Verify first train's ownership unchanged

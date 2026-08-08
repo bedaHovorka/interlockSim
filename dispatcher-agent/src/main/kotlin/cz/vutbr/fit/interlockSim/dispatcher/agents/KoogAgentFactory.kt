@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
@@ -58,7 +59,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   detect via the per-cycle emission counter whether the LLM acted via tools (and therefore the
  *   rule-based fallback must not double-dispatch).
  *
- * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549), SP1.7 (#774), SP2c.6 (#829)
+ * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549), SP1.7 (#774), SP2c.6 (#829); `outcomeFeed`
+ *   added in Issue #893 (phase beta, task B0)
  */
 class KoogAgentFactory(
 	private val toolRegistry: ToolGroupRegistry,
@@ -100,41 +102,164 @@ class KoogAgentFactory(
 	 *
 	 * @since Issue #847 (SP2c.24)
 	 */
-	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0)
+	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
+	/**
+	 * Optional per-context feed of previously-applied outcomes, threaded straight through to
+	 * [AgentService.createDispatchAgent] exactly like [cycleHistory] above (same per-context
+	 * scoped-sharing rationale). `null` by default so agents built outside a run (tests, tooling)
+	 * behave as they did before task B0.
+	 *
+	 * @since Issue #893 (phase beta, task B0)
+	 */
+	private val outcomeFeed: AppliedOutcomeFeed? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
-		// Not `const val`: interpolates RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS so the
-		// concrete cap the LLM reasons over never drifts from the non-LLM dispatcher's own policy.
-		private val DEFAULT_SYSTEM_PROMPT =
-			"You are a railway dispatcher coordinating train movements. " +
-				"You have four actuator tools: approve_train, request_route, cancel_route, no_op. " +
-				"Always prioritize safety. " +
-				"All entry/exit points, signals, switches, and blocks you may reference are listed " +
-				"by exact name in the STATION TOPOLOGY section below. Never invent, abbreviate, or " +
-				"guess a name — if you need a name you don't see there, do not call the tool. " +
-				"The only actuator tools available are approve_train, request_route, cancel_route, " +
-				"and no_op — there is no tool to set a signal aspect or switch position directly; " +
-				"signals and switches change only as a side effect of request_route/cancel_route. " +
-				"request_route's fromEndpointName/toEndpointName arguments accept both InOut and Signal " +
-				"names — never a Block ID from the Blocks list, which names a piece of track rather than " +
-				"a route endpoint. Routing between two Signals reserves a single section and is usually " +
-				"preferable to an InOut-to-InOut route, which holds every block in between and so blocks " +
-				"other trains. " +
-				"request_route only reserves interlocking resources for a train — it does not let the " +
-				"train depart; a queued train stays parked, holding its reservation indefinitely, until " +
-				"you separately call approve_train for it. " +
-				"You have no tool for querying state: every train id, count and position you may act on is " +
-				"already written in the cycle message you are given. Only ever pass a train id that appears " +
-				"there verbatim — never one taken from an example, and never one you inferred. " +
-				"On every turn, admission comes first, exactly like a real interlocking's admission " +
-				"control: read the queued and active train lists in that message; if there are queued " +
-				"(unapproved) trains and fewer than ${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} " +
-				"trains are currently active, call approve_train for the oldest queued trains first, up to " +
-				"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS} total active, before doing anything " +
-				"else. Call approve_train for every queued train you intend to dispatch, in addition to " +
-				"requesting its route. When there is nothing to do, call no_op with a brief reason."
+		/**
+		 * Builds the DISPATCHER system prompt (Issue #893, phase beta, task B2 — full rebuild of
+		 * the pre-#834 prompt, following the agent-architect's design recorded in the task plan).
+		 * Wording is subject to a post-implementation agent-architect review per the task brief;
+		 * only the stable phrases [KoogAgentFactoryTest] asserts on are load-bearing.
+		 *
+		 * Not a precomputed constant: [maxActions] is read per call from the [SinkHolder] instance
+		 * [createAgent] was constructed with, so the stated budget can never drift from what
+		 * [SinkHolder.tryEmit] actually enforces (Issue #847, SP2c.24) — [SinkHolder] itself is
+		 * built from [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.maxActionsPerTick]
+		 * by [cz.vutbr.fit.interlockSim.dispatcher.di.DispatcherAgentModule]'s existing scoped
+		 * wiring, so this threads the real per-run value with no new DI path. `cap` (the
+		 * concurrent-train admission ceiling) is a distinct constant,
+		 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] — the non-LLM dispatcher's own
+		 * policy — kept exactly as before so the LLM and rule-based arms never disagree about
+		 * station capacity.
+		 *
+		 * ## No-menu compliance (#825 C9, extended to this surface by Issue #893 task B3)
+		 *
+		 * The procedure and rules below are dash-bulleted, never numbered (`^\s*\d+[.)]\s` is
+		 * forbidden), and the text avoids "option"/"optional"/"choose one"/"select" everywhere —
+		 * [LivePromptNoMenuTest] locks this against regression on the real, assembled prompt.
+		 *
+		 * ## Queued trains carry no destination clause here (B1 constraint)
+		 *
+		 * [KoogDispatchAgentImpl.renderQueuedTrainLine] deliberately renders a queued train as
+		 * approve-only, naming no topology endpoint at all — the admission step below must not
+		 * imply otherwise, so it never mentions a queued train's exit.
+		 */
+		private fun buildSystemPrompt(maxActions: Int): String {
+			val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+			return buildString {
+				appendLine(
+					"You are a railway dispatcher. Every call you receive is one tick: read the " +
+						"cycle message, decide, act through your tools, and stop — nothing carries " +
+						"forward except what you actually called a tool for."
+				)
+				appendLine(
+					"The only actuator tools available are approve_train, request_route, " +
+						"cancel_route, and no_op — there is no tool to set a signal aspect or " +
+						"switch position directly; signals and switches change only as a side " +
+						"effect of request_route/cancel_route. Always prioritize safety."
+				)
+				appendLine(
+					"All entry/exit points, signals, switches, and blocks you may reference are " +
+						"listed by exact name in the STATION TOPOLOGY section below. Never invent, " +
+						"abbreviate, or guess a name — if you need a name you don't see there, do " +
+						"not call the tool. request_route's fromEndpointName/toEndpointName " +
+						"arguments accept InOut and Signal names — never a Block ID from the Blocks " +
+						"list."
+				)
+				appendLine(
+					"You have no tool for querying state: every train id, count, and position you " +
+						"may act on is already written in the cycle message you are given. Only " +
+						"ever pass a train id that appears there verbatim — never one taken from an " +
+						"example, and never one you inferred."
+				)
+				appendLine(
+					"At most $maxActions actions besides no_op are accepted this tick; no_op never " +
+						"counts against that budget."
+				)
+				appendLine("On every tick, follow these steps in order:")
+				appendLine(
+					"- If the cycle message has an OUTCOMES OF YOUR PREVIOUS ACTIONS section, read " +
+						"it first: it names what your last calls actually did."
+				)
+				appendLine(
+					"- admission comes first: while there are queued (unapproved) trains and " +
+						"fewer than $cap trains are currently active, call approve_train for queued " +
+						"trains in the order listed, up to $cap total active. Queued trains take " +
+						"approve_train only, nothing else."
+				)
+				appendLine(
+					"- For each active train whose line names a NEXT SECTION to reserve, call " +
+						"request_route once for it, copying the from/to names from that NEXT " +
+						"SECTION clause exactly."
+				)
+				appendLine(
+					"- a train with no NEXT SECTION line gets no route request this tick — its " +
+						"line already says why (route already set, or nothing reservable yet); " +
+						"leave it be."
+				)
+				appendLine(
+					"- Call cancel_route only for a train whose reservation is no longer needed " +
+						"and that is not currently standing on it. A REFUSED request in OUTCOMES " +
+						"reserved nothing and needs no cancel_route."
+				)
+				appendLine("- Otherwise, call no_op with a brief reason.")
+				appendNonNegotiableRules(maxActions)
+			}.trimEnd('\n')
+		}
+
+		/**
+		 * Appends the "Rules that never bend:" section to [buildSystemPrompt]'s [StringBuilder],
+		 * factored out purely to keep [buildSystemPrompt] under detekt's `LongMethod` threshold — the
+		 * pre-existing wording and ordering are unchanged from when this lived inline.
+		 *
+		 * @since Issue #893 iteration 3 (extraction); rules themselves date to phase beta task B2 and
+		 *   iteration 2/3 additions
+		 */
+		private fun StringBuilder.appendNonNegotiableRules(maxActions: Int) {
+			appendLine("Rules that never bend:")
+			appendLine(
+				"- Reservation is not movement: request_route only reserves interlocking " +
+					"resources for a train that is already active — it never admits a queued " +
+					"train; only approve_train does that."
+			)
+			appendLine(
+				"- Copy every name character-for-character from STATION TOPOLOGY or a NEXT " +
+					"SECTION line — never a Block ID."
+			)
+			appendLine(
+				"- Reserving a section that is not directly in front of a train does not " +
+					"release anything that train already holds; it only locks that track " +
+					"against other trains."
+			)
+			appendLine(
+				"- This cycle's message always supersedes anything recorded earlier: where " +
+					"they disagree, trust this cycle."
+			)
+			appendLine(
+				"- Never call approve_train for a train already listed as active — " +
+					"approve_train applies only to a queued train."
+			)
+			appendLine(
+				"- Once the per-tick action budget is spent, end your turn: further tool " +
+					"calls this tick are refused."
+			)
+			appendLine(
+				"- When you have taken the actions this tick needs — never more than $maxActions " +
+					"— end the tick: reply with one short plain-text sentence and make no further " +
+					"tool calls. When no action is needed this tick, call no_op once and then reply " +
+					"the same way. Only a plain-text reply ends the tick."
+			)
+			appendLine(
+				"- If a tool call for a train is rejected twice in one tick, stop acting on that " +
+					"train and move on or reply."
+			)
+			appendLine(
+				"no_op is a correct and frequent answer, not a failure to act — most ticks " +
+					"have nothing new to do. Repeating an action already in force is refused, " +
+					"wastes the tick, and tells the next tick nothing new."
+			)
+		}
 	}
 
 	/**
@@ -216,14 +341,17 @@ class KoogAgentFactory(
 
 		// SP2b.8 (Issue #695): serialize static topology into the system prompt once.
 		val topologyPrompt = StationTopologySerializer.toPromptText(topology)
-		val systemPrompt = "$DEFAULT_SYSTEM_PROMPT\n\n$topologyPrompt"
+		// Issue #893 (phase beta, task B2): budget is read from this factory's own sinkHolder,
+		// not a hardcoded literal — see buildSystemPrompt's KDoc for why that is safe.
+		val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick)}\n\n$topologyPrompt"
 
 		val agent =
 			agentService.createDispatchAgent(
 				modelName = ollamaConfig.modelName,
 				tools = instrumentedTools,
 				systemPrompt = systemPrompt,
-				cycleHistory = cycleHistory
+				cycleHistory = cycleHistory,
+				outcomeFeed = outcomeFeed
 			)
 
 		logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }

@@ -57,7 +57,11 @@ private val logger = KotlinLogging.logger {}
  *
  * - **Cleared-signal tracking:** The kernel remembers which entry signal it cleared per train
  *   ([clearedSignals]) so [releaseRoute] resets exactly that signal, regardless of the
- *   [exitSignal] argument supplied by the caller (which is audit-only).
+ *   [exitSignal] argument supplied by the caller (which is audit-only). Since Issue #893 task A6,
+ *   every clear is ALSO recorded with the [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService]
+ *   (single signal ledger — see [clearSignal]), so a release routed directly through the service
+ *   (bypassing this facade) resets the signal too. [clearedSignals] is kept only so THIS facade's
+ *   own [releaseRoute] stays a correct, idempotent no-op no matter which side releases first.
  *
  * @property env The simulation environment providing access to network elements
  *              (blocks, switches, signals, and the block graph).
@@ -281,6 +285,17 @@ class DefaultInterlockingFacade(
 					"Block $blockName occupied by train ${result.existingOwner}"
 				)
 			}
+			is PathReservationService.ReservationResult.NonContiguousStart -> {
+				// Issue #893 (task A-R1b): the requested origin is nowhere near this train. The
+				// reason string already names the origin and the legal alternatives, so it is
+				// forwarded as-is; originNotContiguous=true lets DefaultNetworkActuatorPort map
+				// this denial to RouteRequestResult.OriginNotContiguous instead of the default
+				// AllPathsBlocked(0) collapse applied to every other denial reason.
+				logger.info {
+					"Route DENIED for trainId=$trainId: non-contiguous origin ($fromEndpointName): ${result.reason}"
+				}
+				InterlockingFacade.RouteResponse.Denied(result.reason, originNotContiguous = true)
+			}
 		}
 	}
 
@@ -448,6 +463,17 @@ class DefaultInterlockingFacade(
 	 * cleared, or null if the signal is unknown or the aspect has no [Signal] equivalent — in
 	 * both cases the signal is left untouched and the caller MUST roll back the locks it just
 	 * acquired and deny the route (never return Granted without a cleared signal).
+	 *
+	 * ## Single signal ledger (Issue #893, task A6 -- G6)
+	 *
+	 * A successful clear is ALSO recorded with the [PathReservationService] via
+	 * [PathReservationService.recordExternalClearedSemaphore], so a release routed through the
+	 * service directly (the `OrphanReservationSweeper`, via
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRoute]) sees this grant and
+	 * resets the signal, instead of only [releaseRoute] on THIS facade knowing about it. [clearedSignals]
+	 * is still populated below (see [releaseRoute]) so this facade's own release stays a correct,
+	 * idempotent no-op regardless of which side released first — the service is now the single
+	 * source of truth; this facade's own map exists solely for that idempotency.
 	 */
 	private fun clearSignal(
 		entrySignal: SignalId,
@@ -468,6 +494,7 @@ class DefaultInterlockingFacade(
 			return null
 		}
 		signal.signal = targetSignalState
+		env.getRoutingServices().getPathReservationService().recordExternalClearedSemaphore(trainId, signal)
 		logger.info { "Signal ${entrySignal.name} cleared to ${clearedAspect.humanLabel()} for trainId=$trainId" }
 		return signal
 	}

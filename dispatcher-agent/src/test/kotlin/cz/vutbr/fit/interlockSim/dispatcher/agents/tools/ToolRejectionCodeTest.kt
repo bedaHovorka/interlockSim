@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
@@ -297,8 +299,21 @@ class ToolRejectionCodeTest {
 				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doA1", "toEndpointName" to "A"))
 			}
 
-		assertThat(errorOf(result).rejection, "rejection code")
-			.isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		val error = errorOf(result)
+		assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		// Issue #893 iteration 3: this train is active, so its NEXT SECTION line (rendered by
+		// KoogDispatchAgentImpl.renderActiveTrainLine) names exactly one legal from/to pair --
+		// pointing the model at it beats the bare "do not retry" directive from iteration 2.
+		// queuedOriginError below stays on the older wording: a queued train never gets a NEXT
+		// SECTION line at all (renderQueuedTrainLine is approve-only), so there is nothing to
+		// point at yet.
+		assertThat(error.message, "message points the model at this train's NEXT SECTION line")
+			.contains(
+				"Do not send another origin of your own. Use exactly the from/to pair printed on " +
+					"this train's NEXT SECTION line, or make no route request for this train this tick."
+			)
+		assertThat(error.message, "legacy do-not-retry wording is gone")
+			.doesNotContain("Do not retry with the same origin.")
 	}
 
 	@Test
@@ -412,5 +427,26 @@ class ToolRejectionCodeTest {
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)
 		assertThat((result as? ToolResult.Error)?.rejection, "rejection code on success").isNull()
+	}
+
+	/**
+	 * Issue #893 iteration 2: the per-cycle action cap rejection must tell the model to stop calling
+	 * actuator tools this tick rather than retrying — every retry after the cap is refused is a
+	 * wasted call in an already-exhausted 20-iteration budget.
+	 */
+	@Test
+	@DisplayName("the action-limit rejection tells the model to stop calling tools and end its turn")
+	fun actionLimitRejectionTellsModelToStop() {
+		val sinkHolder = SinkHolder(maxActionsPerTick = 1)
+		val tool = ApproveTrainTool(sinkHolder, sensorPort(listOf("Train #1", "Train #2")))
+		runBlocking { tool.execute(mapOf("trainId" to "Train #1")) }
+
+		val result = runBlocking { tool.execute(mapOf("trainId" to "Train #2")) }
+
+		val error = errorOf(result)
+		assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.ACTION_LIMIT_EXCEEDED)
+		assertThat(error.message, "message").contains(
+			"Action budget for this cycle is exhausted. Do not call any more actuator tools. End your turn now."
+		)
 	}
 }

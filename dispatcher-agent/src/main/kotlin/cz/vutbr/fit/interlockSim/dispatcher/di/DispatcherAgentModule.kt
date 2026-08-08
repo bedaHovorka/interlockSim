@@ -230,8 +230,11 @@ val dispatcherAgentModule: Module =
 
 			// SP2c.17 (#840): AppliedOutcomeChannel (scoped per context)
 			// Bounded ring buffer that receives outcomes published by DispatchDecisionApplier (sim
-			// thread) and is drained by DispatcherObservationProjector on the next captureOnSimThread
-			// call to populate DispatcherObservation.appliedOutcomes.
+			// thread). Drained from two places: DispatcherObservationProjector on the next
+			// captureOnSimThread call (test-only DispatchTickLoop path, populates
+			// DispatcherObservation.appliedOutcomes) and, since Issue #893 phase beta (task B0),
+			// KoogDispatchAgentImpl.buildUserPrompt on the dispatcher-agent-driver thread (the live
+			// path — see the KoogAgentFactory binding below, which wires the SAME instance).
 			scoped<AppliedOutcomeChannel> { AppliedOutcomeChannel() }
 
 			// SP2c.20 follow-up (#843): ActionOutcomeAggregator (scoped per context)
@@ -341,7 +344,11 @@ val dispatcherAgentModule: Module =
 					// ExampleRegistry declares the correctly-armed recorder AFTER resolving this
 					// factory, so an eagerly-captured instance would be the default rule-based one.
 					runRecorderProvider = { getOrNull<DispatcherRunRecorder>() },
-					cycleHistory = get() // Scoped to this context (Issue #847 — shared with KoogAgentPlanAdapter)
+					cycleHistory = get(), // Scoped to this context (Issue #847 — shared with KoogAgentPlanAdapter)
+					// Issue #893 (phase beta, task B0): same scoped AppliedOutcomeChannel instance
+					// wireDispatcherAgent (ExampleRegistry) hands to DispatchDecisionApplier as its
+					// outcomeSink below — this is what closes the live feedback loop end to end.
+					outcomeFeed = get<AppliedOutcomeChannel>()
 				)
 			}
 

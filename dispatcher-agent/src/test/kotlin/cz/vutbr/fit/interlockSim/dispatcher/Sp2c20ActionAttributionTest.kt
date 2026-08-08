@@ -597,8 +597,14 @@ class Sp2c20ActionAttributionTest {
 			assertThat(names.contains("CAP_EXCEEDED_APPLY")).isTrue()
 		}
 
+		/**
+		 * `ORIGIN_NOT_CONTIGUOUS` is the one deliberate addition since SP2c.20 (Issue #893,
+		 * task A-R1): a route origin that is not contiguous with the train's own footprint is
+		 * an LLM-output error and must be counted apart from `ALL_PATHS_BLOCKED` contention.
+		 * The guard itself stands — every further entry still has to be argued for here.
+		 */
 		@Test
-		@DisplayName("ApplyFailureCode has exactly the six SP2c.20 entries — no stray additions")
+		@DisplayName("ApplyFailureCode has exactly the expected entries — no stray additions")
 		fun applyFailureCodeIsExactlyTheExpectedSet() {
 			val names = ApplyFailureCode.entries.map { it.name }.toSet()
 			assertThat(names).isEqualTo(
@@ -608,6 +614,7 @@ class Sp2c20ActionAttributionTest {
 					"NO_ROUTE_EXISTS",
 					"APPROVE_REJECTED",
 					"CAP_EXCEEDED_APPLY",
+					"ORIGIN_NOT_CONTIGUOUS",
 					"DROPPED_INVALID"
 				)
 			)

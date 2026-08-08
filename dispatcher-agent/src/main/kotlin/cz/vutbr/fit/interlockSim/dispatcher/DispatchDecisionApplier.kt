@@ -715,6 +715,13 @@ class DispatchDecisionApplier(
 				}
 				onFailedReservation()
 			}
+			is RouteRequestResult.OriginNotContiguous -> {
+				logger.warn {
+					"ReservePath: origin '${decision.fromSemaphoreName}' is not contiguous " +
+						"with ${decision.trainId}: ${result.reason}"
+				}
+				onFailedReservation()
+			}
 		}
 	}
 
@@ -860,7 +867,44 @@ class DispatchDecisionApplier(
 				}
 				ApplyFailureCode.NO_ROUTE_EXISTS
 			}
+			is RouteRequestResult.OriginNotContiguous -> {
+				handleRequestRouteOriginNotContiguous(decision, result, correlation)
+				ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS
+			}
 		}
+	}
+
+	/**
+	 * Handles the [RouteRequestResult.OriginNotContiguous] branch of [applyRequestRoute] —
+	 * extracted for the same reason as [handleRequestRouteReserved] (detekt LongMethod budget).
+	 *
+	 * Publishes [AppliedOutcome.OriginNotContiguous] so the agent learns *why* its route was
+	 * refused. Symmetric with the `Blocked`/`Conflicted`/`NoRoute` branches: leaving this one
+	 * silent would tell the model less about the worst error class it can produce than about
+	 * routine contention.
+	 *
+	 * @since Issue #893 (phase alpha, task A-R1)
+	 */
+	private fun handleRequestRouteOriginNotContiguous(
+		decision: DispatchDecision.RequestRoute,
+		result: RouteRequestResult.OriginNotContiguous,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.warn {
+			"DispatchDecisionApplier: RequestRoute origin not contiguous for " +
+				"${decision.trainName}: ${result.reason}"
+		}
+		if (correlation == null) return
+		outcomeSink?.publish(
+			AppliedOutcome.OriginNotContiguous(
+				trainId = decision.trainName,
+				fromEndpointName = decision.fromEndpointName,
+				toEndpointName = decision.toEndpointName,
+				reason = result.reason,
+				id = correlation.id,
+				tickIndex = correlation.tickIndex
+			)
+		)
 	}
 
 	/**
@@ -942,7 +986,11 @@ class DispatchDecisionApplier(
 internal fun DispatchDecision.commandTypeName(): String =
 	when (this) {
 		is DispatchDecision.RequestRoute -> "request_route"
-		is DispatchDecision.ReleaseRoute -> "release_route"
+		// The LLM-facing tool name is `cancel_route` (SP2c.6, Issue #829 — see CancelRouteTool).
+		// This projection feeds AppliedOutcome.DroppedInvalid.commandType, which both renderers
+		// emit verbatim to the model, so it must speak the current tool name — not the retired
+		// `release_route` (final-review F1 follow-up, Issue #893).
+		is DispatchDecision.ReleaseRoute -> "cancel_route"
 		is DispatchDecision.ApproveTrain -> "approve_train"
 		is DispatchDecision.ReservePath -> "reserve_path"
 		is DispatchDecision.HoldTrain -> "hold_train"

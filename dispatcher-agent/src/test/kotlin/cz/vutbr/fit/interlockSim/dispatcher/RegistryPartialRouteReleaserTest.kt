@@ -15,9 +15,11 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -118,6 +120,28 @@ class RegistryPartialRouteReleaserTest {
 		return head to blocks.drop(1)
 	}
 
+	private fun inOutNamed(name: String): DynamicInOut = context.getInOuts().single { it.name == name }
+
+	/**
+	 * Reserves a LONGER real route (InOut A -> InOut B, spanning at least one intermediate
+	 * semaphore) and marks its first block occupied, mirroring [reserveAndOccupyHead] but long
+	 * enough to exercise the intermediate-semaphore and InOut-inSemaphore reset paths a single
+	 * zA->doA1 hop cannot reach: that route never passes through a shared boundary separator, and
+	 * never starts at an InOut.
+	 *
+	 * @return the occupied block and the un-travelled tail.
+	 */
+	private fun reserveAndOccupyLongRoute(): Pair<DynamicTrackBlock, List<DynamicTrackBlock>> {
+		val pathReservationService = context.getRoutingServices().getPathReservationService()
+		val result = pathReservationService.reservePath(trainId, inOutNamed("A"), inOutNamed("B"))
+		assertThat(result, "reservePath result").isNotNull()
+		val blocks = heldBlocks()
+		assertThat(blocks, "blocks reserved").isNotEmpty()
+		val head = blocks.first()
+		head.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId })
+		return head to blocks.drop(1)
+	}
+
 	@Test
 	@DisplayName("the block the train stands on keeps its state and its registry ownership")
 	fun occupiedBlockIsUntouched() {
@@ -173,6 +197,58 @@ class RegistryPartialRouteReleaserTest {
 			assertThat(semaphore.signal.name, "aspect of a signal guarding a released block")
 				.isEqualTo("STOP")
 		}
+	}
+
+	/**
+	 * `tryAtomicReservation` sets EVERY block's `reservedFrom` to the route's START separator, not
+	 * to the locally adjacent one — so the old `reservedFrom as? DynamicRailSemaphore` cast only
+	 * ever found the START itself, never an INTERMEDIATE semaphore between two blocks the same
+	 * reservation owns (e.g. `doB1`/`doB2` on an InOut A -> InOut B route). Those stayed lit with
+	 * no route behind them.
+	 *
+	 * @since Issue #893 (phase alpha, task A3)
+	 */
+	@Test
+	@DisplayName("tail release returns every semaphore inside the tail to STOP")
+	fun tailReleaseResetsIntermediateSemaphores() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val litInsideTail =
+			tail
+				.flatMap { it.ends().toList() }
+				.filterIsInstance<DynamicRailSemaphore>()
+				.distinct()
+				.filter { it.signal.isAllowing() }
+		// Guard: if nothing was lit inside the tail, the loop below would pass vacuously.
+		assertThat(litInsideTail, "semaphores lit inside the tail before release").isNotEmpty()
+
+		val released = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) })
+
+		assertThat(released, "released ids").isNotEmpty()
+		litInsideTail.forEach { semaphore ->
+			assertThat(semaphore.signal.name, "aspect of intermediate semaphore ${semaphore.name} after release")
+				.isEqualTo("STOP")
+		}
+	}
+
+	/**
+	 * When the route started at a `DynamicInOut`, `reservedFrom as? DynamicRailSemaphore` casts to
+	 * `null` for every block — the InOut is not a semaphore — so the old code reset nothing at all,
+	 * leaving the InOut's `inSemaphore` lit with no route behind it.
+	 *
+	 * @since Issue #893 (phase alpha, task A3)
+	 */
+	@Test
+	@DisplayName("an InOut-started route's tail release resets its cleared inSemaphore")
+	fun tailReleaseResetsInOutInSemaphore() {
+		val inOutA = inOutNamed("A")
+		val (_, tail) = reserveAndOccupyLongRoute()
+		assertThat(inOutA.inSemaphore.signal.isAllowing(), "InOut A's inSemaphore lit before release").isTrue()
+
+		val released = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) })
+
+		assertThat(released, "released ids").isNotEmpty()
+		assertThat(inOutA.inSemaphore.signal.name, "aspect of InOut A's inSemaphore after tail release")
+			.isEqualTo("STOP")
 	}
 
 	/**

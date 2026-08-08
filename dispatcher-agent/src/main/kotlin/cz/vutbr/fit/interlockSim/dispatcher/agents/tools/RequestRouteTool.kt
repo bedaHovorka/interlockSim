@@ -93,8 +93,19 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   snapshot, which carries no blocks until the simulation has captured one. Empty disables only
  *   the finer classification, never the rejection itself.
  * @param inOutNames Static InOut names of this network (`StationTopology.inOuts`), used to tell an
- *   end-to-end target apart from a section hop in the direction check. Empty disables that check
- *   entirely — without it, every Signal target would look like a wrong destination.
+ *   end-to-end target apart from a section hop in the direction check, and to enforce the
+ *   queued-train origin rule below. Empty disables both checks entirely — without it, every Signal
+ *   target would look like a wrong destination and every origin like a Signal.
+ *
+ * ## Origin validation for queued trains (Issue #893)
+ *
+ * The other half of the same live defect: once the direction was corrected, the model asked for a
+ * correctly *directed* route in the wrong *place* — an origin the train could not reach. For a
+ * train that has not been admitted yet the answer is unambiguous: it stands at its entry InOut and
+ * nowhere else, so a Signal origin is always wrong. See [queuedOriginError], including why the rule
+ * is "an InOut" rather than "the entry InOut". The authoritative, footprint-aware check lives in
+ * `DefaultPathReservationService.reservePath`; its rejection returns through the apply-failure
+ * channel rather than in-turn.
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to [SinkHolder] in Issue #829 (SP2c.6);
  *   train-name pre-check added in Issue #847 round 2
@@ -234,6 +245,8 @@ class RequestRouteTool(
 			}
 		}
 
+		queuedOriginError(resolvedTrainName, fromEndpointName)?.let { return it }
+
 		// A route has to start where the train actually is. Only checked for a train standing
 		// still at a known signal — the case where the answer is unambiguous and the train is
 		// waiting for exactly this route. A moving train's signal ahead changes under the
@@ -244,7 +257,9 @@ class RequestRouteTool(
 				return ToolResult.Error(
 					"Train '$resolvedTrainName' is standing at signal '$signalAhead', so its route must " +
 						"start there: fromEndpointName must be '$signalAhead', not '$fromEndpointName'. " +
-						"A route reserved somewhere else does not release this train.",
+						"A route reserved somewhere else does not release this train. Do not send another " +
+						"origin of your own. Use exactly the from/to pair printed on this train's NEXT " +
+						"SECTION line, or make no route request for this train this tick.",
 					rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
 				)
 			}
@@ -288,6 +303,53 @@ class RequestRouteTool(
 				?.firstOrNull { it.trainId == trainId }
 				?.destinationInOutName
 		return (queued ?: activePerceptionOf(trainId)?.destinationInOutName)?.takeIf { it.isNotBlank() }
+	}
+
+	/**
+	 * Rejects a route for a **queued** train that does not start at an entry point (Issue #893).
+	 *
+	 * A train still waiting for admission is physically nowhere in the network, so the only
+	 * origin it can possibly use is the InOut it is queued at. A route reserved from a Signal in
+	 * the middle of the station locks track the train cannot reach: it never occupies those
+	 * blocks, so it never releases them, and every other train is held out until the orphan
+	 * sweeper reclaims the reservation — the "correctly directed, wrongly placed" half of the
+	 * Issue #893 stall.
+	 *
+	 * ## Limitation: "an InOut", not "*the* entry InOut"
+	 *
+	 * [cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation] carries only `trainId` and
+	 * `destinationInOutName` — the queuing InOut is not exposed, and this task's constraint is
+	 * that no new `:core` query surface may be added for it. The enforceable rule is therefore
+	 * the weaker "a queued train's origin must be an InOut, not a Signal". Combined with the
+	 * existing "cannot depart FROM the destination" rule this pins the origin exactly on a
+	 * two-InOut network such as `vyhybna.xml`, and is a strict improvement on larger ones. The
+	 * authoritative check is `DefaultPathReservationService.reservePath`'s contiguity invariant,
+	 * which sees the live footprint; this one exists to give the model in-turn feedback rather
+	 * than a silently-dropped decision one tick later.
+	 *
+	 * Disabled (returns `null`) when [inOutNames] is empty — without it every origin would look
+	 * like a Signal — or when the train is also active, in which case the live perception is the
+	 * better evidence and [standingAtSignal] governs instead.
+	 */
+	private fun queuedOriginError(
+		trainId: String,
+		fromEndpointName: String
+	): ToolResult.Error? {
+		if (inOutNames.isEmpty()) return null
+		if (fromEndpointName in inOutNames) return null
+		val isQueued = sensorPort?.getQueuedTrains()?.any { it.trainId == trainId } ?: false
+		if (!isQueued || activePerceptionOf(trainId) != null) return null
+		val destination = declaredDestinationOf(trainId)
+		val candidateOrigins = inOutNames.filter { it != destination }.sorted()
+		val legalOrigins = if (candidateOrigins.isEmpty()) inOutNames.sorted() else candidateOrigins
+		return ToolResult.Error(
+			"Train '$trainId' has not entered the network yet, so its route must start at its entry " +
+				"point — an InOut, not signal '$fromEndpointName'. Use fromEndpointName=" +
+				legalOrigins.joinToString(" or ") { "'$it'" } +
+				". A route reserved elsewhere locks track this train cannot reach and releases nobody. " +
+				"Do not retry with the same origin.",
+			rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
+		)
 	}
 
 	/**

@@ -44,16 +44,22 @@ fun interface AppliedOutcomeFeed {
 /**
  * Bounded ring buffer that implements both [AppliedOutcomeSink] and [AppliedOutcomeFeed].
  *
- * ## Threading contract
+ * ## Threading contract (synchronised — Issue #893 phase beta, task B0)
  *
- * Both [publish] and [drainSince] are called **on the kDisco simulation thread only**:
- * - [publish] is called from [DispatchDecisionApplier.onControlStep] (sim thread).
- * - [drainSince] is called from [DispatcherObservationProjector.captureOnSimThread] (sim thread).
+ * [publish] is still called **on the kDisco simulation thread only**, from
+ * [DispatchDecisionApplier.onControlStep]. [drainSince], however, now has **two** callers on
+ * **two different threads**:
+ * - [DispatcherObservationProjector.captureOnSimThread] — kDisco simulation thread (the
+ *   test-only `DispatchTickLoop` path).
+ * - [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl.buildUserPrompt] — the
+ *   `dispatcher-agent-driver` thread ([AgentLoopDriver] runs on its own thread/coroutine, never
+ *   the kDisco thread), the **live** path this outcome channel was built for (SP2c.17, #840) but
+ *   which had no production drainer until task B0.
  *
- * Because both operations occur on the same thread, the underlying [ArrayDeque] requires
- * no synchronisation.  The no-synchronisation contract is documented here rather than
- * hidden so that a future refactor cannot silently move one of the call sites off-thread
- * without noticing.
+ * This is exactly the "future refactor" the previous revision of this KDoc warned about: the
+ * underlying [ArrayDeque] is genuinely cross-thread now, so every access is guarded by
+ * `synchronized(ring)`. Kept allocation-light and logging-free inside the guarded sections — see
+ * [publish]'s contract — so the lock is held only for simple deque operations, never for I/O.
  *
  * ## Overflow
  *
@@ -65,7 +71,8 @@ fun interface AppliedOutcomeFeed {
  * @param ringCapacity Maximum number of outcomes held before the oldest is evicted.
  *   Defaults to [DEFAULT_RING_CAPACITY].
  *
- * @since Issue #840 (SP2c.17 — correlated async outcome channel)
+ * @since Issue #840 (SP2c.17 — correlated async outcome channel); synchronised in Issue #893
+ *   phase beta (task B0) once [drainSince] gained a second, off-sim-thread caller
  */
 class AppliedOutcomeChannel(
 	private val ringCapacity: Int = DEFAULT_RING_CAPACITY
@@ -76,29 +83,40 @@ class AppliedOutcomeChannel(
 		const val DEFAULT_RING_CAPACITY: Int = 512
 	}
 
-	// Sim-thread-only — see class KDoc "Threading contract". No synchronisation needed.
+	// Cross-thread since task B0 — see class KDoc "Threading contract". Every access below is
+	// guarded by `synchronized(ring)`.
 	private val ring = ArrayDeque<AppliedOutcome>(ringCapacity)
 
 	/** Called on the sim thread. Allocation-light; no logging (per SP2c.17 review checklist). */
 	override fun publish(outcome: AppliedOutcome) {
-		if (ring.size >= ringCapacity) {
-			ring.removeFirst() // Evict oldest on overflow
+		synchronized(ring) {
+			if (ring.size >= ringCapacity) {
+				ring.removeFirst() // Evict oldest on overflow
+			}
+			ring.addLast(outcome)
 		}
-		ring.addLast(outcome)
 	}
 
-	/** Called on the sim thread by [DispatcherObservationProjector.captureOnSimThread]. */
-	override fun drainSince(fromTickIndex: Long): List<AppliedOutcome> {
-		if (ring.isEmpty()) return emptyList()
-		val result = mutableListOf<AppliedOutcome>()
-		val it = ring.iterator()
-		while (it.hasNext()) {
-			val outcome = it.next()
-			if (outcome.tickIndex >= fromTickIndex) {
-				result.add(outcome)
-				it.remove()
+	/**
+	 * Called by [DispatcherObservationProjector.captureOnSimThread] (sim thread) or
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl.buildUserPrompt]
+	 * (`dispatcher-agent-driver` thread) — see class KDoc "Threading contract".
+	 */
+	override fun drainSince(fromTickIndex: Long): List<AppliedOutcome> =
+		synchronized(ring) {
+			if (ring.isEmpty()) {
+				emptyList()
+			} else {
+				val result = mutableListOf<AppliedOutcome>()
+				val it = ring.iterator()
+				while (it.hasNext()) {
+					val outcome = it.next()
+					if (outcome.tickIndex >= fromTickIndex) {
+						result.add(outcome)
+						it.remove()
+					}
+				}
+				result
 			}
 		}
-		return result
-	}
 }

@@ -306,6 +306,18 @@ class PathCommandTranslatorTest : KoinTestBase() {
 		}
 
 		@Test
+		@DisplayName("emitted SetSignalAspect carries the trainId (G5, Issue #893 task A6)")
+		fun signalCommandCarriesTrainId() {
+			val candidate = findCandidateWithConf(zA, doA1, RailSwitch.Conf.MAIN)
+
+			val commands = PathCommandTranslator.translate("myTrain42", zA, candidate, context)
+
+			val signalCmds = commands.filterIsInstance<DispatchDecision.SetSignalAspect>()
+			assertThat(signalCmds.size).isEqualTo(1)
+			assertThat(signalCmds[0].trainName).isEqualTo("myTrain42")
+		}
+
+		@Test
 		@DisplayName("returned decisions are concrete DispatchDecision subtypes")
 		fun commandTypesAreDispatchDecisions() {
 			val candidate = findCandidateWithConf(zA, doA1, RailSwitch.Conf.MAIN)

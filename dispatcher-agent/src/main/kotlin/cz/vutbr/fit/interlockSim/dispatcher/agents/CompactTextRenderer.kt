@@ -206,9 +206,15 @@ class CompactTextRenderer : ObservationRenderer {
 			is AppliedOutcome.NoRoute ->
 				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : NO_ROUTE"
 
+			// Issue #893: minimal exhaustiveness branch, deliberately in the same shape as its
+			// siblings. Surfacing the full `reason` text to the model is the beta rendering task.
+			is AppliedOutcome.OriginNotContiguous ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
+					"ORIGIN_NOT_CONTIGUOUS (from ${outcome.fromEndpointName})"
+
 			is AppliedOutcome.Released -> {
 				val status = if (outcome.anyReleased) "RELEASED" else "NO_RESERVATION"
-				"release_route ${outcome.trainId} : $status"
+				"cancel_route ${outcome.trainId} : $status"
 			}
 
 			is AppliedOutcome.Approved ->

@@ -275,6 +275,14 @@ class InterlockingFacadeTest : KoinTestBase() {
 		 * Builds a [SimulationEnvironment] + its [PathReservationRegistry] (a real instance,
 		 * shared with a stub [PathReservationService] whose `releasePath` mirrors
 		 * `DefaultPathReservationService.releasePath`'s registry-cleanup contract).
+		 *
+		 * Also mirrors just enough of `DefaultPathReservationService`'s cleared-signal ledger
+		 * (`recordExternalClearedSemaphore` / `hasClearedSignals` / the signal-reset half of
+		 * `releasePath`) for the [SignalLedgerRelease] G6 tests (Issue #893, task A6): a train's
+		 * `recordExternalClearedSemaphore` calls are tracked here, `releasePath` resets and
+		 * forgets exactly the semaphores still owned by that train (last-writer-wins, matching
+		 * the real service), and every OTHER test in this class simply never calls
+		 * `recordExternalClearedSemaphore`, so this ledger stays empty and inert for them.
 		 */
 		@Suppress("UNCHECKED_CAST")
 		private fun env(
@@ -294,7 +302,21 @@ class InterlockingFacadeTest : KoinTestBase() {
 
 			val registry = PathReservationRegistry(mockk(relaxed = true))
 
+			val clearedSemaphores = mutableMapOf<String, MutableSet<DynamicRailSemaphore>>()
+			val semaphoreClearedFor = mutableMapOf<DynamicRailSemaphore, String>()
+
 			val reservationService = mockk<PathReservationService>(relaxed = true)
+			every { reservationService.recordExternalClearedSemaphore(any(), any()) } answers {
+				val trainId = firstArg<String>()
+				val sem = secondArg<DynamicRailSemaphore>()
+				if (sem.signal.isAllowing()) {
+					clearedSemaphores.getOrPut(trainId) { mutableSetOf() }.add(sem)
+					semaphoreClearedFor[sem] = trainId
+				}
+			}
+			every { reservationService.hasClearedSignals(any()) } answers {
+				clearedSemaphores[firstArg<String>()]?.isNotEmpty() == true
+			}
 			if (releasePathThrows) {
 				every { reservationService.releasePath(any()) } throws IllegalStateException("releasePath boom")
 			} else {
@@ -304,6 +326,12 @@ class InterlockingFacadeTest : KoinTestBase() {
 					registry.getSwitches(trainId).forEach { it.unlock() }
 					registry.unregister(trainId)
 					registry.unregisterSwitches(trainId)
+					clearedSemaphores.remove(trainId)?.forEach { sem ->
+						if (semaphoreClearedFor[sem] == trainId) {
+							semaphoreClearedFor.remove(sem)
+							sem.signal = Signal.STOP
+						}
+					}
 					released
 				}
 			}
@@ -799,6 +827,129 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val reason = (response as InterlockingFacade.RouteResponse.Denied).reason
 			assertThat(reason).contains("All paths blocked")
 			assertThat(reason).contains("attempts: 3")
+		}
+
+		// ── G6: single signal ledger (facade → service), Issue #893 task A6 ────
+
+		/**
+		 * Before task A6, [DefaultInterlockingFacade.clearSignal] wrote the entry signal directly
+		 * and tracked it ONLY in the facade's own [DefaultInterlockingFacade] `clearedSignals`
+		 * map. `PathReservationService.releasePath` -- the path the `OrphanReservationSweeper`
+		 * uses via `NetworkActuatorPort.releaseRoute` -- resets only SERVICE-recorded clears, so
+		 * a facade-granted entry signal stayed lit forever after a sweep.
+		 *
+		 * [env]'s mocked [PathReservationService] now mirrors just enough of
+		 * `DefaultPathReservationService`'s cleared-signal ledger (`recordExternalClearedSemaphore`
+		 * / `hasClearedSignals` / the signal-reset half of `releasePath`) to prove the fix: the
+		 * facade must route its clear through that same ledger.
+		 */
+		@Nested
+		@DisplayName("G6: single signal ledger (facade → service), Issue #893 task A6")
+		inner class SignalLedgerRelease {
+			@Test
+			@DisplayName("a service-side releasePath (the sweeper's path) resets a facade-granted entry signal")
+			fun serviceSideReleaseResetsFacadeGrantedSignal() {
+				val u1 = block("U1")
+				val v1 = switch("V1")
+				val s1 = semaphore("S1", Signal.STOP)
+				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
+				val facade = DefaultInterlockingFacade(e, registry)
+				val route =
+					TrainRoute(
+						from = SignalId("S1"),
+						to = SignalId("S2"),
+						blocks = listOf(BlockId("U1")),
+						running = listOf(plusSetting)
+					)
+
+				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+				assertThat(s1.signal).isEqualTo(Signal.FREE)
+
+				// The sweeper's path: release via the service directly, bypassing facade.releaseRoute.
+				e.getRoutingServices().getPathReservationService().releasePath("T1")
+
+				assertThat(s1.signal).isEqualTo(Signal.STOP)
+			}
+
+			@Test
+			@DisplayName("idempotent double-release: service release then facade.releaseRoute is a harmless no-op")
+			fun serviceReleaseThenFacadeReleaseIsHarmless() {
+				val u1 = block("U1")
+				val v1 = switch("V1")
+				val s1 = semaphore("S1", Signal.STOP)
+				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
+				val facade = DefaultInterlockingFacade(e, registry)
+				val route =
+					TrainRoute(
+						from = SignalId("S1"),
+						to = SignalId("S2"),
+						blocks = listOf(BlockId("U1")),
+						running = listOf(plusSetting)
+					)
+				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+				val service = e.getRoutingServices().getPathReservationService()
+				service.releasePath("T1")
+				assertThat(s1.signal).isEqualTo(Signal.STOP)
+
+				// Must not throw, and must not resurrect the signal or disturb another train.
+				facade.releaseRoute("T1", SignalId("S1"))
+
+				assertThat(s1.signal).isEqualTo(Signal.STOP)
+			}
+
+			@Test
+			@DisplayName("idempotent double-release: facade.releaseRoute then service release is a harmless no-op")
+			fun facadeReleaseThenServiceReleaseIsHarmless() {
+				val u1 = block("U1")
+				val v1 = switch("V1")
+				val s1 = semaphore("S1", Signal.STOP)
+				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
+				val facade = DefaultInterlockingFacade(e, registry)
+				val route =
+					TrainRoute(
+						from = SignalId("S1"),
+						to = SignalId("S2"),
+						blocks = listOf(BlockId("U1")),
+						running = listOf(plusSetting)
+					)
+				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+				facade.releaseRoute("T1", SignalId("S1"))
+				assertThat(s1.signal).isEqualTo(Signal.STOP)
+
+				// Must not throw.
+				e.getRoutingServices().getPathReservationService().releasePath("T1")
+
+				assertThat(s1.signal).isEqualTo(Signal.STOP)
+			}
+
+			@Test
+			@DisplayName("ownership: a signal since re-cleared for another train is not reset by the first train's release")
+			fun ownershipHoldsAcrossFacadeRecording() {
+				val u1 = block("U1")
+				val v1 = switch("V1")
+				val s1 = semaphore("S1", Signal.STOP)
+				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
+				val facade = DefaultInterlockingFacade(e, registry)
+				val route =
+					TrainRoute(
+						from = SignalId("S1"),
+						to = SignalId("S2"),
+						blocks = listOf(BlockId("U1")),
+						running = listOf(plusSetting)
+					)
+				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+				assertThat(s1.signal).isEqualTo(Signal.FREE)
+
+				// Simulate the signal being re-cleared for a different train under the service's
+				// ledger (last-writer-wins ownership reassignment).
+				val service = e.getRoutingServices().getPathReservationService()
+				service.recordExternalClearedSemaphore("T2", s1)
+
+				// Releasing T1 through the service must NOT reset a signal now owned by T2.
+				service.releasePath("T1")
+
+				assertThat(s1.signal).isEqualTo(Signal.FREE)
+			}
 		}
 	}
 }

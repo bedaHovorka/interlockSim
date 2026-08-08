@@ -15,8 +15,11 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isInstanceOf
 import assertk.assertions.messageContains
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
@@ -24,6 +27,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
@@ -59,6 +63,271 @@ class KoogDispatchAgentImplTest {
 		innerBlockInputs = emptyList(),
 		outerBlockInputs = emptyList()
 	)
+
+	// ── Issue #893 (phase beta, task B1): NEXT SECTION facts on active-train lines ────────────
+
+	/**
+	 * Builds an observation with a single active train, optionally carrying a matching
+	 * [TrainPerceptionReading] (destination + standing-at-signal facts) and block-input lists
+	 * ([NextHopResolver] reads those to compute the NEXT SECTION clause).
+	 */
+	private fun singleActiveTrainObservation(
+		trainId: String = "Train #1",
+		destination: String? = "A",
+		velocity: Double = 5.0,
+		signalAheadName: String? = null,
+		innerBlockInputs: List<BlockInputObservation> = emptyList(),
+		outerBlockInputs: List<BlockInputObservation> = emptyList()
+	): DispatchObservation {
+		val perceptions =
+			if (destination != null) {
+				listOf(
+					TrainPerceptionReading(
+						trainId = trainId,
+						signalAheadName = signalAheadName,
+						signalAheadAspect = null,
+						distanceToSignalAheadMetres = 0.0,
+						currentSpeedLimitMps = 0.0,
+						velocity = velocity,
+						acceleration = 0.0,
+						totalDistance = 0.0,
+						frontSectionName = null,
+						destinationInOutName = destination,
+						scheduledArrivalTime = 0.0,
+						isDwelling = velocity == 0.0
+					)
+				)
+			} else {
+				emptyList()
+			}
+		return DispatchObservation(
+			snapshot =
+				SimulationSnapshot.EMPTY.copy(
+					trainPositions =
+						listOf(
+							TrainPositionReading(
+								trainId = trainId,
+								velocity = velocity,
+								acceleration = 0.0,
+								totalDistance = 0.0,
+								frontSectionName = null
+							)
+						),
+					trainPerceptions = perceptions
+				),
+			unapprovedTrains = emptyList(),
+			innerBlockInputs = innerBlockInputs,
+			outerBlockInputs = outerBlockInputs
+		)
+	}
+
+	private fun blockInput(
+		towardSemaphoreName: String,
+		toSeparatorName: String?,
+		ownerTrainId: String?,
+		isApproachingThisInput: Boolean = false,
+		pathSetUpTowardThisInput: Boolean = false,
+		pathAlreadyExtendedBeyond: Boolean = false,
+		blockId: String = "blk"
+	): BlockInputObservation =
+		BlockInputObservation(
+			blockId = blockId,
+			towardSemaphoreName = towardSemaphoreName,
+			toSeparatorName = toSeparatorName,
+			state = TrackFacility.State.OCCUPIED,
+			ownerTrainId = ownerTrainId,
+			isApproachingThisInput = isApproachingThisInput,
+			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
+			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
+		)
+
+	@Test
+	@DisplayName("a qualifying input renders NEXT SECTION with quoted, field-style endpoint names")
+	fun decideAsyncRendersNextSectionWithQuotedFieldStyleEndpoints() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val obs =
+			singleActiveTrainObservation(
+				trainId = "Train #1",
+				innerBlockInputs =
+					listOf(
+						blockInput(
+							towardSemaphoreName = "doB1",
+							toSeparatorName = "doB2",
+							ownerTrainId = "Train #1",
+							isApproachingThisInput = true
+						)
+					)
+			)
+
+		runBlocking { agent.decideAsync(obs) }
+
+		coVerify {
+			aiAgent.run(match { prompt -> prompt.contains("from \"doB1\" to \"doB2\"") }, null)
+		}
+	}
+
+	@Test
+	@DisplayName("no owned input has a FREE next separator: wait wording, never \"blocked\" or \"occupied\"")
+	fun decideAsyncRendersWaitWordingWithoutBlockedOrOccupied() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val obs =
+			singleActiveTrainObservation(
+				trainId = "Train #1",
+				innerBlockInputs =
+					listOf(
+						blockInput(
+							towardSemaphoreName = "doB1",
+							toSeparatorName = null,
+							ownerTrainId = "Train #1",
+							isApproachingThisInput = true
+						)
+					)
+			)
+
+		runBlocking { agent.decideAsync(obs) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					prompt.contains("no section ahead is reservable this cycle") &&
+						!prompt.contains("blocked", ignoreCase = true) &&
+						!prompt.contains("occupied", ignoreCase = true)
+				},
+				null
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("path already extended beyond every owned input: needs-nothing wording with no route-request endpoints")
+	fun decideAsyncRendersNeedsNothingWithNoEndpointsWhenAlreadyExtended() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val obs =
+			singleActiveTrainObservation(
+				trainId = "Train #1",
+				innerBlockInputs =
+					listOf(
+						blockInput(
+							towardSemaphoreName = "doB1",
+							toSeparatorName = "doB2",
+							ownerTrainId = "Train #1",
+							isApproachingThisInput = true,
+							pathAlreadyExtendedBeyond = true
+						)
+					)
+			)
+
+		runBlocking { agent.decideAsync(obs) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					prompt.contains("route already set — needs nothing this cycle.") &&
+						!prompt.contains("NEXT SECTION") &&
+						!prompt.contains("from \"doB1\" to \"doB2\"")
+				},
+				null
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("a queued train renders an approve-only line naming zero topology names")
+	fun decideAsyncRendersQueuedTrainAsApproveOnlyWithZeroTopologyNames() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val obs =
+			DispatchObservation(
+				snapshot = SimulationSnapshot.EMPTY,
+				unapprovedTrains =
+					listOf(QueuedTrainObservation(trainId = "T9", destinationInOutName = "zZZ_no_leak")),
+				innerBlockInputs = emptyList(),
+				outerBlockInputs = emptyList()
+			)
+
+		runBlocking { agent.decideAsync(obs) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					val queuedLine = prompt.lineSequence().first { it.contains("T9") }
+					queuedLine.contains("needs approve_train only") && !queuedLine.contains("zZZ_no_leak")
+				},
+				null
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("no block id from the observation appears anywhere in the rendered train-list segment")
+	fun decideAsyncNeverRendersABlockIdInTheTrainListSegment() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val obs =
+			singleActiveTrainObservation(
+				trainId = "Train #1",
+				innerBlockInputs =
+					listOf(
+						blockInput(
+							towardSemaphoreName = "doB1",
+							toSeparatorName = "doB2",
+							ownerTrainId = "Train #1",
+							isApproachingThisInput = true,
+							blockId = "SECRET_BLOCK_ID"
+						)
+					)
+			)
+
+		runBlocking { agent.decideAsync(obs) }
+
+		coVerify {
+			aiAgent.run(match { prompt -> !prompt.contains("SECRET_BLOCK_ID") }, null)
+		}
+	}
+
+	@Test
+	@DisplayName("standing at a signal (velocity 0, signal ahead named) appends its clause before NEXT SECTION")
+	fun decideAsyncAppendsStandingAtSignalClauseBeforeNextSection() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val obs =
+			singleActiveTrainObservation(
+				trainId = "Train #1",
+				velocity = 0.0,
+				signalAheadName = "doB1",
+				innerBlockInputs =
+					listOf(
+						blockInput(
+							towardSemaphoreName = "doB1",
+							toSeparatorName = "doB2",
+							ownerTrainId = "Train #1",
+							isApproachingThisInput = true
+						)
+					)
+			)
+
+		runBlocking { agent.decideAsync(obs) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					prompt.contains(
+						"standing at signal \"doB1\" (STOP); NEXT SECTION to reserve: from \"doB1\" to \"doB2\""
+					)
+				},
+				null
+			)
+		}
+	}
 
 	@Test
 	fun `decideAsync returns empty list and calls agent run once on success`() {
@@ -242,6 +511,80 @@ class KoogDispatchAgentImplTest {
 		coVerify {
 			aiAgent.run(
 				match { prompt -> !prompt.contains("k1") && !prompt.contains("unknown section") },
+				null
+			)
+		}
+	}
+
+	// ── Issue #893 iteration 3: turn-termination affordance ────────────────────────────────
+	// Measured defect: the model never emits a final plain-text message, so cycles die of Koog
+	// iteration exhaustion. The legacy trailing boilerplate never told the model a tick has a
+	// hard end; it is replaced with a tail line that must be the LAST thing in the prompt.
+
+	@Test
+	fun `decideAsync passes a prompt with the turn-termination tail line as the very last line`() {
+		// Reminder block present (queued train "T1") -- the tail line must still land after it.
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val tailLine =
+			"When your actions for this tick are done, finish with one short plain-text sentence and " +
+				"no further tool calls."
+
+		runBlocking { agent.decideAsync(observation("T1")) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> prompt.trimEnd().endsWith(tailLine) },
+				null
+			)
+		}
+	}
+
+	@Test
+	fun `decideAsync passes a prompt with the tail line last even when no trains are queued`() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val tailLine =
+			"When your actions for this tick are done, finish with one short plain-text sentence and " +
+				"no further tool calls."
+		val emptyObservation =
+			DispatchObservation(
+				snapshot = SimulationSnapshot.EMPTY,
+				unapprovedTrains = emptyList(),
+				innerBlockInputs = emptyList(),
+				outerBlockInputs = emptyList()
+			)
+
+		runBlocking { agent.decideAsync(emptyObservation) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt -> prompt.trimEnd().endsWith(tailLine) },
+				null
+			)
+		}
+	}
+
+	@Test
+	fun `decideAsync passes a prompt that drops the legacy tool-usage boilerplate`() {
+		// "Then use the tools available to you ... Respond with plain text when finished." never
+		// told the model a tick has a hard end -- superseded by the tail line above. The
+		// switch/signal side-effect sentence between them is untouched, still locked by
+		// `decideAsync passes a prompt that does not offer a direct set-switches-or-signals action`.
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		runBlocking { agent.decideAsync(observation("T1")) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					!prompt.contains("Then use the tools available to you") &&
+						!prompt.contains("Respond with plain text when finished.")
+				},
 				null
 			)
 		}

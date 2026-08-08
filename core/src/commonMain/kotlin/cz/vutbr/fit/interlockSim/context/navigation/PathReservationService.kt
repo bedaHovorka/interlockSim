@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -84,6 +85,7 @@ interface PathReservationService {
 	 * - **NoPathExists**: No topological route exists between start and target
 	 * - **AllPathsBlocked**: Route(s) exist but all are occupied/reserved
 	 * - **Conflict**: Attempted to reserve block already owned by different train
+	 * - **NonContiguousStart**: The start separator is nowhere near the requesting train
 	 */
 	sealed class ReservationResult {
 		/**
@@ -124,10 +126,63 @@ interface PathReservationService {
 			val conflictingBlock: DynamicTrackBlock,
 			val existingOwner: String
 		) : ReservationResult()
+
+		/**
+		 * The requested `start` separator is not contiguous with the requesting train's current
+		 * authority: it bounds none of the blocks the train holds in the
+		 * [PathReservationRegistry] and none of the blocks it physically occupies.
+		 *
+		 * Reserving such a route would lock track somewhere the train is not. The train cannot
+		 * reach it, so it never occupies and never releases those blocks; every other train is
+		 * held out of them until an orphan sweeper (if any) reclaims the reservation. Observed
+		 * live on `exampleGui shuntingLoopAI 333`, where a correctly *directed* but wrongly
+		 * *placed* route stalled the whole station (Issue #893).
+		 *
+		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention and a
+		 * caller should simply retry next tick, whereas this one will never succeed while the
+		 * train stays where it is — the caller (or the LLM dispatcher behind it) has to ask for
+		 * a different origin. Collapsing the two hides a dispatcher-output defect inside a
+		 * routine-traffic counter.
+		 *
+		 * A train with **no** footprint at all (neither registered nor occupied blocks) is not
+		 * subject to this check: that is a train still waiting outside the network, whose route
+		 * legitimately starts at an entry InOut.
+		 *
+		 * ## ⚠ Half the malformation, by ruling
+		 *
+		 * That exemption is why this result covers only trains that are already **on** the
+		 * network. The other half of Issue #893 — a route requested from a mid-station Signal for
+		 * a train still **queued** for admission — has an empty footprint and passes vacuously
+		 * here. It is guarded solely at the tool layer, by
+		 * `RequestRouteTool.queuedOriginError`, which itself self-disables when that tool is
+		 * built with no InOut-name set or with no `DispatchLoopSensorPort`. Callers reaching
+		 * `reservePath` by any other route get no protection against the queued-train form.
+		 *
+		 * Tightening the vacuous arm to close it would reject every legitimate train-entry
+		 * reservation, so the split is deliberate (binding traffic-simulation-expert ruling).
+		 *
+		 * @property startName Name of the offending start separator (or its `toString()` when
+		 *   the separator carries no name).
+		 * @property reason English explanation naming the start and, when the train has a
+		 *   footprint, the separators that *would* have been legal starts.
+		 * @since Issue #893 (phase alpha, task A-R1)
+		 */
+		data class NonContiguousStart(
+			val startName: String,
+			val reason: String
+		) : ReservationResult()
 	}
 
 	/**
 	 * Find and reserve a free path from start to target separator.
+	 *
+	 * ## Contiguity precondition (Issue #893)
+	 *
+	 * [start] must be contiguous with the requesting train's current authority: it must bound
+	 * one of the blocks the train holds in the [PathReservationRegistry] or physically occupies.
+	 * A request that fails this is rejected with [ReservationResult.NonContiguousStart] before
+	 * any path finding happens — reserving elsewhere would lock track the train cannot reach.
+	 * A train with no footprint at all (still outside the network) is exempt.
 	 *
 	 * ## Algorithm
 	 *
@@ -189,6 +244,66 @@ interface PathReservationService {
 	 * @return List of blocks that were released (empty if train had no reservations)
 	 */
 	fun releasePath(trainId: String): List<DynamicTrackBlock>
+
+	/**
+	 * Whether this service currently owns at least one semaphore recorded as cleared for
+	 * [trainId] -- a proceed aspect [trainId] obtained through [reservePath] that [releasePath]
+	 * (or [resetSemaphoresForReleasedBlocks]) has not yet returned to
+	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP].
+	 *
+	 * ## Why this exists (Issue #893, task A7)
+	 *
+	 * [releasePath] resets a train's cleared signals even when it has zero blocks left to give
+	 * back -- a train can legitimately reach that state after a partial release reclaimed its
+	 * un-travelled tail (tasks A3/A4), leaving it holding no blocks but still governed by an
+	 * earlier cleared START signal. [releasePath]'s own return value (the released block list)
+	 * cannot report that: the signal-clearing side effect and the block list are independent.
+	 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.releaseRoute] calls this
+	 * BEFORE [releasePath] -- which purges the bookkeeping this reads as part of its own reset --
+	 * so a signals-only release can be reported truthfully instead of being masked as "nothing
+	 * happened".
+	 *
+	 * @param trainId The train to check.
+	 * @return `true` if this service currently owns at least one cleared semaphore for [trainId].
+	 * @since Issue #893 (phase alpha, task A7)
+	 */
+	fun hasClearedSignals(trainId: String): Boolean
+
+	/**
+	 * Record that [semaphore] now shows a proceed aspect on [trainId]'s behalf via an EXTERNAL
+	 * clearing path -- i.e. a caller outside this service's own [reservePath] wrote the aspect
+	 * directly -- so [releasePath], [hasClearedSignals], and [resetSemaphoresForReleasedBlocks]
+	 * see it exactly as though [reservePath] itself had cleared it.
+	 *
+	 * ## Why this exists (Issue #893, task A6 -- G6 single signal ledger)
+	 *
+	 * Before this method, only [reservePath]'s own internal recording populated this service's
+	 * cleared-signal ledger. Any OTHER code path that lit a semaphore directly --
+	 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade]'s block-list form of
+	 * `requestRoute` chief among them -- left this service's ledger blind to it, so a release
+	 * routed through this service (the `OrphanReservationSweeper`, via
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRoute]) never reset a
+	 * facade-granted entry signal: it stayed lit forever after a sweep. This method closes that
+	 * hole by giving external callers a SUPPORTED way to register their write with the single
+	 * ledger this service already maintains, instead of each caller inventing its own parallel
+	 * bookkeeping.
+	 *
+	 * Delegates to the exact same recording [reservePath] uses internally, so the "is it
+	 * actually lit as a result of this call?" filter and last-writer-wins ownership semantics
+	 * are IDENTICAL: a write that leaves [semaphore] at
+	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP] (or a constant semaphore's no-op
+	 * write) records nothing, and a semaphore already owned by a different train under this
+	 * service is simply reassigned to [trainId] (mirroring [PathReservationRegistry.blockToTrain]'s
+	 * last-writer-wins semantics elsewhere in this service).
+	 *
+	 * @param trainId The train the write was made on behalf of.
+	 * @param semaphore The semaphore that was just written by the external caller.
+	 * @since Issue #893 (phase alpha, task A6)
+	 */
+	fun recordExternalClearedSemaphore(
+		trainId: String,
+		semaphore: DynamicRailSemaphore
+	)
 
 	/**
 	 * Emit [BlockEvent.ReservationConflictDetected] for every blocked-path contention
@@ -500,6 +615,17 @@ interface PathReservationService {
 	 * This is called automatically when a train's Tail leaves a block, ensuring
 	 * blocks are cleaned up as soon as they become available for subsequent trains.
 	 *
+	 * On a successful release this also calls [resetSemaphoresForReleasedBlocks] for the single
+	 * released [block], returning any semaphore this service recorded as cleared for [trainId] and
+	 * governing it back to [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP]. This is the
+	 * bookkeeping safety net for the tail-clearance path: head passage
+	 * ([cz.vutbr.fit.interlockSim.sim.Train]'s `semaphoreAction`) already drops the aspect a train
+	 * physically read on the way through, but does not purge this service's `clearedSemaphores` /
+	 * `semaphoreClearedFor` bookkeeping, and cannot reach a governing semaphore the front never
+	 * read. Safe by construction for this per-block call site: every boundary of a released block
+	 * is behind the train's head by definition, so the reset can never drop a signal the train
+	 * still needs ahead of it.
+	 *
 	 * ## Use Case
 	 *
 	 * Called by Train's Tail process after calling block.leave():
@@ -511,11 +637,69 @@ interface PathReservationService {
 	 * @param trainId The train identifier
 	 * @param block The block to unregister
 	 * @return true if block was unregistered, false if block is still occupied or not owned
+	 * @since Issue #893 (phase alpha, task A4) -- added the [resetSemaphoresForReleasedBlocks] call
 	 */
 	fun unregisterBlock(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean
+
+	/**
+	 * Reset (to [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP]) every semaphore this service
+	 * recorded as cleared for [trainId] that governs one of [blocks]: a semaphore that is an
+	 * `ends()` member of the block, the block's `reservedFrom` when that is itself a semaphore, or
+	 * the `inSemaphore` of an InOut that is either an `ends()` member of the block or the block's
+	 * `reservedFrom`.
+	 *
+	 * ## Why more than one source
+	 *
+	 * `reservePath`'s atomic reservation step sets every reserved block's `reservedFrom` to the
+	 * ROUTE-START separator, not to the separator locally adjacent to that particular block. So for
+	 * a multi-block route, only the first block's `reservedFrom` is genuinely next to it -- every
+	 * later block's `reservedFrom` still points at the far-away start:
+	 * - The `ends()` source recovers the correct INTERMEDIATE semaphore for those later blocks: it
+	 *   is a structural property of the block (the separators that bound it), so it is always
+	 *   genuinely adjacent, regardless of the `reservedFrom` behaviour above.
+	 * - The `reservedFrom` source recovers the START separator itself -- including the InOut case,
+	 *   where every block in the route (again due to the behaviour above) still carries the route's
+	 *   origin InOut in `reservedFrom`, letting a release reach that InOut's `inSemaphore` even when
+	 *   the InOut itself borders only the very first block (typically the one still retained and
+	 *   occupied, not part of what is being released).
+	 *
+	 * ## Ownership
+	 *
+	 * Reuses the same last-writer-wins ownership tracking as [releasePath]/[unregister]: a semaphore
+	 * since re-cleared for a different train is left alone.
+	 *
+	 * ## Use Case
+	 *
+	 * A dispatcher reclaiming the un-travelled tail of a stalled reservation: after freeing the
+	 * tail's blocks (`cancelPathSetup` + [unregisterBlock]), call this once over those blocks so no
+	 * released block is left reachable through a signal still showing proceed.
+	 *
+	 * ## Proven-safe scope
+	 *
+	 * This is proven safe for **suffix / rearmost releases on a non-revisiting route**: the
+	 * un-travelled tail of a route the train will never traverse again. It is NOT proven safe for
+	 * an arbitrary mid-route subset of [blocks] -- the semaphore governing a released block can also
+	 * be the one a DIFFERENT, still-reserved downstream block on the same route depends on (e.g. an
+	 * intermediate boundary shared with a block further along the route that remains reserved). A
+	 * route that loops back and becomes adjacent to a released block again has the same exposure:
+	 * the semaphore this call resets may be the one that governs re-entry into the loop.
+	 *
+	 * The failure direction is always fail-safe, never fail-unsafe:
+	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP] authorises nothing, so the worst outcome
+	 * of an over-eager reset outside the proven-safe scope above is a train stalled behind a signal
+	 * it still needed -- never a train permitted to move where it should not be.
+	 *
+	 * @param trainId The train the released [blocks] belonged to.
+	 * @param blocks The blocks being released -- a full route, or an un-travelled tail of one.
+	 * @since Issue #893 (phase alpha, task A3)
+	 */
+	fun resetSemaphoresForReleasedBlocks(
+		trainId: String,
+		blocks: Collection<DynamicTrackBlock>
+	)
 
 	/**
 	 * Subscribe an external agent to block occupancy/release events.

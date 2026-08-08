@@ -15,6 +15,7 @@ import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
@@ -53,7 +54,7 @@ import org.koin.core.context.stopKoin
  *
  * [KoogRealOllamaToolCallingTest] drives real Ollama, but with **hand-written prompts and fake
  * tools**. Every defect PR #891 round 2 fixed lives in the production system prompt
- * ([KoogAgentFactory.DEFAULT_SYSTEM_PROMPT] plus [StationTopologySerializer.toPromptText]) and in
+ * ([KoogAgentFactory.buildSystemPrompt] plus [StationTopologySerializer.toPromptText]) and in
  * the four real actuator tools, so none of it was covered end to end. The offline tests assert the
  * prompt *text*; only a live model can show whether the text works.
  *
@@ -114,9 +115,10 @@ import org.koin.core.context.stopKoin
  *
  * The `"T1"` revert stays undetected for a quantitative reason: round 2's poisoning accumulated
  * over hundreds of cycles of a 600 s run, and six cycles against a prompt that now also names real
- * ids every cycle is not enough for the literal to win. The offline guard in [KoogAgentFactoryTest]
- * — which asserts the system prompt contains no concrete train name — is the load-bearing
- * regression test for that fix, and it is deterministic.
+ * ids every cycle is not enough for the literal to win. The offline guard in
+ * [StationTopologySerializerTest.promptCarriesNoCopyableTrainName] — which asserts the topology
+ * prompt block contains no concrete train name — is the load-bearing regression test for that
+ * fix, and it is deterministic.
  *
  * ## The standing rule for this file
  *
@@ -256,13 +258,15 @@ class KoogRealPromptOllamaTest {
 			modelName: String,
 			tools: List<DomainTool>,
 			systemPrompt: String?,
-			cycleHistory: CycleHistory
+			cycleHistory: CycleHistory,
+			outcomeFeed: AppliedOutcomeFeed?
 		): KoogDispatchAgent =
 			delegate.createDispatchAgent(
 				modelName = modelName,
 				tools = tools.map { RecordingTool(it, recorder) },
 				systemPrompt = systemPrompt,
-				cycleHistory = cycleHistory
+				cycleHistory = cycleHistory,
+				outcomeFeed = outcomeFeed
 			)
 	}
 

@@ -385,6 +385,39 @@ class DefaultNetworkActuatorPortTest {
 			assertThat((result as RouteRequestResult.AllPathsBlocked).attemptedPaths).isEqualTo(0)
 		}
 
+		/**
+		 * Task A-R1b (Issue #893): the facade branch must not collapse EVERY denial to
+		 * `AllPathsBlocked(0)` -- a denial the kernel specifically flagged as
+		 * `originNotContiguous` (mapped from
+		 * `PathReservationService.ReservationResult.NonContiguousStart` by
+		 * `DefaultInterlockingFacade.requestRouteByEndpoints`) must surface as
+		 * `RouteRequestResult.OriginNotContiguous`, reason preserved verbatim, exactly as the
+		 * legacy/no-facade branch already does. Before this fix `DefaultNetworkActuatorPort`
+		 * ignored the discriminant entirely and this always produced `AllPathsBlocked(0)`.
+		 */
+		@Test
+		@DisplayName(
+			"Denied response with originNotContiguous=true maps to RouteRequestResult.OriginNotContiguous, " +
+				"reason preserved"
+		)
+		fun deniedWithNonContiguousOriginMapsToOriginNotContiguous() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val facade = mockk<InterlockingFacade>()
+			val reason = "T1 holds no block bounded by 'A'; legal origins: X, Y"
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied(reason, originNotContiguous = true)
+
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.OriginNotContiguous>()
+			result as RouteRequestResult.OriginNotContiguous
+			assertThat(result.fromEndpointName).isEqualTo("A")
+			assertThat(result.reason).isEqualTo(reason)
+		}
+
 		@Test
 		@DisplayName("unknown endpoint throws IllegalArgumentException even when facade is wired")
 		fun unknownEndpointThrowsWithFacade() {
@@ -449,14 +482,82 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("returns false when no blocks were released")
+		@DisplayName("returns false when no blocks were released and no signal was cleared")
 		fun falseWhenNothingReleased() {
 			val svc = mockk<PathReservationService>(relaxed = true)
 			every { svc.releasePath("T99") } returns emptyList()
+			every { svc.hasClearedSignals("T99") } returns false
 
 			val p = port(reservationService = svc)
 
 			assertThat(p.releaseRoute("T99")).isFalse()
+		}
+
+		/**
+		 * Issue #893 task A7 (G7): `DefaultPathReservationService.releasePath` resets a train's
+		 * cleared signals even when it has zero blocks left to give back (reachable after a
+		 * partial release reclaimed the train's un-travelled tail, tasks A3/A4). Before this fix,
+		 * `releaseRoute` reported `false` here despite the signal genuinely being reset --
+		 * `OrphanReservationSweeper` never counted the reclaim and retried the same owner every
+		 * sweep. Per the binding traffic-simulation-expert R5 ruling, `releaseRoute` means "the
+		 * train's route state is now clear": `true` whenever blocks OR signals were released.
+		 */
+		@Test
+		@DisplayName("returns true when only a signal was cleared, even with zero blocks released")
+		fun trueWhenOnlySignalCleared() {
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePath("T50") } returns emptyList()
+			every { svc.hasClearedSignals("T50") } returns true
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRoute("T50")).isTrue()
+		}
+
+		/**
+		 * `hasClearedSignals` is read BEFORE `releasePath` is called, since `releasePath` purges
+		 * that very bookkeeping as part of resetting the signal (see
+		 * `PathReservationService.hasClearedSignals` KDoc). A stub that only returns `true` when
+		 * queried while the train's registered blocks are still intact catches an implementation
+		 * that accidentally reordered the two calls.
+		 */
+		@Test
+		@DisplayName("hasClearedSignals is queried before releasePath purges its bookkeeping")
+		fun hasClearedSignalsQueriedBeforeReleasePath() {
+			var released = false
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.hasClearedSignals("T51") } answers { !released }
+			every { svc.releasePath("T51") } answers {
+				released = true
+				emptyList()
+			}
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRoute("T51")).isTrue()
+		}
+
+		/**
+		 * Deliberate scope boundary of task A7 (G7): a train that holds neither a block nor a
+		 * cleared signal still reports `false`. This is NOT a "genuine failure" masked as one --
+		 * it is the case `DispatchDecisionApplier` surfaces to the LLM dispatcher as a distinct
+		 * `NO_RESERVATION` outcome (see `AppliedOutcomeChannelSp2c17Test.releaseRouteNoReservationRendered`
+		 * in `:dispatcher-agent`), which collapsing into the same `true` as a genuine release would
+		 * erase for no gain: `OrphanReservationSweeper` never calls `releaseRoute` for a train with
+		 * zero footprint in the first place (it only visits owners the snapshot already shows
+		 * holding a block), so widening `true` to this case fixes no reachable defect and would
+		 * only remove a working diagnostic signal.
+		 */
+		@Test
+		@DisplayName("stays false (not forced idempotent-true) when neither blocks nor a signal existed")
+		fun falseWhenNeitherBlocksNorSignalExisted() {
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePath("T52") } returns emptyList()
+			every { svc.hasClearedSignals("T52") } returns false
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRoute("T52")).isFalse()
 		}
 	}
 
@@ -562,6 +663,62 @@ class DefaultNetworkActuatorPortTest {
 
 			assertThat(p.setSignalAspect("zA", Signal.S40)).isTrue()
 			assertThat(sem.signal).isEqualTo(Signal.S40)
+		}
+
+		/**
+		 * G5 attribution slice (Issue #893, task A6): the plain 2-arg [DefaultNetworkActuatorPort.setSignalAspect]
+		 * stays untracked (no trainId to attribute the write to) -- only the attributed 3-arg
+		 * overload records the write with [PathReservationService.recordExternalClearedSemaphore],
+		 * closing the tracking-contract hole a naive write would otherwise leave for any future
+		 * caller. [svc] mirrors just enough of `DefaultPathReservationService`'s cleared-signal
+		 * ledger to prove the round trip end-to-end: the attributed write must be reset by a
+		 * later [DefaultNetworkActuatorPort.releaseRoute] for the same train.
+		 */
+		@Test
+		@DisplayName("attributed overload records the write so releaseRoute(trainName) resets it")
+		fun attributedWriteIsResetByReleaseRoute() {
+			val sem = realDynamicSemaphore("zA", Signal.STOP)
+			val cleared = mutableMapOf<String, MutableSet<DynamicRailSemaphore>>()
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.recordExternalClearedSemaphore(any(), any()) } answers {
+				val trainId = firstArg<String>()
+				val s = secondArg<DynamicRailSemaphore>()
+				if (s.signal.isAllowing()) cleared.getOrPut(trainId) { mutableSetOf() }.add(s)
+			}
+			every { svc.hasClearedSignals(any()) } answers { cleared[firstArg<String>()]?.isNotEmpty() == true }
+			every { svc.releasePath(any()) } answers {
+				cleared.remove(firstArg<String>())?.forEach { it.signal = Signal.STOP }
+				emptyList()
+			}
+			val p = port(cells = mapOf((0 to 0) to sem), reservationService = svc)
+
+			val writeResult = p.setSignalAspect("zA", Signal.FREE, trainName = "T1")
+
+			assertThat(writeResult).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
+
+			val releaseResult = p.releaseRoute("T1")
+
+			assertThat(releaseResult).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		@DisplayName("plain (unattributed) write is not reset by a later releaseRoute for any train")
+		fun unattributedWriteIsNotTrackedByReleaseRoute() {
+			val sem = realDynamicSemaphore("zA", Signal.STOP)
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.hasClearedSignals(any()) } returns false
+			every { svc.releasePath(any()) } returns emptyList()
+			val p = port(cells = mapOf((0 to 0) to sem), reservationService = svc)
+
+			assertThat(p.setSignalAspect("zA", Signal.FREE)).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
+
+			// No trainId was ever attributed, so no release call can know to reset it.
+			p.releaseRoute("T1")
+
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
 		}
 	}
 }

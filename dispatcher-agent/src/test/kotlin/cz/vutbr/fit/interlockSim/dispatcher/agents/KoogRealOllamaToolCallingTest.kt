@@ -331,6 +331,41 @@ class KoogRealOllamaToolCallingTest {
 	 *
 	 * Deliberately tolerant: it does not require the correction to be immediate, nor that the model
 	 * stops retrying, only that the token is reached at all.
+	 *
+	 * ## Issue #893 iterations 2/3 broke this test's setup, not its premise
+	 *
+	 * Commits 8a289d66 (iteration 2) and 6f258fb5 (iteration 3) taught the dispatcher a new,
+	 * deliberate policy: do not retry a call rejected **twice** in the same tick; end the tick with
+	 * a short plain-text reply instead. [KoogDispatchAgentImpl.buildUserPrompt] enforces the "end
+	 * the tick" half unconditionally on every cycle — its last line changed from "...then use the
+	 * tools available to you to reserve routes, release routes, or approve queued trains as needed
+	 * ... Respond with plain text when finished" (an invitation to act) to "When your actions for
+	 * this tick are done, finish with one short plain-text sentence and no further tool calls." (a
+	 * termination instruction with no mention of acting at all) — and that line is unconditionally
+	 * the closest-to-generation text the model reads, regardless of what a caller's own
+	 * `systemPrompt` says. This test drives [KoogDispatchAgentImpl] straight from
+	 * [DefaultAgentService] and therefore cannot avoid that per-cycle renderer.
+	 *
+	 * Combined with the "Active (approved) trains right now: 0 / N" / "Queued (unapproved) trains:
+	 * 0" framing this test's empty [DispatchObservation] produces (there is genuinely nothing to
+	 * report), the model stopped calling `reserve_point` at all — reproduced deterministically
+	 * across two consecutive live runs before this fix (zero `KoogToolAdapter` invocations logged
+	 * either time; `tool.requestedPoints` was empty). That is a setup problem, not evidence against
+	 * the transport claim: the experiment cannot observe transport if the tool is never called in
+	 * the first place. The fix is the `systemPrompt` below telling the model explicitly that a
+	 * plain-text reply with no call at all is not acceptable this turn — restoring the original
+	 * single mandatory `reserve_point` call the experiment depends on.
+	 *
+	 * Once that first call happens, the in-turn correction this test asserts on is exactly what it
+	 * was before #893: stable across 6 consecutive live runs during this fix. That is consistent
+	 * with, not contradicted by, the new "stop after two rejections" rule — this tool rejects only
+	 * the *first* call and accepts the second, so the two-strikes threshold the new policy targets
+	 * is never reached here. A tolerant alternative (accept the token in the model's final
+	 * plain-text reply as proof of transport, in case a future model chooses not to retry after a
+	 * single rejection) was considered but is not implementable without touching production code:
+	 * [KoogDispatchAgent.decideAsync] returns only `List<DispatchDecision>` (always empty by
+	 * design, see its KDoc) — the final reply text is logged at DEBUG by [KoogDispatchAgentImpl]
+	 * but never returned to a caller.
 	 */
 	@Test
 	@Tag("ollama-test")
@@ -341,10 +376,11 @@ class KoogRealOllamaToolCallingTest {
 
 		// Names no point at all: the model must obtain one from the tool's error message.
 		val systemPrompt =
-			"You are a railway dispatcher test harness. Reserve a track point by calling the " +
-				"reserve_point tool. If a call comes back with an error, read the error text, take " +
-				"the point name it says is valid, and call reserve_point again with that name. " +
-				"Stop once a call succeeds."
+			"You are a railway dispatcher test harness. You must call the reserve_point tool at " +
+				"least once this turn before replying, even if nothing else is going on — a plain-text " +
+				"reply with no tool call at all is not acceptable. If a call comes back with an error, " +
+				"read the error text, take the point name it says is valid, and call reserve_point " +
+				"again with that name. Stop once a call succeeds."
 
 		runBlocking {
 			withTimeout(testTimeoutMillis) {
@@ -422,22 +458,62 @@ class KoogRealOllamaToolCallingTest {
 	 * transient sensor failure would abort the whole dispatch cycle and trip the rule-based
 	 * fallback.
 	 *
-	 * Would fail if `KoogToolAdapter` started rethrowing `ToolResult.Error` instead of marshalling
-	 * it into a tool result.
+	 * ## Issue #893 iterations 2/3: the follow-up call is dropped, not the error-surfacing claim
+	 *
+	 * The original `systemPrompt` demanded two chained calls: "First call all_block_occupancies
+	 * ..., then, regardless of its result, call request_route ...". Commits 8a289d66/6f258fb5 (see
+	 * the KDoc on `a rejected tool argument is corrected on a later call` above for the mechanism)
+	 * made [KoogDispatchAgentImpl.buildUserPrompt]'s last line an unconditional "finish with one
+	 * short plain-text sentence and no further tool calls" instead of the old "...then use the
+	 * tools available to you ... as needed" reminder. Against that, and against this test's queued
+	 * train whose built-in line says it "needs approve_train only" — a tool this test's registry
+	 * does not even contain — the model stopped calling `all_block_occupancies` at all and jumped
+	 * straight to `request_route`: reproduced deterministically across two consecutive live runs
+	 * before this fix (`KoogToolAdapter` logged exactly one call, to `request_route`; `failureCount`
+	 * stayed 0, failing the `isGreaterThanOrEqualTo(1)` assertion below both times).
+	 *
+	 * The fix relaxes exactly the follow-up demand — this test's claim was never that a *second*
+	 * tool call survives the first one's error, only that the first one's error does not propagate
+	 * out of `decideAsync` — and makes the remaining, single call mandatory instead, the same
+	 * pattern used for the sibling test above. Stable across 3 consecutive live runs during this
+	 * fix (revert-probe: restoring the original two-call `systemPrompt` reproduces `failureCount ==
+	 * 0` again, as it did in the pre-fix baseline runs referenced above).
+	 *
+	 * ## Koog itself, not just `KoogToolAdapter`, already guards against an aborted cycle
+	 *
+	 * This test's original "Would fail if ..." claim was checked directly with a temporary
+	 * revert-probe (not part of the committed test): making [AlwaysFailingTool.execute] `throw
+	 * RuntimeException(...)` instead of returning [ToolResult.Error] — the scenario the claim says
+	 * should abort the cycle. It did not: `ai.koog.agents.core.tools.Tool.execute` (`Tool.kt:65`,
+	 * inside the `ai.koog` dependency, not this codebase) already wraps every tool invocation and
+	 * turns *any* thrown exception into a tool-error result, logging
+	 * `"Tool with name '...' failed to execute with arguments: ..."` via `GraphAIAgent` and
+	 * continuing the cycle regardless of what `KoogToolAdapter` does. So `KoogToolAdapter`'s own
+	 * `ToolException.ValidationFailure` marshalling (see its KDoc) is defense-in-depth, not the last
+	 * line of defense the original claim described — Koog's own tool-execution node already never
+	 * lets a tool exception reach `decideAsync`. What this test can still, and does, discriminate on
+	 * is (a) the historical regression above — the failing tool never being invoked at all, so no
+	 * error ever reaches the model to surface in the first place — and (b) `decideAsync` throwing
+	 * for a reason Koog's tool-execution wrapper does not cover (e.g. a genuine agent-level failure,
+	 * or [testTimeoutMillis] firing), which is left uncaught here and would fail this test.
 	 */
 	@Test
 	@Tag("ollama-test")
 	fun `a failing tool does not abort the dispatch cycle`() {
 		val failureCount = AtomicInteger(0)
 		val failingTool = AlwaysFailingTool("all_block_occupancies", failureCount)
+		// Present but, after the #893 fix above, no longer required to be called — see this test's
+		// KDoc for why the follow-up demand was dropped. Kept so the tool registry still mixes a
+		// failing tool with a healthy one, matching the original test shape.
 		val requestRouteTool = FakeRequestRouteTool()
 		val config = OllamaExecutorConfig.forLocalTesting()
 		val service = DefaultAgentService(OllamaSimpleExecutor(config), config)
 
 		val systemPrompt =
-			"You are a railway dispatcher test harness. First call all_block_occupancies to read " +
-				"the network. Then, regardless of its result, call request_route with " +
-				"train_name=T1, from_point=A, to_point=B, and reply with one short sentence."
+			"You are a railway dispatcher test harness. You must call the all_block_occupancies " +
+				"tool at least once this turn before replying, regardless of what it returns — a " +
+				"plain-text reply with no tool call at all is not acceptable. Once you have its " +
+				"result (or its error), reply with one short sentence."
 
 		val decisions =
 			runBlocking {
