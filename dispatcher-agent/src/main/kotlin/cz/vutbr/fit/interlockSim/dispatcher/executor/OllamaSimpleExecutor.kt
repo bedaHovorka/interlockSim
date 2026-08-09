@@ -61,18 +61,6 @@ class OllamaSimpleExecutor(
 	}
 
 	/**
-	 * Tracks whether [promptExecutor] has been built, so [close] doesn't itself trigger lazy
-	 * initialization of a network connection just to immediately tear it down. `by lazy`
-	 * delegated properties don't expose `KProperty0.isInitialized` (that reflection facility
-	 * is `lateinit`-only), so this flag is tracked explicitly. `@Volatile` for visibility
-	 * across threads; set only after [promptExecutor]'s initializer completes successfully, so a
-	 * failed construction leaves it `false` and a retry is possible on the next [getExecutor]
-	 * call.
-	 */
-	@Volatile
-	private var executorInitialized = false
-
-	/**
 	 * Set to `true` by the first [close] call, after which [getExecutor] rejects with
 	 * [IllegalStateException]. [close] is terminal: a closed executor is not re-opened.
 	 * `@Volatile` for visibility across threads; read by [getExecutor] before returning the
@@ -94,39 +82,45 @@ class OllamaSimpleExecutor(
 	 *
 	 * The executor is a heavyweight stateful resource (network connection); creating it once
 	 * per application and reusing it across all agents minimizes overhead.
+	 *
+	 * Held as an explicit [Lazy] (rather than only as a `by lazy` delegated property) so [close]
+	 * can query [Lazy.isInitialized] directly instead of tracking a separate flag: `Lazy<T>`
+	 * exposes `isInitialized()` as a real member — backed by a `@Volatile` field internally, so
+	 * it is already visibility-safe across threads — it is only the unrelated
+	 * `KProperty0.isInitialized()` reflection extension that is `lateinit`-only.
 	 */
-	private val promptExecutor: PromptExecutor by lazy {
-		logger.debug {
-			"Creating Ollama executor: endpoint=${config.ollamaEndpoint}, model=${config.modelName}, " +
-				"contextWindowTokens=${config.contextWindowTokens}"
+	private val promptExecutorLazy: Lazy<PromptExecutor> =
+		lazy {
+			logger.debug {
+				"Creating Ollama executor: endpoint=${config.ollamaEndpoint}, model=${config.modelName}, " +
+					"contextWindowTokens=${config.contextWindowTokens}"
+			}
+
+			// Warn once at startup about any no-op settings a maintainer may have tuned expecting an
+			// effect (maxTokens/topP are not forwarded to Ollama under Koog 1.1.1 — see
+			// OllamaExecutorConfig.noOpSettingWarnings). Singleton-scoped, so this fires exactly once
+			// per application.
+			config.noOpSettingWarnings().forEach { logger.warn { it } }
+
+			// Validate that the model is tool-capable before constructing the executor
+			config.validateToolCapableModel()
+
+			// SP2b.9: request a Fixed context window rather than Koog's default (None), which never
+			// sends `num_ctx` at all and leaves Ollama defaulting to a 2048-token window — too small
+			// to hold the static station topology loaded into the system prompt (see
+			// OllamaExecutorConfig.contextWindowTokens KDoc for the full rationale).
+			val client =
+				OllamaClient(
+					baseUrl = config.ollamaEndpoint,
+					contextWindowStrategy = ContextWindowStrategy.Companion.Fixed(config.contextWindowTokens)
+				)
+			// Fold tool results into named, error-flagged user text before they reach the transport.
+			// They do reach the model without this, but Ollama's message DTO carries no tool_name and
+			// no is_error field, so the model cannot tell which of the four actuators answered or
+			// whether it was rejected. See ToolResultInliningPromptExecutor's KDoc.
+			ToolResultInliningPromptExecutor(MultiLLMPromptExecutor(LLMProvider.Ollama to client))
 		}
-
-		// Warn once at startup about any no-op settings a maintainer may have tuned expecting an
-		// effect (maxTokens/topP are not forwarded to Ollama under Koog 1.1.1 — see
-		// OllamaExecutorConfig.noOpSettingWarnings). Singleton-scoped, so this fires exactly once
-		// per application.
-		config.noOpSettingWarnings().forEach { logger.warn { it } }
-
-		// Validate that the model is tool-capable before constructing the executor
-		config.validateToolCapableModel()
-
-		// SP2b.9: request a Fixed context window rather than Koog's default (None), which never
-		// sends `num_ctx` at all and leaves Ollama defaulting to a 2048-token window — too small
-		// to hold the static station topology loaded into the system prompt (see
-		// OllamaExecutorConfig.contextWindowTokens KDoc for the full rationale).
-		val client =
-			OllamaClient(
-				baseUrl = config.ollamaEndpoint,
-				contextWindowStrategy = ContextWindowStrategy.Companion.Fixed(config.contextWindowTokens)
-			)
-		// Fold tool results into named, error-flagged user text before they reach the transport.
-		// They do reach the model without this, but Ollama's message DTO carries no tool_name and
-		// no is_error field, so the model cannot tell which of the four actuators answered or
-		// whether it was rejected. See ToolResultInliningPromptExecutor's KDoc.
-		val result = ToolResultInliningPromptExecutor(MultiLLMPromptExecutor(LLMProvider.Ollama to client))
-		executorInitialized = true // set only after construction succeeds
-		result
-	}
+	private val promptExecutor: PromptExecutor by promptExecutorLazy
 
 	/**
 	 * Get the Koog prompt executor for LLM-based agent decisions.
@@ -191,7 +185,7 @@ class OllamaSimpleExecutor(
 		closed = true
 		// Only close if the executor has actually been built — avoids triggering the network
 		// connection just to immediately tear it down.
-		if (executorInitialized) {
+		if (promptExecutorLazy.isInitialized()) {
 			logger.debug { "Closing Ollama executor" }
 			try {
 				promptExecutor.close()
