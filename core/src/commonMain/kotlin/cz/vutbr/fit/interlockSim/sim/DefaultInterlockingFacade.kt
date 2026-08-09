@@ -219,6 +219,10 @@ class DefaultInterlockingFacade(
 			"requestRouteByEndpoints: trainId=$trainId, $fromEndpointName → $toEndpointName"
 		}
 
+		// No reservation is attempted for an unresolvable endpoint, so there is no candidate-path
+		// count and no owning train to report: these two denials keep the default residual cause
+		// (DenialCause.Other). Classifying them as contention would invent a count that does not
+		// exist and tell the caller to retry a request that can never succeed (Issue #834).
 		val fromEndpoint =
 			resolveEndpoint(fromEndpointName)
 				?: return InterlockingFacade.RouteResponse.Denied(
@@ -262,7 +266,8 @@ class DefaultInterlockingFacade(
 						"$fromEndpointName → $toEndpointName"
 				}
 				InterlockingFacade.RouteResponse.Denied(
-					"No path exists: $fromEndpointName → $toEndpointName"
+					"No path exists: $fromEndpointName → $toEndpointName",
+					InterlockingFacade.RouteResponse.DenialCause.NoPath
 				)
 			}
 			is PathReservationService.ReservationResult.AllPathsBlocked -> {
@@ -272,7 +277,12 @@ class DefaultInterlockingFacade(
 				}
 				InterlockingFacade.RouteResponse.Denied(
 					"All paths blocked ($fromEndpointName → $toEndpointName, " +
-						"attempts: ${result.attemptedPaths})"
+						"attempts: ${result.attemptedPaths})",
+					// The same count that is formatted into the reason above, now also carried
+					// machine-readably: before Issue #834 task alpha-7a the facade branch of
+					// DefaultNetworkActuatorPort reported attemptedPaths=0 for every denial,
+					// contradicting RouteRequestResult.AllPathsBlocked's own contract.
+					InterlockingFacade.RouteResponse.DenialCause.AllPathsBlocked(result.attemptedPaths)
 				)
 			}
 			is PathReservationService.ReservationResult.Conflict -> {
@@ -282,19 +292,28 @@ class DefaultInterlockingFacade(
 						"(train ${result.existingOwner})"
 				}
 				InterlockingFacade.RouteResponse.Denied(
-					"Block $blockName occupied by train ${result.existingOwner}"
+					"Block $blockName occupied by train ${result.existingOwner}",
+					// The cause carries the block's REAL name (null when unnamed), not the "?"
+					// placeholder the human-readable reason substitutes, so a caller can identify
+					// the block rather than re-parse the text.
+					InterlockingFacade.RouteResponse.DenialCause.Conflict(
+						blockName = result.conflictingBlock.name,
+						existingOwner = result.existingOwner
+					)
 				)
 			}
 			is PathReservationService.ReservationResult.NonContiguousStart -> {
 				// Issue #893 (task A-R1b): the requested origin is nowhere near this train. The
 				// reason string already names the origin and the legal alternatives, so it is
-				// forwarded as-is; originNotContiguous=true lets DefaultNetworkActuatorPort map
-				// this denial to RouteRequestResult.OriginNotContiguous instead of the default
-				// AllPathsBlocked(0) collapse applied to every other denial reason.
+				// forwarded as-is; the NonContiguousStart cause lets DefaultNetworkActuatorPort
+				// map this denial to RouteRequestResult.OriginNotContiguous.
 				logger.info {
 					"Route DENIED for trainId=$trainId: non-contiguous origin ($fromEndpointName): ${result.reason}"
 				}
-				InterlockingFacade.RouteResponse.Denied(result.reason, originNotContiguous = true)
+				InterlockingFacade.RouteResponse.Denied(
+					result.reason,
+					InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart
+				)
 			}
 		}
 	}

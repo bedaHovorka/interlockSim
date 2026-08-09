@@ -18,6 +18,7 @@ import assertk.assertions.isTrue
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
@@ -35,12 +36,17 @@ import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
+import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
+import cz.vutbr.fit.interlockSim.util.Point
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.MethodSource
 import kotlin.test.assertFailsWith
 
 /**
@@ -368,21 +374,116 @@ class DefaultNetworkActuatorPortTest {
 			assertThat(result.blocksCount).isEqualTo(2)
 		}
 
+		/**
+		 * Test F-g (Issue #834, task alpha-7a) — the rewrite of the former
+		 * `deniedMapsToAllPathsBlocked`, which pinned the defect: it asserted that EVERY facade
+		 * denial became `AllPathsBlocked(0)`, i.e. that the kernel's reason was discarded and a
+		 * count that contradicts [RouteRequestResult.AllPathsBlocked]'s own contract
+		 * (`attemptedPaths` = number of candidate paths actually checked) was invented.
+		 *
+		 * Its replacement pins the **residual** case only:
+		 * [InterlockingFacade.RouteResponse.DenialCause.Other] — a denial with no reservation
+		 * outcome behind it, so no candidate-path count exists. Per invariant I5 such a denial must
+		 * never be reported as contention; it lands in [RouteRequestResult.NoRouteExists], the
+		 * permanent-refusal bucket a dispatcher must not blindly retry.
+		 */
 		@Test
-		@DisplayName("Denied response maps to RouteRequestResult.AllPathsBlocked(0)")
-		fun deniedMapsToAllPathsBlocked() {
+		@DisplayName("Denied with the residual cause (Other) maps to NoRouteExists, never AllPathsBlocked")
+		fun deniedWithResidualCauseMapsToNoRouteExists() {
 			val a = inOut("A")
 			val b = inOut("B")
 			val facade = mockk<InterlockingFacade>()
 			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
-				InterlockingFacade.RouteResponse.Denied("No path exists")
+				InterlockingFacade.RouteResponse.Denied("Unknown route endpoint: A")
+
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.NoRouteExists>()
+			result as RouteRequestResult.NoRouteExists
+			assertThat(result.fromEndpointName).isEqualTo("A")
+			assertThat(result.toEndpointName).isEqualTo("B")
+		}
+
+		/**
+		 * Test F-a (Issue #834, task alpha-7a): a kernel `NoPathExists` must reach the caller as
+		 * [RouteRequestResult.NoRouteExists] on the facade branch, exactly as it already does on
+		 * the legacy/no-facade branch. Before this fix it collapsed to `AllPathsBlocked(0)`.
+		 */
+		@Test
+		@DisplayName("Denied with DenialCause.NoPath maps to RouteRequestResult.NoRouteExists")
+		fun deniedNoPathMapsToNoRouteExists() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val facade = mockk<InterlockingFacade>()
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied(
+					"No path exists: A → B",
+					InterlockingFacade.RouteResponse.DenialCause.NoPath
+				)
+
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.NoRouteExists>()
+			result as RouteRequestResult.NoRouteExists
+			assertThat(result.fromEndpointName).isEqualTo("A")
+			assertThat(result.toEndpointName).isEqualTo("B")
+		}
+
+		/**
+		 * Test F-c (Issue #834, task alpha-7a): the real candidate-path count must survive the
+		 * facade branch. `attemptedPaths = 0` was not merely imprecise — it contradicted
+		 * [RouteRequestResult.AllPathsBlocked]'s contract and was rendered verbatim to the LLM
+		 * dispatcher as "0 path(s) attempted".
+		 */
+		@Test
+		@DisplayName("Denied with DenialCause.AllPathsBlocked(n) preserves n (never collapses to 0)")
+		fun deniedAllPathsBlockedPreservesAttemptedPaths() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val facade = mockk<InterlockingFacade>()
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied(
+					"All paths blocked (A → B, attempts: 3)",
+					InterlockingFacade.RouteResponse.DenialCause.AllPathsBlocked(3)
+				)
 
 			val result =
 				portWithFacade(inOuts = listOf(a, b), facade = facade)
 					.requestRoute("T1", "A", "B")
 
 			assertThat(result).isInstanceOf<RouteRequestResult.AllPathsBlocked>()
-			assertThat((result as RouteRequestResult.AllPathsBlocked).attemptedPaths).isEqualTo(0)
+			assertThat((result as RouteRequestResult.AllPathsBlocked).attemptedPaths).isEqualTo(3)
+		}
+
+		/**
+		 * Test F-b (Issue #834, task alpha-7a): the conflicting block and its owner must survive
+		 * the facade branch, so a dispatcher can wait for that specific train instead of retrying
+		 * blindly. Both payloads were discarded before this fix.
+		 */
+		@Test
+		@DisplayName("Denied with DenialCause.Conflict preserves block name and existing owner")
+		fun deniedConflictPreservesBlockAndOwner() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val facade = mockk<InterlockingFacade>()
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied(
+					"Block U7 occupied by train T2",
+					InterlockingFacade.RouteResponse.DenialCause.Conflict("U7", "T2")
+				)
+
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.Conflict>()
+			result as RouteRequestResult.Conflict
+			assertThat(result.blockName).isEqualTo("U7")
+			assertThat(result.existingOwner).isEqualTo("T2")
 		}
 
 		/**
@@ -454,6 +555,110 @@ class DefaultNetworkActuatorPortTest {
 
 			// Verify facade was never invoked
 			io.mockk.verify(exactly = 0) { facade.requestRouteByEndpoints(any(), any(), any()) }
+		}
+	}
+
+	// ── facade branch ≡ legacy branch (Issue #834, task alpha-7a) ───────────
+
+	/**
+	 * Test F-e (Issue #834, task alpha-7a) — the strongest single regression guard available for
+	 * this fix, and the repair of a measurement defect.
+	 *
+	 * [DefaultNetworkActuatorPort] has two branches producing [RouteRequestResult]: the facade
+	 * branch (production LLM dispatcher — `DispatcherAgentModule` always supplies an
+	 * [InterlockingFacade]) and the legacy/no-facade branch (`:fast-sim`, the rule-based
+	 * `SynchronousDispatcherWiring` baseline, and tests without Koin DI). They classified the same
+	 * kernel outcome differently: the legacy branch mapped all four
+	 * [PathReservationService.ReservationResult] failures faithfully, while the facade branch
+	 * collapsed everything except `NonContiguousStart` into `AllPathsBlocked(0)`. The #847 sweep
+	 * therefore compared `ALL_PATHS_BLOCKED` counts produced by two different classifiers.
+	 *
+	 * This property pins the repair: **identical [PathReservationService.ReservationResult] ⇒
+	 * identical [RouteRequestResult]**, on every subtype of the sealed hierarchy — with
+	 * [providerCoversEveryReservationResultSubtype] guaranteeing the parameter list stays
+	 * exhaustive if a subtype is ever added.
+	 */
+	@Nested
+	@DisplayName("facade branch and legacy branch agree (Issue #834, task alpha-7a)")
+	inner class FacadeLegacyEquivalence {
+		/**
+		 * Runs the identical request down both branches of [DefaultNetworkActuatorPort] against
+		 * the same stubbed [PathReservationService], and returns `legacy to viaFacade`.
+		 *
+		 * The facade is a **real** [DefaultInterlockingFacade] (not a mock): the whole point is
+		 * that the kernel's own translation of a [PathReservationService.ReservationResult] into a
+		 * [InterlockingFacade.RouteResponse] preserves everything the legacy branch reads directly.
+		 */
+		private fun bothBranches(
+			reservation: PathReservationService.ReservationResult
+		): Pair<RouteRequestResult, RouteRequestResult> {
+			val a = inOut("A")
+			val b = inOut("B")
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.reservePath(any(), any(), any(), any()) } returns reservation
+
+			val (e, _) = env(inOuts = listOf(a, b), reservationService = svc)
+			val graph = mockk<ExtendedUnorientedGraph<Point, DynamicTrackBlock, Cell.Segment>>(relaxed = true)
+			every { graph.values() } returns emptyList()
+			every { e.getGraph() } returns graph
+
+			val legacy = DefaultNetworkActuatorPort(e, svc).requestRoute("T1", "A", "B")
+			val facade = DefaultInterlockingFacade(e, PathReservationRegistry(mockk(relaxed = true)))
+			val viaFacade =
+				DefaultNetworkActuatorPort(e, svc, facade).requestRoute("T1", "A", "B")
+			return legacy to viaFacade
+		}
+
+		@ParameterizedTest(name = "{0}")
+		@MethodSource("cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPortTest#reservationResults")
+		@DisplayName("same ReservationResult yields the same RouteRequestResult on both branches")
+		fun branchesAgree(reservation: PathReservationService.ReservationResult) {
+			val (legacy, viaFacade) = bothBranches(reservation)
+
+			assertThat(viaFacade).isEqualTo(legacy)
+		}
+
+		/**
+		 * Guards [reservationResults] against silently going stale: a new
+		 * [PathReservationService.ReservationResult] subtype must be added to the provider, or
+		 * [branchesAgree] would stop covering it while still passing.
+		 */
+		@Test
+		@DisplayName("the equivalence provider covers every ReservationResult subtype")
+		fun providerCoversEveryReservationResultSubtype() {
+			val covered = reservationResults().map { it::class }.toSet()
+
+			assertThat(covered).isEqualTo(PathReservationService.ReservationResult::class.sealedSubclasses.toSet())
+		}
+
+		/**
+		 * Test F-f (Issue #834, task alpha-7a): a denial with **no reservation behind it**.
+		 *
+		 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade.requestRouteByEndpoints] denies
+		 * an unresolvable endpoint name before it ever calls `reservePath`, so no candidate-path
+		 * count exists. Per invariant I5 that denial must not be reported as contention — it
+		 * carries the residual cause and classifies as [RouteRequestResult.NoRouteExists].
+		 *
+		 * This state is currently unreachable *through the port* (which pre-validates endpoint
+		 * names and throws [IllegalArgumentException] first — see `unknownEndpointThrowsWithFacade`
+		 * above), but it is reachable for every other facade caller, so the classifier needs a
+		 * defined answer rather than an accidental one.
+		 */
+		@Test
+		@DisplayName("unknown-endpoint denial carries the residual cause, never a contention cause")
+		fun unknownEndpointDenialIsResidualNotContention() {
+			val a = inOut("A")
+			val (e, _) = env(inOuts = listOf(a))
+			val graph = mockk<ExtendedUnorientedGraph<Point, DynamicTrackBlock, Cell.Segment>>(relaxed = true)
+			every { graph.values() } returns emptyList()
+			every { e.getGraph() } returns graph
+			val facade = DefaultInterlockingFacade(e, PathReservationRegistry(mockk(relaxed = true)))
+
+			val response = facade.requestRouteByEndpoints("T1", "NOPE", "A")
+
+			assertThat(response).isInstanceOf<InterlockingFacade.RouteResponse.Denied>()
+			response as InterlockingFacade.RouteResponse.Denied
+			assertThat(response.cause).isEqualTo(InterlockingFacade.RouteResponse.DenialCause.Other)
 		}
 	}
 
@@ -719,6 +924,35 @@ class DefaultNetworkActuatorPortTest {
 			p.releaseRoute("T1")
 
 			assertThat(sem.signal).isEqualTo(Signal.FREE)
+		}
+	}
+
+	companion object {
+		/**
+		 * One instance of every [PathReservationService.ReservationResult] subtype, feeding the
+		 * branch-equivalence property in [FacadeLegacyEquivalence] (Issue #834, task alpha-7a).
+		 *
+		 * Exhaustiveness is asserted, not assumed — see
+		 * [FacadeLegacyEquivalence.providerCoversEveryReservationResultSubtype].
+		 */
+		@JvmStatic
+		fun reservationResults(): List<PathReservationService.ReservationResult> {
+			val block =
+				mockk<DynamicTrackBlock>(relaxed = true).also {
+					every { it.name } returns "U7"
+				}
+			return listOf(
+				PathReservationService.ReservationResult.Success(
+					listOf(mockk<DynamicTrackBlock>(relaxed = true), mockk<DynamicTrackBlock>(relaxed = true))
+				),
+				PathReservationService.ReservationResult.NoPathExists,
+				PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths = 4),
+				PathReservationService.ReservationResult.Conflict(block, "T2"),
+				PathReservationService.ReservationResult.NonContiguousStart(
+					startName = "A",
+					reason = "T1 holds no block bounded by 'A'; legal origins: B"
+				)
+			)
 		}
 	}
 }

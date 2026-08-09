@@ -81,6 +81,97 @@ interface InterlockingFacade {
 		) : RouteResponse
 
 		/**
+		 * Machine-readable cause of a [Denied] response — the discriminant a caller branches on,
+		 * as opposed to [Denied.reason], which is prose for a human operator or an LLM.
+		 *
+		 * ## Why this exists (Issue #834, task alpha-7a)
+		 *
+		 * [requestRouteByEndpoints] already distinguishes all four
+		 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult]
+		 * failures, but before this type existed it threw every one of them into the free-text
+		 * [Denied.reason]. [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort] had
+		 * nothing to branch on, so on its facade branch — the one production always takes —
+		 * every denial except the contiguity rejection collapsed to
+		 * `RouteRequestResult.AllPathsBlocked(0)`. That mislabelled permanent impossibility as
+		 * retryable contention, reported a path count that contradicted its own contract, and
+		 * left the facade and legacy branches classifying the same kernel outcome differently.
+		 *
+		 * Each subtype carries **only payloads that already existed** in the kernel result it is
+		 * built from; nothing here is newly computed, and populating it changes no decision.
+		 *
+		 * @since Issue #834 (SP2c.11 — Goal 10, task alpha-7a)
+		 */
+		sealed interface DenialCause {
+			/**
+			 * No topological path connects the requested endpoints. Maps from
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NoPathExists].
+			 *
+			 * Permanent for the requested endpoint pair: retrying is pointless.
+			 */
+			data object NoPath : DenialCause
+
+			/**
+			 * A topological path exists but every candidate was blocked (OCCUPIED or RESERVED by
+			 * other trains). Maps from
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.AllPathsBlocked].
+			 *
+			 * The only genuinely retryable denial cause: contention clears on its own.
+			 *
+			 * @property attemptedPaths Number of topological candidate paths that were checked —
+			 *   the kernel's own `candidatePaths.size`, forwarded unchanged. A denial with no
+			 *   candidate-path count behind it is [Other], never this.
+			 */
+			data class AllPathsBlocked(
+				val attemptedPaths: Int
+			) : DenialCause
+
+			/**
+			 * A path exists but a block along it is already owned by another train. Maps from
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict].
+			 *
+			 * Only string identifiers are carried, so no live domain object escapes the kernel.
+			 *
+			 * @property blockName     Name of the conflicting block, or `null` if it is unnamed.
+			 * @property existingOwner Name of the train that already owns that block.
+			 */
+			data class Conflict(
+				val blockName: String?,
+				val existingOwner: String
+			) : DenialCause
+
+			/**
+			 * The requested origin bounds none of the blocks the train holds or occupies, so it
+			 * could never reach the route no matter how long it waits. Maps from
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart].
+			 *
+			 * Must never be re-sorted into [Conflict] or [AllPathsBlocked]: it is a dispatcher
+			 * **output** defect, and folding it into a contention counter is exactly what Issue
+			 * #893 stopped. The offending origin name is not repeated here — the port already
+			 * knows it (it is the caller's own `fromEndpointName`) and [Denied.reason] names it
+			 * and every legal alternative.
+			 *
+			 * @since Issue #893 (phase alpha, task A-R1b), promoted from the
+			 *   `originNotContiguous` boolean by Issue #834 task alpha-7a.
+			 */
+			data object NonContiguousStart : DenialCause
+
+			/**
+			 * Residual cause: a denial with no reservation outcome behind it, so no
+			 * candidate-path count and no conflicting owner exist to report.
+			 *
+			 * Covers the endpoint-resolution failures of [requestRouteByEndpoints] and every
+			 * denial produced by the four-condition [requestRoute] (empty route, entry-signal
+			 * mismatch, occupied block, wrong switch position, un-clearable signal), which does
+			 * not go through the reservation service at all.
+			 *
+			 * Callers must **not** classify this as contention — there is no count to report and
+			 * a retry is not indicated. See
+			 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.requestRoute].
+			 */
+			data object Other : DenialCause
+		}
+
+		/**
 		 * Route request was **denied**: one or more conditions failed, no locks acquired.
 		 *
 		 * @property reason English human-readable reason (e.g., "Block U7 occupied by train 42",
@@ -88,21 +179,52 @@ interface InterlockingFacade {
 		 *                 genuinely untranslatable railway technical terms — see the project
 		 *                 CLAUDE.md "Language: English Only" rule.
 		 *                 Suitable for dispatcher operator display and agent LLM context.
-		 * @property originNotContiguous `true` when this denial is specifically
-		 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
-		 *   surfaced through [requestRouteByEndpoints] — the requested origin bounds none of the
-		 *   blocks the train holds or occupies, so it could never reach the route no matter how
-		 *   long it waits. [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort] consults
-		 *   this flag on its facade branch to map the denial to
-		 *   [cz.vutbr.fit.interlockSim.ports.RouteRequestResult.OriginNotContiguous] instead of the
-		 *   default `AllPathsBlocked(0)` collapse. `false` (the default) for every other denial
-		 *   reason, which still collapses on the facade branch — widening that is a spin-off
-		 *   candidate, not part of this fix (Issue #893, task A-R1b).
+		 *                 **Prose only** — never parse it; branch on [cause] instead.
+		 * @property cause Machine-readable discriminant for this denial (Issue #834, task
+		 *   alpha-7a). Defaults to [DenialCause.Other], the residual cause, so a denial raised
+		 *   without a reservation outcome behind it can never be mistaken for contention.
+		 *   [requestRouteByEndpoints] populates it from the kernel result it already holds.
 		 */
 		data class Denied(
 			val reason: String,
-			val originNotContiguous: Boolean = false
-		) : RouteResponse
+			val cause: DenialCause = DenialCause.Other
+		) : RouteResponse {
+			/**
+			 * Source-compatibility constructor for Issue #893's `originNotContiguous` call sites.
+			 *
+			 * @param originNotContiguous `true` selects [DenialCause.NonContiguousStart],
+			 *   `false` selects [DenialCause.Other] — the same two-way split this boolean
+			 *   expressed before [DenialCause] existed.
+			 */
+			@Deprecated(
+				"Pass a DenialCause instead: it distinguishes all five denial causes, not two.",
+				ReplaceWith("InterlockingFacade.RouteResponse.Denied(reason, cause)")
+			)
+			constructor(
+				reason: String,
+				originNotContiguous: Boolean
+			) : this(
+				reason,
+				if (originNotContiguous) DenialCause.NonContiguousStart else DenialCause.Other
+			)
+
+			/**
+			 * `true` when this denial is specifically
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
+			 * surfaced through [requestRouteByEndpoints] — the requested origin bounds none of the
+			 * blocks the train holds or occupies (Issue #893, task A-R1b).
+			 *
+			 * Derived from [cause] since Issue #834 task alpha-7a, which replaced this boolean
+			 * with the full [DenialCause] hierarchy. It is retained so #893's semantics and tests
+			 * read unchanged, but it answers only one of five questions — branch on [cause].
+			 */
+			@Deprecated(
+				"Branch on `cause` instead; this flag collapses four distinct causes into 'not it'.",
+				ReplaceWith("cause is InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart")
+			)
+			val originNotContiguous: Boolean
+				get() = cause is DenialCause.NonContiguousStart
+		}
 	}
 
 	/**
@@ -189,7 +311,12 @@ interface InterlockingFacade {
 	 * @param fromEndpointName   Name of the entry InOut or Semaphore endpoint.
 	 * @param toEndpointName     Name of the exit InOut or Semaphore endpoint.
 	 * @return [RouteResponse.Granted] with a minimal [TrainRoute] (block list from reservation) if
-	 *         the path was reserved; [RouteResponse.Denied] with an English reason otherwise.
+	 *         the path was reserved; otherwise [RouteResponse.Denied] with an English reason **and**
+	 *         a [RouteResponse.DenialCause] identifying which reservation outcome produced it
+	 *         (Issue #834, task alpha-7a). Every implementation must set a cause other than
+	 *         [RouteResponse.DenialCause.Other] whenever the corresponding
+	 *         [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult]
+	 *         is available, so callers never have to parse the reason text.
 	 * @since Issue #573 (SP3.5 — Goal 10)
 	 */
 	fun requestRouteByEndpoints(
