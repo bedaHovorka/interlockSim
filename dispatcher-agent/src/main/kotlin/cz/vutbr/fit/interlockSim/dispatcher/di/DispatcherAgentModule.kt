@@ -62,18 +62,27 @@ import java.util.UUID
  * | [Dispatcher] | singleton | [RuleBasedDispatcher] |
  * | [DispatcherPlanner] | singleton | [RuleBasedPlanAdapter] |
  * | [AgentService] | singleton | [DefaultAgentService] |
+ * | [DispatcherRunConfig] | singleton | [DispatcherRunConfig.fromProperties] |
  * | [OllamaExecutorConfig] | singleton | [OllamaExecutorConfig.default] |
  * | [OllamaSimpleExecutor] | singleton | [OllamaSimpleExecutor] |
  * | [ToolGroupRegistry] | singleton | [ToolGroupRegistry] |
  * | [NetworkPerceptionPort] | per [DefaultSimulationContext] | [DefaultNetworkPerceptionPort] |
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] |
+ * | [CommandCorrelationMap] | per [DefaultSimulationContext] | new instance |
  * | [ActuatorCommandQueue] | per [DefaultSimulationContext] | new instance |
+ * | [AppliedOutcomeChannel] | per [DefaultSimulationContext] | new instance |
+ * | [ActionOutcomeAggregator] | per [DefaultSimulationContext] | new instance |
  * | [DispatchLoopSensorPort] | per [DefaultSimulationContext] | [MainProcessDispatchLoopSensorPort] |
  * | [DispatcherObservationSource] | per [DefaultSimulationContext] | [DispatcherObservationProjector] |
  * | [DispatcherModeState] | per [DefaultSimulationContext] | new instance |
+ * | [DispatchDecisionListenerHub] | per [DefaultSimulationContext] | new instance |
  * | [SemiAutoApprovalGateway] | per [DefaultSimulationContext] | new instance |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance |
+ * | [SinkHolder] | per [DefaultSimulationContext] | new instance |
+ * | [CycleHistory] | per [DefaultSimulationContext] | new instance |
  * | [KoogAgentFactory] | per [DefaultSimulationContext] | [KoogAgentFactory] |
+ * | [RunSnapshotStore] | per [DefaultSimulationContext] | [DefaultRunSnapshotStore] |
+ * | [DispatcherRunRecorder] | per [DefaultSimulationContext] | [DefaultDispatcherRunRecorder] |
  *
  * **Note:** Per-context `KoogDispatchAgent` binding does not exist because agent creation is a
  * `suspend` function and cannot be directly wired in a Koin module (which is not a suspend
