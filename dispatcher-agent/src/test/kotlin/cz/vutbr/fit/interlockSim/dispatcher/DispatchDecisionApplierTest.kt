@@ -384,6 +384,28 @@ class DispatchDecisionApplierTest {
 		}
 
 		@Test
+		@DisplayName(
+			"Two genuinely different triples that concatenate to the same '|'-joined string are " +
+				"NOT conflated by the duplicate-suppression guard"
+		)
+		fun delimiterStraddlingTriples_notConflated() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			val (queue, applier) = makeApplier()
+
+			// "T1|zB" + "doA1" + "X" and "T1" + "zB|doA1" + "X" both concatenate (with "|" as
+			// separator) to the literal string "T1|zB|doA1|X" — a naive string-key dedup guard
+			// would treat these as the same reservation even though trainId/from/to genuinely
+			// differ. Both must reach the actuator port.
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1|zB", "doA1", "X")))
+			applier.onControlStep()
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB|doA1", "X")))
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.requestRoute("T1|zB", "doA1", "X") }
+			verify(exactly = 1) { networkActuator.requestRoute("T1", "zB|doA1", "X") }
+		}
+
+		@Test
 		@DisplayName("A failed reservation is not remembered, so a later retry of the same triple is applied")
 		fun failedReservation_retryIsApplied() {
 			var callCount = 0

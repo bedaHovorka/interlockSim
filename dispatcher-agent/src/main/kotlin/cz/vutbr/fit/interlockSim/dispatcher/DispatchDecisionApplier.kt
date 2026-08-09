@@ -241,9 +241,27 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * Reservation triples (`trainId|fromSemaphoreName|toSeparatorName`) already
-	 * successfully applied via [applyReservePath], for the duplicate-suppression
-	 * guard documented on that function.
+	 * Key for one train's hop/endpoint-pair reservation, used by [appliedReservations] and
+	 * [appliedRequestRoutes] to guard against re-applying an in-flight duplicate.
+	 *
+	 * A structured key (rather than a manually delimited `"$trainId|$from|$to"` string) is
+	 * used deliberately: [trainId] is externally supplied (tool-driven decisions carry LLM
+	 * output, not just XML-validated network element names restricted to
+	 * `[a-zA-Z0-9_-]`), so a string-concatenation key could let two genuinely different
+	 * triples collide on the same delimiter-joined string (e.g. `trainId="T1|zB", from="doA1"`
+	 * and `trainId="T1", from="zB|doA1"` both joined with `"|"` — see
+	 * `delimiterStraddlingTriples_notConflated` in `DispatchDecisionApplierTest`). Equality on
+	 * a data class of the three fields has no such ambiguity.
+	 */
+	private data class ReservationKey(
+		val trainId: String,
+		val from: String,
+		val to: String
+	)
+
+	/**
+	 * Reservation keys already successfully applied via [applyReservePath], for the
+	 * duplicate-suppression guard documented on that function.
 	 *
 	 * Entries are evicted via [evictReservationsFor] once the wiring layer observes a
 	 * block release for that train (see [evictReservationsFor] KDoc) — this set must
@@ -252,12 +270,12 @@ class DispatchDecisionApplier(
 	 * traversed once), which would otherwise collide with an entry left over from the
 	 * first pass and silently stall the train.
 	 */
-	private val appliedReservations: MutableSet<String> = mutableSetOf()
+	private val appliedReservations: MutableSet<ReservationKey> = mutableSetOf()
 
 	/**
-	 * Request-route triples (`trainName|fromEndpointName|toEndpointName`) already
-	 * successfully applied via [applyRequestRoute], for the duplicate-suppression guard
-	 * symmetric to [appliedReservations] (see [applyRequestRoute] KDoc).
+	 * Request-route keys already successfully applied via [applyRequestRoute], for the
+	 * duplicate-suppression guard symmetric to [appliedReservations] (see
+	 * [applyRequestRoute] KDoc).
 	 *
 	 * Evicted together with [appliedReservations] by [evictReservationsFor] — the same
 	 * bidirectional-operation rationale applies: a train that reverses and re-approaches
@@ -267,7 +285,7 @@ class DispatchDecisionApplier(
 	 * for why this guard is dormant today but load-bearing once the validator conflict
 	 * rule permits forward extensions.
 	 */
-	private val appliedRequestRoutes: MutableSet<String> = mutableSetOf()
+	private val appliedRequestRoutes: MutableSet<ReservationKey> = mutableSetOf()
 
 	/**
 	 * Evicts every [appliedReservations] entry recorded for [trainId].
@@ -294,9 +312,8 @@ class DispatchDecisionApplier(
 	 * vocabulary's dedup guard for that train.
 	 */
 	fun evictReservationsFor(trainId: String) {
-		val prefix = "$trainId|"
-		appliedReservations.removeAll { it.startsWith(prefix) }
-		appliedRequestRoutes.removeAll { it.startsWith(prefix) }
+		appliedReservations.removeAll { it.trainId == trainId }
+		appliedRequestRoutes.removeAll { it.trainId == trainId }
 	}
 
 	/**
@@ -603,7 +620,7 @@ class DispatchDecisionApplier(
 	 * navigation/registry code that other callers (e.g. `InOutWorker`) also depend on.
 	 */
 	private fun applyReservePath(decision: DispatchDecision.ReservePath) {
-		val reservationKey = "${decision.trainId}|${decision.fromSemaphoreName}|${decision.toSeparatorName}"
+		val reservationKey = ReservationKey(decision.trainId, decision.fromSemaphoreName, decision.toSeparatorName)
 		if (reservationKey in appliedReservations) {
 			logger.debug {
 				"Skipping duplicate ReservePath: trainId=${decision.trainId} " +
@@ -725,7 +742,7 @@ class DispatchDecisionApplier(
 		decision: DispatchDecision.RequestRoute,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	): ApplyFailureCode? {
-		val reservationKey = "${decision.trainName}|${decision.fromEndpointName}|${decision.toEndpointName}"
+		val reservationKey = ReservationKey(decision.trainName, decision.fromEndpointName, decision.toEndpointName)
 		if (reservationKey in appliedRequestRoutes) {
 			logger.debug {
 				"DispatchDecisionApplier: skipping duplicate RequestRoute: " +
@@ -853,7 +870,7 @@ class DispatchDecisionApplier(
 	private fun handleRequestRouteReserved(
 		decision: DispatchDecision.RequestRoute,
 		result: RouteRequestResult.Reserved,
-		reservationKey: String,
+		reservationKey: ReservationKey,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
 		logger.debug {
