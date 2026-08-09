@@ -147,6 +147,9 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 
 		SwingUtilities.invokeAndWait { frame.stopSimulation() }
 
+		// Issue #834 (SP2c.11): DispatcherRunSummaries.finishAndPersist also records the run's
+		// RailwayOutcome before finish()/logFinalSummary() — see that method's kdoc.
+		verify(exactly = 1) { runRecorder.recordRailwayOutcome(any()) }
 		verify(exactly = 1) { runRecorder.finish(any()) }
 		verify(exactly = 1) { runRecorder.logFinalSummary() }
 		confirmVerified(runRecorder)
