@@ -16,7 +16,9 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -244,5 +246,60 @@ class OllamaExecutorConfigTest {
 		val warnings = OllamaExecutorConfig(maxTokens = 2048, topP = 0.8f).noOpSettingWarnings()
 
 		assertThat(warnings).hasSize(2)
+	}
+
+	// #834 (SP2c.11): modelName/temperature committed-file tier. Mirrors DispatcherRunConfigTest's
+	// injectable-seam pattern, so none of these touch the real classpath resource except the
+	// regression-lock test.
+
+	@Test
+	@DisplayName("#834: a committed-file modelName/temperature beats the code fallback constant")
+	fun fileBeatsCodeFallbackForModelAndTemperature() {
+		val config =
+			OllamaExecutorConfig.default(
+				fileProperties = {
+					when (it) {
+						DispatcherRunConfig.PROP_MODEL -> "llama3.1:8b"
+						DispatcherRunConfig.PROP_TEMPERATURE -> "0.5"
+						else -> null
+					}
+				}
+			)
+
+		assertThat(config.modelName).isEqualTo("llama3.1:8b")
+		assertThat(config.temperature).isEqualTo(0.5f)
+	}
+
+	@Test
+	@DisplayName("#834: an absent committed file falls back to the code constant, no exception")
+	fun absentFileFallsBackToCodeConstantForModelAndTemperature() {
+		val config = OllamaExecutorConfig.default(fileProperties = { null })
+
+		assertThat(config.modelName).isEqualTo("qwen2.5:7b-instruct")
+		assertThat(config.temperature).isEqualTo(0.28f)
+	}
+
+	@Test
+	@DisplayName("#834: a malformed committed-file temperature falls back to the code constant, no exception")
+	fun malformedFileTemperatureFallsBackToCodeConstant() {
+		val config =
+			OllamaExecutorConfig.default(
+				fileProperties = { if (it == DispatcherRunConfig.PROP_TEMPERATURE) "warm" else null }
+			)
+
+		assertThat(config.temperature).isEqualTo(0.28f)
+	}
+
+	@Test
+	@DisplayName(
+		"#834 regression lock: the shipped properties file yields exactly today's compiled modelName/temperature"
+	)
+	fun shippedFileYieldsTodaysDefaults() {
+		// No env, no injected file map: exercises the real classpath resource end to end. #834
+		// Task 6 must not change any default's value.
+		val config = OllamaExecutorConfig.default()
+
+		assertThat(config.modelName).isEqualTo("qwen2.5:7b-instruct")
+		assertThat(config.temperature).isEqualTo(0.28f)
 	}
 }

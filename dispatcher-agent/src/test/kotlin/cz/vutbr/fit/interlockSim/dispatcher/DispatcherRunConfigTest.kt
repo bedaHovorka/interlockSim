@@ -28,6 +28,22 @@ class DispatcherRunConfigTest {
 		return DispatcherRunConfig.fromProperties { map[it] }
 	}
 
+	/**
+	 * Like [configOf] but also injects the committed-file tier, so #834's three-way precedence
+	 * (system property > file > code constant) can be tested without touching the real classpath
+	 * resource.
+	 */
+	private fun configOf(
+		fileProperties: Map<String, String>,
+		vararg systemProperties: Pair<String, String>
+	): DispatcherRunConfig {
+		val sysMap = systemProperties.toMap()
+		return DispatcherRunConfig.fromProperties(
+			fileProperties = { fileProperties[it] },
+			properties = { sysMap[it] }
+		)
+	}
+
 	@Test
 	fun `absent properties reproduce the pre-847 defaults`() {
 		val config = configOf()
@@ -119,5 +135,81 @@ class DispatcherRunConfigTest {
 	fun negativeTickPeriodRejected() {
 		assertThat(configOf(DispatcherRunConfig.PROP_TICK_PERIOD_MS to "-5").tickPeriodMs)
 			.isEqualTo(DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS)
+	}
+
+	// #834 (SP2c.11): committed-file tier tests. The seam mirrors the existing system-property
+	// seam above so none of these mutate real JVM state or the real classpath resource.
+
+	@Test
+	@DisplayName("#834: a system property beats a committed-file value for the same key")
+	fun systemPropertyBeatsFile() {
+		val config =
+			configOf(
+				mapOf(DispatcherRunConfig.PROP_HISTORY_N to "5"),
+				DispatcherRunConfig.PROP_HISTORY_N to "7"
+			)
+
+		assertThat(config.historyN).isEqualTo(7)
+	}
+
+	@Test
+	@DisplayName("#834: a committed-file value beats the code fallback constant")
+	fun fileBeatsCodeFallback() {
+		val config =
+			configOf(
+				mapOf(
+					DispatcherRunConfig.PROP_TICK_PERIOD_MS to "500",
+					DispatcherRunConfig.PROP_HISTORY_N to "5",
+					DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK to "2",
+					DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "60"
+				)
+			)
+
+		assertThat(config.tickPeriodMs).isEqualTo(500L)
+		assertThat(config.historyN).isEqualTo(5)
+		assertThat(config.maxActionsPerTick).isEqualTo(2)
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(60L)
+	}
+
+	@Test
+	@DisplayName("#834: an absent committed file falls back to the code constant, no exception")
+	fun absentFileFallsBackToCodeConstant() {
+		val config = configOf(emptyMap())
+
+		assertThat(config.tickPeriodMs).isEqualTo(DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS)
+		assertThat(config.historyN).isEqualTo(DispatcherRunConfig.DEFAULT_HISTORY_N)
+		assertThat(config.maxActionsPerTick).isEqualTo(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK)
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
+	}
+
+	@Test
+	@DisplayName("#834: a malformed committed-file value falls back to the code constant, no exception")
+	fun malformedFileValueFallsBackToCodeConstant() {
+		val config =
+			configOf(
+				mapOf(
+					DispatcherRunConfig.PROP_HISTORY_N to "three",
+					DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK to "0"
+				)
+			)
+
+		assertThat(config.historyN).isEqualTo(DispatcherRunConfig.DEFAULT_HISTORY_N)
+		// 0 is out of range for a cap, not merely unparseable — same treatment as the -D case.
+		assertThat(config.maxActionsPerTick).isEqualTo(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK)
+	}
+
+	@Test
+	@DisplayName(
+		"#834 regression lock: the shipped properties file yields exactly today's compiled defaults"
+	)
+	fun shippedFileYieldsTodaysDefaults() {
+		// No system properties, no injected file map: exercises the real classpath resource
+		// end to end. #834 Task 6 must not change any default's value.
+		val config = DispatcherRunConfig.fromProperties()
+
+		assertThat(config.tickPeriodMs).isEqualTo(0L)
+		assertThat(config.historyN).isEqualTo(3)
+		assertThat(config.maxActionsPerTick).isEqualTo(3)
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(30L)
 	}
 }

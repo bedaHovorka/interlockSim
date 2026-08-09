@@ -125,9 +125,11 @@ val dispatcherAgentModule: Module =
 		// No Spring Boot: uses lightweight Koin DI instead.
 		single<AgentService> { DefaultAgentService(get(), get()) } // OllamaSimpleExecutor, OllamaExecutorConfig
 
-		// Per-run knobs read from -D system properties, so the sweep driver can vary them
-		// between forked runs. Absent properties reproduce the previous defaults exactly, so
-		// a plain `java -jar … example shuntingLoopAI 600` is unchanged.
+		// Per-run knobs read from -D system properties, falling back to the committed
+		// dispatcher-defaults.properties resource and then to the code constant (Issue #834,
+		// SP2c.11 — see DispatcherRunConfig's "Configuration precedence" KDoc). Absent -D
+		// properties and an absent/unchanged resource reproduce the previous defaults exactly,
+		// so a plain `java -jar … example shuntingLoopAI 600` is unchanged.
 		single<DispatcherRunConfig> { DispatcherRunConfig.fromProperties() }
 
 		// Ollama executor configuration (singleton).
@@ -137,7 +139,11 @@ val dispatcherAgentModule: Module =
 		// model and temperature are the two grid axes that were already live; they are
 		// overridden here rather than in OllamaExecutorConfig.default() so the environment-variable
 		// contract (OLLAMA_BASE_URL — machine configuration) stays separate from the sweep's
-		// per-run contract (-D properties — measurement parameters).
+		// per-run contract (-D properties — measurement parameters). OllamaExecutorConfig.default()
+		// itself now resolves modelName/temperature against the same committed
+		// dispatcher-defaults.properties resource DispatcherRunConfig reads (Issue #834); runConfig's
+		// -D-only override below still wins over that file, giving the full
+		// -D property > committed file > code constant chain without reading the file twice.
 		single<OllamaExecutorConfig> {
 			val runConfig = get<DispatcherRunConfig>()
 			OllamaExecutorConfig.default().let { base ->
