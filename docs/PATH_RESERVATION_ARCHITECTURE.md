@@ -1,8 +1,8 @@
 # Path Reservation Architecture
 
-**Document Version:** 1.0
-**Last Updated:** 2026-01-26
-**Related Issue:** #292 Phase 2 Enhancement
+**Document Version:** 1.1
+**Last Updated:** 2026-08-09
+**Related Issues:** #292 Phase 2 Enhancement; #893 (signal-clearing invariants + contiguity); #896/#899 (route-release fixes)
 
 ## Table of Contents
 
@@ -10,10 +10,12 @@
 2. [Component Responsibilities](#component-responsibilities)
 3. [Reservation Algorithm](#reservation-algorithm)
 4. [Error Handling Strategy](#error-handling-strategy)
-5. [TOCTOU Trade-Off Analysis](#toctou-trade-off-analysis)
-6. [Design Decisions](#design-decisions)
-7. [Sequence Diagrams](#sequence-diagrams)
-8. [Future Considerations](#future-considerations)
+5. [Signal-Clearing Invariants (Issue #893, G1–G7)](#signal-clearing-invariants-issue-893-g1g7)
+6. [Cancel / Release Paths Taxonomy](#cancel--release-paths-taxonomy)
+7. [TOCTOU Trade-Off Analysis](#toctou-trade-off-analysis)
+8. [Design Decisions](#design-decisions)
+9. [Sequence Diagrams](#sequence-diagrams)
+10. [Future Considerations](#future-considerations)
 
 ---
 
@@ -171,6 +173,18 @@ fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): R
 
 ### Detailed Steps
 
+#### Step 0: Contiguity Precondition (Issue #893, task A-R1)
+
+**Method:** `rejectNonContiguousStart(trainId, start)` (`DefaultPathReservationService.kt:422`)
+
+**Purpose:** A route may only start where the train actually is. `[start]` must bound one of the blocks the train holds in the `PathReservationRegistry` or physically occupies; a failing request is rejected with `NonContiguousStart` (`PathReservationService.kt:170`) **before** any candidate-path discovery (`DefaultPathReservationService.kt:510-514`), so it also governs the already-owned early-return branch.
+
+**Exemption:** A train with no footprint at all (neither registered nor occupied blocks — still outside the network) is exempt; its route legitimately starts at an entry InOut.
+
+**Split malformation coverage:** The queued-train half of the malformation (a route requested from a mid-station Signal for a train still queued for admission) has an empty footprint and passes vacuously here. It is guarded only at the tool layer by `RequestRouteTool.queuedOriginError` (`PathReservationService.kt:151-162`), which self-disables when that tool is built with no InOut-name set or with no `DispatchLoopSensorPort`. Callers reaching `reservePath` by any other route get no protection against the queued-train form. This split is a binding traffic-simulation-expert ruling, not an oversight: tightening the vacuous arm would reject every legitimate train-entry reservation.
+
+**Why distinct from `AllPathsBlocked`:** `AllPathsBlocked` is ordinary contention — a caller should retry next tick. `NonContiguousStart` will never succeed while the train stays where it is; the caller (or the LLM dispatcher behind it) must ask for a different origin. Collapsing the two hides a dispatcher-output defect inside a routine-traffic counter.
+
 #### Step 1: Path Discovery (TopologyNavigator)
 
 **Method:** `findAllTopologicalPaths()`
@@ -311,6 +325,7 @@ TrackReservationException (sealed class)
 | **InvalidStateTransition** | State machine violation (programming error) | Try next path, log error | Medium |
 | **RegistrationResult.Conflict** | Registry detects ownership conflict | Rollback blocks, return Conflict | Medium |
 | **NoPathExists** | No topological route (disconnected network) | Report to caller | High |
+| **NonContiguousStart** | Start separator bounds none of the train's blocks (Issue #893, A-R1); will never succeed while the train stays where it is | Caller must request a different origin; do NOT retry the same start | High |
 
 ### Handling Guidelines
 
@@ -377,7 +392,88 @@ when (val result = registry.registerAtomic(trainId, blocks)) {
 
 ---
 
-## 5. TOCTOU Trade-Off Analysis
+## 5. Signal-Clearing Invariants (Issue #893, G1–G7)
+
+**Contract** (pinned by `PathReservationServiceTest.kt:1571-1592`): *a proceed aspect may not outlive the reservation that produced it.* Every release path resets the train's cleared signals to STOP before any block becomes FREE/available to another train. Until the #893 fix, `releasePath` and `unregister` cancelled blocks and unlocked switches but never touched a semaphore, so every aspect they cleared stayed lit forever — observed live on `exampleGui shuntingLoopAI 333`, where an `A → B` route granted at t=26.0 cleared `zA`, `doA1`, `doB1`; the `OrphanReservationSweeper` cancelled the stale route at t=88.0; all three were still showing S80 at the end of the run. `Signal.STOP` is always the fail-safe direction: it authorises nothing, so resetting too eagerly can only ever be over-restrictive.
+
+### G1–G7 Invariant Table
+
+| G | Invariant | Task | Source |
+|---|-----------|------|--------|
+| G1 | A partial (tail) route release must reset the governing semaphores of every released block through the ownership-aware `resetSemaphoresForReleasedBlocks`, not just `reservedFrom as? DynamicRailSemaphore`. | A3 | `PathReservationService.kt:647-702`; impl `DefaultPathReservationService.kt:2655-2676` |
+| G2 | `unregisterBlock` (per-block tail-clearance) must return the released block's governing semaphores to STOP, not just update the registry. | A4 | impl `DefaultPathReservationService.kt:2623-2636` (reset call at :2632 before emit at :2633) |
+| G3 | A signal-config failure in `reservePath` Step 2g must undo any PARTIAL aspect write (START may be physically lit though `recordClearedSemaphore` never ran) via `resetSemaphoreSet` + `resetUnrecordedStartSignal`. | A5 | `DefaultPathReservationService.kt:219`, `:290`, Step 2g `:641-659` |
+| G4 | A route whose START semaphore faces AWAY from the requested direction must be rejected outright (a rear-facing START grants no proceed authority — a #566-class stall). | A1 | `DefaultPathReservationService.kt:2306-2342` (`configureStartSignal` G4 guard) |
+| G5 | `DispatchDecision.SetSignalAspect` carries an optional `trainName`; `DefaultNetworkActuatorPort.setSignalAspect` has an attributed 3-arg overload recording through the same single ledger — closing the tracking-contract hole for any future caller. (Attribution-only; no live behaviour change.) | A6 | commit `e8f5460e` |
+| G6 | Every cleared signal — including ones written by external paths (`DefaultInterlockingFacade.clearSignal`, the facade's block-list `requestRoute`) — must be folded into the single service ledger (`recordExternalClearedSemaphore`) so a later `releasePath`/sweeper reset can find and drop it. | A6 | `PathReservationService.kt:278-306`; impl `DefaultPathReservationService.kt:959-970` |
+| G7 | `releasePath` must reset a train's cleared signals BEFORE its `blocks.isEmpty()` early return, and `releaseRoute` must report truthfully (via `hasClearedSignals`) when a train holds cleared signals but zero blocks — a signals-only reclaim counts as work done. | A7 | impl `DefaultPathReservationService.kt:896-906` (reset at :901 before empty-blocks early return), `:957` |
+
+**Malformation class note:** G4 (rear-facing START rejection) and the contiguity precondition (A-R1, [Step 0](#step-0-contiguity-precondition-issue-893-task-a-r1)) are the same malformation class — a route the train cannot actually use (`PathReservationServiceTest.kt:2957`).
+
+### Ownership-Aware Reset APIs
+
+Three ownership-aware APIs underpin G1–G7. All share a single cleared-signal ledger (`clearedSemaphores` / `semaphoreClearedFor`) maintained by `recordClearedSemaphore` (`DefaultPathReservationService.kt:165-172`).
+
+#### `resetSemaphoresForReleasedBlocks(trainId, blocks)`
+
+- **Interface:** `PathReservationService.kt:699`
+- **Impl:** `DefaultPathReservationService.kt:2655`
+- **Candidate signal sources:** `block.ends()` (intermediate semaphore or InOut's `inSemaphore`) + `block.reservedFrom` (route START incl. InOut's `inSemaphore`). Both sources are needed because `reservePath` sets every reserved block's `reservedFrom` to the ROUTE-START separator, so for a multi-block route only the first block's `reservedFrom` is genuinely adjacent — `ends()` recovers the correct intermediate boundary for later blocks, and `reservedFrom` recovers the START itself (including the InOut case).
+
+#### `hasClearedSignals(trainId)`
+
+- **Interface:** `PathReservationService.kt:270`
+- **Impl:** `DefaultPathReservationService.kt:957` (`= clearedSemaphores.containsKey(trainId)`)
+- **Purpose:** Read by `DefaultNetworkActuatorPort.releaseRoute` (`:196`) BEFORE `releasePath` (`:197`) purges the bookkeeping this reads — so a signals-only release can be reported truthfully instead of being masked as "nothing happened" (G7).
+
+#### `recordExternalClearedSemaphore(trainId, semaphore)`
+
+- **Interface:** `PathReservationService.kt:303`
+- **Impl:** `DefaultPathReservationService.kt:965`
+- **Purpose:** The G6 single-signal-ledger entry point for external paths. Delegates to the same `recordClearedSemaphore` used internally by `reservePath`, so an external caller's write is folded into the single ledger this service already maintains. Without it, a facade-granted entry signal stayed lit forever after a sweep.
+
+### Proven-Safe Scope (suffix/rearmost releases only)
+
+The reset is **proven safe only for suffix / rearmost releases on a non-revisiting route** (`PathReservationService.kt:680-693`); NOT for an arbitrary mid-route subset, because the semaphore governing a released block can also be the one a still-reserved downstream block on the same route depends on (an intermediate boundary shared with a block further along). A route that loops back and becomes adjacent to a released block again has the same exposure: the semaphore this call resets may be the one that governs re-entry into the loop.
+
+**Failure direction is fail-safe:** `Signal.STOP` authorises nothing, so the worst outcome of an over-eager reset outside the proven-safe scope is a train stalled behind a signal it still needed — never a train permitted to move where it should not be.
+
+The impl performs no route-position validation of its own; the caller is responsible for staying within the proven-safe scope (`DefaultPathReservationService.kt:2649-2651`). See also [INTERLOCKING_SCOPE_LIMITATIONS.md](INTERLOCKING_SCOPE_LIMITATIONS.md) §B5 (revisiting / circular-route caveat).
+
+### Ownership-Aware Last-Writer-Wins Reset
+
+A semaphore that has since been re-cleared for a DIFFERENT train is left alone by a later release. This is **single-threaded sequential ownership hygiene** (the simulation is single-threaded — kDisco runs one sim thread), not a concurrency guard. Backed by the `semaphoreClearedFor` map:
+
+- `recordClearedSemaphore` (`:165-172`) records `semaphoreClearedFor[semaphore] = trainId`.
+- `resetClearedSemaphores` (`:181-203`) skips when `semaphoreClearedFor[semaphore] != trainId` (at `:184`).
+- `resetSemaphoreSet` (`:219-249`) applies the same guard (at `:232`).
+
+**Test:** `PathReservationServiceTest.kt:1649-1707` — *"resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone, and a later releasePath does too"*. After `t2` re-clears a semaphore `t1` released, a stale `resetSemaphoresForReleasedBlocks("t1", ...)` and a subsequent `releasePath("t1")` both leave `t2`'s live signal untouched.
+
+---
+
+## 6. Cancel / Release Paths Taxonomy
+
+**Invariant: signals-first-blocks-second** — every full/partial release resets the train's cleared signals to STOP before any block becomes FREE/available to another train. A block must never become available to another train while the semaphore that authorises entry to it still shows proceed.
+
+> **Scope note (*storno* vs *uvolnění*):** real railways distinguish *storno* (cancel before occupancy: dispatcher command, signal→Stop, then a mandatory time-release timer before the *závěr* frees) from *uvolnění* (release after occupancy: automatic/progressive behind the train). The simulator conflates both into the single release path below and has no approach-locking timer — acceptable because entry is gated on reservation, not signal-sighting (see [INTERLOCKING_SCOPE_LIMITATIONS.md](INTERLOCKING_SCOPE_LIMITATIONS.md) §B1 for the full safety argument).
+
+There are six release call sites:
+
+| # | Call site | Location | Role | Signals-first? |
+|---|-----------|----------|------|----------------|
+| 1 | `releasePath` | `DefaultPathReservationService.kt:896` | Full-route release. Reset `:901` (resetClearedSemaphores) before empty-blocks early return and before per-block `cancelPathSetup` `:913-922`; `registry.unregister` in `finally` `:939`. Invariant comment `:897-900`. | Yes (self-enforced) |
+| 2 | `unregister` | `:2548` | Production train-completion path (`Train → releaseTrainReservations`). Reset `:2551`, switch unlock `:2555-2563`, **per-block `cancelPathSetup` `:2574-2583`**, `registry.unregister` `:2585`. **F1 fix (commit `d99862bc`):** the per-block `cancelPathSetup` loop was ADDED so a journey completing with RESERVED-but-never-entered blocks (bidirectional reversal / abandoned extension) no longer leaves orphan RESERVED blocks. Previously `registry.unregister` only removed ownership maps and `emitBlockReleased` hardcoded `newState=FREE`, masking the state/event divergence. Mirrors `releasePath` `:913-922` (comment `:2565-2572`). | Yes (self-enforced) |
+| 3 | `unregisterBlock` | `:2623` | Production per-block tail-clearance (`Train.Tail.separatorAction`). `resetSemaphoresForReleasedBlocks(trainId, listOf(block))` `:2632` BEFORE `emitBlockReleased` `:2633` (**F2 fix**, commit `d99862bc` — comment `:2629-2631` "Matches releasePath's invariant :897-900"). | Yes (self-enforced) |
+| 4 | bypass-rollback | `releaseBypassRollbackBlocks` `:1140` (private helper; call site `reservePathToAnyNextSemaphore` `:1076`) | Releases the wrongly-reserved path when the reserved path doesn't use the required `next` block. Per-block `cancelPathSetup` with `registry.unregisterBlock` in `finally` `:1154-1158` (**F3 fix**: `finally` so a `cancelPathSetup` throw no longer leaks a registered block; uses `block.reservedFrom`). Signals reset done by the caller at `:1072-1074` before the helper. | Caller-enforced |
+| 5 | `rollbackUnconfigurableCandidate` | `:2500` (internal) | Rolls back a candidate whose switches (Step 2f) or START signal (Step 2g) couldn't be configured. Scoped to the candidate's own mutations (no `registry.unregister(trainId)`); per-block `cancelPathSetup` with `registry.unregisterBlock` in `finally` `:2529-2531` (**F3 fix**). Signal-config-failure (G3) reset done by the caller in Step 2g. | Caller-enforced |
+| 6 | `releaseUntravelledTail` | `dispatcher-agent/.../PartialRouteReleaser.kt:46` (interface), impl `RegistryPartialRouteReleaser.kt:73` | Releases the un-travelled tail of a stalled reservation while leaving the occupied block registered. `resetSemaphoresForReleasedBlocks(trainId, eligible)` `RegistryPartialRouteReleaser.kt:106` BEFORE any `cancelPathSetup` `:113` / `unregisterBlock` `:114`. Caller `OrphanReservationSweeper.kt:315`. | Yes (self-enforced) |
+
+**Summary:** `releasePath`, `unregister`, `unregisterBlock`, and `releaseUntravelledTail` enforce signals-first-blocks-second themselves; the two rollback helpers handle a never-granted candidate and rely on their caller (Step 2g / the bypass path) to reset signals.
+
+---
+
+## 7. TOCTOU Trade-Off Analysis
 
 ### Problem Description
 
@@ -499,7 +595,7 @@ fun reservePath(...): ReservationResult {
 
 ---
 
-## 6. Design Decisions
+## 8. Design Decisions
 
 ### String-Based Train IDs vs Object References
 
@@ -722,7 +818,7 @@ service.releasePath("Train-123")  // Works for both states
 
 ---
 
-## 7. Sequence Diagrams
+## 9. Sequence Diagrams
 
 ### Successful Reservation Flow
 
@@ -833,9 +929,50 @@ sequenceDiagram
     end
 ```
 
+### Cancel-Route (releaseRoute) Flow (Issue #893, G7)
+
+The `cancel_route` tool path. The G7 invariant — `hasClearedSignals` is read BEFORE `releasePath` purges the bookkeeping — ensures a signals-only reclaim (train holds cleared signals but zero blocks, reachable after a partial release reclaimed its un-travelled tail) is reported truthfully as work done.
+
+```mermaid
+sequenceDiagram
+    participant LLM as LLM dispatcher
+    participant Applier as DispatchDecisionApplier
+    participant Port as NetworkActuatorPort
+    participant Service as PathReservationService
+    participant Registry
+
+    LLM->>Applier: DispatchDecision.ReleaseRoute(trainName)
+    Applier->>Port: releaseRoute(trainName)
+
+    Note over Port,Service: G7: read hasClearedSignals BEFORE releasePath<br/>purges the bookkeeping this reads
+    Port->>Service: hasClearedSignals(trainName)
+    Service-->>Port: true / false
+
+    Port->>Service: releasePath(trainName)
+    Note over Service: Signals-first: resetClearedSemaphores(trainName)<br/>BEFORE blocks become FREE
+    Service->>Service: resetClearedSemaphores(trainName)
+    Service->>Registry: getBlocks(trainName)
+    Registry-->>Service: blocks (may be empty)
+
+    alt blocks non-empty
+        loop For each block
+            Service->>Service: cancelPathSetup(reservedFrom)
+        end
+    end
+    Note over Service,Registry: registry.unregister in finally<br/>(guaranteed even if cancelPathSetup throws)
+    Service->>Registry: unregister(trainName)
+    Service-->>Port: released blocks
+
+    Note over Port: return releasedBlocks.isNotEmpty() || hadClearedSignals<br/>(truthful: signals-only reclaim = work done)
+    Port-->>Applier: true / false
+    Applier-->>LLM: outcome
+```
+
+**Source:** `DefaultNetworkActuatorPort.releaseRoute` (`:192-210`); `hasClearedSignals` read at `:196` before `releasePath` at `:197`; truthfulness ruling at `:209` (`releasedBlocks.isNotEmpty() || hadClearedSignals`). Test: `DefaultNetworkActuatorPortTest.kt:524-538` documents the read-before-purge ordering.
+
 ---
 
-## 8. Future Considerations
+## 10. Future Considerations
 
 ### Multi-Threading Support
 
@@ -1041,13 +1178,15 @@ fun reserveSection(trainId: String, section: TrackSection) {
 ## Appendix B: Code References
 
 **Key Files:**
-- `PathReservationService.kt` - Interface definition (214 lines)
-- `DefaultPathReservationService.kt` - Implementation (390 lines)
-- `PathReservationRegistry.kt` - Ownership tracking (220 lines)
+- `PathReservationService.kt` - Interface definition
+- `DefaultPathReservationService.kt` - Implementation
+- `PathReservationRegistry.kt` - Ownership tracking
 - `TopologyNavigator.kt` - Path finding interface
-- `DynamicTrackBlock.kt` - Block state machine (450 lines)
-- `TrackReservationException.kt` - Exception hierarchy (NEW)
-- `DynamicTrackBlockExtensions.kt` - Kotlin extension functions (NEW)
+- `DynamicTrackBlock.kt` - Block state machine
+- `TrackReservationException.kt` - Exception hierarchy
+- `DynamicTrackBlockExtensions.kt` - Kotlin extension functions
+
+> **Note:** These files grow over the life of the project. Specific line counts rot quickly and are intentionally omitted — consult the current source for sizes. (At the time of v1.1, `PathReservationService.kt` is ~715 lines and `DefaultPathReservationService.kt` is ~2915 lines.)
 
 **Test Files:**
 - `PathReservationServiceTest.kt` - 15 test cases (382 lines)
@@ -1063,6 +1202,7 @@ fun reserveSection(trainId: String, section: TrackSection) {
 | Version | Date | Author | Changes |
 |---|---|---|---|
 | 1.0 | 2026-01-26 | Claude Code | Initial comprehensive documentation |
+| 1.1 | 2026-08-09 | Claude Code | Issue #893: add G1–G7 signal-clearing invariants, ownership-aware reset APIs (`resetSemaphoresForReleasedBlocks`/`hasClearedSignals`/`recordExternalClearedSemaphore`) with proven-safe-scope and last-writer-wins caveats, `NonContiguousStart` + contiguity precondition (Step 0), Cancel/Release Paths Taxonomy of the six release call sites (signals-first-blocks-second + the `unregister` asymmetry fixed by F1 in `d99862bc`), and a cancel-route sequence diagram. Fix stale Appendix B line counts. |
 
 ---
 
