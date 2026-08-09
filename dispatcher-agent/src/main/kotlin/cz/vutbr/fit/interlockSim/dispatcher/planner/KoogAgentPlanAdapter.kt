@@ -29,8 +29,6 @@ import java.time.Duration
 /**
  * [DispatcherPlanner] backed by the Koog LLM agent with a deterministic [Dispatcher] fallback.
  *
- * ## SP2b.9 (Issue #566)
- *
  * Runs the DISPATCHER agent against a local Ollama model (via [KoogAgentFactory]) and falls back
  * to the deterministic [fallbackDispatcher] (typically [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher])
  * whenever the LLM:
@@ -51,7 +49,7 @@ import java.time.Duration
  *   creation, [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaModelPrewarmer.warmUp]
  *   fires a minimal request to preload the configured model into Ollama memory — this happens
  *   *before* [withTimeout] starts, so cold model-load latency is absorbed here rather than
- *   inside the per-cycle timeout budget (Issue #815).
+ *   inside the per-cycle timeout budget.
  *
  * ## Fallback priority
  *
@@ -66,10 +64,9 @@ import java.time.Duration
  *    as failure and invoking [fallbackDispatcher] on top would double-dispatch: the LLM's
  *    tool-driven decision plus the rule engine's independently-decided one for the same train/hop,
  *    posted to the same queue in the same drain cycle — risking the duplicate-`ReservePath`
- *    train-freeze regression `DispatchDecisionApplier`'s own KDoc documents as a past incident
- *    (Issue #733 follow-up), from a new source. A deliberately emitted `no_op` also counts as
- *    "acted" (the LLM chose to do nothing), so the fallback does not run on top of an explicit
- *    no-op either (SP2c.19).
+ *    train-freeze regression `DispatchDecisionApplier`'s own KDoc documents as a past incident,
+ *    from a new source. A deliberately emitted `no_op` also counts as "acted" (the LLM chose to
+ *    do nothing), so the fallback does not run on top of an explicit no-op either.
  * 2. LLM cycle completes **and the LLM invoked no actuator tool** (the LLM truly did nothing this
  *    cycle — `decideAsync` returned empty and the emission counter is zero) → fall back to
  *    [fallbackDispatcher]. Nothing was posted this cycle, so there is no double-dispatch risk;
@@ -98,19 +95,15 @@ import java.time.Duration
  *
  * The counter lives on the [sinkHolder] shared with [KoogAgentFactory] (which installs the
  * queue-posting wrapper on `sinkHolder.current`), so the same instance both routes emissions to
- * the queue and records that they happened. SP2c.6 (#829) replaced the pre-#829 per-cycle
- * actuator-post counter that lived on [ActuatorCommandQueue] (`resetCycleActuatorCount` /
- * `actedViaToolsThisCycle`, deleted in #829) — that counter went stale once the actuator tools
- * were rewired to emit to [SinkHolder] instead of posting to the queue directly, which is exactly
- * the 100%-fallback regression this counter restores.
+ * the queue and records that they happened.
  *
  * **Residual safety** (the backstop if a detection miss ever did occur, e.g. a tool post
  * rejected by queue backpressure so no call is counted): the downstream layers are idempotent —
- * `ShuntingLoop.approveQueuedTrain` is a no-op for an already-active/nonexistent train (SP0.11),
- * and the reservation layer's block-exclusivity rejects a duplicate `ReservePath` for an
- * already-owned block (`AllPathsBlocked`). So a fallback firing on top of an already-acted
- * cycle degrades to a redundant (rejected) decision rather than a corrupting one. The call
- * counter exists to avoid relying on that backstop in the common case.
+ * `ShuntingLoop.approveQueuedTrain` is a no-op for an already-active/nonexistent train, and the
+ * reservation layer's block-exclusivity rejects a duplicate `ReservePath` for an already-owned
+ * block (`AllPathsBlocked`). So a fallback firing on top of an already-acted cycle degrades to a
+ * redundant (rejected) decision rather than a corrupting one. The call counter exists to avoid
+ * relying on that backstop in the common case.
  *
  * ## Thread safety
  *
@@ -141,8 +134,6 @@ import java.time.Duration
  *                       Thread-safe: reads are done under `@Volatile`; write must happen
  *                       before the first [plan] call (typically from the same thread that
  *                       constructs the outer [MeasuringPlanAdapter]).
- *
- * @since Issue #566 (SP2b.9 — Goal 10)
  */
 class KoogAgentPlanAdapter(
 	private val agentFactory: KoogAgentFactory,
@@ -152,13 +143,11 @@ class KoogAgentPlanAdapter(
 	private val commandQueue: ActuatorCommandQueue,
 	private val sinkHolder: SinkHolder,
 	/**
-	 * Bounded history of previous cycles, rendered into the next cycle's prompt by the agent
-	 * (#822 C5). This adapter is its only writer: it is the one place that knows both what the
-	 * agent emitted (via [sinkHolder]) and how the cycle was classified.
+	 * Bounded history of previous cycles, rendered into the next cycle's prompt by the agent.
+	 * This adapter is its only writer: it is the one place that knows both what the agent
+	 * emitted (via [sinkHolder]) and how the cycle was classified.
 	 *
-	 * Defaults to a disabled history, reproducing the pre-#847 stateless-per-cycle behaviour.
-	 *
-	 * @since Issue #847 (SP2c.24)
+	 * Defaults to a disabled history, reproducing the previous stateless-per-cycle behaviour.
 	 */
 	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0)
 ) : DispatcherPlanner {
@@ -193,8 +182,6 @@ class KoogAgentPlanAdapter(
 	 * sets it to attribute `commandQueue.postAll` calls correctly).
 	 *
 	 * `@Volatile` for the same safe-publication reason as [cycleListener].
-	 *
-	 * @since Issue #843 (SP2c.20 follow-up — Goal 10 action attribution)
 	 */
 	@Volatile
 	var tickListener: PlannerTickListener? = null
@@ -231,19 +218,17 @@ class KoogAgentPlanAdapter(
 	 */
 	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> =
 		try {
-			// Agent creation is INSIDE the try (Issue #847 round 4, R4-2). createAgent runs
-			// OllamaModelPrewarmer.warmUp — real network I/O that can fail — and when this call sat
-			// outside the try its exception escaped plan() altogether, propagating out of
+			// Agent creation is deliberately INSIDE the try: createAgent runs
+			// OllamaModelPrewarmer.warmUp — real network I/O that can fail — and if that call sat
+			// outside the try its exception would escape plan() altogether, propagating out of
 			// AgentLoopDriver.runCycle() into a daemon thread with no uncaught-exception handler and
-			// killing the dispatcher for the rest of the run. A creation failure is now an ordinary
+			// killing the dispatcher for the rest of the run. A creation failure is an ordinary
 			// counted fallback like any other LLM failure, and `agent` stays null so the next cycle
 			// retries rather than the whole run being demoted to rule-based by one transient fault.
 			val a = getOrCreateAgent()
 			// Advance the correlation-map cycle counter before the LLM cycle so every decision
 			// posted by actuator tools during decideAsync receives the correct tick index, and
 			// zero the per-cycle emission counter so actedThisCycle() reflects only this cycle.
-			// SP2c.6 (#829): the emission counter replaces the deleted
-			// resetCycleActuatorCount()/actedViaToolsThisCycle() queue-counter heuristic.
 			commandQueue.advanceCorrelationCycle()
 			sinkHolder.resetCycleEmissionCount()
 			val decisions =
@@ -254,7 +239,7 @@ class KoogAgentPlanAdapter(
 				// The LLM acted via its actuator tools (the emissions were already posted to the
 				// queue through sinkHolder.current) and/or returned decisions directly. Either way
 				// the LLM did its job this cycle — do NOT fall back (would double-dispatch). An
-				// empty returned list with tool emissions is the normal, successful SP2c.6 outcome:
+				// empty returned list with tool emissions is the normal, successful outcome:
 				// decideAsync always returns empty (see KoogDispatchAgentImpl); the load-bearing
 				// signal is the emission counter.
 				logger.debug {
@@ -274,9 +259,9 @@ class KoogAgentPlanAdapter(
 						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
 				}
 				cycleListener?.onFallback(FallbackReason.EMPTY_NO_TOOLS, observation.snapshot.simTime)
-				// SP2c.20 follow-up (#843): fallbackDispatcher.decide() actually runs here and its
-				// decisions are returned — this is a dispatching event, not a no-op, so it maps to
-				// RULE_FALLBACK (not TIMEOUT_NOOP) for correct ActionAuthor attribution.
+				// fallbackDispatcher.decide() actually runs here and its decisions are returned —
+				// this is a dispatching event, not a no-op, so it maps to RULE_FALLBACK (not
+				// TIMEOUT_NOOP) for correct ActionAuthor attribution.
 				reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
 				fallbackDispatcher.decide(observation)
 			}
@@ -302,7 +287,7 @@ class KoogAgentPlanAdapter(
 		}
 
 	/**
-	 * Publishes one completed cycle to the tick listener and to [cycleHistory] (Issue #847).
+	 * Publishes one completed cycle to the tick listener and to [cycleHistory].
 	 *
 	 * A single funnel rather than a call pair at each of the four cycle endings: the history and
 	 * the tick taxonomy must never disagree about how a cycle ended, and they cannot drift if
