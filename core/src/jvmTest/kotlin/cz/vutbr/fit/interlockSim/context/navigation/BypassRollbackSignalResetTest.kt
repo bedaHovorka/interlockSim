@@ -13,12 +13,14 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -133,6 +135,58 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 			.isEqualTo(firstHop.reservedBlocks.map { it.staticRef.toString() }.toSet())
 	}
 
+	@Test
+	@DisplayName("a rolled-back bypass candidate registers no switches and locks none")
+	fun bypassRollbackLocksNoSwitchesWhenNothingSurvives() {
+		val registry: PathReservationRegistry = context.scope.get()
+		val sem1 = semaphoreNamed("sem1")
+		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		requiredNext.setUpPath(sem1, "other-train")
+
+		val result = service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
+
+		// The call must fail: every candidate either bypasses the required block or is blocked.
+		assertThat(result).isEqualTo(PathReservationService.ReservationResult.AllPathsBlocked(2))
+		// The transactional rollback extends the block/signal cleanup to switch state: a rejected
+		// candidate may not leave switches locked or registered to the train — that locks track
+		// the train never reserved, blocking other trains from routing through it.
+		assertThat(registry.getSwitches("train1"))
+			.withMessage("a rejected candidate must not leave switches registered to the train")
+			.isEmpty()
+		assertThat(switches().filter { it.locked }.map { it.name })
+			.withMessage("the candidate's switch locks must be undone when its reservation is rolled back")
+			.isEmpty()
+	}
+
+	@Test
+	@DisplayName("the rollback restores the pre-attempt PathInfo and switch registrations exactly")
+	fun bypassRollbackRestoresPathInfoAndSwitchesToTheirPreAttemptSnapshots() {
+		val registry: PathReservationRegistry = context.scope.get()
+		val entry = inOutNamed("A")
+		val firstHop = service.reservePath("train1", entry, semaphoreNamed("sem1"))
+		assertThat(firstHop).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		val pathInfoBefore = requireNotNull(registry.getPathInfo("train1"))
+		val switchesBefore = registry.getSwitches("train1").toSet()
+		val lockedBefore = switches().associate { it.name to it.locked }
+
+		val sem1 = semaphoreNamed("sem1")
+		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		requiredNext.setUpPath(sem1, "other-train")
+		service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
+
+		// A rejected candidate's PathInfo must not stay merged into the train's navigation metadata:
+		// it points through a route that was just released, steering the train onto the rejected path.
+		assertThat(registry.getPathInfo("train1"))
+			.withMessage("the rolled-back candidate must not leave a PathInfo merged through the rejected route")
+			.isSameInstanceAs(pathInfoBefore)
+		assertThat(registry.getSwitches("train1").toSet())
+			.withMessage("the rolled-back candidate must not leave switches registered beyond the live reservation's")
+			.isEqualTo(switchesBefore)
+		assertThat(switches().associate { it.name to it.locked })
+			.withMessage("candidate switch locks must be undone; the live reservation's locks must survive")
+			.isEqualTo(lockedBefore)
+	}
+
 	private fun semaphoreNamed(name: String): DynamicRailSemaphore =
 		separators().filterIsInstance<DynamicRailSemaphore>().single { it.name == name }
 
@@ -153,6 +207,20 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 				val cell = grid[Point(x, y)]
 				if (cell is DynamicRailSemaphore || cell is DynamicInOut) {
 					found.add(cell as DynamicPathSeparator)
+				}
+			}
+		}
+		return found
+	}
+
+	private fun switches(): List<DynamicRailSwitch> {
+		val grid = context.getRailWayNetGrid()
+		val found = mutableListOf<DynamicRailSwitch>()
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val cell = grid[Point(x, y)]
+				if (cell is DynamicRailSwitch) {
+					found.add(cell)
 				}
 			}
 		}

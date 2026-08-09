@@ -218,7 +218,7 @@ For complete navigation services architecture, Koin DI integration patterns, and
 **Additional architecture documentation:**
 - `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases (808 lines)
 - `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration examples with before/after code (547 lines)
-- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Atomic reservation algorithm and graph theory (1209 lines)
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Atomic reservation algorithm and graph theory (1213 lines)
 - `docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Static/dynamic wrapper pattern
 
 **Object model:**
@@ -519,7 +519,7 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 - `KOTLIN_STYLE_GUIDE.md` - Kotlin coding conventions, DI patterns, build environment (2253 lines)
 - `PATH_DISCOVERY_ARCHITECTURE.md` - Navigation services design (808 lines)
 - `PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with examples (547 lines)
-- `PATH_RESERVATION_ARCHITECTURE.md` - Reservation service design (1209 lines)
+- `PATH_RESERVATION_ARCHITECTURE.md` - Reservation service design (1213 lines)
 - `CONTEXT_REFACTORING_DESIGN.md` - Context system design (Issue #98, #153)
 - `CONTEXT_REFACTORING_PHASE6_SUMMARY.md` - Phase 6 status and completion plan (2026-02-05)
 - `ISSUE_153_RETROSPECTIVE.md` - Phases 1-5 detailed retrospective (927 lines)

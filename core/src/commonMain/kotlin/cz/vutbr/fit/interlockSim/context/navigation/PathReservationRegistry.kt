@@ -1009,6 +1009,52 @@ class PathReservationRegistry(
 	fun getPathInfo(trainId: String): PathInfo? = trainToPathInfo[trainId]
 
 	/**
+	 * Restore a train's PathInfo to a previously snapshotted value, bypassing [registerPathInfo]'s
+	 * merge logic.
+	 *
+	 * ## Purpose: transaction rollback only
+	 *
+	 * `registerPathInfo` is merge-only by design (Issue #296 Phase 8), and the merge is NOT
+	 * invertible — it has cycle-guard abort semantics and entry-direction overwrites that make a
+	 * "subtract the last registration" operation ill-defined. A caller that must undo a registration
+	 * therefore snapshots the PathInfo via [getPathInfo] BEFORE attempting the mutation, and passes
+	 * that snapshot here on rollback:
+	 *
+	 * - Non-null snapshot → replaces the current entry with the snapshot object (exact restore,
+	 *   not a merge).
+	 * - Null snapshot → removes the entry entirely (the train had no PathInfo before the attempt).
+	 *
+	 * The sole production caller is the bypass-rollback in
+	 * `DefaultPathReservationService.reservePathToAnyNextSemaphore`: a candidate that committed its
+	 * reservation and merged its PathInfo is rejected after the fact, and its contribution must be
+	 * removed exactly — a merged-through-the-rejected-route PathInfo would steer the train onto
+	 * track that was just released.
+	 *
+	 * Do NOT use this for general PathInfo editing: route extensions belong in [registerPathInfo]
+	 * so the merge invariants (overlap handling, cycle guard) keep applying.
+	 *
+	 * @param trainId The train identifier
+	 * @param snapshot The value previously read via [getPathInfo], or `null` when the train had
+	 *   no PathInfo before the rolled-back attempt
+	 * @since Issue #893 follow-up (PR #901 review — bypass-rollback transactional completion)
+	 */
+	fun restorePathInfo(
+		trainId: String,
+		snapshot: PathInfo?
+	) {
+		if (snapshot == null) {
+			trainToPathInfo.remove(trainId)
+			logger.debug { "restorePathInfo: removed PathInfo entry for '$trainId' (no pre-attempt PathInfo)" }
+		} else {
+			trainToPathInfo[trainId] = snapshot
+			logger.debug {
+				"restorePathInfo: restored PathInfo for '$trainId' to snapshot " +
+					"(start=${snapshot.start}, target=${snapshot.target}, path length=${snapshot.reservedPath.size})"
+			}
+		}
+	}
+
+	/**
 	 * Clear all registrations.
 	 *
 	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-train mappings.
