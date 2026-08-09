@@ -85,9 +85,10 @@ class OllamaSimpleExecutor(
 	 *
 	 * Held as an explicit [Lazy] (rather than only as a `by lazy` delegated property) so [close]
 	 * can query [Lazy.isInitialized] directly instead of tracking a separate flag: `Lazy<T>`
-	 * exposes `isInitialized()` as a real member — backed by a `@Volatile` field internally, so
-	 * it is already visibility-safe across threads — it is only the unrelated
-	 * `KProperty0.isInitialized()` reflection extension that is `lateinit`-only.
+	 * exposes `isInitialized()` as a real member — under the default `SYNCHRONIZED` mode (also
+	 * true for `PUBLICATION`, but not `LazyThreadSafetyMode.NONE`) it is backed by a `@Volatile`
+	 * field internally, so it is already visibility-safe across threads — it is only the
+	 * unrelated `KProperty0.isInitialized()` reflection extension that is `lateinit`-only.
 	 */
 	private val promptExecutorLazy: Lazy<PromptExecutor> =
 		lazy {
@@ -120,6 +121,8 @@ class OllamaSimpleExecutor(
 			// whether it was rejected. See ToolResultInliningPromptExecutor's KDoc.
 			ToolResultInliningPromptExecutor(MultiLLMPromptExecutor(LLMProvider.Ollama to client))
 		}
+
+	/** Delegated accessor for [promptExecutorLazy]. */
 	private val promptExecutor: PromptExecutor by promptExecutorLazy
 
 	/**
@@ -180,6 +183,16 @@ class OllamaSimpleExecutor(
 	 *
 	 * Koog's [PromptExecutor] implements `AutoCloseable`; we explicitly expose [close] so that
 	 * Koin can wire shutdown hooks during context cleanup.
+	 *
+	 * ### Concurrency note
+	 *
+	 * A [close] call racing with a still-in-progress first [getExecutor] initialization is not
+	 * synchronized against it: [promptExecutorLazy]'s `isInitialized()` only flips to `true`
+	 * after the lazy initializer returns, so a [close] that observes `false` mid-initialization
+	 * will skip closing the executor that finishes building moments later, leaking its
+	 * underlying [OllamaClient] connection. This is a narrow, pre-existing race (not introduced
+	 * by the current implementation) and is considered acceptable given [close] is only called
+	 * once, at application/context shutdown, well after normal [getExecutor] usage has settled.
 	 */
 	fun close() {
 		closed = true
