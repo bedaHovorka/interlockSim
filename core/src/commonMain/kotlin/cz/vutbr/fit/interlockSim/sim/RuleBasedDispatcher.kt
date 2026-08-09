@@ -27,7 +27,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    [DispatchObservation.outerBlockInputs] entry, reserves the next forward
  *    section for any approaching or reserved train. Each reservation is expressed
  *    as a from→to [DispatchDecision.ReservePath] whose `to` the shell has
- *    pre-computed as the next FREE separator toward the train's destination.
+ *    pre-computed as the next FREE separator one section ahead — destination-agnostic;
+ *    see [DispatchObservation.toSeparatorName].
  *
  * The shell ([ShuntingLoop]) calls [decide] once per tick with a single
  * [DispatchObservation] whose fields are all populated together (SP0.11,
@@ -56,7 +57,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * value* of a reservation attempt, which is unavailable before the shell applies
  * the returned [DispatchDecision]s.
  *
- * When the shell found no FREE next separator toward a train's destination
+ * When the shell found no FREE next separator one section ahead
  * ([BlockInputObservation.toSeparatorName] == `null`), no reservation can be
  * requested this tick and [DispatchDecision.NoAction] effectively results for
  * that input — the train waits and is reconsidered next tick, matching the
