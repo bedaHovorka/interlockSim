@@ -387,15 +387,13 @@ class DispatchDecisionApplier(
 					}
 					// Publish DroppedInvalid so the agent learns that its command was
 					// dropped — a silently lost outcome is how this class of bug hides.
-					if (correlation != null) {
-						outcomeSink?.publish(
-							AppliedOutcome.DroppedInvalid(
-								commandType = decision.commandTypeName(),
-								trainId = decision.extractTrainId(),
-								message = e.message ?: "invalid argument",
-								id = correlation.id,
-								tickIndex = correlation.tickIndex
-							)
+					publishOutcome(correlation) {
+						AppliedOutcome.DroppedInvalid(
+							commandType = decision.commandTypeName(),
+							trainId = decision.extractTrainId(),
+							message = e.message ?: "invalid argument",
+							id = it.id,
+							tickIndex = it.tickIndex
 						)
 					}
 					// Notify the action outcome sink about the drop. No logging here —
@@ -530,6 +528,26 @@ class DispatchDecisionApplier(
 		}
 
 	/**
+	 * Publishes an [AppliedOutcome] built by [outcome] to [outcomeSink] when [correlation] is
+	 * non-null; a no-op otherwise.
+	 *
+	 * Every apply-time branch that reports an outcome (approve, release, reserve, and each
+	 * `RequestRoute` result variant) repeats the same "only publish when correlated, using the
+	 * correlation's `id`/`tickIndex`" shape — this collapses that repeated boilerplate into one
+	 * place. [outcome] receives the non-null [CommandCorrelationMap.CommandAndTick] so callers
+	 * that have nothing to publish ([correlation] `== null`) never construct the [AppliedOutcome]
+	 * instance.
+	 */
+	private inline fun publishOutcome(
+		correlation: CommandCorrelationMap.CommandAndTick?,
+		outcome: (CommandCorrelationMap.CommandAndTick) -> AppliedOutcome
+	) {
+		if (correlation != null) {
+			outcomeSink?.publish(outcome(correlation))
+		}
+	}
+
+	/**
 	 * Applies [decision] by checking the live active-train count (if
 	 * [activeTrainCountProvider] is wired) and either admitting the train or refusing
 	 * with [ApplyFailureCode.CAP_EXCEEDED_APPLY].
@@ -565,15 +583,13 @@ class DispatchDecisionApplier(
 					"ApproveTrain CAP_EXCEEDED_APPLY at apply time: trainId=${decision.trainId} " +
 						"live=$liveCount max=$maxConcurrentTrains — admission refused"
 				}
-				if (correlation != null) {
-					outcomeSink?.publish(
-						AppliedOutcome.Approved(
-							trainId = decision.trainId,
-							admitted = false,
-							reason = ApplyFailureCode.CAP_EXCEEDED_APPLY,
-							id = correlation.id,
-							tickIndex = correlation.tickIndex
-						)
+				publishOutcome(correlation) {
+					AppliedOutcome.Approved(
+						trainId = decision.trainId,
+						admitted = false,
+						reason = ApplyFailureCode.CAP_EXCEEDED_APPLY,
+						id = it.id,
+						tickIndex = it.tickIndex
 					)
 				}
 				return false
@@ -584,14 +600,12 @@ class DispatchDecisionApplier(
 				decision.rationale.toRationaleLogSuffix()
 		}
 		onApproveTrain(decision.trainId)
-		if (correlation != null) {
-			outcomeSink?.publish(
-				AppliedOutcome.Approved(
-					trainId = decision.trainId,
-					admitted = true,
-					id = correlation.id,
-					tickIndex = correlation.tickIndex
-				)
+		publishOutcome(correlation) {
+			AppliedOutcome.Approved(
+				trainId = decision.trainId,
+				admitted = true,
+				id = it.id,
+				tickIndex = it.tickIndex
 			)
 		}
 		return true
@@ -705,14 +719,12 @@ class DispatchDecisionApplier(
 				"DispatchDecisionApplier: ReleaseRoute train '${decision.trainName}' held no reservation (no-op)"
 			}
 		}
-		if (correlation != null) {
-			outcomeSink?.publish(
-				AppliedOutcome.Released(
-					trainId = decision.trainName,
-					anyReleased = released,
-					id = correlation.id,
-					tickIndex = correlation.tickIndex
-				)
+		publishOutcome(correlation) {
+			AppliedOutcome.Released(
+				trainId = decision.trainName,
+				anyReleased = released,
+				id = it.id,
+				tickIndex = it.tickIndex
 			)
 		}
 	}
@@ -771,16 +783,14 @@ class DispatchDecisionApplier(
 					"DispatchDecisionApplier: RequestRoute all paths blocked for ${decision.trainName} " +
 						"(${decision.fromEndpointName} → ${decision.toEndpointName}); attempted: ${result.attemptedPaths}"
 				}
-				if (correlation != null) {
-					outcomeSink?.publish(
-						AppliedOutcome.Blocked(
-							trainId = decision.trainName,
-							fromEndpointName = decision.fromEndpointName,
-							toEndpointName = decision.toEndpointName,
-							attemptedPaths = result.attemptedPaths,
-							id = correlation.id,
-							tickIndex = correlation.tickIndex
-						)
+				publishOutcome(correlation) {
+					AppliedOutcome.Blocked(
+						trainId = decision.trainName,
+						fromEndpointName = decision.fromEndpointName,
+						toEndpointName = decision.toEndpointName,
+						attemptedPaths = result.attemptedPaths,
+						id = it.id,
+						tickIndex = it.tickIndex
 					)
 				}
 				ApplyFailureCode.ALL_PATHS_BLOCKED
@@ -790,17 +800,15 @@ class DispatchDecisionApplier(
 					"DispatchDecisionApplier: RequestRoute conflict for ${decision.trainName} — " +
 						"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
 				}
-				if (correlation != null) {
-					outcomeSink?.publish(
-						AppliedOutcome.Conflicted(
-							trainId = decision.trainName,
-							fromEndpointName = decision.fromEndpointName,
-							toEndpointName = decision.toEndpointName,
-							blockName = result.blockName,
-							existingOwner = result.existingOwner,
-							id = correlation.id,
-							tickIndex = correlation.tickIndex
-						)
+				publishOutcome(correlation) {
+					AppliedOutcome.Conflicted(
+						trainId = decision.trainName,
+						fromEndpointName = decision.fromEndpointName,
+						toEndpointName = decision.toEndpointName,
+						blockName = result.blockName,
+						existingOwner = result.existingOwner,
+						id = it.id,
+						tickIndex = it.tickIndex
 					)
 				}
 				ApplyFailureCode.CONFLICT
@@ -810,15 +818,13 @@ class DispatchDecisionApplier(
 					"DispatchDecisionApplier: RequestRoute no route exists " +
 						"${decision.fromEndpointName} → ${decision.toEndpointName} for ${decision.trainName}"
 				}
-				if (correlation != null) {
-					outcomeSink?.publish(
-						AppliedOutcome.NoRoute(
-							trainId = decision.trainName,
-							fromEndpointName = decision.fromEndpointName,
-							toEndpointName = decision.toEndpointName,
-							id = correlation.id,
-							tickIndex = correlation.tickIndex
-						)
+				publishOutcome(correlation) {
+					AppliedOutcome.NoRoute(
+						trainId = decision.trainName,
+						fromEndpointName = decision.fromEndpointName,
+						toEndpointName = decision.toEndpointName,
+						id = it.id,
+						tickIndex = it.tickIndex
 					)
 				}
 				ApplyFailureCode.NO_ROUTE_EXISTS
@@ -848,17 +854,16 @@ class DispatchDecisionApplier(
 			"DispatchDecisionApplier: RequestRoute origin not contiguous for " +
 				"${decision.trainName}: ${result.reason}"
 		}
-		if (correlation == null) return
-		outcomeSink?.publish(
+		publishOutcome(correlation) {
 			AppliedOutcome.OriginNotContiguous(
 				trainId = decision.trainName,
 				fromEndpointName = decision.fromEndpointName,
 				toEndpointName = decision.toEndpointName,
 				reason = result.reason,
-				id = correlation.id,
-				tickIndex = correlation.tickIndex
+				id = it.id,
+				tickIndex = it.tickIndex
 			)
-		)
+		}
 	}
 
 	/**
@@ -878,16 +883,14 @@ class DispatchDecisionApplier(
 		}
 		appliedRequestRoutes.add(reservationKey)
 		onBlockTransition(decision.trainName)
-		if (correlation != null) {
-			outcomeSink?.publish(
-				AppliedOutcome.Reserved(
-					trainId = decision.trainName,
-					fromEndpointName = decision.fromEndpointName,
-					toEndpointName = decision.toEndpointName,
-					blocksCount = result.blocksCount,
-					id = correlation.id,
-					tickIndex = correlation.tickIndex
-				)
+		publishOutcome(correlation) {
+			AppliedOutcome.Reserved(
+				trainId = decision.trainName,
+				fromEndpointName = decision.fromEndpointName,
+				toEndpointName = decision.toEndpointName,
+				blocksCount = result.blocksCount,
+				id = it.id,
+				tickIndex = it.tickIndex
 			)
 		}
 	}
