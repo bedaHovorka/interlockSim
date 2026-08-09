@@ -47,9 +47,21 @@ import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
+import org.koin.core.scope.Scope
 import org.koin.dsl.module
 import java.nio.file.Path
 import java.util.UUID
+
+/**
+ * Resolves the [DefaultSimulationContext] this scope was opened for.
+ *
+ * All `scoped<...>` bindings below need the live context that backs their
+ * [DefaultSimulationContext]-scoped Koin scope; this is the single place that resolves it and
+ * throws consistently if the scope was somehow opened without one.
+ */
+private fun Scope.requireContextSource(): DefaultSimulationContext =
+	getSource<DefaultSimulationContext>()
+		?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 
 /**
  * Koin DI module for `:dispatcher-agent`'s components: the rule-based/LLM dispatcher, the Ollama
@@ -153,9 +165,7 @@ val dispatcherAgentModule: Module =
 			// Each context gets its own perception port instance with its own
 			// perception/block/train state snapshots.
 			scoped<NetworkPerceptionPort> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context = requireContextSource()
 				DefaultNetworkPerceptionPort(
 					env = context,
 					// SP1.4b follow-up (PR #769 review): interface-based lookup, no reflection.
@@ -169,9 +179,7 @@ val dispatcherAgentModule: Module =
 			// safety logic. Each context gets its own actuator port instance with its own
 			// routing services and dynamic wrappers.
 			scoped<NetworkActuatorPort> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context = requireContextSource()
 				// InterlockingFacade is wired as the single chokepoint so all requestRoute calls
 				// (tool → queue → applier → port) pass through the safety kernel.
 				DefaultNetworkActuatorPort(
@@ -211,9 +219,7 @@ val dispatcherAgentModule: Module =
 			// context.setMainProcess(loop) has run) via the interface-based lookup pattern (see
 			// mainProcessActiveTrains / ProvidesDispatchLoopObservation).
 			scoped<DispatchLoopSensorPort> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context = requireContextSource()
 				MainProcessDispatchLoopSensorPort(context)
 			}
 
@@ -227,9 +233,7 @@ val dispatcherAgentModule: Module =
 			// with the AppliedOutcomeChannel as outcomeFeed so applied outcomes flow into each
 			// tick's observation.
 			scoped<DispatcherObservationProjector> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context = requireContextSource()
 				DispatcherObservationProjector(
 					perceptionPort = get(),
 					dispatchLoopSensorPort = get(),
