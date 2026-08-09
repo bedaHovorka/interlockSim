@@ -38,6 +38,17 @@ The *storno* time-release timer is a real-world defence against a human driver w
 
 A grep of `core/src/commonMain` and `dispatcher-agent/src/main` confirms that "storno" and "sighting" appear nowhere in the production source — the concepts are absent by design, not by oversight.
 
+### The "cancelled between clearance and first movement" edge case — measured (#834, SP2c.11)
+
+The one moment the guard-less `releaseRoute` noted above could bite hardest is the narrowest one: after `Train.actions()`'s admission gate (`waitUntil { isPathReservedForTrain(...) }`) has passed but before the `Front` has moved a metre. The `Front`'s first loop iteration sits at the entry `InOut` with `current == null`, and `Train.kt`'s `if (path == null || next == null) { if (where is DynamicInOut) break }` makes a missing route there an immediate exit from the movement loop rather than the wait-for-dispatcher branch every later position takes.
+
+Two things were established about it, and neither required a `core/` change:
+
+- **It is not currently reachable by cancelling a route.** Every releaser — `DispatchDecisionApplier` applying `cancel_route`/`ReleaseRoute`, and `OrphanReservationSweeper.sweep` — runs synchronously inside `ShuntingLoop.iteration()`, before the loop's `hold()`. The admission chain (`InOutWorker` reserving → `Train.actions()` resuming → `Process.activate(front)` → the `Front`'s first query) runs strictly afterwards in the same simulated instant on the single kDisco scheduler thread, with no releaser interleaved. `CancelRouteTool` only emits a `DispatchAction` for that same sim thread, so the agent thread cannot short-circuit it. `isPathReservedForTrain` is implemented on top of `findReservedPathForTrain`, so the gate and the `Front`'s query are the same predicate over the same state.
+- **If the state is produced anyway, it does not inflate any counter.** Forced deterministically (`EntryRouteLossAccountingTest`, `:dispatcher-agent`), the `Front` breaks with zero movement, but `Train.actions()` stays parked forever in `waitUntilCrossing { (getLength() - dtMin) - front.getTotalDistance() }` — a distance the train will never cover — so the `Train` process never terminates and `ShuntingLoop`'s `trainsExitedCount`, which counts only terminated trains, never credits it. The exited counter under-reports here; it does not over-report.
+
+What it *does* cost is a permanent stall: the train holds its admission slot and the head of its `InOutWorker` queue for the rest of the run, and `Front.separatorAction` throws a FATAL `SimulationException` ("Path to semaphore first element must match current position: null") on the `Front`'s own coroutine on the way out, where it is reported but does not stop the run. Making the entry case take the wait-for-dispatcher branch instead of `break` is a `core/` behaviour change and needs a traffic-simulation-expert ruling; it is recorded here rather than made.
+
 ---
 
 ## B2. Flank-Protection Switch-Lock Scope (F4)
