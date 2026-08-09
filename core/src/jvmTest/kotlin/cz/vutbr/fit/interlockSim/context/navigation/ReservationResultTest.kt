@@ -129,7 +129,11 @@ class ReservationResultTest : KoinTestBase() {
 
 	@Test
 	fun `NonContiguousStart carries startName and reason`() {
-		val result = PathReservationService.ReservationResult.NonContiguousStart("S1", "start S1 is not contiguous with the train footprint")
+		val result =
+			PathReservationService.ReservationResult.NonContiguousStart(
+				"S1",
+				"start S1 is not contiguous with the train footprint"
+			)
 
 		assertThat(result.startName).isEqualTo("S1")
 		assertThat(result.reason).isEqualTo("start S1 is not contiguous with the train footprint")

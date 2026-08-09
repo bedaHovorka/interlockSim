@@ -1052,6 +1052,14 @@ class DefaultPathReservationService(
 			// bypass-rollback can reset only what THIS candidate cleared (the before/after delta)
 			// and not a pre-existing reservation's signals.
 			val clearedBefore = clearedSemaphores[trainId]?.toSet() ?: emptySet()
+			// Capture the blocks this train already owns before this attempt, for the same reason
+			// on the block side: a bypass candidate's alternative route may reuse blocks the train
+			// already holds from a live reservation, so result.reservedBlocks can overlap that
+			// reservation. Releasing all of it would unregister the live reservation. The rollback
+			// must release only the candidate's NEW blocks (the before/after ownership delta),
+			// mirroring the semaphore delta above. registerAtomic is idempotent for already-owned
+			// blocks (it only updates ownership maps), so the snapshot is stable across the attempt.
+			val blocksBefore = registry.getBlocks(trainId).toSet()
 
 			val result = reservePath(trainId, start, semaphore)
 
@@ -1072,8 +1080,11 @@ class DefaultPathReservationService(
 						val clearedByThisCandidate =
 							(clearedSemaphores[trainId] ?: emptySet()) - clearedBefore
 						resetSemaphoreSet(trainId, clearedByThisCandidate)
-						// Release the wrongly reserved path
-						releaseBypassRollbackBlocks(trainId, result.reservedBlocks)
+						// Release the wrongly reserved path — only the blocks THIS candidate newly
+						// reserved (the ownership delta vs [blocksBefore]); blocks the train already
+						// held from a live reservation must stay registered, or the rollback would
+						// strand a mid-journey train.
+						releaseBypassRollbackBlocks(trainId, result.reservedBlocks, blocksBefore)
 						lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 						continue
 					}
@@ -1136,12 +1147,26 @@ class DefaultPathReservationService(
 	 * `finally` so a `cancelPathSetup` throw no longer leaks a block still registered to the train.
 	 * Uses `block.reservedFrom` (not the caller's `start`) so the cancel targets the separator the
 	 * block was actually reserved from.
+	 *
+	 * Only the candidate's NEW blocks — those not in [blocksBefore] (the train's ownership
+	 * snapshot taken before this candidate's [reservePath]) — are released. A bypass candidate's
+	 * alternative route may reuse blocks the train already holds from a live reservation; releasing
+	 * those would unregister the live reservation and strand a mid-journey train. This mirrors the
+	 * caller's semaphore delta reset (`clearedByThisCandidate = clearedAfter - clearedBefore`).
+	 * Blocks already owned are skipped entirely — both `cancelPathSetup` (which would drive a live
+	 * RESERVED block to FREE) and `unregisterBlock` — so the pre-existing reservation is undisturbed.
 	 */
 	private fun releaseBypassRollbackBlocks(
 		trainId: String,
-		reservedBlocks: List<DynamicTrackBlock>
+		reservedBlocks: List<DynamicTrackBlock>,
+		blocksBefore: Set<DynamicTrackBlock>
 	) {
 		reservedBlocks.forEach { block ->
+			// Skip blocks the train already owned before this candidate: they belong to a live
+			// reservation and must not be cancelled or unregistered.
+			if (block in blocksBefore) {
+				return@forEach
+			}
 			try {
 				val reservedFrom = block.reservedFrom
 				if (reservedFrom != null) {
