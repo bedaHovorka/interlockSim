@@ -23,14 +23,13 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * [EmissionStrategy] adapter that delegates to the synchronous [Dispatcher] API (SP2c.5,
- * Issue #828 — P10 gate).
+ * [EmissionStrategy] adapter that delegates to the synchronous [Dispatcher] API.
  *
  * ## Purpose
  *
  * [RuleBasedEmissionStrategy] routes the [RuleBasedDispatcher][cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]
  * (or any other [Dispatcher] implementation) through the **same** [DispatchTickLoop] validator
- * and four-action vocabulary as the LLM agent. This provides three guarantees (from the issue):
+ * and four-action vocabulary as the LLM agent. This provides three guarantees:
  *
  * 1. The rule engine is exercised against the **same** [ActionValidator] and the **same**
  *    four-action vocabulary — a real cross-check on the vocabulary's expressiveness. If the
@@ -49,7 +48,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * - `approvedTrainCount` ← count of trains with phase not QUEUED and not EXITED (= `obs.activeCount`)
  * - `unapprovedTrains` ← `obs.queued` mapped to [QueuedTrainObservation]
- * - `innerBlockInputs` ← `obs.innerBlockInputs` (populated by [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector] since SP2c.5)
+ * - `innerBlockInputs` ← `obs.innerBlockInputs` (populated by [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector])
  * - `outerBlockInputs` ← `obs.outerBlockInputs` (same)
  * - `snapshot.trainPositions` ← built from `obs.trains` (non-QUEUED, non-EXITED) so that
  *   `approvedTrainCount == snapshot.trainPositions.size` — the only field of [SimulationSnapshot]
@@ -63,7 +62,7 @@ import java.util.concurrent.atomic.AtomicLong
  * | [DispatchDecision] | [DispatchAction] |
  * |---|---|
  * | [DispatchDecision.ApproveTrain] | [DispatchAction.ApproveTrain] |
- * | [DispatchDecision.ReservePath] | [DispatchAction.RequestRoute] (same `from`/`to` semantics; `scope = RouteScope.Section` — see Issue #848 / #829) |
+ * | [DispatchDecision.ReservePath] | [DispatchAction.RequestRoute] (same `from`/`to` semantics; `scope = RouteScope.Section`) |
  * | [DispatchDecision.NoAction] | filtered out (empty list = "nothing to do") |
  * | Any other subtype | filtered out |
  *
@@ -88,15 +87,13 @@ import java.util.concurrent.atomic.AtomicLong
  * When [TerminalFallbackGuard][cz.vutbr.fit.interlockSim.dispatcher.agents.TerminalFallbackGuard]
  * engages after an LLM run, it constructs a new [RuleBasedEmissionStrategy] with
  * `overrideAuthor = ActionAuthor.RULE_FALLBACK` so that post-engagement actions are
- * distinguishable from normal rule-engine runs and are not scored as LLM work (SP2c.8, #831).
+ * distinguishable from normal rule-engine runs and are not scored as LLM work.
  *
  * @param dispatcher The [Dispatcher] to delegate to. [RuleBasedDispatcher][cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]
  *   for the P10 gate; can be any [Dispatcher] implementation for future use.
  * @param overrideAuthor The [ActionAuthor] to stamp on every emitted [AttributedAction]. Defaults to
  *   [ActionAuthor.RULE_BASED]. Pass [ActionAuthor.RULE_FALLBACK] when this strategy acts as the
  *   post-engagement fallback after a terminal LLM failure.
- *
- * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 class RuleBasedEmissionStrategy(
 	private val dispatcher: Dispatcher,
@@ -150,9 +147,8 @@ class RuleBasedEmissionStrategy(
 	 *
 	 * When [DispatchTickLoop] calls [emit] with an optimistically projected [observation]
 	 * (for C6 re-validation), the projected `activeCount` / `queued` reflect the in-loop
-	 * state after previous actions this tick — not the true sim-thread state. This is the
-	 * documented intra-tick inaccuracy from the issue design table (option A); divergence
-	 * is bounded to one tick and surfaces in `applied_outcomes` next tick.
+	 * state after previous actions this tick — not the true sim-thread state. This intra-tick
+	 * inaccuracy is bounded to one tick and surfaces in `applied_outcomes` next tick.
 	 */
 	private fun toDispatchObservation(obs: DispatcherObservation): DispatchObservation {
 		val activeTrainPositions =
@@ -221,9 +217,9 @@ class RuleBasedEmissionStrategy(
 							trainId = decision.trainId,
 							fromEndpointName = decision.fromSemaphoreName,
 							toEndpointName = decision.toSeparatorName,
-							// Issue #848 / #829: ReservePath is a hop-level (per-block-boundary)
-							// decision, not a request for the train's final destination — see
-							// RouteScope's KDoc for why ActionValidator needs this discriminant.
+							// ReservePath is a hop-level (per-block-boundary) decision, not a request
+							// for the train's final destination — see RouteScope's KDoc for why
+							// ActionValidator needs this discriminant.
 							scope = RouteScope.Section
 						),
 					author = overrideAuthor,
