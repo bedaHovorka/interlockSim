@@ -163,6 +163,19 @@ data class OllamaExecutorConfig(
 			OllamaExecutorConfig(
 				inferenceTimeout = Duration.ofSeconds(10)
 			)
+
+		/**
+		 * Build the shared warning text for a setting that Koog 1.1.1 accepts but never forwards
+		 * to Ollama (see [noOpSettingWarnings] and the class KDoc's "`maxTokens`/`topP`
+		 * limitation").
+		 */
+		private fun noOpSettingWarning(
+			settingName: String,
+			value: Any
+		): String =
+			"$settingName=$value has no effect under Koog 1.1.1 — OllamaClient.execute() does not " +
+				"forward it to Ollama. The value is retained for forward compatibility (a future Koog " +
+				"release or an LLMParams.additionalProperties escape hatch may pick it up)."
 	}
 
 	/**
@@ -204,20 +217,8 @@ data class OllamaExecutorConfig(
 	 */
 	fun noOpSettingWarnings(): List<String> =
 		buildList {
-			if (maxTokens != DEFAULT_MAX_TOKENS) {
-				add(
-					"maxTokens=$maxTokens has no effect under Koog 1.1.1 — OllamaClient.execute() does not " +
-						"forward it to Ollama. The value is retained for forward compatibility (a future Koog " +
-						"release or an LLMParams.additionalProperties escape hatch may pick it up)."
-				)
-			}
-			if (topP != DEFAULT_TOP_P) {
-				add(
-					"topP=$topP has no effect under Koog 1.1.1 — OllamaClient.execute() does not forward it " +
-						"to Ollama. The value is retained for forward compatibility (a future Koog release or " +
-						"an LLMParams.additionalProperties escape hatch may pick it up)."
-				)
-			}
+			if (maxTokens != DEFAULT_MAX_TOKENS) add(noOpSettingWarning("maxTokens", maxTokens))
+			if (topP != DEFAULT_TOP_P) add(noOpSettingWarning("topP", topP))
 		}
 
 	init {
