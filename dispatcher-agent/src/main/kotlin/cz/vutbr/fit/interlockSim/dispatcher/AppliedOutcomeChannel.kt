@@ -94,15 +94,22 @@ class AppliedOutcomeChannel(
 	 */
 	override fun drainSince(fromTickIndex: Long): List<AppliedOutcome> =
 		synchronized(ring) {
-			val result = mutableListOf<AppliedOutcome>()
-			val it = ring.iterator()
-			while (it.hasNext()) {
-				val outcome = it.next()
-				if (outcome.tickIndex >= fromTickIndex) {
-					result.add(outcome)
-					it.remove()
+			// Empty-ring fast path: the common case on a freshly-drained or idle channel. Returns
+			// the shared emptyList() singleton without allocating a MutableList — this method is on
+			// a hot, per-tick, cross-thread path and the class contract (see KDoc) is allocation-light.
+			if (ring.isEmpty()) {
+				emptyList()
+			} else {
+				val result = mutableListOf<AppliedOutcome>()
+				val it = ring.iterator()
+				while (it.hasNext()) {
+					val outcome = it.next()
+					if (outcome.tickIndex >= fromTickIndex) {
+						result.add(outcome)
+						it.remove()
+					}
 				}
+				result
 			}
-			result
 		}
 }
