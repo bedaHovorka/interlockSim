@@ -246,9 +246,15 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `renderMarkdown shows correctAt1 value in Arm Comparison and Parameter Sweep when oracle data present`() {
+		// Task 5 (#834) legitimately introduced "n/a" elsewhere in the report (invalid-action rate
+		// and railway-outcome columns, for figures nothing measured), so this can no longer assert
+		// a blanket absence of "n/a" — it must check the correctAt1 column specifically.
 		val report = aggregator.aggregate(listOf(snapshot(runId = "oracle1", correctAt1 = 0.75)))
 		val md = aggregator.renderMarkdown(listOf(report))
-		assertThat(md).transform("does not fall back to n/a") { !md.contains("n/a") }.isTrue()
+
+		assertThat(md).transform("Arm Comparison shows correctAt1") { md.contains("| 0.750 |") }.isTrue()
+		val hygieneCells = tableRowCells(hygieneSection(md), DispatcherArm.RULE_BASED.name)
+		assertThat(hygieneCells[17]).isEqualTo("0.750")
 	}
 
 	@Test
@@ -312,11 +318,21 @@ class RunReportAggregatorTest {
 		val report = aggregator.aggregate(cold + hot)
 		val md = aggregator.renderMarkdown(listOf(report))
 
-		val sweepSection = md.substringAfter("## Parameter Sweep")
-		assertThat(sweepSection).transform("shows the 0.28 cell") { it.contains("| 0.28 |") }.isTrue()
-		assertThat(sweepSection).transform("shows the 0.5 cell") { it.contains("| 0.5 |") }.isTrue()
-		assertThat(sweepSection)
+		// Task 5 (#834): the Parameter Sweep section is now two tables (Decision Hygiene, Railway
+		// Outcomes) sharing the same parameter-identity columns; check each table independently so
+		// this assertion still means "one row per cell" rather than "one row per cell per table".
+		val hygiene = hygieneSection(md)
+		assertThat(hygiene).transform("shows the 0.28 cell") { it.contains("| 0.28 |") }.isTrue()
+		assertThat(hygiene).transform("shows the 0.5 cell") { it.contains("| 0.5 |") }.isTrue()
+		assertThat(hygiene)
 			.transform("counts runs per cell, not per arm") {
+				val dataRows = it.lines().filter { line -> line.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+				dataRows.size == 2
+			}.isTrue()
+
+		val outcomes = outcomesSection(md)
+		assertThat(outcomes)
+			.transform("Railway Outcomes also has one row per cell") {
 				val dataRows = it.lines().filter { line -> line.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
 				dataRows.size == 2
 			}.isTrue()
@@ -332,9 +348,10 @@ class RunReportAggregatorTest {
 					snapshot(runId = "b1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.9)
 				)
 			)
-		val sweepSection = aggregator.renderMarkdown(listOf(report)).substringAfter("## Parameter Sweep")
+		val md = aggregator.renderMarkdown(listOf(report))
+		val hygiene = hygieneSection(md)
 		val rows =
-			sweepSection
+			hygiene
 				.lines()
 				.filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
 
@@ -347,6 +364,186 @@ class RunReportAggregatorTest {
 			.isTrue()
 	}
 
+	// ── Task 5 (#834): AC-required per-cell columns ─────────────────────────────
+
+	@Test
+	fun `Parameter Sweep reports every AC-required metric from known snapshot values`() {
+		val snap =
+			snapshot(
+				runId = "ac1",
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				llmSuccessRate = 0.75,
+				noOpRate = 0.2,
+				repairSuccessRate = 0.1,
+				latencyP50Ms = 150L,
+				latencyP95Ms = 250L,
+				c7Clean = true,
+				emittedByActionType = mapOf("MOVE_TRAIN" to 10L),
+				rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 3L),
+				ruleFallbackTicks = 2L,
+				inferenceTimeoutSeconds = 90L,
+				promptVariant = "v2",
+				railwayOutcome =
+					RailwayOutcome(
+						journeysCompleted = 5L,
+						trainsEntered = 6L,
+						trainsExited = 4L,
+						maxConcurrentTrains = 3L,
+						blockTransitions = 20L,
+						conflicts = 1L,
+						failedReservations = 2L
+					)
+			)
+		val report = aggregator.aggregate(listOf(snap))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val hygieneCells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
+		assertThat(hygieneCells[7]).isEqualTo("90")
+		assertThat(hygieneCells[8]).isEqualTo("v2")
+		assertThat(hygieneCells[12]).isEqualTo("0.750")
+		// Invalid-action rate = 3 rejected / 10 emitted actions = 0.300 (action-scoped, not tick-scoped).
+		assertThat(hygieneCells[13]).isEqualTo("0.300")
+		assertThat(hygieneCells[14]).isEqualTo("0.200")
+		assertThat(hygieneCells[15]).isEqualTo("0.100")
+		assertThat(hygieneCells[18]).isEqualTo("150")
+		assertThat(hygieneCells[19]).isEqualTo("250")
+		assertThat(hygieneCells[20]).isEqualTo("yes")
+		assertThat(hygieneCells[21]).isEqualTo("2")
+
+		val outcomeCells = tableRowCells(outcomesSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
+		assertThat(outcomeCells[10]).isEqualTo("5")
+		assertThat(outcomeCells[11]).isEqualTo("6")
+		assertThat(outcomeCells[12]).isEqualTo("4")
+		assertThat(outcomeCells[13]).isEqualTo("3")
+		assertThat(outcomeCells[14]).isEqualTo("20")
+		assertThat(outcomeCells[15]).isEqualTo("1")
+		assertThat(outcomeCells[16]).isEqualTo("2")
+	}
+
+	@Test
+	fun `invalid-action rate is computed from emitted and rejected actions, not from ticks`() {
+		// invalidOutputRate (tick-scoped) stays at its default 0.0 here; emitted=20 actions with 5
+		// rejected gives an action-scoped rate of 0.25 — a value invalidOutputRate could never
+		// produce from this fixture, so this pins that the two are not silently interchangeable.
+		val snap =
+			snapshot(
+				runId = "action-rate",
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				invalidOutputRate = 0.0,
+				emittedByActionType = mapOf("MOVE_TRAIN" to 15L, "SET_SIGNAL" to 5L),
+				rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 5L)
+			)
+		val report = aggregator.aggregate(listOf(snap))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val cells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
+		assertThat(cells[13]).isEqualTo("0.250")
+	}
+
+	@Test
+	fun `invalid-action rate is n slash a, not zero, when no run in the cell emitted any action`() {
+		val snap = snapshot(runId = "no-actions", arm = DispatcherArm.LLM_TOOL_CALLING)
+		val report = aggregator.aggregate(listOf(snap))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val cells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
+		assertThat(cells[13]).isEqualTo("n/a")
+	}
+
+	@Test
+	fun `cells differing only in inferenceTimeoutSeconds render as separate rows`() {
+		val short = snapshot(runId = "short", arm = DispatcherArm.LLM_TOOL_CALLING, inferenceTimeoutSeconds = 30L)
+		val long = snapshot(runId = "long", arm = DispatcherArm.LLM_TOOL_CALLING, inferenceTimeoutSeconds = 90L)
+		val report = aggregator.aggregate(listOf(short, long))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val rows = hygieneSection(md).lines().filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+		assertThat(rows.size).isEqualTo(2)
+		assertThat(rows.any { it.contains("| 30 |") }).isTrue()
+		assertThat(rows.any { it.contains("| 90 |") }).isTrue()
+	}
+
+	@Test
+	fun `cells differing only in promptVariant render as separate rows`() {
+		val v1 = snapshot(runId = "pv1", arm = DispatcherArm.LLM_TOOL_CALLING, promptVariant = "prompt-v1")
+		val v2 = snapshot(runId = "pv2", arm = DispatcherArm.LLM_TOOL_CALLING, promptVariant = "prompt-v2")
+		val report = aggregator.aggregate(listOf(v1, v2))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val rows = hygieneSection(md).lines().filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+		assertThat(rows.size).isEqualTo(2)
+		assertThat(rows.any { it.contains("| prompt-v1 |") }).isTrue()
+		assertThat(rows.any { it.contains("| prompt-v2 |") }).isTrue()
+	}
+
+	@Test
+	fun `railway outcome figures render as n slash a, not zero, when never measured`() {
+		val snap = snapshot(runId = "unmeasured", arm = DispatcherArm.LLM_TOOL_CALLING)
+		val report = aggregator.aggregate(listOf(snap))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val cells = tableRowCells(outcomesSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
+		// Indices 10..16: journeysCompleted, trainsEntered, trainsExited, maxConcurrentTrains,
+		// blockTransitions, conflicts, failedReservations — RailwayOutcome.UNMEASURED, all null.
+		(10..16).forEach { idx -> assertThat(cells[idx]).isEqualTo("n/a") }
+	}
+
+	@Test
+	fun `repair-success rate is marked as having no live producer, not presented as a bare measurement`() {
+		val report = aggregator.aggregate(listOf(snapshot(runId = "repair1")))
+		val md = aggregator.renderMarkdown(listOf(report))
+		assertThat(md).transform("mentions no live producer") { it.contains("no live producer") }.isTrue()
+	}
+
+	@Test
+	fun `Parameter Sweep legend distinguishes invalid-action rate from invalidOutputRate and cites #906`() {
+		val report = aggregator.aggregate(listOf(snapshot(runId = "legend1")))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		assertThat(md).transform("mentions invalidOutputRate for contrast") { it.contains("invalidOutputRate") }.isTrue()
+		assertThat(md).transform("mentions trainsExited ranking rationale") { it.contains("trainsExited") }.isTrue()
+		assertThat(md).transform("cites issue #906") { it.contains("#906") }.isTrue()
+	}
+
+	@Test
+	fun `Parameter Sweep ranks cells by trainsExited, not journeysCompleted`() {
+		// "loser" has the higher journeysCompleted but the lower (real) trainsExited — #906's ruling
+		// is precisely that ranking on journeysCompleted would put it first, which is the miscount
+		// the ruling forbids: journeysCompleted can credit a journey to a train that never moved.
+		val loser =
+			snapshot(
+				runId = "loser",
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				temperature = 0.1,
+				railwayOutcome = RailwayOutcome(journeysCompleted = 50L, trainsExited = 1L)
+			)
+		val winner =
+			snapshot(
+				runId = "winner",
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				temperature = 0.9,
+				railwayOutcome = RailwayOutcome(journeysCompleted = 2L, trainsExited = 10L)
+			)
+		val report = aggregator.aggregate(listOf(loser, winner))
+		val md = aggregator.renderMarkdown(listOf(report))
+		val rows = outcomesSection(md).lines().filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+
+		assertThat(rows.size).isEqualTo(2)
+		val winnerIdx = rows.indexOfFirst { it.contains("| 0.9 |") }
+		val loserIdx = rows.indexOfFirst { it.contains("| 0.1 |") }
+		assertThat(winnerIdx < loserIdx).isTrue()
+	}
+
+	@Test
+	fun `Parameter Sweep with zero runs renders both tables without throwing`() {
+		val emptyArmReport = aggregator.aggregate(emptyList())
+		val md = aggregator.renderMarkdown(listOf(emptyArmReport))
+
+		assertThat(md).transform("contains Decision Hygiene") { md.contains("### Decision Hygiene") }.isTrue()
+		assertThat(md).transform("contains Railway Outcomes") { md.contains("### Railway Outcomes") }.isTrue()
+		assertThat(md).transform("railway figures fall back to n/a") { outcomesSection(md).contains("n/a") }.isTrue()
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	private fun snapshot(
@@ -356,17 +553,27 @@ class RunReportAggregatorTest {
 		fallback: Boolean = false,
 		c7Clean: Boolean = true,
 		llmSuccessRate: Double = 1.0,
+		noOpRate: Double = 0.0,
+		invalidOutputRate: Double = 0.0,
+		repairSuccessRate: Double = 0.0,
+		latencyP50Ms: Long = 100L,
 		latencyP95Ms: Long = 200L,
 		rejections: Map<RejectionCode, Long> = emptyMap(),
 		applyFailures: Map<ApplyFailureCode, Long> = emptyMap(),
 		authorCounts: Map<ActionAuthor, Long> = emptyMap(),
+		emittedByActionType: Map<String, Long> = emptyMap(),
 		correctAt1: Double? = null,
 		model: String = "",
 		seed: Long? = null,
-		temperature: Double = 0.0
+		temperature: Double = 0.0,
+		inferenceTimeoutSeconds: Long = KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
+		promptVariant: String = RunParameters.DEFAULT_PROMPT_VARIANT,
+		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
+		ruleFallbackTicks: Long = 0L
 	): DispatcherRunSnapshot {
 		val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
 		outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
+		outcomes[TickOutcome.RULE_FALLBACK.name] = ruleFallbackTicks
 
 		return DispatcherRunSnapshot(
 			runId = runId,
@@ -378,22 +585,24 @@ class RunReportAggregatorTest {
 					temperature = temperature,
 					maxActionsPerTick = 3,
 					model = model,
-					seed = seed
+					seed = seed,
+					inferenceTimeoutSeconds = inferenceTimeoutSeconds,
+					promptVariant = promptVariant
 				),
-			totalTicks = 1L,
+			totalTicks = 1L + ruleFallbackTicks,
 			ticksByOutcome = outcomes,
 			timeoutNoOpByCause = TimeoutNoOpCause.entries.associate { it.name to 0L },
 			llmSuccessRate = llmSuccessRate,
-			noOpRate = 0.0,
-			invalidOutputRate = 0.0,
-			repairSuccessRate = 0.0,
-			emittedByActionType = emptyMap(),
+			noOpRate = noOpRate,
+			invalidOutputRate = invalidOutputRate,
+			repairSuccessRate = repairSuccessRate,
+			emittedByActionType = emittedByActionType,
 			rejectionsByCode = rejections.mapKeys { it.key.name },
 			applyFailuresByCode = applyFailures.mapKeys { it.key.name },
 			validAt1 = 1.0,
 			correctAt1 = correctAt1,
 			oracleAgreementAt1 = null,
-			latencyP50Ms = 100L,
+			latencyP50Ms = latencyP50Ms,
 			latencyP95Ms = latencyP95Ms,
 			latencyMaxMs = 300L,
 			actionsByAuthor = authorCounts.mapKeys { it.key.name },
@@ -402,7 +611,30 @@ class RunReportAggregatorTest {
 			terminalFallbackTickIndex = if (fallback) 5L else null,
 			c7Clean = c7Clean,
 			completedNaturally = completedNaturally,
-			endCause = if (completedNaturally) RunEndCause.NATURAL_COMPLETION else RunEndCause.TIMEOUT_ABORT
+			endCause = if (completedNaturally) RunEndCause.NATURAL_COMPLETION else RunEndCause.TIMEOUT_ABORT,
+			railwayOutcome = railwayOutcome
 		)
 	}
+
+	/**
+	 * Extracts the data row for [armPrefix] from a single Parameter Sweep table [section] (the
+	 * text between one `###` heading and the next), split into trimmed cell values with the
+	 * leading/trailing empty cells (from the outer `|`) dropped.
+	 */
+	private fun tableRowCells(
+		section: String,
+		armPrefix: String
+	): List<String> {
+		val line = section.lines().first { it.startsWith("| $armPrefix ") }
+		return line
+			.split("|")
+			.drop(1)
+			.dropLast(1)
+			.map { it.trim() }
+	}
+
+	private fun hygieneSection(md: String): String =
+		md.substringAfter("### Decision Hygiene").substringBefore("### Railway Outcomes")
+
+	private fun outcomesSection(md: String): String = md.substringAfter("### Railway Outcomes")
 }
