@@ -121,6 +121,17 @@ class KoogDispatchAgentImpl(
 	 * [DispatchObservation.innerBlockInputs]/[DispatchObservation.outerBlockInputs] and
 	 * [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot.trainPerceptions] — never a block id (same
 	 * rule as above).
+	 *
+	 * All active trains' NEXT SECTION facts are resolved together via a single
+	 * [NextHopResolver.resolveAll] call, not one [NextHopResolver.resolve] call per train (Issue
+	 * #834, SP2c.11, task 8): resolving independently per train let two active trains both be
+	 * shown the same target separator this same cycle, a request the interlocking would only ever
+	 * grant one of — a wasted `request_route` call whose apply-failure inflated
+	 * `applyFailuresByCode` in proportion to how many trains were concurrently active, contaminating
+	 * exactly the measurement #834's sweep exists to take. [NextHopResolver.resolveAll] applies the
+	 * same same-tick `claimedSeparators` dedup
+	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs] applies, so this prompt and
+	 * the rule-based arm can never disagree about which train gets a given separator this tick.
 	 */
 	private fun buildUserPrompt(observation: DispatchObservation): String =
 		buildString {
@@ -141,12 +152,16 @@ class KoogDispatchAgentImpl(
 				"Active (approved) trains right now: ${observation.approvedTrainCount} / " +
 					"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS}"
 			)
+			// Resolved once for every active train together so the same-tick same-target dedup
+			// applies across the whole cycle message — see this method's "NEXT SECTION facts" KDoc.
+			val nextHopOutcomes =
+				NextHopResolver.resolveAll(observation.snapshot.trainPositions.map { it.trainId }, observation)
 			// Ids only — deliberately no position. See "Never render a name the model cannot use"
 			// in this method's KDoc: TrainPositionReading.frontSectionName is a *block* name, and
 			// rendering it here got it copied straight back as a request_route endpoint. The NEXT
 			// SECTION clause added here uses signal/InOut names only — see renderActiveTrainLine.
 			observation.snapshot.trainPositions.forEach {
-				appendLine(renderActiveTrainLine(it.trainId, observation))
+				appendLine(renderActiveTrainLine(it.trainId, observation, nextHopOutcomes.getValue(it.trainId)))
 			}
 			appendLine("Queued (unapproved) trains: ${observation.unapprovedTrains.size}")
 			observation.unapprovedTrains.forEach {
@@ -185,6 +200,11 @@ class KoogDispatchAgentImpl(
 	 * Renders one active train's row in the current-state train list, appending the NEXT SECTION
 	 * fact so the model can name the one route request that helps this train this cycle.
 	 *
+	 * [nextHopOutcome] must come from a single [NextHopResolver.resolveAll] call covering every
+	 * active train rendered in this cycle's message — see [buildUserPrompt]'s "NEXT SECTION facts"
+	 * KDoc — never from a fresh per-train [NextHopResolver.resolve] call, or the same-tick
+	 * same-target dedup that call site exists to provide is silently lost.
+	 *
 	 * ## Field style, quoted names, never a block id
 	 *
 	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toSeparatorName] come from
@@ -200,7 +220,9 @@ class KoogDispatchAgentImpl(
 	 * Per [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName]'s own contract, a
 	 * `null` next separator means "no forward-reservation target applies", not "the track ahead is
 	 * occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must never claim
-	 * otherwise, and must never invite a route request the kernel has no target for.
+	 * otherwise, and must never invite a route request the kernel has no target for. The same rule
+	 * applies to [NextHopOutcome.ClaimedByAnotherTrain]: the section is not occupied or blocked, it
+	 * is simply going to a different train this cycle.
 	 *
 	 * ## Standing at a signal reads the same perception field the tool guard reads
 	 *
@@ -212,7 +234,8 @@ class KoogDispatchAgentImpl(
 	 */
 	private fun renderActiveTrainLine(
 		trainId: String,
-		observation: DispatchObservation
+		observation: DispatchObservation,
+		nextHopOutcome: NextHopOutcome
 	): String {
 		val perception = observation.snapshot.trainPerceptions.firstOrNull { it.trainId == trainId }
 		val clauses = mutableListOf<String>()
@@ -222,7 +245,7 @@ class KoogDispatchAgentImpl(
 		if (perception != null && perception.velocity == 0.0 && !perception.signalAheadName.isNullOrBlank()) {
 			clauses += "standing at signal \"${perception.signalAheadName}\" (STOP)"
 		}
-		clauses += renderNextHopClause(NextHopResolver.resolve(trainId, observation))
+		clauses += renderNextHopClause(nextHopOutcome)
 		return "- $trainId (active) -> ${clauses.joinToString("; ")}"
 	}
 
@@ -241,6 +264,10 @@ class KoogDispatchAgentImpl(
 
 			NextHopOutcome.NoSectionReservable ->
 				"no section ahead is reservable this cycle — make no route request for this train; it waits."
+
+			is NextHopOutcome.ClaimedByAnotherTrain ->
+				"section to \"${outcome.toSeparatorName}\" is going to another train this cycle — make no route " +
+					"request for this train; it is re-evaluated next cycle."
 		}
 
 	/**
