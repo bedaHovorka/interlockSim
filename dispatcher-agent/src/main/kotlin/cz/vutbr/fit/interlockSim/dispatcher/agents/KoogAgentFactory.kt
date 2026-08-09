@@ -27,6 +27,8 @@ import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Factory for creating per-context Koog dispatch agents.
@@ -255,90 +257,101 @@ class KoogAgentFactory(
 	 * and posts it to [commandQueue] (fire-and-forget; applied on the kDisco thread by
 	 * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]).
 	 *
+	 * Model warm-up ([OllamaModelPrewarmer.warmUp]) runs concurrently with the topology/prompt/tool
+	 * assembly below rather than before it: the two are independent (warm-up is network I/O against
+	 * Ollama, assembly is local CPU work), and only the final [AgentService.createDispatchAgent] call
+	 * needs both finished, so overlapping them shortens the time this suspend function takes overall
+	 * without changing what it waits for before returning.
+	 *
 	 * @param context Current simulation context (for static topology extraction).
 	 * @return A configured Koog dispatch agent ready for dispatch decisions.
 	 */
-	suspend fun createAgent(context: DefaultSimulationContext): KoogDispatchAgent {
-		// Preload the model before the dispatch timeout window.
-		OllamaModelPrewarmer.warmUp(ollamaConfig)
+	suspend fun createAgent(context: DefaultSimulationContext): KoogDispatchAgent =
+		coroutineScope {
+			// Preload the model before the dispatch timeout window; started here, awaited below.
+			val warmUp = async { OllamaModelPrewarmer.warmUp(ollamaConfig) }
 
-		logger.debug {
-			"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
-				"model=${ollamaConfig.modelName} (SP2c.6 SinkHolder 4-tool surface)"
-		}
-
-		// Wrap the live perception port in an off-thread-safe snapshot projection so the static
-		// topology can be read here at construction time.
-		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
-
-		// Static topology never changes during a run — read once at agent construction.
-		// The InOut/Signal names double as the valid-endpoint set request_route validates against.
-		val topology = StationTopologySerializer.describe(context)
-		val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
-
-		// Install the queue-posting wrapper on the per-context SinkHolder. Every DispatchAction
-		// emitted by an actuator tool is converted to a DispatchDecision and posted to
-		// commandQueue (fire-and-forget). The SinkHolder is shared by all four tools and with
-		// KoogAgentPlanAdapter, which reads its per-cycle emission counter.
-		sinkHolder.current =
-			EmittedActionSink { action ->
-				val decisions: List<DispatchDecision> =
-					when (action) {
-						is DispatchAction.ApproveTrain ->
-							listOf(DispatchDecision.ApproveTrain(trainId = action.trainId))
-						is DispatchAction.RequestRoute ->
-							listOf(
-								DispatchDecision.RequestRoute(
-									trainName = action.trainId,
-									fromEndpointName = action.fromEndpointName,
-									toEndpointName = action.toEndpointName
-								)
-							)
-						is DispatchAction.CancelRoute ->
-							listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
-						is DispatchAction.NoOp -> emptyList()
-					}
-				commandQueue.postAll(decisions)
+			logger.debug {
+				"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
+					"model=${ollamaConfig.modelName} (SP2c.6 SinkHolder 4-tool surface)"
 			}
 
-		// Assemble the four-tool actuator surface for this context. Both ports are passed through so
-		// the actuator tools can pre-validate train ids in-turn: perceptionPort supplies the active
-		// trains, dispatchLoopSensorPort the queued ones. Both are existing internal ports —
-		// reusing them adds no LLM-facing query tool, and ActuatorToolSurface.assertExactly below
-		// still holds the surface at four.
-		val tools =
-			toolRegistry.assembleAllTools(
-				validEndpointNames,
-				sinkHolder,
-				perceptionPort,
-				dispatchLoopSensorPort,
-				topology.blocks.map { it.name }.toSet(),
-				topology.inOuts.toSet()
-			)
-		// Assert the surface on the REAL tools, before decoration — the decorator is transparent
-		// (it forwards name/description/parameters) but asserting first keeps the four-tool contract
-		// checked against what the registry actually built.
-		ActuatorToolSurface.assertExactly(tools)
-		val instrumentedTools = tools.map { tool -> RejectionRecordingTool(tool, ::recordRejection) }
+			// Wrap the live perception port in an off-thread-safe snapshot projection so the static
+			// topology can be read here at construction time.
+			val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
 
-		// Serialize static topology into the system prompt once.
-		val topologyPrompt = StationTopologySerializer.toPromptText(topology)
-		// Budget is read from this factory's own sinkHolder, not a hardcoded literal — see
-		// buildSystemPrompt's KDoc for why that is safe.
-		val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick)}\n\n$topologyPrompt"
+			// Static topology never changes during a run — read once at agent construction.
+			// The InOut/Signal names double as the valid-endpoint set request_route validates against.
+			val topology = StationTopologySerializer.describe(context)
+			val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
 
-		val agent =
-			agentService.createDispatchAgent(
-				modelName = ollamaConfig.modelName,
-				tools = instrumentedTools,
-				systemPrompt = systemPrompt,
-				cycleHistory = cycleHistory,
-				outcomeFeed = outcomeFeed
-			)
+			// Install the queue-posting wrapper on the per-context SinkHolder. Every DispatchAction
+			// emitted by an actuator tool is converted to a DispatchDecision and posted to
+			// commandQueue (fire-and-forget). The SinkHolder is shared by all four tools and with
+			// KoogAgentPlanAdapter, which reads its per-cycle emission counter.
+			sinkHolder.current =
+				EmittedActionSink { action ->
+					val decisions: List<DispatchDecision> =
+						when (action) {
+							is DispatchAction.ApproveTrain ->
+								listOf(DispatchDecision.ApproveTrain(trainId = action.trainId))
+							is DispatchAction.RequestRoute ->
+								listOf(
+									DispatchDecision.RequestRoute(
+										trainName = action.trainId,
+										fromEndpointName = action.fromEndpointName,
+										toEndpointName = action.toEndpointName
+									)
+								)
+							is DispatchAction.CancelRoute ->
+								listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
+							is DispatchAction.NoOp -> emptyList()
+						}
+					commandQueue.postAll(decisions)
+				}
 
-		logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }
-		return agent
-	}
+			// Assemble the four-tool actuator surface for this context. Both ports are passed through so
+			// the actuator tools can pre-validate train ids in-turn: perceptionPort supplies the active
+			// trains, dispatchLoopSensorPort the queued ones. Both are existing internal ports —
+			// reusing them adds no LLM-facing query tool, and ActuatorToolSurface.assertExactly below
+			// still holds the surface at four.
+			val tools =
+				toolRegistry.assembleAllTools(
+					validEndpointNames,
+					sinkHolder,
+					perceptionPort,
+					dispatchLoopSensorPort,
+					topology.blocks.map { it.name }.toSet(),
+					topology.inOuts.toSet()
+				)
+			// Assert the surface on the REAL tools, before decoration — the decorator is transparent
+			// (it forwards name/description/parameters) but asserting first keeps the four-tool contract
+			// checked against what the registry actually built.
+			ActuatorToolSurface.assertExactly(tools)
+			val instrumentedTools = tools.map { tool -> RejectionRecordingTool(tool, ::recordRejection) }
+
+			// Serialize static topology into the system prompt once.
+			val topologyPrompt = StationTopologySerializer.toPromptText(topology)
+			// Budget is read from this factory's own sinkHolder, not a hardcoded literal — see
+			// buildSystemPrompt's KDoc for why that is safe.
+			val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick)}\n\n$topologyPrompt"
+
+			val agent =
+				agentService.createDispatchAgent(
+					modelName = ollamaConfig.modelName,
+					tools = instrumentedTools,
+					systemPrompt = systemPrompt,
+					cycleHistory = cycleHistory,
+					outcomeFeed = outcomeFeed
+				)
+
+			// Join the warm-up before returning: the caller's first real dispatch cycle must see a
+			// warmed model, exactly as before this method overlapped the two phases.
+			warmUp.await()
+
+			logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }
+			agent
+		}
 
 	/**
 	 * Records one coded in-turn tool rejection on the per-run recorder.
