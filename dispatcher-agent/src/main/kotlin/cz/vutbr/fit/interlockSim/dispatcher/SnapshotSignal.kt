@@ -23,8 +23,8 @@ import java.util.concurrent.atomic.AtomicLong
  *    AFTER `iteration()` has published the per-tick `latestObservation`/`TickObservation`):
  *    [signal]. **Must NOT be wired from `snapshotCaptureHook`** — `iteration()` calls
  *    that hook BEFORE it publishes `latestObservation`, so signalling from there wakes
- *    the driver to read the *previous* tick's observation (the mixed-tick read that
- *    closed #809 as BROKEN). Both the production wiring
+ *    the driver to read the *previous* tick's observation (a mixed-tick read that was
+ *    previously a real, confirmed bug). Both the production wiring
  *    ([cz.vutbr.fit.interlockSim.ExampleRegistry.wireDispatcherAgent]) and the
  *    determinism-test wiring fire from `controlStepListener` for exactly this reason.
  * 2. Driver thread (inside [AgentLoopDriver.runCycle]): [await] (blocks until step 1
@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicLong
  * scratch on every call (state-based, not edge-triggered): reacting to the current
  * network state a tick later than it changed is a latency cost, not a correctness one.
  *
- * ## Why this replaces the wall-clock poll (Issue #746 / SP0.11c)
+ * ## Why this replaces the wall-clock poll
  *
  * The previous pacing in [AgentLoopDriver] combined two wall-clock-coupled mechanisms:
  * a `Thread.sleep(1)` busy-poll, and a guard that skipped deciding whenever
@@ -78,8 +78,6 @@ import java.util.concurrent.atomic.AtomicLong
  * causes a spurious timeout mid-run, no signal is lost — the pending permit (if any) is
  * simply picked up by the next [await] call, since [signal] does not require an [await]
  * to be in progress to take effect.
- *
- * @since Issue #746 (SP0.11c — Goal 10)
  */
 interface SnapshotSignal {
 	/**
@@ -131,12 +129,9 @@ interface SnapshotSignal {
  *   In GUI 1× real-time mode `ShuntingLoop.iteration()` ends with `hold(1.0)`, so ticks
  *   arrive ~1 s apart wall-clock and this 50 ms timeout fires ~20 no-op cycles per tick
  *   — each no-op is just `awaitIfPaused` + `return false` (non-mutating, pause-aware,
- *   no determinism or correctness risk); the headless #746 target under
- *   `NoOpSimulationController` is genuinely signal-driven. Kept fixed rather than made
- *   adaptive: a longer/adaptive timeout would slow shutdown detection for no
- *   correctness gain.
- *
- * @since Issue #746 (SP0.11c — Goal 10)
+ *   no determinism or correctness risk); under a headless `NoOpSimulationController`
+ *   target it is genuinely signal-driven. Kept fixed rather than made adaptive: a
+ *   longer/adaptive timeout would slow shutdown detection for no correctness gain.
  */
 class DefaultSnapshotSignal(
 	private val awaitTimeoutMillis: Long = DEFAULT_AWAIT_TIMEOUT_MILLIS
@@ -146,25 +141,17 @@ class DefaultSnapshotSignal(
 	private val signals = AtomicLong(0L)
 	private val coalesced = AtomicLong(0L)
 
-	/**
-	 * Total [signal] calls — one per control tick in the production wiring.
-	 *
-	 * @since Issue #847 round 4 (R4-1 — making the tick-to-cycle gap measurable)
-	 */
+	/** Total [signal] calls — one per control tick in the production wiring. */
 	val signalCount: Long get() = signals.get()
 
 	/**
 	 * Signals discarded by the at-most-one-pending rule: ticks that fired while the driver was
 	 * still busy with an earlier cycle and were overwritten before it could wake.
 	 *
-	 * This is the whole of the "301 control ticks but only 20-29 planner cycles" gap that round 3
-	 * reported and could not reconcile. The coalescing itself is correct — a dispatcher that
-	 * recomputes from scratch each cycle gains nothing from a backlog of stale wake-ups — but it
-	 * used to be invisible, so the decision rate looked like a defect rather than a consequence of
-	 * inference latency. `signalCount - coalescedCount` is the number of ticks that actually
-	 * reached the driver.
-	 *
-	 * @since Issue #847 round 4 (R4-1)
+	 * The coalescing itself is correct — a dispatcher that recomputes from scratch each cycle
+	 * gains nothing from a backlog of stale wake-ups. `signalCount - coalescedCount` is the
+	 * number of ticks that actually reached the driver, so the gap between the two counts is a
+	 * consequence of inference/decision latency, not a defect.
 	 */
 	val coalescedCount: Long get() = coalesced.get()
 
