@@ -268,7 +268,7 @@ class DispatchDecisionApplierTest {
 		@Test
 		@DisplayName("SetSignalAspect throwing IllegalArgumentException does not throw out of onControlStep")
 		fun setSignalAspect_throwing_doesNotThrow() {
-			every { networkActuator.setSignalAspect(any(), any()) } throws
+			every { networkActuator.setSignalAspect(any(), any(), any()) } throws
 				IllegalArgumentException("bad semaphore name")
 			val (queue, applier) = makeApplier()
 			queue.postAll(listOf(DispatchDecision.SetSignalAspect("bogus", Signal.STOP)))
@@ -572,32 +572,44 @@ class DispatchDecisionApplierTest {
 		@Test
 		@DisplayName("SetSignalAspect is routed to NetworkActuatorPort.setSignalAspect")
 		fun setSignalAspect_routedToActuatorPort() {
-			every { networkActuator.setSignalAspect(any(), any()) } returns true
+			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
 			val (queue, applier) = makeApplier()
 			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE)))
 
 			applier.onControlStep()
 
-			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE) }
+			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE, null) }
 			assertThat(approvedTrains).isEmpty()
 		}
 
 		@Test
 		@DisplayName("SetSignalAspect passes correct semaphore name and signal to the port")
 		fun setSignalAspect_passesCorrectArguments() {
-			every { networkActuator.setSignalAspect(any(), any()) } returns true
+			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
 			val (queue, applier) = makeApplier()
 			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zB", Signal.STOP)))
 
 			applier.onControlStep()
 
-			verify { networkActuator.setSignalAspect("zB", Signal.STOP) }
+			verify { networkActuator.setSignalAspect("zB", Signal.STOP, null) }
+		}
+
+		@Test
+		@DisplayName("SetSignalAspect forwards a non-null trainName to the actuator (G5, #898)")
+		fun setSignalAspect_forwardsTrainName() {
+			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE, trainName = "T1")))
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE, "T1") }
 		}
 
 		@Test
 		@DisplayName("SetSignalAspect false result (e.g. constant semaphore) does not throw")
 		fun setSignalAspect_falseResult_doesNotThrow() {
-			every { networkActuator.setSignalAspect(any(), any()) } returns false
+			every { networkActuator.setSignalAspect(any(), any(), any()) } returns false
 			val (queue, applier) = makeApplier()
 			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zC", Signal.STOP)))
 
@@ -714,7 +726,7 @@ class DispatchDecisionApplierTest {
 		@Test
 		@DisplayName("All four tool-driven decisions applied in a single drain")
 		fun allFourToolDecisions_appliedInSingleDrain() {
-			every { networkActuator.setSignalAspect(any(), any()) } returns true
+			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
 			every { networkActuator.setSwitchPosition(any(), any()) } returns true
 			every { networkActuator.releaseRoute(any()) } returns true
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
@@ -731,7 +743,7 @@ class DispatchDecisionApplierTest {
 
 			applier.onControlStep()
 
-			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE) }
+			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE, null) }
 			verify(exactly = 1) { networkActuator.setSwitchPosition("v1", RailSwitch.Conf.BRANCH) }
 			verify(exactly = 1) { networkActuator.releaseRoute("Train #1") }
 			verify(exactly = 1) { networkActuator.requestRoute("Train #1", "A", "B") }
@@ -741,7 +753,7 @@ class DispatchDecisionApplierTest {
 		@DisplayName("Tool-driven decisions are applied on the thread invoking onControlStep")
 		fun toolDecisions_appliedOnControlStepThread() {
 			val actuatorCallThread = AtomicReference<Thread>()
-			every { networkActuator.setSignalAspect(any(), any()) } answers {
+			every { networkActuator.setSignalAspect(any(), any(), any()) } answers {
 				actuatorCallThread.set(Thread.currentThread())
 				true
 			}

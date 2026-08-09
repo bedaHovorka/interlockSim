@@ -265,9 +265,20 @@ class SimulationSnapshotTest {
 					semaphoreName: String,
 					signal: Signal
 				): Boolean = false
+
+				// Attributed form required by the abstract 3-arg contract; this compile-check
+				// stub does not attribute writes (G5), so it returns false like the 2-arg form.
+				override fun setSignalAspect(
+					semaphoreName: String,
+					signal: Signal,
+					trainName: String?
+				): Boolean = false
 			}
 
 		val result = actuator.requestRoute("T1", "IN", "OUT")
 		assertThat(result is RouteRequestResult.NoRouteExists).isTrue()
+		// Exercise the attributed 3-arg override so it is covered (the abstract contract requires
+		// it to exist; an unexercised override would fail the Sonar new-code coverage gate).
+		assertThat(actuator.setSignalAspect("S", Signal.FREE, "T1")).isFalse()
 	}
 }

@@ -162,10 +162,12 @@ class ActuatorPortsTest {
 
 		override fun setSignalAspect(
 			semaphoreName: String,
-			signal: Signal
+			signal: Signal,
+			trainName: String?
 		): Boolean {
 			lastSemaphoreName = semaphoreName
 			lastSignal = signal
+			// trainName is intentionally ignored -- this stub does not attribute writes (G5).
 			return signalResult
 		}
 	}
@@ -209,6 +211,35 @@ class ActuatorPortsTest {
 		val failActuator = StubNetworkActuator(signalResult = false)
 		assertThat(okActuator.setSignalAspect("SEM_A", Signal.STOP)).isTrue()
 		assertThat(failActuator.setSignalAspect("SEM_A", Signal.STOP)).isFalse()
+	}
+
+	@Test
+	fun `NetworkActuatorPort setSignalAspect attributed overload records name and signal`() {
+		val actuator = StubNetworkActuator()
+		actuator.setSignalAspect("SEM_A", Signal.FREE, "T1")
+		assertThat(actuator.lastSemaphoreName).isEqualTo("SEM_A")
+		assertThat(actuator.lastSignal).isEqualTo(Signal.FREE)
+		// trainName is intentionally ignored by this stub (no attribution, G5) -- there is no
+		// lastSignalTrainName field, so the attributed overload must not record one.
+	}
+
+	@Test
+	fun `NetworkActuatorPort setSignalAspect attributed overload returns impl result`() {
+		val okActuator = StubNetworkActuator(signalResult = true)
+		val failActuator = StubNetworkActuator(signalResult = false)
+		assertThat(okActuator.setSignalAspect("SEM_A", Signal.STOP, "T1")).isTrue()
+		assertThat(failActuator.setSignalAspect("SEM_A", Signal.STOP, "T1")).isFalse()
+	}
+
+	@Test
+	fun `NetworkActuatorPort setSignalAspect 2-arg delegates to attributed overload`() {
+		// The interface 2-arg default must delegate to the 3-arg (with null).  StubNetworkActuator
+		// overrides only the 3-arg, so a 2-arg call exercises the interface default body and lands
+		// in the 3-arg recording override.
+		val actuator = StubNetworkActuator(signalResult = true)
+		assertThat(actuator.setSignalAspect("SEM_A", Signal.FREE)).isTrue()
+		assertThat(actuator.lastSemaphoreName).isEqualTo("SEM_A")
+		assertThat(actuator.lastSignal).isEqualTo(Signal.FREE)
 	}
 
 	@Test
@@ -263,6 +294,15 @@ class ActuatorPortsTest {
 			semaphoreName: String,
 			signal: Signal
 		): Boolean = true
+
+		// Attributed form: this contract fake does not attribute writes (G5), so it delegates
+		// to the 2-arg form above.  The 2-arg override is kept to break the delegation cycle the
+		// interface default would otherwise create (2-arg default -> 3-arg -> 2-arg default ...).
+		override fun setSignalAspect(
+			semaphoreName: String,
+			signal: Signal,
+			trainName: String?
+		): Boolean = setSignalAspect(semaphoreName, signal)
 	}
 
 	@Test
@@ -287,6 +327,13 @@ class ActuatorPortsTest {
 	fun `NetworkActuatorPort releaseRoute blank trainName throws`() {
 		val actuator = ContractValidatingNetworkActuator(validEndpointNames = setOf("IN", "OUT"))
 		assertFailsWith<IllegalArgumentException> { actuator.releaseRoute("") }
+	}
+
+	@Test
+	fun `NetworkActuatorPort setSignalAspect attributed overload delegates on contract fake`() {
+		// ContractValidatingNetworkActuator's 3-arg delegates to its 2-arg (which returns true).
+		val actuator = ContractValidatingNetworkActuator(validEndpointNames = setOf("IN", "OUT"))
+		assertThat(actuator.setSignalAspect("SEM_A", Signal.FREE, "T1")).isTrue()
 	}
 
 	// ── RouteRequestResult ─────────────────────────────────────────────────────

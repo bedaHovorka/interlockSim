@@ -189,6 +189,11 @@ interface NetworkActuatorPort {
 	 * Calling this method with the currently-displayed aspect on a dynamic semaphore is
 	 * likewise a no-op and returns `true`.
 	 *
+	 * This is the unattributed convenience form: the default implementation delegates to the
+	 * attributed 3-arg overload with `trainName = null`, so an implementation only needs to
+	 * override the 3-arg form. Override this 2-arg form only to break the delegation cycle if
+	 * the 3-arg override itself delegates back here (see [setSignalAspect] below).
+	 *
 	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
 	 * @param signal        Target signal aspect (e.g. [Signal.STOP], [Signal.FREE]).
 	 * @return `true` if the semaphore now displays [signal]; `false` if no semaphore with
@@ -198,6 +203,32 @@ interface NetworkActuatorPort {
 	fun setSignalAspect(
 		semaphoreName: String,
 		signal: Signal
+	): Boolean = setSignalAspect(semaphoreName, signal, trainName = null)
+
+	/**
+	 * Attributed [setSignalAspect]: identical write, but the caller supplies the [trainName]
+	 * the write is made on behalf of, enabling G5 cleared-signal ownership tracking so that a
+	 * later [releaseRoute] for [trainName] can reset this semaphore.
+	 *
+	 * This is the **abstract contract method** — every implementation must provide it so that
+	 * attribution cannot be silently dropped (which would re-open the G5 hole of #898). A
+	 * test fake that does not care about attribution may delegate to the 2-arg form, but it
+	 * must then also override the 2-arg form to break the delegation cycle (the 2-arg default
+	 * calls this 3-arg form; a 3-arg override that calls the 2-arg default would recurse).
+	 *
+	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
+	 * @param signal        Target signal aspect.
+	 * @param trainName     The train this write is made on behalf of, or `null` for an
+	 *   unattributed write (equivalent to the 2-arg overload).
+	 * @return `true` if the semaphore now displays [signal]; `false` if no semaphore with
+	 *   that name exists, or if the semaphore is constant and [signal] differs from its
+	 *   fixed aspect.
+	 * @since Issue #898 (follow-up to #893 task A6 — G5 attribution slice)
+	 */
+	fun setSignalAspect(
+		semaphoreName: String,
+		signal: Signal,
+		trainName: String?
 	): Boolean
 }
 

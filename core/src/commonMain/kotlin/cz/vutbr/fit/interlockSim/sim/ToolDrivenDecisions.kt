@@ -68,7 +68,7 @@ fun DispatchDecision.applyToolDrivenToActuator(
 				"$logPrefix: applying SetSignalAspect semaphoreName=$semaphoreName, signal=$signal" +
 					rationale.toRationaleLogSuffix()
 			}
-			val success = actuator.setSignalAspect(semaphoreName, signal)
+			val success = actuator.setSignalAspect(semaphoreName, signal, trainName)
 			if (!success) {
 				toolDrivenLogger.warn {
 					"$logPrefix: SetSignalAspect semaphore '$semaphoreName' does not exist or is constant — " +
