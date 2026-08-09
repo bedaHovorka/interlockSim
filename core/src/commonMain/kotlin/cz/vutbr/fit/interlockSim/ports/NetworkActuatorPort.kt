@@ -91,8 +91,9 @@ interface NetworkActuatorPort {
 	 *   the network throws [IllegalArgumentException] (unknown names must fail fast — they are
 	 *   not "no route").
 	 *
-	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid but
-	 * no topological path connects them.  [RouteRequestResult.Conflict] is returned when a
+	 * [RouteRequestResult.NoRouteExists] is returned when no topological path connects the
+	 * requested endpoints, and also for a residual kernel refusal that never reached
+	 * pathfinding — see that type's own KDoc.  [RouteRequestResult.Conflict] is returned when a
 	 * path exists but a block along it is already owned by another train — it carries the
 	 * conflicting block name and the owning train name so a dispatcher can wait for that
 	 * specific train rather than retrying blindly.
