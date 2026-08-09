@@ -18,8 +18,8 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -90,6 +90,7 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 	private lateinit var zA: DynamicPathSeparator
 	private lateinit var doA1: DynamicPathSeparator
 	private lateinit var doB1: DynamicPathSeparator
+	private lateinit var inOutA: DynamicPathSeparator
 
 	private val trainId = "Train #1"
 
@@ -106,17 +107,20 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 		registry = simulationContext.scope.get()
 		service = simulationContext.getRoutingServices().getPathReservationService()
 
-		zA = semaphoreAt(14, 8)
-		doA1 = semaphoreAt(16, 8)
-		doB1 = semaphoreAt(25, 8)
+		zA = separatorAt(14, 8)
+		doA1 = separatorAt(16, 8)
+		doB1 = separatorAt(25, 8)
+		inOutA = separatorAt(11, 8)
 	}
 
-	private fun semaphoreAt(
+	/** Canonical dynamic wrapper for the grid cell at ([x], [y]) — the identity the registry keys on. */
+	private fun separatorAt(
 		x: Int,
 		y: Int
-	): DynamicRailSemaphore {
+	): DynamicPathSeparator {
 		val cell = simulationContext.getRailWayNetGrid()[Point(x, y)]
-		return cell as? DynamicRailSemaphore ?: throw IllegalStateException("No semaphore at ($x, $y): $cell")
+		val separator = cell as? PathSeparator ?: throw IllegalStateException("No separator at ($x, $y): $cell")
+		return simulationContext.toDynamic(separator)
 	}
 
 	private fun reserve(
@@ -129,7 +133,7 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 	fun step2iMergeAbortDoesNotThrow() {
 		// Given: the train holds zA → doA1
 		assertThat(reserve(zA, doA1))
-			.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		val storedBefore = registry.getPathInfo(trainId)
 		assertThat(storedBefore).isNotNull()
 		assertThat(storedBefore!!.target).isEqualTo(doA1)
@@ -140,7 +144,7 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 		val result = reserve(zA, doB1)
 
 		// Then: no exception escaped reservePath, and it still reports Success.
-		assertThat(result).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		// The blocks really are reserved to this train — the abort is a PathInfo-only decision
 		// and must not touch block ownership (invariant I1).
@@ -164,7 +168,7 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 	fun alreadyOwnedMergeAbortDoesNotThrow() {
 		// Given: the train holds the LONGER route zA → doB1, which subsumes zA → doA1.
 		assertThat(reserve(zA, doB1))
-			.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		val storedBefore = registry.getPathInfo(trainId)
 		assertThat(storedBefore).isNotNull()
 		assertThat(storedBefore!!.target).isEqualTo(doB1)
@@ -183,7 +187,7 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 		val result = reserve(zA, doA1)
 
 		// Then: no exception escaped, Success is still reported.
-		assertThat(result).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		// The longer route's PathInfo is untouched — in particular it was NOT shortened to doA1,
 		// which would have stranded the train's already-reserved doA1–doB1 block.
@@ -199,18 +203,19 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 	@DisplayName("golden equivalence: a contiguous extension still merges and advances the front")
 	fun contiguousExtensionStillMerges() {
 		// The happy path must be untouched by the abort guards (invariant I4).
-		assertThat(reserve(zA, doA1))
-			.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+		// A → zA first, so that the second request can start exactly at the stored front.
+		assertThat(reserve(inOutA, zA))
+			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		val lengthBefore = registry.getPathInfo(trainId)!!.reservedPath.size
 
-		// doA1 IS the current front, so this extension is contiguous and must merge normally.
-		assertThat(reserve(doA1, doB1))
-			.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+		// zA IS the current front, so this extension is contiguous and must merge normally.
+		assertThat(reserve(zA, doA1))
+			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		val merged = registry.getPathInfo(trainId)
 		assertThat(merged).isNotNull()
-		assertThat(merged!!.start).isEqualTo(zA) // tail preserved
-		assertThat(merged.target).isEqualTo(doB1) // front advanced
+		assertThat(merged!!.start).isEqualTo(inOutA) // tail preserved
+		assertThat(merged.target).isEqualTo(doA1) // front advanced
 		assertThat(merged.reservedPath.size > lengthBefore).isTrue()
 	}
 }
