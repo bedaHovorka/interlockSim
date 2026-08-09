@@ -184,6 +184,12 @@ interface InterlockingFacade {
 		 *   alpha-7a). Defaults to [DenialCause.Other], the residual cause, so a denial raised
 		 *   without a reservation outcome behind it can never be mistaken for contention.
 		 *   [requestRouteByEndpoints] populates it from the kernel result it already holds.
+		 *
+		 * **Data-class surface change (Issue #834).** [cause] replaced the former
+		 * `originNotContiguous: Boolean` as the second *component*, so `component2()` now returns
+		 * [DenialCause] and `copy(originNotContiguous = …)` no longer compiles — use
+		 * `copy(cause = …)`. No in-repo call site used either form, but an external consumer of
+		 * this type would.
 		 */
 		data class Denied(
 			val reason: String,

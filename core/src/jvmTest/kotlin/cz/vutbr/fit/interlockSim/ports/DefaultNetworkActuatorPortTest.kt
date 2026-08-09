@@ -622,6 +622,10 @@ class DefaultNetworkActuatorPortTest {
 		 * Guards [reservationResults] against silently going stale: a new
 		 * [PathReservationService.ReservationResult] subtype must be added to the provider, or
 		 * [branchesAgree] would stop covering it while still passing.
+		 *
+		 * Limitation: `sealedSubclasses` reports **direct** subclasses only, so a subtype nested
+		 * one level deeper (a sealed subtype of a subtype) would escape this guard. The hierarchy
+		 * is flat today; deepening it means extending this check to recurse.
 		 */
 		@Test
 		@DisplayName("the equivalence provider covers every ReservationResult subtype")

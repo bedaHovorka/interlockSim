@@ -253,13 +253,24 @@ sealed class RouteRequestResult {
 	) : RouteRequestResult()
 
 	/**
-	 * No topological path exists between the requested endpoints.
+	 * No route was established between the requested endpoints, and retrying the identical
+	 * request will always yield the same result.  The dispatcher should log this as an error.
 	 *
-	 * Both endpoints are valid InOuts or Semaphores in the network, but the topology graph
-	 * connects no path between them (e.g. disconnected sub-networks).  The dispatcher should
-	 * log this as an error; retrying the same request will always yield the same result.
+	 * Two kernel outcomes produce it:
+	 *
+	 * - **No topological path** — the endpoints are as requested, but the topology graph connects
+	 *   no path between them (e.g. disconnected sub-networks).  Maps from
+	 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NoPathExists].
+	 * - **A residual interlocking refusal that never reached pathfinding** — the kernel denied
+	 *   before attempting a reservation, so no candidate-path count and no owning train exist to
+	 *   report.  Maps from
+	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]
+	 *   (Issue #834): it is reported here rather than as [AllPathsBlocked] because there is no
+	 *   count to report and the refusal is not contention.
+	 *
 	 * Note: an unknown (non-existent) endpoint name is **not** this result — it throws
-	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute].
+	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute], which validates endpoint
+	 * names before consulting the kernel.
 	 *
 	 * @property fromEndpointName The requested entry point name.
 	 * @property toEndpointName   The requested exit point name.
@@ -321,10 +332,12 @@ sealed class RouteRequestResult {
 	 * [DefaultNetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]
 	 * constructs this on the legacy/no-facade path directly from
 	 * `ReservationResult.NonContiguousStart`, and on the facade path (production dispatcher-agent
-	 * runs) from `RouteResponse.Denied.originNotContiguous` -- the discriminant
-	 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through from the same
-	 * kernel result. Every other denial reason still collapses to [AllPathsBlocked] `(0)` on the
-	 * facade path (Issue #893, task A-R1b).
+	 * runs) from
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart]
+	 * -- the discriminant [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through
+	 * from the same kernel result. Since Issue #834 (task alpha-7a) the facade path classifies
+	 * **every** denial on that exhaustive `DenialCause`, so both paths yield the same
+	 * [RouteRequestResult] for the same kernel outcome (invariant I4).
 	 *
 	 * @property fromEndpointName The rejected origin name, as requested.
 	 * @property reason English explanation naming the origin and the legal origins for this
