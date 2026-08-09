@@ -503,7 +503,7 @@ Thread/Process 1 (Train A):
 
 #### 1. Single-Threaded Execution
 
-**Current Model:** jDisco discrete event simulation runs in single thread.
+**Current Model:** kDisco discrete event simulation runs in single thread.
 
 **Implication:** No concurrent reservations possible.
 
@@ -976,7 +976,7 @@ sequenceDiagram
 
 ### Multi-Threading Support
 
-**Trigger:** Migration from jDisco to DSOL/Kalasim with multi-threaded simulation engine.
+**Trigger:** Migration from kDisco to DSOL/Kalasim with multi-threaded simulation engine.
 
 **Required Changes:**
 
@@ -1144,7 +1144,7 @@ fun reserveSection(trainId: String, section: TrackSection) {
 
 **Context:** Path reservation system designed to be simulation-engine-agnostic.
 
-**Current:** jDisco (discrete event simulation, single-threaded)
+**Current:** kDisco (discrete event simulation, single-threaded)
 
 **Future Options:** DSOL, Kalasim (see LONG_TERM_GOALS.md)
 
@@ -1154,7 +1154,7 @@ fun reserveSection(trainId: String, section: TrackSection) {
 
 **Steps:**
 1. Implement `DSolSimulationEnvironment` adapter
-2. Replace jDisco Process with DSOL event scheduling
+2. Replace kDisco Process with DSOL event scheduling
 3. Update simulation loop (while maintaining single-threaded model initially)
 4. Run integration tests with both engines in parallel (A/B validation)
 5. Profile performance (DSOL should be faster due to modern JVM optimizations)
