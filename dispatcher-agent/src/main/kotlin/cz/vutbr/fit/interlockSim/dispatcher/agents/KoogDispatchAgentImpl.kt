@@ -18,7 +18,7 @@ import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Real Koog-based railway dispatch agent (SP2b.9, Issue #566).
+ * Real Koog-based railway dispatch agent.
  *
  * Wraps a Koog `AIAgent<String, String>` (built by [DefaultAgentService] via Koog's
  * `singleRunStrategy()` tool-calling loop: call the LLM, execute any requested tools, send tool
@@ -37,18 +37,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   and system prompt (topology + dispatcher persona) at construction time in
  *   [DefaultAgentService.createDispatchAgent].
  * @param cycleHistory Bounded record of the previous N cycles, rendered into the per-cycle prompt
- *   ahead of the current state (#822 C5 / §5.4). Defaults to a disabled history, which reproduces
- *   the stateless-per-cycle behaviour that existed before Issue #847.
- * @param outcomeFeed Optional source of [AppliedOutcome]s accumulated since the previous cycle
- *   (SP2c.17, #840), drained once per [buildUserPrompt] call and rendered as the "OUTCOMES OF YOUR
- *   PREVIOUS ACTIONS" block. `null` (the default) renders no block at all — existing callers that
- *   predate Issue #893 phase beta (task B0) are unaffected. Before task B0 the channel this feed
- *   wraps had no production drainer at all: 173 `ALL_PATHS_BLOCKED` apply failures across the
- *   #847 baseline runs were invisible to the model, which kept re-emitting the same refused route.
- *
- * @since Issue #547 (SP1.2 — Goal 10 skeleton); real Koog wiring added in Issue #566 (SP2b.9);
- *   cycle history added in Issue #847 (SP2c.24); [outcomeFeed] added in Issue #893 (phase beta,
- *   task B0)
+ *   ahead of the current state (lost-in-the-middle ordering). Defaults to a disabled history,
+ *   which reproduces the previously stateless-per-cycle behaviour.
+ * @param outcomeFeed Optional source of [AppliedOutcome]s accumulated since the previous cycle,
+ *   drained once per [buildUserPrompt] call and rendered as the "OUTCOMES OF YOUR PREVIOUS
+ *   ACTIONS" block. `null` (the default) renders no block at all. Before this feed existed, the
+ *   channel it wraps had no production drainer at all: 173 `ALL_PATHS_BLOCKED` apply failures
+ *   were invisible to the model, which kept re-emitting the same refused route.
  */
 class KoogDispatchAgentImpl(
 	private val aiAgent: AIAgent<String, String>,
@@ -60,12 +55,10 @@ class KoogDispatchAgentImpl(
 	}
 
 	/**
-	 * The built Koog agent, exposed `internal` for the SP2c.6 build-contract test (Issue #829 /
-	 * #850) to reflect on its strategy + [ai.koog.agents.core.agent.config.AIAgentConfig] without
-	 * driving a live LLM run. Production code must not reach past [decideAsync]; this getter is
-	 * a test-only seam, not a public API.
-	 *
-	 * @since Issue #829 (SP2c.6 — Goal 10 four-actuator tool surface)
+	 * The built Koog agent, exposed `internal` for the build-contract test to reflect on its
+	 * strategy + [ai.koog.agents.core.agent.config.AIAgentConfig] without driving a live LLM run.
+	 * Production code must not reach past [decideAsync]; this getter is a test-only seam, not a
+	 * public API.
 	 */
 	internal val builtAgent: AIAgent<String, String> get() = aiAgent
 
@@ -82,19 +75,18 @@ class KoogDispatchAgentImpl(
 
 	/**
 	 * Builds the per-cycle user prompt. The static station topology is already in the system prompt
-	 * ([cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer], SP2b.8), so only
-	 * live state belongs here.
+	 * ([cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer]), so only live state
+	 * belongs here.
 	 *
-	 * ## This message is the model's only source of train identity (Issue #847 round 2)
+	 * ## This message is the model's only source of train identity
 	 *
-	 * Until SP2c.6 (#829) the agent had perception tools (`queued_trains`, `all_train_positions`, …)
-	 * and this prompt could stay minimal and simply point at them. Those tools are gone — the
-	 * surface is four actuators
-	 * ([cz.vutbr.fit.interlockSim.dispatcher.agents.ActuatorToolSurface]) — but the prompt kept
-	 * telling the model to "use the perception tools" while reporting active trains as a bare
-	 * *count*. The model consequently had no way to name a running train and invented ids (a live
-	 * run produced `trainId=4`), and burned its `maxAgentIterations` budget reaching for tools that
-	 * do not exist.
+	 * The agent used to have perception tools (`queued_trains`, `all_train_positions`, …) and this
+	 * prompt could stay minimal and simply point at them. Those tools are gone — the surface is
+	 * four actuators ([cz.vutbr.fit.interlockSim.dispatcher.agents.ActuatorToolSurface]) — but the
+	 * prompt kept telling the model to "use the perception tools" while reporting active trains as
+	 * a bare *count*. The model consequently had no way to name a running train and invented ids (a
+	 * live run produced `trainId=4`), and burned its `maxAgentIterations` budget reaching for tools
+	 * that do not exist.
 	 *
 	 * Both lists are therefore rendered in full here. The data needs no new plumbing: queued trains
 	 * come from [DispatchObservation.unapprovedTrains] and active ones from
@@ -119,34 +111,32 @@ class KoogDispatchAgentImpl(
 	 * endpoint and what `ActionValidator.ORIGIN_NOT_AT_TRAIN_POSITION` expects — and never a bare
 	 * placeholder string that can be copied verbatim.
 	 *
-	 * ## NEXT SECTION facts (Issue #893, phase beta, task B1)
+	 * ## NEXT SECTION facts
 	 *
-	 * Phase alpha (task A-R1) taught the kernel to reject a queued train's route when the
-	 * requested origin is not where the train actually stands — a "correctly directed, wrongly
-	 * placed" request. That closes the gate but does not tell the model where the *right* request
-	 * is. Each active-train row here now also renders the one forward route request
-	 * [NextHopResolver] computes as eligible right now (see [renderActiveTrainLine]), sourced
-	 * exclusively from [DispatchObservation.innerBlockInputs]/[DispatchObservation.outerBlockInputs]
-	 * and [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot.trainPerceptions] — never a block id
-	 * (same rule as above).
+	 * The kernel rejects a queued train's route when the requested origin is not where the train
+	 * actually stands — a "correctly directed, wrongly placed" request. That closes the gate but
+	 * does not tell the model where the *right* request is. Each active-train row here now also
+	 * renders the one forward route request [NextHopResolver] computes as eligible right now (see
+	 * [renderActiveTrainLine]), sourced exclusively from
+	 * [DispatchObservation.innerBlockInputs]/[DispatchObservation.outerBlockInputs] and
+	 * [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot.trainPerceptions] — never a block id (same
+	 * rule as above).
 	 */
 	private fun buildUserPrompt(observation: DispatchObservation): String =
 		buildString {
-			// #822 §5.4 (lost-in-the-middle): history first, current state last — closest to
-			// generation. Empty string when historyN = 0, so the disabled arm renders nothing at
-			// all rather than a bare header (Issue #847, SP2c.24).
+			// Lost-in-the-middle: history first, current state last — closest to generation.
+			// Empty string when historyN = 0, so the disabled arm renders nothing at all rather
+			// than a bare header.
 			append(cycleHistory.renderPromptBlock())
-			// Issue #893 (phase beta, task B0): drain-once - every outcome published since the
-			// last drain is removed from the channel by drainSince here, so a re-published
-			// (still-empty) channel on the next call renders nothing for it. Placed after
-			// history, before current state, per the same lost-in-the-middle ordering above.
-			// Renders the empty string when outcomeFeed is unwired or nothing was published
-			// (see renderAppliedOutcomesBlock).
+			// Drain-once - every outcome published since the last drain is removed from the
+			// channel by drainSince here, so a re-published (still-empty) channel on the next
+			// call renders nothing for it. Placed after history, before current state, per the
+			// same lost-in-the-middle ordering above. Renders the empty string when outcomeFeed
+			// is unwired or nothing was published (see renderAppliedOutcomesBlock).
 			append(renderAppliedOutcomesBlock(outcomeFeed?.drainSince(0L) ?: emptyList()))
 			appendLine("Dispatch cycle at simTime=${observation.snapshot.simTime}.")
-			// Goal 10 SP2b.9 follow-up: state the active count/cap directly so the admission
-			// precondition can be evaluated in one shot — this stateless cycle has no memory of
-			// the same check from last time.
+			// State the active count/cap directly so the admission precondition can be evaluated
+			// in one shot — this stateless cycle has no memory of the same check from last time.
 			appendLine(
 				"Active (approved) trains right now: ${observation.approvedTrainCount} / " +
 					"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS}"
@@ -154,8 +144,7 @@ class KoogDispatchAgentImpl(
 			// Ids only — deliberately no position. See "Never render a name the model cannot use"
 			// in this method's KDoc: TrainPositionReading.frontSectionName is a *block* name, and
 			// rendering it here got it copied straight back as a request_route endpoint. The NEXT
-			// SECTION clause added here (Issue #893, phase beta, task B1) uses signal/InOut names
-			// only — see renderActiveTrainLine.
+			// SECTION clause added here uses signal/InOut names only — see renderActiveTrainLine.
 			observation.snapshot.trainPositions.forEach {
 				appendLine(renderActiveTrainLine(it.trainId, observation))
 			}
@@ -163,12 +152,12 @@ class KoogDispatchAgentImpl(
 			observation.unapprovedTrains.forEach {
 				appendLine(renderQueuedTrainLine(it.trainId))
 			}
-			// Constrains the *data* the model may name, and keeps the switch/signal side-effect rule
-			// (SP2b.9, PR #811 Minor #1). It deliberately makes no claim about which tools exist:
-			// that belongs in the system prompt (KoogAgentFactory), which is built alongside the
-			// tool surface and knows it, whereas this method is generic. An earlier cut asserted
-			// "no tool to query state" here and contradicted callers that legitimately supply one —
-			// see KoogRealOllamaToolCallingTest's failing-tool harness.
+			// Constrains the *data* the model may name, and keeps the switch/signal side-effect
+			// rule. It deliberately makes no claim about which tools exist: that belongs in the
+			// system prompt (KoogAgentFactory), which is built alongside the tool surface and
+			// knows it, whereas this method is generic. An earlier cut asserted "no tool to query
+			// state" here and contradicted callers that legitimately supply one — see
+			// KoogRealOllamaToolCallingTest's failing-tool harness.
 			appendLine(
 				"The two lists above are the complete set of trains you may name this cycle; pass a " +
 					"trainId/trainName exactly as written there, never one you inferred. Switch and " +
@@ -181,11 +170,11 @@ class KoogDispatchAgentImpl(
 						"approve_train(trainId) for each queued train above once you want it to depart."
 				)
 			}
-			// Issue #893 iteration 3: replaces the legacy "Then use the tools available to you to
-			// reserve routes, release routes, or approve queued trains as needed. ... Respond with
-			// plain text when finished." boilerplate, which never told the model a tick has a hard
-			// end. Deliberately the LAST line appended -- closest to generation, and unconditional
-			// so it lands after the reminder above too.
+			// Replaces the legacy "Then use the tools available to you to reserve routes, release
+			// routes, or approve queued trains as needed. ... Respond with plain text when
+			// finished." boilerplate, which never told the model a tick has a hard end.
+			// Deliberately the LAST line appended -- closest to generation, and unconditional so
+			// it lands after the reminder above too.
 			appendLine(
 				"When your actions for this tick are done, finish with one short plain-text sentence " +
 					"and no further tool calls."
@@ -194,8 +183,7 @@ class KoogDispatchAgentImpl(
 
 	/**
 	 * Renders one active train's row in the current-state train list, appending the NEXT SECTION
-	 * fact so the model can name the one route request that helps this train this cycle
-	 * (Issue #893, phase beta, task B1).
+	 * fact so the model can name the one route request that helps this train this cycle.
 	 *
 	 * ## Field style, quoted names, never a block id
 	 *
@@ -257,8 +245,7 @@ class KoogDispatchAgentImpl(
 
 	/**
 	 * Renders one queued train's row: approve-only, deliberately naming no topology endpoint at
-	 * all (Issue #893, phase beta, task B1). A queued train cannot legally start a route from
-	 * anywhere yet —
+	 * all. A queued train cannot legally start a route from anywhere yet —
 	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool]'s queued-origin guard
 	 * rejects every non-InOut origin for it, and the entry InOut itself is not exposed on
 	 * [cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation] — so printing its destination here
@@ -271,9 +258,9 @@ class KoogDispatchAgentImpl(
 
 	/**
 	 * Renders the "OUTCOMES OF YOUR PREVIOUS ACTIONS" block from [outcomes], or the empty string
-	 * when [outcomes] is empty (Issue #893, phase beta, task B0).
+	 * when [outcomes] is empty.
 	 *
-	 * ## Design rules this must keep (binding, task B0 brief)
+	 * ## Design rules this must keep (binding)
 	 *
 	 * - trainId + endpoints + outcome + reason are rendered for every request_route outcome; the
 	 *   [AppliedOutcome.OriginNotContiguous.reason] is carried through **verbatim** — it already
@@ -323,9 +310,8 @@ class KoogDispatchAgentImpl(
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — no route exists between these endpoints."
 
-			// Issue #893 (phase alpha task A-R1 published it; phase beta task B0 renders it): the
-			// kernel's reason already names the offending origin and every legal alternative for
-			// this train, so it is carried through verbatim rather than paraphrased.
+			// The kernel's reason already names the offending origin and every legal alternative
+			// for this train, so it is carried through verbatim rather than paraphrased.
 			is AppliedOutcome.OriginNotContiguous ->
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — ${outcome.reason}"
