@@ -94,19 +94,15 @@ class AppliedOutcomeChannel(
 	 */
 	override fun drainSince(fromTickIndex: Long): List<AppliedOutcome> =
 		synchronized(ring) {
-			if (ring.isEmpty()) {
-				emptyList()
-			} else {
-				val result = mutableListOf<AppliedOutcome>()
-				val it = ring.iterator()
-				while (it.hasNext()) {
-					val outcome = it.next()
-					if (outcome.tickIndex >= fromTickIndex) {
-						result.add(outcome)
-						it.remove()
-					}
+			val result = mutableListOf<AppliedOutcome>()
+			val it = ring.iterator()
+			while (it.hasNext()) {
+				val outcome = it.next()
+				if (outcome.tickIndex >= fromTickIndex) {
+					result.add(outcome)
+					it.remove()
 				}
-				result
 			}
+			result
 		}
 }
