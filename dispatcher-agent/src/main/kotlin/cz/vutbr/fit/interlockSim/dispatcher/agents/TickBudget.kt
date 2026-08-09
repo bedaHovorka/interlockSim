@@ -13,22 +13,22 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Deadline wrapper for [EmissionStrategy.emit] inside [DispatchTickLoop] (SP2c.5, Issue #828).
+ * Deadline wrapper for [EmissionStrategy.emit] inside [DispatchTickLoop].
  *
  * The loop calls `budget.withBudget { emission.emit(prompt, obs) }`. If the emission strategy
  * exceeds the configured deadline, [withBudget] returns `null` and the loop substitutes a
  * [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp] with author
  * [ActionAuthor.TIMEOUT_NOOP].
  *
- * ## Timing regimes (SP2c.10, Issue #833)
+ * ## Timing regimes
  *
  * Two configurable modes address the reproducibility (P8) vs honesty (F2 real-time ratio) split:
  *
  * - **F1 paused-clock** ([PausedClockTickBudget]) — the simulation clock is frozen for the
  *   entire emission window via [SimulationController.requestPause]/[SimulationController.requestResume].
  *   Sim time is provably unchanged across a slow emission; this is the **acceptance mode** for P8.
- *   The feasibility and binding constraints are established by Issue #849 (SP2c.26) and recorded
- *   in `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`.
+ *   The feasibility and binding constraints are recorded in
+ *   `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`.
  *
  * - **F2 wall-clock deadline** ([DeadlineTickBudget]) — enforces a hard wall-clock deadline via
  *   [kotlinx.coroutines.withTimeoutOrNull]. A miss yields `null` → [ActionAuthor.TIMEOUT_NOOP].
@@ -43,8 +43,6 @@ import kotlinx.coroutines.withTimeoutOrNull
  * | [PausedClockTickBudget] | F1 | Pauses sim clock; resumes in `finally`. P8 acceptance mode. |
  * | [DeadlineTickBudget] | F2 | Hard wall-clock deadline; null on timeout. LLM reporting mode. |
  * | [NoTimeoutBudget] | N/A | No deadline; passes block through. Rule-based strategies. |
- *
- * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 interface TickBudget {
 	/**
@@ -57,7 +55,7 @@ interface TickBudget {
 }
 
 /**
- * **F1 paused-clock** [TickBudget] (SP2c.10, Issue #833).
+ * **F1 paused-clock** [TickBudget].
  *
  * Pauses the simulation clock for the entire emission window, preventing sim time from advancing
  * while the LLM (or any other strategy) produces a decision. The simulation is resumed in a
@@ -70,17 +68,17 @@ interface TickBudget {
  * events can alter observable state. A recorded snapshot sequence therefore always produces a
  * byte-identical prompt sequence. This is the acceptance-mode half of P8 (Issue #532 §A4).
  *
- * **Decode determinism** is NOT delivered on the production tool-calling path. SP2c.27 (Issue
- * #850, `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md`) established that Koog 1.1.1's
- * `OllamaClient` is `final` with `internal` DTOs, and `LLMParams.additionalProperties` flattens
- * into the request root rather than inside `options` — so no path exists from the production
- * tool-calling dispatcher to the Ollama sampler's `seed` option. P8's guarantee is therefore
- * scoped to the **prompt half only**: a recorded snapshot sequence always produces a byte-identical
- * prompt sequence; decode determinism is not guaranteed (Issue #894, settled). A future JSON-only
- * decision mode could deliver decode determinism using `SeededOllamaJsonClient`, which is a proven
- * prototype, but that mode does not exist yet.
+ * **Decode determinism** is NOT delivered on the production tool-calling path.
+ * `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` established that Koog 1.1.1's `OllamaClient`
+ * is `final` with `internal` DTOs, and `LLMParams.additionalProperties` flattens into the request
+ * root rather than inside `options` — so no path exists from the production tool-calling
+ * dispatcher to the Ollama sampler's `seed` option. P8's guarantee is therefore scoped to the
+ * **prompt half only**: a recorded snapshot sequence always produces a byte-identical prompt
+ * sequence; decode determinism is not guaranteed. A future JSON-only decision mode could deliver
+ * decode determinism using `SeededOllamaJsonClient`, which is a proven prototype, but that mode
+ * does not exist yet.
  *
- * ## Binding constraints (SP2c.26, `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`)
+ * ## Binding constraints (`docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`)
  *
  * - **C1** — brackets **only** `EmissionStrategy.emit`. Nothing else runs inside the paused window.
  * - **C2** — intra-tick re-validation stays on the optimistic in-process projection (SP2c.5 option A).
@@ -94,8 +92,6 @@ interface TickBudget {
  *   the same controller that the simulation thread polls — typically a
  *   [cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController] backed by the live
  *   `SimulationRunner`.
- *
- * @since Issue #833 (SP2c.10 — Goal 10 timing regimes F1+F2)
  */
 class PausedClockTickBudget(
 	private val controller: SimulationController
@@ -116,7 +112,7 @@ class PausedClockTickBudget(
 	 * cancellation around the [withBudget] call (e.g. `withTimeoutOrNull(deadline) { budget.withBudget { ... } }`,
 	 * or a future `DeadlineTickBudget(PausedClockTickBudget(...))` composition helper — not
 	 * implemented today; [withBudget] takes a `suspend () -> T?` block, not a nested budget). The
-	 * SP2c.26 ruling (`docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` §3.4 / §4 C4) records only the
+	 * ruling in `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` §3.4 / §4 C4 records only the
 	 * throwing/timed-out cases; the forever-suspend case is a separate, still-open follow-up.
 	 *
 	 * ## Exclusive ownership of the pause (Important)
@@ -126,7 +122,7 @@ class PausedClockTickBudget(
 	 * therefore assumes **exclusive ownership** of the pause state for the duration of [block]: no
 	 * other component may pause the simulation concurrently with the emission window. A concurrent
 	 * external pauser (collision detection, operator hold, etc.) that paused during [block] would
-	 * have its pause **released prematurely** by this budget's resume. SP2c.10 scope assumes no
+	 * have its pause **released prematurely** by this budget's resume. This design assumes no
 	 * concurrent external pausers during emission; lifting that assumption requires a refcounted
 	 * pause/resume on [SimulationController] (a separate change).
 	 *
@@ -145,13 +141,13 @@ class PausedClockTickBudget(
 }
 
 /**
- * **F2 wall-clock deadline** [TickBudget] (SP2c.10, Issue #833).
+ * **F2 wall-clock deadline** [TickBudget].
  *
  * Enforces a hard wall-clock deadline via [kotlinx.coroutines.withTimeoutOrNull]. A miss yields
  * `null`, which [DispatchTickLoop] maps to a [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp]
  * attributed to [ActionAuthor.TIMEOUT_NOOP].
  *
- * ## Real-time ratio reporting (F2, A6 split)
+ * ## Real-time ratio reporting
  *
  * [DispatchTickLoop] measures the wall-clock time of each [EmissionStrategy.emit] call and logs
  * the real-time ratio (`simDelta / emissionWallClockSeconds`). For the LLM arm this ratio is
@@ -161,8 +157,7 @@ class PausedClockTickBudget(
  * remain the binding enforcement.
  *
  * @property timeoutMillis Maximum time allowed in milliseconds. Returns `null` on timeout.
- *   Default for LLM strategies is 3 000 ms (3 s hard deadline, SP2c.10 §design).
- * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
+ *   Default for LLM strategies is 3 000 ms (3 s hard deadline).
  */
 class DeadlineTickBudget(
 	private val timeoutMillis: Long
@@ -176,8 +171,6 @@ class DeadlineTickBudget(
  * Use this for synchronous strategies (e.g. [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy])
  * where a deadline makes no sense: rule-based dispatch returns immediately and
  * `withTimeoutOrNull` overhead would add noise without value.
- *
- * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 object NoTimeoutBudget : TickBudget {
 	override suspend fun <T> withBudget(block: suspend () -> T?): T? = block()
