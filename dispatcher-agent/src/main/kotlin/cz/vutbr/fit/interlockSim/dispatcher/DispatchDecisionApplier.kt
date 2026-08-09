@@ -123,15 +123,13 @@ class DispatchDecisionApplier(
 	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
 	/**
 	 * Callback invoked on the sim thread when a path reservation succeeds. Increments
-	 * [ShuntingLoop.incrementBlockTransition] (the counter previously updated inside the
-	 * removed [ShuntingLoop.tryReservePath]).
+	 * [ShuntingLoop.incrementBlockTransition].
 	 */
 	private val onBlockTransition: (trainId: String) -> Unit = {},
 	/**
 	 * Callback invoked on the sim thread when a path reservation fails (any of
 	 * AllPathsBlocked, Conflict, or NoRouteExists). Increments
-	 * [ShuntingLoop.incrementFailedReservation] (the counter previously updated inside the
-	 * removed [ShuntingLoop.tryReservePath]).
+	 * [ShuntingLoop.incrementFailedReservation].
 	 */
 	private val onFailedReservation: () -> Unit = {},
 	/**
