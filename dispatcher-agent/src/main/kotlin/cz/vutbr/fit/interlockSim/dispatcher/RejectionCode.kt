@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 /**
  * Rejection codes produced by [ActionValidator] when a [DispatchAction] fails pre-execution
- * validation (SP2c.3, Issue #826).
+ * validation.
  *
  * Codes are grouped by the action type they guard and by their semantic category.
  *

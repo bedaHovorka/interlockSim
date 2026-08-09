@@ -168,7 +168,7 @@ val dispatcherAgentModule: Module =
 				val context = requireContextSource()
 				DefaultNetworkPerceptionPort(
 					env = context,
-					// SP1.4b follow-up (PR #769 review): interface-based lookup, no reflection.
+					// Interface-based lookup, no reflection.
 					// See mainProcessActiveTrains() for rationale.
 					activeTrains = { mainProcessActiveTrains(context) }
 				)

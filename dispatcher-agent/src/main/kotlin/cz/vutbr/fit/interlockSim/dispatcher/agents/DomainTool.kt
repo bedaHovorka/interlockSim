@@ -21,8 +21,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
  * ## Tool categories
  *
  * - **Perception tools** - Read-only queries on [NetworkPerceptionPort] (e.g. signal
- *   state, block occupancy, train positions), backed by the off-thread-safe
- *   [cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort] projection.
+ *   state, block occupancy, train positions). Tools receive the live [NetworkPerceptionPort]
+ *   directly and read only its [NetworkPerceptionPort.snapshot] member — the sole
+ *   `@Volatile`-backed, off-thread-safe accessor — never its single-query / `allXxx()` methods,
+ *   which read mutable state and are kDisco-thread-only.
  * - **Actuator tools** - Commands posted (fire-and-forget) to
  *   [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] as
  *   [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s (e.g. set signal, request route), applied
@@ -64,15 +66,13 @@ interface DomainTool {
 	 * simulation thread. The two tool categories satisfy the kDisco threading contract by
 	 * different mechanisms, neither of which marshals onto the kDisco thread directly:
 	 *
-	 * - **Perception tools** read from a
-	 *   [cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort] — an
-	 *   off-thread-safe [NetworkPerceptionPort] that projects every query from the most recently
-	 *   published [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot] (the live
-	 *   [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]'s single-query / `allXxx()`
-	 *   methods read mutable state and are kDisco-thread-only; only
-	 *   [NetworkPerceptionPort.snapshot] is `@Volatile`-backed and off-thread-safe). The projection
-	 *   is built once in [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory.createAgent]
-	 *   and passed to every perception tool. The projected snapshot may be one kDisco tick stale.
+	 * - **Perception tools** receive the live [NetworkPerceptionPort] directly and read only
+	 *   [NetworkPerceptionPort.snapshot] — the sole `@Volatile`-backed reference to the most
+	 *   recently published [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot], safe to read from
+	 *   any thread. The port's single-query / `allXxx()` methods (e.g. on
+	 *   [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]) walk live mutable
+	 *   simulation state and are kDisco-thread-only; perception tools must never call them. The
+	 *   snapshot they read may be one kDisco tick stale.
 	 *
 	 * - **Actuator tools** do **not** touch a [NetworkActuatorPort] directly. They build a
 	 *   [cz.vutbr.fit.interlockSim.sim.DispatchDecision] subtype and post it (fire-and-forget) to

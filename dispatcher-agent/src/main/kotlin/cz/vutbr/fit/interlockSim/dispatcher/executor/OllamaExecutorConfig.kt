@@ -185,7 +185,7 @@ data class OllamaExecutorConfig(
 	 * Accepted tags include version-pinned models like "qwen2.5:7b-instruct", "llama3.1:8b", etc.
 	 * per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md §3.
 	 *
-	 * SP1.5 will enforce this validation at runtime when Ollama client is initialized.
+	 * Enforced at runtime when the Ollama client is lazily initialized in [OllamaSimpleExecutor].
 	 *
 	 * @throws IllegalArgumentException if modelName is not tool-capable
 	 */
