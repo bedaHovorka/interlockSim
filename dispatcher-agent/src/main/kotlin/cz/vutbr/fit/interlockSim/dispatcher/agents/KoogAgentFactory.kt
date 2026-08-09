@@ -260,9 +260,11 @@ class KoogAgentFactory(
 	 *
 	 * Model warm-up ([OllamaModelPrewarmer.warmUp]) runs concurrently with the topology/prompt/tool
 	 * assembly below rather than before it: the two are independent (warm-up is network I/O against
-	 * Ollama, assembly is local CPU work), and only the final [AgentService.createDispatchAgent] call
-	 * needs both finished, so overlapping them shortens the time this suspend function takes overall
-	 * without changing what it waits for before returning.
+	 * Ollama, assembly is local CPU work). Both are joined — warm-up is awaited — *before* the final
+	 * [AgentService.createDispatchAgent] call, which is the synchronization point, so overlapping
+	 * the two shortens the time this suspend function takes overall without changing what it waits
+	 * for before returning. `warmUp` is non-fatal: it catches every non-cancellation failure and
+	 * returns normally, so the await throws only on cooperative cancellation of the driver coroutine.
 	 *
 	 * The warm-up is launched with `async(Dispatchers.IO)`, not plain `async`, on purpose: every
 	 * real caller reaches [createAgent] through a single-threaded `runBlocking` event loop
@@ -347,6 +349,13 @@ class KoogAgentFactory(
 			// buildSystemPrompt's KDoc for why that is safe.
 			val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick)}\n\n$topologyPrompt"
 
+			// Join the warm-up before building the agent: this is the documented synchronization
+			// point — both warm-up (network I/O) and the local assembly above are finished before
+			// the final createDispatchAgent call. warmUp is non-fatal (OllamaModelPrewarmer catches
+			// every non-CancellationException failure and returns normally), so this await only
+			// throws on cooperative cancellation of the driver coroutine.
+			warmUp.await()
+
 			val agent =
 				agentService.createDispatchAgent(
 					modelName = ollamaConfig.modelName,
@@ -355,10 +364,6 @@ class KoogAgentFactory(
 					cycleHistory = cycleHistory,
 					outcomeFeed = outcomeFeed
 				)
-
-			// Join the warm-up before returning: the caller's first real dispatch cycle must see a
-			// warmed model, exactly as before this method overlapped the two phases.
-			warmUp.await()
 
 			logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }
 			agent
