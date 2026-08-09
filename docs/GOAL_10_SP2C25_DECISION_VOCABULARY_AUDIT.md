@@ -66,7 +66,7 @@ confirms zero occurrences of `HoldTrain(`, `SetSignalAspect(`, `SetSwitchPositio
 | `HoldTrain` | **None found anywhere in production code** — all ~25 grep hits for `DispatchDecision.HoldTrain(` are in test files (`DispatchDecisionSp2b1Test.kt`, `DispatchDecisionSp2b5Test.kt`, `SynchronousDispatcherWiringTest.kt:191`, `dispatcher-agent/.../DispatchDecisionApplierTest.kt`, `DispatchDecisionApplierModeGatingTest.kt`, `DispatchDecisionListenerHubTest.kt`) constructing it as a fixture to test the *applier's* handling | **No** |
 | `SetSignalAspect` | `core/.../sim/PathCommandTranslator.kt:189,197` | **No** |
 | `SetSwitchPosition` | `core/.../sim/PathCommandTranslator.kt:158` | **No** |
-| `ReleaseRoute` | `dispatcher-agent/.../agents/tools/ReleaseRouteTool.kt:71` (LLM `release_route` tool) | **No** |
+| `ReleaseRoute` | `dispatcher-agent/.../agents/tools/CancelRouteTool.kt:70` (LLM `cancel_route` tool) | **No** |
 | `RequestRoute` (tool-driven, 3-arg) | `dispatcher-agent/.../agents/tools/RequestRouteTool.kt:132` (LLM `request_route` tool) | **No** |
 
 `PathCommandTranslator` (the only producer of `SetSignalAspect`/`SetSwitchPosition`) is itself

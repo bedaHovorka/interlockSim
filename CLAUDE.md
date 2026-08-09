@@ -538,6 +538,9 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 - `GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` - Ollama/Koog capability audit: seed reachability, format+tools coexistence, num_ctx right-sizing, maxIterations tripwire (Issue #850, SP2c.27)
 - `GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` - Recorded traffic-simulation-expert ruling on the F1 paused-clock timing regime and the R8 headless-pacing question (Issue #849, SP2c.26)
 - `GOAL_10_SP2C24_SWEEP_REPORT.md` - Measured A4 reliability sweep: `aiSweep` results, the gate verdict, and which grid axes are live (Issue #847, SP2c.24)
+- `GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md` - Audits which `DispatchDecision` sealed subtypes are actually produced in production vs. only in tests (Issue #848, SP2c.25)
+- `INTERLOCKING_SCOPE_LIMITATIONS.md` - Documents intentional simplifications in the interlocking model (Issue #893, path-reservation review Phase 6)
+- `SP1_6_TOOL_EXPOSURE_IMPLEMENTATION.md` - Implementation summary for exposing sensors/actuators as Koog tools (Issue #551, SP1.6)
 
 ## Known Issues
 
