@@ -254,37 +254,49 @@ class KoogAgentPlanAdapter(
 				// The LLM completed a cycle but neither acted via tools nor returned a decision —
 				// it truly did nothing this cycle. Nothing was posted, so there is no
 				// double-dispatch risk; the fallback supplies both admission and routing.
-				logger.warn {
-					"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
-						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
+				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation) {
+					logger.warn {
+						"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
+							"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
+					}
 				}
-				cycleListener?.onFallback(FallbackReason.EMPTY_NO_TOOLS, observation.snapshot.simTime)
-				// fallbackDispatcher.decide() actually runs here and its decisions are returned —
-				// this is a dispatching event, not a no-op, so it maps to RULE_FALLBACK (not
-				// TIMEOUT_NOOP) for correct ActionAuthor attribution.
-				reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
-				fallbackDispatcher.decide(observation)
 			}
 		} catch (e: TimeoutCancellationException) {
-			logger.warn {
-				"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +
-					"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
+			runFallback(FallbackReason.TIMEOUT, observation) {
+				logger.warn {
+					"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +
+						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
+				}
 			}
-			cycleListener?.onFallback(FallbackReason.TIMEOUT, observation.snapshot.simTime)
-			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
-			fallbackDispatcher.decide(observation)
 		} catch (e: CancellationException) {
 			// Parent coroutine was cancelled — propagate rather than swallow.
 			throw e
 		} catch (e: Exception) {
-			logger.warn(e) {
-				"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
-					"(simTime=${observation.snapshot.simTime})"
+			runFallback(FallbackReason.EXCEPTION, observation) {
+				logger.warn(e) {
+					"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
+						"(simTime=${observation.snapshot.simTime})"
+				}
 			}
-			cycleListener?.onFallback(FallbackReason.EXCEPTION, observation.snapshot.simTime)
-			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
-			fallbackDispatcher.decide(observation)
 		}
+
+	/**
+	 * Runs the shared rule-based-fallback sequence: log via [logAction], notify [cycleListener],
+	 * report [TickOutcome.RULE_FALLBACK] (the fallback dispatcher always actually runs and
+	 * returns decisions here — a dispatching event, not a no-op), then delegate to
+	 * [fallbackDispatcher]. Shared by all three fallback sites in [plan] (empty LLM cycle,
+	 * inference timeout, LLM exception) so they cannot drift out of sync with each other.
+	 */
+	private fun runFallback(
+		reason: FallbackReason,
+		observation: DispatchObservation,
+		logAction: () -> Unit
+	): List<DispatchDecision> {
+		logAction()
+		cycleListener?.onFallback(reason, observation.snapshot.simTime)
+		reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
+		return fallbackDispatcher.decide(observation)
+	}
 
 	/**
 	 * Publishes one completed cycle to the tick listener and to [cycleHistory].
