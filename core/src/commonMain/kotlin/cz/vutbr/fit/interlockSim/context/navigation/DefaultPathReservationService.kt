@@ -1052,6 +1052,21 @@ class DefaultPathReservationService(
 			// bypass-rollback can reset only what THIS candidate cleared (the before/after delta)
 			// and not a pre-existing reservation's signals.
 			val clearedBefore = clearedSemaphores[trainId]?.toSet() ?: emptySet()
+			// Capture the blocks this train already owns before this attempt, for the same reason
+			// on the block side: a bypass candidate's alternative route may reuse blocks the train
+			// already holds from a live reservation, so result.reservedBlocks can overlap that
+			// reservation. Releasing all of it would unregister the live reservation. The rollback
+			// must release only the candidate's NEW blocks (the before/after ownership delta),
+			// mirroring the semaphore delta above. registerAtomic is idempotent for already-owned
+			// blocks (it only updates ownership maps), so the snapshot is stable across the attempt.
+			val blocksBefore = registry.getBlocks(trainId).toSet()
+			// Same reason on the switch and PathInfo sides (PR #901 review): a successful bypass
+			// candidate has already locked/registered its switches (configureAndRegisterSwitches,
+			// inside reservePath's Step 2f) and merged its PathInfo (Step 2i) before the bypass
+			// check below can reject it. The snapshots let the rollback undo exactly what THIS
+			// candidate added on those two sides too, mirroring the semaphore/block deltas above.
+			val switchesBefore = registry.getSwitches(trainId).toSet()
+			val pathInfoBefore = registry.getPathInfo(trainId)
 
 			val result = reservePath(trainId, start, semaphore)
 
@@ -1072,17 +1087,22 @@ class DefaultPathReservationService(
 						val clearedByThisCandidate =
 							(clearedSemaphores[trainId] ?: emptySet()) - clearedBefore
 						resetSemaphoreSet(trainId, clearedByThisCandidate)
-						// Release the wrongly reserved path
-						result.reservedBlocks.forEach { block ->
-							try {
-								block.cancelPathSetup(start)
-								registry.unregisterBlock(trainId, block)
-							} catch (e: Exception) {
-								logger.warn(e) {
-									"reservePathToAnyNextSemaphore: Failed to release block during rollback: ${block.staticRef}"
-								}
-							}
-						}
+						// Release the wrongly reserved path — only the blocks THIS candidate newly
+						// reserved (the ownership delta vs [blocksBefore]); blocks the train already
+						// held from a live reservation must stay registered, or the rollback would
+						// strand a mid-journey train.
+						releaseBypassRollbackBlocks(trainId, result.reservedBlocks, blocksBefore)
+						// The transaction must also be complete on the switch and PathInfo sides
+						// (PR #901 review): a successful bypass candidate locked/registered its
+						// switches and merged its PathInfo inside reservePath. Leaving either behind
+						// keeps track locked the train never reserved (blocking other trains) and
+						// navigation metadata pointing through a route that was just released
+						// (steering THIS train onto the rejected path).
+						val candidateSwitches = registry.getSwitches(trainId) - switchesBefore
+						releaseCandidateSwitches(trainId, candidateSwitches)
+						// PathInfo cannot be un-merged (merge has cycle-guard abort semantics), so
+						// restore the pre-attempt snapshot registered value instead.
+						registry.restorePathInfo(trainId, pathInfoBefore)
 						lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 						continue
 					}
@@ -1136,6 +1156,50 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: All $attemptCount path(s) blocked"
 		}
 		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
+	}
+
+	/**
+	 * Release the blocks of a bypass-rollback candidate (the wrongly reserved path that did not
+	 * use the required next block). Mirrors [rollbackUnconfigurableCandidate]'s block loop:
+	 * `cancelPathSetup` runs under a per-block try, and [registry.unregisterBlock] runs in a
+	 * `finally` so a `cancelPathSetup` throw no longer leaks a block still registered to the train.
+	 * Uses `block.reservedFrom` (not the caller's `start`) so the cancel targets the separator the
+	 * block was actually reserved from.
+	 *
+	 * Only the candidate's NEW blocks — those not in [blocksBefore] (the train's ownership
+	 * snapshot taken before this candidate's [reservePath]) — are released. A bypass candidate's
+	 * alternative route may reuse blocks the train already holds from a live reservation; releasing
+	 * those would unregister the live reservation and strand a mid-journey train. This mirrors the
+	 * caller's semaphore delta reset (`clearedByThisCandidate = clearedAfter - clearedBefore`).
+	 * Blocks already owned are skipped entirely — both `cancelPathSetup` (which would drive a live
+	 * RESERVED block to FREE) and `unregisterBlock` — so the pre-existing reservation is undisturbed.
+	 */
+	private fun releaseBypassRollbackBlocks(
+		trainId: String,
+		reservedBlocks: List<DynamicTrackBlock>,
+		blocksBefore: Set<DynamicTrackBlock>
+	) {
+		reservedBlocks.forEach { block ->
+			// Skip blocks the train already owned before this candidate: they belong to a live
+			// reservation and must not be cancelled or unregistered.
+			if (block in blocksBefore) {
+				return@forEach
+			}
+			try {
+				val reservedFrom = block.reservedFrom
+				if (reservedFrom != null) {
+					block.cancelPathSetup(reservedFrom)
+				}
+			} catch (e: Exception) {
+				logger.warn(e) {
+					"reservePathToAnyNextSemaphore: Failed to release block during rollback: ${block.staticRef}"
+				}
+			} finally {
+				// Registry cleanup MUST run even if cancelPathSetup throws, otherwise
+				// a failed rollback leaks a block still registered to the train.
+				registry.unregisterBlock(trainId, block)
+			}
+		}
 	}
 
 	override fun reservePathToAnyNextSemaphore(
@@ -2476,36 +2540,23 @@ class DefaultPathReservationService(
 	 *   attempted (snapshot by the caller before Step 2f). Only candidate switches NOT in
 	 *   this set are released; switches shared with earlier hops stay locked/registered.
 	 */
-	private fun rollbackUnconfigurableCandidate(
+	internal fun rollbackUnconfigurableCandidate(
 		trainId: String,
 		forwardBlocks: List<DynamicTrackBlock>,
 		switches: List<DynamicRailSwitch>,
 		priorSwitches: Set<DynamicRailSwitch>
 	) {
-		switches.filterNot { it in priorSwitches }.forEach { switch ->
-			try {
-				// unregisterSwitch unlocks + removes the switch from the registry's
-				// switchToTrain/trainToSwitches maps when the switch is registered to this
-				// train (signal-config-failure path, after registerSwitches). When the switch
-				// was locked by setUpPath but NOT yet registered (switch-config-failure path,
-				// before registerSwitches), unregisterSwitch is a no-op — so fall back to an
-				// explicit unlock to release the physical lock.
-				if (!registry.unregisterSwitch(trainId, switch) && switch.locked) {
-					switch.unlock()
-				}
-			} catch (e: Exception) {
-				logger.warn(e) { "rollbackUnconfigurableCandidate: Failed to release switch $switch" }
-			}
-		}
+		releaseCandidateSwitches(trainId, switches.filterNot { it in priorSwitches })
 		for (block in forwardBlocks) {
 			try {
 				val reservedFrom = block.reservedFrom
 				if (reservedFrom != null) {
 					block.cancelPathSetup(reservedFrom)
 				}
-				registry.unregisterBlock(trainId, block)
 			} catch (e: Exception) {
 				logger.warn(e) { "rollbackUnconfigurableCandidate: Failed to release block $block" }
+			} finally {
+				registry.unregisterBlock(trainId, block)
 			}
 		}
 		logger.debug {
@@ -2515,10 +2566,44 @@ class DefaultPathReservationService(
 	}
 
 	/**
+	 * Unlock and unregister THIS candidate's switches, shared by all scoped rollback paths
+	 * ([rollbackUnconfigurableCandidate], the bypass rollback in [reservePathToAnyNextSemaphore]).
+	 *
+	 * [PathReservationRegistry.unregisterSwitch] unlocks + removes the switch from the registry's
+	 * switchToTrain/trainToSwitches maps when the switch is registered to this train (after
+	 * [PathReservationRegistry.registerSwitches]). When the switch was locked by `setUpPath` but NOT
+	 * yet registered (switch-config-failure path, before registration), unregisterSwitch is a no-op —
+	 * so fall back to an explicit unlock to release the physical lock.
+	 *
+	 * @param trainId The train identifier
+	 * @param candidateSwitches Only the switches newly locked/registered by the rolled-back
+	 *   candidate — callers must have already excluded the train's pre-existing switches
+	 */
+	private fun releaseCandidateSwitches(
+		trainId: String,
+		candidateSwitches: Collection<DynamicRailSwitch>
+	) {
+		candidateSwitches.forEach { switch ->
+			try {
+				if (!registry.unregisterSwitch(trainId, switch) && switch.locked) {
+					switch.unlock()
+				}
+			} catch (e: Exception) {
+				logger.warn(e) { "releaseCandidateSwitches: Failed to release switch $switch for $trainId" }
+			}
+		}
+	}
+
+	/**
 	 * Unregister all block reservations for a train.
 	 *
 	 * Removes the train from the registry, freeing all blocks it owns.
 	 * Called when a train completes its journey.
+	 *
+	 * This is a full route release, not just registry removal: the train's cleared signals return
+	 * to STOP first, blocks still RESERVED but never entered are cancelled back to FREE, and the
+	 * route's switches are unlocked only after their blocks are free — see the interface KDoc for
+	 * the contract.
 	 *
 	 * @param trainId The train identifier to unregister
 	 * @return List of blocks that were released
@@ -2528,8 +2613,29 @@ class DefaultPathReservationService(
 		// blocks become available to anyone else.
 		resetClearedSemaphores(trainId)
 
-		// Unlock switches before registry cleanup, matching releasePath behavior.
+		// Cancel path setup for blocks still physically RESERVED (un-travelled route head or
+		// extension tail). registry.unregister below only removes ownership maps; it does NOT
+		// drive block state RESERVED->FREE. Without this, a journey completing with
+		// RESERVED-but-never-entered blocks (reachable via bidirectional reversal or an
+		// abandoned forward extension) leaves orphan RESERVED blocks no other train can ever
+		// reserve (isBlockAvailable fails on state != FREE). Mirrors releasePath (:913-922).
+		// The reservedFrom != null guard skips already-entered/left blocks (enter() nulls
+		// reservedFrom), so only RESERVED-unentered blocks are freed.
 		// unregister is the production train-completion path; releasePath is test-only.
+		val blocks = registry.getBlocks(trainId)
+		blocks.forEach { block ->
+			val reservedFrom = block.reservedFrom
+			if (reservedFrom != null) {
+				try {
+					block.cancelPathSetup(reservedFrom)
+				} catch (e: Exception) {
+					logger.warn(e) { "unregister: Failed to release block $block" }
+				}
+			}
+		}
+
+		// Unlock switches AFTER their route blocks are cancelled, matching releasePath behavior
+		// (:924-933): a switch is unlocked only once nothing it protects is still RESERVED.
 		val switches = registry.getSwitches(trainId)
 		switches.forEach { switch ->
 			try {
@@ -2582,10 +2688,17 @@ class DefaultPathReservationService(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean {
+		// Signals first, then registry: reset the governing semaphore to STOP BEFORE the block
+		// leaves the registry, so there is no instant where a block is owner-less-and-FREE while
+		// its authorising signal still shows proceed. Matches releasePath's invariant (:897-900).
+		// On the released==false path the reset is fail-safe: resetSemaphoreSet only touches
+		// semaphores LAST recorded for this train, and STOP authorises nothing —
+		// the worst case is a stall, never an unprotected movement. Emission stays last, so a
+		// subscriber still never observes a FREE block whose signal shows proceed.
+		resetSemaphoresForReleasedBlocks(trainId, listOf(block))
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			emitBlockReleased(block, trainId, currentSimulationTime())
-			resetSemaphoresForReleasedBlocks(trainId, listOf(block))
 		}
 		return released
 	}

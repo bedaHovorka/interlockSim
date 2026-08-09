@@ -47,6 +47,8 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -3125,6 +3127,138 @@ class PathReservationServiceTest : KoinTestBase() {
 					override fun nextSemaphore(): OrientedPathSeparator? = null
 				}
 			)
+		}
+	}
+
+	@Nested
+	inner class UnregisterReleasesReservedBlocks {
+		@Test
+		fun `unregister frees blocks still RESERVED from an un-entered route (no orphan RESERVED blocks)`() {
+			// Given: a route reserved but never entered (no boundary crossed) -- the
+			// bidirectional-reversal / abandoned-extension footprint, minimally reproduced.
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val reservedBlocks =
+				(result as PathReservationService.ReservationResult.Success).reservedBlocks
+			assertThat(reservedBlocks).isNotEmpty()
+			reservedBlocks.forEach {
+				assertThat(it.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(it.reservedFrom).isEqualTo(inOut1)
+				assertThat(it.trainName).isEqualTo("train1")
+			}
+
+			// When: the train completes its journey via the production path (unregister).
+			val released = service.unregister("train1")
+
+			// Then: every reserved block must be physically FREE -- no orphan RESERVED blocks
+			// left that no other train can ever reserve. Before the fix, registry.unregister
+			// only removed ownership maps and the blocks stayed RESERVED (emitBlockReleased
+			// falsely reported newState=FREE), so a second train's reservePath for the same
+			// route was blocked forever (until the 60s OrphanReservationSweeper reclaimed).
+			assertThat(released).hasSize(reservedBlocks.size)
+			reservedBlocks.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.FREE)
+				assertThat(block.reservedFrom).isNull()
+				assertThat(block.trainName).isNull()
+			}
+			assertThat(service.getReservedBlocks("train1")).isEmpty()
+
+			// And a second train can now reserve the same route (an orphan would have blocked it).
+			val result2 = service.reservePath("train2", inOut1, inOut2)
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+	}
+
+	@Nested
+	inner class UnregisterBlockSignalOrdering {
+		@Test
+		fun `unregisterBlock resets the governing semaphore to STOP before publishing BlockReleased`() {
+			// Given: a route reserved (governing start signal cleared to proceed), then the first
+			// block driven through enter -> leave so it is FREE -- the production tail-clearance
+			// state in which unregisterBlock's vacancy guard passes.
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val firstBlock =
+				(result as PathReservationService.ReservationResult.Success).reservedBlocks.first()
+
+			// The governing semaphores bounding the first block that reservePath cleared to proceed.
+			val governedSemaphores =
+				firstBlock.ends().filterIsInstance<DynamicRailSemaphore>().filter { it.signal.isAllowing() }
+			assertThat(governedSemaphores).isNotEmpty()
+
+			// Drive the first block to FREE the production way (enter then leave). enter/leave do
+			// not reset signal aspects, so the governing semaphore is still proceed afterwards.
+			val occupant =
+				object : TrackOccupant {
+					override val name: String = "test-occupant"
+
+					override fun distanceToSemaphore(): Double = 0.0
+
+					override fun nextSemaphore(): OrientedPathSeparator? = null
+				}
+			firstBlock.enter(occupant)
+			firstBlock.leave(occupant)
+			assertThat(firstBlock.getState()).isEqualTo(TrackFacility.State.FREE)
+			// Guard: the governing semaphore must still be proceed here, otherwise the
+			// STOP-at-receipt assertion below would pass vacuously.
+			assertThat(governedSemaphores.all { it.signal.isAllowing() }).isTrue()
+
+			// A listener that captures the governing semaphore aspect at BlockReleased-receipt time.
+			val aspectAtRelease = mutableListOf<Signal>()
+			val listener =
+				object : BlockOccupancyListener {
+					override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
+						if (event.type == BlockOccupancyEventType.BLOCK_RELEASED && event.block == firstBlock) {
+							aspectAtRelease.addAll(governedSemaphores.map { it.signal })
+						}
+					}
+				}
+			environment.addBlockOccupancyListener(listener)
+
+			// When: unregisterBlock publishes BlockReleased.
+			assertThat(service.unregisterBlock("train1", firstBlock)).isTrue()
+
+			// Then: at BlockReleased-receipt time the governing semaphore must already be STOP.
+			// Before the swap, emitBlockReleased fired before resetSemaphoresForReleasedBlocks,
+			// so the subscriber observed a FREE block whose authorising signal still showed proceed
+			// -- the signals-before-blocks invariant violation (releasePath :897-900).
+			assertThat(aspectAtRelease).isNotEmpty()
+			aspectAtRelease.forEach { assertThat(it).isEqualTo(Signal.STOP) }
+		}
+	}
+
+	@Nested
+	inner class RollbackCleanupOnCancelThrow {
+		@Test
+		fun `rollbackUnconfigurableCandidate still unregisters a block from the registry when cancelPathSetup throws`() {
+			// Given: a mock block registered to train1, whose cancelPathSetup throws -- the
+			// degenerate state the finally-guard defends against (a cancel that fails mid-rollback).
+			val mockBlock = mockk<DynamicTrackBlock>(relaxed = true)
+			every { mockBlock.reservedFrom } returns inOut1
+			every { mockBlock.cancelPathSetup(any()) } throws IllegalStateException("forced rollback failure")
+			// registry.registerAtomic's conflict guard reads trainName/occupant; both must read
+			// as unowned (null). registry.unregisterBlock's vacancy guard requires FREE + no occupant.
+			every { mockBlock.trainName } returns null
+			every { mockBlock.getState() } returns TrackFacility.State.FREE
+			every { mockBlock.occupant } returns null
+
+			val regResult = registry.registerAtomic("train1", listOf(mockBlock))
+			assertThat(regResult).isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			assertThat(registry.isRegistered(mockBlock)).isTrue()
+
+			// When: rollback runs and cancelPathSetup throws.
+			(service as DefaultPathReservationService).rollbackUnconfigurableCandidate(
+				trainId = "train1",
+				forwardBlocks = listOf(mockBlock),
+				switches = emptyList(),
+				priorSwitches = emptySet()
+			)
+
+			// Then: the block MUST have been unregistered from the registry (finally ran). Before
+			// the fix, registry.unregisterBlock was inside the same try as cancelPathSetup, so the
+			// throw skipped registry cleanup and leaked a block still registered to the train.
+			assertThat(registry.isRegistered(mockBlock)).isFalse()
+			assertThat(registry.getOwner(mockBlock)).isNull()
 		}
 	}
 

@@ -234,6 +234,12 @@ interface PathReservationService {
 	 * - Block.trainId set to null
 	 * - Ownership removed from registry
 	 *
+	 * Signals first, always: every semaphore this service recorded as cleared for [trainId] is
+	 * returned to STOP BEFORE any of its blocks becomes available — a block must never become
+	 * reserveable while the aspect authorising entry to it still shows proceed. This reset runs
+	 * even when the train owns no blocks (a partial release may have reclaimed them earlier),
+	 * which is why [hasClearedSignals] exists.
+	 *
 	 * ## Use Cases
 	 *
 	 * - Train completes journey (exits network)
@@ -595,6 +601,13 @@ interface PathReservationService {
 	 * Removes all blocks owned by the specified train from the registry,
 	 * freeing them for subsequent trains. This is called when a train
 	 * completes its journey and reaches its destination.
+	 *
+	 * Beyond registry removal, this is a full route release with the same ordering invariants as
+	 * [releasePath]: the train's cleared signals return to STOP first, blocks still physically
+	 * RESERVED but never entered (an abandoned forward extension or reversal tail) are cancelled
+	 * back to FREE, and route switches are unlocked only after their blocks are free — so a
+	 * completed journey leaves no orphan RESERVED blocks, standing proceed aspects, or stale
+	 * switch locks behind (Issue #893 review, F1/F2).
 	 *
 	 * ## Use Case
 	 *

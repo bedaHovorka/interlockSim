@@ -126,4 +126,45 @@ class ReservationResultTest : KoinTestBase() {
 		assertThat(s1).isEqualTo(s2)
 		assertThat(s1.reservedBlocks).isEqualTo(sample)
 	}
+
+	@Test
+	fun `NonContiguousStart carries startName and reason`() {
+		val result =
+			PathReservationService.ReservationResult.NonContiguousStart(
+				"S1",
+				"start S1 is not contiguous with the train footprint"
+			)
+
+		assertThat(result.startName).isEqualTo("S1")
+		assertThat(result.reason).isEqualTo("start S1 is not contiguous with the train footprint")
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+	}
+
+	@Test
+	fun `NonContiguousStart data class equality and hashCode`() {
+		val a = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason A")
+		val b = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason A")
+		val c = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason B")
+		val d = PathReservationService.ReservationResult.NonContiguousStart("S2", "reason A")
+
+		assertThat(a).isEqualTo(b)
+		assertThat(a.hashCode()).isEqualTo(b.hashCode())
+		assertThat(a).isNotEqualTo(c) // different reason
+		assertThat(a).isNotEqualTo(d) // different startName
+		// Exercise copy() + componentN of data class
+		val copied = a.copy(reason = "reason C")
+		assertThat(copied.reason).isEqualTo("reason C")
+		assertThat(copied.startName).isEqualTo("S1")
+	}
+
+	@Test
+	fun `NonContiguousStart is distinct from AllPathsBlocked`() {
+		val ncs = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason")
+		val apb = PathReservationService.ReservationResult.AllPathsBlocked(3)
+
+		// Distinct subtypes are never equal — guards against a future merge of the result types.
+		assertThat(ncs).isNotEqualTo(apb)
+		assertThat(ncs).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+		assertThat(apb).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+	}
 }

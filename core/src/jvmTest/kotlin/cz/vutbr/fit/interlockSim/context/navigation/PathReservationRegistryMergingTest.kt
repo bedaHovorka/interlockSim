@@ -15,6 +15,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -779,6 +780,72 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			assertThat(registry.getPathInfo(train2)).isNotNull()
 			assertThat(registry.getPathInfo(train2)!!.start).isEqualTo(semaphoreZB)
 			assertThat(registry.getPathInfo(train2)!!.target).isEqualTo(switchVB)
+		}
+	}
+
+	@Nested
+	@DisplayName("restorePathInfo (transaction rollback)")
+	inner class RestorePathInfo {
+		@Test
+		fun `restorePathInfo with null removes the entry`() {
+			// Given: a train with a registered PathInfo
+			val trainId = "train1"
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
+			)
+
+			// When: the transaction is rolled back to "no PathInfo"
+			registry.restorePathInfo(trainId, null)
+
+			// Then: the entry is gone, as if the candidate had never been attempted
+			assertThat(registry.getPathInfo(trainId)).isNull()
+		}
+
+		@Test
+		fun `restorePathInfo replaces a merged PathInfo with the exact snapshot`() {
+			// Given: a train whose PathInfo was merged across two registrations
+			val trainId = "train1"
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
+			)
+			val snapshot = registry.getPathInfo(trainId)
+			val snapshotSize = snapshot!!.reservedPath.size
+
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
+			)
+			// Sanity: the merge really happened (3 + 3 - 1 overlap = 5 elements)
+			assertThat(registry.getPathInfo(trainId)!!.reservedPath.size).isEqualTo(5)
+
+			// When: the second registration is rolled back
+			registry.restorePathInfo(trainId, snapshot)
+
+			// Then: the original, unmerged PathInfo is back — merge() is not invertible by
+			// subtraction (cycle-guard aborts, entry-direction overwrites), so rollback restores
+			// the stored object rather than undoing the merge.
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(snapshot)
+			assertThat(registry.getPathInfo(trainId)!!.reservedPath.size).isEqualTo(snapshotSize)
+		}
+
+		@Test
+		fun `restorePathInfo with null on a train with no entry is a no-op`() {
+			registry.restorePathInfo("train-with-no-pathinfo", null)
+			assertThat(registry.getPathInfo("train-with-no-pathinfo")).isNull()
 		}
 	}
 
