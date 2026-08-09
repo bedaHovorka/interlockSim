@@ -73,7 +73,7 @@ The simulator has **one** release path that conflates all three: `releasePath` /
 
 | ESA-11 concept | Simulator analogue |
 |---|---|
-| *Volnost jídní cesty* (Route freedom) | `areAllFree()` / `isPathAvailable()` — the FREE/availability check |
+| *Volnost jízdní cesty* (Route freedom) | `areAllFree()` / `isPathAvailable()` — the FREE/availability check |
 | *Závěr* (Route lock) | The atomic `reservePath` reservation + on-route switch lock (`registry.registerSwitches`) |
 | Mutual exclusion (conflicting routes) | `RegistrationResult.Conflict` / `AllPathsBlocked` |
 | Section locking (track-circuit hold) | The `OCCUPIED` state in the `FREE → RESERVED → OCCUPIED → FREE` state machine — a block stays `OCCUPIED` while the train is physically present, independent of whether the route is still "locked" |
