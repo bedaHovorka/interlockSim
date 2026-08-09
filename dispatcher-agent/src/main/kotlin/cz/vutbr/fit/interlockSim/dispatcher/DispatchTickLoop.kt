@@ -256,20 +256,16 @@ class DispatchTickLoop(
 			when {
 				emittedRaw == null ->
 					listOf(
-						AttributedAction(
-							commandId = CommandId(commandIdCounter.incrementAndGet()),
+						noOpAction(
 							tick = obs0.tick,
-							action = DispatchAction.NoOp,
 							author = ActionAuthor.TIMEOUT_NOOP,
 							reason = "deadline exceeded — budget exhausted, NoOp substituted"
 						)
 					)
 				emittedRaw.isEmpty() ->
 					listOf(
-						AttributedAction(
-							commandId = CommandId(commandIdCounter.incrementAndGet()),
+						noOpAction(
 							tick = obs0.tick,
-							action = DispatchAction.NoOp,
 							author = currentEmission.author,
 							reason = "no action warranted this tick"
 						)
@@ -375,6 +371,23 @@ class DispatchTickLoop(
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────────
+
+	/**
+	 * Builds a single-element substitute [DispatchAction.NoOp] with a fresh [CommandId],
+	 * used by the deadline-exceeded and nothing-warranted short-circuits in step 4 (DECIDE).
+	 */
+	private fun noOpAction(
+		tick: Long,
+		author: ActionAuthor,
+		reason: String
+	): AttributedAction =
+		AttributedAction(
+			commandId = CommandId(commandIdCounter.incrementAndGet()),
+			tick = tick,
+			action = DispatchAction.NoOp,
+			author = author,
+			reason = reason
+		)
 
 	/**
 	 * Invokes [currentEmission.emit] under [budget].
