@@ -282,6 +282,7 @@ if (isLinuxHost) {
         // it sidesteps the crash without losing anything — console output (via testLogging
         // below) still reports full pass/fail detail.
         reports.junitXml.required.set(false)
+        reports.html.required.set(false)
 
         testLogging {
             events("passed", "skipped", "failed")
