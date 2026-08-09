@@ -23,20 +23,21 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.AuthoredAction
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /**
- * Factory for creating per-context Koog dispatch agents (SP1.3 skeleton, SP1.4-updated, Issue #548/#549;
- * rewired to [SinkHolder] four-tool surface in SP2c.6, Issue #829).
+ * Factory for creating per-context Koog dispatch agents.
  *
- * ## SP2c.6 tool surface change (Issue #829)
+ * ## Tool surface
  *
- * [createAgent] now builds a [SinkHolder] initialized with a queue-posting wrapper that converts
+ * [createAgent] builds a [SinkHolder] initialized with a queue-posting wrapper that converts
  * every [DispatchAction] emitted by the four actuator tools into a [cz.vutbr.fit.interlockSim.sim.DispatchDecision]
- * and posts it to the [commandQueue]. The agent then receives exactly four tools from
+ * and posts it to the [commandQueue]. The agent receives exactly four tools from
  * [ToolGroupRegistry.assembleAllTools]: `approve_train`, `request_route`, `cancel_route`, `no_op`.
  * No perception tools and no dispatch-loop sensor tools are bundled in for the LLM; they are
  * assembled separately for other uses if needed.
@@ -44,23 +45,21 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @property toolRegistry Tool group registry (singleton, injected into scope)
  * @property ollamaConfig Ollama executor config (singleton, global model/endpoint)
  * @property agentService Agent creation service (singleton, handles Koog wiring)
- * @property perceptionPort Live sensor port for network perception (scoped per context, SP1.4).
- *   Wrapped in a snapshot projection before topology is read (SP1.7).
+ * @property perceptionPort Live sensor port for network perception (scoped per context). Passed
+ *   through unchanged to the actuator tools so they can pre-validate train ids in-turn; static
+ *   topology itself is read from the [DefaultSimulationContext] argument, not through this port.
  * @property commandQueue Command queue for fire-and-forget actuator commands (scoped per
- *   context, SP1.7). Receives converted [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s from
- *   the [sinkHolder] queue-posting wrapper in SP2c.6.
+ *   context). Receives converted [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s from
+ *   the [sinkHolder] queue-posting wrapper.
  * @property dispatchLoopSensorPort Dispatch-loop sensor port for this context. Retained for
  *   topology reads and future use; dispatch-loop sensor tools (`queued_trains`/`block_inputs`)
- *   are NOT added to the LLM's tool surface in SP2c.6.
- * @property sinkHolder Per-context shared [SinkHolder] for the four actuator tools (SP2c.6, #829).
- *   Holds the queue-posting wrapper installed here so every actuator tool's `emit` posts its
- *   converted [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to [commandQueue]; the same
- *   instance is read by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] to
- *   detect via the per-cycle emission counter whether the LLM acted via tools (and therefore the
+ *   are NOT added to the LLM's tool surface.
+ * @property sinkHolder Per-context shared [SinkHolder] for the four actuator tools. Holds the
+ *   queue-posting wrapper installed here so every actuator tool's `emit` posts its converted
+ *   [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to [commandQueue]; the same instance is
+ *   read by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] to detect via
+ *   the per-cycle emission counter whether the LLM acted via tools (and therefore the
  *   rule-based fallback must not double-dispatch).
- *
- * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549), SP1.7 (#774), SP2c.6 (#829); `outcomeFeed`
- *   added in Issue #893 (phase beta, task B0)
  */
 class KoogAgentFactory(
 	private val toolRegistry: ToolGroupRegistry,
@@ -73,10 +72,9 @@ class KoogAgentFactory(
 	/**
 	 * Optional per-run recorder receiving every coded in-turn tool rejection.
 	 *
-	 * Issue #847 round 4: the live path rejects arguments at the tool boundary and nowhere else —
-	 * `ActionValidator` is reached only from the test-only `DispatchTickLoop` — so without this the
-	 * per-run JSON's `rejectionsByCode` was structurally always empty and rounds 2 and 3 had to
-	 * count rejected calls by grepping the log.
+	 * The live path rejects arguments at the tool boundary and nowhere else — `ActionValidator`
+	 * is reached only from the test-only `DispatchTickLoop` — so without this the per-run JSON's
+	 * `rejectionsByCode` would be structurally always empty.
 	 *
 	 * Resolved **lazily, per rejection** rather than captured at construction. `ExampleRegistry`
 	 * overrides the scoped recorder with the correct arm *after* it has already resolved this
@@ -87,29 +85,23 @@ class KoogAgentFactory(
 	 *
 	 * Returns `null` for agents built outside a run (tests, tooling); the tool surface is unaffected
 	 * either way.
-	 *
-	 * @since Issue #847 round 4 (PR #891)
 	 */
 	private val runRecorderProvider: () -> DispatcherRunRecorder? = { null },
 	/**
 	 * Bounded per-cycle history handed to the built agent and written by
-	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] after each cycle
-	 * (#822 C5). Shared per context exactly like [sinkHolder], and for the same reason: the
-	 * writer and the reader are two different objects on the same driver thread.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] after each cycle.
+	 * Shared per context exactly like [sinkHolder], and for the same reason: the writer and the
+	 * reader are two different objects on the same driver thread.
 	 *
-	 * Defaults to a disabled history so agents built outside a run behave as they did before
-	 * Issue #847.
-	 *
-	 * @since Issue #847 (SP2c.24)
+	 * Defaults to a disabled history so agents built outside a run behave as before this history
+	 * existed.
 	 */
 	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
 	/**
 	 * Optional per-context feed of previously-applied outcomes, threaded straight through to
 	 * [AgentService.createDispatchAgent] exactly like [cycleHistory] above (same per-context
 	 * scoped-sharing rationale). `null` by default so agents built outside a run (tests, tooling)
-	 * behave as they did before task B0.
-	 *
-	 * @since Issue #893 (phase beta, task B0)
+	 * behave as before this feed existed.
 	 */
 	private val outcomeFeed: AppliedOutcomeFeed? = null
 ) {
@@ -117,29 +109,27 @@ class KoogAgentFactory(
 		private val logger = KotlinLogging.logger {}
 
 		/**
-		 * Builds the DISPATCHER system prompt (Issue #893, phase beta, task B2 — full rebuild of
-		 * the pre-#834 prompt, following the agent-architect's design recorded in the task plan).
-		 * Wording is subject to a post-implementation agent-architect review per the task brief;
+		 * Builds the DISPATCHER system prompt. Wording is subject to agent-architect review;
 		 * only the stable phrases [KoogAgentFactoryTest] asserts on are load-bearing.
 		 *
 		 * Not a precomputed constant: [maxActions] is read per call from the [SinkHolder] instance
 		 * [createAgent] was constructed with, so the stated budget can never drift from what
-		 * [SinkHolder.tryEmit] actually enforces (Issue #847, SP2c.24) — [SinkHolder] itself is
-		 * built from [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.maxActionsPerTick]
-		 * by [cz.vutbr.fit.interlockSim.dispatcher.di.DispatcherAgentModule]'s existing scoped
+		 * [SinkHolder.tryEmit] actually enforces — [SinkHolder] itself is built from
+		 * [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.maxActionsPerTick] by
+		 * [cz.vutbr.fit.interlockSim.dispatcher.di.DispatcherAgentModule]'s existing scoped
 		 * wiring, so this threads the real per-run value with no new DI path. `cap` (the
 		 * concurrent-train admission ceiling) is a distinct constant,
 		 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] — the non-LLM dispatcher's own
 		 * policy — kept exactly as before so the LLM and rule-based arms never disagree about
 		 * station capacity.
 		 *
-		 * ## No-menu compliance (#825 C9, extended to this surface by Issue #893 task B3)
+		 * ## No-menu compliance
 		 *
 		 * The procedure and rules below are dash-bulleted, never numbered (`^\s*\d+[.)]\s` is
 		 * forbidden), and the text avoids "option"/"optional"/"choose one"/"select" everywhere —
 		 * [LivePromptNoMenuTest] locks this against regression on the real, assembled prompt.
 		 *
-		 * ## Queued trains carry no destination clause here (B1 constraint)
+		 * ## Queued trains carry no destination clause here
 		 *
 		 * [KoogDispatchAgentImpl.renderQueuedTrainLine] deliberately renders a queued train as
 		 * approve-only, naming no topology endpoint at all — the admission step below must not
@@ -209,12 +199,9 @@ class KoogAgentFactory(
 		}
 
 		/**
-		 * Appends the "Rules that never bend:" section to [buildSystemPrompt]'s [StringBuilder],
-		 * factored out purely to keep [buildSystemPrompt] under detekt's `LongMethod` threshold — the
-		 * pre-existing wording and ordering are unchanged from when this lived inline.
-		 *
-		 * @since Issue #893 iteration 3 (extraction); rules themselves date to phase beta task B2 and
-		 *   iteration 2/3 additions
+		 * Appends the "Rules that never bend:" section to [buildSystemPrompt]'s [StringBuilder];
+		 * factored out to keep [buildSystemPrompt] within detekt's `LongMethod` budget, wording
+		 * unchanged from when it lived inline.
 		 */
 		private fun StringBuilder.appendNonNegotiableRules(maxActions: Int) {
 			appendLine("Rules that never bend:")
@@ -271,95 +258,119 @@ class KoogAgentFactory(
 	 * and posts it to [commandQueue] (fire-and-forget; applied on the kDisco thread by
 	 * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]).
 	 *
+	 * Model warm-up ([OllamaModelPrewarmer.warmUp]) runs concurrently with the topology/prompt/tool
+	 * assembly below rather than before it: the two are independent (warm-up is network I/O against
+	 * Ollama, assembly is local CPU work). Both are joined — warm-up is awaited — *before* the final
+	 * [AgentService.createDispatchAgent] call, which is the synchronization point, so overlapping
+	 * the two shortens the time this suspend function takes overall without changing what it waits
+	 * for before returning. `warmUp` is non-fatal: it catches every non-cancellation failure and
+	 * returns normally, so the await throws only on cooperative cancellation of the driver coroutine.
+	 *
+	 * The warm-up is launched with `async(Dispatchers.IO)`, not plain `async`, on purpose: every
+	 * real caller reaches [createAgent] through a single-threaded `runBlocking` event loop
+	 * (`AgentDriverLoop`, `AgentLoopDriver`, `DelegatingSimulationController`). On such a
+	 * dispatcher, a plain `async { ... }` child is merely *queued* — it only starts running once
+	 * the parent coroutine suspends — so without an explicit dispatcher the child would not begin
+	 * until `warmUp.await()` is reached below, after all the local assembly work has already run,
+	 * defeating the overlap entirely. Explicitly dispatching to [Dispatchers.IO] starts the child
+	 * on an IO thread immediately, genuinely concurrent with the assembly below.
+	 * [OllamaModelPrewarmer.warmUp] already confines its own HTTP call to `Dispatchers.IO`
+	 * internally, so this only changes *when* the coroutine is first dispatched, not where the
+	 * network call executes — no redundant or nested dispatch.
+	 *
 	 * @param context Current simulation context (for static topology extraction).
 	 * @return A configured Koog dispatch agent ready for dispatch decisions.
-	 *
-	 * @since Issue #548 (SP1.3); SP2c.6 (#829) introduces [SinkHolder] 4-tool surface
 	 */
-	suspend fun createAgent(context: DefaultSimulationContext): KoogDispatchAgent {
-		// Issue #815 (SP2b.9 warm-up follow-up): preload the model before the dispatch timeout window.
-		OllamaModelPrewarmer.warmUp(ollamaConfig)
+	suspend fun createAgent(context: DefaultSimulationContext): KoogDispatchAgent =
+		coroutineScope {
+			// Preload the model before the dispatch timeout window; started here, awaited below.
+			// Dispatchers.IO ensures this actually starts now (not merely queued) even when the
+			// caller is on a single-threaded runBlocking dispatcher — see KDoc above.
+			val warmUp = async(Dispatchers.IO) { OllamaModelPrewarmer.warmUp(ollamaConfig) }
 
-		logger.debug {
-			"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
-				"model=${ollamaConfig.modelName} (SP2c.6 SinkHolder 4-tool surface)"
-		}
-
-		// SP1.7 (Issue #774): wrap the live perception port in an off-thread-safe snapshot
-		// projection so the static topology can be read here at construction time.
-		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
-
-		// Static topology never changes during a run — read once at agent construction.
-		// The InOut/Signal names double as the valid-endpoint set request_route validates against.
-		val topology = StationTopologySerializer.describe(context)
-		val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
-
-		// SP2c.6 (#829): install the queue-posting wrapper on the per-context SinkHolder.
-		// Every DispatchAction emitted by an actuator tool is converted to a DispatchDecision
-		// and posted to commandQueue (fire-and-forget). The SinkHolder is shared by all four tools
-		// and with KoogAgentPlanAdapter, which reads its per-cycle emission counter.
-		sinkHolder.current =
-			EmittedActionSink { action ->
-				val decisions: List<DispatchDecision> =
-					when (action) {
-						is DispatchAction.ApproveTrain ->
-							listOf(DispatchDecision.ApproveTrain(trainId = action.trainId))
-						is DispatchAction.RequestRoute ->
-							listOf(
-								DispatchDecision.RequestRoute(
-									trainName = action.trainId,
-									fromEndpointName = action.fromEndpointName,
-									toEndpointName = action.toEndpointName
-								)
-							)
-						is DispatchAction.CancelRoute ->
-							listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
-						is DispatchAction.NoOp -> emptyList()
-					}
-				commandQueue.postAll(decisions)
+			logger.debug {
+				"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
+					"model=${ollamaConfig.modelName} (SP2c.6 SinkHolder 4-tool surface)"
 			}
 
-		// Assemble the four-tool actuator surface for this context. Both ports are passed through so
-		// the actuator tools can pre-validate train ids in-turn (Issue #847): perceptionPort supplies
-		// the active trains, dispatchLoopSensorPort the queued ones. Both are existing internal ports
-		// — reusing them adds no LLM-facing query tool, and ActuatorToolSurface.assertExactly below
-		// still holds the surface at four.
-		val tools =
-			toolRegistry.assembleAllTools(
-				validEndpointNames,
-				sinkHolder,
-				perceptionPort,
-				dispatchLoopSensorPort,
-				topology.blocks.map { it.name }.toSet(),
-				topology.inOuts.toSet()
-			)
-		// Assert the surface on the REAL tools, before decoration — the decorator is transparent
-		// (it forwards name/description/parameters) but asserting first keeps the four-tool contract
-		// checked against what the registry actually built.
-		ActuatorToolSurface.assertExactly(tools)
-		val instrumentedTools = tools.map { tool -> RejectionRecordingTool(tool, ::recordRejection) }
+			// Static topology never changes during a run — read once at agent construction.
+			// The InOut/Signal names double as the valid-endpoint set request_route validates against.
+			val topology = StationTopologySerializer.describe(context)
+			val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
 
-		// SP2b.8 (Issue #695): serialize static topology into the system prompt once.
-		val topologyPrompt = StationTopologySerializer.toPromptText(topology)
-		// Issue #893 (phase beta, task B2): budget is read from this factory's own sinkHolder,
-		// not a hardcoded literal — see buildSystemPrompt's KDoc for why that is safe.
-		val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick)}\n\n$topologyPrompt"
+			// Install the queue-posting wrapper on the per-context SinkHolder. Every DispatchAction
+			// emitted by an actuator tool is converted to a DispatchDecision and posted to
+			// commandQueue (fire-and-forget). The SinkHolder is shared by all four tools and with
+			// KoogAgentPlanAdapter, which reads its per-cycle emission counter.
+			sinkHolder.current =
+				EmittedActionSink { action ->
+					val decisions: List<DispatchDecision> =
+						when (action) {
+							is DispatchAction.ApproveTrain ->
+								listOf(DispatchDecision.ApproveTrain(trainId = action.trainId))
+							is DispatchAction.RequestRoute ->
+								listOf(
+									DispatchDecision.RequestRoute(
+										trainName = action.trainId,
+										fromEndpointName = action.fromEndpointName,
+										toEndpointName = action.toEndpointName
+									)
+								)
+							is DispatchAction.CancelRoute ->
+								listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
+							is DispatchAction.NoOp -> emptyList()
+						}
+					commandQueue.postAll(decisions)
+				}
 
-		val agent =
-			agentService.createDispatchAgent(
-				modelName = ollamaConfig.modelName,
-				tools = instrumentedTools,
-				systemPrompt = systemPrompt,
-				cycleHistory = cycleHistory,
-				outcomeFeed = outcomeFeed
-			)
+			// Assemble the four-tool actuator surface for this context. Both ports are passed through so
+			// the actuator tools can pre-validate train ids in-turn: perceptionPort supplies the active
+			// trains, dispatchLoopSensorPort the queued ones. Both are existing internal ports —
+			// reusing them adds no LLM-facing query tool, and ActuatorToolSurface.assertExactly below
+			// still holds the surface at four.
+			val tools =
+				toolRegistry.assembleAllTools(
+					validEndpointNames,
+					sinkHolder,
+					perceptionPort,
+					dispatchLoopSensorPort,
+					topology.blocks.map { it.name }.toSet(),
+					topology.inOuts.toSet()
+				)
+			// Assert the surface on the REAL tools, before decoration — the decorator is transparent
+			// (it forwards name/description/parameters) but asserting first keeps the four-tool contract
+			// checked against what the registry actually built.
+			ActuatorToolSurface.assertExactly(tools)
+			val instrumentedTools = tools.map { tool -> RejectionRecordingTool(tool, ::recordRejection) }
 
-		logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }
-		return agent
-	}
+			// Serialize static topology into the system prompt once.
+			val topologyPrompt = StationTopologySerializer.toPromptText(topology)
+			// Budget is read from this factory's own sinkHolder, not a hardcoded literal — see
+			// buildSystemPrompt's KDoc for why that is safe.
+			val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick)}\n\n$topologyPrompt"
+
+			// Join the warm-up before building the agent: this is the documented synchronization
+			// point — both warm-up (network I/O) and the local assembly above are finished before
+			// the final createDispatchAgent call. warmUp is non-fatal (OllamaModelPrewarmer catches
+			// every non-CancellationException failure and returns normally), so this await only
+			// throws on cooperative cancellation of the driver coroutine.
+			warmUp.await()
+
+			val agent =
+				agentService.createDispatchAgent(
+					modelName = ollamaConfig.modelName,
+					tools = instrumentedTools,
+					systemPrompt = systemPrompt,
+					cycleHistory = cycleHistory,
+					outcomeFeed = outcomeFeed
+				)
+
+			logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }
+			agent
+		}
 
 	/**
-	 * Records one coded in-turn tool rejection on the per-run recorder (Issue #847 round 4).
+	 * Records one coded in-turn tool rejection on the per-run recorder.
 	 *
 	 * Phase is [ActionPhase.REJECTED_BY_VALIDATOR] — the action never reached the applier, so it is
 	 * a validator-stage rejection in every sense the snapshot distinguishes.

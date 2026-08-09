@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 /**
  * Rejection codes produced by [ActionValidator] when a [DispatchAction] fails pre-execution
- * validation (SP2c.3, Issue #826).
+ * validation.
  *
  * Codes are grouped by the action type they guard and by their semantic category.
  *
@@ -23,8 +23,6 @@ package cz.vutbr.fit.interlockSim.dispatcher
  * - **request_route** — guards specific to [DispatchAction.RequestRoute].
  * - **cancel_route** — guards specific to [DispatchAction.CancelRoute].
  * - **meta** — batch-level limits managed by [ActionValidator.validateBatch].
- *
- * @since Issue #826 (SP2c.3 — Goal 10)
  */
 enum class RejectionCode {
 	// ── Shape / identity ─────────────────────────────────────────────────────
@@ -77,7 +75,7 @@ enum class RejectionCode {
 	/**
 	 * The train already holds a path reservation whose target equals the requested
 	 * `toEndpointName` — re-requesting the same route is a no-op that should not reach the
-	 * interlocking. This is the machine-readable defence against Issue #814 Symptom 3.
+	 * interlocking. This is the machine-readable defence against redundant same-target requests.
 	 *
 	 * The outer [ActionValidator] gate fires **before** any [ActuatorCommandQueue] post, and
 	 * before [cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService] is

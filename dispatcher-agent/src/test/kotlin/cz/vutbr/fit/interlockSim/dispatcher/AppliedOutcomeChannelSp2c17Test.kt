@@ -19,6 +19,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isSameAs
 import cz.vutbr.fit.interlockSim.dispatcher.agents.Affordance
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CompactTextRenderer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.RenderContext
@@ -593,6 +594,24 @@ class AppliedOutcomeChannelSp2c17Test {
 			assertThat(ids).containsExactly(2L, 3L, 4L)
 			// The ring is empty after a full drain.
 			assertThat(sink.drainSince(0L)).isEmpty()
+		}
+
+		/**
+		 * Locks the empty-ring allocation-light fast path: a drain on an empty channel returns the
+		 * shared `emptyList()` singleton (no `MutableList` allocation). `drainSince` is on a hot,
+		 * per-tick, cross-thread path and the channel's contract is allocation-light — a prior
+		 * "redundant branch" simplification once dropped this fast path and reintroduced a per-tick
+		 * allocation. The referential-identity assertion here prevents that regression.
+		 */
+		@Test
+		@DisplayName("drainSince on an empty channel returns the shared emptyList() singleton (no allocation)")
+		fun drainSinceOnEmptyChannelReturnsEmptyListSingleton() {
+			val sink = AppliedOutcomeChannel()
+			assertThat(sink.drainSince(0L)).isSameAs(emptyList<AppliedOutcome>())
+			// Also holds after a full drain leaves the ring empty.
+			sink.publish(approved(1L))
+			sink.drainSince(0L)
+			assertThat(sink.drainSince(0L)).isSameAs(emptyList<AppliedOutcome>())
 		}
 
 		private fun approved(id: Long): AppliedOutcome.Approved =

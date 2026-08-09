@@ -34,19 +34,18 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Unconditional fixed-tick perceive → decide → act control loop for the Goal 10 dispatcher
- * agent (SP2c.5, Issue #828 — constraint C2 / axis A2).
+ * agent.
  *
  * ## Structural guarantee (C2)
  *
  * Every call to [runTick] is exactly one dispatcher tick: sense the current observation,
  * produce a decision (via [EmissionStrategy]), validate it (via [ActionValidator]), and post
  * it (via [ActuatorCommandQueue]). There is no state in which the dispatcher can silently
- * "forget" to reconsider admission because it is an unconditional per-tick loop (dissolves
- * #814 Symptom 2 structurally).
+ * "forget" to reconsider admission because it is an unconditional per-tick loop.
  *
  * ## Pacing (ported from [AgentLoopDriver])
  *
- * The [snapshotSignal] protocol from SP0.11c (Issue #746) is used verbatim:
+ * The [snapshotSignal] protocol is used verbatim:
  *
  * - When [snapshotSignal] is non-null, [runTick] blocks on [SnapshotSignal.await] at the top of
  *   each tick. A `false` return (timeout — sim stopping) short-circuits and returns `null`.
@@ -97,22 +96,21 @@ import java.util.concurrent.atomic.AtomicLong
  * @param budget Deadline wrapper for [EmissionStrategy.emit]; returns `null` on timeout.
  * @param fallbackGuard Observes each completed [TickRecord] and sets [runOutcome] to
  *   [RunOutcome.Failed] after [threshold][TerminalFallbackGuard.threshold] consecutive
- *   [ActionAuthor.TIMEOUT_NOOP] ticks (SP2c.8, #831). Defaults to a fresh guard.
+ *   [ActionAuthor.TIMEOUT_NOOP] ticks. Defaults to a fresh guard.
  * @param fallbackEmission Optional emission strategy to activate after [fallbackGuard] engages.
  *   Typically [RuleBasedEmissionStrategy] with [cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor.RULE_FALLBACK]
  *   so that post-engagement actions are distinguishable and the simulation can reach a terminating
  *   state for inspection. When `null`, the original [emission] continues after engagement.
  * @param controller Pacing controller for pause/step and wall-clock throttling.
- * @param snapshotSignal Optional sim-to-driver wake signal (SP0.11c, Issue #746). When
- *   non-null, each tick blocks on [SnapshotSignal.await] instead of reading a potentially
- *   stale observation. When null, [runTick] reads whatever [observations.latest][DispatcherObservationSource.latest]
- *   returns (same polling behaviour as the pre-#746 driver).
+ * @param snapshotSignal Optional sim-to-driver wake signal. When non-null, each tick blocks on
+ *   [SnapshotSignal.await] instead of reading a potentially stale observation. When null,
+ *   [runTick] reads whatever [observations.latest][DispatcherObservationSource.latest] returns
+ *   (polling behaviour).
  * @param maxActionsPerTick Maximum number of actions to process per tick. Actions beyond this
  *   limit are not posted.
  *
  * @see AgentLoopDriver
  * @see RuleBasedEmissionStrategy
- * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 class DispatchTickLoop(
 	private val observations: DispatcherObservationSource,
@@ -130,14 +128,12 @@ class DispatchTickLoop(
 	private val snapshotSignal: SnapshotSignal? = null,
 	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK,
 	/**
-	 * Optional attribution store for SP2c.9 (Issue #832). When non-null, each completed
-	 * [TickRecord] is forwarded to [DispatcherPreferenceStore.observe] after the ring-buffer
-	 * push and working-memory update, so the store accumulates a per-run author-count summary
-	 * that can be emitted via [DispatcherPreferenceStore.logFinalSummary] at run end.
+	 * Optional attribution store. When non-null, each completed [TickRecord] is forwarded to
+	 * [DispatcherPreferenceStore.observe] after the ring-buffer push and working-memory update,
+	 * so the store accumulates a per-run author-count summary that can be emitted via
+	 * [DispatcherPreferenceStore.logFinalSummary] at run end.
 	 *
 	 * When null (the default) no attribution tracking is performed — existing callers are unaffected.
-	 *
-	 * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance)
 	 */
 	private val preferenceStore: DispatcherPreferenceStore? = null
 ) {
@@ -242,17 +238,17 @@ class DispatchTickLoop(
 		// null return = deadline exceeded; substitute a single TIMEOUT_NOOP.
 		// empty list = strategy ran and decided there is nothing to do this tick; substitute a
 		// single NoOp authored by the strategy's own author (RULE_BASED / future LLM) so an idle
-		// tick records as a deliberate decision, not a degraded timeout (SP2c.19 / #829).
-		// Exception = LLM infrastructure failure. See [runEmission] for the SP2c.8/#831 vs
-		// SP2c.26/#849 reconciliation (swallow-and-engage when a fallback is configured, rethrow
-		// otherwise so the failure is diagnosable by the caller).
+		// tick records as a deliberate decision, not a degraded timeout.
+		// Exception = LLM infrastructure failure. See [runEmission] for the reconciliation
+		// (swallow-and-engage when a fallback is configured, rethrow otherwise so the failure is
+		// diagnosable by the caller).
 		//
-		// F2 real-time ratio (SP2c.10, Issue #833): measure wall-clock time of the whole emission
-		// step (primary attempt + any fallback engage) and log the ratio
-		// (simDelta / emissionWallClockSeconds). Wrapping [runEmission] — not the bare
-		// `budget.withBudget { emission.emit(...) }` — means the ratio reflects the full pacing
-		// latency unit, including fallback work. For the LLM arm this is reported but NOT used to
-		// gate the run (A6 split). Rule-based arm is intrinsically ≥ 1× (synchronous).
+		// F2 real-time ratio: measure wall-clock time of the whole emission step (primary attempt
+		// + any fallback engage) and log the ratio (simDelta / emissionWallClockSeconds). Wrapping
+		// [runEmission] — not the bare `budget.withBudget { emission.emit(...) }` — means the
+		// ratio reflects the full pacing latency unit, including fallback work. For the LLM arm
+		// this is reported but NOT used to gate the run. Rule-based arm is intrinsically ≥ 1×
+		// (synchronous).
 		val emissionStartNanos = System.nanoTime()
 		val emittedRaw: List<AttributedAction>? = runEmission(prompt, obs0)
 		val emissionNanos = System.nanoTime() - emissionStartNanos
@@ -260,20 +256,16 @@ class DispatchTickLoop(
 			when {
 				emittedRaw == null ->
 					listOf(
-						AttributedAction(
-							commandId = CommandId(commandIdCounter.incrementAndGet()),
+						noOpAction(
 							tick = obs0.tick,
-							action = DispatchAction.NoOp,
 							author = ActionAuthor.TIMEOUT_NOOP,
 							reason = "deadline exceeded — budget exhausted, NoOp substituted"
 						)
 					)
 				emittedRaw.isEmpty() ->
 					listOf(
-						AttributedAction(
-							commandId = CommandId(commandIdCounter.incrementAndGet()),
+						noOpAction(
 							tick = obs0.tick,
-							action = DispatchAction.NoOp,
 							author = currentEmission.author,
 							reason = "no action warranted this tick"
 						)
@@ -306,7 +298,7 @@ class DispatchTickLoop(
 			// Valid action: convert to DispatchDecision and post.
 			val decisions = toDispatchDecisions(attributedAction.action)
 			if (decisions.isNotEmpty()) {
-				// SP2c.20 (#843): pass author/reason to postAll so the correlation map can
+				// Pass author/reason to postAll so the correlation map can
 				// attribute the apply-time outcome back to the originating decision-maker.
 				val posted = queue.postAll(decisions, attributedAction.author, attributedAction.reason)
 				if (!posted) {
@@ -325,8 +317,8 @@ class DispatchTickLoop(
 		}
 
 		// 6. RECORD — build TickRecord; push to ring buffer; update working memory; observe with guard.
-		// Outcomes for this tick are the applied outcomes already embedded in obs0 by the projector
-		// (SP2c.17, #840). For the P10 gate where no outcome channel is wired, this is always empty.
+		// Outcomes for this tick are the applied outcomes already embedded in obs0 by the projector.
+		// For the P10 gate where no outcome channel is wired, this is always empty.
 		val outcomes = obs0.appliedOutcomes
 		val record =
 			TickRecord(
@@ -353,7 +345,7 @@ class DispatchTickLoop(
 		val simDelta = obs0.simTime - prevSimTime
 		controller.throttle(simDelta)
 
-		// F2 real-time ratio reporting (SP2c.10, Issue #833 — A6 split):
+		// F2 real-time ratio reporting:
 		// simDelta is the simulation time elapsed since the previous tick.
 		// emissionNanos is the wall-clock time the emission strategy took.
 		// ratio = simDelta / emissionWallClockSeconds; < 1.0 means the emission was slower
@@ -381,15 +373,32 @@ class DispatchTickLoop(
 	// ── Private helpers ───────────────────────────────────────────────────────
 
 	/**
-	 * Invokes [currentEmission.emit] under [budget], reconciling SP2c.8 (#831) with SP2c.26 (#849).
+	 * Builds a single-element substitute [DispatchAction.NoOp] with a fresh [CommandId],
+	 * used by the deadline-exceeded and nothing-warranted short-circuits in step 4 (DECIDE).
+	 */
+	private fun noOpAction(
+		tick: Long,
+		author: ActionAuthor,
+		reason: String
+	): AttributedAction =
+		AttributedAction(
+			commandId = CommandId(commandIdCounter.incrementAndGet()),
+			tick = tick,
+			action = DispatchAction.NoOp,
+			author = author,
+			reason = reason
+		)
+
+	/**
+	 * Invokes [currentEmission.emit] under [budget].
 	 *
 	 * - When [fallbackEmission] is configured: an unhandled exception engages [fallbackGuard]
 	 *   immediately and returns `null` so the tick substitutes a TIMEOUT_NOOP and subsequent ticks
-	 *   run via [fallbackEmission] — the run reaches a terminating state for inspection
-	 *   (SP2c.8 / #831 terminal fallback with run-failure marking).
+	 *   run via [fallbackEmission] — the run reaches a terminating state for inspection (terminal
+	 *   fallback with run-failure marking).
 	 * - When [fallbackEmission] is `null`: rethrows — the run cannot continue advancing, and
 	 *   surfacing the exception is the only way to make the failure diagnosable by the caller
-	 *   (SP2c.26 / #849 paused-clock propagation invariant; the spike harness exercises this case).
+	 *   (paused-clock propagation invariant).
 	 *
 	 * [kotlinx.coroutines.CancellationException] is always rethrown for cooperative cancellation.
 	 */

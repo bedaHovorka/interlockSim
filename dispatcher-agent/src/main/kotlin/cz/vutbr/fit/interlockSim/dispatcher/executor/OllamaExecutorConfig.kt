@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.executor
 import java.time.Duration
 
 /**
- * Configuration for the Ollama LLM executor (SP1.3 skeleton, Issue #548).
+ * Configuration for the Ollama LLM executor.
  *
  * ## Responsibility
  *
@@ -26,35 +26,24 @@ import java.time.Duration
  * simulation contexts and agents (the config itself has no mutable state that
  * varies per context).
  *
- * ## SP1 phasing
- *
- * - SP1.3 (this class): Configuration skeleton, endpoint + model selection
- * - SP1.5 (#550): Ollama backend initialization and client setup
- * - SP1.6 (#551): Tool executor wiring into Koog agent
- *
- * ## Design rationale
- *
- * Ollama executor config is a **singleton** because:
- * 1. Endpoint URL is runtime-global (same local Ollama for all agents)
- * 2. Model selection is global policy (all dispatcher agents use the same model)
- * 3. Timeout/retry settings are global tuning (not per-context)
- * 4. Config is immutable after creation → safe to share
+ * Singleton because config is runtime-global and immutable — the same endpoint, model, and
+ * tuning apply to every dispatcher agent, and there is nothing per-context to vary.
  *
  * @property ollamaEndpoint HTTP endpoint of local Ollama instance (default: `http://localhost:11434`,
  *   overridable via the `OLLAMA_BASE_URL` environment variable — see [default])
  * @property modelName Ollama model tag, e.g. "qwen2.5:7b-instruct" (per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md)
- * @property temperature Model sampling temperature (0.0–1.0, default 0.28). Decided via Goal 10
- *   agent-architect + traffic-simulation-expert consultation after a live incident where the LLM
- *   hallucinated a nonexistent endpoint name (`"kA"`/`"kB"`) instead of copying one from its
- *   system prompt's topology. Per `docs/GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` §7 (A4), the LLM
- *   dispatcher is explicitly **not** this project's reproducibility anchor — `RuleBasedDispatcher`
- *   is, and acceptance is outcome-gated across seed-pinned runs, not decision-for-decision — so
- *   0.28 is **not** chosen for reproducibility. It is chosen for tool-calling correctness (§2's
- *   "reliably emits valid JSON" criterion): low enough to meaningfully reduce hallucinated tool
- *   arguments versus a higher temperature, while staying clear of near-greedy (~0.1) decoding,
- *   where small (7B-class) instruct models tend toward repetitive/degenerate tool-call loops — a
- *   failure mode §6's fallback/loop-guard mitigates but should not be relied on to mask. Revisit
- *   empirically once the §7 benchmark harness lands (tool-call success rate at 0.28 vs. higher).
+ * @property temperature Model sampling temperature (0.0–1.0, default 0.28). Chosen after a live
+ *   incident where the LLM hallucinated a nonexistent endpoint name (`"kA"`/`"kB"`) instead of
+ *   copying one from its system prompt's topology. Per `docs/GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md`
+ *   §7 (A4), the LLM dispatcher is explicitly **not** this project's reproducibility anchor —
+ *   `RuleBasedDispatcher` is, and acceptance is outcome-gated across seed-pinned runs, not
+ *   decision-for-decision — so 0.28 is **not** chosen for reproducibility. It is chosen for
+ *   tool-calling correctness (§2's "reliably emits valid JSON" criterion): low enough to
+ *   meaningfully reduce hallucinated tool arguments versus a higher temperature, while staying
+ *   clear of near-greedy (~0.1) decoding, where small (7B-class) instruct models tend toward
+ *   repetitive/degenerate tool-call loops — a failure mode §6's fallback/loop-guard mitigates but
+ *   should not be relied on to mask. Revisit empirically once the §7 benchmark harness lands
+ *   (tool-call success rate at 0.28 vs. higher).
  * @property topP Nucleus sampling parameter (0.0–1.0, default 0.9)
  * @property maxTokens Maximum tokens in response (default 1024)
  * @property inferenceTimeout Maximum wall-clock time for inference (default 30 seconds per #532 latency constraint)
@@ -71,56 +60,50 @@ import java.time.Duration
  *   more often than intended. 20 gives the model comfortable headroom while [inferenceTimeout]
  *   remains the real safety bound on total wall-clock time per cycle.
  *
- *   **SP2c.27 verification (Issue #850, Spike 4):** the "node traversals, not LLM turns" claim
- *   above is confirmed directly against the pinned Koog 1.1.1 source
+ *   Confirmed directly against the pinned Koog 1.1.1 source
  *   (`ai.koog.agents.core.agent.entity.AIAgentSubgraph.executeWithInnerContext`): the iteration
  *   counter increments once per `while(true)` loop pass — i.e. once per node execution — and the
  *   `singleRunStrategy()` graph alternates an LLM-call node with a tool-execution node, so each
- *   tool call consumes roughly two iterations, not one. #850 originally hypothesized `4` would
- *   suffice for the acyclic one-shot graph; that is refuted by this same KDoc's own prior finding
- *   two paragraphs up (`4` was never even tested standalone — `8` already failed on a happy-path
- *   `shuntingLoopAI` cycle). `20` remains the correct production value; #850 adds a live regression
- *   test ([cz.vutbr.fit.interlockSim.dispatcher.agents.KoogRealOllamaToolCallingTest]) asserting no
- *   `AIAgentMaxNumberOfIterationsReachedException` on a multi-tool happy-path cycle at this value.
+ *   tool call consumes roughly two iterations, not one. `20` is the correct production value; a
+ *   live regression test ([cz.vutbr.fit.interlockSim.dispatcher.agents.KoogRealOllamaToolCallingTest])
+ *   asserts no `AIAgentMaxNumberOfIterationsReachedException` on a multi-tool happy-path cycle at
+ *   this value.
  * @property contextWindowTokens Fixed Ollama context window (`num_ctx`) requested for every prompt,
- *   via [ai.koog.prompt.executor.ollama.client.ContextWindowStrategy.Fixed] (default 16,384;
- *   right-sized in SP2c.27, Issue #850 — see below). Koog's own default strategy
- *   ([ai.koog.prompt.executor.ollama.client.ContextWindowStrategy.None]) never sends `num_ctx` at
- *   all, which makes Ollama fall back to a hard 2048-token window — too small to hold the static
- *   station topology SP2b.8 loads into the system prompt once at agent construction. A `Fixed`
- *   value (rather than the adaptive `FitPrompt` strategy) is used deliberately: Ollama reloads the
- *   model every time `num_ctx` changes between requests, so a stable value avoids repeated reloads
- *   during a long-running simulation — **never** change this value mid-run.
+ *   via [ai.koog.prompt.executor.ollama.client.ContextWindowStrategy.Fixed] (default 16,384).
+ *   Koog's own default strategy ([ai.koog.prompt.executor.ollama.client.ContextWindowStrategy.None])
+ *   never sends `num_ctx` at all, which makes Ollama fall back to a hard 2048-token window — too
+ *   small to hold the static station topology SP2b.8 loads into the system prompt once at agent
+ *   construction. A `Fixed` value (rather than the adaptive `FitPrompt` strategy) is used
+ *   deliberately: Ollama reloads the model every time `num_ctx` changes between requests, so a
+ *   stable value avoids repeated reloads during a long-running simulation — **never** change this
+ *   value mid-run.
  *
- *   **SP2c.27 right-sizing (Issue #850):** the static per-tick system prompt (topology +
- *   instructions) measures ≈2,100 tokens against `qwen2.5:7b-instruct` on this project's
- *   synthetic-but-representative station fixture, matching the ≈1,700–2,100 estimate in #850's
- *   issue body. That number alone would suggest 8,192 is generous. However, Koog's
- *   `singleRunStrategy()` resends the **entire accumulated conversation** on every LLM round trip
- *   within a single [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent.decideAsync]
- *   call — up to [maxAgentIterations] node traversals — and full-network perception tools (e.g.
+ *   The static per-tick system prompt (topology + instructions) measures ≈2,100 tokens against
+ *   `qwen2.5:7b-instruct` on this project's synthetic-but-representative station fixture. That
+ *   number alone would suggest 8,192 is generous. However, Koog's `singleRunStrategy()` resends
+ *   the **entire accumulated conversation** on every LLM round trip within a single
+ *   [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent.decideAsync] call — up to
+ *   [maxAgentIterations] node traversals — and full-network perception tools (e.g.
  *   `all_block_occupancies`) return a complete snapshot on every call, not a diff. A live
  *   measurement of 5 simulated tool-call/result rounds against a 60-block synthetic topology grew
  *   the prompt from 2,102 to 4,510 tokens (≈482 tokens/round) — so the worst-case prompt near the
  *   end of a `maxAgentIterations`-heavy cycle is materially larger than the static topology alone.
- *   16,384 was chosen over #850's suggested 8,192 for that reason: it keeps ~2× headroom above the
- *   measured growth trend (8,192 would risk **silent** truncation of the oldest messages —
- *   including the topology in the system prompt — rather than a visible error, since Ollama
- *   trims context that exceeds `num_ctx` instead of rejecting the request) while still capturing
- *   nearly all of 32,768's latency/memory cost reduction: measured cold-load on this dev machine
- *   dropped from 6.53s (32,768, 6.14 GiB VRAM) to 4.75s (16,384, 5.23 GiB VRAM) — 8,192 measured
- *   4.85s / 4.78 GiB, i.e. almost no further benefit over 16,384. Prompt-eval duration and decode
- *   throughput were unaffected by `num_ctx` in all three measurements, as expected: `num_ctx` is a
- *   KV-cache preallocation ceiling, not a per-token processing cost. Full methodology and raw
- *   numbers: `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md`.
+ *   16,384 was chosen over the initially-considered 8,192 for that reason: it keeps ~2× headroom
+ *   above the measured growth trend (8,192 would risk **silent** truncation of the oldest
+ *   messages — including the topology in the system prompt — rather than a visible error, since
+ *   Ollama trims context that exceeds `num_ctx` instead of rejecting the request) while still
+ *   capturing nearly all of 32,768's latency/memory cost reduction: measured cold-load on this dev
+ *   machine dropped from 6.53s (32,768, 6.14 GiB VRAM) to 4.75s (16,384, 5.23 GiB VRAM) — 8,192
+ *   measured 4.85s / 4.78 GiB, i.e. almost no further benefit over 16,384. Prompt-eval duration
+ *   and decode throughput were unaffected by `num_ctx` in all three measurements, as expected:
+ *   `num_ctx` is a KV-cache preallocation ceiling, not a per-token processing cost. Full
+ *   methodology and raw numbers: `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md`.
  *
  * **`maxTokens`/`topP` limitation:** as of Koog 1.1.1, `OllamaClient.execute()` only forwards
  * `temperature` (plus the computed context length) to Ollama's `/api/chat` request `options` —
  * `maxTokens` and `topP` have no wiring path to the real Ollama backend in this Koog version.
  * They are kept here as forward-looking configuration (a future Koog release, or a
  * `LLMParams.additionalProperties` escape hatch, may pick them up) but currently have no effect.
- *
- * @since Issue #548 (SP1.3 — Goal 10)
  */
 data class OllamaExecutorConfig(
 	val ollamaEndpoint: String = DEFAULT_OLLAMA_ENDPOINT,
@@ -144,9 +127,8 @@ data class OllamaExecutorConfig(
 		private const val DEFAULT_RETRY_ATTEMPTS = 3
 		private const val DEFAULT_MAX_AGENT_ITERATIONS = 20
 
-		// SP2c.27 (Issue #850): right-sized from 32,768 to 16,384 — see contextWindowTokens KDoc
-		// for the measured latency/memory rationale and why 8,192 (the issue's initial
-		// suggestion) was rejected in favor of this value.
+		// Right-sized from 32,768 to 16,384 — see contextWindowTokens KDoc for the measured
+		// latency/memory rationale and why 8,192 was rejected in favor of this value.
 		private const val DEFAULT_CONTEXT_WINDOW_TOKENS = 16_384L
 
 		/**
@@ -156,12 +138,12 @@ data class OllamaExecutorConfig(
 		 *
 		 * [ollamaEndpoint][OllamaExecutorConfig.ollamaEndpoint] defaults to `http://localhost:11434`,
 		 * overridable via the `OLLAMA_BASE_URL` environment variable. This matters once
-		 * dispatcher-agent is wired into the `app` container (Stage B, Issue #770): on
-		 * Windows/macOS Docker Desktop, `localhost` inside a container does not reach a native
-		 * Ollama install or the host, even under `network_mode: host` — but
-		 * `host.docker.internal` does (verified 2026-07-19 on Windows 11 + Docker Desktop 29.5.3,
-		 * WSL2 backend, including from a `network_mode: host` container matching `app`'s actual
-		 * config). Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in that scenario.
+		 * dispatcher-agent is wired into the `app` container: on Windows/macOS Docker Desktop,
+		 * `localhost` inside a container does not reach a native Ollama install or the host, even
+		 * under `network_mode: host` — but `host.docker.internal` does (verified on Windows 11 +
+		 * Docker Desktop 29.5.3, WSL2 backend, including from a `network_mode: host` container
+		 * matching `app`'s actual config). Set `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+		 * in that scenario.
 		 *
 		 * @param env Environment variables to read the override from; defaults to the real
 		 *   process environment. Exposed as a parameter so tests can inject a fake map instead
@@ -181,6 +163,19 @@ data class OllamaExecutorConfig(
 			OllamaExecutorConfig(
 				inferenceTimeout = Duration.ofSeconds(10)
 			)
+
+		/**
+		 * Build the shared warning text for a setting that Koog 1.1.1 accepts but never forwards
+		 * to Ollama (see [noOpSettingWarnings] and the class KDoc's "`maxTokens`/`topP`
+		 * limitation").
+		 */
+		private fun noOpSettingWarning(
+			settingName: String,
+			value: Any
+		): String =
+			"$settingName=$value has no effect under Koog 1.1.1 — OllamaClient.execute() does not " +
+				"forward it to Ollama. The value is retained for forward compatibility (a future Koog " +
+				"release or an LLMParams.additionalProperties escape hatch may pick it up)."
 	}
 
 	/**
@@ -190,7 +185,7 @@ data class OllamaExecutorConfig(
 	 * Accepted tags include version-pinned models like "qwen2.5:7b-instruct", "llama3.1:8b", etc.
 	 * per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md §3.
 	 *
-	 * SP1.5 will enforce this validation at runtime when Ollama client is initialized.
+	 * Enforced at runtime when the Ollama client is lazily initialized in [OllamaSimpleExecutor].
 	 *
 	 * @throws IllegalArgumentException if modelName is not tool-capable
 	 */
@@ -219,24 +214,11 @@ data class OllamaExecutorConfig(
 	 * @return Warning messages for any no-op setting at a non-default value; empty when all
 	 *   no-op settings are at their defaults (the common case, since [default] only overrides
 	 *   the endpoint).
-	 * @since SP2b.9 review follow-up (PR #811)
 	 */
 	fun noOpSettingWarnings(): List<String> =
 		buildList {
-			if (maxTokens != DEFAULT_MAX_TOKENS) {
-				add(
-					"maxTokens=$maxTokens has no effect under Koog 1.1.1 — OllamaClient.execute() does not " +
-						"forward it to Ollama. The value is retained for forward compatibility (a future Koog " +
-						"release or an LLMParams.additionalProperties escape hatch may pick it up)."
-				)
-			}
-			if (topP != DEFAULT_TOP_P) {
-				add(
-					"topP=$topP has no effect under Koog 1.1.1 — OllamaClient.execute() does not forward it " +
-						"to Ollama. The value is retained for forward compatibility (a future Koog release or " +
-						"an LLMParams.additionalProperties escape hatch may pick it up)."
-				)
-			}
+			if (maxTokens != DEFAULT_MAX_TOKENS) add(noOpSettingWarning("maxTokens", maxTokens))
+			if (topP != DEFAULT_TOP_P) add(noOpSettingWarning("topP", topP))
 		}
 
 	init {

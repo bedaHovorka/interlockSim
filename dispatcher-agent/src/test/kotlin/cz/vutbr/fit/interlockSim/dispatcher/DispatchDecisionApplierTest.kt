@@ -384,6 +384,32 @@ class DispatchDecisionApplierTest {
 		}
 
 		@Test
+		@DisplayName(
+			"Two triples that would concatenate to the same '|'-joined string, an input shape " +
+				"currently blocked upstream by endpoint validation, are NOT conflated by the " +
+				"duplicate-suppression guard"
+		)
+		fun delimiterStraddlingTriples_notConflated() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			val (queue, applier) = makeApplier()
+
+			// "T1|zB" + "doA1" + "X" and "T1" + "zB|doA1" + "X" both concatenate (with "|" as
+			// separator) to the literal string "T1|zB|doA1|X". A "|" in `from`/`to` cannot occur
+			// today (endpoint names are XSD/`validEndpointNames`-validated upstream, see
+			// ReservationKey's KDoc), so this exact collision is not currently reachable via
+			// production decision sources. This test is defense-in-depth: it keeps the
+			// structured-key guard demonstrably sound against this input shape, so it stays safe
+			// if that upstream validation is ever relaxed. Both must reach the actuator port.
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1|zB", "doA1", "X")))
+			applier.onControlStep()
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB|doA1", "X")))
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.requestRoute("T1|zB", "doA1", "X") }
+			verify(exactly = 1) { networkActuator.requestRoute("T1", "zB|doA1", "X") }
+		}
+
+		@Test
 		@DisplayName("A failed reservation is not remembered, so a later retry of the same triple is applied")
 		fun failedReservation_retryIsApplied() {
 			var callCount = 0

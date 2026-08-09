@@ -16,21 +16,17 @@ import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Registry of the actuator tools available to Koog agents (SP2c.6, Issue #829).
- *
- * ## SP2c.6 actuator surface (Issue #829)
+ * Registry of the actuator tools available to Koog agents.
  *
  * [assembleAllTools] produces the **four-tool actuator surface** only
- * (`approve_train`, `request_route`, `cancel_route`, `no_op`) using a [SinkHolder]. The former
- * perception tools (`signal_aspect`, `block_occupancy`, `train_position`, …) and dispatch-loop
- * sensor tools (`queued_trains`, `block_inputs`) were removed from the LLM tool surface in SP2c.6
- * — perception now flows through the single sim-thread-captured
- * [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector] value, not
- * through LLM-queried tools. Their tool classes were deleted; the perception/sensor port
- * interfaces themselves remain (used by the projector and by
- * [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] for static topology reads).
- *
- * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549), SP1.7 (#774), SP2c.6 (#829) narrows to 4 tools
+ * (`approve_train`, `request_route`, `cancel_route`, `no_op`) using a [SinkHolder]. Perception
+ * tools (`signal_aspect`, `block_occupancy`, `train_position`, …) and dispatch-loop sensor tools
+ * (`queued_trains`, `block_inputs`) are not part of the LLM tool surface — perception flows
+ * through the single sim-thread-captured
+ * [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector] value instead
+ * of LLM-queried tools. The perception/sensor port interfaces themselves still exist (used by the
+ * projector and by [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] for static
+ * topology reads).
  */
 class ToolGroupRegistry {
 	companion object {
@@ -38,7 +34,7 @@ class ToolGroupRegistry {
 	}
 
 	/**
-	 * Assemble the four-tool actuator surface for a Koog agent (SP2c.6, Issue #829).
+	 * Assemble the four-tool actuator surface for a Koog agent.
 	 *
 	 * Returns exactly four actuator tools:
 	 * - `approve_train` — admit a queued train
@@ -49,23 +45,20 @@ class ToolGroupRegistry {
 	 * @param validEndpointNames Exact InOut/Signal names `request_route` validates against.
 	 * @param sinkHolder Shared sink holder for this agent instance; all four tools emit to it.
 	 * @param perceptionPort Optional off-thread-safe perception port supplying the **active**
-	 *   trains for in-turn `trainId`/`trainName` validation in [CancelRouteTool] (Issue #847
-	 *   cleanup pass) and [RequestRouteTool] (Issue #847 round 2); `null` (the default) preserves
-	 *   the prior no-pre-check behavior.
+	 *   trains for in-turn `trainId`/`trainName` validation in [CancelRouteTool] and
+	 *   [RequestRouteTool]; `null` (the default) preserves the prior no-pre-check behavior.
 	 * @param blockIds Static Block IDs, letting [RequestRouteTool] classify a rejected endpoint as
-	 *   `ENDPOINT_IS_BLOCK_ID` rather than `UNKNOWN_ENDPOINT` (Issue #847 round 4) — the `kA` vs `A`
-	 *   confusion the anti-hallucination work targets, which must be countable on its own.
+	 *   `ENDPOINT_IS_BLOCK_ID` rather than `UNKNOWN_ENDPOINT` — distinguishing the `kA` vs `A`
+	 *   confusion the anti-hallucination checks target from a genuinely unknown name.
 	 * @param sensorPort Optional dispatch-loop sensor port supplying the **queued** trains, for
-	 *   the same validation in [ApproveTrainTool] and [RequestRouteTool] (Issue #847 round 2);
-	 *   `null` (the default) preserves the prior no-pre-check behavior.
+	 *   the same validation in [ApproveTrainTool] and [RequestRouteTool]; `null` (the default)
+	 *   preserves the prior no-pre-check behavior.
 	 * @param inOutNames Static InOut names, letting [RequestRouteTool] reject an end-to-end route
 	 *   aimed at the wrong end of the station while still allowing Signal-to-Signal section hops.
 	 *   Empty (the default) disables that check.
 	 * @return Four actuator tools. Neither port is an LLM-facing tool — the four-tool actuator
 	 *   surface is unchanged, as [cz.vutbr.fit.interlockSim.dispatcher.agents.ActuatorToolSurface]
 	 *   asserts at agent construction.
-	 *
-	 * @since Issue #548 (SP1.3 skeleton); SP2c.6 (#829) reduces to the 4-tool surface
 	 */
 	fun assembleAllTools(
 		validEndpointNames: Set<String>,

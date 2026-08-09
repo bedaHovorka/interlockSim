@@ -53,44 +53,41 @@ import kotlinx.coroutines.delay
  * [controller] is injected into the driver **only** — it is never passed to
  * [SimulationController][cz.vutbr.fit.interlockSim.context.SimulationEnvironment],
  * [DispatchObservation], or [DispatcherPlanner] implementations (locked invariant 3
- * from the SP0.5 design spec, docs/specs/2026-07-08-544-sp05-drive-loop-design.md).
+ * from `docs/specs/2026-07-08-544-sp05-drive-loop-design.md`).
  *
  * ## DispatchObservation construction
  *
  * The observation combines the general-purpose [SimulationSnapshot] (signals, block
  * occupancy, train positions, timetables) with the ShuntingLoop-specific dispatch
- * inputs read from [dispatchLoopSensorPort] — the SP4.1 sensor seam (Issue #563):
- * the [DispatchObservation.unapprovedTrains] list and the block-input lists all come
- * from one atomic [DispatchLoopSensorPort.snapshot] read. With the default (empty)
- * sensor port, [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] (via
- * [cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter]) handles
+ * inputs read from [dispatchLoopSensorPort]: the [DispatchObservation.unapprovedTrains]
+ * list and the block-input lists all come from one atomic [DispatchLoopSensorPort.snapshot]
+ * read. With the default (empty) sensor port, [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]
+ * (via [cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter]) handles
  * this case gracefully (it returns [cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction]).
  *
- * @param perceptionPort Read-only sense port for the railway network state (SP0.4, #543)
- * @param planner        Pluggable planning function (SP3.6, #574); must not retain the
+ * @param perceptionPort Read-only sense port for the railway network state
+ * @param planner        Pluggable planning function; must not retain the
  *   observation beyond the call or mutate simulation state
- * @param commandQueue   Thread-safe queue to which decisions are posted (SP0.8, #730);
- *   drained and applied by the sim-thread applier (SP0.9, #731)
+ * @param commandQueue   Thread-safe queue to which decisions are posted;
+ *   drained and applied by the sim-thread applier
  * @param controller     Pacing controller; injected into the driver **only** —
  *   never exposed to [cz.vutbr.fit.interlockSim.context.SimulationEnvironment] or
- *   policy implementations (SP0.5 invariant 3)
- * @param snapshotSignal Optional sim-to-driver pacing signal (SP0.11c, Issue #746).
- *   When non-null, [runCycle] blocks on [SnapshotSignal.await] (bounded — see its
- *   KDoc) at the top of each cycle instead of polling with [Thread.sleep], and —
- *   because a real signal already guarantees the resulting snapshot is fresh and has
- *   not been processed before — the `snapshot.simTime == prevSimTime` stale-tick
- *   guard is skipped too. The caller must arrange for [SnapshotSignal.signal] to be
- *   called on the sim thread from
+ *   policy implementations
+ * @param snapshotSignal Optional sim-to-driver pacing signal. When non-null,
+ *   [runCycle] blocks on [SnapshotSignal.await] (bounded — see its KDoc) at the top
+ *   of each cycle instead of polling with [Thread.sleep], and — because a real
+ *   signal already guarantees the resulting snapshot is fresh and has not been
+ *   processed before — the `snapshot.simTime == prevSimTime` stale-tick guard is
+ *   skipped too. The caller must arrange for [SnapshotSignal.signal] to be called on
+ *   the sim thread from
  *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.controlStepListener], AFTER
  *   `iteration()` publishes the per-tick `TickObservation` — NOT from
  *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.snapshotCaptureHook], which
  *   `iteration()` calls BEFORE the publish and would wake the driver to read the
- *   previous tick's observation (the #809 failure mode).
+ *   previous tick's observation.
  *   `null` by default: preserves the original polling behaviour for callers that do
  *   not supply a signal (e.g. tests exercising [runCycle] directly against a mocked
  *   [perceptionPort] with no real sim thread to signal from).
- *
- * @since Issue #732 (SP0.10 — Goal 10); [snapshotSignal] added in Issue #746 (SP0.11c)
  */
 class AgentLoopDriver(
 	private val perceptionPort: NetworkPerceptionPort,
@@ -99,21 +96,17 @@ class AgentLoopDriver(
 	private val controller: SimulationController,
 	/**
 	 * Sensor port for the current per-tick dispatch-loop observation bundle
-	 * (unapproved-train queue plus inner/outer block inputs) — the SP4.1 "sense" seam
-	 * (Issue #563). Its [DispatchLoopSensorPort.snapshot] is invoked ONCE per
-	 * [runCycle] on the driver thread during SENSE; the default implementation reads
-	 * the single [ShuntingLoop.getLatestObservation] @Volatile reference published
-	 * atomically by the sim thread. Defaults to a port over an empty bundle
-	 * (SP0.10 compatibility).
+	 * (unapproved-train queue plus inner/outer block inputs) — the "sense" seam onto
+	 * ShuntingLoop-specific inputs. Its [DispatchLoopSensorPort.snapshot] is invoked
+	 * ONCE per [runCycle] on the driver thread during SENSE; the default
+	 * implementation reads the single [ShuntingLoop.getLatestObservation] @Volatile
+	 * reference published atomically by the sim thread. Defaults to a port over an
+	 * empty bundle.
 	 *
 	 * [DispatchLoopSensorPort.snapshot] must be called at most once per cycle: it
 	 * bundles all three fields specifically so a reader never mixes fields from two
 	 * different sim ticks — reading the three fields via the per-field accessors
 	 * would defeat that guarantee.
-	 *
-	 * @since Issue #733 (SP0.11 — Goal 10); collapsed to a single provider by the
-	 *   SP0.11 review follow-up (tearing fix); lifted to the SP4.1
-	 *   [DispatchLoopSensorPort] seam in SP4.2 (Issue #564)
 	 */
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort =
 		DefaultDispatchLoopSensorPort {
@@ -121,9 +114,9 @@ class AgentLoopDriver(
 		},
 	private val snapshotSignal: SnapshotSignal? = null,
 	/**
-	 * SP2c.20 follow-up (#843): the [KoogAgentPlanAdapter] driving [planner], when [planner]
-	 * is (possibly wrapped) LLM-backed — supplied explicitly by the wiring layer rather than
-	 * detected via `is` on a `by`-delegated wrapper such as [MeasuringPlanAdapter].
+	 * The [KoogAgentPlanAdapter] driving [planner], when [planner] is (possibly wrapped)
+	 * LLM-backed — supplied explicitly by the wiring layer rather than detected via `is` on a
+	 * `by`-delegated wrapper such as [MeasuringPlanAdapter].
 	 *
 	 * When non-null, this driver installs a [PlannerTickListener] on it and attributes each
 	 * cycle's `commandQueue.postAll` call via [TickOutcome.toActionAuthor] on the tick
@@ -131,8 +124,6 @@ class AgentLoopDriver(
 	 * planner such as [RuleBasedPlanAdapter]), every cycle is attributed
 	 * [ActionAuthor.RULE_BASED] — safe because a synchronous rule-based planner has no
 	 * internal LLM/fallback blend to distinguish.
-	 *
-	 * @since Issue #843 (SP2c.20 follow-up — Goal 10 action attribution)
 	 */
 	private val plannerTickSource: KoogAgentPlanAdapter? = null,
 	/**
@@ -142,25 +133,21 @@ class AgentLoopDriver(
 	 * so a caller that installed its own listener beforehand had it silently discarded — there was
 	 * no seam at all onto which a run recorder could be wired, which is why
 	 * `DispatcherRunRecorder.onTick` had no production caller and every per-run JSON reported
-	 * `totalTicks = 0` (Issue #847 round 4, R4-5).
+	 * `totalTicks = 0`.
 	 *
 	 * Invoked on the dispatcher-agent driver thread, synchronously inside `planner.plan()`.
 	 * Implementations must be cheap and non-blocking; `DefaultDispatcherRunRecorder.onTick` is a
 	 * counter increment.
 	 *
 	 * `null` for wirings with no recorder — the rule-based baseline included.
-	 *
-	 * @since Issue #847 round 4 (PR #891)
 	 */
 	private val onTickRecord: ((TickRecord) -> Unit)? = null,
 	/**
 	 * Minimum wall-clock spacing between the end of one cycle and the end of the next, in
-	 * milliseconds. `0` (the default) imposes nothing and reproduces the pre-#847 cadence.
+	 * milliseconds. `0` (the default) imposes nothing and reproduces the original cadence.
 	 *
 	 * See [awaitMinimumCyclePeriod] for why this is a wall-clock floor rather than the
 	 * simulated-time period #822 §5.5 describes.
-	 *
-	 * @since Issue #847 (SP2c.24 — parameter grid)
 	 */
 	private val tickPeriodMs: Long = DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS
 ) {
@@ -210,6 +197,60 @@ class AgentLoopDriver(
 	}
 
 	/**
+	 * Steps 0 (WAIT) and 1 (SENSE) of [runCycle], collapsed into one seam so the
+	 * polling-vs-signal-based pacing branch lives in exactly one place instead of being
+	 * re-decided at three separate points inside [runCycle] (the WAIT block, the
+	 * [SimulationSnapshot.EMPTY] guard, and the stale-tick guard all used to test
+	 * `snapshotSignal == null`/`!= null` independently).
+	 *
+	 * - Signal-based pacing ([snapshotSignal] non-null): blocks on [SnapshotSignal.await];
+	 *   a `false` result (timeout) short-circuits with `null`. A `true` result already
+	 *   guarantees the resulting snapshot is fresh and unprocessed, so neither the
+	 *   [SimulationSnapshot.EMPTY] guard nor the stale-tick guard applies — see [runCycle]'s
+	 *   KDoc for why re-deriving staleness here would be actively wrong.
+	 * - Polling pacing ([snapshotSignal] `null`): no wait; the freshly read snapshot is
+	 *   checked against [SimulationSnapshot.EMPTY] and against [prevSimTime] for staleness.
+	 *
+	 * In both modes, a short-circuit still calls [SimulationController.awaitIfPaused] so
+	 * pause/step requests are honoured even on a no-op cycle.
+	 *
+	 * @return the fresh [SimulationSnapshot] to process this cycle, or `null` if this call
+	 *   should short-circuit (see [runCycle]'s return-value contract).
+	 */
+	private suspend fun awaitFreshSnapshot(): SimulationSnapshot? {
+		if (snapshotSignal != null) {
+			if (!snapshotSignal.await()) {
+				controller.awaitIfPaused()
+				return null
+			}
+			val snapshot = perceptionPort.snapshot()
+			logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
+			return snapshot
+		}
+
+		val snapshot = perceptionPort.snapshot()
+		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
+		if (snapshot === SimulationSnapshot.EMPTY) {
+			controller.awaitIfPaused()
+			pauseUntilNextSnapshot()
+			return null
+		}
+		if (hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
+			// Polling-mode-only stale-tick guard. Not applicable in signal-based pacing:
+			// SnapshotSignal.await already guarantees this snapshot was published for THIS
+			// tick and has not been processed before, so re-deriving staleness from
+			// simTime here would be redundant at best and actively wrong: it is exactly
+			// this guard firing on a tick it should not have skipped that produced the
+			// ~4% `trainsExited = 0` admission-stall residue that this parameter was
+			// introduced to eliminate.
+			controller.awaitIfPaused()
+			pauseUntilNextSnapshot()
+			return null
+		}
+		return snapshot
+	}
+
+	/**
 	 * Executes one complete sense→decide→act→pace cycle.
 	 *
 	 * This is a `suspend` function so that [SimulationController.awaitIfPaused] (which
@@ -252,43 +293,12 @@ class AgentLoopDriver(
 	 *   thread proceed before the corresponding decision is actually posted.
 	 */
 	suspend fun runCycle(): Boolean {
-		// 0. WAIT (signal-based pacing only) — block until the sim thread publishes a
-		// fresh snapshot for this tick. Replaces the Thread.sleep(1) poll and the
-		// simTime-equality guard below with an explicit wake-up (Issue #746 / SP0.11c).
-		// SnapshotSignal.await's bounded timeout is a shutdown safety net (see its KDoc):
-		// if it returns false, no signal arrived — most commonly because the simulation
-		// has just stopped calling the hook that signals — so this cycle does nothing and
-		// lets the caller's `while (isSimActive())` loop notice and exit instead of
-		// blocking here forever. No decision opportunity is lost: any signal that does
-		// eventually arrive is still picked up by the next await() call.
-		if (snapshotSignal != null && !snapshotSignal.await()) {
-			controller.awaitIfPaused()
-			return false
-		}
-
-		// 1. SENSE — read a consistent frozen snapshot off the perception port.
-		val snapshot = perceptionPort.snapshot()
-		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
-		if (snapshotSignal == null && snapshot === SimulationSnapshot.EMPTY) {
-			controller.awaitIfPaused()
-			pauseUntilNextSnapshot()
-			return false
-		}
-		if (snapshotSignal == null && hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
-			// Polling-mode-only stale-tick guard. Not applicable in signal-based pacing:
-			// SnapshotSignal.await already guarantees this snapshot was published for THIS
-			// tick and has not been processed before, so re-deriving staleness from
-			// simTime here would be redundant at best and — per the SP0.11c root-cause
-			// analysis (Issue #746) — actively wrong: it is exactly this guard firing on a
-			// tick it should not have skipped that produced the ~4% `trainsExited = 0`
-			// admission-stall residue that this parameter was introduced to eliminate.
-			controller.awaitIfPaused()
-			pauseUntilNextSnapshot()
-			return false
-		}
+		// 0. WAIT + 1. SENSE — see awaitFreshSnapshot's KDoc for the polling-vs-signal-based
+		// pacing contract (this is the single seam where that branch is decided).
+		val snapshot = awaitFreshSnapshot() ?: return false
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
-		// SP0.11/SP4.2: unapprovedTrains and block-input lists populated via a single
+		// unapprovedTrains and block-input lists are populated via a single
 		// DispatchLoopSensorPort.snapshot() read — one atomic port call, so all three
 		// fields come from the same sim tick (published as one @Volatile reference by
 		// ShuntingLoop.iteration() on the sim thread).
@@ -303,9 +313,9 @@ class AgentLoopDriver(
 		val decisions = planner.plan(observation)
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
 
-		// SP2c.20 follow-up (#843): attribute this cycle's decisions correctly instead of
-		// silently defaulting to ActionAuthor.LLM (postAll's pre-fix default) regardless of
-		// which planner actually produced them.
+		// Attribute this cycle's decisions correctly instead of silently defaulting to
+		// ActionAuthor.LLM (postAll's pre-fix default) regardless of which planner
+		// actually produced them.
 		val author =
 			if (plannerTickSource == null) {
 				ActionAuthor.RULE_BASED
@@ -337,7 +347,7 @@ class AgentLoopDriver(
 
 	/**
 	 * Holds the driver until at least [tickPeriodMs] of wall clock has passed since the previous
-	 * cycle ended (Issue #847, SP2c.24). No-op at the default `0`.
+	 * cycle ended. No-op at the default `0`.
 	 *
 	 * ## Why wall clock and not simulated time
 	 *

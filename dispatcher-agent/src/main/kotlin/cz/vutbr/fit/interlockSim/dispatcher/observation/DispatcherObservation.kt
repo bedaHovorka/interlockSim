@@ -9,7 +9,7 @@
  */
 
 /**
- * Dispatcher observation model (SP2c.1, #824).
+ * Dispatcher observation model.
  *
  * The canonical push-based snapshot published each tick by
  * [DispatcherObservationProjector] and consumed by the control loop and renderers.
@@ -28,7 +28,7 @@ import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import java.security.MessageDigest
 
 /**
- * Lifecycle phase of one train as seen by the dispatcher control loop (SP2c.1, #824).
+ * Lifecycle phase of one train as seen by the dispatcher control loop.
  *
  * - [QUEUED] — generated but not yet approved (admitted) onto the network.
  * - [RUNNING] — approved and moving (`velocityMps > 0`).
@@ -161,8 +161,7 @@ data class QueuedTrainView(
 
 /**
  * Correlated outcome of one applied actuator command, pushed into the next tick's perception
- * prompt so the agent always learns what actually happened — closing the fire-and-forget gap
- * documented in SP2c.17 (#840).
+ * prompt so the agent always learns what actually happened — closing the fire-and-forget gap.
  *
  * Every outcome carries a [CommandId] that was issued at queue-post time (driver thread) and
  * looked up by identity in [cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap] on the
@@ -181,8 +180,6 @@ data class QueuedTrainView(
  *
  * @property id Correlation key issued at queue-post time.
  * @property tickIndex Driver-thread cycle counter value at the time the command was posted.
- *
- * @since Issue #840 (SP2c.17 — correlated async outcome channel)
  */
 sealed interface AppliedOutcome {
 	val id: CommandId
@@ -232,14 +229,12 @@ sealed interface AppliedOutcome {
 	/**
 	 * `request_route` failed because the requested origin is not contiguous with the train's own
 	 * position: it bounds none of the blocks the train holds or occupies, so the train could
-	 * never have reached the route (Issue #893).
+	 * never have reached the route.
 	 *
 	 * Unlike [Blocked], retrying the identical request is futile while the train stays put — the
 	 * agent has to name a different origin, which is why [reason] is carried verbatim from
 	 * `DefaultPathReservationService`: it already names the offending origin and every legal
 	 * alternative for this train.
-	 *
-	 * @since Issue #893 (phase alpha, task A-R1)
 	 */
 	data class OriginNotContiguous(
 		val trainId: String,
@@ -270,12 +265,9 @@ sealed interface AppliedOutcome {
 	 *   already at full capacity when this command was drained.  The callback was **not**
 	 *   invoked.  The agent should wait for an active train to exit before retrying.
 	 *
-	 * ## SP2c.18 note
-	 *
-	 * Prior to SP2c.18, [admitted] was always `true` (the applier never checked the cap).
-	 * SP2c.18 moves the authoritative cap check onto the sim thread so two commands posted
-	 * in the same driver tick that both passed the stale-snapshot [ActionValidator] check
-	 * are resolved correctly in FIFO order: the first is admitted, the second receives
+	 * The authoritative cap check runs on the sim thread, so two commands posted in the same
+	 * driver tick that both passed the stale-snapshot [ActionValidator] check are resolved
+	 * correctly in FIFO order: the first is admitted, the second receives
 	 * [ApplyFailureCode.CAP_EXCEEDED_APPLY].
 	 */
 	data class Approved(
@@ -284,8 +276,6 @@ sealed interface AppliedOutcome {
 		/**
 		 * Non-null when [admitted] is `false`, carries the machine-readable reason.
 		 * Always `null` when [admitted] is `true`.
-		 *
-		 * @since Issue #841 (SP2c.18 — Goal 10 apply-time cap enforcement)
 		 */
 		val reason: ApplyFailureCode? = null,
 		override val id: CommandId,
@@ -309,19 +299,18 @@ sealed interface AppliedOutcome {
 
 /**
  * One immutable, deterministic, sim-thread-captured snapshot of everything the Goal 10
- * dispatcher control loop needs to render, annotate, and validate the next decision (SP2c.1,
- * #824). This replaces query-tool-based perception (nine tools, #822 constraint C1) and the
- * stale-snapshot problem (#822 root cause RC2) with a single pushed value.
+ * dispatcher control loop needs to render, annotate, and validate the next decision. This
+ * replaces query-tool-based perception with a single pushed value.
  *
  * ## Sorting (P8 reproducibility)
  *
  * Every entity list ([trains], [blocks], [switches], [signals], [reservations], [queued]) is
  * sorted by its documented natural key (see each view type's KDoc) by
- * [DispatcherObservationProjector] before publication. Unsorted collections are — per #824's own
- * wording — "the classic silent source of non-reproducible prompts": a `HashMap`/`HashSet`-backed
- * iteration order is a JVM implementation detail, not a simulation invariant, and would make two
- * byte-identical simulation runs render different prompts. [ReservationView.blockIds] is the one
- * deliberate exception — see its KDoc.
+ * [DispatcherObservationProjector] before publication. Unsorted collections are "the classic
+ * silent source of non-reproducible prompts": a `HashMap`/`HashSet`-backed iteration order is a
+ * JVM implementation detail, not a simulation invariant, and would make two byte-identical
+ * simulation runs render different prompts. [ReservationView.blockIds] is the one deliberate
+ * exception — see its KDoc.
  *
  * @property tick Monotonically increasing publish-sequence number, incremented once per
  *   [DispatcherObservationProjector.captureOnSimThread] call. `0` for [EMPTY].
@@ -337,25 +326,21 @@ sealed interface AppliedOutcome {
  *   [cz.vutbr.fit.interlockSim.sim.DispatchObservation.approvedTrainCount].
  * @property capacity Station capacity (maximum concurrently active trains). Defaults to
  *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], the same constant
- *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop]'s hard admission gate, `approve_train`'s tool
- *   guard, and the (now-deleted per #822 §6) admission safety net all used, so every consumer of
- *   "capacity" in this codebase agrees by default.
+ *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop]'s hard admission gate and `approve_train`'s tool
+ *   guard use, so every consumer of "capacity" in this codebase agrees by default.
  * @property appliedOutcomes Outcomes of previously queued actuator commands correlated back to
  *   this tick. Populated by [DispatcherObservationProjector] when an
- *   [cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel] is wired (SP2c.17, #840).
- *   Always empty when no channel is wired (headless / rule-based-only runs).
+ *   [cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel] is wired. Always empty when no
+ *   channel is wired (headless / rule-based-only runs).
  * @property innerBlockInputs Directional block-input observations for all **inner** track blocks
  *   (RailSemaphore–RailSemaphore bounded). Populated by [DispatcherObservationProjector] from
  *   [cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort.snapshot] on each sim tick.
  *   Consumed by [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy] to convert a
  *   [DispatcherObservation] back into a
  *   [cz.vutbr.fit.interlockSim.sim.DispatchObservation] for [cz.vutbr.fit.interlockSim.sim.Dispatcher.decide].
- *   Defaults to [emptyList] so existing callers that pre-date SP2c.5 are unaffected.
+ *   Defaults to [emptyList] so existing callers predating this field are unaffected.
  * @property outerBlockInputs Directional block-input observations for all **outer** track blocks
  *   (InOut–RailSemaphore bounded). Same contract as [innerBlockInputs].
- *
- * @since Issue #824 (SP2c.1 — Goal 10 autonomous dispatcher control-loop redesign);
- *   [innerBlockInputs] / [outerBlockInputs] added in Issue #828 (SP2c.5 — DispatchTickLoop)
  */
 data class DispatcherObservation(
 	val tick: Long,
@@ -372,8 +357,8 @@ data class DispatcherObservation(
 	/**
 	 * Directional block-input observations for all **inner** track blocks. Populated by
 	 * [DispatcherObservationProjector] from [cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort]
-	 * on each sim tick (SP2c.5, Issue #828). Defaults to [emptyList] for backwards compatibility
-	 * with callers that pre-date SP2c.5 (renderers, tests, the SP2c.1–4 scaffolding).
+	 * on each sim tick. Defaults to [emptyList] for backwards compatibility with callers that
+	 * pre-date this field (renderers, tests, earlier scaffolding).
 	 */
 	val innerBlockInputs: List<BlockInputObservation> = emptyList(),
 	/**
@@ -383,9 +368,9 @@ data class DispatcherObservation(
 	val outerBlockInputs: List<BlockInputObservation> = emptyList()
 ) {
 	/**
-	 * Stable content hash of this observation, suitable as the ring-buffer digest key (#822
-	 * §5.1/C5). Two [DispatcherObservation] values that are structurally [equals] always produce
-	 * the same digest, and the reverse holds in practice (SHA-256 over the canonical [toString]):
+	 * Stable content hash of this observation, suitable as the ring-buffer digest key. Two
+	 * [DispatcherObservation] values that are structurally [equals] always produce the same
+	 * digest, and the reverse holds in practice (SHA-256 over the canonical [toString]):
 	 * a Kotlin data class [toString] enumerates every property, in declaration order, using each
 	 * nested value's own (equally deterministic) `toString` — so nothing in this value's shape
 	 * can change without changing the digest.
@@ -422,12 +407,10 @@ data class DispatcherObservation(
 }
 
 /**
- * The **only** type downstream code (renderers, annotators, validators — SP2c.2+) may depend on
- * for dispatcher perception (#824 acceptance criterion). Never depend on
- * [DispatcherObservationProjector] directly outside its own wiring/tests: depending on this
- * narrower interface instead is what lets a future compressed Praha projection
- * ([cz.vutbr.fit.interlockSim.dispatcher.observation], #822 §10) be substituted later without
- * touching any consumer.
+ * The **only** type downstream code (renderers, annotators, validators) may depend on for
+ * dispatcher perception. Never depend on [DispatcherObservationProjector] directly outside its
+ * own wiring/tests: depending on this narrower interface instead is what lets a future
+ * compressed Praha projection be substituted later without touching any consumer.
  */
 fun interface DispatcherObservationSource {
 	/**

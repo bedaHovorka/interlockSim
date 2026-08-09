@@ -31,12 +31,12 @@ import kotlin.streams.asSequence
 private val logger = KotlinLogging.logger {}
 
 /**
- * Unattended N-run parameter sweep over the headless dispatcher examples (SP2c.24, Issue #847).
+ * Unattended N-run parameter sweep over the headless dispatcher examples.
  *
- * Expands a [SweepGrid], runs every cell [SweepGrid.repeat] times, and renders the SP2c.23
- * cross-run report over the results. A4's "measured success rate over N ≥ 10 runs" is a claim
- * nobody can check without this; the run recorder (#845) and the aggregator (#846) were both
- * built for a producer that did not exist.
+ * Expands a [SweepGrid], runs every cell [SweepGrid.repeat] times, and renders the cross-run
+ * report over the results. A4's "measured success rate over N ≥ 10 runs" is a claim nobody can
+ * check without this; the run recorder and the aggregator were both built for a producer that
+ * did not exist.
  *
  * ## One forked JVM per run
  *
@@ -71,8 +71,6 @@ private val logger = KotlinLogging.logger {}
  * @param store Where run snapshots are read from and abort snapshots are written to.
  * @param processRunner Seam for launching a run; the default forks a JVM. Tests substitute it so
  *   the driver's skip/timeout/report logic can be exercised without an LLM.
- *
- * @since Issue #847 (SP2c.24 — headless N-run sweep driver and parameter grid)
  */
 class AiSweepDriver(
 	private val store: RunSnapshotStore = DefaultRunSnapshotStore(),
@@ -253,6 +251,10 @@ class AiSweepDriver(
 		val reports =
 			DispatcherArm.entries.map { arm ->
 				aggregator.aggregate(byArm[arm] ?: emptyList()).let {
+					// RunReportAggregator.aggregate() hardcodes arm = RULE_BASED for the empty-run-list
+					// case (runCount == 0), since it has no snapshot to read the arm from. Patch the
+					// correct arm back in here so an empty LLM-arm section doesn't misreport itself as
+					// RULE_BASED in the rendered report.
 					if (it.runCount == 0) it.copy(arm = arm) else it
 				}
 			}
