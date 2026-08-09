@@ -22,6 +22,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * frequently-correct action so the model stops inventing unnecessary work. Distinguishing that
  * from a dead model ([TIMEOUT_NOOP]) is the entire point of this taxonomy.
  *
+ * [LLM_NO_OP] is produced on the live path by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
+ * in two cases (Issue #834): an idle station (no active or queued trains) with no LLM emissions,
+ * and a cycle whose only tool emission(s) were an explicit `no_op`. Before Issue #834 both cases
+ * were mis-scored as [RULE_FALLBACK] via the undifferentiated `FallbackReason.EMPTY_NO_TOOLS`
+ * path, which is why `noOpRate` read `0` in every run measured before that fix.
+ *
  * | Outcome | Meaning | [tickClass] | Counts as LLM success |
  * |---|---|---|---|
  * | [LLM_ACTIONS] | ≥ 1 valid action emitted and accepted by the action validator | [TickClass.SUCCESS] | yes |

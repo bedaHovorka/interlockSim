@@ -39,6 +39,10 @@ enum class FallbackReason {
 	 * The LLM completed a dispatch cycle but neither returned decisions nor invoked any actuator
 	 * tool — it truly did nothing this cycle.  The fallback is needed to route queued trains that
 	 * the LLM left unaddressed.
+	 *
+	 * Since Issue #834, [KoogAgentPlanAdapter] only reaches this reason when the station is
+	 * *not* idle (an active or queued train exists) — an empty cycle on a genuinely idle station
+	 * is reported as [TickOutcome.LLM_NO_OP] instead, without consulting the fallback.
 	 */
 	EMPTY_NO_TOOLS,
 

@@ -220,6 +220,159 @@ class KoogAgentPlanAdapterTest {
 		assertThat(result).containsExactly(DispatchDecision.NoAction)
 	}
 
+	// ── Idle-station classification (Issue #834) ──────────────────────────────
+
+	/**
+	 * Issue #834: the project owner reported a correct "nothing to do" LLM cycle on an empty
+	 * station being mis-scored as a rule-based-fallback run failure
+	 * (`fallback: reason=EMPTY_NO_TOOLS ... ollamaSuccessRate=27%`). An idle station — no
+	 * approved (active) trains and no unapproved (queued) trains — with no LLM emissions must be
+	 * reported as [TickOutcome.LLM_NO_OP] and the fallback dispatcher must never be consulted.
+	 */
+	@Test
+	@DisplayName("idle station (no active or queued trains) with no LLM emissions reports LLM_NO_OP, not RULE_FALLBACK")
+	fun `idle station with no LLM emissions reports LLM_NO_OP and skips fallback`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val idleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 0)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(idleObservation) }
+
+		assertThat(result).isEmpty()
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_NO_OP)
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("non-idle station (an active train, no emissions) still falls back (RULE_FALLBACK)")
+	fun `non-idle station with an active train and no LLM emissions still falls back`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val recorded = mutableListOf<TickRecord>()
+		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("non-idle station (a queued train, no emissions) still falls back (RULE_FALLBACK)")
+	fun `non-idle station with a queued train and no LLM emissions still falls back`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val recorded = mutableListOf<TickRecord>()
+		val nonIdleObservation =
+			observationWithQueue(
+				unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A")),
+				approvedTrainCount = 0
+			)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	/**
+	 * [SimulationSnapshot.EMPTY] is the pre-first-capture sentinel — it carries no train
+	 * positions and therefore *looks* idle without being a real idle tick (e.g. the very first
+	 * cycle before [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot] has
+	 * ever run on the kDisco thread). A cycle observing it must keep the pre-#834 RULE_FALLBACK
+	 * behaviour rather than being scored as a successful no-op.
+	 */
+	@Test
+	@DisplayName("SimulationSnapshot.EMPTY sentinel with no emissions falls back despite looking idle (guard)")
+	fun `EMPTY sentinel snapshot with no emissions falls back despite looking idle`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val recorded = mutableListOf<TickRecord>()
+		// `observation` (the class-level fixture) uses SimulationSnapshot.EMPTY with no queued
+		// trains — structurally idle-looking but the pre-first-capture sentinel.
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	/**
+	 * `SinkHolder.tryEmit` counts [DispatchAction.NoOp] as "acted" so the fallback correctly does
+	 * not run on top of it (see [SinkHolder]'s KDoc), but an emission set consisting *only* of
+	 * `no_op` is a no-op tick, not an action tick — it must be reported as [TickOutcome.LLM_NO_OP],
+	 * not [TickOutcome.LLM_ACTIONS] (Issue #834, required change 2).
+	 */
+	@Test
+	@DisplayName("an explicit no_op-only emission reports LLM_NO_OP, not LLM_ACTIONS")
+	fun `only NoOp emissions report LLM_NO_OP`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.NoOp)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(result).isEmpty()
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_NO_OP)
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("a no_op emission alongside a real action still reports LLM_ACTIONS")
+	fun `NoOp plus a real action reports LLM_ACTIONS`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.NoOp)
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
 	/**
 	 * P3 — no non-LLM component originates a [DispatchDecision.ApproveTrain] during an LLM run
 	 * (SP2c.8, Issue #831 — admission safety net deleted).

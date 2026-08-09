@@ -11,10 +11,12 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
@@ -66,17 +68,26 @@ import java.time.Duration
  *    posted to the same queue in the same drain cycle — risking the duplicate-`ReservePath`
  *    train-freeze regression `DispatchDecisionApplier`'s own KDoc documents as a past incident,
  *    from a new source. A deliberately emitted `no_op` also counts as "acted" (the LLM chose to
- *    do nothing), so the fallback does not run on top of an explicit no-op either.
- * 2. LLM cycle completes **and the LLM invoked no actuator tool** (the LLM truly did nothing this
- *    cycle — `decideAsync` returned empty and the emission counter is zero) → fall back to
- *    [fallbackDispatcher]. Nothing was posted this cycle, so there is no double-dispatch risk;
- *    and because the LLM is stateless across cycles (a fresh `singleRunStrategy()` execution per
- *    [KoogDispatchAgent.decideAsync] — the agent itself is cached and reused; see
- *    [KoogAgentFactory]), a no-op cycle is not a preamble to a later routing cycle — not falling
- *    back would leave queued trains never routed, stalled at their entry signal indefinitely.
- *    The fallback supplies both admission and routing.
- * 3. LLM times out → fall back to [fallbackDispatcher]
- * 4. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
+ *    do nothing), so the fallback does not run on top of an explicit no-op either — but is
+ *    reported as [TickOutcome.LLM_NO_OP] rather than [TickOutcome.LLM_ACTIONS] when *every*
+ *    emission this cycle was `no_op` (Issue #834, required change 2): a no-op tick is not an
+ *    action tick even though both skip the fallback for the same double-dispatch reason.
+ * 2. LLM cycle completes, invoked no actuator tool, and the station is **idle** — no approved
+ *    (active) trains and no unapproved (queued) trains (Issue #834) → do NOT fall back; report
+ *    [TickOutcome.LLM_NO_OP]. There is nothing to dispatch, so a correctly-idle LLM cycle must not
+ *    be scored as a rule-based-fallback run failure (the defect Issue #834 reports:
+ *    `fallback: reason=EMPTY_NO_TOOLS ... ollamaSuccessRate=27%` on an empty station). See
+ *    [isIdleStation] for the exact predicate and its [SimulationSnapshot.EMPTY] guard.
+ * 3. LLM cycle completes, invoked no actuator tool, and the station is **not idle** (an active or
+ *    queued train the LLM left unaddressed) — the LLM truly failed to produce anything this cycle
+ *    → fall back to [fallbackDispatcher]. Nothing was posted this cycle, so there is no
+ *    double-dispatch risk; and because the LLM is stateless across cycles (a fresh
+ *    `singleRunStrategy()` execution per [KoogDispatchAgent.decideAsync] — the agent itself is
+ *    cached and reused; see [KoogAgentFactory]), a no-op cycle is not a preamble to a later
+ *    routing cycle — not falling back would leave queued trains never routed, stalled at their
+ *    entry signal indefinitely. The fallback supplies both admission and routing.
+ * 4. LLM times out → fall back to [fallbackDispatcher]
+ * 5. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
  *
  * ## How "the LLM acted via tools" is detected
  *
@@ -208,7 +219,10 @@ class KoogAgentPlanAdapter(
 
 	/**
 	 * Produces dispatch decisions by consulting the Koog LLM agent, falling back to
-	 * [fallbackDispatcher] on empty result, timeout, or any exception.
+	 * [fallbackDispatcher] on an empty result on a non-idle station, on timeout, or on any
+	 * exception. An empty result on an *idle* station (no active or queued trains, per
+	 * [isIdleStation]) is a correct no-op, not a fallback trigger — see "Fallback priority" above
+	 * (Issue #834).
 	 *
 	 * The fallback is invoked transparently — callers observe valid decisions regardless
 	 * of which path (LLM or rule-based) produced them.
@@ -242,18 +256,48 @@ class KoogAgentPlanAdapter(
 				// empty returned list with tool emissions is the normal, successful outcome:
 				// decideAsync always returns empty (see KoogDispatchAgentImpl); the load-bearing
 				// signal is the emission counter.
+				//
+				// The emitted actions further split LLM_ACTIONS from LLM_NO_OP (Issue #834,
+				// required change 2): a cycle whose only tool emission(s) were an explicit no_op
+				// is a no-op tick, not an action tick, even though actedThisCycle() is true for
+				// both (see SinkHolder's KDoc on why no_op counts as "acted" for the
+				// double-dispatch guard).
+				val emittedThisCycle = sinkHolder.emittedActionsThisCycle()
+				val outcome =
+					if (emittedThisCycle.isNotEmpty() && emittedThisCycle.all { it is DispatchAction.NoOp }) {
+						TickOutcome.LLM_NO_OP
+					} else {
+						TickOutcome.LLM_ACTIONS
+					}
 				logger.debug {
 					"KoogAgentPlanAdapter: LLM cycle acted via tools " +
 						"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
-				reportTick(TickOutcome.LLM_ACTIONS, observation.snapshot.simTime)
+				reportTick(outcome, observation.snapshot.simTime)
 				decisions
+			} else if (isIdleStation(observation)) {
+				// The LLM completed a cycle with no decisions and no tool emissions, and the
+				// station is idle — no active or queued trains, so there is genuinely nothing to
+				// dispatch. This is a correct, healthy outcome (Issue #834), not a failure: report
+				// it as LLM_NO_OP and do NOT consult the fallback dispatcher (there is nothing for
+				// it to do either, and consulting it would mis-score a correct cycle as a
+				// rule-based-fallback run failure — the exact defect #834 reports).
+				logger.debug {
+					"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions on " +
+						"an idle station (no active or queued trains) — reporting LLM_NO_OP, not " +
+						"falling back (simTime=${observation.snapshot.simTime})"
+				}
+				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
+				reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime)
+				emptyList()
 			} else {
-				// The LLM completed a cycle but neither acted via tools nor returned a decision —
-				// it truly did nothing this cycle. Nothing was posted, so there is no
-				// double-dispatch risk; the fallback supplies both admission and routing.
+				// The LLM completed a cycle but neither acted via tools nor returned a decision,
+				// and the station is NOT idle (there is an active or queued train the LLM left
+				// unaddressed) — it truly failed to produce anything this cycle. Nothing was
+				// posted, so there is no double-dispatch risk; the fallback supplies both
+				// admission and routing.
 				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation) {
 					logger.warn {
 						"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
@@ -284,8 +328,9 @@ class KoogAgentPlanAdapter(
 	 * Runs the shared rule-based-fallback sequence: log via [logAction], notify [cycleListener],
 	 * report [TickOutcome.RULE_FALLBACK] (the fallback dispatcher always actually runs and
 	 * returns decisions here — a dispatching event, not a no-op), then delegate to
-	 * [fallbackDispatcher]. Shared by all three fallback sites in [plan] (empty LLM cycle,
-	 * inference timeout, LLM exception) so they cannot drift out of sync with each other.
+	 * [fallbackDispatcher]. Shared by all three fallback sites in [plan] (empty LLM cycle on a
+	 * non-idle station — see [isIdleStation], inference timeout, LLM exception) so they cannot
+	 * drift out of sync with each other.
 	 */
 	private fun runFallback(
 		reason: FallbackReason,
@@ -297,6 +342,31 @@ class KoogAgentPlanAdapter(
 		reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
 		return fallbackDispatcher.decide(observation)
 	}
+
+	/**
+	 * `true` when [observation] describes an idle station: no approved (active) trains and no
+	 * unapproved (queued) trains — there is genuinely nothing for a dispatcher to do this cycle.
+	 *
+	 * Deliberately narrow (Issue #834): defined *only* as
+	 * `approvedTrainCount == 0 && unapprovedTrains.isEmpty()`, not the wider "no action was
+	 * applicable" (e.g. every queued train blocked, every reservation already extended). The
+	 * wider variant was considered and rejected during planning — it would fold genuine LLM
+	 * failures on a busy station into the same success bucket as this narrow, unambiguous case.
+	 *
+	 * **Guards against [SimulationSnapshot.EMPTY]** — the pre-first-capture sentinel returned by
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.snapshot] before the first on-thread
+	 * `captureSnapshot()` call. It carries no train positions and therefore looks idle by the
+	 * predicate above without being a real idle tick, so a cycle observing it must keep the
+	 * pre-#834 fallback behaviour. Checked by reference identity (`!==`) against the singleton,
+	 * which is both the cheapest possible check and the only one that cannot misclassify a
+	 * genuinely idle *real* snapshot (structural equality would also match a real snapshot whose
+	 * fields all happen to equal [SimulationSnapshot.EMPTY]'s defaults, e.g. `simTime == 0.0`
+	 * with zero trains at the very start of a run).
+	 */
+	private fun isIdleStation(observation: DispatchObservation): Boolean =
+		observation.snapshot !== SimulationSnapshot.EMPTY &&
+			observation.approvedTrainCount == 0 &&
+			observation.unapprovedTrains.isEmpty()
 
 	/**
 	 * Publishes one completed cycle to the tick listener and to [cycleHistory].
