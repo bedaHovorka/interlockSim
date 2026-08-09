@@ -83,7 +83,8 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 		val sweeper = checkNotNull(context.scope.getOrNull<OrphanReservationSweeper>())
 		val before = sweeper.sweepCount
 
-		// Exactly what ShuntingLoop.iteration() calls once per simulated second.
+		// Exactly what ShuntingLoop.iteration() calls once per control step — every 2.0 simulated
+		// seconds, not every 1.0 (iteration() holds 1.0 and interLoopSleep() holds another 1.0).
 		checkNotNull(loop.controlStepListener) { "no ControlStepListener was wired" }.onControlStep()
 
 		assertThat(sweeper.sweepCount).isGreaterThanOrEqualTo(before + 1)

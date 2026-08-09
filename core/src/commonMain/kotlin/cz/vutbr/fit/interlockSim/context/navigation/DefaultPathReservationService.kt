@@ -765,7 +765,9 @@ class DefaultPathReservationService(
 	 * it is observed, mirroring [recordBlockedContention]'s dedup semantics.
 	 *
 	 * reservePath() is called on every poll tick while a train is queued behind a busy
-	 * shared block (ShuntingLoop/MultiTrainLoop retry every simulated second), so without
+	 * shared block (ShuntingLoop/MultiTrainLoop retry once per control step — every 2.0
+	 * simulated seconds, since `iteration()` holds 1.0 and `interLoopSleep()` holds another
+	 * 1.0), so without
 	 * this guard the same still-blocked contention would re-emit the event once per tick
 	 * for the entire wait instead of once per contention.
 	 *

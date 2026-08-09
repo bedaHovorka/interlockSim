@@ -88,7 +88,9 @@ class LoopProcessTest : KoinTestBase() {
 	 * Wraps a target [LoopProcess] as an [Interlocking]-style main process:
 	 * - [startAction] activates the target
 	 * - [iteration] polls time and terminates target + stops simulation when [endTime] is reached
-	 * - [interLoopSleep] holds 1 simulated second (same cadence as [ShuntingLoop])
+	 * - [interLoopSleep] holds 1 simulated second (same as [ShuntingLoop]'s `interLoopSleep`; note
+	 *   that ShuntingLoop's `iteration()` holds another 1.0, making its control step 2.0 s, while
+	 *   this driver's `iteration()` does not hold at all)
 	 */
 	private inner class DriverProcess(
 		env: cz.vutbr.fit.interlockSim.context.SimulationEnvironment,

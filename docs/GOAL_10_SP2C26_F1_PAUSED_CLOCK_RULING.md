@@ -102,8 +102,15 @@ These specific figures are from one run on one machine and vary several-fold by 
 host logged mean ~1.7 µs, p99 ~20 µs, max ~66 µs — still well inside the gate). The binding property
 the test enforces is **p99 < 1 ms**, not any particular microsecond value.
 
-Against a 1 s tick this is **immaterial** — well under one part per thousand at p99 even on the
-slower host. Pause/resume cost is not a design constraint for F1.
+Against the control tick this is **immaterial** — well under one part per thousand at p99 even on
+the slower host. Pause/resume cost is not a design constraint for F1.
+
+> **Correction (#834, SP2c.11).** This paragraph originally read "against a 1 s tick". `ShuntingLoop`'s
+> control step actually fires every **2.0** simulated seconds — `LoopProcess.actions()` runs
+> `iteration()` (ending in `hold(1.0)`) and then `interLoopSleep()` (another `hold(1.0)`). The
+> conclusion is unchanged and only gets stronger: the same microseconds are measured against twice
+> the interval. §3.3 below is unaffected — its 0.333 sim s/s quantum comes from the individual
+> `hold(1.0)`, which is the granularity at which simulated time advances, not from the control period.
 
 ### 3.3 Interaction with real-time sync and the speed multiplier (AC4)
 

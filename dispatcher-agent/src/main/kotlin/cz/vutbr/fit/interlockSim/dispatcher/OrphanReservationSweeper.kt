@@ -125,10 +125,25 @@ class OrphanReservationSweeper(
 		/**
 		 * Default staleness threshold, in simulated seconds.
 		 *
-		 * Comfortably longer than a train takes to enter a route it actually intends to travel on
-		 * `vyhybna.xml` (`ShuntingLoop` ticks once per simulated second and a train clears a block
-		 * in well under a minute), so a train that is merely slow is never mistaken for one that
-		 * has abandoned its route.
+		 * ## What the window actually is: 60 simulated seconds = 30 sweeps
+		 *
+		 * `ShuntingLoop`'s control step fires every **2.0** simulated seconds, not every 1.0:
+		 * `LoopProcess.actions()` runs `iteration()` (which ends in `hold(1.0)`) and *then*
+		 * `interLoopSleep()` (another `hold(1.0)`). [sweep] is called once per control step, so
+		 * this threshold is a window of **30 sweeps**, not the 60 the earlier justification here
+		 * implied. (The same holds for `MultiTrainLoop`, which is paced identically.)
+		 *
+		 * ## The value is deliberately unchanged
+		 *
+		 * This is a behavioural constant: raising or lowering it changes *when* reservations are
+		 * reclaimed. Only the arithmetic in the old justification was wrong, not the threshold —
+		 * 60 simulated seconds is still comfortably longer than a train takes to enter a route it
+		 * actually intends to travel on `vyhybna.xml` (a train clears a block in well under a
+		 * minute), so a merely slow train is not mistaken for one that has abandoned its route.
+		 * Anyone revisiting it should decide in both units — sweeps *and* simulated seconds —
+		 * rather than assuming they are the same number.
+		 *
+		 * @since Issue #847 (round 3); period corrected in Issue #834 (SP2c.11)
 		 */
 		const val DEFAULT_STALE_AFTER_SIM_SECONDS: Double = 60.0
 	}
