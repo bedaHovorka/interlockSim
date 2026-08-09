@@ -23,10 +23,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.AuthoredAction
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -45,8 +45,9 @@ import kotlinx.coroutines.coroutineScope
  * @property toolRegistry Tool group registry (singleton, injected into scope)
  * @property ollamaConfig Ollama executor config (singleton, global model/endpoint)
  * @property agentService Agent creation service (singleton, handles Koog wiring)
- * @property perceptionPort Live sensor port for network perception (scoped per context).
- *   Wrapped in a snapshot projection before topology is read.
+ * @property perceptionPort Live sensor port for network perception (scoped per context). Passed
+ *   through unchanged to the actuator tools so they can pre-validate train ids in-turn; static
+ *   topology itself is read from the [DefaultSimulationContext] argument, not through this port.
  * @property commandQueue Command queue for fire-and-forget actuator commands (scoped per
  *   context). Receives converted [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s from
  *   the [sinkHolder] queue-posting wrapper.
@@ -263,22 +264,32 @@ class KoogAgentFactory(
 	 * needs both finished, so overlapping them shortens the time this suspend function takes overall
 	 * without changing what it waits for before returning.
 	 *
+	 * The warm-up is launched with `async(Dispatchers.IO)`, not plain `async`, on purpose: every
+	 * real caller reaches [createAgent] through a single-threaded `runBlocking` event loop
+	 * (`AgentDriverLoop`, `AgentLoopDriver`, `DelegatingSimulationController`). On such a
+	 * dispatcher, a plain `async { ... }` child is merely *queued* — it only starts running once
+	 * the parent coroutine suspends — so without an explicit dispatcher the child would not begin
+	 * until `warmUp.await()` is reached below, after all the local assembly work has already run,
+	 * defeating the overlap entirely. Explicitly dispatching to [Dispatchers.IO] starts the child
+	 * on an IO thread immediately, genuinely concurrent with the assembly below.
+	 * [OllamaModelPrewarmer.warmUp] already confines its own HTTP call to `Dispatchers.IO`
+	 * internally, so this only changes *when* the coroutine is first dispatched, not where the
+	 * network call executes — no redundant or nested dispatch.
+	 *
 	 * @param context Current simulation context (for static topology extraction).
 	 * @return A configured Koog dispatch agent ready for dispatch decisions.
 	 */
 	suspend fun createAgent(context: DefaultSimulationContext): KoogDispatchAgent =
 		coroutineScope {
 			// Preload the model before the dispatch timeout window; started here, awaited below.
-			val warmUp = async { OllamaModelPrewarmer.warmUp(ollamaConfig) }
+			// Dispatchers.IO ensures this actually starts now (not merely queued) even when the
+			// caller is on a single-threaded runBlocking dispatcher — see KDoc above.
+			val warmUp = async(Dispatchers.IO) { OllamaModelPrewarmer.warmUp(ollamaConfig) }
 
 			logger.debug {
 				"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
 					"model=${ollamaConfig.modelName} (SP2c.6 SinkHolder 4-tool surface)"
 			}
-
-			// Wrap the live perception port in an off-thread-safe snapshot projection so the static
-			// topology can be read here at construction time.
-			val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
 
 			// Static topology never changes during a run — read once at agent construction.
 			// The InOut/Signal names double as the valid-endpoint set request_route validates against.
