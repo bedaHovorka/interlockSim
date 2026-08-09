@@ -245,13 +245,24 @@ class DispatchDecisionApplier(
 	 * [appliedRequestRoutes] to guard against re-applying an in-flight duplicate.
 	 *
 	 * A structured key (rather than a manually delimited `"$trainId|$from|$to"` string) is
-	 * used deliberately: [trainId] is externally supplied (tool-driven decisions carry LLM
-	 * output, not just XML-validated network element names restricted to
-	 * `[a-zA-Z0-9_-]`), so a string-concatenation key could let two genuinely different
-	 * triples collide on the same delimiter-joined string (e.g. `trainId="T1|zB", from="doA1"`
-	 * and `trainId="T1", from="zB|doA1"` both joined with `"|"` — see
-	 * `delimiterStraddlingTriples_notConflated` in `DispatchDecisionApplierTest`). Equality on
-	 * a data class of the three fields has no such ambiguity.
+	 * used for two reasons:
+	 *
+	 * 1. **Correctness for [evictReservationsFor]**: that method needs to remove every entry
+	 *    belonging to one `trainId` without touching entries for any other train. A prefix
+	 *    scan over a joined string (`startsWith("$trainId|")`) is unsound for this: evicting
+	 *    `trainId = "T1"` would also wrongly evict entries for a distinct train literally
+	 *    named `"T1|zB"`, since its joined key also starts with `"T1|"`. Exact structural
+	 *    equality on the three fields (`it.trainId == trainId`) has no such false-positive.
+	 * 2. **Defense-in-depth**: [from]/[to] are today always validated network element names
+	 *    (`[a-zA-Z0-9_-]{1,50}` per `data.xsd`, and pre-checked against `validEndpointNames`
+	 *    for the LLM tool path — see `RequestRouteTool`), so they can never contain `|` and a
+	 *    delimiter-joined string key would in practice be unambiguous. [trainId], however, is
+	 *    externally supplied and not similarly constrained. Should endpoint-name validation
+	 *    ever be relaxed, a string-concatenation key could silently become ambiguous (e.g.
+	 *    `trainId="T1|zB", from="doA1"` vs. `trainId="T1", from="zB|doA1"` — see
+	 *    `delimiterStraddlingTriples_notConflated` in `DispatchDecisionApplierTest`, which
+	 *    exercises exactly that shape). The structured key removes the dependency on that
+	 *    upstream invariant entirely, rather than relying on it never changing.
 	 */
 	private data class ReservationKey(
 		val trainId: String,

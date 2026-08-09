@@ -385,17 +385,21 @@ class DispatchDecisionApplierTest {
 
 		@Test
 		@DisplayName(
-			"Two genuinely different triples that concatenate to the same '|'-joined string are " +
-				"NOT conflated by the duplicate-suppression guard"
+			"Two triples that would concatenate to the same '|'-joined string, an input shape " +
+				"currently blocked upstream by endpoint validation, are NOT conflated by the " +
+				"duplicate-suppression guard"
 		)
 		fun delimiterStraddlingTriples_notConflated() {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
 			val (queue, applier) = makeApplier()
 
 			// "T1|zB" + "doA1" + "X" and "T1" + "zB|doA1" + "X" both concatenate (with "|" as
-			// separator) to the literal string "T1|zB|doA1|X" — a naive string-key dedup guard
-			// would treat these as the same reservation even though trainId/from/to genuinely
-			// differ. Both must reach the actuator port.
+			// separator) to the literal string "T1|zB|doA1|X". A "|" in `from`/`to` cannot occur
+			// today (endpoint names are XSD/`validEndpointNames`-validated upstream, see
+			// ReservationKey's KDoc), so this exact collision is not currently reachable via
+			// production decision sources. This test is defense-in-depth: it keeps the
+			// structured-key guard demonstrably sound against this input shape, so it stays safe
+			// if that upstream validation is ever relaxed. Both must reach the actuator port.
 			queue.postAll(listOf(DispatchDecision.ReservePath("T1|zB", "doA1", "X")))
 			applier.onControlStep()
 			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB|doA1", "X")))
