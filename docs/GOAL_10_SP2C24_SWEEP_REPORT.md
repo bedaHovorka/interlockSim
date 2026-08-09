@@ -138,7 +138,7 @@ than swept as sentinels.
 | `maxActionsPerTick` | live (new) | `SinkHolder` per-cycle cap → `ACTION_LIMIT_EXCEEDED` |
 | `historyN` | live (new) | `CycleHistory` block in the per-cycle prompt |
 | `tickPeriodMs` | live (new), **inert in practice** | minimum wall-clock spacing in `AgentLoopDriver` |
-| `seed` | **impossible** | no path through Koog 1.1.1 — see #894 |
+| `seed` | **impossible** | no path through Koog 1.1.1 — settled by #894; P8 covers prompt half only |
 
 `tickPeriodMs` deserves the qualifier. On the asynchronous path the only period the driver can impose
 is a wall-clock floor between cycles — the *simulated*-time period #822 §5.5 describes belongs to
@@ -148,9 +148,9 @@ inference latency measured here, any value below p95 latency changes nothing, so
 
 `seed` has **no axis at all**, and that is the honest position rather than an omission: Koog 1.1.1
 forwards only `temperature` and the context length to Ollama, so a seed column would claim a
-reproducibility guarantee the runs do not have. P8's "pinned seed + recorded snapshot sequence" is
-therefore **half held** — the snapshot sequence is deterministic (`CycleHistory` renders purely from
-recorded state, no accumulated chat), the seed is not. Filed as **#894**.
+reproducibility guarantee the runs do not have. P8's guarantee was amended by #894 (closed) to
+cover the **prompt half only**: same recorded snapshot sequence ⇒ byte-identical prompt sequence.
+Decode determinism on the production tool-calling path is not guaranteed (SP2c.27, #850; #894).
 
 ### The history block has a measured cost
 

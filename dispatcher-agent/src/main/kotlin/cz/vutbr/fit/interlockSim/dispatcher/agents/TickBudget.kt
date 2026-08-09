@@ -70,10 +70,15 @@ interface TickBudget {
  * events can alter observable state. A recorded snapshot sequence therefore always produces a
  * byte-identical prompt sequence. This is the acceptance-mode half of P8 (Issue #532 §A4).
  *
- * **Decode determinism** is NOT delivered by this class alone: the sampling random state inside
- * the Ollama inference engine is not seeded by the pinned Koog version (see SP2c.27, Issue #850,
- * `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md`). P8's decode half is conditional on SP2c.27
- * delivering a seed path.
+ * **Decode determinism** is NOT delivered on the production tool-calling path. SP2c.27 (Issue
+ * #850, `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md`) established that Koog 1.1.1's
+ * `OllamaClient` is `final` with `internal` DTOs, and `LLMParams.additionalProperties` flattens
+ * into the request root rather than inside `options` — so no path exists from the production
+ * tool-calling dispatcher to the Ollama sampler's `seed` option. P8's guarantee is therefore
+ * scoped to the **prompt half only**: a recorded snapshot sequence always produces a byte-identical
+ * prompt sequence; decode determinism is not guaranteed (Issue #894, settled). A future JSON-only
+ * decision mode could deliver decode determinism using `SeededOllamaJsonClient`, which is a proven
+ * prototype, but that mode does not exist yet.
  *
  * ## Binding constraints (SP2c.26, `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`)
  *

@@ -29,9 +29,12 @@ import java.util.concurrent.TimeUnit
  * observable state inside the paused window. Therefore a recorded snapshot sequence always
  * produces a byte-identical prompt sequence.
  *
- * **Decode determinism is NOT delivered** by this class alone — the sampling random state inside
- * the Ollama inference engine is not externally seeded in the pinned Koog version (SP2c.27,
- * Issue #850). P8's decode half is conditional on SP2c.27 delivering a seed path.
+ * **Decode determinism is NOT delivered** on the production tool-calling path. SP2c.27 (Issue
+ * #850) established that Koog 1.1.1's `OllamaClient` is `final` with `internal` DTOs and that
+ * `LLMParams.additionalProperties` flattens into the request root rather than inside `options` —
+ * so no path exists to seed the Ollama sampler from the production tool-calling dispatcher (Issue
+ * #894, settled). P8's guarantee covers only the **prompt half**: a recorded snapshot sequence
+ * always produces a byte-identical prompt sequence.
  *
  * These tests serve as the "golden file" acceptance criterion:
  * - A fixed, pre-recorded [RenderContext] (from [RendererFixtures.tick41Context]) is rendered

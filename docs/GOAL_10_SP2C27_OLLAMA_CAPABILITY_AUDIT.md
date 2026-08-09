@@ -146,11 +146,12 @@ non-critical (`RuleBasedDispatcher` is the reproducibility anchor; LLM acceptanc
 across seed-pinned runs, not decision-for-decision). Revisit if/when a JSON-only decision mode is
 actually scheduled.
 
-**Follow-up needed (not done in this spike, flagged per #850's own acceptance criteria):** #822's
-P8 wording and the SP2c.10/SP2c.12 acceptance criteria should be updated to reflect this split
-explicitly (decode determinism achievable for a JSON-only mode that doesn't exist yet, not for the
-current tool-calling dispatcher). This spike does not edit #822's body — that's flagged here and in
-the GitHub comment for the issue owner / a follow-up task.
+**Follow-up completed (#894):** #822's P8 wording was updated in #894 to reflect the split:
+decode determinism is achievable only on a future JSON-only decision mode (`SeededOllamaJsonClient`
+is the proven prototype), not on the current tool-calling dispatcher. The KDocs for `TickBudget`,
+`PromptDeterminismTest`, and the `SweepAxes` comment in `SweepGrid` were all amended to record the
+settled position. #822's GitHub issue body was not edited directly (it is not a code file), but
+every in-repo reference to the P8 decode-half status now states the settled outcome.
 
 ---
 
