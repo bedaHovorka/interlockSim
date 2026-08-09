@@ -50,9 +50,11 @@ enum class ApplyFailureCode {
 	CONFLICT,
 
 	/**
-	 * No route exists in the network topology between the requested endpoints.
+	 * No route exists in the network topology between the requested endpoints, or the interlocking
+	 * kernel refused before topology lookup was attempted (Issue #834).
 	 *
-	 * Maps to `RouteRequestResult.NoRouteExists` (`:core`, read-only).
+	 * Maps to `RouteRequestResult.NoRouteExists` (`:core`, read-only), whose KDoc documents both
+	 * producing outcomes and why the second one is not reported as contention.
 	 */
 	NO_ROUTE_EXISTS,
 
