@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
@@ -39,7 +40,17 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * [onTick] is called on the dispatcher-agent-driver thread; [onActionOutcome] on the kDisco
  * simulation thread. All counters use [AtomicLong] or [ConcurrentHashMap] with pre-populated
- * [AtomicLong] values.  [snapshot] and [finish] may be called from any thread.
+ * [AtomicLong] values, and latency samples use a [java.util.concurrent.ConcurrentLinkedQueue].
+ * [snapshot] and [finish] may be called from any thread.
+ *
+ * ## Latency percentiles (Issue #834, SP2c.11)
+ *
+ * [onTick] appends [TickRecord.latencyMs] (when non-`null`) to an unbounded sample queue;
+ * [buildSnapshot] takes a point-in-time copy and derives [DispatcherRunSnapshot.latencyP50Ms],
+ * [DispatcherRunSnapshot.latencyP95Ms] and [DispatcherRunSnapshot.latencyMaxMs] from it using
+ * [nearestRankPercentile] (nearest-rank convention — see its KDoc). An empty sample set (no
+ * ticks carried a latency, e.g. an all-rule-based run) yields `0L` for all three fields,
+ * preserving the pre-#834 behaviour for runs with nothing to measure.
  *
  * @param runId Opaque unique identifier (typically a UUID or `yyyyMMdd-HHmmss-<short-uuid>`).
  * @param arm Which dispatcher implementation arm is active.
@@ -75,9 +86,14 @@ class DefaultDispatcherRunRecorder(
 
 	// ── Latency tracking ─────────────────────────────────────────────────────
 
-	// Latency data is not yet wired in SP2c.22 — reserved for a follow-up that adds
-	// wall-clock measurement at the DispatchTickLoop level. All latency fields are 0
-	// until that wiring is added.
+	// One entry per TickRecord.latencyMs that was non-null (Issue #834, SP2c.11). A tick with no
+	// meaningful latency (e.g. a construction site that predates the field) contributes nothing,
+	// so the sample set can legitimately stay smaller than totalTicks. ConcurrentLinkedQueue
+	// supports the same concurrent-add-while-iterating pattern as the AtomicLong/ConcurrentHashMap
+	// fields above: onTick appends from the driver coroutine while buildSnapshot (invoked from
+	// snapshot()/finish(), callable from any thread) takes an immutable point-in-time copy via
+	// toList() before computing percentiles.
+	private val latencySamplesMs: ConcurrentLinkedQueue<Long> = ConcurrentLinkedQueue()
 
 	// ── Action-outcome counters ──────────────────────────────────────────────
 
@@ -110,6 +126,7 @@ class DefaultDispatcherRunRecorder(
 	override fun onTick(record: TickRecord) {
 		ticksByOutcome.getValue(record.outcome.name).incrementAndGet()
 		record.timeoutNoOpCause?.let { cause -> timeoutNoOpByCause.getValue(cause.name).incrementAndGet() }
+		record.latencyMs?.let { latencySamplesMs.add(it) }
 	}
 
 	override fun onActionOutcome(outcome: ActionOutcome) {
@@ -194,9 +211,12 @@ class DefaultDispatcherRunRecorder(
 		val invalidOutputRate = if (total > 0L) timeoutNoOpCount.toDouble() / total.toDouble() else 0.0
 		val repairSuccessRate = if (total > 0L) repairedCount.toDouble() / total.toDouble() else 0.0
 
-		val latencyP50 = 0L
-		val latencyP95 = 0L
-		val latencyMax = 0L
+		// Point-in-time copy so the three percentile computations below all see the same sample
+		// set even if onTick appends concurrently (see the latencySamplesMs KDoc).
+		val latencySamples = latencySamplesMs.toList()
+		val latencyP50 = nearestRankPercentile(latencySamples, 50.0)
+		val latencyP95 = nearestRankPercentile(latencySamples, 95.0)
+		val latencyMax = nearestRankPercentile(latencySamples, 100.0)
 
 		val byAuthor: Map<String, Long> = actionsByAuthor.mapValues { it.value.get() }
 		val c7Clean =

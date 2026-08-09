@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import java.time.Duration
+import kotlin.time.TimeSource
 
 /**
  * [DispatcherPlanner] backed by the Koog LLM agent with a deterministic [Dispatcher] fallback.
@@ -227,11 +228,36 @@ class KoogAgentPlanAdapter(
 	 * The fallback is invoked transparently — callers observe valid decisions regardless
 	 * of which path (LLM or rule-based) produced them.
 	 *
+	 * ## Latency measurement (Issue #834, SP2c.11)
+	 *
+	 * [cycleListener] and [tickListener] both receive a latency figure via
+	 * [TickRecord.latencyMs], measured with a monotonic clock ([TimeSource.Monotonic]) around the
+	 * `withTimeout { a.decideAsync(observation) }` call only — deliberately **not** the whole
+	 * `plan()` attempt. Including [getOrCreateAgent] would fold the one-time
+	 * `OllamaModelPrewarmer.warmUp` cost into the very first cycle's sample, making it a durable
+	 * outlier that skews every run's p95. The mark is taken right before `withTimeout` starts (the
+	 * cheap `commandQueue`/`sinkHolder` bookkeeping calls before it are negligible next to an LLM
+	 * round-trip) so the measured window is, as closely as this call boundary allows, the
+	 * inference itself.
+	 *
+	 * All four cycle endings report a latency computed from that same mark:
+	 * - **success** / **idle no-op**: elapsed time once `withTimeout` returns.
+	 * - **timeout**: elapsed time at the moment [TimeoutCancellationException] is caught — this is
+	 *   not a missing measurement, it IS the deadline, and is exactly as real and reportable as
+	 *   any other cycle's latency.
+	 * - **exception**: elapsed time at the moment the exception is caught, when it was thrown
+	 *   from inside the measured window (the common case — a network or parsing failure during
+	 *   `decideAsync`). The one exception to "always non-null" is a [getOrCreateAgent] failure: no
+	 *   mark exists yet because inference never started, so [TickRecord.latencyMs] is `null` for
+	 *   that specific sub-case — honestly reporting "no cycle latency exists" rather than
+	 *   inventing a number for work that was never attempted.
+	 *
 	 * @param observation Read-only snapshot of the current railway network state.
 	 * @return Non-null list of decisions; may be the rule-based fallback result.
 	 */
-	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> =
-		try {
+	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> {
+		var cycleStart: TimeSource.Monotonic.ValueTimeMark? = null
+		return try {
 			// Agent creation is deliberately INSIDE the try: createAgent runs
 			// OllamaModelPrewarmer.warmUp — real network I/O that can fail — and if that call sat
 			// outside the try its exception would escape plan() altogether, propagating out of
@@ -245,10 +271,14 @@ class KoogAgentPlanAdapter(
 			// zero the per-cycle emission counter so actedThisCycle() reflects only this cycle.
 			commandQueue.advanceCorrelationCycle()
 			sinkHolder.resetCycleEmissionCount()
+			// Latency mark starts here, deliberately after agent creation — see "Latency
+			// measurement" above.
+			cycleStart = TimeSource.Monotonic.markNow()
 			val decisions =
 				withTimeout(inferenceTimeout.toMillis()) {
 					a.decideAsync(observation)
 				}
+			val latencyMs = cycleStart.elapsedNow().inWholeMilliseconds
 			if (sinkHolder.actedThisCycle() || decisions.isNotEmpty()) {
 				// The LLM acted via its actuator tools (the emissions were already posted to the
 				// queue through sinkHolder.current) and/or returned decisions directly. Either way
@@ -275,7 +305,7 @@ class KoogAgentPlanAdapter(
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
-				reportTick(outcome, observation.snapshot.simTime)
+				reportTick(outcome, observation.snapshot.simTime, latencyMs)
 				decisions
 			} else if (isIdleStation(observation)) {
 				// The LLM completed a cycle with no decisions and no tool emissions, and the
@@ -290,7 +320,7 @@ class KoogAgentPlanAdapter(
 						"falling back (simTime=${observation.snapshot.simTime})"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
-				reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime)
+				reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime, latencyMs)
 				emptyList()
 			} else {
 				// The LLM completed a cycle but neither acted via tools nor returned a decision,
@@ -298,7 +328,7 @@ class KoogAgentPlanAdapter(
 				// unaddressed) — it truly failed to produce anything this cycle. Nothing was
 				// posted, so there is no double-dispatch risk; the fallback supplies both
 				// admission and routing.
-				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation) {
+				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation, latencyMs) {
 					logger.warn {
 						"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
 							"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
@@ -306,7 +336,10 @@ class KoogAgentPlanAdapter(
 				}
 			}
 		} catch (e: TimeoutCancellationException) {
-			runFallback(FallbackReason.TIMEOUT, observation) {
+			// cycleStart is always set here: TimeoutCancellationException can only originate from
+			// inside the withTimeout block, which starts after the mark is taken. The elapsed time
+			// is the deadline itself — a real, reportable latency, not a missing one.
+			runFallback(FallbackReason.TIMEOUT, observation, cycleStart?.elapsedNow()?.inWholeMilliseconds) {
 				logger.warn {
 					"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +
 						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
@@ -316,13 +349,16 @@ class KoogAgentPlanAdapter(
 			// Parent coroutine was cancelled — propagate rather than swallow.
 			throw e
 		} catch (e: Exception) {
-			runFallback(FallbackReason.EXCEPTION, observation) {
+			// cycleStart is null only if getOrCreateAgent() itself threw — inference never
+			// started, so there is no cycle latency to report (null, not a fabricated 0).
+			runFallback(FallbackReason.EXCEPTION, observation, cycleStart?.elapsedNow()?.inWholeMilliseconds) {
 				logger.warn(e) {
 					"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
 						"(simTime=${observation.snapshot.simTime})"
 				}
 			}
 		}
+	}
 
 	/**
 	 * Runs the shared rule-based-fallback sequence: log via [logAction], notify [cycleListener],
@@ -331,15 +367,19 @@ class KoogAgentPlanAdapter(
 	 * [fallbackDispatcher]. Shared by all three fallback sites in [plan] (empty LLM cycle on a
 	 * non-idle station — see [isIdleStation], inference timeout, LLM exception) so they cannot
 	 * drift out of sync with each other.
+	 *
+	 * @param latencyMs Cycle latency to report alongside the tick, or `null` if no meaningful
+	 *   inference attempt was measured for this cycle — see [plan]'s "Latency measurement" KDoc.
 	 */
 	private fun runFallback(
 		reason: FallbackReason,
 		observation: DispatchObservation,
+		latencyMs: Long?,
 		logAction: () -> Unit
 	): List<DispatchDecision> {
 		logAction()
 		cycleListener?.onFallback(reason, observation.snapshot.simTime)
-		reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
+		reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
 		return fallbackDispatcher.decide(observation)
 	}
 
@@ -379,12 +419,18 @@ class KoogAgentPlanAdapter(
 	 * On a `RULE_FALLBACK` cycle that list is normally empty even though the fallback dispatcher
 	 * did act — deliberately: [cycleHistory] is the model's memory of its own behaviour, and the
 	 * outcome name already tells it the cycle was taken over.
+	 *
+	 * @param latencyMs Cycle latency measured by [plan] (see its "Latency measurement" KDoc), or
+	 *   `null` when this cycle never reached the measured window. Forwarded to
+	 *   [TickRecord.latencyMs]; not part of [cycleHistory] (the model's own memory does not need
+	 *   its own timing).
 	 */
 	private fun reportTick(
 		outcome: TickOutcome,
-		simTime: Double
+		simTime: Double,
+		latencyMs: Long?
 	) {
-		tickListener?.onTick(TickRecord(outcome, simTime))
+		tickListener?.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
 	}
 

@@ -262,6 +262,98 @@ class DefaultDispatcherRunRecorderTest {
 		r.logFinalSummary()
 	}
 
+	// ── Latency percentiles (Issue #834, SP2c.11) ─────────────────────────────
+
+	@Test
+	fun `latency fields are zero when no ticks carried a latency`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0))
+
+		val snap = r.snapshot()
+		assertThat(snap.latencyP50Ms).isEqualTo(0L)
+		assertThat(snap.latencyP95Ms).isEqualTo(0L)
+		assertThat(snap.latencyMaxMs).isEqualTo(0L)
+	}
+
+	@Test
+	fun `latency fields are zero when the recorder has seen no ticks at all`() {
+		val snap = recorder().snapshot()
+		assertThat(snap.latencyP50Ms).isEqualTo(0L)
+		assertThat(snap.latencyP95Ms).isEqualTo(0L)
+		assertThat(snap.latencyMaxMs).isEqualTo(0L)
+	}
+
+	@Test
+	fun `a single latency sample is reported for p50, p95 and max`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = 250L))
+
+		val snap = r.snapshot()
+		assertThat(snap.latencyP50Ms).isEqualTo(250L)
+		assertThat(snap.latencyP95Ms).isEqualTo(250L)
+		assertThat(snap.latencyMaxMs).isEqualTo(250L)
+	}
+
+	@Test
+	fun `an even-sized latency sample set computes p50 by nearest-rank`() {
+		val r = recorder()
+		listOf(400L, 100L, 300L, 200L).forEach { latency ->
+			r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = latency))
+		}
+
+		val snap = r.snapshot()
+		// sorted: 100, 200, 300, 400 -> nearest-rank(50) = ceil(0.5 * 4) = rank 2 -> 200
+		assertThat(snap.latencyP50Ms).isEqualTo(200L)
+		assertThat(snap.latencyMaxMs).isEqualTo(400L)
+	}
+
+	@Test
+	fun `an odd-sized latency sample set computes p50 as the middle element`() {
+		val r = recorder()
+		listOf(500L, 100L, 300L).forEach { latency ->
+			r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = latency))
+		}
+
+		val snap = r.snapshot()
+		// sorted: 100, 300, 500 -> middle is 300
+		assertThat(snap.latencyP50Ms).isEqualTo(300L)
+		assertThat(snap.latencyMaxMs).isEqualTo(500L)
+	}
+
+	@Test
+	fun `p95 is not confused with max on a larger latency sample set`() {
+		val r = recorder()
+		(1..20).map { it * 10L }.shuffled().forEach { latency ->
+			r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = latency))
+		}
+
+		val snap = r.snapshot()
+		// sorted: 10, 20, ..., 200 -> nearest-rank(95) = ceil(0.95 * 20) = 19th element = 190
+		assertThat(snap.latencyP95Ms).isEqualTo(190L)
+		assertThat(snap.latencyMaxMs).isEqualTo(200L)
+	}
+
+	@Test
+	fun `ticks with a null latency do not contribute a sample`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 1.0, latencyMs = null))
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 2.0, latencyMs = 100L))
+
+		val snap = r.snapshot()
+		assertThat(snap.latencyP50Ms).isEqualTo(100L)
+		assertThat(snap.latencyMaxMs).isEqualTo(100L)
+	}
+
+	@Test
+	fun `latency samples recorded after finish do not affect the frozen snapshot`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = 100L))
+		val frozen = r.finish(RunEndCause.MANUAL_STOP)
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 2.0, latencyMs = 9000L))
+
+		assertThat(frozen.latencyMaxMs).isEqualTo(100L)
+	}
+
 	// ── Helpers ─────────────────────────────────────────────────────────────
 
 	private fun makeOutcome(
