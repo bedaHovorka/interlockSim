@@ -393,9 +393,10 @@ class KoogDispatchAgentImplTest {
 		coVerify {
 			aiAgent.run(
 				match { prompt ->
-					val hopOccurrences = Regex("""NEXT SECTION to reserve: from ".*?" to "sharedSep"""")
-						.findAll(prompt)
-						.count()
+					val hopOccurrences =
+						Regex("""NEXT SECTION to reserve: from ".*?" to "sharedSep"""")
+							.findAll(prompt)
+							.count()
 					hopOccurrences == 1
 				},
 				null
