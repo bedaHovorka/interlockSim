@@ -30,7 +30,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Sim-thread applier that drains [ActuatorCommandQueue] at each simulation control
- * step and applies every [DispatchDecision] through the SP0.6 actuator ports.
+ * step and applies every [DispatchDecision] through the actuator ports.
  *
  * Registered as a [ControlStepListener] on [ShuntingLoop][cz.vutbr.fit.interlockSim.sim.ShuntingLoop]
  * before the simulation starts.  [onControlStep] is called synchronously by
@@ -50,13 +50,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * Decisions are applied in FIFO order matching the posting order on the driver thread.
  *
- * ## Mode gating (SP2b.4)
+ * ## Mode gating
  *
  * When a [DispatcherModeState] is wired (default: `null`, gate disabled) every drained
  * decision is filtered through the effective [DispatcherMode] before it reaches the
  * actuator ports:
  *
- * - [DispatcherMode.AUTO] — apply directly (pre-SP2b.4 behaviour).
+ * - [DispatcherMode.AUTO] — apply directly.
  * - [DispatcherMode.SEMI_AUTO] — forward to the wired approver callback and apply
  *   only if it returns `true`; if no approver is wired, drop with a warning.
  * - [DispatcherMode.MANUAL] — drop every actuating decision (a debug line is logged).
@@ -85,13 +85,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param onApproveTrain    Callback invoked (on the sim thread) to admit a queued train.
  *   Typically [ShuntingLoop.approveQueuedTrain][cz.vutbr.fit.interlockSim.sim.ShuntingLoop.approveQueuedTrain].
  *
- *   **Design note (SP0.9 review, Minor #4 / SP2b.1 follow-up):** `ApproveTrain` is
- *   kept as a `(String) -> Unit` callback for backward compatibility; `HoldTrain`
- *   is routed through [trainLifecyclePort] — the new dedicated port introduced by
- *   SP2b.1 (#556), symmetric with [NetworkActuatorPort].
- * @param activeTrainCountProvider SP2c.18: optional callback (on the sim thread) that
- *   returns the **live** number of currently approved trains. When non-null, the applier
- *   checks `activeTrainCountProvider() >= maxConcurrentTrains` before invoking [onApproveTrain]:
+ *   Kept as a `(String) -> Unit` callback for backward compatibility; `HoldTrain` is routed
+ *   through [trainLifecyclePort] instead, the dedicated port symmetric with [NetworkActuatorPort].
+ * @param activeTrainCountProvider Optional callback (on the sim thread) that returns the
+ *   **live** number of currently approved trains. When non-null, the applier checks
+ *   `activeTrainCountProvider() >= maxConcurrentTrains` before invoking [onApproveTrain]:
  *   if the cap is already reached, [onApproveTrain] is **not** called and an
  *   [AppliedOutcome.Approved] with `admitted = false` and reason [ApplyFailureCode.CAP_EXCEEDED_APPLY]
  *   is published through [outcomeSink]. When `null` (the default), no apply-time cap check
@@ -99,107 +97,88 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   guard are unaffected. The provider **must not throw** — an exception escapes into
  *   [onControlStep] and crashes the kDisco simulation thread (the production provider
  *   `{ loop.getApprovedTrains().size }` is safe).
- * @param maxConcurrentTrains SP2c.18: maximum concurrent trains allowed; only consulted when
+ * @param maxConcurrentTrains Maximum concurrent trains allowed; only consulted when
  *   [activeTrainCountProvider] is non-null. Defaults to
  *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], matching the constant used by
  *   [cz.vutbr.fit.interlockSim.sim.ShuntingLoop]'s own admission gate and
  *   [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ApproveTrainTool]'s pre-queue check.
  * @param trainLifecyclePort Train lifecycle actuator port for [DispatchDecision.HoldTrain]
- *   commands (SP2b.1 — Issue #556).  `null` by default for backward compatibility with
- *   callers that do not need train-lifecycle commands; when `null` and a [DispatchDecision.HoldTrain]
- *   is received, a warning is logged and the decision is dropped.
- *
- * @since Issue #731 (SP0.9 — Goal 10); [trainLifecyclePort] added in Issue #556 (SP2b.1);
- *   [modeState] + [semiAutoApprover] added in Issue #559 (SP2b.4);
- *   [onDecisionApplied] added in Issue #561 (SP2b.6);
- *   [activeTrainCountProvider] + [maxConcurrentTrains] added in Issue #841 (SP2c.18)
+ *   commands. `null` by default for backward compatibility with callers that do not need
+ *   train-lifecycle commands; when `null` and a [DispatchDecision.HoldTrain] is received, a
+ *   warning is logged and the decision is dropped.
  */
 class DispatchDecisionApplier(
 	private val queue: ActuatorCommandQueue,
 	private val networkActuator: NetworkActuatorPort,
 	private val onApproveTrain: (trainId: String) -> Unit,
 	/**
-	 * SP2c.18: Optional provider for the live active-train count on the sim thread.
-	 * When non-null, the cap check [maxConcurrentTrains] is enforced at apply time.
-	 *
-	 * @since Issue #841 (SP2c.18 — Goal 10)
+	 * Optional provider for the live active-train count on the sim thread. When non-null,
+	 * the cap check [maxConcurrentTrains] is enforced at apply time.
 	 */
 	private val activeTrainCountProvider: (() -> Int)? = null,
 	/**
-	 * SP2c.18: Maximum concurrent trains allowed (only consulted when
-	 * [activeTrainCountProvider] is non-null).
-	 *
-	 * @since Issue #841 (SP2c.18 — Goal 10)
+	 * Maximum concurrent trains allowed (only consulted when [activeTrainCountProvider]
+	 * is non-null).
 	 */
 	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
 	/**
-	 * SP0.11: Callback invoked on the sim thread when a path reservation succeeds.
-	 * Increments [ShuntingLoop.incrementBlockTransition] (the counter previously
-	 * updated inside the removed [ShuntingLoop.tryReservePath]).
-	 *
-	 * @since Issue #733 (SP0.11 — Goal 10)
+	 * Callback invoked on the sim thread when a path reservation succeeds. Increments
+	 * [ShuntingLoop.incrementBlockTransition] (the counter previously updated inside the
+	 * removed [ShuntingLoop.tryReservePath]).
 	 */
 	private val onBlockTransition: (trainId: String) -> Unit = {},
 	/**
-	 * SP0.11: Callback invoked on the sim thread when a path reservation fails
-	 * (any of AllPathsBlocked, Conflict, or NoRouteExists).
-	 * Increments [ShuntingLoop.incrementFailedReservation] (the counter previously
-	 * updated inside the removed [ShuntingLoop.tryReservePath]).
-	 *
-	 * @since Issue #733 (SP0.11 — Goal 10)
+	 * Callback invoked on the sim thread when a path reservation fails (any of
+	 * AllPathsBlocked, Conflict, or NoRouteExists). Increments
+	 * [ShuntingLoop.incrementFailedReservation] (the counter previously updated inside the
+	 * removed [ShuntingLoop.tryReservePath]).
 	 */
 	private val onFailedReservation: () -> Unit = {},
 	/**
-	 * SP2b.1: Train lifecycle actuator port for [DispatchDecision.HoldTrain] commands.
-	 * Null by default for backward compatibility with callers that do not supply one.
-	 *
-	 * @since Issue #556 (SP2b.1 — Goal 10)
+	 * Train lifecycle actuator port for [DispatchDecision.HoldTrain] commands. Null by
+	 * default for backward compatibility with callers that do not supply one.
 	 */
 	private val trainLifecyclePort: TrainLifecyclePort? = null,
 	/**
-	 * SP2b.4: Dispatcher operating-mode state that gates decision application.
+	 * Dispatcher operating-mode state that gates decision application.
 	 *
-	 * When `null` (the default), the applier behaves exactly as before SP2b.4 — every
-	 * drained decision is applied.  When non-null, the effective mode
+	 * When `null` (the default), the applier behaves as if the mode gate did not exist —
+	 * every drained decision is applied.  When non-null, the effective mode
 	 * ([DispatcherModeState.getEffectiveMode]) is consulted on every drained
 	 * decision and controls whether it is applied, forwarded to [semiAutoApprover] for
 	 * human approval, or dropped:
 	 *
 	 * | Effective mode | Behaviour |
 	 * |---|---|
-	 * | [DispatcherMode.AUTO] | Apply directly (pre-SP2b.4 behaviour). |
+	 * | [DispatcherMode.AUTO] | Apply directly. |
 	 * | [DispatcherMode.SEMI_AUTO] | Forward to [semiAutoApprover]; apply only if it returns `true`. If no approver is wired, the decision is dropped with a warning. |
 	 * | [DispatcherMode.MANUAL] | Drop the decision without invoking the actuator port; a debug line is logged. [DispatchDecision.NoAction] passes through as a no-op regardless of mode. |
 	 *
 	 * The mode is read once per decision via [DispatcherModeState.getEffectiveMode], so
 	 * a mode change becomes effective on the next drained decision.
-	 *
-	 * @since Issue #559 (SP2b.4 — Goal 10)
 	 */
 	private val modeState: DispatcherModeState? = null,
 	/**
-	 * SP2b.4: Approver callback consulted when the effective [DispatcherMode] is
+	 * Approver callback consulted when the effective [DispatcherMode] is
 	 * [DispatcherMode.SEMI_AUTO].
 	 *
 	 * Called on the sim thread (same thread as [onControlStep]) with the pending
-	 * decision; must return `true` to apply the decision or `false` to drop it.  Wired
-	 * in Stage B1 (Issue #532) to the Goal 9 `ConflictResolutionPanel` propose-approve
-	 * flow; `null` in headless contexts, in which case every actuating decision is
-	 * dropped with a warning while in SEMI_AUTO mode.
+	 * decision; must return `true` to apply the decision or `false` to drop it.  Wired to
+	 * the Goal 9 `ConflictResolutionPanel` propose-approve flow; `null` in headless
+	 * contexts, in which case every actuating decision is dropped with a warning while in
+	 * SEMI_AUTO mode.
 	 *
 	 * Implementations must be non-blocking (or at least short-lived) — the callback
 	 * runs inline on the kDisco simulation thread and stalling it stalls the whole
 	 * simulation.
-	 *
-	 * @since Issue #559 (SP2b.4 — Goal 10)
 	 */
 	private val semiAutoApprover: ((DispatchDecision) -> Boolean)? = null,
 	/**
-	 * SP2b.6: Optional observer notified (on the kDisco simulation thread) for
-	 * each applied, non-[DispatchDecision.NoAction] decision.
+	 * Optional observer notified (on the kDisco simulation thread) for each applied,
+	 * non-[DispatchDecision.NoAction] decision.
 	 *
-	 * When `null` (the default) the applier behaves exactly as before SP2b.6 —
-	 * applied decisions are not surfaced to any listener. When non-null (e.g. a
+	 * When `null` (the default) the applier does not surface applied decisions to any
+	 * listener. When non-null (e.g. a
 	 * [cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub] pulled from the
 	 * per-context Koin scope), every gated, non-`NoAction` decision is forwarded
 	 * so a GUI ("Why this route?" panel) can display its rationale.
@@ -209,22 +188,19 @@ class DispatchDecisionApplier(
 	 * [ApplyFailureCode.CAP_EXCEEDED_APPLY] — see [applyApproveTrain]) do not trigger the listener:
 	 * it fires only for decisions that were actually applied.
 	 *
-	 * @since Issue #561 (SP2b.6 — Goal 10)
 	 * @see cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
 	 */
 	private val onDecisionApplied: DispatchDecisionListener? = null,
 	/**
-	 * SP2c.17: Identity-keyed side map used to correlate each drained [DispatchDecision]
+	 * Identity-keyed side map used to correlate each drained [DispatchDecision]
 	 * back to the [CommandId] and tick index assigned at post time.
 	 *
 	 * When `null` (the default) no correlation is performed and [outcomeSink] is never
 	 * called — existing callers that do not need the feedback channel are unaffected.
-	 *
-	 * @since Issue #840 (SP2c.17 — correlated async outcome channel)
 	 */
 	private val correlationMap: CommandCorrelationMap? = null,
 	/**
-	 * SP2c.17: Sink that receives an [AppliedOutcome] for each decision applied on the sim
+	 * Sink that receives an [AppliedOutcome] for each decision applied on the sim
 	 * thread. Populated outcomes are drained by [DispatcherObservationProjector] and included
 	 * in the next tick's pushed observation so the agent learns what actually happened.
 	 *
@@ -233,12 +209,10 @@ class DispatchDecisionApplier(
 	 *
 	 * When `null` (the default) no outcomes are published — existing callers that do not
 	 * need the feedback channel are unaffected.
-	 *
-	 * @since Issue #840 (SP2c.17 — correlated async outcome channel)
 	 */
 	private val outcomeSink: AppliedOutcomeSink? = null,
 	/**
-	 * SP2c.20: Optional sink notified (on the kDisco simulation thread) for each applied
+	 * Optional sink notified (on the kDisco simulation thread) for each applied
 	 * or apply-failed [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction] with full
 	 * author attribution.
 	 *
@@ -247,8 +221,6 @@ class DispatchDecisionApplier(
 	 *
 	 * When `null` (the default) no action outcomes are published — existing callers that
 	 * do not need attribution at apply granularity are unaffected.
-	 *
-	 * @since Issue #843 (SP2c.20 — Goal 10 action attribution + C7 violation gate)
 	 */
 	private val actionOutcomeSink: ActionOutcomeSink? = null
 ) : ControlStepListener {
@@ -257,10 +229,10 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * SP2c.18 (#841): fail fast at wiring time when the apply-time cap is misconfigured.
-	 * With a non-null [activeTrainCountProvider], a `maxConcurrentTrains <= 0` would silently
-	 * refuse every `approve_train` (live count `>= 0` is always true) with only a debug log —
-	 * mirroring [RuleBasedDispatcher]'s own `require(maxConcurrentTrains > 0)` guard.
+	 * Fails fast at wiring time when the apply-time cap is misconfigured. With a non-null
+	 * [activeTrainCountProvider], a `maxConcurrentTrains <= 0` would silently refuse every
+	 * `approve_train` (live count `>= 0` is always true) with only a debug log — mirroring
+	 * [RuleBasedDispatcher]'s own `require(maxConcurrentTrains > 0)` guard.
 	 */
 	init {
 		if (activeTrainCountProvider != null) {
@@ -293,16 +265,16 @@ class DispatchDecisionApplier(
 	 * bidirectional-operation rationale applies: a train that reverses and re-approaches
 	 * an endpoint pair it already traversed must not stay suppressed.
 	 *
-	 * @since SP2c.5 (#865) — anchor for the #829 (SP2c.6) O5 validator relaxation; see
-	 *   [applyRequestRoute] for why this guard is dormant today but load-bearing once the
-	 *   `ActionValidator` conflict rule permits forward extensions.
+	 * This is an anchor for a future `ActionValidator` relaxation; see [applyRequestRoute]
+	 * for why this guard is dormant today but load-bearing once the validator conflict
+	 * rule permits forward extensions.
 	 */
 	private val appliedRequestRoutes: MutableSet<String> = mutableSetOf()
 
 	/**
 	 * Evicts every [appliedReservations] entry recorded for [trainId].
 	 *
-	 * ## Why eviction is needed (Goal 10 code-review fix)
+	 * ## Why eviction is needed
 	 *
 	 * [appliedReservations] exists to suppress a *duplicate* [DispatchDecision.ReservePath]
 	 * decided twice before its first application is reflected back (see [applyReservePath]).
@@ -322,9 +294,6 @@ class DispatchDecisionApplier(
 	 * Clears both [appliedReservations] (per-hop `ReservePath`) and [appliedRequestRoutes]
 	 * (destination-level `RequestRoute`) so a single block-release event re-enables either
 	 * vocabulary's dedup guard for that train.
-	 *
-	 * @since Goal 10 code-review fix — latent bug found during the SP0.11 review;
-	 *   [appliedRequestRoutes] eviction added in SP2c.5 (#865)
 	 */
 	fun evictReservationsFor(trainId: String) {
 		val prefix = "$trainId|"
@@ -334,16 +303,13 @@ class DispatchDecisionApplier(
 
 	/**
 	 * Result of applying one [DispatchDecision] — decouples two independent signals that used
-	 * to be conflated into a single `Boolean` (SP2c.20 follow-up, Issue #843 acceptance
-	 * criterion #10):
+	 * to be conflated into a single `Boolean`.
 	 *
 	 * @property decisionApplied Whether [onDecisionApplied] should fire for this decision.
-	 *   Unchanged from the pre-refactor `Boolean` semantics — `false` only for
-	 *   [DispatchDecision.NoAction] and an [DispatchDecision.ApproveTrain] refused at apply
-	 *   time ([ApplyFailureCode.CAP_EXCEEDED_APPLY]).
+	 *   `false` only for [DispatchDecision.NoAction] and an [DispatchDecision.ApproveTrain]
+	 *   refused at apply time ([ApplyFailureCode.CAP_EXCEEDED_APPLY]).
 	 * @property applyFailure The [ApplyFailureCode] to report to [actionOutcomeSink], or `null`
-	 *   on success. Previously only ever set for `ApproveTrain`; now also correctly derived
-	 *   for `RequestRoute`'s `AllPathsBlocked`/`Conflict`/`NoRouteExists` results.
+	 *   on success.
 	 */
 	private data class ApplyResult(
 		val decisionApplied: Boolean,
@@ -358,53 +324,54 @@ class DispatchDecisionApplier(
 	 * All simulation-state mutations performed here are serialised with all other
 	 * sim-thread operations by kDisco's single-threaded scheduler.
 	 *
-	 * ## Per-decision exception isolation (Goal 10 incident fix)
+	 * ## Per-decision exception isolation
 	 *
-	 * Tool-driven decisions ([DispatchDecision.RequestRoute] etc., SP1.7) can carry
+	 * Tool-driven decisions ([DispatchDecision.RequestRoute] etc.) can carry
 	 * LLM-hallucinated string arguments (an endpoint name that doesn't exist in this
 	 * network). [NetworkActuatorPort.requestRoute]'s `requireEndpoint` check throws
 	 * [IllegalArgumentException] for that case — correct for its other, trusted callers
 	 * (an unknown endpoint there really is a caller bug), but for the LLM tool path it is
 	 * a routine, expected external-input error, not a bug. Without the guard below, that
 	 * exception propagated out of this method and killed the entire kDisco simulation
-	 * thread (confirmed via a live `shuntingLoopAI` run against a real local model), after
-	 * which the simulation stopped dispatching anything at all. Each decision is applied
-	 * in its own try/catch so one bad LLM argument only drops that single decision —
-	 * every other decision in the same drained batch is still applied, and the simulation
-	 * keeps running. Only [IllegalArgumentException] is caught here: it is the specific,
-	 * established idiom this codebase uses for "caller violated an API precondition";
-	 * anything else (e.g. a `NullPointerException` from a genuine bug) still propagates
-	 * and crashes loud, preserving today's dev-time bug visibility.
+	 * thread (confirmed via a live local-model run), after which the simulation stopped
+	 * dispatching anything at all. Each decision is applied in its own try/catch so one
+	 * bad LLM argument only drops that single decision — every other decision in the same
+	 * drained batch is still applied, and the simulation keeps running. Only
+	 * [IllegalArgumentException] is caught here: it is the specific, established idiom
+	 * this codebase uses for "caller violated an API precondition"; anything else (e.g. a
+	 * `NullPointerException` from a genuine bug) still propagates and crashes loud,
+	 * preserving today's dev-time bug visibility.
 	 */
 	override fun onControlStep() {
 		val decisions = queue.drain()
 		if (decisions.isEmpty()) return
 		logger.debug { "onControlStep: applying ${decisions.size} pending decision(s)" }
 		for (decision in decisions) {
-			// SP2c.17 (#840): look up the CommandId and tick index assigned at post time.
-			// Evicts the entry so the map doesn't grow unboundedly.
+			// Look up the CommandId and tick index assigned at post time. Evicts the
+			// entry so the map doesn't grow unboundedly.
 			val correlation = correlationMap?.correlate(decision)
 			if (shouldApply(decision)) {
 				try {
 					val result = applyDecision(decision, correlation)
-					// SP2b.6 (Issue #561): surface applied decisions to a GUI observer so the
-					// "Why this route?" panel can display the rationale. NoAction carries no
-					// rationale, and dropped/refused decisions (under MANUAL, or an apply-time
-					// CAP_EXCEEDED_APPLY refusal — see applyApproveTrain) are not "applied", so
-					// applyDecision returns decisionApplied=false and the listener is not invoked.
+					// Surface applied decisions to a GUI observer so the "Why this route?"
+					// panel can display the rationale. NoAction carries no rationale, and
+					// dropped/refused decisions (under MANUAL, or an apply-time
+					// CAP_EXCEEDED_APPLY refusal — see applyApproveTrain) are not "applied",
+					// so applyDecision returns decisionApplied=false and the listener is not
+					// invoked.
 					if (result.decisionApplied) {
 						onDecisionApplied?.onDecisionApplied(decision)
 					}
-					// SP2c.20 (#843): notify the action outcome sink with author attribution.
-					// No logging here — this runs on the sim thread and log calls inject latency.
+					// Notify the action outcome sink with author attribution. No logging
+					// here — this runs on the sim thread and log calls inject latency.
 					reportActionOutcome(decision, correlation, result.applyFailure)
 				} catch (e: IllegalArgumentException) {
 					logger.warn(e) {
 						"onControlStep: dropping decision ${decision::class.simpleName} — invalid " +
 							"argument(s): ${e.message}"
 					}
-					// SP2c.17 (#840): publish DroppedInvalid so the agent learns that its command
-					// was dropped — a silently lost outcome is how this class of bug hides.
+					// Publish DroppedInvalid so the agent learns that its command was
+					// dropped — a silently lost outcome is how this class of bug hides.
 					if (correlation != null) {
 						outcomeSink?.publish(
 							AppliedOutcome.DroppedInvalid(
@@ -416,8 +383,8 @@ class DispatchDecisionApplier(
 							)
 						)
 					}
-					// SP2c.20 (#843): notify the action outcome sink about the drop.
-					// No logging here — this runs on the sim thread.
+					// Notify the action outcome sink about the drop. No logging here —
+					// this runs on the sim thread.
 					reportActionOutcome(decision, correlation, ApplyFailureCode.DROPPED_INVALID)
 				}
 			}
@@ -425,17 +392,16 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * SP2c.20 (#843): publishes the [ActionOutcome] for one applied/failed decision to
-	 * [actionOutcomeSink]. No-logging — runs on the sim thread; a log call here would
-	 * inject latency into the physics loop (see [ActionOutcomeSink] contract).
+	 * Publishes the [ActionOutcome] for one applied/failed decision to [actionOutcomeSink].
+	 * No-logging — runs on the sim thread; a log call here would inject latency into the
+	 * physics loop (see [ActionOutcomeSink] contract).
 	 *
 	 * No-op when [actionOutcomeSink] is null or [decision] is [DispatchDecision.NoAction]
 	 * — NoAction carries no author attribution. The [applyFailure] argument drives the
 	 * phase: `null` → [ActionPhase.APPLIED]; non-null → [ActionPhase.APPLIED_THEN_FAILED]
 	 * (with that code). The catch path passes [ApplyFailureCode.DROPPED_INVALID].
 	 *
-	 * Extracted from [onControlStep] to keep that method under the Sonar S3776
-	 * cognitive-complexity threshold (Issue #843 review).
+	 * (Extracted from [onControlStep] to keep that method within the detekt LongMethod budget.)
 	 */
 	private fun reportActionOutcome(
 		decision: DispatchDecision,
@@ -456,8 +422,8 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * SP2b.4 gate: consults [modeState] (if wired) to decide whether [decision] should
-	 * be applied, sent to the [semiAutoApprover], or dropped outright.
+	 * Consults [modeState] (if wired) to decide whether [decision] should be applied, sent
+	 * to the [semiAutoApprover], or dropped outright.
 	 *
 	 * Returns `true` when the caller should proceed to [applyDecision], `false` when
 	 * the decision has been dropped by the mode gate (a debug/warn line has been
@@ -466,8 +432,6 @@ class DispatchDecisionApplier(
 	 * [DispatchDecision.NoAction] always returns `true` — applying it is a no-op
 	 * regardless of mode, and short-circuiting it here would suppress the exhaustive-
 	 * `when` guarantee in [applyDecision].
-	 *
-	 * @since Issue #559 (SP2b.4 — Goal 10)
 	 */
 	private fun shouldApply(decision: DispatchDecision): Boolean {
 		val state = modeState ?: return true
@@ -521,16 +485,16 @@ class DispatchDecisionApplier(
 				ApplyResult(true)
 			}
 			DispatchDecision.NoAction -> ApplyResult(false)
-			// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
+			// ── Train-lifecycle subtypes ──────────────────────────────────────────
 			is DispatchDecision.HoldTrain -> {
 				applyHoldTrain(decision)
 				ApplyResult(true)
 			}
-			// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
+			// ── Tool-driven actuator subtypes ─────────────────────────────────────
 			// SetSignalAspect and SetSwitchPosition still delegate to the shared helper in :core
-			// (no outcome type defined for them in SP2c.17). ReleaseRoute and RequestRoute are
-			// handled directly here so the outcome can be captured and published without touching
-			// :core's applyToolDrivenToActuator (zero :core changes, per SP2c.17 constraint C10).
+			// (no outcome type defined for them). ReleaseRoute and RequestRoute are handled
+			// directly here so the outcome can be captured and published without touching
+			// :core's applyToolDrivenToActuator (zero :core changes).
 			is DispatchDecision.SetSignalAspect,
 			is DispatchDecision.SetSwitchPosition -> {
 				decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
@@ -544,14 +508,14 @@ class DispatchDecisionApplier(
 				val applyFailure = applyRequestRoute(decision, correlation)
 				// decisionApplied stays true regardless of RouteRequestResult: the actuator was
 				// reached and the attempt is surfaced to the GUI "Why this route?" observer either
-				// way (unchanged pre-SP2c.20-follow-up behaviour). Only applyFailure — which drives
-				// actionOutcomeSink's phase/code — now varies with the actual result.
+				// way. Only applyFailure — which drives actionOutcomeSink's phase/code — varies
+				// with the actual result.
 				ApplyResult(true, applyFailure)
 			}
 		}
 
 	/**
-	 * SP2c.18 (#841): Applies [decision] by checking the live active-train count (if
+	 * Applies [decision] by checking the live active-train count (if
 	 * [activeTrainCountProvider] is wired) and either admitting the train or refusing
 	 * with [ApplyFailureCode.CAP_EXCEEDED_APPLY].
 	 *
@@ -566,10 +530,8 @@ class DispatchDecisionApplier(
 	 * that was possible with [ActionValidator]'s pre-queue check alone is closed.
 	 *
 	 * When [activeTrainCountProvider] is `null`, no apply-time cap check is performed and
-	 * [onApproveTrain] is always invoked (pre-SP2c.18 behaviour for callers that rely on
+	 * [onApproveTrain] is always invoked (the behaviour for callers that rely on
 	 * [ShuntingLoop.approveQueuedTrain]'s own inner guard).
-	 *
-	 * @since Issue #841 (SP2c.18 — Goal 10 apply-time cap enforcement)
 	 *
 	 * @return `true` when the train was admitted ([onApproveTrain] invoked); `false` when the
 	 *   cap was already reached and the admission was refused with [ApplyFailureCode.CAP_EXCEEDED_APPLY].
@@ -624,41 +586,23 @@ class DispatchDecisionApplier(
 	 * Applies [decision] via [NetworkActuatorPort.requestRoute], guarding against
 	 * duplicate application of an already-successfully-reserved hop.
 	 *
-	 * ## Duplicate-decision race (SP0.11 regression, Issue #733 follow-up)
+	 * ## Duplicate-decision race
 	 *
-	 * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] runs
-	 * on its own thread, decoupled from the sim thread that applies its decisions.
-	 * Because [ShuntingLoop][cz.vutbr.fit.interlockSim.sim.ShuntingLoop]'s own
-	 * polling ticks are not wall-clock throttled (no `SimulationController`
-	 * pacing in a headless run), several ShuntingLoop ticks can elapse before the
-	 * driver thread gets scheduled again. The block-input observation it reads —
-	 * in particular [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.pathAlreadyExtendedBeyond],
-	 * the guard [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] relies on to
-	 * avoid re-deciding an already-reserved hop — only updates once a decided
-	 * [DispatchDecision.ReservePath] has actually been drained and applied here.
-	 * This means the driver can legitimately decide the *same* `ReservePath` more
-	 * than once before its first application is reflected back.
+	 * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] runs on its
+	 * own thread, decoupled from the sim thread that applies its decisions. Because
+	 * headless runs are not wall-clock throttled, several sim ticks can elapse before the
+	 * driver thread is scheduled again — so it can legitimately decide the *same*
+	 * `ReservePath` more than once before its first application is reflected back into
+	 * the observation it reads next.
 	 *
-	 * Re-applying an already-owned hop is not a harmless no-op:
-	 * `DefaultPathReservationService.reservePath`'s already-owned fast path calls
-	 * `PathReservationRegistry.registerPathInfo` again, and that registry's merge
-	 * logic assumes the incoming path's `start` overlaps the *current* registered
-	 * `target`. Once the first (legitimate) application has already advanced that
-	 * target past the duplicate's `start`, the overlap check fails, the duplicate
-	 * segment is spliced back into the train's registered path, and the train's
-	 * `Front` process (`Train.kt`) loses track of its position — permanently
-	 * stalling (confirmed via `PathReservationRegistry` merge tracing during root
-	 * cause analysis; the malformed splice is silently "allowed" as a false-positive
-	 * "circular route" before a *third* occurrence trips the existing cycle guard).
+	 * Re-applying an already-owned hop is not a harmless no-op: it corrupts
+	 * `PathReservationRegistry`'s merge logic (the incoming path's `start` no longer
+	 * overlaps the already-advanced registered `target`), splicing a stale segment back
+	 * into the train's registered path and permanently stalling its position tracking.
 	 *
-	 * Skipping a triple already recorded in [appliedReservations] restores the
-	 * "at most one real application per reservation need" invariant that held
-	 * naturally under the pre-SP0.11 synchronous (decide-and-apply-in-one-step)
-	 * architecture, without touching the shared navigation/registry code that
-	 * other callers (e.g. `InOutWorker`) also depend on.
-	 *
-	 * @since Issue #733 (SP0.11 — Goal 10); duplicate-suppression guard added as a
-	 *   regression fix for the resulting train-freeze/deadlock
+	 * Skipping a triple already recorded in [appliedReservations] restores "at most one
+	 * real application per reservation need", without touching the shared
+	 * navigation/registry code that other callers (e.g. `InOutWorker`) also depend on.
 	 */
 	private fun applyReservePath(decision: DispatchDecision.ReservePath) {
 		val reservationKey = "${decision.trainId}|${decision.fromSemaphoreName}|${decision.toSeparatorName}"
@@ -726,7 +670,7 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * SP2c.17 (#840): Applies [decision] via [NetworkActuatorPort.releaseRoute] and publishes
+	 * Applies [decision] via [NetworkActuatorPort.releaseRoute] and publishes
 	 * an [AppliedOutcome.Released] when a [correlation] is available.
 	 *
 	 * Inlined from [cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator] so the outcome can
@@ -759,28 +703,25 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * SP2c.17 (#840): Applies [decision] via [NetworkActuatorPort.requestRoute] and publishes
+	 * Applies [decision] via [NetworkActuatorPort.requestRoute] and publishes
 	 * an [AppliedOutcome] subtype matching the [RouteRequestResult] when a [correlation] is
 	 * available.
 	 *
 	 * Inlined from [cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator] so the outcome can
 	 * be captured without modifying `:core`. Logging is identical to the shared helper.
 	 *
-	 * ## Duplicate-suppression guard (SP2c.5 / #865)
+	 * ## Duplicate-suppression guard
 	 *
 	 * Symmetric to [applyReservePath]: an exact `trainName|fromEndpointName|toEndpointName` triple
 	 * already successfully applied is skipped on re-entry. The guard is **dormant today** because
 	 * `ActionValidator.validateRequestRouteConflict` rejects any second `RequestRoute` for a train
 	 * that already holds a reservation before it reaches this applier — so a duplicate never gets
-	 * this far. It becomes **load-bearing once #829 (SP2c.6) lands the O5 fix** that lets the
-	 * validator accept a contiguous forward extension (`from == existing.target`): at that point a
-	 * train may legitimately re-emit the *same* `RequestRoute` while its first application is still
-	 * in flight, and re-applying it would corrupt the `PathReservationRegistry` merge exactly as
-	 * `applyReservePath`'s guard prevents for `ReservePath` (the #733 train-freeze). Recording the
-	 * triple only on `Reserved` keeps the guard aligned with actual successful application.
-	 *
-	 * @since SP2c.17 (#840); duplicate-suppression guard added in SP2c.5 (#865) as a hard anchor
-	 *   for the #829 (SP2c.6) O5 validator relaxation.
+	 * this far. It becomes **load-bearing once a future validator fix** lets the validator accept
+	 * a contiguous forward extension (`from == existing.target`): at that point a train may
+	 * legitimately re-emit the *same* `RequestRoute` while its first application is still in
+	 * flight, and re-applying it would corrupt the `PathReservationRegistry` merge exactly as
+	 * `applyReservePath`'s guard prevents for `ReservePath`. Recording the triple only on
+	 * `Reserved` keeps the guard aligned with actual successful application.
 	 */
 	private fun applyRequestRoute(
 		decision: DispatchDecision.RequestRoute,
@@ -882,8 +823,6 @@ class DispatchDecisionApplier(
 	 * refused. Symmetric with the `Blocked`/`Conflicted`/`NoRoute` branches: leaving this one
 	 * silent would tell the model less about the worst error class it can produce than about
 	 * routine contention.
-	 *
-	 * @since Issue #893 (phase alpha, task A-R1)
 	 */
 	private fun handleRequestRouteOriginNotContiguous(
 		decision: DispatchDecision.RequestRoute,
@@ -909,11 +848,9 @@ class DispatchDecisionApplier(
 
 	/**
 	 * Handles the [RouteRequestResult.Reserved] branch of [applyRequestRoute] — extracted to
-	 * keep that method within the detekt LongMethod budget.
-	 *
-	 * @since SP2c.17 (#840); [onBlockTransition] call added in SP2c.6 (#829) to restore
-	 *   block-transition counting for the [DispatchTickLoop]-emitted `RequestRoute` path,
-	 *   mirroring [applyReservePath]
+	 * keep that method within the detekt LongMethod budget. [onBlockTransition] is called here
+	 * to restore block-transition counting for the [DispatchTickLoop]-emitted `RequestRoute`
+	 * path, mirroring [applyReservePath].
 	 */
 	private fun handleRequestRouteReserved(
 		decision: DispatchDecision.RequestRoute,
@@ -947,8 +884,6 @@ class DispatchDecisionApplier(
 	 * simulation seconds.  If no [trainLifecyclePort] was supplied at construction time, this
 	 * logs a warning and drops the decision (backward-compatible no-op for callers that do not
 	 * need train-lifecycle commands).
-	 *
-	 * @since Issue #556 (SP2b.1 — Goal 10)
 	 */
 	private fun applyHoldTrain(decision: DispatchDecision.HoldTrain) {
 		val port = trainLifecyclePort
@@ -976,7 +911,7 @@ class DispatchDecisionApplier(
 }
 
 /**
- * SP2c.17 (#840): Returns the tool name for this decision type, used in
+ * Returns the tool name for this decision type, used in
  * [AppliedOutcome.DroppedInvalid.commandType] to identify which tool was attempted.
  *
  * Top-level `internal` so exhaustive-branch coverage can be asserted directly by tests
@@ -986,10 +921,10 @@ class DispatchDecisionApplier(
 internal fun DispatchDecision.commandTypeName(): String =
 	when (this) {
 		is DispatchDecision.RequestRoute -> "request_route"
-		// The LLM-facing tool name is `cancel_route` (SP2c.6, Issue #829 — see CancelRouteTool).
-		// This projection feeds AppliedOutcome.DroppedInvalid.commandType, which both renderers
-		// emit verbatim to the model, so it must speak the current tool name — not the retired
-		// `release_route` (final-review F1 follow-up, Issue #893).
+		// The LLM-facing tool name is `cancel_route` (see CancelRouteTool). This projection
+		// feeds AppliedOutcome.DroppedInvalid.commandType, which both renderers emit
+		// verbatim to the model, so it must speak the current tool name — not the retired
+		// `release_route`.
 		is DispatchDecision.ReleaseRoute -> "cancel_route"
 		is DispatchDecision.ApproveTrain -> "approve_train"
 		is DispatchDecision.ReservePath -> "reserve_path"
@@ -1000,8 +935,8 @@ internal fun DispatchDecision.commandTypeName(): String =
 	}
 
 /**
- * SP2c.17 (#840): Returns the train identifier carried by this decision, or an empty
- * string when no train identifier is applicable (e.g. [DispatchDecision.NoAction]).
+ * Returns the train identifier carried by this decision, or an empty string when no train
+ * identifier is applicable (e.g. [DispatchDecision.NoAction]).
  *
  * Top-level `internal` for the same reason as [commandTypeName] — pure projection, no
  * applier state, exhaustively testable.
