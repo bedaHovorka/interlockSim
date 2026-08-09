@@ -233,11 +233,6 @@ class DefaultNetworkActuatorPort(
 		}
 	}
 
-	override fun setSignalAspect(
-		semaphoreName: String,
-		signal: Signal
-	): Boolean = setSignalAspect(semaphoreName, signal, trainName = null)
-
 	/**
 	 * Attributed overload of [setSignalAspect]: identical write, but the caller supplies the
 	 * [trainName] the write is made on behalf of. A successful write to a proceed aspect is

@@ -595,6 +595,18 @@ class DispatchDecisionApplierTest {
 		}
 
 		@Test
+		@DisplayName("SetSignalAspect forwards a non-null trainName to the actuator (G5, #898)")
+		fun setSignalAspect_forwardsTrainName() {
+			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE, trainName = "T1")))
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE, "T1") }
+		}
+
+		@Test
 		@DisplayName("SetSignalAspect false result (e.g. constant semaphore) does not throw")
 		fun setSignalAspect_falseResult_doesNotThrow() {
 			every { networkActuator.setSignalAspect(any(), any(), any()) } returns false
