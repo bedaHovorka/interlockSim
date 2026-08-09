@@ -197,6 +197,60 @@ class AgentLoopDriver(
 	}
 
 	/**
+	 * Steps 0 (WAIT) and 1 (SENSE) of [runCycle], collapsed into one seam so the
+	 * polling-vs-signal-based pacing branch lives in exactly one place instead of being
+	 * re-decided at three separate points inside [runCycle] (the WAIT block, the
+	 * [SimulationSnapshot.EMPTY] guard, and the stale-tick guard all used to test
+	 * `snapshotSignal == null`/`!= null` independently).
+	 *
+	 * - Signal-based pacing ([snapshotSignal] non-null): blocks on [SnapshotSignal.await];
+	 *   a `false` result (timeout) short-circuits with `null`. A `true` result already
+	 *   guarantees the resulting snapshot is fresh and unprocessed, so neither the
+	 *   [SimulationSnapshot.EMPTY] guard nor the stale-tick guard applies — see [runCycle]'s
+	 *   KDoc for why re-deriving staleness here would be actively wrong.
+	 * - Polling pacing ([snapshotSignal] `null`): no wait; the freshly read snapshot is
+	 *   checked against [SimulationSnapshot.EMPTY] and against [prevSimTime] for staleness.
+	 *
+	 * In both modes, a short-circuit still calls [SimulationController.awaitIfPaused] so
+	 * pause/step requests are honoured even on a no-op cycle.
+	 *
+	 * @return the fresh [SimulationSnapshot] to process this cycle, or `null` if this call
+	 *   should short-circuit (see [runCycle]'s return-value contract).
+	 */
+	private suspend fun awaitFreshSnapshot(): SimulationSnapshot? {
+		if (snapshotSignal != null) {
+			if (!snapshotSignal.await()) {
+				controller.awaitIfPaused()
+				return null
+			}
+			val snapshot = perceptionPort.snapshot()
+			logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
+			return snapshot
+		}
+
+		val snapshot = perceptionPort.snapshot()
+		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
+		if (snapshot === SimulationSnapshot.EMPTY) {
+			controller.awaitIfPaused()
+			pauseUntilNextSnapshot()
+			return null
+		}
+		if (hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
+			// Polling-mode-only stale-tick guard. Not applicable in signal-based pacing:
+			// SnapshotSignal.await already guarantees this snapshot was published for THIS
+			// tick and has not been processed before, so re-deriving staleness from
+			// simTime here would be redundant at best and actively wrong: it is exactly
+			// this guard firing on a tick it should not have skipped that produced the
+			// ~4% `trainsExited = 0` admission-stall residue that this parameter was
+			// introduced to eliminate.
+			controller.awaitIfPaused()
+			pauseUntilNextSnapshot()
+			return null
+		}
+		return snapshot
+	}
+
+	/**
 	 * Executes one complete sense→decide→act→pace cycle.
 	 *
 	 * This is a `suspend` function so that [SimulationController.awaitIfPaused] (which
@@ -239,40 +293,9 @@ class AgentLoopDriver(
 	 *   thread proceed before the corresponding decision is actually posted.
 	 */
 	suspend fun runCycle(): Boolean {
-		// 0. WAIT (signal-based pacing only) — block until the sim thread publishes a
-		// fresh snapshot for this tick. Replaces the Thread.sleep(1) poll and the
-		// simTime-equality guard below with an explicit wake-up.
-		// SnapshotSignal.await's bounded timeout is a shutdown safety net (see its KDoc):
-		// if it returns false, no signal arrived — most commonly because the simulation
-		// has just stopped calling the hook that signals — so this cycle does nothing and
-		// lets the caller's `while (isSimActive())` loop notice and exit instead of
-		// blocking here forever. No decision opportunity is lost: any signal that does
-		// eventually arrive is still picked up by the next await() call.
-		if (snapshotSignal != null && !snapshotSignal.await()) {
-			controller.awaitIfPaused()
-			return false
-		}
-
-		// 1. SENSE — read a consistent frozen snapshot off the perception port.
-		val snapshot = perceptionPort.snapshot()
-		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
-		if (snapshotSignal == null && snapshot === SimulationSnapshot.EMPTY) {
-			controller.awaitIfPaused()
-			pauseUntilNextSnapshot()
-			return false
-		}
-		if (snapshotSignal == null && hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
-			// Polling-mode-only stale-tick guard. Not applicable in signal-based pacing:
-			// SnapshotSignal.await already guarantees this snapshot was published for THIS
-			// tick and has not been processed before, so re-deriving staleness from
-			// simTime here would be redundant at best and actively wrong: it is exactly
-			// this guard firing on a tick it should not have skipped that produced the
-			// ~4% `trainsExited = 0` admission-stall residue that this parameter was
-			// introduced to eliminate.
-			controller.awaitIfPaused()
-			pauseUntilNextSnapshot()
-			return false
-		}
+		// 0. WAIT + 1. SENSE — see awaitFreshSnapshot's KDoc for the polling-vs-signal-based
+		// pacing contract (this is the single seam where that branch is decided).
+		val snapshot = awaitFreshSnapshot() ?: return false
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
 		// unapprovedTrains and block-input lists are populated via a single
