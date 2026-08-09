@@ -13,7 +13,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * In-memory store for decision attribution data, satisfying Principle P7 (SP2c.9, Issue #832).
+ * In-memory store for decision attribution data, satisfying Principle P7.
  *
  * ## Purpose
  *
@@ -27,9 +27,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * At run end, [logFinalSummary] emits a structured INFO log with per-author action counts,
  * so B2's "why this route?" can also answer "who decided this?" without inspecting raw logs.
  * When [c7Clean] is `false`, the summary line is prefixed `!! C7_VIOLATION !!` and a one-time
- * WARN with the literal token `C7_VIOLATION` was already emitted at the first violation (SP2c.20).
+ * WARN with the literal token `C7_VIOLATION` was already emitted at the first violation.
  *
- * ## C7 gate (SP2c.20, Issue #843)
+ * ## C7 gate
  *
  * C7 requires that every applied dispatching action originate from the LLM (or from an
  * intentional rule-based run — [ActionAuthor.RULE_BASED]).  A C7 violation occurs when
@@ -57,17 +57,14 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * store.logFinalSummary()
  * ```
  *
- * **Production wiring status (SP2c.9):** the store is currently exercised only via tests —
+ * **Production wiring status:** the store is currently exercised only via tests —
  * [DispatchTickLoop] is constructed only in test code (`PausedClockSpikeHarness`,
  * `RuleBasedDispatcherDeterminismRunner`, `HeadlessPacingFeasibilityTest`,
  * `DispatchTickLoopTest`); production `ExampleRegistry.wireDispatcherAgent` still uses the
  * older `agentDriverAction` loop and does not construct `DispatchTickLoop`. Production
- * wiring of this store therefore awaits `DispatchTickLoop` production promotion (a separate
- * SP2c effort). The store API and log format are stable and tested so the wiring is a
- * one-line addition once the loop is promoted.
- *
- * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance);
- *        [c7Clean] / C7 gate added Issue #843 (SP2c.20)
+ * wiring of this store therefore awaits `DispatchTickLoop` production promotion. The store
+ * API and log format are stable and tested so the wiring is a one-line addition once the loop
+ * is promoted.
  */
 class DispatcherPreferenceStore {
 	companion object {
@@ -106,13 +103,10 @@ class DispatcherPreferenceStore {
 	 * forced-admission safety net stepped in, which should not happen in an autonomous LLM
 	 * run.  When `false`, [logFinalSummary] prefixes the summary line with `!! C7_VIOLATION !!`
 	 * and a one-time WARN with the literal token `C7_VIOLATION` was already emitted at the
-	 * first violation (SP2c.20, Issue #843).
+	 * first violation.
 	 *
 	 * O(1) read — latched by [observe] on the first violating tick, it does not rescan
-	 * records on every access (unlike the previous computed property, which was O(n) per
-	 * call and O(n²) per run).
-	 *
-	 * @since Issue #843 (SP2c.20 — Goal 10 action attribution + C7 violation gate)
+	 * records on every access.
 	 */
 	var c7Clean: Boolean = true
 		private set
@@ -122,7 +116,7 @@ class DispatcherPreferenceStore {
 	 *
 	 * On the first tick that introduces a [ActionAuthor.RULE_FALLBACK] or
 	 * [ActionAuthor.SAFETY_NET] action, emits a one-time WARN with the literal token
-	 * `C7_VIOLATION` so the violation is unmissable in the log (SP2c.20, Issue #843).
+	 * `C7_VIOLATION` so the violation is unmissable in the log.
 	 *
 	 * Intended to be called from [DispatchTickLoop] after each completed tick (same position
 	 * as [TerminalFallbackGuard.observe]).
@@ -141,9 +135,9 @@ class DispatcherPreferenceStore {
 				)
 			)
 		}
-		// C7 gate (SP2c.20): latch c7Clean false on the first tick that introduces a
-		// RULE_FALLBACK or SAFETY_NET action, and emit a one-time WARN.  Flood prevention:
-		// the WARN fires at most once per run.
+		// C7 gate: latch c7Clean false on the first tick that introduces a RULE_FALLBACK or
+		// SAFETY_NET action, and emit a one-time WARN.  Flood prevention: the WARN fires at
+		// most once per run.
 		val violatingActions =
 			record.actions.filter {
 				it.author == ActionAuthor.RULE_FALLBACK || it.author == ActionAuthor.SAFETY_NET
@@ -209,9 +203,6 @@ class DispatcherPreferenceStore {
 	 *
 	 * Safe to call with zero recorded actions — the counts will all be zero.
 	 * Read-only: does not mutate any state, so it is safe to call more than once.
-	 *
-	 * @since Issue #832 (SP2c.9 — Goal 10 decision attribution + provenance);
-	 *        `!! C7_VIOLATION !!` prefix added Issue #843 (SP2c.20)
 	 */
 	fun logFinalSummary() {
 		val counts = getAuthorCounts()
