@@ -222,8 +222,19 @@ class ExampleRegistry {
 	 * `seed` stays `null`, and that is not an oversight: Koog 1.1.1 has no path from
 	 * [OllamaExecutorConfig] to Ollama's `seed` option, so pinning one is impossible here and
 	 * recording a value would claim a reproducibility guarantee the run does not have.
+	 *
+	 * `inferenceTimeoutSeconds` records what [runConfig] actually gave this run (Issue #834,
+	 * SP2c.11) — the same value threaded into [KoogAgentPlanAdapter]'s `inferenceTimeout` at both
+	 * call sites below, so the JSON matches what the run was really bounded by. `promptVariant`
+	 * stays at [RunParameters.DEFAULT_PROMPT_VARIANT]: Task 11 (#834) has not yet wired a
+	 * selectable prompt variant into this path, so every LLM run through here still uses the one
+	 * production prompt, and the default honestly says "a prompt was used, no variant tracked".
+	 *
+	 * `internal` rather than `private` so tests can call it directly with a plain (non-Koin)
+	 * [OllamaExecutorConfig]/[DispatcherRunConfig] pair — the same testability reasoning as
+	 * `ruleBasedRunParameters` in `DispatcherAgentModule`.
 	 */
-	private fun llmRunParameters(
+	internal fun llmRunParameters(
 		config: OllamaExecutorConfig,
 		runConfig: DispatcherRunConfig
 	): RunParameters =
@@ -233,7 +244,8 @@ class ExampleRegistry {
 			temperature = config.temperature.toDouble(),
 			maxActionsPerTick = runConfig.maxActionsPerTick,
 			model = config.modelName,
-			seed = null
+			seed = null,
+			inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds
 		)
 
 	/**

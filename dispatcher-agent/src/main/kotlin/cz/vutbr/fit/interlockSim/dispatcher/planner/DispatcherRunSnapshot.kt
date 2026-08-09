@@ -37,10 +37,15 @@ import kotlinx.serialization.Serializable
  * be ranked alongside a genuinely idle one, which is the whole point of keeping absent and zero
  * apart. `DefaultRunSnapshotStoreTest` pins this against a literal version 1 document.
  *
- * The guarantee is specific to adding *defaulted* fields. A future field without a default, or
- * one added to [RunParameters] (whose properties have no defaults), would make version 1 files
- * fail to decode — `readAll` would then skip them with a WARN rather than crash, but they would
- * be silently lost from any aggregate. Give new fields defaults.
+ * The guarantee is specific to adding *defaulted* fields. A future field without a default would
+ * make version 1 files fail to decode — `readAll` would then skip them with a WARN rather than
+ * crash, but they would be silently lost from any aggregate. Give new fields defaults.
+ *
+ * This is not hypothetical for [RunParameters]: its own properties were entirely non-defaulted
+ * until Issue #834 (SP2c.11) added [RunParameters.inferenceTimeoutSeconds] and
+ * [RunParameters.promptVariant] in this same version-2 wave. Both were given defaults precisely
+ * to avoid the hazard above — see [RunParameters]'s own "No defaults on the original six fields"
+ * KDoc for the full reasoning and why [schemaVersion] did not need a further bump for them.
  *
  * ## Invariant
  *

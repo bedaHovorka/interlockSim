@@ -147,6 +147,12 @@ class DefaultRunSnapshotStoreTest {
 	 *
 	 * The v1 run's railway figures come back **absent**, not zero: nothing measured them, and a
 	 * zero would let an old run be ranked alongside a genuinely-idle new one.
+	 *
+	 * The `params` object in [SCHEMA_V1_JSON] also predates [RunParameters.inferenceTimeoutSeconds]
+	 * and [RunParameters.promptVariant] (added in this same #834/SP2c.11 wave) — this is the
+	 * pinning test for the hazard documented on [RunParameters] itself: because both fields carry
+	 * defaults, this literal pre-#834 document still decodes instead of being silently dropped by
+	 * [DefaultRunSnapshotStore.readAll]'s WARN-and-skip catch-all.
 	 */
 	@Test
 	fun `readAll still reads a schema-version-1 file and reports its railway figures as absent`(
@@ -168,6 +174,10 @@ class DefaultRunSnapshotStoreTest {
 		assertThat(legacy.railwayOutcome).isEqualTo(RailwayOutcome.UNMEASURED)
 		assertThat(legacy.railwayOutcome.trainsEntered).isNull()
 		assertThat(legacy.railwayOutcome.blockTransitions).isNull()
+		// #834/SP2c.11: params.inferenceTimeoutSeconds/promptVariant are absent from the literal
+		// JSON above and must decode to their defaults, not fail the whole file.
+		assertThat(legacy.params.inferenceTimeoutSeconds).isEqualTo(KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS)
+		assertThat(legacy.params.promptVariant).isEqualTo(RunParameters.DEFAULT_PROMPT_VARIANT)
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────

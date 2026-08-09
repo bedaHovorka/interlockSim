@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.sweep
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
+import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 
 /**
@@ -94,7 +95,21 @@ data class SweepCell(
 	val arm: DispatcherArm
 		get() = if (example.endsWith("AI")) DispatcherArm.LLM_TOOL_CALLING else DispatcherArm.RULE_BASED
 
-	/** [RunParameters] as they will be recorded, used for the abort snapshot of a killed run. */
+	/**
+	 * [RunParameters] as they will be recorded, used for the abort snapshot of a killed run.
+	 *
+	 * Must agree field-for-field with whatever the live recording path (the DI-built rule-based
+	 * `RunParameters`, or the LLM arm's `llmRunParameters`) produces for an equivalent
+	 * [DispatcherRunConfig] — otherwise an aborted run of this cell groups into a different
+	 * report cell than its completed siblings, corrupting [RunReportAggregator]'s per-cell stats.
+	 * `inferenceTimeoutSeconds` mirrors [systemProperties]'s `null` handling: `null` here means
+	 * "leave [KoogAgentPlanAdapter]'s own default in place", so the *recorded* value must be that
+	 * same default, not `null` (this field is non-nullable on [RunParameters]). `promptVariant`
+	 * mirrors [model]'s `null → ""` handling: `""` for a rule-based cell (`model == null`, no
+	 * prompt at all), [RunParameters.DEFAULT_PROMPT_VARIANT] for an LLM cell — this grid has no
+	 * variant axis yet (Task 11, #834), so every LLM cell gets the same untracked-variant default
+	 * the live LLM path would also fall back to.
+	 */
 	fun runParameters(): RunParameters =
 		RunParameters(
 			tickPeriodMs = tickPeriodMs,
@@ -102,7 +117,9 @@ data class SweepCell(
 			temperature = temperature ?: 0.0,
 			maxActionsPerTick = maxActionsPerTick,
 			model = model ?: "",
-			seed = null
+			seed = null,
+			inferenceTimeoutSeconds = inferenceTimeoutSeconds ?: KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
+			promptVariant = if (model == null) "" else RunParameters.DEFAULT_PROMPT_VARIANT
 		)
 
 	private fun sanitise(raw: String): String = raw.replace(Regex("[^A-Za-z0-9.-]"), "-")

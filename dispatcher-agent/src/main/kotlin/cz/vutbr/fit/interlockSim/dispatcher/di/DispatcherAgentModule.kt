@@ -64,6 +64,33 @@ private fun Scope.requireContextSource(): DefaultSimulationContext =
 		?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 
 /**
+ * Builds the [RunParameters] recorded for a rule-based-arm run from [runConfig].
+ *
+ * Extracted to a standalone, non-Koin function so tests can exercise the exact mapping the
+ * `scoped<DispatcherRunRecorder>` binding below uses — including a non-default
+ * [DispatcherRunConfig.inferenceTimeoutSeconds] read from an injected property lookup — without
+ * needing a live Koin scope. Constructing a [DispatcherRunConfig] never needs Koin at all.
+ *
+ * `temperature`/`model`/`promptVariant` stay at their "no prompt" values (`0.0`/`""`/`""`)
+ * because a rule-based run has no prompt at all — see [RunParameters.model]'s and
+ * [RunParameters.promptVariant]'s own KDoc for why the report's "rule-based" label depends on
+ * exactly these sentinels rather than the LLM-arm defaults.
+ *
+ * @since Issue #834 (SP2c.11 — inferenceTimeoutSeconds/promptVariant threading)
+ */
+internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParameters =
+	RunParameters(
+		tickPeriodMs = runConfig.tickPeriodMs,
+		historyN = runConfig.historyN,
+		temperature = 0.0,
+		maxActionsPerTick = runConfig.maxActionsPerTick,
+		model = "",
+		seed = null,
+		inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds,
+		promptVariant = ""
+	)
+
+/**
  * Koin DI module for `:dispatcher-agent`'s components: the rule-based/LLM dispatcher, the Ollama
  * executor and tool registry, and the per-simulation sensor/actuator ports and agent factory.
  *
@@ -343,19 +370,8 @@ val dispatcherAgentModule: Module =
 					// runs have to be resumable by the same file-name scan.
 					runId = get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
 					arm = DispatcherArm.RULE_BASED,
-					// Report what this run was actually given. `tickPeriodMs` genuinely applies to
-					// the rule-based arm too — it also runs through AgentLoopDriver. `temperature`/
-					// `model` stay empty because a rule-based run has neither, which is what the
-					// report's "rule-based" label means.
-					params =
-						RunParameters(
-							tickPeriodMs = get<DispatcherRunConfig>().tickPeriodMs,
-							historyN = get<DispatcherRunConfig>().historyN,
-							temperature = 0.0,
-							maxActionsPerTick = get<DispatcherRunConfig>().maxActionsPerTick,
-							model = "",
-							seed = null
-						)
+					// Report what this run was actually given — see ruleBasedRunParameters's KDoc.
+					params = ruleBasedRunParameters(get<DispatcherRunConfig>())
 				)
 			}
 
