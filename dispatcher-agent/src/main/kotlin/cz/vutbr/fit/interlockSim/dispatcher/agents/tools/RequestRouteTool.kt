@@ -23,12 +23,11 @@ import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Actuator tool exposing end-to-end route reservation to Koog agents (SP1.6, Issue #551;
- * rewired to [SinkHolder] in SP2c.6, Issue #829).
+ * Actuator tool exposing end-to-end route reservation to Koog agents.
  *
  * Request a route reservation from one endpoint to another for a named train.
  *
- * ## Threading contract (SP2c.6, Issue #829)
+ * ## Threading contract
  *
  * `execute()` runs on the agent driver thread. It emits [DispatchAction.RequestRoute] to the
  * active [sinkHolder] (fire-and-forget). The [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop]
@@ -36,7 +35,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * and posts the validated [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to the
  * [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] for the kDisco thread.
  *
- * ## Endpoint-name validation (Goal 10 agent-architect review finding)
+ * ## Endpoint-name validation
  *
  * A live run showed the LLM occasionally hallucinating a plausible-looking endpoint name
  * (e.g. `"kA"`/`"kB"`) instead of copying one from the topology in its system prompt. [execute]
@@ -44,7 +43,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * returns a [ToolResult.Error] naming the valid options when either is unrecognized, so the model
  * gets in-turn feedback and can retry with a real name instead of silently losing the decision.
  *
- * ## Train-name validation (Issue #847 round 2)
+ * ## Train-name validation
  *
  * Endpoint names were validated from the start; `trainName` was not, and that asymmetry proved
  * expensive. A live run had the model copy the literal placeholder train name out of a worked
@@ -88,16 +87,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * this tool's own description recommends, and they say nothing about where the train finishes.
  *
  * @param blockIds Static Block IDs of this network, used only to classify a rejected endpoint as
- *   [RejectionCode.ENDPOINT_IS_BLOCK_ID] rather than [RejectionCode.UNKNOWN_ENDPOINT]
- *   (Issue #847 round 4). Static topology, so it is correct from the first cycle — unlike the live
- *   snapshot, which carries no blocks until the simulation has captured one. Empty disables only
- *   the finer classification, never the rejection itself.
+ *   [RejectionCode.ENDPOINT_IS_BLOCK_ID] rather than [RejectionCode.UNKNOWN_ENDPOINT]. Static
+ *   topology, so it is correct from the first cycle — unlike the live snapshot, which carries no
+ *   blocks until the simulation has captured one. Empty disables only the finer classification,
+ *   never the rejection itself.
  * @param inOutNames Static InOut names of this network (`StationTopology.inOuts`), used to tell an
  *   end-to-end target apart from a section hop in the direction check, and to enforce the
  *   queued-train origin rule below. Empty disables both checks entirely — without it, every Signal
  *   target would look like a wrong destination and every origin like a Signal.
  *
- * ## Origin validation for queued trains (Issue #893)
+ * ## Origin validation for queued trains
  *
  * The other half of the same live defect: once the direction was corrected, the model asked for a
  * correctly *directed* route in the wrong *place* — an origin the train could not reach. For a
@@ -107,8 +106,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * `DefaultPathReservationService.reservePath`; its rejection returns through the apply-failure
  * channel rather than in-turn.
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to [SinkHolder] in Issue #829 (SP2c.6);
- *   train-name pre-check added in Issue #847 round 2
  */
 class RequestRouteTool(
 	private val sinkHolder: SinkHolder,
@@ -306,20 +303,20 @@ class RequestRouteTool(
 	}
 
 	/**
-	 * Rejects a route for a **queued** train that does not start at an entry point (Issue #893).
+	 * Rejects a route for a **queued** train that does not start at an entry point.
 	 *
 	 * A train still waiting for admission is physically nowhere in the network, so the only
 	 * origin it can possibly use is the InOut it is queued at. A route reserved from a Signal in
 	 * the middle of the station locks track the train cannot reach: it never occupies those
 	 * blocks, so it never releases them, and every other train is held out until the orphan
-	 * sweeper reclaims the reservation — the "correctly directed, wrongly placed" half of the
-	 * Issue #893 stall.
+	 * sweeper reclaims the reservation — the "correctly directed, wrongly placed" half of that
+	 * stall.
 	 *
 	 * ## Limitation: "an InOut", not "*the* entry InOut"
 	 *
 	 * [cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation] carries only `trainId` and
-	 * `destinationInOutName` — the queuing InOut is not exposed, and this task's constraint is
-	 * that no new `:core` query surface may be added for it. The enforceable rule is therefore
+	 * `destinationInOutName` — the queuing InOut is not exposed, and no new `:core` query surface
+	 * may be added for it. The enforceable rule is therefore
 	 * the weaker "a queued train's origin must be an InOut, not a Signal". Combined with the
 	 * existing "cannot depart FROM the destination" rule this pins the origin exactly on a
 	 * two-InOut network such as `vyhybna.xml`, and is a strict improvement on larger ones. The
@@ -386,7 +383,7 @@ class RequestRouteTool(
 	 * those already running. Returns `null` when neither port is wired, which disables the
 	 * [trainName] pre-check entirely rather than validating against a misleadingly partial set —
 	 * with only one port present the union would be incomplete, and rejecting a real train is worse
-	 * than the pre-#847 behavior of accepting anything.
+	 * than accepting anything.
 	 */
 	private fun knownTrainIds(): Set<String>? {
 		if (perceptionPort == null || sensorPort == null) return null
@@ -397,13 +394,13 @@ class RequestRouteTool(
 
 	/**
 	 * Classifies a rejected endpoint name: a real Block ID passed where an endpoint was expected, or
-	 * a name that exists nowhere in the network (Issue #847 round 4).
+	 * a name that exists nowhere in the network.
 	 *
 	 * The two say different things and must not be counted together. `vyhybna.xml` names its blocks
-	 * `k1`/`kA`/`kB` and its InOuts `A`/`B`, and one round-2 run produced 48 rejected calls naming
+	 * `k1`/`kA`/`kB` and its InOuts `A`/`B`, and one live run produced 48 rejected calls naming
 	 * block `k1` — a model that has read the topology and picked the wrong list from it. A wholly
 	 * invented name is a different failure, addressed by different prompt work. Folding both into
-	 * `UNKNOWN_ENDPOINT` would hide the one this PR's prompt changes actually target.
+	 * `UNKNOWN_ENDPOINT` would hide the distinction this tool exists to draw.
 	 *
 	 * Falls back to [RejectionCode.UNKNOWN_ENDPOINT] when no perception port is wired: without the
 	 * block list the distinction cannot be drawn, and the weaker classification is honest.
