@@ -54,11 +54,17 @@ import java.util.concurrent.TimeUnit
 class DispatcherRunPersistenceTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
 
-	private fun createAiContext(): DefaultSimulationContext {
+	private fun createAiContext(): DefaultSimulationContext =
+		createExample("createShuntingLoopAIExample", "shuntingLoopAI")
+
+	private fun createExample(
+		factoryMethod: String,
+		exampleName: String
+	): DefaultSimulationContext {
 		val registry = get<ExampleRegistry>()
 		val createMethod =
 			ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopAIExample",
+				factoryMethod,
 				SimulationContextFactory::class.java,
 				Array<String>::class.java
 			)
@@ -66,7 +72,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		return createMethod.invoke(
 			registry,
 			get<SimulationContextFactory>(),
-			arrayOf("example", "shuntingLoopAI", "60")
+			arrayOf("example", exampleName, "60")
 		) as DefaultSimulationContext
 	}
 
@@ -158,5 +164,64 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 
 		assertThat(written, "written path").isNull()
 		assertThat(DefaultRunSnapshotStore(root).readAll(root), "snapshots on disk").hasSize(0)
+	}
+
+	// ── Railway outcomes (Issue #834, SP2c.11) ───────────────────────────────
+
+	/**
+	 * The point of SP2c.11: the persisted run must say whether the railway moved, not only how
+	 * tidily the dispatcher decided. Every figure has to survive the write → `readAll` round trip,
+	 * because that file is the only thing #834's sweep ranks parameter cells on.
+	 *
+	 * No simulation is run here, so the counters are legitimately `0` — what is asserted is that
+	 * they are **present** (`0`, a measurement) rather than absent, which is what distinguishes a
+	 * wired source from an unwired one.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("a persisted run carries the railway figures read from its loop and metrics service")
+	fun persistedRunCarriesRailwayOutcomes(
+		@TempDir root: Path
+	) {
+		val context = createAiContext()
+		context.scope.declare<RunSnapshotStore>(DefaultRunSnapshotStore(root))
+
+		DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION)
+
+		val outcome = DefaultRunSnapshotStore(root).readAll(root).first().railwayOutcome
+		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
+		assertThat(outcome.conflicts, "conflicts").isNotNull()
+		assertThat(outcome.trainsEntered, "trains entered").isNotNull()
+		assertThat(outcome.trainsExited, "trains exited").isNotNull()
+		assertThat(outcome.maxConcurrentTrains, "max concurrent trains").isNotNull()
+		assertThat(outcome.blockTransitions, "block transitions").isNotNull()
+		assertThat(outcome.failedReservations, "failed reservations").isNotNull()
+	}
+
+	/**
+	 * `multiTrainLoop` runs a `MultiTrainLoop`, which keeps none of `ShuntingLoop`'s counters. Its
+	 * loop-sourced figures must therefore come out **absent**, not `0`: a zeroed column would say
+	 * "this configuration moved no train", which is the misreading
+	 * `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` names under "Structurally empty columns".
+	 *
+	 * The metrics-sourced figures stay present, because `MetricsCollectionService` is bound for
+	 * every simulation context regardless of which process drives it.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("an example that is not a ShuntingLoop reports its loop figures as absent, not zero")
+	fun nonShuntingLoopExampleReportsLoopFiguresAsAbsent() {
+		val context = createExample("createMultiTrainLoopExample", "multiTrainLoop")
+
+		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
+
+		assertThat(outcome.trainsEntered, "trains entered").isNull()
+		assertThat(outcome.trainsExited, "trains exited").isNull()
+		assertThat(outcome.maxConcurrentTrains, "max concurrent trains").isNull()
+		assertThat(outcome.blockTransitions, "block transitions").isNull()
+		assertThat(outcome.failedReservations, "failed reservations").isNull()
+		// Metrics are context-scoped, so they remain measurable for any main process.
+		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
+		assertThat(outcome.conflicts, "conflicts").isNotNull()
 	}
 }

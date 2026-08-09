@@ -23,7 +23,24 @@ import kotlinx.serialization.Serializable
  * ## Schema versioning
  *
  * [schemaVersion] is incremented whenever fields are added or removed so that the SP2c.23
- * aggregator can detect and handle old JSON files without crashing.  Current version: **1**.
+ * aggregator can detect and handle old JSON files without crashing.  Current version: **2**
+ * (version 2 added [railwayOutcome]; Issue #834, SP2c.11).
+ *
+ * ### Compatibility with version 1 files — decided, not discovered
+ *
+ * **Version 1 run JSONs stay readable.** [railwayOutcome] carries a default
+ * ([RailwayOutcome.UNMEASURED]), so kotlinx.serialization supplies it for any document that
+ * lacks the key, and [RunSnapshotStore.readAll] only skips files whose version is *greater*
+ * than [CURRENT_SCHEMA_VERSION]. A version 1 run therefore loads with every railway figure
+ * **absent**, which is the literal truth about it: nothing measured those figures when it ran.
+ * The alternative — decoding old runs with zeroed outcome fields — would let a pre-SP2c.11 run
+ * be ranked alongside a genuinely idle one, which is the whole point of keeping absent and zero
+ * apart. `DefaultRunSnapshotStoreTest` pins this against a literal version 1 document.
+ *
+ * The guarantee is specific to adding *defaulted* fields. A future field without a default, or
+ * one added to [RunParameters] (whose properties have no defaults), would make version 1 files
+ * fail to decode — `readAll` would then skip them with a WARN rather than crash, but they would
+ * be silently lost from any aggregate. Give new fields defaults.
  *
  * ## Invariant
  *
@@ -64,6 +81,11 @@ import kotlinx.serialization.Serializable
  * @property c7Clean Whether no [ActionAuthor.RULE_FALLBACK] or [ActionAuthor.SAFETY_NET] actions were observed.
  * @property completedNaturally Whether the run ended with [RunEndCause.NATURAL_COMPLETION].
  * @property endCause The cause that ended the run; `null` for in-progress snapshots from [DispatcherRunRecorder.snapshot].
+ * @property railwayOutcome What the railway achieved — journeys completed, trains admitted and
+ *   exited, movement events, conflicts and refused reservations. Every field inside is nullable
+ *   and `null` means *not measured*, never *measured as none*; see [RailwayOutcome]. Defaults to
+ *   [RailwayOutcome.UNMEASURED], which is both the honest value for a run nobody measured and
+ *   what keeps schema-version-1 files decodable (see "Schema versioning" above).
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -102,11 +124,17 @@ data class DispatcherRunSnapshot(
 	val terminalFallbackTickIndex: Long?,
 	val c7Clean: Boolean,
 	val completedNaturally: Boolean,
-	val endCause: RunEndCause?
+	val endCause: RunEndCause?,
+	val railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED
 ) {
 	companion object {
-		/** Current JSON schema version. Increment on breaking field changes. */
-		const val CURRENT_SCHEMA_VERSION: Int = 1
+		/**
+		 * Current JSON schema version. Increment on breaking field changes.
+		 *
+		 * - **1** — SP2c.22 (#845), the original run-identity schema.
+		 * - **2** — SP2c.11 (#834), added [railwayOutcome].
+		 */
+		const val CURRENT_SCHEMA_VERSION: Int = 2
 	}
 
 	init {

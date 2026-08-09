@@ -354,6 +354,82 @@ class DefaultDispatcherRunRecorderTest {
 		assertThat(frozen.latencyMaxMs).isEqualTo(100L)
 	}
 
+	// ── Railway outcomes (Issue #834, SP2c.11) ───────────────────────────────
+
+	@Test
+	fun `railway outcome figures are absent - not zero - when none were recorded`() {
+		val outcome = recorder().snapshot().railwayOutcome
+
+		// Every figure must be null. A `0` here would read as "the railway moved nothing",
+		// which is a measurement; the truth is that nothing measured it.
+		assertThat(outcome.journeysCompleted).isNull()
+		assertThat(outcome.trainsEntered).isNull()
+		assertThat(outcome.trainsExited).isNull()
+		assertThat(outcome.maxConcurrentTrains).isNull()
+		assertThat(outcome.blockTransitions).isNull()
+		assertThat(outcome.conflicts).isNull()
+		assertThat(outcome.failedReservations).isNull()
+	}
+
+	@Test
+	fun `recordRailwayOutcome figures appear in the snapshot`() {
+		val r = recorder()
+		r.recordRailwayOutcome(
+			RailwayOutcome(
+				journeysCompleted = 7L,
+				trainsEntered = 13L,
+				trainsExited = 11L,
+				maxConcurrentTrains = 2L,
+				blockTransitions = 173L,
+				conflicts = 4L,
+				failedReservations = 9L
+			)
+		)
+
+		val outcome = r.snapshot().railwayOutcome
+		assertThat(outcome.journeysCompleted).isEqualTo(7L)
+		assertThat(outcome.trainsEntered).isEqualTo(13L)
+		assertThat(outcome.trainsExited).isEqualTo(11L)
+		assertThat(outcome.maxConcurrentTrains).isEqualTo(2L)
+		assertThat(outcome.blockTransitions).isEqualTo(173L)
+		assertThat(outcome.conflicts).isEqualTo(4L)
+		assertThat(outcome.failedReservations).isEqualTo(9L)
+	}
+
+	/**
+	 * A measured zero and an unmeasured figure must not collapse into the same value: a run in
+	 * which the dispatcher admitted no train at all is a finding, and a run nobody measured is not.
+	 */
+	@Test
+	fun `a measured zero is reported as zero and stays distinguishable from absent`() {
+		val r = recorder()
+		r.recordRailwayOutcome(RailwayOutcome(trainsEntered = 0L))
+
+		val outcome = r.snapshot().railwayOutcome
+		assertThat(outcome.trainsEntered).isEqualTo(0L)
+		// Nothing was recorded for the remaining figures, so they stay absent.
+		assertThat(outcome.trainsExited).isNull()
+	}
+
+	@Test
+	fun `railway outcome recorded after finish does not affect the frozen snapshot`() {
+		val r = recorder()
+		r.recordRailwayOutcome(RailwayOutcome(trainsEntered = 1L))
+		val frozen = r.finish(RunEndCause.MANUAL_STOP)
+		r.recordRailwayOutcome(RailwayOutcome(trainsEntered = 99L))
+
+		assertThat(frozen.railwayOutcome.trainsEntered).isEqualTo(1L)
+	}
+
+	@Test
+	fun `logFinalSummary does not throw when the railway outcome is absent`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_NO_OP, simTime = 1.0))
+		r.finish(RunEndCause.MANUAL_STOP)
+		// Must not throw even though every railway figure is null.
+		r.logFinalSummary()
+	}
+
 	// ── Helpers ─────────────────────────────────────────────────────────────
 
 	private fun makeOutcome(

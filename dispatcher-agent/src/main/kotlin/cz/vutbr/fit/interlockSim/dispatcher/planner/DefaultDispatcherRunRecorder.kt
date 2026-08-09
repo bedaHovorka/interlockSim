@@ -52,6 +52,14 @@ import java.util.concurrent.atomic.AtomicReference
  * ticks carried a latency, e.g. an all-rule-based run) yields `0L` for all three fields,
  * preserving the pre-#834 behaviour for runs with nothing to measure.
  *
+ * ## Railway outcomes (Issue #834, SP2c.11)
+ *
+ * [recordRailwayOutcome] takes the run's [RailwayOutcome] whole from a caller that can see the
+ * simulation context — the recorder itself observes only the dispatcher. Until it is called (and
+ * for runs where nobody calls it at all), the snapshot reports [RailwayOutcome.UNMEASURED], whose
+ * every figure is `null`. That is deliberate: `null` means *not measured* and `0` means *measured
+ * as none*, and a sweep that cannot tell them apart cannot rank on either.
+ *
  * @param runId Opaque unique identifier (typically a UUID or `yyyyMMdd-HHmmss-<short-uuid>`).
  * @param arm Which dispatcher implementation arm is active.
  * @param params Fixed run parameters captured at run start.
@@ -116,6 +124,14 @@ class DefaultDispatcherRunRecorder(
 
 	private val unattributedApplies = AtomicLong(0L)
 
+	// ── Railway outcome (Issue #834, SP2c.11) ────────────────────────────────
+
+	// Not an accumulator: the recorder has no view of the railway, so the figures arrive whole
+	// from whoever holds the simulation context (DispatcherRunSummaries on the live path) and the
+	// last writer wins. Starts at RailwayOutcome.UNMEASURED — all-null — so a run nobody measured
+	// reports every figure as absent rather than as a zero that would read as a measurement.
+	private val railwayOutcome = AtomicReference(RailwayOutcome.UNMEASURED)
+
 	// ── Terminal state ───────────────────────────────────────────────────────
 
 	/** Frozen terminal snapshot; null while the run is still in progress. */
@@ -150,6 +166,10 @@ class DefaultDispatcherRunRecorder(
 		}
 	}
 
+	override fun recordRailwayOutcome(outcome: RailwayOutcome) {
+		railwayOutcome.set(outcome)
+	}
+
 	override fun snapshot(): DispatcherRunSnapshot {
 		// Return the frozen terminal snapshot when the run has ended.
 		frozenSnapshot.get()?.let { return it }
@@ -172,6 +192,7 @@ class DefaultDispatcherRunRecorder(
 
 	override fun logFinalSummary() {
 		val snap = snapshot()
+		val railway = snap.railwayOutcome
 		logger.info {
 			"[DispatcherRunRecorder] final summary runId=${snap.runId} arm=${snap.arm.name} " +
 				"totalTicks=${snap.totalTicks} " +
@@ -180,7 +201,16 @@ class DefaultDispatcherRunRecorder(
 				"invalidOutputRate=${formatRate(snap.invalidOutputRate)} " +
 				"c7Clean=${snap.c7Clean} " +
 				"terminalFallbackEngaged=${snap.terminalFallbackEngaged} " +
-				"endCause=${snap.endCause}"
+				"endCause=${snap.endCause} " +
+				// Issue #834 (SP2c.11): what the railway achieved, so a single run is readable
+				// without opening the JSON. `n/a` marks a figure nobody measured — never 0.
+				"journeysCompleted=${formatFigure(railway.journeysCompleted)} " +
+				"trainsEntered=${formatFigure(railway.trainsEntered)} " +
+				"trainsExited=${formatFigure(railway.trainsExited)} " +
+				"maxConcurrentTrains=${formatFigure(railway.maxConcurrentTrains)} " +
+				"blockTransitions=${formatFigure(railway.blockTransitions)} " +
+				"conflicts=${formatFigure(railway.conflicts)} " +
+				"failedReservations=${formatFigure(railway.failedReservations)}"
 		}
 	}
 
@@ -249,9 +279,18 @@ class DefaultDispatcherRunRecorder(
 			terminalFallbackTickIndex = null,
 			c7Clean = c7Clean,
 			completedNaturally = endCause == RunEndCause.NATURAL_COMPLETION,
-			endCause = endCause
+			endCause = endCause,
+			railwayOutcome = railwayOutcome.get()
 		)
 	}
 
 	private fun formatRate(rate: Double): String = "${(rate * 100.0).toLong()}%"
+
+	/**
+	 * Renders one railway figure, printing `n/a` for a figure nobody measured.
+	 *
+	 * Deliberately not `?: 0`: a zero in this line would be read as "the railway moved nothing",
+	 * which is a different claim from "nothing measured it". See [RailwayOutcome].
+	 */
+	private fun formatFigure(value: Long?): String = value?.toString() ?: "n/a"
 }

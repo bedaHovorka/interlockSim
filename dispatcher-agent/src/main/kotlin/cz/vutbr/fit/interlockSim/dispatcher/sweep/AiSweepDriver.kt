@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunReportAggregator
@@ -401,6 +402,9 @@ class ForkedJvmSweepProcessRunner : SweepProcessRunner {
  * Every rate is `0.0` and every counter `0` — not because those are measured values, but because
  * the run produced none. `completedNaturally = false` is what the aggregator's pass predicate
  * reads, so such a run counts against the arm exactly as it should.
+ *
+ * The railway figures are the exception: they are recorded **absent**, not zero. See the comment
+ * at the `railwayOutcome` argument below.
  */
 internal fun abortedSnapshot(
 	runId: String,
@@ -439,7 +443,12 @@ internal fun abortedSnapshot(
 		// RunReportAggregator.runPassed reads.
 		c7Clean = true,
 		completedNaturally = false,
-		endCause = cause
+		endCause = cause,
+		// Issue #834 (SP2c.11): the one group of figures that must NOT be zeroed here. Every
+		// counter above is zero because the run genuinely produced none; the railway figures are
+		// absent because the run never got far enough for anything to read them. Writing 0 would
+		// enter an unmeasured run into the sweep as one where no train moved — a measurement.
+		railwayOutcome = RailwayOutcome.UNMEASURED
 	)
 
 private fun zeroed(keys: List<String>): Map<String, Long> = keys.associateWith { 0L }

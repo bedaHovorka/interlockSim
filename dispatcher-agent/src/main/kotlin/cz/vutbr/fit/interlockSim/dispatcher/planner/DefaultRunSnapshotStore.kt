@@ -35,6 +35,11 @@ import java.time.format.DateTimeFormatter
  * whose `schemaVersion` exceeds [DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION] with a WARN
  * log, keeping aggregation resilient to forward-incompatible schema changes.
  *
+ * *Older* files are read, not skipped: a schema-version-1 document (written before SP2c.11 added
+ * [DispatcherRunSnapshot.railwayOutcome]) decodes because the added field has a default, and it
+ * loads with its railway figures absent — the truth about a run that never measured them. See
+ * [DispatcherRunSnapshot]'s "Schema versioning" section for the full decision and its limits.
+ *
  * ## Thread safety
  *
  * Thread-safe: [write] writes to a temp file then atomically moves it into place
