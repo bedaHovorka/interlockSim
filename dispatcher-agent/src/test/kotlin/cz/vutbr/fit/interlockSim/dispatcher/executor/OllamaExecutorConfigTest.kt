@@ -40,7 +40,14 @@ import java.time.Duration
 class OllamaExecutorConfigTest {
 	@Test
 	fun `default config uses standard defaults`() {
-		val config = OllamaExecutorConfig.default()
+		// Pins the committed-file tier to empty explicitly (#834 fix-round-1 review finding):
+		// plain default() would let fileProperties silently default to the real shipped
+		// dispatcher-defaults.properties resource, which coincidentally matches today's compiled
+		// constants but stops doing so the moment #834 Task 14 commits the sweep's chosen values —
+		// at which point this test's name ("standard defaults", i.e. the compiled constants) would
+		// stop matching what it actually verifies. Pinning fileProperties to empty here makes the
+		// code-constant fallback path unambiguous and independent of the file's contents.
+		val config = OllamaExecutorConfig.default(fileProperties = { null })
 
 		assertThat(config.ollamaEndpoint).isEqualTo("http://localhost:11434")
 		assertThat(config.modelName).isEqualTo("qwen2.5:7b-instruct")

@@ -46,7 +46,14 @@ class DispatcherRunConfigTest {
 
 	@Test
 	fun `absent properties reproduce the pre-847 defaults`() {
-		val config = configOf()
+		// Pins the committed-file tier to empty explicitly (#834 fix-round-1 review finding):
+		// plain configOf() would let fileProperties silently default to the real shipped
+		// dispatcher-defaults.properties resource, which coincidentally matches today's compiled
+		// constants but stops doing so the moment #834 Task 14 commits the sweep's chosen values —
+		// at which point this test's name ("pre-847 defaults", i.e. the compiled constants) would
+		// stop matching what it actually verifies. Pinning fileProperties to empty here makes the
+		// code-constant fallback path unambiguous and independent of the file's contents.
+		val config = configOf(emptyMap())
 
 		assertThat(config.model).isNull()
 		assertThat(config.temperature).isNull()

@@ -42,7 +42,9 @@ class DispatcherDefaultsResourceTest {
 	@Test
 	@DisplayName("malformed properties syntax falls back to no values, no exception")
 	fun malformedStreamYieldsNoValues() {
-		// An invalid \u escape makes java.util.Properties#load throw IOException.
+		// An invalid \u escape makes java.util.Properties#load throw IllegalArgumentException
+		// (not IOException, despite the method's checked-exception signature only mentioning the
+		// latter) — see DispatcherDefaultsResource.fromStream's matching catch clause.
 		val resource = DispatcherDefaultsResource.fromStream(streamOf("interlocksim.dispatcher.historyN=\\uZZZZ"))
 
 		assertThat(resource.lookup(DispatcherRunConfig.PROP_HISTORY_N)).isNull()
