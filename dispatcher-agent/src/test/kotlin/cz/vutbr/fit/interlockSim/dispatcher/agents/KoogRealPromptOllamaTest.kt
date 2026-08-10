@@ -113,6 +113,29 @@ import org.koin.core.context.stopKoin
  * the prompt. There is no single edit that removes signal names from the prompt, so that property
  * cannot be probed this way at all.
  *
+ * ## Issue #834 (SP2c.11): three further candidates, none of them assertable
+ *
+ * The SP2c.11 prompt rebuild added [PromptVariant.REVISED] and looked for live assertions to guard
+ * the properties it changed. Three candidates were built and probed under this file's standing
+ * rule. **None survived, so none was added** — the outcome is recorded here so the next attempt
+ * starts from the evidence rather than repeating it.
+ *
+ * | Candidate property | Probe | Verdict |
+ * |---|---|---|
+ * | The unconditional `no_op` catch-all bullet | narrowed to the empty-station case, then deleted outright | **invalid probe** — `NoOpTool.description` independently tells the model "Call this when you have examined the current state and determined there is nothing to do", every cycle, through the tool schema. The model called `no_op` in every probe run. No system-prompt edit can remove this property from what the model sees. |
+ * | Turn termination ("only a plain-text reply ends the tick") | delete the clause from the system prompt | **invalid probe, by inspection** — [KoogDispatchAgentImpl.buildUserPrompt]'s deliberately-last line says "When your actions for this tick are done, finish with one short plain-text sentence and no further tool calls" on every cycle, unconditionally. Same structural problem as the Signals row above; not run. |
+ * | The per-tick action budget being stated at all | 3 cycles, three queued trains, `SinkHolder(maxActionsPerTick = 1)` | **not assertable** — the assertion fails against the *correct* prompt. `qwen2.5:7b-instruct` exceeded the cap in every cycle, producing 5 `ACTION_LIMIT_EXCEEDED` rejections; [PromptVariant.BASELINE], which states the budget three times, produced **the same 5**. Stating the budget more often does not help, and what actually stops the model is [SinkHolder]'s own terminal rejection message. |
+ *
+ * The third row is the useful measurement of the three, and it is the reason SP2c.11's compression
+ * of the budget from three statements to one carries no measured regression on this axis: 5 and 5.
+ *
+ * The pattern behind rows one and two is worth stating on its own, because it will recur: the
+ * properties most worth guarding live are exactly the ones the surface has since learned to state
+ * twice — once in the system prompt and once in a tool description or the per-cycle message. That
+ * redundancy is good for the model and fatal for single-edit probing. A live assertion for such a
+ * property would need both statements reverted together, at which point it no longer guards the
+ * prompt sentence it claims to.
+ *
  * The `"T1"` revert stays undetected for a quantitative reason: round 2's poisoning accumulated
  * over hundreds of cycles of a 600 s run, and six cycles against a prompt that now also names real
  * ids every cycle is not enough for the literal to win. The offline guard in

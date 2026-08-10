@@ -360,9 +360,10 @@ class KoogAgentFactory(
 		 * most salient position in the prompt while costing fewer tokens than the rule it replaces.
 		 *
 		 * Added: the catch-all bullet now says what the correct output *is*, not merely that `no_op`
-		 * is available. Task 1 of #834 made a tick with no tool calls a scored success
-		 * ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP]) rather than a
-		 * rule-based-fallback failure, so naming the expected output — one `no_op`, then a closing
+		 * is available. Task 1 of #834 made an **idle-station** cycle with no emissions a scored
+		 * success ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP]) rather than
+		 * a rule-based-fallback failure — that outcome is scoped to the idle station specifically,
+		 * not to any tick without tool calls — so naming the expected output — one `no_op`, then a closing
 		 * sentence — is now worth its tokens. [buildBaselineSystemPrompt]'s catch-all says only
 		 * "call no_op with a brief reason", never that replying afterwards is what ends the tick nor
 		 * that this is the expected result rather than a failure to act; #896 measured 2-7 ticks per
@@ -429,9 +430,9 @@ class KoogAgentFactory(
 						"reserved nothing and needs no cancel_route."
 				)
 				appendLine(
-					"- Otherwise — nothing to approve, nothing to reserve, nothing to cancel — call " +
-						"no_op once with a brief reason and then reply. That is the correct and " +
-						"expected result for such a tick, not a failure to act."
+					"- Otherwise — none of the steps above applied — call no_op once with a brief " +
+						"reason and then reply. That is the correct and expected result for such a " +
+						"tick, not a failure to act."
 				)
 				appendRevisedNonNegotiableRules()
 			}.trimEnd('\n')

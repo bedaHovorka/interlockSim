@@ -323,9 +323,10 @@ class PromptVariantTest {
 		}
 
 		/**
-		 * The property Task 1 of #834 made worth stating: a tick with no tool calls is now a scored
-		 * success ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP]), not a
-		 * rule-based-fallback failure. BASELINE's catch-all says only "call no_op with a brief
+		 * The property Task 1 of #834 made worth stating: an **idle-station** cycle with no emissions
+		 * is now a scored success ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP])
+		 * rather than a rule-based-fallback failure — that outcome is scoped to the idle station, not
+		 * to any tick without tool calls. BASELINE's catch-all says only "call no_op with a brief
 		 * reason" — never that replying afterwards ends the tick, nor that this is the expected
 		 * result rather than a failure to act. #896 measured 2-7 ticks per run ending in a bare text
 		 * reply instead of the taught `no_op`.
