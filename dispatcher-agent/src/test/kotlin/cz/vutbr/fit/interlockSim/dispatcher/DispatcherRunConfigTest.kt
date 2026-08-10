@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -146,6 +147,56 @@ class DispatcherRunConfigTest {
 
 	// #834 (SP2c.11): committed-file tier tests. The seam mirrors the existing system-property
 	// seam above so none of these mutate real JVM state or the real classpath resource.
+
+	// ── Issue #834 (SP2c.11): the prompt-variant axis ─────────────────────────────────────
+
+	/**
+	 * The seam's default must reproduce today's behaviour: an unconfigured run keeps the
+	 * prompt PR #896 shipped, so adding the axis changes no run that does not ask to change.
+	 */
+	@Test
+	@DisplayName("#834: an unset promptVariant is PromptVariant.DEFAULT (BASELINE)")
+	fun promptVariantDefaultsToBaseline() {
+		assertThat(configOf(emptyMap()).promptVariant).isEqualTo(PromptVariant.BASELINE)
+	}
+
+	@Test
+	@DisplayName("#834: promptVariant resolves system property > committed file > code constant")
+	fun promptVariantFollowsThePrecedenceChain() {
+		val fromProperty =
+			configOf(
+				mapOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "BASELINE"),
+				DispatcherRunConfig.PROP_PROMPT_VARIANT to "REVISED"
+			)
+		val fromFile = configOf(mapOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "REVISED"))
+
+		assertThat(fromProperty.promptVariant).isEqualTo(PromptVariant.REVISED)
+		assertThat(fromFile.promptVariant).isEqualTo(PromptVariant.REVISED)
+	}
+
+	/**
+	 * Same discipline as every other knob: a malformed value is logged and ignored, never an
+	 * aborted run. A typo in a forked-JVM `-D` must not cost an unattended sweep — the sweep
+	 * *grid* is where an unknown variant name fails loudly instead (`SweepAxes`'s `init`).
+	 */
+	@Test
+	@DisplayName("#834: an unparseable promptVariant WARNs and falls back rather than failing the run")
+	fun unparseablePromptVariantFallsBack() {
+		val fromProperty = configOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "REVISD")
+		val fromFile = configOf(mapOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "not-a-variant"))
+		val blank = configOf(mapOf(), DispatcherRunConfig.PROP_PROMPT_VARIANT to "   ")
+
+		assertThat(fromProperty.promptVariant).isEqualTo(DispatcherRunConfig.DEFAULT_PROMPT_VARIANT)
+		assertThat(fromFile.promptVariant).isEqualTo(DispatcherRunConfig.DEFAULT_PROMPT_VARIANT)
+		assertThat(blank.promptVariant).isEqualTo(DispatcherRunConfig.DEFAULT_PROMPT_VARIANT)
+	}
+
+	@Test
+	@DisplayName("#834: promptVariant is a recognized key of the committed defaults resource")
+	fun promptVariantIsARecognizedFileKey() {
+		assertThat(DispatcherDefaultsResource.RECOGNIZED_KEYS.contains(DispatcherRunConfig.PROP_PROMPT_VARIANT))
+			.isEqualTo(true)
+	}
 
 	@Test
 	@DisplayName("#834: a system property beats a committed-file value for the same key")

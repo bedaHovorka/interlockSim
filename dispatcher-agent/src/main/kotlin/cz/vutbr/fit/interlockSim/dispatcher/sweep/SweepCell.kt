@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.sweep
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
@@ -28,6 +29,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
  *   [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]'s own default (30s) in
  *   place — the grid says "unchanged", not "some particular value that happens to match today's
  *   default", exactly like [model]/[temperature] (Issue #893 iteration 2).
+ * @property promptVariant Which DISPATCHER system-prompt revision this cell runs, or `null` to
+ *   leave [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.promptVariant]'s own resolution
+ *   (system property > committed file > [PromptVariant.DEFAULT]) in place — the same "unchanged,
+ *   not coincidentally-equal" reasoning as [model]/[temperature]/[inferenceTimeoutSeconds]. This
+ *   is the axis Task 11 (#834) exists to create: a prompt revision can only be judged by running
+ *   both arms of the same grid, never by assertion.
  */
 data class SweepCell(
 	val example: String,
@@ -36,7 +43,8 @@ data class SweepCell(
 	val tickPeriodMs: Long,
 	val historyN: Int,
 	val maxActionsPerTick: Int,
-	val inferenceTimeoutSeconds: Long? = null
+	val inferenceTimeoutSeconds: Long? = null,
+	val promptVariant: PromptVariant? = null
 ) {
 	/**
 	 * Filename- and run-id-safe identifier for this cell.
@@ -57,7 +65,8 @@ data class SweepCell(
 				"p-$tickPeriodMs",
 				"h-$historyN",
 				"a-$maxActionsPerTick",
-				"it-${inferenceTimeoutSeconds ?: "default"}"
+				"it-${inferenceTimeoutSeconds ?: "default"}",
+				"pv-${promptVariant?.name ?: "default"}"
 			).joinToString("_")
 
 	/** Deterministic run id for the [repeatIndex]-th repetition of this cell (1-based). */
@@ -83,6 +92,7 @@ data class SweepCell(
 			put(DispatcherRunConfig.PROP_RUN_ID, runId)
 			put(DispatcherRunConfig.PROP_RUNS_ROOT, runsRoot)
 			inferenceTimeoutSeconds?.let { put(DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS, it.toString()) }
+			promptVariant?.let { put(DispatcherRunConfig.PROP_PROMPT_VARIANT, it.name) }
 		}
 
 	/**
@@ -105,10 +115,20 @@ data class SweepCell(
 	 * `inferenceTimeoutSeconds` mirrors [systemProperties]'s `null` handling: `null` here means
 	 * "leave [KoogAgentPlanAdapter]'s own default in place", so the *recorded* value must be that
 	 * same default, not `null` (this field is non-nullable on [RunParameters]). `promptVariant`
-	 * mirrors [model]'s `null → ""` handling: `""` for a rule-based cell (`model == null`, no
-	 * prompt at all), [RunParameters.DEFAULT_PROMPT_VARIANT] for an LLM cell — this grid has no
-	 * variant axis yet (Task 11, #834), so every LLM cell gets the same untracked-variant default
-	 * the live LLM path would also fall back to.
+	 * resolves the same way — `null` means "leave [DispatcherRunConfig.promptVariant]'s own
+	 * resolution in place", so the recorded value is [PromptVariant.DEFAULT]'s name.
+	 *
+	 * ## Which cells have no prompt at all
+	 *
+	 * The empty-string sentinel belongs to the rule-based arm, and [arm] is what decides that — not
+	 * `model == null`, which Task 4 (#834) used as a stand-in before this axis existed. The two
+	 * disagree in both directions and each disagreement misfiles a run: a rule-based cell that
+	 * *does* pin a model (harmless — the rule-based arm never contacts Ollama, but a grid may still
+	 * hold the axis fixed) would be recorded as having used a prompt it never assembled, and an LLM
+	 * cell that leaves `model` at the executor default would be recorded as having used no prompt
+	 * at all and grouped with the rule-based rows. [arm] is derived from the same `example` name the
+	 * run's recorder is armed from, so this abort snapshot and the live recording can never
+	 * disagree about which arm a run belongs to.
 	 */
 	fun runParameters(): RunParameters =
 		RunParameters(
@@ -119,7 +139,8 @@ data class SweepCell(
 			model = model ?: "",
 			seed = null,
 			inferenceTimeoutSeconds = inferenceTimeoutSeconds ?: KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
-			promptVariant = if (model == null) "" else RunParameters.DEFAULT_PROMPT_VARIANT
+			promptVariant =
+				if (arm == DispatcherArm.RULE_BASED) "" else (promptVariant ?: PromptVariant.DEFAULT).name
 		)
 
 	private fun sanitise(raw: String): String = raw.replace(Regex("[^A-Za-z0-9.-]"), "-")

@@ -226,9 +226,13 @@ class ExampleRegistry {
 	 * `inferenceTimeoutSeconds` records what [runConfig] actually gave this run (Issue #834,
 	 * SP2c.11) — the same value threaded into [KoogAgentPlanAdapter]'s `inferenceTimeout` at both
 	 * call sites below, so the JSON matches what the run was really bounded by. `promptVariant`
-	 * stays at [RunParameters.DEFAULT_PROMPT_VARIANT]: Task 11 (#834) has not yet wired a
-	 * selectable prompt variant into this path, so every LLM run through here still uses the one
-	 * production prompt, and the default honestly says "a prompt was used, no variant tracked".
+	 * records the name of the [cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant] this run's
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] was built with (#834, SP2c.11),
+	 * read from the same [DispatcherRunConfig] that supplied it to the factory — so a run JSON names
+	 * the prompt that actually produced it, and [RunParameters.DEFAULT_PROMPT_VARIANT]'s
+	 * "untracked" sentinel is now reached only when decoding a JSON written before this field
+	 * existed. The `.name` (rather than the enum) keeps [RunParameters] decoupled from this enum,
+	 * exactly as that field's KDoc requires.
 	 *
 	 * `internal` rather than `private` so tests can call it directly with a plain (non-Koin)
 	 * [OllamaExecutorConfig]/[DispatcherRunConfig] pair — the same testability reasoning as
@@ -245,7 +249,8 @@ class ExampleRegistry {
 			maxActionsPerTick = runConfig.maxActionsPerTick,
 			model = config.modelName,
 			seed = null,
-			inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds
+			inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds,
+			promptVariant = runConfig.promptVariant.name
 		)
 
 	/**

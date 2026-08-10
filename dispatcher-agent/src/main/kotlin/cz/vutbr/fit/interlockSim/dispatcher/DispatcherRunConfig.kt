@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -40,8 +41,8 @@ private val logger = KotlinLogging.logger {}
  *
  * ## Configuration precedence (Issue #834, SP2c.11)
  *
- * [tickPeriodMs], [historyN], [maxActionsPerTick] and [inferenceTimeoutSeconds] each resolve in
- * this order:
+ * [tickPeriodMs], [historyN], [maxActionsPerTick], [inferenceTimeoutSeconds] and [promptVariant]
+ * each resolve in this order:
  *
  * ```
  * JVM system property (-Dinterlocksim.dispatcher.*)  >  committed properties resource  >  code
@@ -86,9 +87,18 @@ private val logger = KotlinLogging.logger {}
  *   (30s), reproducing the pre-Issue-#893-iteration-2 behaviour — the production default is
  *   unchanged; a longer budget (e.g. 90s) is a grid-only measurement value, never a production
  *   default (traffic-simulation-expert + agent-architect ruling, Issue #893).
+ * @property promptVariant Which revision of the DISPATCHER system prompt
+ *   [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] assembles. Defaults to
+ *   [PromptVariant.DEFAULT] ([PromptVariant.BASELINE]), the prompt PR #896 shipped, so this knob's
+ *   existence changes no run that does not ask to be changed. Unlike every other knob here the
+ *   value is an enum rather than a number, so an unrecognised name is the realistic failure mode:
+ *   it is handled exactly like an unparseable number — WARN, then the default — because losing an
+ *   unattended sweep to a typo would cost far more than the one mis-labelled measurement that a
+ *   hard failure would prevent.
  *
  * @since Issue #847 (SP2c.24 — headless N-run sweep driver and parameter grid);
- *   `inferenceTimeoutSeconds` added in Issue #893 iteration 2
+ *   `inferenceTimeoutSeconds` added in Issue #893 iteration 2; `promptVariant` added in Issue #834
+ *   (SP2c.11)
  */
 data class DispatcherRunConfig(
 	val model: String? = null,
@@ -98,7 +108,8 @@ data class DispatcherRunConfig(
 	val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK,
 	val runId: String? = null,
 	val runsRoot: String? = null,
-	val inferenceTimeoutSeconds: Long = DEFAULT_INFERENCE_TIMEOUT_SECONDS
+	val inferenceTimeoutSeconds: Long = DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+	val promptVariant: PromptVariant = DEFAULT_PROMPT_VARIANT
 ) {
 	init {
 		require(tickPeriodMs >= 0) { "tickPeriodMs must be >= 0, was $tickPeriodMs" }
@@ -121,6 +132,7 @@ data class DispatcherRunConfig(
 		const val PROP_RUN_ID: String = "${PREFIX}runId"
 		const val PROP_RUNS_ROOT: String = "${PREFIX}runsRoot"
 		const val PROP_INFERENCE_TIMEOUT_SECONDS: String = "${PREFIX}inferenceTimeoutSeconds"
+		const val PROP_PROMPT_VARIANT: String = "${PREFIX}promptVariant"
 
 		/**
 		 * No enforced spacing. The snapshot signal already paces the driver at one cycle per
@@ -141,6 +153,13 @@ data class DispatcherRunConfig(
 		 * override it, per the traffic-simulation-expert + agent-architect ruling.
 		 */
 		const val DEFAULT_INFERENCE_TIMEOUT_SECONDS: Long = 30L
+
+		/**
+		 * Delegates to [PromptVariant.DEFAULT] rather than naming a variant here, so there is one
+		 * place in the codebase that decides which prompt an unconfigured run gets — see that
+		 * constant's KDoc for why flipping it is a measurement decision.
+		 */
+		val DEFAULT_PROMPT_VARIANT: PromptVariant = PromptVariant.DEFAULT
 
 		/**
 		 * Reads the configuration from JVM system properties, falling back to the committed
@@ -186,7 +205,14 @@ data class DispatcherRunConfig(
 						resolveRaw(PROP_INFERENCE_TIMEOUT_SECONDS, properties, fileProperties),
 						PROP_INFERENCE_TIMEOUT_SECONDS,
 						DEFAULT_INFERENCE_TIMEOUT_SECONDS
-					) { it.toLongOrNull()?.takeIf { parsed -> parsed >= 1 } }
+					) { it.toLongOrNull()?.takeIf { parsed -> parsed >= 1 } },
+				promptVariant =
+					parseOrDefault(
+						resolveRaw(PROP_PROMPT_VARIANT, properties, fileProperties),
+						PROP_PROMPT_VARIANT,
+						DEFAULT_PROMPT_VARIANT,
+						PromptVariant::parse
+					)
 			)
 
 		/**

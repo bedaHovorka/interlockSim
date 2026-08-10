@@ -344,7 +344,11 @@ val dispatcherAgentModule: Module =
 					// Same scoped AppliedOutcomeChannel instance wireDispatcherAgent (ExampleRegistry)
 					// hands to DispatchDecisionApplier as its outcomeSink below — this is what closes
 					// the live feedback loop end to end.
-					outcomeFeed = get<AppliedOutcomeChannel>()
+					outcomeFeed = get<AppliedOutcomeChannel>(),
+					// Which system-prompt revision this run assembles (#834, SP2c.11). Read from the
+					// same DispatcherRunConfig every other per-run knob comes from, so the sweep's
+					// existing forked-JVM `-D` mechanism selects the A/B arm with no new channel.
+					promptVariant = get<DispatcherRunConfig>().promptVariant
 				)
 			}
 

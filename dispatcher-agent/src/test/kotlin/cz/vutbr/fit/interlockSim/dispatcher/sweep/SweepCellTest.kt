@@ -10,8 +10,11 @@
 package cz.vutbr.fit.interlockSim.dispatcher.sweep
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import cz.vutbr.fit.interlockSim.dispatcher.di.ruleBasedRunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
@@ -32,6 +35,18 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("SP2c.11 — SweepCell.runParameters(): agreement with the live rule-based path (#834)")
 class SweepCellTest {
+	private fun llmCell(promptVariant: PromptVariant? = null): SweepCell =
+		SweepCell(
+			example = "shuntingLoopAI",
+			model = "qwen2.5:7b-instruct",
+			temperature = 0.5,
+			tickPeriodMs = 250L,
+			historyN = 5,
+			maxActionsPerTick = 2,
+			inferenceTimeoutSeconds = 90L,
+			promptVariant = promptVariant
+		)
+
 	private fun ruleBasedCell(inferenceTimeoutSeconds: Long? = null): SweepCell =
 		SweepCell(
 			example = "shuntingLoop",
@@ -59,32 +74,86 @@ class SweepCellTest {
 		assertThat(params.inferenceTimeoutSeconds).isEqualTo(90L)
 	}
 
+	/**
+	 * The `""` sentinel means "this run assembled no prompt at all", and Task 11 (#834) moved
+	 * that decision off `model == null` and onto [SweepCell.arm] — the same signal the live
+	 * recorder is armed from. A rule-based cell that happens to pin a model must still record
+	 * the no-prompt sentinel, which is exactly what the old stand-in got wrong.
+	 */
 	@Test
-	@DisplayName("a rule-based cell (model == null) records promptVariant as \"\", mirroring model")
+	@DisplayName("a rule-based cell records promptVariant as \"\", even when it pins a model")
 	fun ruleBasedCellRecordsEmptyPromptVariant() {
-		val params = ruleBasedCell().runParameters()
+		assertThat(ruleBasedCell().runParameters().promptVariant).isEqualTo("")
+		assertThat(ruleBasedCell().runParameters().model).isEqualTo("")
 
-		assertThat(params.promptVariant).isEqualTo("")
-		assertThat(params.model).isEqualTo("")
+		val ruleBasedWithModel =
+			SweepCell(
+				example = "shuntingLoop",
+				model = "qwen2.5:7b-instruct",
+				temperature = null,
+				tickPeriodMs = 250L,
+				historyN = 5,
+				maxActionsPerTick = 2
+			)
+
+		assertThat(ruleBasedWithModel.runParameters().promptVariant).isEqualTo("")
+	}
+
+	/**
+	 * An LLM cell that names no variant leaves [DispatcherRunConfig.promptVariant]'s own
+	 * resolution in place, so the recorded value is [PromptVariant.DEFAULT]'s name — a real
+	 * prompt identity, never the "untracked" sentinel the pre-Task-11 stand-in wrote.
+	 */
+	@Test
+	@DisplayName("an LLM cell with no variant records PromptVariant.DEFAULT, not the untracked sentinel")
+	fun llmCellRecordsDefaultPromptVariant() {
+		val params = llmCell().runParameters()
+
+		assertThat(params.promptVariant).isEqualTo(PromptVariant.DEFAULT.name)
+		assertThat(params.promptVariant).isNotEqualTo(RunParameters.DEFAULT_PROMPT_VARIANT)
 	}
 
 	@Test
-	@DisplayName("an LLM cell (model != null) records the untracked-variant default, not the rule-based sentinel")
-	fun llmCellRecordsDefaultPromptVariant() {
-		val cell =
-			SweepCell(
-				example = "shuntingLoopAI",
-				model = "qwen2.5:7b-instruct",
-				temperature = 0.5,
-				tickPeriodMs = 250L,
-				historyN = 5,
-				maxActionsPerTick = 2,
-				inferenceTimeoutSeconds = 90L
-			)
+	@DisplayName("an LLM cell that names a variant records that variant")
+	fun llmCellRecordsItsExplicitPromptVariant() {
+		val params = llmCell(promptVariant = PromptVariant.REVISED).runParameters()
 
-		val params = cell.runParameters()
+		assertThat(params.promptVariant).isEqualTo("REVISED")
+	}
 
-		assertThat(params.promptVariant).isEqualTo(RunParameters.DEFAULT_PROMPT_VARIANT)
+	/**
+	 * The slug is the resumption key, so two cells differing only in variant must not collide:
+	 * a colliding id would make the driver skip the second arm as already-run, and the A/B
+	 * comparison would silently be a comparison of one arm with itself.
+	 */
+	@Test
+	@DisplayName("cells differing only in promptVariant get distinct slugs and run ids")
+	fun promptVariantDiscriminatesTheSlug() {
+		val baseline = llmCell(promptVariant = PromptVariant.BASELINE)
+		val revised = llmCell(promptVariant = PromptVariant.REVISED)
+
+		assertThat(baseline.slug).isNotEqualTo(revised.slug)
+		assertThat(baseline.runId(1)).isNotEqualTo(revised.runId(1))
+		assertThat(llmCell().slug).contains("pv-default")
+		assertThat(revised.slug).contains("pv-REVISED")
+	}
+
+	/**
+	 * `null` means "leave the run config's own resolution in place", so no `-D` may be emitted
+	 * for it — emitting [PromptVariant.DEFAULT] explicitly would override a committed
+	 * `dispatcher-defaults.properties` value the grid never asked to override. Mirrors the
+	 * identical handling of `model`/`temperature`/`inferenceTimeoutSeconds`.
+	 */
+	@Test
+	@DisplayName("promptVariant reaches the forked run as a -D only when the cell names one")
+	fun promptVariantIsPassedAsASystemPropertyOnlyWhenSet() {
+		val unset = llmCell().systemProperties(runId = "r", runsRoot = "/tmp")
+		val set =
+			llmCell(promptVariant = PromptVariant.REVISED)
+				.systemProperties(runId = "r", runsRoot = "/tmp")
+
+		assertThat(unset.containsKey(DispatcherRunConfig.PROP_PROMPT_VARIANT)).isEqualTo(false)
+		assertThat(set[DispatcherRunConfig.PROP_PROMPT_VARIANT]).isEqualTo("REVISED")
 	}
 
 	/**

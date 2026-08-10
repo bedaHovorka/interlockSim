@@ -11,7 +11,9 @@ package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
@@ -46,12 +48,31 @@ class ExampleRegistryLlmRunParametersTest {
 		assertThat(params.inferenceTimeoutSeconds).isEqualTo(90L)
 	}
 
+	/**
+	 * Task 11 (#834) replaced the untracked-variant placeholder with the real seam: an LLM run
+	 * now records the name of the [PromptVariant] its `KoogAgentFactory` was actually built
+	 * with. An unconfigured run gets [PromptVariant.DEFAULT], which is BASELINE — so the JSON
+	 * says "this run used the baseline prompt" rather than "a prompt was used, unknown which".
+	 */
 	@Test
-	@DisplayName("promptVariant defaults to the untracked-variant sentinel, not the rule-based empty string")
-	fun promptVariantDefaultsToUntracked() {
+	@DisplayName("promptVariant records the run config's variant, not the untracked-variant sentinel")
+	fun promptVariantRecordsTheConfiguredVariant() {
 		val params = registry.llmRunParameters(OllamaExecutorConfig(), DispatcherRunConfig())
 
-		assertThat(params.promptVariant).isEqualTo(RunParameters.DEFAULT_PROMPT_VARIANT)
+		assertThat(params.promptVariant).isEqualTo(PromptVariant.DEFAULT.name)
+		assertThat(params.promptVariant).isNotEqualTo(RunParameters.DEFAULT_PROMPT_VARIANT)
+	}
+
+	@Test
+	@DisplayName("a non-default promptVariant is carried through from DispatcherRunConfig")
+	fun carriesNonDefaultPromptVariantFromRunConfig() {
+		val params =
+			registry.llmRunParameters(
+				OllamaExecutorConfig(),
+				DispatcherRunConfig(promptVariant = PromptVariant.REVISED)
+			)
+
+		assertThat(params.promptVariant).isEqualTo("REVISED")
 	}
 
 	/**

@@ -45,6 +45,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
@@ -135,9 +137,16 @@ class LivePromptNoMenuTest {
 	@Nested
 	@DisplayName("Surface 1 — KoogAgentFactory-assembled system prompt (buildSystemPrompt + topology)")
 	inner class SystemPromptSurface {
-		@Test
+		/**
+		 * Parameterised over [PromptVariant] since Issue #834 (SP2c.11): C9 binds the prompt the
+		 * model is actually sent, so it binds every selectable variant of it, not merely whichever
+		 * one happens to be the default. A revision that reintroduced a numbered procedure would
+		 * otherwise reach a real sweep run untested.
+		 */
+		@ParameterizedTest
+		@EnumSource(PromptVariant::class)
 		@DisplayName("no numbered-option lines, no 'option'/'choose one'/'select' token")
-		fun systemPromptHasNoMenuArtifacts() {
+		fun systemPromptHasNoMenuArtifacts(variant: PromptVariant) {
 			loadShuntingLoopContext().use { context ->
 				val agentService = KoogAgentFactoryTest.CapturingAgentService()
 				val factory =
@@ -148,7 +157,8 @@ class LivePromptNoMenuTest {
 						perceptionPort = fakePerceptionPort(),
 						commandQueue = ActuatorCommandQueue(),
 						dispatchLoopSensorPort = fakeSensorPort(),
-						sinkHolder = SinkHolder()
+						sinkHolder = SinkHolder(),
+						promptVariant = variant
 					)
 
 				runBlocking { factory.createAgent(context) }

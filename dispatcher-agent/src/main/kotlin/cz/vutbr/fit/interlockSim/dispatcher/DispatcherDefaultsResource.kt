@@ -79,7 +79,8 @@ class DispatcherDefaultsResource private constructor(
 				DispatcherRunConfig.PROP_TICK_PERIOD_MS,
 				DispatcherRunConfig.PROP_HISTORY_N,
 				DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK,
-				DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS
+				DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS,
+				DispatcherRunConfig.PROP_PROMPT_VARIANT
 			)
 
 		/**

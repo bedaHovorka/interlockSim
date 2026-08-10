@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.sweep
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
@@ -133,12 +134,14 @@ data class SweepGrid(
 /**
  * The swept dimensions of a [SweepGrid]. Each is a list of values; the grid is their product.
  *
- * All five parameter axes are honoured by the live dispatcher path — `temperature` and `model`
+ * Every parameter axis is honoured by the live dispatcher path — `temperature` and `model`
  * through [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig], and
  * `tickPeriodMs` / `historyN` / `maxActionsPerTick` through the wiring SP2c.24 added
  * ([cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver],
  * [cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory] and
- * [cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder] respectively).
+ * [cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder] respectively), and `promptVariant`
+ * through [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.promptVariant] into
+ * [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] (Issue #834).
  *
  * There is deliberately **no `seed` axis**. SP2c.27 (Issue #850) and #894 established that Koog
  * 1.1.1's `OllamaClient` is `final` with `internal` DTOs and provides no path to seed the Ollama
@@ -164,7 +167,22 @@ data class SweepAxes(
 	 *
 	 * @since Issue #893 iteration 2
 	 */
-	val inferenceTimeoutSeconds: List<Long> = listOf(UNSET_INFERENCE_TIMEOUT_SECONDS)
+	val inferenceTimeoutSeconds: List<Long> = listOf(UNSET_INFERENCE_TIMEOUT_SECONDS),
+	/**
+	 * DISPATCHER system-prompt revision, by [PromptVariant] name, or the empty string meaning
+	 * "leave [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.promptVariant]'s own
+	 * resolution in place" — the same omitted-axis spelling [model] uses.
+	 *
+	 * This is the axis Issue #834 exists to measure. PR #896's prompt works, and #834 revises
+	 * it; a revision of a working prompt cannot be argued to be better, only run against the
+	 * same grid and compared. Names are matched case-insensitively ([PromptVariant.parse]),
+	 * and an unrecognised one is rejected at load rather than swept as the default — a grid is
+	 * a description of a measurement, and a typo that quietly ran the control arm twice would
+	 * yield a report claiming to compare two arms that were the same arm.
+	 *
+	 * @since Issue #834 (SP2c.11)
+	 */
+	val promptVariant: List<String> = listOf("")
 ) {
 	init {
 		require(example.isNotEmpty()) { "axes.example must not be empty" }
@@ -174,6 +192,7 @@ data class SweepAxes(
 		require(historyN.isNotEmpty()) { "axes.historyN must not be empty" }
 		require(maxActionsPerTick.isNotEmpty()) { "axes.maxActionsPerTick must not be empty" }
 		require(inferenceTimeoutSeconds.isNotEmpty()) { "axes.inferenceTimeoutSeconds must not be empty" }
+		require(promptVariant.isNotEmpty()) { "axes.promptVariant must not be empty" }
 		require(example.all { it.isNotBlank() }) { "axes.example must not contain a blank name" }
 		require(tickPeriodMs.all { it >= 0 }) { "axes.tickPeriodMs values must be >= 0" }
 		require(historyN.all { it >= 0 }) { "axes.historyN values must be >= 0" }
@@ -188,17 +207,33 @@ data class SweepAxes(
 			"axes.inferenceTimeoutSeconds values must be $UNSET_INFERENCE_TIMEOUT_SECONDS " +
 				"(unset) or >= 1, was $inferenceTimeoutSeconds"
 		}
+		// A name PromptVariant cannot parse is a mistake, not an omission: the omission
+		// spelling is the empty string. Rejecting it here makes a grid naming "REVISD" fail
+		// at load, instead of quietly running BASELINE and reporting it as the revision.
+		require(promptVariant.all { it.isBlank() || PromptVariant.parse(it) != null }) {
+			"axes.promptVariant values must name a PromptVariant " +
+				"(${PromptVariant.entries.joinToString { it.name }}) or be \"\" (unset), " +
+				"was $promptVariant"
+		}
 	}
 
-	/** The cartesian product, in axis-declaration order. */
-	fun cells(): List<SweepCell> =
-		example.flatMap { exampleName ->
+	/**
+	 * The cartesian product, in axis-declaration order.
+	 *
+	 * The two innermost axes are pre-flattened into a pair list rather than nested as
+	 * one more `flatMap` level, so adding the #834 variant axis leaves this comprehension at
+	 * exactly the block depth it already had.
+	 */
+	fun cells(): List<SweepCell> {
+		val timeoutAndVariant: List<Pair<Long, String>> =
+			inferenceTimeoutSeconds.flatMap { timeout -> promptVariant.map { variant -> timeout to variant } }
+		return example.flatMap { exampleName ->
 			model.flatMap { modelName ->
 				temperature.flatMap { temp ->
 					tickPeriodMs.flatMap { period ->
 						historyN.flatMap { history ->
 							maxActionsPerTick.flatMap { maxActions ->
-								inferenceTimeoutSeconds.map { timeout ->
+								timeoutAndVariant.map { (timeout, variantName) ->
 									SweepCell(
 										example = exampleName,
 										model = modelName.takeIf { it.isNotBlank() },
@@ -206,7 +241,8 @@ data class SweepAxes(
 										tickPeriodMs = period,
 										historyN = history,
 										maxActionsPerTick = maxActions,
-										inferenceTimeoutSeconds = timeout.takeIf { it > 0 }
+										inferenceTimeoutSeconds = timeout.takeIf { it > 0 },
+										promptVariant = PromptVariant.parse(variantName)
 									)
 								}
 							}
@@ -215,6 +251,7 @@ data class SweepAxes(
 				}
 			}
 		}
+	}
 
 	companion object {
 		const val DEFAULT_EXAMPLE: String = "shuntingLoopAI"
