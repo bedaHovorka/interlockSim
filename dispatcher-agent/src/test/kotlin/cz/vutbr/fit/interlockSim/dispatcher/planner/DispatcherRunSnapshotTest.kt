@@ -38,7 +38,9 @@ class DispatcherRunSnapshotTest {
 		rejectionsByCode: Map<String, Long> = mapOf(RejectionCode.UNKNOWN_TRAIN.name to 2L),
 		applyFailuresByCode: Map<String, Long> = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED.name to 3L),
 		actionsByAuthor: Map<String, Long> = mapOf(ActionAuthor.LLM.name to 4L),
-		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED
+		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
+		fatalExceptionCount: Long? = null,
+		fatalExceptionFirstMessage: String? = null
 	): DispatcherRunSnapshot =
 		DispatcherRunSnapshot(
 			runId = "typed-view-001",
@@ -75,7 +77,9 @@ class DispatcherRunSnapshotTest {
 			c7Clean = true,
 			completedNaturally = true,
 			endCause = RunEndCause.NATURAL_COMPLETION,
-			railwayOutcome = railwayOutcome
+			railwayOutcome = railwayOutcome,
+			fatalExceptionCount = fatalExceptionCount,
+			fatalExceptionFirstMessage = fatalExceptionFirstMessage
 		)
 
 	@Test
@@ -129,16 +133,65 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 2`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_RAILWAY_OUTCOMES)
+	fun `current schema version is 3`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_FATAL_EXCEPTION_FIELDS)
 	}
 
 	@Test
-	fun `a snapshot defaults to the current schema version and an unmeasured railway outcome`() {
+	fun `a snapshot defaults to the current schema version, an unmeasured railway outcome, and no fatal-exception scan`() {
 		val snap = snapshotWith()
 		assertThat(snap.schemaVersion).isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
 		assertThat(snap.railwayOutcome).isEqualTo(RailwayOutcome.UNMEASURED)
 		assertThat(snap.railwayOutcome.journeysCompleted).isNull()
+		assertThat(snap.fatalExceptionCount).isNull()
+		assertThat(snap.fatalExceptionFirstMessage).isNull()
+	}
+
+	// ── Fatal-exception fields (measurement-integrity fix for #834's C2 condition) ────────────
+
+	@Test
+	fun `serialization round-trips a snapshot carrying a measured fatal-exception count of zero`() {
+		val snap = snapshotWith(fatalExceptionCount = 0L, fatalExceptionFirstMessage = null)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"fatalExceptionCount\": 0")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.fatalExceptionCount).isEqualTo(0L)
+		assertThat(decoded.fatalExceptionFirstMessage).isNull()
+	}
+
+	@Test
+	fun `serialization round-trips a snapshot carrying a nonzero fatal-exception finding`() {
+		val snap =
+			snapshotWith(
+				fatalExceptionCount = 3L,
+				fatalExceptionFirstMessage = "SimulationException[FATAL]: pathToSemaphore null at time 12.5"
+			)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+
+		assertThat(decoded).isEqualTo(snap)
+		assertThat(decoded.fatalExceptionCount).isEqualTo(3L)
+		assertThat(decoded.fatalExceptionFirstMessage)
+			.isEqualTo("SimulationException[FATAL]: pathToSemaphore null at time 12.5")
+	}
+
+	/**
+	 * Absent must survive the JSON round-trip as absent, exactly like [RailwayOutcome]'s own
+	 * absent-vs-zero guarantee. Were `fatalExceptionCount` encoded as `0` for a run whose log was
+	 * never scanned, a sweep would rank that run as measured-clean rather than not-measured.
+	 */
+	@Test
+	fun `serialization round-trips an absent fatal-exception scan as JSON null, never as zero`() {
+		val snap = snapshotWith(fatalExceptionCount = null, fatalExceptionFirstMessage = null)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"fatalExceptionCount\": null")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.fatalExceptionCount).isNull()
 	}
 
 	@Test
@@ -183,7 +236,7 @@ class DispatcherRunSnapshotTest {
 
 	private companion object {
 		/** Pinned literally so a future bump has to touch this test deliberately. */
-		private const val SCHEMA_VERSION_WITH_RAILWAY_OUTCOMES: Int = 2
+		private const val SCHEMA_VERSION_WITH_FATAL_EXCEPTION_FIELDS: Int = 3
 
 		private val json =
 			Json {

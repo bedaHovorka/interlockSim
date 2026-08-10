@@ -178,6 +178,7 @@ class RunReportAggregator(
 		sb.appendLine()
 
 		appendArmComparison(sb, reports)
+		appendFatalExceptions(sb, reports)
 		appendPerRunDetail(sb, reports)
 		appendFailureModes(sb, reports)
 		appendApplyFailures(sb, reports)
@@ -237,10 +238,10 @@ class RunReportAggregator(
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | RunId | Ticks | LLM_ACTIONS | LLM_NO_OP | LLM_REPAIRED | TIMEOUT_NOOP | " +
-				"RULE_FALLBACK | End cause | C7 clean | Fallback tick |"
+				"RULE_FALLBACK | End cause | C7 clean | Fallback tick | FATAL exceptions |"
 		)
 		sb.appendLine(
-			"|---|---|---|---|---|---|---|---|---|---|---|"
+			"|---|---|---|---|---|---|---|---|---|---|---|---|"
 		)
 		for (r in reports) {
 			for (snap in r.snapshots) {
@@ -256,9 +257,58 @@ class RunReportAggregator(
 						"| ${byOutcome[TickOutcome.RULE_FALLBACK.name] ?: 0L} " +
 						"| ${snap.endCause ?: "in-progress"} " +
 						"| ${boolSymbol(snap.c7Clean)} " +
-						"| ${snap.terminalFallbackTickIndex ?: "-"} |"
+						"| ${snap.terminalFallbackTickIndex ?: "-"} " +
+						"| ${fmtNullableLong(snap.fatalExceptionCount)} |"
 				)
 			}
+		}
+		sb.appendLine()
+	}
+
+	/**
+	 * Flags every run that recorded at least one `SimulationException[FATAL]` occurrence
+	 * (`FatalExceptionScanner`, the measurement-integrity fix for #834's C2 condition).
+	 *
+	 * Rendered near the top of the report, ahead of every other section, because a flagged run
+	 * had *something* invalid happen during it and kDisco's `SupervisorJob` absorbed the error —
+	 * the run still completed and exited `0`, so nothing else in this report would otherwise
+	 * distinguish it from a genuinely clean run. The gate predicate ([runPassed] and
+	 * [ArmReport.gatePassed]) deliberately does not read [DispatcherRunSnapshot.fatalExceptionCount] — this
+	 * section exists so a human deciding whether to keep or discard a run's data has the fact in
+	 * front of them, not buried in a per-run log file nobody re-opens.
+	 */
+	private fun appendFatalExceptions(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
+		val flagged = reports.flatMap { it.snapshots }.filter { (it.fatalExceptionCount ?: 0L) > 0L }
+
+		sb.appendLine("## FATAL Exceptions")
+		sb.appendLine()
+		if (flagged.isEmpty()) {
+			sb.appendLine(
+				"No run recorded a `SimulationException[FATAL]` occurrence. (A run whose log could not be " +
+					"scanned shows `n/a`, not a count, for `FATAL exceptions` in Per-Run Detail below — " +
+					"absence of a finding, not a clean bill.)"
+			)
+			sb.appendLine()
+			return
+		}
+
+		sb.appendLine(
+			"> A `FATAL` `SimulationException` was thrown and absorbed by kDisco's `SupervisorJob` — the " +
+				"run still completed and exited 0. Every run listed here measured something invalid and " +
+				"should be treated as a discarded data point, not a passing one; the gate predicate above " +
+				"does not do this automatically."
+		)
+		sb.appendLine()
+		sb.appendLine("| Arm | RunId | Count | First message |")
+		sb.appendLine("|---|---|---|---|")
+		for (snap in flagged) {
+			sb.appendLine(
+				"| ${snap.arm} | ${snap.runId} | ${snap.fatalExceptionCount} | " +
+					"${mdEscapeCell(snap.fatalExceptionFirstMessage)} |"
+			)
 		}
 		sb.appendLine()
 	}
@@ -693,4 +743,7 @@ class RunReportAggregator(
 	private fun gateSymbol(passed: Boolean): String = if (passed) "✅ PASS" else "❌ FAIL"
 
 	private fun boolSymbol(v: Boolean): String = if (v) "yes" else "no"
+
+	/** Escapes [value] for a single Markdown table cell: no bare `|` or newline can break the row. */
+	private fun mdEscapeCell(value: String?): String = (value ?: "").replace("|", "\\|").replace("\n", " ")
 }

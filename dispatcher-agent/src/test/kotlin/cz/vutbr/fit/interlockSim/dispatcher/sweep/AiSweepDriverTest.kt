@@ -16,6 +16,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
@@ -237,6 +238,73 @@ class AiSweepDriverTest {
 				.systemProperties
 				.containsKey("interlocksim.dispatcher.inferenceTimeoutSeconds")
 		assertThat(hasProperty).isFalse()
+	}
+
+	// ── FATAL-exception log scanning (measurement-integrity fix for #834's C2 condition) ──────
+
+	private fun runnerWritingLogAndSnapshot(logContent: String): SweepProcessRunner =
+		SweepProcessRunner { request ->
+			Files.writeString(request.logFile, logContent)
+			val runId = request.systemProperties.getValue("interlocksim.dispatcher.runId")
+			DefaultRunSnapshotStore(outputRoot).write(
+				abortedSnapshot(
+					runId,
+					DispatcherArm.LLM_TOOL_CALLING,
+					SweepAxes().cells().single().runParameters(),
+					RunEndCause.NATURAL_COMPLETION
+				).copy(completedNaturally = true)
+			)
+			SweepProcessResult(exitCode = 0, timedOut = false)
+		}
+
+	@Test
+	@DisplayName("a FATAL SimulationException in the child's log is patched into the persisted run JSON")
+	fun fatalExceptionInLogIsPatchedIntoTheRunJson() {
+		val logContent = "SimulationException[FATAL]: pathToSemaphore null at time 12.5\n"
+		driverWith(runnerWritingLogAndSnapshot(logContent)).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written).hasSize(1)
+		assertThat(written.single().fatalExceptionCount).isEqualTo(1L)
+		assertThat(written.single().fatalExceptionFirstMessage)
+			.isEqualTo("SimulationException[FATAL]: pathToSemaphore null at time 12.5")
+	}
+
+	@Test
+	@DisplayName("a run whose log is clean reports fatalExceptionCount = 0, not absent")
+	fun cleanLogReportsZeroFatalExceptionsNotAbsent() {
+		val runner = runnerWritingLogAndSnapshot("Simulation completed normally\n")
+		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written.single().fatalExceptionCount).isEqualTo(0L)
+		assertThat(written.single().fatalExceptionFirstMessage).isNull()
+	}
+
+	@Test
+	@DisplayName("a run whose log was never written keeps fatalExceptionCount absent, not zero")
+	fun missingLogKeepsFatalExceptionCountAbsent() {
+		// The default RecordingRunner never touches request.logFile — the same shape as a real
+		// ForkedJvmSweepProcessRunner that could not create the log file at all.
+		driverWith(RecordingRunner()).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written.single().fatalExceptionCount).isNull()
+	}
+
+	@Test
+	@DisplayName("a timed-out run still carries a FATAL finding recorded earlier in its log")
+	fun timedOutRunStillCarriesAFatalFindingFromItsLog() {
+		val runner =
+			SweepProcessRunner { request ->
+				Files.writeString(request.logFile, "SimulationException[FATAL]: stuck at time 9.0\n")
+				SweepProcessResult(exitCode = null, timedOut = true)
+			}
+		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written.single().endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(written.single().fatalExceptionCount).isEqualTo(1L)
 	}
 
 	@Test

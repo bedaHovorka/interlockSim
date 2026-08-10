@@ -23,19 +23,22 @@ import kotlinx.serialization.Serializable
  * ## Schema versioning
  *
  * [schemaVersion] is incremented whenever fields are added or removed so that the SP2c.23
- * aggregator can detect and handle old JSON files without crashing.  Current version: **2**
- * (version 2 added [railwayOutcome]; Issue #834, SP2c.11).
+ * aggregator can detect and handle old JSON files without crashing.  Current version: **3**
+ * (version 2 added [railwayOutcome], Issue #834/SP2c.11; version 3 added [fatalExceptionCount]
+ * and [fatalExceptionFirstMessage], the measurement-integrity fix for #834's C2 condition).
  *
- * ### Compatibility with version 1 files — decided, not discovered
+ * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
- * **Version 1 run JSONs stay readable.** [railwayOutcome] carries a default
- * ([RailwayOutcome.UNMEASURED]), so kotlinx.serialization supplies it for any document that
- * lacks the key, and [RunSnapshotStore.readAll] only skips files whose version is *greater*
- * than [CURRENT_SCHEMA_VERSION]. A version 1 run therefore loads with every railway figure
- * **absent**, which is the literal truth about it: nothing measured those figures when it ran.
- * The alternative — decoding old runs with zeroed outcome fields — would let a pre-SP2c.11 run
- * be ranked alongside a genuinely idle one, which is the whole point of keeping absent and zero
- * apart. `DefaultRunSnapshotStoreTest` pins this against a literal version 1 document.
+ * **Older run JSONs stay readable.** [railwayOutcome], [fatalExceptionCount] and
+ * [fatalExceptionFirstMessage] all carry defaults ([RailwayOutcome.UNMEASURED] and `null`
+ * respectively), so kotlinx.serialization supplies them for any document that lacks the key, and
+ * [RunSnapshotStore.readAll] only skips files whose version is *greater* than
+ * [CURRENT_SCHEMA_VERSION]. A version 1 or 2 run therefore loads with every railway figure and
+ * the fatal-exception figures **absent**, which is the literal truth about it: nothing measured
+ * those figures when it ran. The alternative — decoding old runs with zeroed fields — would let a
+ * pre-fix run be ranked alongside a genuinely clean one, which is the whole point of keeping
+ * absent and zero apart. `DefaultRunSnapshotStoreTest` pins this against a literal version 1
+ * document.
  *
  * The guarantee is specific to adding *defaulted* fields. A future field without a default would
  * make version 1 files fail to decode — `readAll` would then skip them with a WARN rather than
@@ -91,6 +94,16 @@ import kotlinx.serialization.Serializable
  *   and `null` means *not measured*, never *measured as none*; see [RailwayOutcome]. Defaults to
  *   [RailwayOutcome.UNMEASURED], which is both the honest value for a run nobody measured and
  *   what keeps schema-version-1 files decodable (see "Schema versioning" above).
+ * @property fatalExceptionCount Number of `SimulationException[FATAL]` occurrences found by
+ *   scanning this run's log; see `cz.vutbr.fit.interlockSim.dispatcher.sweep.FatalExceptionScanner`.
+ *   `null` means the scan itself could not run (log missing or unreadable) — *not measured*,
+ *   never *measured as none*; `0` is the positive finding that the log was read in full and
+ *   contained no FATAL marker. A nonzero value means kDisco's `SupervisorJob` absorbed a FATAL
+ *   error during this run and it still completed and exited 0 — the run should be treated as a
+ *   discarded data point, not a passing one, even though the gate predicate itself (deliberately)
+ *   does not read this field. `null` for any run recorded before this field existed.
+ * @property fatalExceptionFirstMessage The first matching log line (trimmed), verbatim; `null`
+ *   whenever [fatalExceptionCount] is `null` or `0`.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -130,7 +143,9 @@ data class DispatcherRunSnapshot(
 	val c7Clean: Boolean,
 	val completedNaturally: Boolean,
 	val endCause: RunEndCause?,
-	val railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED
+	val railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
+	val fatalExceptionCount: Long? = null,
+	val fatalExceptionFirstMessage: String? = null
 ) {
 	companion object {
 		/**
@@ -138,8 +153,10 @@ data class DispatcherRunSnapshot(
 		 *
 		 * - **1** — SP2c.22 (#845), the original run-identity schema.
 		 * - **2** — SP2c.11 (#834), added [railwayOutcome].
+		 * - **3** — measurement-integrity fix for #834's C2 condition, added
+		 *   [fatalExceptionCount] and [fatalExceptionFirstMessage].
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 2
+		const val CURRENT_SCHEMA_VERSION: Int = 3
 	}
 
 	init {
