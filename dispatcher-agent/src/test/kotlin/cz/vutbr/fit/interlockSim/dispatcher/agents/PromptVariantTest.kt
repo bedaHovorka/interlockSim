@@ -15,6 +15,7 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
@@ -253,12 +254,39 @@ class PromptVariantTest {
 			assertThat(promptFor(variant)).contains("Never call approve_train for a train already listed as active")
 		}
 
-		/** Once the budget is spent, further calls are refused and the turn should end. */
+		/**
+		 * Once the budget is spent, further actions are refused and the turn should end.
+		 *
+		 * A bare `contains("refused")` would be satisfied by the unrelated "Repeating an action
+		 * already in force is refused" rule, which both variants carry — so this asserts the
+		 * *budget* sentence specifically, by requiring "budget" and "refused" on one line.
+		 *
+		 * That line must also not claim `no_op` itself gets refused: `SinkHolder.tryEmit` always
+		 * emits a `NoOp` and never counts it against the cap, so "every further tool call is
+		 * refused" would be false for the one tool the model most needs *after* the budget is
+		 * spent — and would contradict the same sentence's own "no_op never counts against that
+		 * budget" clause.
+		 */
 		@ParameterizedTest
 		@EnumSource(PromptVariant::class)
-		@DisplayName("states that tool calls past the budget are refused")
-		fun statesThatCallsPastTheBudgetAreRefused(variant: PromptVariant) {
-			assertThat(promptFor(variant).lowercase()).contains("refused")
+		@DisplayName("states that actions past the budget are refused, without refusing no_op")
+		fun statesThatActionsPastTheBudgetAreRefused(variant: PromptVariant) {
+			val budgetLines =
+				promptFor(variant)
+					.lineSequence()
+					.filter { it.contains("budget") && it.contains("refused") }
+					.toList()
+
+			assertThat(budgetLines).isNotEmpty()
+			budgetLines
+				.filter { it.contains("no_op never counts against that budget") }
+				.forEach { line ->
+					// A line that exempts no_op from the budget must not, in the same breath, refuse
+					// "every further tool call" — no_op is a tool call, and SinkHolder.tryEmit always
+					// emits it. Refusing actions is the true and non-contradictory claim.
+					assertThat(line).doesNotContain("tool call this tick is refused")
+					assertThat(line).doesNotContain("tool calls this tick are refused")
+				}
 		}
 	}
 
@@ -295,20 +323,49 @@ class PromptVariantTest {
 		}
 
 		/**
-		 * The property Task 1 of #834 made worth stating: an idle cycle with no tool calls is now a
-		 * scored success ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP]),
-		 * not a rule-based-fallback failure. BASELINE legitimises `no_op` in general but never names
-		 * the empty-station case, and #896 measured 2-7 ticks per run ending in a bare text reply
-		 * instead of the taught `no_op`.
+		 * The property Task 1 of #834 made worth stating: a tick with no tool calls is now a scored
+		 * success ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP]), not a
+		 * rule-based-fallback failure. BASELINE's catch-all says only "call no_op with a brief
+		 * reason" — never that replying afterwards ends the tick, nor that this is the expected
+		 * result rather than a failure to act. #896 measured 2-7 ticks per run ending in a bare text
+		 * reply instead of the taught `no_op`.
 		 */
 		@Test
-		@DisplayName("REVISED names the idle-station case and its correct output explicitly")
+		@DisplayName("REVISED names the correct idle output explicitly: one no_op, then a reply")
 		fun revisedNamesTheIdlePath() {
-			assertThat(revised).contains(
-				"When the station is idle — no queued trains, and no active train with a NEXT " +
-					"SECTION line — call no_op once with a brief reason and then reply."
-			)
+			assertThat(revised).contains("call no_op once with a brief reason and then reply")
 			assertThat(revised).contains("not a failure to act")
+		}
+
+		/**
+		 * The catch-all must stay **unconditional**, as [PromptVariant.BASELINE]'s
+		 * "- Otherwise, call no_op with a brief reason." is.
+		 *
+		 * An earlier cut of this revision gated it on the empty-station case ("no queued trains, and
+		 * no active train with a NEXT SECTION line"), which leaves a routine state with *no bullet
+		 * firing at all*: queued trains waiting, the station already at `cap` active, and no active
+		 * train with a NEXT SECTION line. Admission's guard is false, routing's is false,
+		 * cancelling's is false, and a station-idle guard is false precisely because trains are
+		 * queued. The model then replies in plain text with no emission and the tick is scored
+		 * `RULE_FALLBACK` — the outcome #834 exists to reduce. This test is the regression lock on
+		 * that reasoning.
+		 */
+		@Test
+		@DisplayName("REVISED's final procedure bullet is an unconditional catch-all, not an idle-only case")
+		fun revisedCatchAllIsUnconditional() {
+			// The last dash bullet of the *procedure* — the rules section that follows is dash-bulleted
+			// too, so the search must stop at its header.
+			val catchAll =
+				revised
+					.substringBefore("Rules that never bend:")
+					.lineSequence()
+					.last { it.startsWith("- ") }
+
+			assertThat(catchAll).contains("Otherwise")
+			assertThat(catchAll).contains("call no_op once")
+			// The guard clauses of the narrowed version, which must not have come back.
+			assertThat(catchAll.contains("no queued trains")).isFalse()
+			assertThat(catchAll.contains("station is idle")).isFalse()
 		}
 
 		/**

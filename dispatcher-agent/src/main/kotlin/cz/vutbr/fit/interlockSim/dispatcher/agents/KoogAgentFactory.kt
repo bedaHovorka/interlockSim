@@ -318,6 +318,36 @@ class KoogAgentFactory(
 		 *   the procedure itself is untouched, only its line count.
 		 * - **"Always prioritize safety"** is gone: it is the one sentence in the prompt that no
 		 *   measurement ever asked for and that names no action the model can take.
+		 * - **"You have no tool for querying state"** is gone. The four-tool inventory two lines
+		 *   above already says which tools exist, and
+		 *   [KoogDispatchAgentImpl.buildUserPrompt] asserts every cycle that its two train lists are
+		 *   "the complete set of trains you may name this cycle". The property this sentence guarded
+		 *   is therefore still stated twice; only this third statement of it is gone.
+		 * - **"no_op is a correct and frequent answer…"** is gone *as a separate closing line*. The
+		 *   property it carries is not: the catch-all bullet below ends "That is the correct and
+		 *   expected result for such a tick, not a failure to act", which is the same claim in the
+		 *   place the model reaches it — inside the procedure, at the moment it applies. Its second
+		 *   half ("Repeating an action already in force is refused…") survives verbatim as a rule.
+		 *
+		 * ## What was NOT cut, despite being redundant, and why
+		 *
+		 * `no_op` is legitimised **three** times in [buildBaselineSystemPrompt] and the obvious
+		 * "state it once" cut is exactly the wrong one to make here. Redundancy is cheap where
+		 * compliance is already measured at 100% (the name rules, whose rejection counts #847 puts
+		 * at zero) and expensive to remove where compliance was measured as *failing* — #896 measured
+		 * 2-7 ticks per run ending in a bare text reply instead of the taught `no_op`. So the
+		 * procedure's final bullet stays an **unconditional catch-all**, exactly as
+		 * [buildBaselineSystemPrompt]'s "- Otherwise, call no_op with a brief reason." is.
+		 *
+		 * An earlier cut of this revision narrowed that bullet to the empty-station case ("no queued
+		 * trains, and no active train with a NEXT SECTION line"). That leaves a real and routine
+		 * state uncovered: `queued > 0` **and** `active == cap` **and** no active train has a NEXT
+		 * SECTION line, which any run with more than `cap` trains reaches regularly. Admission's
+		 * guard is false (the station is full), routing's is false, cancelling's is false, and the
+		 * narrowed idle bullet is false *because queued trains exist* — no bullet would fire and the
+		 * prompt would say nothing at all. The model then replies in plain text,
+		 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] sees no emission, and
+		 * the tick is scored `RULE_FALLBACK` — the very outcome #834 exists to reduce.
 		 *
 		 * ## What was kept, and what was added
 		 *
@@ -329,12 +359,23 @@ class KoogAgentFactory(
 		 * the rules: it is the instruction whose absence broke every cycle, and it now occupies the
 		 * most salient position in the prompt while costing fewer tokens than the rule it replaces.
 		 *
-		 * Added: the empty-station idle path. Task 1 of #834 made an idle cycle with no tool calls a
-		 * scored success ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP])
-		 * rather than a rule-based-fallback failure, so what the model should do on an idle tick is
-		 * now worth saying plainly. [buildBaselineSystemPrompt] legitimises `no_op` in general but
-		 * never names the empty-station case, and #896 measured 2-7 ticks per run ending in a bare
-		 * text reply instead of the taught `no_op`.
+		 * Added: the catch-all bullet now says what the correct output *is*, not merely that `no_op`
+		 * is available. Task 1 of #834 made a tick with no tool calls a scored success
+		 * ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP]) rather than a
+		 * rule-based-fallback failure, so naming the expected output — one `no_op`, then a closing
+		 * sentence — is now worth its tokens. [buildBaselineSystemPrompt]'s catch-all says only
+		 * "call no_op with a brief reason", never that replying afterwards is what ends the tick nor
+		 * that this is the expected result rather than a failure to act; #896 measured 2-7 ticks per
+		 * run ending in a bare text reply instead of the taught `no_op`.
+		 *
+		 * ## This variant is a bundle, not a single-variable experiment
+		 *
+		 * Its stated hypothesis is length, but it also **moves** the turn-termination affordance to
+		 * the first line and **adds** the idle-output instruction above. Both are deliberate and
+		 * both are argued from measurements, but they are separate interventions: a difference the
+		 * sweep measures between the arms cannot be attributed to token count alone. Whoever reads
+		 * the sweep result must read it as "this bundle vs. #896's prompt", and isolating the three
+		 * would need three more variants and three more arms.
 		 */
 		private fun buildRevisedSystemPrompt(maxActions: Int): String {
 			val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
@@ -361,7 +402,7 @@ class KoogAgentFactory(
 				appendLine(
 					"At most $maxActions actions besides no_op are accepted this tick; no_op never " +
 						"counts against that budget, and once the budget is spent every further " +
-						"tool call this tick is refused — end your turn instead."
+						"action this tick is refused — end your turn instead."
 				)
 				appendLine("On every tick, follow these steps in order:")
 				appendLine(
@@ -379,7 +420,8 @@ class KoogAgentFactory(
 					"- For each active train whose line names a NEXT SECTION to reserve, call " +
 						"request_route once for it, copying the from/to names from that NEXT " +
 						"SECTION clause exactly. A train with no NEXT SECTION line gets no route " +
-						"request this tick — its line already says why; leave it be."
+						"request this tick — its line already says why (route already set, or " +
+						"nothing reservable yet); leave it be."
 				)
 				appendLine(
 					"- Call cancel_route only for a train whose reservation is no longer needed and " +
@@ -387,9 +429,9 @@ class KoogAgentFactory(
 						"reserved nothing and needs no cancel_route."
 				)
 				appendLine(
-					"- When the station is idle — no queued trains, and no active train with a NEXT " +
-						"SECTION line — call no_op once with a brief reason and then reply. That is " +
-						"the correct and expected result for such a tick, not a failure to act."
+					"- Otherwise — nothing to approve, nothing to reserve, nothing to cancel — call " +
+						"no_op once with a brief reason and then reply. That is the correct and " +
+						"expected result for such a tick, not a failure to act."
 				)
 				appendRevisedNonNegotiableRules()
 			}.trimEnd('\n')
