@@ -21,6 +21,11 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
+import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -258,16 +263,25 @@ class AiSweepDriverTest {
 		}
 
 	@Test
-	@DisplayName("a FATAL SimulationException in the child's log is patched into the persisted run JSON")
+	@DisplayName(
+		"a real PathSeparatorChangeException[FATAL] line in the child's log — not a hand-typed " +
+			"literal — is patched into the persisted run JSON"
+	)
 	fun fatalExceptionInLogIsPatchedIntoTheRunJson() {
-		val logContent = "SimulationException[FATAL]: pathToSemaphore null at time 12.5\n"
-		driverWith(runnerWritingLogAndSnapshot(logContent)).run(grid(repeat = 1), outputRoot, mainClass)
+		// PathSeparatorChangeException, not SimulationException: this is exactly the reachable
+		// switch-setup producer that a class-name-prefix-only scanner would have missed, so this
+		// test exercises the real end-to-end shape, not an assumed literal.
+		val realLine =
+			PathSeparatorChangeException(
+				"switch doesn't join this segments",
+				mockk<PathSeparator>(relaxed = true)
+			).toString()
+		driverWith(runnerWritingLogAndSnapshot("$realLine\n")).run(grid(repeat = 1), outputRoot, mainClass)
 
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
 		assertThat(written).hasSize(1)
 		assertThat(written.single().fatalExceptionCount).isEqualTo(1L)
-		assertThat(written.single().fatalExceptionFirstMessage)
-			.isEqualTo("SimulationException[FATAL]: pathToSemaphore null at time 12.5")
+		assertThat(written.single().fatalExceptionFirstMessage).isEqualTo(realLine)
 	}
 
 	@Test
@@ -293,11 +307,13 @@ class AiSweepDriverTest {
 	}
 
 	@Test
-	@DisplayName("a timed-out run still carries a FATAL finding recorded earlier in its log")
+	@DisplayName("a timed-out run still carries a FATAL finding (a real TrackOperationException line) from its log")
 	fun timedOutRunStillCarriesAFatalFindingFromItsLog() {
+		val realLine =
+			TrackOperationException("track operation failed", mockk<StaticTrack>(relaxed = true)).toString()
 		val runner =
 			SweepProcessRunner { request ->
-				Files.writeString(request.logFile, "SimulationException[FATAL]: stuck at time 9.0\n")
+				Files.writeString(request.logFile, "$realLine\n")
 				SweepProcessResult(exitCode = null, timedOut = true)
 			}
 		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)

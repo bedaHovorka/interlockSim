@@ -515,7 +515,7 @@ class RunReportAggregatorTest {
 
 		assertThat(md).transform("contains heading") { it.contains("## FATAL Exceptions") }.isTrue()
 		assertThat(md)
-			.transform("contains the no-FATAL message") { it.contains("No run recorded a `SimulationException[FATAL]`") }
+			.transform("contains the no-FATAL message") { it.contains("No run recorded a FATAL `SimulationException`") }
 			.isTrue()
 	}
 

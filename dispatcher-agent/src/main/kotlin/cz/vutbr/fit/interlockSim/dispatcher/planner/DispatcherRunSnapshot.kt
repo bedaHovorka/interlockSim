@@ -94,14 +94,16 @@ import kotlinx.serialization.Serializable
  *   and `null` means *not measured*, never *measured as none*; see [RailwayOutcome]. Defaults to
  *   [RailwayOutcome.UNMEASURED], which is both the honest value for a run nobody measured and
  *   what keeps schema-version-1 files decodable (see "Schema versioning" above).
- * @property fatalExceptionCount Number of `SimulationException[FATAL]` occurrences found by
- *   scanning this run's log; see `cz.vutbr.fit.interlockSim.dispatcher.sweep.FatalExceptionScanner`.
- *   `null` means the scan itself could not run (log missing or unreadable) — *not measured*,
- *   never *measured as none*; `0` is the positive finding that the log was read in full and
- *   contained no FATAL marker. A nonzero value means kDisco's `SupervisorJob` absorbed a FATAL
- *   error during this run and it still completed and exited 0 — the run should be treated as a
- *   discarded data point, not a passing one, even though the gate predicate itself (deliberately)
- *   does not read this field. `null` for any run recorded before this field existed.
+ * @property fatalExceptionCount Number of FATAL `SimulationException` occurrences — including
+ *   subclasses such as `PathSeparatorChangeException` and `TrackOperationException`, not only the
+ *   base class — found by scanning this run's log; see
+ *   `cz.vutbr.fit.interlockSim.dispatcher.sweep.FatalExceptionScanner`. `null` means the scan
+ *   itself could not run (log missing or unreadable) — *not measured*, never *measured as none*;
+ *   `0` is the positive finding that the log was read in full and contained no FATAL marker. A
+ *   nonzero value means kDisco's `SupervisorJob` absorbed a FATAL error during this run and it
+ *   still completed and exited 0 — the run should be treated as a discarded data point, not a
+ *   passing one, even though the gate predicate itself (deliberately) does not read this field.
+ *   `null` for any run recorded before this field existed.
  * @property fatalExceptionFirstMessage The first matching log line (trimmed), verbatim; `null`
  *   whenever [fatalExceptionCount] is `null` or `0`.
  *

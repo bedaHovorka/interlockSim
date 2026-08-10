@@ -28,8 +28,8 @@ private val logger = KotlinLogging.logger {}
  * belongs to. `count = 0` is the honest positive finding that the log was read in full and
  * contained no FATAL marker.
  *
- * @property count Number of [FatalExceptionScanner.FATAL_MARKER] occurrences found in the run's
- *   log; `null` if the scan itself could not run.
+ * @property count Number of [FatalExceptionScanner.FATAL_MARKER_PATTERN] occurrences found in the
+ *   run's log; `null` if the scan itself could not run.
  * @property firstMessage The first matching log line, verbatim (trimmed); `null` when [count] is
  *   `null` or `0`.
  */
@@ -54,12 +54,26 @@ data class FatalExceptionScanResult(
  * falls through to `Thread.uncaughtExceptionHandler`, which prints it via
  * `Throwable.printStackTrace()` to `System.err`.
  *
- * `SimulationException.toString()` renders as the class's simple name, the severity in square
- * brackets, the message, and the model time — so a FATAL one starts its printed stack trace with
- * the literal text [FATAL_MARKER], exactly what this scanner looks for.
- * [ForkedJvmSweepProcessRunner] redirects the child's stderr
- * into its per-run log file (`redirectErrorStream(true)` + `redirectOutput(logFile)`), so that
- * evidence lands exactly where this scanner reads it.
+ * `SimulationException.toString()` builds its text from the **runtime** class's simple name, not
+ * the literal text `"SimulationException"` (`SimulationException.kt:82-85`: `this::class.simpleName`
+ * followed by the severity in square brackets, the message, and the model time). Two
+ * subclasses exist, neither overrides `toString()`, and both default to `Severity.FATAL`:
+ * [cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException] (thrown from
+ * `DynamicRailSwitch.getPathConfWithException`/`setUpPath`/`cancelPathSetup` — i.e. switch path
+ * setup during ordinary route reservation, plus `DynamicInOut`/`DynamicRailSemaphore`) and
+ * [cz.vutbr.fit.interlockSim.exceptions.TrackOperationException] (`AbstractPath`, `DynamicTrack`,
+ * `DynamicTrackBlock`). A real occurrence therefore does **not** necessarily start with the text
+ * `SimulationException` — e.g. `PathSeparatorChangeException[FATAL]: switch doesn't join this
+ * segments at time 12.5` is exactly as real a FATAL as `SimulationException[FATAL]: ...` is, and a
+ * scanner keyed on the literal `SimulationException[FATAL]` prefix would silently miss it,
+ * reporting `count = 0` — a *positive clean finding* — for a run that was not clean. [scan] must
+ * therefore match on the severity bracket, not the class-name prefix, and stay correct for any
+ * future `SimulationException` subclass without needing to enumerate it by name: see
+ * [FATAL_MARKER_PATTERN].
+ *
+ * [ForkedJvmSweepProcessRunner] redirects the child's stderr into its per-run log file
+ * (`redirectErrorStream(true)` + `redirectOutput(logFile)`), so that evidence lands exactly where
+ * this scanner reads it.
  *
  * ## Why not capture it in-process instead
  *
@@ -76,17 +90,31 @@ data class FatalExceptionScanResult(
  * `core/` has to observe the run from the outside, and the log is the only outside artifact this
  * driver already keeps per run.
  *
- * A concrete producer of this marker is filed separately (Issue #905: a FATAL thrown from
- * `Front.separatorAction`, `Train.kt:644`, on an origin-abandon path, ruled "not reachable on the
- * current wiring" but real). This scanner does not depend on that specific defect — only on the
- * `SupervisorJob` absorption mechanism being real for *any* FATAL `SimulationException`.
+ * The switch/track sites above are ordinary *reachable* failure paths — unlike Issue #905 (a
+ * FATAL from `Front.separatorAction`, `Train.kt:644`, on an origin-abandon path), which the
+ * traffic-simulation-expert ruled "not reachable on the current wiring" for the examples this
+ * sweep runs. This scanner does not depend on any single defect being reachable — only on the
+ * `SupervisorJob` absorption mechanism being real for *any* FATAL `SimulationException`, and #905
+ * remains useful context for what an absorbed FATAL looks like end to end.
  */
 object FatalExceptionScanner {
-	/** Literal substring [cz.vutbr.fit.interlockSim.exceptions.SimulationException.toString] produces for a FATAL. */
-	internal const val FATAL_MARKER: String = "SimulationException[FATAL]"
+	/**
+	 * Matches the severity bracket [SimulationException.toString] produces for a FATAL, regardless
+	 * of which subclass threw it.
+	 *
+	 * Deliberately **not** anchored on `SimulationException` (or any other class-name prefix): the
+	 * class-name portion of `toString()` is `this::class.simpleName`, which varies by subclass, so
+	 * a future `SimulationException` subclass must not be able to silently defeat this scanner the
+	 * way a name-prefix match already did once (see this object's own KDoc). The trailing
+	 * `at time` fragment is included so this pattern cannot match a
+	 * `cz.vutbr.fit.interlockSim.exceptions.EditorException` occurrence: `EditorException` shares
+	 * the identical class-name/severity/message `toString()` shape but has no time component, so
+	 * the two hierarchies are otherwise textually indistinguishable.
+	 */
+	internal val FATAL_MARKER_PATTERN: Regex = Regex("""\[FATAL]:.*\bat time\b""")
 
 	/**
-	 * Scans [logFile] line by line for [FATAL_MARKER].
+	 * Scans [logFile] line by line for [FATAL_MARKER_PATTERN].
 	 *
 	 * Never throws: a missing or unreadable file yields a [FatalExceptionScanResult] with
 	 * `count = null` rather than propagating, so callers can record "not measured" without
@@ -103,7 +131,7 @@ object FatalExceptionScanner {
 			var firstMessage: String? = null
 			Files.newBufferedReader(logFile).use { reader ->
 				reader.lineSequence().forEach { line ->
-					if (line.contains(FATAL_MARKER)) {
+					if (FATAL_MARKER_PATTERN.containsMatchIn(line)) {
 						count++
 						if (firstMessage == null) {
 							firstMessage = line.trim()

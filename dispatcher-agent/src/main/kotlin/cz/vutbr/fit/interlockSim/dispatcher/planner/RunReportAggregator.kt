@@ -266,8 +266,10 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * Flags every run that recorded at least one `SimulationException[FATAL]` occurrence
-	 * (`FatalExceptionScanner`, the measurement-integrity fix for #834's C2 condition).
+	 * Flags every run that recorded at least one FATAL `SimulationException` occurrence (including
+	 * subclasses such as `PathSeparatorChangeException`/`TrackOperationException`, not only the
+	 * base class — see `FatalExceptionScanner`'s KDoc, the measurement-integrity fix for #834's C2
+	 * condition).
 	 *
 	 * Rendered near the top of the report, ahead of every other section, because a flagged run
 	 * had *something* invalid happen during it and kDisco's `SupervisorJob` absorbed the error —
@@ -287,7 +289,7 @@ class RunReportAggregator(
 		sb.appendLine()
 		if (flagged.isEmpty()) {
 			sb.appendLine(
-				"No run recorded a `SimulationException[FATAL]` occurrence. (A run whose log could not be " +
+				"No run recorded a FATAL `SimulationException` occurrence. (A run whose log could not be " +
 					"scanned shows `n/a`, not a count, for `FATAL exceptions` in Per-Run Detail below — " +
 					"absence of a finding, not a clean bill.)"
 			)
