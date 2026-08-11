@@ -258,15 +258,17 @@ class DispatcherRunConfigTest {
 
 	@Test
 	@DisplayName(
-		"#834 regression lock: the shipped properties file yields exactly today's compiled defaults"
+		"#834 regression lock: the shipped properties file yields exactly the values the sweep chose"
 	)
-	fun shippedFileYieldsTodaysDefaults() {
-		// No system properties, no injected file map: exercises the real classpath resource
-		// end to end. #834 Task 6 must not change any default's value.
+	fun shippedFileYieldsChosenDefaults() {
+		// No system properties, no injected file map: exercises the real classpath resource end to
+		// end. The lock still forbids silent drift; its expectation for historyN moved once, when
+		// #834's sweep chose 0 over 3 (c7Clean 8/10 vs 0/10, across all four factorial cells).
+		// See docs/GOAL_10_SP2C11_SWEEP_REPORT.md.
 		val config = DispatcherRunConfig.fromProperties()
 
 		assertThat(config.tickPeriodMs).isEqualTo(0L)
-		assertThat(config.historyN).isEqualTo(3)
+		assertThat(config.historyN).isEqualTo(0)
 		assertThat(config.maxActionsPerTick).isEqualTo(3)
 		assertThat(config.inferenceTimeoutSeconds).isEqualTo(30L)
 	}

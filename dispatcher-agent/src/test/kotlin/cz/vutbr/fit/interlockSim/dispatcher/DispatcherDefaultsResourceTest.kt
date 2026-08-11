@@ -76,15 +76,25 @@ class DispatcherDefaultsResourceTest {
 	}
 
 	@Test
-	@DisplayName("the shipped resource yields exactly today's compiled defaults, unchanged (#834 regression lock)")
-	fun shippedResourceMatchesCompiledDefaults() {
+	@DisplayName("the shipped resource yields exactly the values #834's sweep chose (#834 regression lock)")
+	fun shippedResourceMatchesChosenDefaults() {
+		// The lock's PURPOSE is unchanged: no value in the shipped file may drift without a
+		// deliberate edit here. Only its expectations moved, once, when #834's sweep decided two
+		// of them (docs/GOAL_10_SP2C11_SWEEP_REPORT.md; records under docs/measurement/sp2c11-runs/).
+		//
+		// historyN 3 -> 0 and promptVariant BASELINE -> REVISED are therefore asserted against the
+		// SWEEP's values, not against the compiled constants they no longer equal. The other four
+		// still coincide with their constants, and are still pinned.
 		val shipped = DispatcherDefaultsResource.shipped
 
 		assertThat(shipped.lookup(DispatcherRunConfig.PROP_TICK_PERIOD_MS)).isEqualTo("0")
-		assertThat(shipped.lookup(DispatcherRunConfig.PROP_HISTORY_N)).isEqualTo("3")
+		// Sweep: c7Clean 8/10 at historyN=0 in all four cells, 0/10 at historyN=3 in all four.
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_HISTORY_N)).isEqualTo("0")
 		assertThat(shipped.lookup(DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK)).isEqualTo("3")
 		assertThat(shipped.lookup(DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS)).isEqualTo("30")
 		assertThat(shipped.lookup(DispatcherRunConfig.PROP_MODEL)).isEqualTo("qwen2.5:7b-instruct")
 		assertThat(shipped.lookup(DispatcherRunConfig.PROP_TEMPERATURE)).isEqualTo("0.28")
+		// Sweep A/B: journeys median 8.0 vs 6.0, one-sided permutation p = 0.0215.
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_PROMPT_VARIANT)).isEqualTo("REVISED")
 	}
 }
