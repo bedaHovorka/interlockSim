@@ -1,0 +1,101 @@
+{
+    "schemaVersion": 3,
+    "runId": "sweep-ex-shuntingLoopAI_m-qwen2.5-7b-instruct_t-0.28_p-0_h-3_a-3_it-30_pv-REVISED-r07",
+    "arm": "LLM_TOOL_CALLING",
+    "params": {
+        "tickPeriodMs": 0,
+        "historyN": 3,
+        "temperature": 0.2800000011920929,
+        "maxActionsPerTick": 3,
+        "model": "qwen2.5:7b-instruct",
+        "seed": null,
+        "inferenceTimeoutSeconds": 30,
+        "promptVariant": "REVISED"
+    },
+    "totalTicks": 30,
+    "ticksByOutcome": {
+        "LLM_ACTIONS": 11,
+        "LLM_REPAIRED": 0,
+        "LLM_EXCEPTION": 0,
+        "RULE_FALLBACK": 12,
+        "LLM_NO_OP": 7,
+        "TIMEOUT_NOOP": 0,
+        "LLM_ABANDONED": 0
+    },
+    "timeoutNoOpByCause": {
+        "EMPTY_UNPARSEABLE": 0,
+        "UNREPAIRABLE_OUTPUT": 0,
+        "DEADLINE_MISS": 0
+    },
+    "llmSuccessRate": 0.6,
+    "noOpRate": 0.23333333333333334,
+    "invalidOutputRate": 0.0,
+    "repairSuccessRate": 0.0,
+    "emittedByActionType": {
+        "approve_train": 3,
+        "ReservePath": 3,
+        "RequestRoute": 11,
+        "request_route": 5,
+        "ApproveTrain": 13
+    },
+    "rejectionsByCode": {
+        "NO_ROUTE_HELD": 0,
+        "BLANK_ARGUMENT": 1,
+        "DUPLICATE_ACTION_THIS_TICK": 0,
+        "UNKNOWN_ENDPOINT": 0,
+        "ACTION_LIMIT_EXCEEDED": 3,
+        "TRAIN_NOT_ADMITTED": 0,
+        "NO_FREE_PATH": 0,
+        "TARGET_NOT_TRAIN_DESTINATION": 1,
+        "TRAIN_ALREADY_ACTIVE": 0,
+        "ORIGIN_NOT_AT_TRAIN_POSITION": 3,
+        "ROUTE_HELD_TO_DIFFERENT_TARGET": 0,
+        "TRAIN_ALREADY_EXITED": 0,
+        "TRAIN_ON_RESERVED_BLOCK": 0,
+        "UNKNOWN_TRAIN": 0,
+        "CAPACITY_FULL": 0,
+        "ROUTE_ALREADY_HELD_TO_SAME_TARGET": 0,
+        "ENDPOINT_IS_BLOCK_ID": 0,
+        "TRAIN_NOT_QUEUED": 0
+    },
+    "applyFailuresByCode": {
+        "CONFLICT": 0,
+        "CAP_EXCEEDED_APPLY": 8,
+        "ORIGIN_NOT_CONTIGUOUS": 0,
+        "NO_ROUTE_EXISTS": 0,
+        "ALL_PATHS_BLOCKED": 6,
+        "APPROVE_REJECTED": 0,
+        "DROPPED_INVALID": 0
+    },
+    "validAt1": 0.0,
+    "correctAt1": null,
+    "oracleAgreementAt1": null,
+    "latencyP50Ms": 545,
+    "latencyP95Ms": 2300,
+    "latencyMaxMs": 3039,
+    "actionsByAuthor": {
+        "RULE_BASED": 0,
+        "OPERATOR": 0,
+        "SAFETY_NET": 0,
+        "RULE_FALLBACK": 4,
+        "LLM": 31,
+        "TIMEOUT_NOOP": 0
+    },
+    "unattributedApplies": 0,
+    "terminalFallbackEngaged": false,
+    "terminalFallbackTickIndex": null,
+    "c7Clean": false,
+    "completedNaturally": true,
+    "endCause": "NATURAL_COMPLETION",
+    "railwayOutcome": {
+        "journeysCompleted": 3,
+        "trainsEntered": 15,
+        "trainsExited": 3,
+        "maxConcurrentTrains": 2,
+        "blockTransitions": 8,
+        "conflicts": 1,
+        "failedReservations": 0
+    },
+    "fatalExceptionCount": 4,
+    "fatalExceptionFirstMessage": "SimulationException[FATAL]: Path separator must be an end of this track at time 6.0"
+}
