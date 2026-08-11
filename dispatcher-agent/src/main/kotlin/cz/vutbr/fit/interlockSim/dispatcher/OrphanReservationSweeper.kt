@@ -94,9 +94,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * once per tick, alongside [DispatchDecisionApplier.onControlStep]. Not thread-safe, and does not
  * need to be.
  *
- * **Coverage limitation:** this is wired only into the dispatcher-agent examples. Runs driven by
- * `SynchronousDispatcherWiring` (`:core`, used by `:fast-sim` and the non-AI `shuntingLoop`
- * example) are unaffected — closing that would require a `core/` change.
+ * **Coverage:** wired into all four `wireDispatcherAgent` examples — `shuntingLoop` (console and
+ * GUI) and `shuntingLoopAI` (console and GUI). Runs driven by `SynchronousDispatcherWiring`
+ * (`:core`, used by `:fast-sim`, `shuntingLoopSync`, `multiTrainLoop`, and `threeTrainLoop`)
+ * are unaffected — closing that would require a `core/` change.
  *
  * @property perceptionPort Live network state: block ownership, block state, and active trains.
  * @property dispatchLoopSensorPort Source of the admission queue.
