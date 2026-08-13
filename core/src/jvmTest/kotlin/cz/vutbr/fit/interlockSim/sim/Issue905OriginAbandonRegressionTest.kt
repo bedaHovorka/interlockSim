@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -138,7 +139,7 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 			object : TrainNavigationService {
 				override fun findReservedPathForTrain(
 					trainId: String,
-					separator: PathSeparator,
+					separator: PathSeparator
 				): PathResult {
 					if (separator is DynamicInOut) {
 						val key = "$trainId@${separator.name}"
@@ -155,13 +156,13 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 
 				override fun isPathReservedForTrain(
 					trainId: String,
-					separator: PathSeparator,
+					separator: PathSeparator
 				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
 
 				override fun reservedSeparatorsAhead(
 					trainId: String,
 					separator: PathSeparator,
-					limit: Int,
+					limit: Int
 				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
 			}
 
@@ -172,7 +173,9 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 		every { spyContext.getRoutingServices() } returns
 			object : RoutingServices {
 				override fun getTopologyNavigator() = realRouting.getTopologyNavigator()
+
 				override fun getPathReservationService() = realRouting.getPathReservationService()
+
 				override fun getTrainNavigationService() = decoratedNav
 			}
 
