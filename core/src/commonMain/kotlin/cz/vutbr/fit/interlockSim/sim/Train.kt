@@ -196,8 +196,9 @@ class Train :
 								// At origin InOut with no topological continuation.
 								// This is a configuration error; do NOT break — fall through to
 								// the bounded-retry handler below (Issue #905, AC2).
+								val originInOut = where
 								logger.warn {
-									"Train $number: No topological path from origin InOut '${where.name}' " +
+									"Train $number: No topological path from origin InOut '${originInOut.name}' " +
 										"(attempt ${originNoPathRetries + 1}/$MAX_ORIGIN_NO_PATH_RETRIES). " +
 										"Network may be misconfigured."
 								}
