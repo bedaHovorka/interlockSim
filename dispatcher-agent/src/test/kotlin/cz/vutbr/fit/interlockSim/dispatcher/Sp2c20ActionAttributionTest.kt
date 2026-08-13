@@ -615,6 +615,8 @@ class Sp2c20ActionAttributionTest {
 					"APPROVE_REJECTED",
 					"CAP_EXCEEDED_APPLY",
 					"ORIGIN_NOT_CONTIGUOUS",
+					// Issue #834 review finding #2: four-condition interlocking refusal code.
+					"CONDITION_FAILED",
 					"DROPPED_INVALID"
 				)
 			)

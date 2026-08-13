@@ -12,7 +12,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import ai.koog.agents.core.agent.AIAgent
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.messageContains
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -327,6 +329,122 @@ class KoogDispatchAgentImplTest {
 				null
 			)
 		}
+	}
+
+	// ── Issue #834 (SP2c.11, task 8): same-tick same-target dedup across active trains ────────
+
+	/**
+	 * Builds an observation with two active trains, both owning an
+	 * [BlockInputObservation.isApproachingThisInput] input targeting the same
+	 * [toSeparatorName][BlockInputObservation.toSeparatorName] -- the scenario
+	 * [NextHopResolver.resolveAll] must dedup so the two arms cannot disagree about who gets
+	 * the section (mirrors [RuleBasedDispatcher.checkAllInputs]'s `claimedSeparators`).
+	 */
+	private fun twoActiveTrainsTargetingTheSameSeparatorObservation(): DispatchObservation =
+		DispatchObservation(
+			snapshot =
+				SimulationSnapshot.EMPTY.copy(
+					trainPositions =
+						listOf(
+							TrainPositionReading(
+								trainId = "Train #1",
+								velocity = 5.0,
+								acceleration = 0.0,
+								totalDistance = 0.0,
+								frontSectionName = null
+							),
+							TrainPositionReading(
+								trainId = "Train #2",
+								velocity = 5.0,
+								acceleration = 0.0,
+								totalDistance = 0.0,
+								frontSectionName = null
+							)
+						)
+				),
+			unapprovedTrains = emptyList(),
+			innerBlockInputs =
+				listOf(
+					blockInput(
+						towardSemaphoreName = "doB1",
+						toSeparatorName = "sharedSep",
+						ownerTrainId = "Train #1",
+						isApproachingThisInput = true
+					),
+					blockInput(
+						towardSemaphoreName = "doC1",
+						toSeparatorName = "sharedSep",
+						ownerTrainId = "Train #2",
+						isApproachingThisInput = true
+					)
+				),
+			outerBlockInputs = emptyList()
+		)
+
+	@Test
+	@DisplayName("two active trains targeting the same separator: exactly one NEXT SECTION Hop to it is rendered")
+	fun decideAsyncDedupesNextSectionAcrossTwoTrainsTargetingTheSameSeparator() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		runBlocking { agent.decideAsync(twoActiveTrainsTargetingTheSameSeparatorObservation()) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					val hopOccurrences =
+						Regex("""NEXT SECTION to reserve: from ".*?" to "sharedSep"""")
+							.findAll(prompt)
+							.count()
+					hopOccurrences == 1
+				},
+				null
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("the losing train's line does not claim the track ahead is occupied or blocked")
+	fun decideAsyncLoserLineNeverImpliesTrackIsBlockedOrOccupied() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.run(any(), null) } returns "done"
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		runBlocking { agent.decideAsync(twoActiveTrainsTargetingTheSameSeparatorObservation()) }
+
+		coVerify {
+			aiAgent.run(
+				match { prompt ->
+					val loserLine = prompt.lineSequence().first { it.contains("Train #2") }
+					!loserLine.contains("blocked", ignoreCase = true) &&
+						!loserLine.contains("occupied", ignoreCase = true) &&
+						!loserLine.contains("no section ahead is reservable")
+				},
+				null
+			)
+		}
+	}
+
+	@Test
+	@DisplayName("the same observation rendered twice produces a byte-identical prompt (determinism)")
+	fun decideAsyncRendersByteIdenticalPromptsForTheSameObservation() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		val prompts = mutableListOf<String>()
+		coEvery { aiAgent.run(any(), null) } answers {
+			prompts.add(firstArg())
+			"done"
+		}
+		val agent = KoogDispatchAgentImpl(aiAgent)
+		val obs = twoActiveTrainsTargetingTheSameSeparatorObservation()
+
+		runBlocking {
+			agent.decideAsync(obs)
+			agent.decideAsync(obs)
+		}
+
+		assertThat(prompts).hasSize(2)
+		assertThat(prompts[0]).isEqualTo(prompts[1])
 	}
 
 	@Test

@@ -222,8 +222,23 @@ class ExampleRegistry {
 	 * `seed` stays `null`, and that is not an oversight: Koog 1.1.1 has no path from
 	 * [OllamaExecutorConfig] to Ollama's `seed` option, so pinning one is impossible here and
 	 * recording a value would claim a reproducibility guarantee the run does not have.
+	 *
+	 * `inferenceTimeoutSeconds` records what [runConfig] actually gave this run (Issue #834,
+	 * SP2c.11) — the same value threaded into [KoogAgentPlanAdapter]'s `inferenceTimeout` at both
+	 * call sites below, so the JSON matches what the run was really bounded by. `promptVariant`
+	 * records the name of the [cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant] this run's
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] was built with (#834, SP2c.11),
+	 * read from the same [DispatcherRunConfig] that supplied it to the factory — so a run JSON names
+	 * the prompt that actually produced it, and [RunParameters.DEFAULT_PROMPT_VARIANT]'s
+	 * "untracked" sentinel is now reached only when decoding a JSON written before this field
+	 * existed. The `.name` (rather than the enum) keeps [RunParameters] decoupled from this enum,
+	 * exactly as that field's KDoc requires.
+	 *
+	 * `internal` rather than `private` so tests can call it directly with a plain (non-Koin)
+	 * [OllamaExecutorConfig]/[DispatcherRunConfig] pair — the same testability reasoning as
+	 * `ruleBasedRunParameters` in `DispatcherAgentModule`.
 	 */
-	private fun llmRunParameters(
+	internal fun llmRunParameters(
 		config: OllamaExecutorConfig,
 		runConfig: DispatcherRunConfig
 	): RunParameters =
@@ -233,7 +248,9 @@ class ExampleRegistry {
 			temperature = config.temperature.toDouble(),
 			maxActionsPerTick = runConfig.maxActionsPerTick,
 			model = config.modelName,
-			seed = null
+			seed = null,
+			inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds,
+			promptVariant = runConfig.promptVariant.name
 		)
 
 	/**

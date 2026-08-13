@@ -14,6 +14,7 @@ import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
@@ -216,6 +217,78 @@ class SweepGridTest {
 	fun negativeNonSentinelInferenceTimeoutIsRejected() {
 		val grid = gridFile("""{ "repeat": 1, "axes": { "inferenceTimeoutSeconds": [-2] } }""")
 		assertThrows<SweepGridException> { SweepGrid.load(grid) }
+	}
+
+	/**
+	 * Issue #834 (SP2c.11): `promptVariant` is optional exactly like `model`/`temperature` — an
+	 * omitted axis means "leave DispatcherRunConfig's own resolution in place", so a grid that
+	 * never mentions it must pass no `-D` for it and the child keeps whatever the committed
+	 * `dispatcher-defaults.properties` says.
+	 */
+	@Test
+	@DisplayName("an omitted promptVariant axis means 'leave the run config default', not a value")
+	fun omittedPromptVariantAxisMeansUnchanged() {
+		val cell =
+			SweepGrid
+				.load(gridFile("""{ "repeat": 1 }"""))
+				.axes
+				.cells()
+				.single()
+
+		assertThat(cell.promptVariant).isNull()
+		assertThat(cell.systemProperties("run-1", "out").keys)
+			.isEqualTo(
+				setOf(
+					"interlocksim.dispatcher.tickPeriodMs",
+					"interlocksim.dispatcher.historyN",
+					"interlocksim.dispatcher.maxActionsPerTick",
+					"interlocksim.dispatcher.runId",
+					"interlocksim.dispatcher.runsRoot"
+				)
+			)
+	}
+
+	@Test
+	@DisplayName("an explicit promptVariant axis is swept into the cell, the slug and the -D properties")
+	fun explicitPromptVariantAxisIsSwept() {
+		val cells =
+			SweepGrid
+				.load(gridFile("""{ "repeat": 1, "axes": { "promptVariant": ["BASELINE", "REVISED"] } }"""))
+				.axes
+				.cells()
+
+		assertThat(cells.map { it.promptVariant }.toSet())
+			.isEqualTo(setOf(PromptVariant.BASELINE, PromptVariant.REVISED))
+		assertThat(cells.map { it.slug }.toSet()).hasSize(2)
+		val revised = cells.single { it.promptVariant == PromptVariant.REVISED }
+		assertThat(revised.systemProperties("run-1", "out")["interlocksim.dispatcher.promptVariant"])
+			.isEqualTo("REVISED")
+	}
+
+	@Test
+	@DisplayName("promptVariant axis names are matched case-insensitively")
+	fun promptVariantAxisIsCaseInsensitive() {
+		val cell =
+			SweepGrid
+				.load(gridFile("""{ "repeat": 1, "axes": { "promptVariant": ["revised"] } }"""))
+				.axes
+				.cells()
+				.single()
+
+		assertThat(cell.promptVariant).isEqualTo(PromptVariant.REVISED)
+	}
+
+	/**
+	 * A typo must fail at load. Swept as the default it would run the control arm twice and the
+	 * report would compare two arms that were the same arm — the one failure mode a measurement
+	 * harness must never have.
+	 */
+	@Test
+	@DisplayName("an unknown promptVariant name is rejected at load, not swept as the default")
+	fun unknownPromptVariantNameIsRejected() {
+		val grid = gridFile("""{ "repeat": 1, "axes": { "promptVariant": ["REVISD"] } }""")
+		val ex = assertThrows<SweepGridException> { SweepGrid.load(grid) }
+		assertThat(ex.message ?: "").contains("promptVariant")
 	}
 
 	@Test

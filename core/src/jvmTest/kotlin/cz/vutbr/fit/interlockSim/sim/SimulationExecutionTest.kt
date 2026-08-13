@@ -345,7 +345,8 @@ class SimulationExecutionTest : KoinTestBase() {
 		 * track blocks. When getNextTrackSection() returns null (no path available),
 		 * train should passivate (wait) rather than stopping the entire simulation.
 		 *
-		 * Physics: ShuntingLoop polls every 1.0s to reserve paths via trySetupPaths().
+		 * Physics: ShuntingLoop polls every 2.0 simulated seconds to reserve paths via
+		 * trySetupPaths() — iteration() holds 1.0 and interLoopSleep() holds another 1.0.
 		 * Between polls, trains may reach separators with unreserved next blocks.
 		 * Train remains stationary (velocity=0) while passivated, waiting for
 		 * dispatcher to reserve path.
@@ -371,7 +372,7 @@ class SimulationExecutionTest : KoinTestBase() {
 		 *
 		 * Code References:
 		 * - Train.kt:104-109 - Passivation logic when next path unavailable
-		 * - ShuntingLoop.applyReservePath() - Path reservation mechanism (1.0s polling),
+		 * - ShuntingLoop.applyReservePath() - Path reservation mechanism (2.0 s control step),
 		 *   driven by RuleBasedDispatcher.checkAllInputs()/checkInput() decisions
 		 * - ShuntingLoop.kt:trySetupPaths() - Dispatcher path reservation logic
 		 *

@@ -33,7 +33,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 import org.koin.test.inject
 import java.io.InputStream
 
@@ -46,11 +45,11 @@ import java.io.InputStream
  * PathReservationRegistry.registerPathInfo() and mergePathInfo().
  *
  * Key scenarios tested:
- * - Normal overlap (old.target == new.start)
- * - No overlap (old.target != new.start)
+ * - Normal continuation (old.target == new.start) — the only shape that actually merges
+ * - Non-contiguous new path (old.target != new.start) — merge ABORTS, stored PathInfo untouched
  * - Single-element paths
  * - Entry direction merging
- * - Circular route rejection (new feature)
+ * - Duplicated new start (circular route) — merge ABORTS, no exception
  * - Three-way merges (old → middle → new)
  *
  * ## Why This Matters
@@ -64,7 +63,25 @@ import java.io.InputStream
  * - Double-leave bugs (Tail leaves same block twice)
  * - Lost path segments (Tail can't find next block)
  *
- * @since Code Quality Plan 2026-02-02 (Phase 2)
+ * ## Behaviour change (Issue #834, SP2c.11)
+ *
+ * Until #834 this suite asserted two shapes that were in fact defects:
+ *
+ * 1. **Concatenation of a non-contiguous new path.** `old.target != new.start` used to be
+ *    concatenated verbatim, producing two adjacent `PathSeparator`s. Navigation readers
+ *    truncate safely at that seam, so the train never teleports — but the reservation's tail
+ *    stays RESERVED behind a cleared START aspect that the train will never reach.
+ *    `mergePathInfo` now ABORTS such a merge and keeps the stored PathInfo unchanged.
+ * 2. **`IllegalStateException` on a duplicated new start.** That throw escaped
+ *    `reservePath` *after* blocks were reserved and a signal was already cleared, and it
+ *    killed the kDisco simulation thread while the run still wrote a well-formed result
+ *    file. `mergePathInfo` must never throw; the same WARN-and-`return old` fail-safe abort
+ *    the cycle guard already used is now used for this case too.
+ *
+ * The abort WARNs themselves are asserted in `dispatcher-agent`'s
+ * `MergeAbortSimSurvivalTest` (Logback is only on that module's test compile classpath).
+ *
+ * @since Code Quality Plan 2026-02-02 (Phase 2); abort semantics from Issue #834 (SP2c.11)
  */
 @DisplayName("PathReservationRegistry PathInfo Merging Tests")
 class PathReservationRegistryMergingTest : KoinTestBase() {
@@ -288,23 +305,25 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("No Overlap Cases")
-	inner class NoOverlapCases {
+	@DisplayName("Non-Contiguous Merge Abort (Issue #834)")
+	inner class NonContiguousMergeAbort {
 		@Test
-		fun `mergePathInfo with no overlap appends full path`() {
+		fun `mergePathInfo with a non-contiguous new path keeps the stored PathInfo unchanged`() {
 			// Given: Train with path B → zB (using named elements)
 			val trainId = "train1"
 
-			val oldPathInfo =
+			registry.registerPathInfo(
+				trainId,
 				createPathInfo(
 					start = inOutB,
 					target = semaphoreZB,
 					path = listOf(inOutB, trackBtoZB, semaphoreZB) // [B, track(B→zB), zB]
 				)
-			registry.registerPathInfo(trainId, oldPathInfo)
+			)
+			val stored = storedPathInfo(trainId)
 
-			// When: Register path starting from DIFFERENT separator (no overlap)
-			// Use switchVA → zA (not adjacent to zB, creates no-overlap scenario)
+			// When: Register path starting from a DIFFERENT separator (not contiguous)
+			// Use switchVA → zA (nowhere near zB, so old.target != new.start)
 			val newPathInfo =
 				createPathInfo(
 					start = switchVA,
@@ -313,20 +332,140 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
-			// Then: Both paths should be concatenated without skipping
-			// No overlap: old.target (zB) != new.start (vA)
-			// Merged: [B, track(B→zB), zB] + [vA, track, zA]
-			// Expected size: 3 + 3 = 6 (no overlap, no skip)
-			val merged = registry.getPathInfo(trainId)
-			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB) // Original start at B
-			assertThat(merged.target).isEqualTo(semaphoreZA) // New target at zA
-			assertThat(merged.reservedPath.size).isEqualTo(6) // 3 + 3 (no overlap)
+			// Then: the merge is ABORTED. Concatenating would have produced two adjacent
+			// separators (zB followed by vA) and an orphaned RESERVED tail behind a cleared
+			// aspect the train can never reach. The stored PathInfo must be the *same object*
+			// as before — not a truncated or partially merged copy (#316 rule).
+			assertStoredIsExactly(trainId, stored)
+			assertThat(stored.target).isEqualTo(semaphoreZB) // still the OLD target
+			assertThat(stored.reservedPath.size).isEqualTo(3) // 3, not 3 + 3
+		}
+
+		@Test
+		fun `non-contiguous single-element new path leaves the stored PathInfo unchanged`() {
+			// Given: Train with normal path B → zB
+			val trainId = "train1"
+
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB) // [B, track(B→zB), zB]
+				)
+			)
+			val stored = storedPathInfo(trainId)
+
+			// When: Register a single-element new path that does not continue from zB
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = switchVB,
+					target = switchVB,
+					path = listOf(switchVB)
+				)
+			)
+
+			// Then: abort — the front position is NOT advanced to vB
+			assertStoredIsExactly(trainId, stored)
+			assertThat(stored.target).isEqualTo(semaphoreZB)
+			assertThat(stored.reservedPath.size).isEqualTo(3)
+		}
+
+		@Test
+		fun `non-contiguous new path against a single-element old path leaves it unchanged`() {
+			// Given: Train with single-element path (just a separator): start == target == B
+			val trainId = "train1"
+
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB,
+					target = inOutB,
+					path = listOf(inOutB)
+				)
+			)
+			val stored = storedPathInfo(trainId)
+
+			// When: Register a new path from a separator that is not B
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
+			)
+
+			// Then: abort — the single-element PathInfo survives intact
+			assertStoredIsExactly(trainId, stored)
+			assertThat(stored.reservedPath.size).isEqualTo(1)
+		}
+
+		@Test
+		fun `non-contiguous separator-only paths leave the stored PathInfo unchanged`() {
+			// Given: separator-only PathInfo (unusual but legal: start == target, path = [B])
+			val trainId = "train1"
+
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB,
+					target = inOutB,
+					path = listOf(inOutB)
+				)
+			)
+			val stored = storedPathInfo(trainId)
+
+			// When: Register another separator-only path that does not continue from B
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = semaphoreZB,
+					target = semaphoreZB,
+					path = listOf(semaphoreZB)
+				)
+			)
+
+			// Then: abort — no [B, zB] separator pair is ever stored
+			assertStoredIsExactly(trainId, stored)
+			assertThat(stored.reservedPath.size).isEqualTo(1)
+		}
+
+		@Test
+		fun `non-contiguous merge disturbs neither the tail nor the front position`() {
+			// Given: Train whose Tail sits at B
+			val trainId = "train1"
+
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB, // Tail position at B
+					target = inOutB, // Front position at B
+					path = listOf(inOutB)
+				)
+			)
+			val stored = storedPathInfo(trainId)
+
+			// When: Register a new path that starts somewhere else entirely
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
+			)
+
+			// Then: both ends are exactly where they were — the abort is not a partial update
+			assertStoredIsExactly(trainId, stored)
+			assertThat(stored.start).isEqualTo(inOutB) // Tail unchanged
+			assertThat(stored.target).isEqualTo(inOutB) // Front NOT advanced to vB
 		}
 	}
 
 	@Nested
-	@DisplayName("Single-Element Paths")
+	@DisplayName("Single-Element Paths (contiguous)")
 	inner class SingleElementPaths {
 		@Test
 		fun `mergePathInfo with single-element old path works correctly`() {
@@ -342,24 +481,23 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
-			// When: Register new path from different separator (no overlap)
-			// Use zB → vB (not adjacent to inOutB)
+			// When: Register a new path that continues from B (old.target == new.start)
 			val newPathInfo =
 				createPathInfo(
-					start = semaphoreZB,
-					target = switchVB,
-					path = listOf(semaphoreZB, trackZBtoVB, switchVB) // [zB, track(zB→vB), vB]
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB) // [B, track(B→zB), zB]
 				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
-			// Then: Both paths concatenated (no overlap)
-			// Merged: [B] + [zB, track(zB→vB), vB]
-			// Expected size: 1 + 3 = 4
+			// Then: the duplicated B is skipped and the rest appended
+			// Merged: [B] + [track(B→zB), zB]
+			// Expected size: 1 + (3 - 1) = 3
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
 			assertThat(merged!!.start).isEqualTo(inOutB) // Original start preserved
-			assertThat(merged.target).isEqualTo(switchVB) // New target at vB
-			assertThat(merged.reservedPath.size).isEqualTo(4) // 1 + 3
+			assertThat(merged.target).isEqualTo(semaphoreZB) // New target at zB
+			assertThat(merged.reservedPath.size).isEqualTo(3) // 1 + (3 - 1)
 		}
 
 		@Test
@@ -375,24 +513,23 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
-			// When: Register single-element new path (no overlap)
-			// Use switchVB (different from zB, no overlap)
+			// When: Register a single-element new path AT the current front (zB).
+			// This is the degenerate continuation: the only element is the overlap itself.
 			val newPathInfo =
 				createPathInfo(
-					start = switchVB,
-					target = switchVB, // ✅ Valid: single separator
-					path = listOf(switchVB) // ✅ Valid: single separator path
+					start = semaphoreZB,
+					target = semaphoreZB, // ✅ Valid: single separator
+					path = listOf(semaphoreZB) // ✅ Valid: single separator path
 				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
-			// Then: Should merge correctly (no overlap)
-			// Merged: [B, track(B→zB), zB] + [vB]
-			// Expected size: 3 + 1 = 4
+			// Then: the overlap is skipped, so nothing is appended
+			// Merged: [B, track(B→zB), zB] + [] = size 3
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
 			assertThat(merged!!.start).isEqualTo(inOutB) // Original start preserved
-			assertThat(merged.target).isEqualTo(switchVB) // Target updated to vB
-			assertThat(merged.reservedPath.size).isEqualTo(4) // 3 + 1
+			assertThat(merged.target).isEqualTo(semaphoreZB) // Front stays at zB
+			assertThat(merged.reservedPath.size).isEqualTo(3) // 3 + (1 - 1)
 		}
 	}
 
@@ -515,10 +652,10 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Circular Route Validation")
+	@DisplayName("Duplicated New Start (never throws — Issue #834)")
 	inner class CircularRouteValidation {
 		@Test
-		fun `mergePathInfo rejects circular route with multiple start occurrences`() {
+		fun `mergePathInfo aborts instead of throwing when the new start appears twice`() {
 			// Given: Train with existing path B → zB
 			val trainId = "train1"
 
@@ -529,9 +666,11 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 					path = listOf(inOutB, trackBtoZB, semaphoreZB)
 				)
 			registry.registerPathInfo(trainId, oldPathInfo)
+			val stored = storedPathInfo(trainId)
 
-			// When: Attempt to register path where start appears multiple times (circular)
-			// Create a path manually where semaphoreZB appears twice: [zB, track, zB]
+			// When: Attempt to register a CONTIGUOUS path (new.start == old.target == zB) whose
+			// start also appears a second time inside its own reserved path: [zB, track, zB].
+			// Contiguity holds, so this reaches the duplicated-start check specifically.
 			val circularArrayPath = ArrayPath(simulationContext)
 			circularArrayPath.add(semaphoreZB) // Start
 			circularArrayPath.add(trackZBtoVB.getNextTrackSection(semaphoreZB, null)!!) // Track section
@@ -545,14 +684,16 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 					entryDirections = emptyMap()
 				)
 
-			// Then: Should throw IllegalStateException with clear message
-			val exception =
-				assertThrows<IllegalStateException> {
-					registry.registerPathInfo(trainId, circularPath)
-				}
-			assertThat(exception.message).isNotNull()
-			assertThat(exception.message!!).contains("Circular routes not supported")
-			assertThat(exception.message!!).contains("appears 2 times")
+			// Then: NO exception. Before Issue #834 this threw IllegalStateException out of
+			// registerPathInfo — i.e. out of reservePath Step 2i, after blocks were reserved and
+			// a START signal was already cleared — which killed the kDisco simulation thread
+			// while the run still produced a well-formed result file. The merge must abort
+			// fail-safe instead, exactly like the cycle guard: WARN and keep `old`.
+			registry.registerPathInfo(trainId, circularPath)
+
+			assertStoredIsExactly(trainId, stored)
+			assertThat(stored.target).isEqualTo(semaphoreZB)
+			assertThat(stored.reservedPath.size).isEqualTo(3)
 		}
 
 		@Test
@@ -623,24 +764,22 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
-			// When: Register new path also with single separator (no overlap)
-			// Use semaphoreZB (different from inOutB)
+			// When: Register a contiguous separator-only continuation from B
 			val newPathInfo =
 				createPathInfo(
-					start = semaphoreZB,
-					target = semaphoreZB, // ✅ Valid: single separator
-					path = listOf(semaphoreZB) // ✅ Valid: single separator
+					start = inOutB,
+					target = inOutB, // ✅ Valid: single separator
+					path = listOf(inOutB) // ✅ Valid: single separator
 				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
-			// Then: Should merge correctly (no overlap)
-			// Merged: [inOutB] + [semaphoreZB]
-			// Expected size: 1 + 1 = 2
+			// Then: the overlap is skipped, so the stored path stays a single separator.
+			// No [B, B] separator pair is ever produced.
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
 			assertThat(merged!!.start).isEqualTo(inOutB)
-			assertThat(merged.target).isEqualTo(semaphoreZB)
-			assertThat(merged.reservedPath.size).isEqualTo(2) // 1 + 1
+			assertThat(merged.target).isEqualTo(inOutB)
+			assertThat(merged.reservedPath.size).isEqualTo(1) // 1 + (1 - 1)
 		}
 
 		@Test
@@ -656,12 +795,12 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
-			// When: Register new path zB → vB (no overlap with B)
+			// When: Register a contiguous continuation B → zB
 			val newPathInfo =
 				createPathInfo(
-					start = semaphoreZB,
-					target = switchVB,
-					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
 				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
@@ -669,23 +808,23 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
 			assertThat(merged!!.start).isEqualTo(inOutB) // Original Tail position preserved
-			assertThat(merged.target).isEqualTo(switchVB) // New Front position
+			assertThat(merged.target).isEqualTo(semaphoreZB) // New Front position
 		}
 
 		@Test
 		fun `mergePathInfo updates to new front position`() {
-			// Given: Train with single separator path at B (Old Front position)
+			// Given: Train with path B → zB (Old Front position at zB)
 			val trainId = "train1"
 
 			val oldPathInfo =
 				createPathInfo(
 					start = inOutB,
-					target = inOutB, // Old Front position at B
-					path = listOf(inOutB)
+					target = semaphoreZB, // Old Front position at zB
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
 				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
-			// When: Register new path zB → vB with new Front position (no overlap)
+			// When: Register a contiguous continuation zB → vB with a new Front position
 			val newPathInfo =
 				createPathInfo(
 					start = semaphoreZB,
@@ -847,6 +986,26 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			registry.restorePathInfo("train-with-no-pathinfo", null)
 			assertThat(registry.getPathInfo("train-with-no-pathinfo")).isNull()
 		}
+	}
+
+	/** The instance currently stored for [trainId]; fails the test if there is none. */
+	private fun storedPathInfo(trainId: String): PathInfo =
+		registry.getPathInfo(trainId) ?: throw AssertionError("No PathInfo stored for '$trainId'")
+
+	/**
+	 * Asserts that the merge left the stored [PathInfo] *identical by reference* to [expected].
+	 *
+	 * Reference identity, not structural equality: invariant I2 (#316) is that an aborted merge
+	 * never writes anything back — not that it writes back something that happens to look the
+	 * same. A truncated or partially merged copy would satisfy an equality check on `start` and
+	 * `target` alone, which is exactly the bug shape #316 was about.
+	 */
+	private fun assertStoredIsExactly(
+		trainId: String,
+		expected: PathInfo
+	) {
+		assertThat(registry.getPathInfo(trainId)).isNotNull()
+		assertThat(registry.getPathInfo(trainId)!!).isSameInstanceAs(expected)
 	}
 
 	// Helper function to create PathInfo for testing

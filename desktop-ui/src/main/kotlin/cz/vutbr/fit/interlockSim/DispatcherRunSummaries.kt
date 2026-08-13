@@ -9,14 +9,18 @@
  */
 package cz.vutbr.fit.interlockSim
 
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DecisionRateReport
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.scope.Scope
 import java.io.IOException
@@ -98,6 +102,10 @@ object DispatcherRunSummaries {
 	 * Must be called inside `context.use { … }`: everything is read from the context scope, which
 	 * closes with the context.
 	 *
+	 * Issue #834 (SP2c.11) also sources the run's [RailwayOutcome] here — see [railwayOutcomeFrom]
+	 * — because this is the last point at which the scope still holds both the simulation context
+	 * and its main process.
+	 *
 	 * @return the file written, or `null` if this context has no dispatcher recorder or store, or
 	 *   the run was already persisted.
 	 */
@@ -106,6 +114,12 @@ object DispatcherRunSummaries {
 		cause: RunEndCause
 	): Path? {
 		val recorder = scope.getOrNull<DispatcherRunRecorder>() ?: return null
+		// Issue #834 (SP2c.11): hand the recorder what the railway achieved BEFORE finishing it.
+		// finish() freezes the snapshot, so an outcome recorded afterwards would be dropped — and
+		// this is the last moment at which the scope still holds both the simulation context and
+		// its main process. Idempotent-safe: on a second finishAndPersist for the same run the
+		// recorder is already frozen and this write cannot alter the frozen snapshot.
+		recorder.recordRailwayOutcome(railwayOutcomeFrom(scope))
 		// finish() is idempotent by contract (SP2c.22) precisely so several callers may invoke it,
 		// so it needs no guard of its own — and an earlier version that guarded it silently stopped
 		// the GUI finishing its recorder at all, which FrameDispatcherMetricsLogTest caught. Only
@@ -138,6 +152,57 @@ object DispatcherRunSummaries {
 			logger.error(e) { "Failed to persist dispatcher run ${recorder.runId}" }
 			null
 		}
+	}
+
+	/**
+	 * Reads what the railway achieved during the run owned by [scope].
+	 *
+	 * ## Why here (Issue #834, SP2c.11)
+	 *
+	 * Both read-only sources hang off the simulation context, and this is the one place on the
+	 * live path — shared by the headless `Main.runExample` and the GUI `Frame`'s Stop handler —
+	 * that still holds the context's Koin scope at run end. Neither source is touched:
+	 *
+	 * - [MetricsCollectionService] is bound `scoped` per simulation context in `CoreModule`, so it
+	 *   resolves for **every** context regardless of which process drives it.
+	 * - [ShuntingLoop]'s counters exist only when the run's main process is a [ShuntingLoop]. For
+	 *   any other example (`multiTrainLoop`, `threeTrainLoop`) those figures are genuinely
+	 *   unobtainable and are left `null`.
+	 *
+	 * ## Absent, never zero
+	 *
+	 * A source that is not there yields `null`, not `0`. Substituting a zero would put a run that
+	 * nothing measured into the sweep as a run in which no train moved — the misreading
+	 * `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` records under "Structurally empty columns". See
+	 * [RailwayOutcome].
+	 *
+	 * ## Threading
+	 *
+	 * Called at run end, after the kDisco kernel has stopped, on the thread that ended the run
+	 * (the `example` caller thread, or the EDT for the GUI). [MetricsCollectionService.getSnapshot]
+	 * documents that external threads must synchronise while the simulation is live; here it is
+	 * not, so the read is a quiescent one.
+	 *
+	 * Must be called inside `context.use { … }`, like every other read in this object.
+	 *
+	 * @return the figures available for this run, with `null` for every one that is not.
+	 */
+	fun railwayOutcomeFrom(scope: Scope): RailwayOutcome {
+		val metrics = scope.getOrNull<MetricsCollectionService>()?.getSnapshot()
+		// getSource is how CoreModule's own scoped definitions reach the context; the run's main
+		// process is only a ShuntingLoop for the shuntingLoop* examples, hence the safe cast.
+		val loop = scope.getSource<DefaultSimulationContext>()?.getMainProcess() as? ShuntingLoop
+		return RailwayOutcome(
+			journeysCompleted = metrics?.completedTrains?.toLong(),
+			trainsEntered = loop?.getTrainsEntered()?.toLong(),
+			trainsExited = loop?.getTrainsExited()?.toLong(),
+			maxConcurrentTrains = loop?.getMaxConcurrentTrains()?.toLong(),
+			// One movement event per block-to-block step, summed over every train — the figure the
+			// #847 sweep had to scrape from logs to tell a working railway from a busy dispatcher.
+			blockTransitions = loop?.getAllBlockTransitions()?.values?.sumOf { it.toLong() },
+			conflicts = metrics?.conflictCount?.toLong(),
+			failedReservations = loop?.getFailedReservations()?.toLong()
+		)
 	}
 
 	/**

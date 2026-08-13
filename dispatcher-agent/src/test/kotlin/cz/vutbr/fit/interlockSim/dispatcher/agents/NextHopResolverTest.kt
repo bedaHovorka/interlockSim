@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
@@ -220,5 +221,195 @@ class NextHopResolverTest {
 		val second = NextHopResolver.resolve("T1", obs)
 
 		assertThat(first).isEqualTo(second)
+	}
+
+	// ── resolveAll: same-tick same-target dedup (Issue #834, SP2c.11, task 8) ──────────────────
+
+	/**
+	 * Coverage for [NextHopResolver.resolveAll], the cycle-scoped entry point that gives the
+	 * per-cycle rendering the same same-tick `claimedSeparators` dedup
+	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs] applies across trains —
+	 * see that class's KDoc for the race [resolve] alone cannot see (each train resolved in
+	 * isolation, no notion of another train's target this same cycle).
+	 */
+	@DisplayName("resolveAll (Issue #834, SP2c.11, task 8)")
+	@Nested
+	inner class ResolveAll {
+		@Test
+		@DisplayName("two trains whose owned inputs target the same separator: exactly one keeps the Hop")
+		fun exactlyOneTrainKeepsTheHopWhenTargetsCollide() {
+			val t1Input =
+				input(
+					towardSemaphoreName = "doB1",
+					toSeparatorName = "sharedSep",
+					ownerTrainId = "T1",
+					isApproachingThisInput = true
+				)
+			val t2Input =
+				input(
+					towardSemaphoreName = "doC1",
+					toSeparatorName = "sharedSep",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val obs = observation(innerBlockInputs = listOf(t1Input, t2Input))
+
+			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toSeparatorName = "sharedSep"))
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = "sharedSep"))
+		}
+
+		@Test
+		@DisplayName("the winner is the train whose eligible input is first in innerBlockInputs+outerBlockInputs order")
+		fun winnerIsEarlierInInputListOrderRegardlessOfTrainIdsArgumentOrder() {
+			// T2's eligible input is listed first (innerBlockInputs before outerBlockInputs), so T2
+			// wins even though "T1" is requested first in the trainIds argument -- the tie-break
+			// mirrors RuleBasedDispatcher.checkAllInputs's fixed evaluation order, not caller order.
+			val t2Input =
+				input(
+					towardSemaphoreName = "inner",
+					toSeparatorName = "sharedSep",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val t1Input =
+				input(
+					towardSemaphoreName = "outer",
+					toSeparatorName = "sharedSep",
+					ownerTrainId = "T1",
+					isApproachingThisInput = true
+				)
+			val obs = observation(innerBlockInputs = listOf(t2Input), outerBlockInputs = listOf(t1Input))
+
+			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "inner", toSeparatorName = "sharedSep"))
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = "sharedSep"))
+		}
+
+		@Test
+		@DisplayName("two trains with different targets: both keep their Hop (dedup must not over-reach)")
+		fun bothTrainsKeepTheirHopWhenTargetsDiffer() {
+			val t1Input =
+				input(
+					towardSemaphoreName = "doB1",
+					toSeparatorName = "sepA",
+					ownerTrainId = "T1",
+					isApproachingThisInput = true
+				)
+			val t2Input =
+				input(
+					towardSemaphoreName = "doC1",
+					toSeparatorName = "sepB",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val obs = observation(innerBlockInputs = listOf(t1Input, t2Input))
+
+			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toSeparatorName = "sepA"))
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doC1", toSeparatorName = "sepB"))
+		}
+
+		@Test
+		@DisplayName(
+			"synthetic multi-eligible-input data: resolveAll takes the train's FIRST eligible input and " +
+				"does not fall back to a later free one — the accepted divergence from checkAllInputs"
+		)
+		fun resolveAllShortCircuitsAtFirstEligibleInputPerTrainDivergingFromCheckAllInputsOnSyntheticData() {
+			// Real-domain invariant: a train owns at most ONE eligible input per tick
+			// (nextSemaphore is single-valued, isSetUpPath is directional — see NextHopResolver's
+			// KDoc). This test deliberately violates it: T2 owns TWO both-eligible inputs. T1's
+			// earlier input claims sepX first, so T2's first eligible input (→sepX) is already
+			// claimed. resolveAll decides T2 at that first input and reports ClaimedByAnotherTrain,
+			// never falling back to T2's second, still-free input (→sepY) — where
+			// RuleBasedDispatcher.checkAllInputs (per-input, no per-train short-circuit) would skip
+			// the claimed sepX and grant T2 a route to sepY. This divergence is accepted design (it
+			// keeps resolve pure and the per-train outcome a single hop) and never arises on the
+			// real topologies this dispatcher runs on.
+			val t1Input =
+				input(
+					towardSemaphoreName = "doA1",
+					toSeparatorName = "sepX",
+					ownerTrainId = "T1",
+					isApproachingThisInput = true
+				)
+			val t2FirstInput =
+				input(
+					towardSemaphoreName = "doB1",
+					toSeparatorName = "sepX",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val t2SecondInput =
+				input(
+					towardSemaphoreName = "doB2",
+					toSeparatorName = "sepY",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val obs = observation(innerBlockInputs = listOf(t1Input, t2FirstInput, t2SecondInput))
+
+			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doA1", toSeparatorName = "sepX"))
+			// T2 is decided at its first eligible input (doB1→sepX, already claimed); it does NOT
+			// fall back to doB2→sepY — this is the point where resolveAll diverges from checkAllInputs.
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = "sepX"))
+		}
+
+		@Test
+		@DisplayName("a single train is unaffected: resolveAll agrees with resolve for every existing outcome shape")
+		fun singleTrainResolveAllAgreesWithResolve() {
+			val hopInput =
+				input(towardSemaphoreName = "doB1", toSeparatorName = "doB2", isApproachingThisInput = true)
+			val extendedInput =
+				input(
+					ownerTrainId = "T1",
+					isApproachingThisInput = true,
+					toSeparatorName = "target",
+					pathAlreadyExtendedBeyond = true
+				)
+			val noHopInput = input(ownerTrainId = "T1", toSeparatorName = "target")
+
+			listOf(
+				observation(innerBlockInputs = listOf(hopInput)),
+				observation(innerBlockInputs = listOf(extendedInput)),
+				observation(innerBlockInputs = listOf(noHopInput)),
+				observation()
+			).forEach { obs ->
+				val single = NextHopResolver.resolve("T1", obs)
+				val fromResolveAll = NextHopResolver.resolveAll(listOf("T1"), obs)["T1"]
+
+				assertThat(fromResolveAll).isEqualTo(single)
+			}
+		}
+
+		@Test
+		@DisplayName("resolveAll on the same observation twice yields an equal map both times (determinism)")
+		fun determinism() {
+			val t1Input =
+				input(
+					towardSemaphoreName = "doB1",
+					toSeparatorName = "sharedSep",
+					ownerTrainId = "T1",
+					isApproachingThisInput = true
+				)
+			val t2Input =
+				input(
+					towardSemaphoreName = "doC1",
+					toSeparatorName = "sharedSep",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val obs = observation(innerBlockInputs = listOf(t1Input, t2Input))
+
+			val first = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+			val second = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+
+			assertThat(first).isEqualTo(second)
+		}
 	}
 }

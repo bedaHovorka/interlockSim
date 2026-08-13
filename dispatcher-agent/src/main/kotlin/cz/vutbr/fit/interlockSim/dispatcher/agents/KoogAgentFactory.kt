@@ -103,39 +103,72 @@ class KoogAgentFactory(
 	 * scoped-sharing rationale). `null` by default so agents built outside a run (tests, tooling)
 	 * behave as before this feed existed.
 	 */
-	private val outcomeFeed: AppliedOutcomeFeed? = null
+	private val outcomeFeed: AppliedOutcomeFeed? = null,
+	/**
+	 * Which revision of the system prompt this factory assembles (#834, SP2c.11).
+	 *
+	 * Defaults to [PromptVariant.DEFAULT] ([PromptVariant.BASELINE]) so a factory built without an
+	 * opinion — every test that predates this seam, and every caller outside a configured run —
+	 * produces the exact prompt PR #896 shipped. The live path receives the per-run value through
+	 * [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.promptVariant], which resolves
+	 * `-D` system property > committed `dispatcher-defaults.properties` > code constant like every
+	 * other run knob; nothing here introduces a second configuration channel.
+	 */
+	private val promptVariant: PromptVariant = PromptVariant.DEFAULT
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
 		/**
-		 * Builds the DISPATCHER system prompt. Wording is subject to agent-architect review;
-		 * only the stable phrases [KoogAgentFactoryTest] asserts on are load-bearing.
+		 * Builds the DISPATCHER system prompt for [variant].
+		 *
+		 * Selection only — each variant's text lives in its own builder below, so the two can never
+		 * partially bleed into each other and [PromptVariant.BASELINE] stays reproducible byte for
+		 * byte. Wording within a variant is subject to agent-architect review; only the stable
+		 * phrases [KoogAgentFactoryTest] asserts on are load-bearing.
 		 *
 		 * Not a precomputed constant: [maxActions] is read per call from the [SinkHolder] instance
 		 * [createAgent] was constructed with, so the stated budget can never drift from what
 		 * [SinkHolder.tryEmit] actually enforces — [SinkHolder] itself is built from
 		 * [cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig.maxActionsPerTick] by
 		 * [cz.vutbr.fit.interlockSim.dispatcher.di.DispatcherAgentModule]'s existing scoped
-		 * wiring, so this threads the real per-run value with no new DI path. `cap` (the
-		 * concurrent-train admission ceiling) is a distinct constant,
-		 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] — the non-LLM dispatcher's own
-		 * policy — kept exactly as before so the LLM and rule-based arms never disagree about
+		 * wiring, so this threads the real per-run value with no new DI path. That property is
+		 * variant-independent by construction: every variant interpolates the same [maxActions]
+		 * argument, never a literal. `cap` (the concurrent-train admission ceiling) is a distinct
+		 * constant, [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] — the non-LLM dispatcher's
+		 * own policy — kept exactly as before so the LLM and rule-based arms never disagree about
 		 * station capacity.
 		 *
 		 * ## No-menu compliance
 		 *
-		 * The procedure and rules below are dash-bulleted, never numbered (`^\s*\d+[.)]\s` is
+		 * Every variant's procedure and rules are dash-bulleted, never numbered (`^\s*\d+[.)]\s` is
 		 * forbidden), and the text avoids "option"/"optional"/"choose one"/"select" everywhere —
-		 * [LivePromptNoMenuTest] locks this against regression on the real, assembled prompt.
+		 * [LivePromptNoMenuTest] locks this against regression on the real, assembled prompt, for
+		 * every variant.
 		 *
-		 * ## Queued trains carry no destination clause here
+		 * ## Queued trains carry no destination clause in any variant
 		 *
 		 * [KoogDispatchAgentImpl.renderQueuedTrainLine] deliberately renders a queued train as
-		 * approve-only, naming no topology endpoint at all — the admission step below must not
-		 * imply otherwise, so it never mentions a queued train's exit.
+		 * approve-only, naming no topology endpoint at all — no admission step below may imply
+		 * otherwise, so none of them mentions a queued train's exit.
 		 */
-		private fun buildSystemPrompt(maxActions: Int): String {
+		internal fun buildSystemPrompt(
+			maxActions: Int,
+			variant: PromptVariant
+		): String =
+			when (variant) {
+				PromptVariant.BASELINE -> buildBaselineSystemPrompt(maxActions)
+				PromptVariant.REVISED -> buildRevisedSystemPrompt(maxActions)
+			}
+
+		/**
+		 * The prompt exactly as PR #896 shipped it — the measurement's control arm.
+		 *
+		 * **Do not edit this text.** It is the zero point every [PromptVariant.REVISED] number is
+		 * compared against; changing it silently moves that zero point and invalidates every
+		 * comparison already recorded. A new idea belongs in a new variant, not in this function.
+		 */
+		private fun buildBaselineSystemPrompt(maxActions: Int): String {
 			val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 			return buildString {
 				appendLine(
@@ -194,16 +227,16 @@ class KoogAgentFactory(
 						"reserved nothing and needs no cancel_route."
 				)
 				appendLine("- Otherwise, call no_op with a brief reason.")
-				appendNonNegotiableRules(maxActions)
+				appendBaselineNonNegotiableRules(maxActions)
 			}.trimEnd('\n')
 		}
 
 		/**
-		 * Appends the "Rules that never bend:" section to [buildSystemPrompt]'s [StringBuilder];
-		 * factored out to keep [buildSystemPrompt] within detekt's `LongMethod` budget, wording
-		 * unchanged from when it lived inline.
+		 * Appends the "Rules that never bend:" section to [buildBaselineSystemPrompt]'s
+		 * [StringBuilder]; factored out to keep that function within detekt's `LongMethod` budget,
+		 * wording unchanged from when it lived inline. Frozen for the same reason its caller is.
 		 */
-		private fun StringBuilder.appendNonNegotiableRules(maxActions: Int) {
+		private fun StringBuilder.appendBaselineNonNegotiableRules(maxActions: Int) {
 			appendLine("Rules that never bend:")
 			appendLine(
 				"- Reservation is not movement: request_route only reserves interlocking " +
@@ -245,6 +278,195 @@ class KoogAgentFactory(
 				"no_op is a correct and frequent answer, not a failure to act — most ticks " +
 					"have nothing new to do. Repeating an action already in force is refused, " +
 					"wastes the tick, and tells the next tick nothing new."
+			)
+		}
+
+		/**
+		 * The #834 revision of the system prompt: same guarded properties, fewer tokens, plus an
+		 * explicit empty-station idle path.
+		 *
+		 * ## Why shorter at all
+		 *
+		 * Cycle latency is the binding constraint on the whole LLM arm. PR #896 measured 60-100 s
+		 * per cycle against `qwen2.5:7b-instruct`, and every token of system prompt is re-read on
+		 * every cycle. A slower cycle is not merely a slower run: `DefaultSnapshotSignal` keeps at
+		 * most one pending control tick, so ticks that arrive while a cycle is still thinking are
+		 * coalesced away and the run simply gets fewer decisions. #847 measured the same mechanism
+		 * from the other side — enabling the history block alone cost roughly a fifth of the
+		 * decision rate. Length is therefore a measured cost, not a style preference.
+		 *
+		 * ## What was cut, and why each cut is safe
+		 *
+		 * Redundancy only — no property that a measured failure bought was dropped:
+		 *
+		 * - **The action budget was stated three times** in [buildBaselineSystemPrompt] (a standalone
+		 *   sentence, the "Once the per-tick action budget is spent" rule, and the "never more than
+		 *   N" clause of the turn-termination rule). All three now live in one sentence that still
+		 *   interpolates the same [maxActions] value #847's 146 `ACTION_LIMIT_EXCEEDED` rejections
+		 *   established must be stated.
+		 * - **Name discipline was stated three times** (the STATION TOPOLOGY paragraph, the
+		 *   verbatim-train-id paragraph, and the "Copy every name character-for-character" rule).
+		 *   Merged into one sentence that keeps both load-bearing clauses: names copied
+		 *   character-for-character, and `fromEndpointName`/`toEndpointName` take an InOut or Signal
+		 *   name and **never a Block ID**. #847 recorded zero `UNKNOWN_ENDPOINT`, zero
+		 *   `ENDPOINT_IS_BLOCK_ID`, zero `UNKNOWN_TRAIN` and zero `BLANK_ARGUMENT` rejections, so
+		 *   this is a solved problem being stated once instead of three times, not a relaxed one.
+		 * - **"Reservation is not movement"** duplicated the admission step's own "queued trains take
+		 *   approve_train only"; the two are now one clause on the admission bullet.
+		 * - **The NEXT SECTION pair of bullets** (act on a train that has one, leave alone a train
+		 *   that does not) is one bullet — #893's fix is what took journeys per run from 0 to 1-3, so
+		 *   the procedure itself is untouched, only its line count.
+		 * - **"Always prioritize safety"** is gone: it is the one sentence in the prompt that no
+		 *   measurement ever asked for and that names no action the model can take.
+		 * - **"You have no tool for querying state"** is gone. The four-tool inventory two lines
+		 *   above already says which tools exist, and
+		 *   [KoogDispatchAgentImpl.buildUserPrompt] asserts every cycle that its two train lists are
+		 *   "the complete set of trains you may name this cycle". The property this sentence guarded
+		 *   is therefore still stated twice; only this third statement of it is gone.
+		 * - **"no_op is a correct and frequent answer…"** is gone *as a separate closing line*. The
+		 *   property it carries is not: the catch-all bullet below ends "That is the correct and
+		 *   expected result for such a tick, not a failure to act", which is the same claim in the
+		 *   place the model reaches it — inside the procedure, at the moment it applies. Its second
+		 *   half ("Repeating an action already in force is refused…") survives verbatim as a rule.
+		 *
+		 * ## What was NOT cut, despite being redundant, and why
+		 *
+		 * `no_op` is legitimised **three** times in [buildBaselineSystemPrompt] and the obvious
+		 * "state it once" cut is exactly the wrong one to make here. Redundancy is cheap where
+		 * compliance is already measured at 100% (the name rules, whose rejection counts #847 puts
+		 * at zero) and expensive to remove where compliance was measured as *failing* — #896 measured
+		 * 2-7 ticks per run ending in a bare text reply instead of the taught `no_op`. So the
+		 * procedure's final bullet stays an **unconditional catch-all**, exactly as
+		 * [buildBaselineSystemPrompt]'s "- Otherwise, call no_op with a brief reason." is.
+		 *
+		 * An earlier cut of this revision narrowed that bullet to the empty-station case ("no queued
+		 * trains, and no active train with a NEXT SECTION line"). That leaves a real and routine
+		 * state uncovered: `queued > 0` **and** `active == cap` **and** no active train has a NEXT
+		 * SECTION line, which any run with more than `cap` trains reaches regularly. Admission's
+		 * guard is false (the station is full), routing's is false, cancelling's is false, and the
+		 * narrowed idle bullet is false *because queued trains exist* — no bullet would fire and the
+		 * prompt would say nothing at all. The model then replies in plain text,
+		 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] sees no emission, and
+		 * the tick is scored `RULE_FALLBACK` — the very outcome #834 exists to reduce.
+		 *
+		 * ## What was kept, and what was added
+		 *
+		 * Kept verbatim in substance: the turn-termination affordance (before it, the model never
+		 * ended a turn — zero `no_op` calls ever and iteration exhaustion in 3-4 of 5 cycles), the
+		 * two-rejections-stop rule, the terminal never-approve-an-active-train directive, the
+		 * explicit interpolated action budget, and the whole `NEXT SECTION` procedure. The
+		 * turn-termination sentence moved *up* into the opening framing rather than sitting last in
+		 * the rules: it is the instruction whose absence broke every cycle, and it now occupies the
+		 * most salient position in the prompt while costing fewer tokens than the rule it replaces.
+		 *
+		 * Added: the catch-all bullet now says what the correct output *is*, not merely that `no_op`
+		 * is available. Task 1 of #834 made an **idle-station** cycle with no emissions a scored
+		 * success ([cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome.LLM_NO_OP]) rather than
+		 * a rule-based-fallback failure — that outcome is scoped to the idle station specifically,
+		 * not to any tick without tool calls — so naming the expected output — one `no_op`, then a closing
+		 * sentence — is now worth its tokens. [buildBaselineSystemPrompt]'s catch-all says only
+		 * "call no_op with a brief reason", never that replying afterwards is what ends the tick nor
+		 * that this is the expected result rather than a failure to act; #896 measured 2-7 ticks per
+		 * run ending in a bare text reply instead of the taught `no_op`.
+		 *
+		 * ## This variant is a bundle, not a single-variable experiment
+		 *
+		 * Its stated hypothesis is length, but it also **moves** the turn-termination affordance to
+		 * the first line and **adds** the idle-output instruction above. Both are deliberate and
+		 * both are argued from measurements, but they are separate interventions: a difference the
+		 * sweep measures between the arms cannot be attributed to token count alone. Whoever reads
+		 * the sweep result must read it as "this bundle vs. #896's prompt", and isolating the three
+		 * would need three more variants and three more arms.
+		 */
+		private fun buildRevisedSystemPrompt(maxActions: Int): String {
+			val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+			return buildString {
+				appendLine(
+					"You are a railway dispatcher. Every call you receive is one tick: read the " +
+						"cycle message, act through your tools, then end the tick with one short " +
+						"plain-text sentence. Only a plain-text reply ends the tick, and nothing " +
+						"carries forward except what you actually called a tool for."
+				)
+				appendLine(
+					"The only actuator tools available are approve_train, request_route, " +
+						"cancel_route, and no_op — there is no tool to set a signal aspect or " +
+						"switch position directly; signals and switches change only as a side " +
+						"effect of request_route/cancel_route."
+				)
+				appendLine(
+					"Copy every endpoint name character-for-character from the STATION TOPOLOGY " +
+						"section below or from a NEXT SECTION line, and every train id verbatim " +
+						"from the cycle message; never invent, abbreviate, or infer one. " +
+						"request_route's fromEndpointName/toEndpointName take an InOut or Signal " +
+						"name — never a Block ID."
+				)
+				appendLine(
+					"At most $maxActions actions besides no_op are accepted this tick; no_op never " +
+						"counts against that budget, and once the budget is spent every further " +
+						"action this tick is refused — end your turn instead."
+				)
+				appendLine("On every tick, follow these steps in order:")
+				appendLine(
+					"- When the cycle message has an OUTCOMES OF YOUR PREVIOUS ACTIONS section, " +
+						"read it first: it names what your last calls actually did."
+				)
+				appendLine(
+					"- Admission comes first: while there are queued (unapproved) trains and fewer " +
+						"than $cap trains are currently active, call approve_train for queued " +
+						"trains in the order listed, up to $cap total active. A queued train takes " +
+						"approve_train and nothing else — request_route reserves track, it never " +
+						"admits a train."
+				)
+				appendLine(
+					"- For each active train whose line names a NEXT SECTION to reserve, call " +
+						"request_route once for it, copying the from/to names from that NEXT " +
+						"SECTION clause exactly. A train with no NEXT SECTION line gets no route " +
+						"request this tick — its line already says why (route already set, or " +
+						"nothing reservable yet); leave it be."
+				)
+				appendLine(
+					"- Call cancel_route only for a train whose reservation is no longer needed and " +
+						"that is not currently standing on it. A REFUSED request in OUTCOMES " +
+						"reserved nothing and needs no cancel_route."
+				)
+				appendLine(
+					"- Otherwise — none of the steps above applied — call no_op once with a brief " +
+						"reason and then reply. That is the correct and expected result for such a " +
+						"tick, not a failure to act."
+				)
+				appendRevisedNonNegotiableRules()
+			}.trimEnd('\n')
+		}
+
+		/**
+		 * Appends [buildRevisedSystemPrompt]'s "Rules that never bend:" section.
+		 *
+		 * Factored out for the same reason [appendBaselineNonNegotiableRules] is — detekt's
+		 * `LongMethod` budget — and takes no `maxActions` argument, because the revision states the
+		 * budget exactly once, up in the framing paragraphs.
+		 */
+		private fun StringBuilder.appendRevisedNonNegotiableRules() {
+			appendLine("Rules that never bend:")
+			appendLine(
+				"- Never call approve_train for a train already listed as active — approve_train " +
+					"applies only to a queued train."
+			)
+			appendLine(
+				"- Reserving a section that is not directly in front of a train does not release " +
+					"anything that train already holds; it only locks that track against other " +
+					"trains."
+			)
+			appendLine(
+				"- This cycle's message always supersedes anything recorded earlier: where they " +
+					"disagree, trust this cycle."
+			)
+			appendLine(
+				"- If a tool call for a train is rejected twice in one tick, stop acting on that " +
+					"train and move on or reply."
+			)
+			appendLine(
+				"- Repeating an action already in force is refused, wastes the tick, and tells the " +
+					"next tick nothing new."
 			)
 		}
 	}
@@ -290,7 +512,8 @@ class KoogAgentFactory(
 
 			logger.debug {
 				"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
-					"model=${ollamaConfig.modelName} (SP2c.6 SinkHolder 4-tool surface)"
+					"model=${ollamaConfig.modelName}, promptVariant=$promptVariant " +
+					"(SP2c.6 SinkHolder 4-tool surface)"
 			}
 
 			// Static topology never changes during a run — read once at agent construction.
@@ -346,8 +569,10 @@ class KoogAgentFactory(
 			// Serialize static topology into the system prompt once.
 			val topologyPrompt = StationTopologySerializer.toPromptText(topology)
 			// Budget is read from this factory's own sinkHolder, not a hardcoded literal — see
-			// buildSystemPrompt's KDoc for why that is safe.
-			val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick)}\n\n$topologyPrompt"
+			// buildSystemPrompt's KDoc for why that is safe. The topology half is variant-independent
+			// on purpose (#834 AC: StationTopologySerializer is untouched by the prompt rebuild), so
+			// only the instruction half varies between A/B arms.
+			val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick, promptVariant)}\n\n$topologyPrompt"
 
 			// Join the warm-up before building the agent: this is the documented synchronization
 			// point — both warm-up (network I/O) and the local assembly above are finished before

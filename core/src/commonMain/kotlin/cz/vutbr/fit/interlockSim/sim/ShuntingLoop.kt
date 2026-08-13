@@ -392,7 +392,13 @@ class ShuntingLoop(
 		if (approwedTrains.size > maxConcurrentTrainsCount) {
 			maxConcurrentTrainsCount = approwedTrains.size
 		}
-		// Polling interval: 1.0s (matches baseline timing)
+		// This hold is only HALF the control period. [LoopProcess.actions] runs `iteration()` and
+		// then `interLoopSleep()`, which holds another 1.0 (see [interLoopSleep] below), so the
+		// effective control tick — the interval between successive `iteration()` calls, and hence
+		// between successive [controlStepListener] callbacks — is **2.0 simulated seconds**, not
+		// 1.0. Simulated time still advances in 1.0 increments; it is the control step that fires
+		// every 2.0. Pinned by `ShuntingLoopControlPeriodTest` (`:dispatcher-agent`): endTime = 20
+		// yields 11 control steps, at t = 0, 2, 4, …, 20.
 		hold(1.0)
 	}
 
@@ -605,6 +611,10 @@ class ShuntingLoop(
 		failedReservationsCount++
 	}
 
+	/**
+	 * Second half of the control period. Together with the `hold(1.0)` that ends [iteration] this
+	 * makes the control tick **2.0 simulated seconds** — see the comment at the end of [iteration].
+	 */
 	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
 			simActive = false // signal the companion driver thread to stop

@@ -63,6 +63,25 @@ interface DispatcherRunRecorder {
 	fun onActionOutcome(outcome: ActionOutcome)
 
 	/**
+	 * Records what the railway achieved during this run.
+	 *
+	 * Unlike [onTick] and [onActionOutcome], this is **not** an accumulator: the recorder cannot
+	 * observe the railway itself, so the caller reads the figures from the simulation context and
+	 * hands them over whole. Each call replaces the previously recorded outcome.
+	 *
+	 * Call it before [finish]; a call afterwards cannot change the frozen snapshot, matching the
+	 * behaviour of every other counter on this interface.
+	 *
+	 * Figures the caller could not obtain must be left `null` rather than passed as `0` — see
+	 * [RailwayOutcome] for why absent and zero are different answers.
+	 *
+	 * @param outcome The railway figures, with `null` for anything not measured.
+	 *
+	 * @since Issue #834 (SP2c.11)
+	 */
+	fun recordRailwayOutcome(outcome: RailwayOutcome)
+
+	/**
 	 * Returns an immutable snapshot of the current accumulated metrics.
 	 *
 	 * May be called at any time during the run; the returned snapshot is independent of

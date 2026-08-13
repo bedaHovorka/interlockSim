@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -771,75 +770,6 @@ class PathReservationRegistry(
 		}
 	}
 
-	/**
-	 * Merge two PathInfo instances by extending old path with new path.
-	 *
-	 * ## Algorithm
-	 *
-	 * 1. Validate circular route assumption (new.start appears exactly once)
-	 * 2. Create new ArrayPath and add all elements from old path
-	 * 3. Find overlap point (old.target == new.start)
-	 * 4. Add elements from new path, skipping first occurrence if it overlaps
-	 * 5. Distinguish legitimate circular routes from infinite loop bugs
-	 * 6. Merge entry directions (new overwrites old for same blocks)
-	 *
-	 * ## Example
-	 *
-	 * ```
-	 * old: B → zB → vB → doB1  (Tail at B, Front at doB1)
-	 * new: doB1 → k1 → A       (Front reserves forward to A)
-	 * merged: B → zB → vB → doB1 → k1 → A  (complete path for both Front and Tail)
-	 * ```
-	 *
-	 * ## Assumptions
-	 *
-	 * - new.start appears exactly ONCE in new.reservedPath (at the beginning)
-	 * - old.target and new.start may overlap (direct continuation)
-	 * - Circular routes are ALLOWED if train completes one full loop back to original start
-	 * - Repeated cycles (>1 loop) are REJECTED to prevent infinite loops
-	 *
-	 * ## Circular Route Handling
-	 *
-	 * **Shunting Loop Scenario (LEGITIMATE):**
-	 * - Train starts at A, travels A → B → C → A (one complete loop)
-	 * - old.start = A, new path returns to A
-	 * - This is ALLOWED: train completes circular shunting operation
-	 *
-	 * **Infinite Loop Bug (REJECTED):**
-	 * - Train oscillates: A → B → A → B → A (repeated back-and-forth)
-	 * - Separator would appear 3+ times in merged path
-	 * - The entire merge is ABORTED and the original `old` PathInfo is returned unchanged
-	 *   (Issue #316 fix: a truncated PathInfo ending mid-path is worse than keeping the valid original)
-	 *
-	 * ## Entry Direction Merging
-	 *
-	 * When old and new have the same block with different entry directions,
-	 * the NEW direction overwrites the old (most recent direction is used).
-	 *
-	 * ## Resource Safety
-	 *
-	 * `mergePathInfo()` is a **pure data-structure operation** — it does not acquire or
-	 * release track blocks or switches. All resource locking happens in
-	 * `DefaultPathReservationService.reservePath()` via `registerAtomic()` and
-	 * `registerSwitches()`, which use their own tracking maps (`trainToBlocks` /
-	 * `trainToSwitches`). Those maps are independent of PathInfo, so `releasePath()` can
-	 * still find and free all resources even when `return old` aborts the PathInfo merge.
-	 *
-	 * **PathInfo / block divergence (accepted trade-off):** When `return old` fires, the
-	 * train's `trainToBlocks` entry already contains the newly reserved blocks (step 2d in
-	 * `reservePath()`), but `trainToPathInfo` still holds the pre-merge `old`. This means
-	 * `TrainNavigationService` will not guide the train through those new blocks — the train
-	 * effectively ignores the just-reserved segment. This is intentional: the cycle guard
-	 * prevents a malformed PathInfo from being stored. The train will retry on its next
-	 * dispatch tick.
-	 *
-	 * @param old Previous PathInfo (Tail may still be navigating through this)
-	 * @param new New PathInfo (Front just reserved this)
-	 * @return Merged PathInfo covering both old and new paths, or [old] unchanged if the
-	 *         merge would create a third occurrence of any separator (cycle guard)
-	 * @since Issue #296 Phase 8
-	 */
-
 	private fun addElementWithCycleDetection(
 		element: cz.vutbr.fit.interlockSim.objects.core.PathElement,
 		mergedPath: ArrayPath,
@@ -871,6 +801,131 @@ class PathReservationRegistry(
 		return null
 	}
 
+	/**
+	 * Merge two PathInfo instances by extending old path with new path.
+	 *
+	 * ## This method NEVER throws (Issue #834)
+	 *
+	 * Every rejection is a **fail-safe abort**: log a WARN and `return old` unchanged. There are
+	 * three of them — non-contiguous start, duplicated new start, and the 3rd-occurrence cycle
+	 * guard — and they all behave identically from the caller's point of view.
+	 *
+	 * This is not stylistic. `registerPathInfo` is called from
+	 * [DefaultPathReservationService.reservePath] Step 2i and from its already-owned early return,
+	 * in both cases **after** blocks are reserved, switches locked and a START signal cleared, on
+	 * the kDisco simulation thread, with no rollback and nothing catching a throw
+	 * (`DispatchDecisionApplier.onControlStep` catches only `IllegalArgumentException`). An
+	 * exception here therefore did not fail a run loudly — it killed the simulation thread while
+	 * the run still wrote a well-formed result file, i.e. it fabricated a measurement.
+	 *
+	 * **Why "never throw" is safe on its own, without releasing anything at abort time.** An abort
+	 * leaves an *orphaned RESERVED tail*: blocks this train owns that the stored PathInfo does not
+	 * cover, some of them behind a cleared aspect. That state is not permanent, because it is
+	 * exactly what `OrphanReservationSweeper` is for — it detects a route held un-travelled past
+	 * its staleness threshold and hands it to
+	 * `RegistryPartialRouteReleaser.releaseUntravelledTail`, which frees the tail's blocks *and*
+	 * drives every semaphore governing them back to STOP (G1) before they become available to
+	 * anyone else. So the worst an abort can produce is a temporarily over-reserved, temporarily
+	 * over-permissive tail that the sweeper reclaims fail-safe; a thrown exception, by contrast, is
+	 * unrecoverable for the whole run. Releasing the tail *here* instead would be the
+	 * transactionally complete answer (the PR #901 standard applied to `reservePath`'s last
+	 * un-rolled-back exit) but it changes the trade-off recorded under "Resource Safety" below and
+	 * is deliberately filed as separate work.
+	 *
+	 * **Scope of that reclamation (review finding #8, Issue #834).** `OrphanReservationSweeper`
+	 * lives in `dispatcher-agent` and is wired only in `desktop-ui`/`dispatcher-agent` (via
+	 * `ExampleRegistry`). `:fast-sim` wires `wireSynchronousDispatcher(ctx, loop)` with
+	 * `interlockingFacade = null` — the legacy `reservePath` → `mergePathInfo` branch — and does
+	 * **not** wire the sweeper; neither does a bare-`:core` host that calls `reservePath` directly.
+	 * In those hosts the orphaned tail persists for the rest of the run: the abort is still an
+	 * improvement over the prior throw (no simulation thread dies), but the fail-safe reclamation
+	 * the paragraph above describes is a `desktop-ui`/`dispatcher-agent` property, not a universal
+	 * one. Releasing the tail in `mergePathInfo` itself — the transactionally-complete option the
+	 * previous paragraph already files as "separate work" — is the only fix that would hold in
+	 * `:fast-sim` and bare-`:core` too.
+	 *
+	 * ## Algorithm
+	 *
+	 * 0. Abort unless the new path continues the stored one (new.start == old.target)
+	 * 1. Abort unless new.start appears exactly once in new.reservedPath
+	 * 2. Create new ArrayPath and add all elements from old path
+	 * 3. Find overlap point (old.target == new.start)
+	 * 4. Add elements from new path, skipping first occurrence if it overlaps
+	 * 5. Distinguish legitimate circular routes from infinite loop bugs
+	 * 6. Merge entry directions (new overwrites old for same blocks)
+	 *
+	 * ## Example
+	 *
+	 * ```
+	 * old: B → zB → vB → doB1  (Tail at B, Front at doB1)
+	 * new: doB1 → k1 → A       (Front reserves forward to A)
+	 * merged: B → zB → vB → doB1 → k1 → A  (complete path for both Front and Tail)
+	 * ```
+	 *
+	 * ## Preconditions (each one aborts the merge rather than throwing)
+	 *
+	 * - `new.start == old.target` — the new path must CONTINUE the stored one. A path that starts
+	 *   elsewhere is not merged: concatenating it yields two adjacent `PathSeparator`s, which every
+	 *   navigation reader handles safely (`ArrayPath.getNext` returns `deque[i+2]` only when it
+	 *   `is TrackSection`, so it returns `null`; `DefaultTrainNavigationService`'s
+	 *   `determineNextFromPathInfo` hits its `is PathSeparator -> null` arm) — so there is no
+	 *   teleport and no weakening of the `allowingSignal` gate, navigation simply truncates at
+	 *   `old.target`. The damage is the orphaned RESERVED tail described above, not a safety
+	 *   violation. Note this is a *merge* precondition only: it is unrelated to
+	 *   `DefaultPathReservationService.rejectNonContiguousStart`, which tests the route origin
+	 *   against the train's physical block footprint and must stay permissive enough for entry,
+	 *   bidirectional reversal (PR #356) and post-partial-release re-reservation.
+	 * - `new.start` appears exactly ONCE in `new.reservedPath` (at the beginning)
+	 * - Circular routes are ALLOWED if train completes one full loop back to original start
+	 * - Repeated cycles (>1 loop) are REJECTED to prevent infinite loops
+	 *
+	 * ## Circular Route Handling
+	 *
+	 * **Shunting Loop Scenario (LEGITIMATE):**
+	 * - Train starts at A, travels A → B → C → A (one complete loop)
+	 * - old.start = A, new path returns to A
+	 * - This is ALLOWED: train completes circular shunting operation
+	 *
+	 * **Infinite Loop Bug (REJECTED):**
+	 * - Train oscillates: A → B → A → B → A (repeated back-and-forth)
+	 * - Separator would appear 3+ times in merged path
+	 * - The entire merge is ABORTED and the original `old` PathInfo is returned unchanged
+	 *   (Issue #316 fix: a truncated PathInfo ending mid-path is worse than keeping the valid original)
+	 *
+	 * ## Entry Direction Merging
+	 *
+	 * When old and new have the same block with different entry directions,
+	 * the NEW direction overwrites the old (most recent direction is used).
+	 *
+	 * ## Resource Safety
+	 *
+	 * `mergePathInfo()` is a **pure data-structure operation** — it does not acquire or
+	 * release track blocks or switches. All resource locking happens in
+	 * `DefaultPathReservationService.reservePath()` via `registerAtomic()` and
+	 * `registerSwitches()`, which use their own tracking maps (`trainToBlocks` /
+	 * `trainToSwitches`). Those maps are independent of PathInfo, so `releasePath()` can
+	 * still find and free all resources even when `return old` aborts the PathInfo merge.
+	 *
+	 * **PathInfo / block divergence (accepted trade-off):** When `return old` fires — for any of
+	 * the three abort reasons — the train's `trainToBlocks` entry already contains the newly
+	 * reserved blocks (step 2d in `reservePath()`), but `trainToPathInfo` still holds the pre-merge
+	 * `old`. This means `TrainNavigationService` will not guide the train through those new blocks
+	 * — the train effectively ignores the just-reserved segment. This is intentional: it is always
+	 * better than storing a malformed PathInfo (#316), and it is recoverable, because
+	 * `OrphanReservationSweeper` reclaims the divergent tail and resets its signals to STOP — in
+	 * the hosts that wire it; see the "Scope of that reclamation" caveat above for `:fast-sim` and
+	 * bare-`:core`, where the tail is left unreclaimed. The train will retry on its next dispatch
+	 * tick.
+	 *
+	 * @param trainId Owner of the PathInfo being merged (used in the abort WARNs)
+	 * @param old Previous PathInfo (Tail may still be navigating through this)
+	 * @param new New PathInfo (Front just reserved this)
+	 * @return Merged PathInfo covering both old and new paths, or [old] unchanged if the merge was
+	 *         aborted: [new] does not start at `old.target`, `new.start` is duplicated inside
+	 *         [new], or the merge would create a third occurrence of a separator (cycle guard).
+	 *         Never throws.
+	 * @since Issue #296 Phase 8; never-throw abort semantics from Issue #834 (SP2c.11)
+	 */
 	private fun mergePathInfo(
 		trainId: String,
 		old: PathInfo,
@@ -881,11 +936,33 @@ class PathReservationRegistry(
 				"with new ${new.start}->${new.target} for '$trainId'"
 		}
 
-		// Step 0: Validate circular route assumption
+		// Step 0a (Issue #834): the new path must CONTINUE the stored one. Concatenating a path
+		// that starts somewhere else produces two adjacent separators; navigation truncates there
+		// safely, so the train never teleports, but everything past the seam becomes an orphaned
+		// RESERVED tail behind a cleared aspect the train will never reach. Abort fail-safe.
+		if (new.start != old.target) {
+			logger.warn {
+				"mergePathInfo: aborting non-contiguous merge for train $trainId — new path starts at " +
+					"${new.start} but the stored path ends at ${old.target}. " +
+					"Keeping existing valid PathInfo unchanged. " +
+					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+			}
+			return old
+		}
+
+		// Step 0b: new.start must occur exactly once in its own path (see "Preconditions" above).
+		// Until Issue #834 this threw IllegalStateException — from reservePath Step 2i, i.e. after
+		// blocks were reserved and a signal was already cleared, on the kDisco simulation thread,
+		// with nothing catching it. Abort the same fail-safe way instead; never throw from here.
 		val occurrences = new.reservedPath.count { it == new.start }
-		requireValidState(occurrences == 1) {
-			"Circular routes not supported: new.start ($new.start) appears $occurrences times in path. " +
-				"Expected exactly 1 occurrence at path beginning."
+		if (occurrences != 1) {
+			logger.warn {
+				"mergePathInfo: aborting merge with duplicated new start for train $trainId — " +
+					"${new.start} appears $occurrences times in the new path, expected exactly 1 at its " +
+					"beginning. Keeping existing valid PathInfo unchanged. " +
+					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+			}
+			return old
 		}
 
 		// Step 1: Create merged path starting from old path
@@ -894,7 +971,8 @@ class PathReservationRegistry(
 		// Step 2: Add all elements from old path
 		old.reservedPath.forEach { mergedPath.add(it) }
 
-		// Step 3: Find overlap point (old.target == new.start)
+		// Step 3: Find overlap point (old.target == new.start). Always true past Step 0a; kept as an
+		// explicit predicate so the skip below reads on its own terms rather than on the guard's.
 		val skipFirst = (new.start == old.target)
 		var skipped = false
 

@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -28,9 +29,32 @@ class DispatcherRunConfigTest {
 		return DispatcherRunConfig.fromProperties { map[it] }
 	}
 
+	/**
+	 * Like [configOf] but also injects the committed-file tier, so #834's three-way precedence
+	 * (system property > file > code constant) can be tested without touching the real classpath
+	 * resource.
+	 */
+	private fun configOf(
+		fileProperties: Map<String, String>,
+		vararg systemProperties: Pair<String, String>
+	): DispatcherRunConfig {
+		val sysMap = systemProperties.toMap()
+		return DispatcherRunConfig.fromProperties(
+			fileProperties = { fileProperties[it] },
+			properties = { sysMap[it] }
+		)
+	}
+
 	@Test
 	fun `absent properties reproduce the pre-847 defaults`() {
-		val config = configOf()
+		// Pins the committed-file tier to empty explicitly (#834 fix-round-1 review finding):
+		// plain configOf() would let fileProperties silently default to the real shipped
+		// dispatcher-defaults.properties resource, which coincidentally matches today's compiled
+		// constants but stops doing so the moment #834 Task 14 commits the sweep's chosen values —
+		// at which point this test's name ("pre-847 defaults", i.e. the compiled constants) would
+		// stop matching what it actually verifies. Pinning fileProperties to empty here makes the
+		// code-constant fallback path unambiguous and independent of the file's contents.
+		val config = configOf(emptyMap())
 
 		assertThat(config.model).isNull()
 		assertThat(config.temperature).isNull()
@@ -119,5 +143,133 @@ class DispatcherRunConfigTest {
 	fun negativeTickPeriodRejected() {
 		assertThat(configOf(DispatcherRunConfig.PROP_TICK_PERIOD_MS to "-5").tickPeriodMs)
 			.isEqualTo(DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS)
+	}
+
+	// #834 (SP2c.11): committed-file tier tests. The seam mirrors the existing system-property
+	// seam above so none of these mutate real JVM state or the real classpath resource.
+
+	// ── Issue #834 (SP2c.11): the prompt-variant axis ─────────────────────────────────────
+
+	/**
+	 * The seam's default must reproduce today's behaviour: an unconfigured run keeps the
+	 * prompt PR #896 shipped, so adding the axis changes no run that does not ask to change.
+	 */
+	@Test
+	@DisplayName("#834: an unset promptVariant is PromptVariant.DEFAULT (BASELINE)")
+	fun promptVariantDefaultsToBaseline() {
+		assertThat(configOf(emptyMap()).promptVariant).isEqualTo(PromptVariant.BASELINE)
+	}
+
+	@Test
+	@DisplayName("#834: promptVariant resolves system property > committed file > code constant")
+	fun promptVariantFollowsThePrecedenceChain() {
+		val fromProperty =
+			configOf(
+				mapOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "BASELINE"),
+				DispatcherRunConfig.PROP_PROMPT_VARIANT to "REVISED"
+			)
+		val fromFile = configOf(mapOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "REVISED"))
+
+		assertThat(fromProperty.promptVariant).isEqualTo(PromptVariant.REVISED)
+		assertThat(fromFile.promptVariant).isEqualTo(PromptVariant.REVISED)
+	}
+
+	/**
+	 * Same discipline as every other knob: a malformed value is logged and ignored, never an
+	 * aborted run. A typo in a forked-JVM `-D` must not cost an unattended sweep — the sweep
+	 * *grid* is where an unknown variant name fails loudly instead (`SweepAxes`'s `init`).
+	 */
+	@Test
+	@DisplayName("#834: an unparseable promptVariant WARNs and falls back rather than failing the run")
+	fun unparseablePromptVariantFallsBack() {
+		val fromProperty = configOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "REVISD")
+		val fromFile = configOf(mapOf(DispatcherRunConfig.PROP_PROMPT_VARIANT to "not-a-variant"))
+		val blank = configOf(mapOf(), DispatcherRunConfig.PROP_PROMPT_VARIANT to "   ")
+
+		assertThat(fromProperty.promptVariant).isEqualTo(DispatcherRunConfig.DEFAULT_PROMPT_VARIANT)
+		assertThat(fromFile.promptVariant).isEqualTo(DispatcherRunConfig.DEFAULT_PROMPT_VARIANT)
+		assertThat(blank.promptVariant).isEqualTo(DispatcherRunConfig.DEFAULT_PROMPT_VARIANT)
+	}
+
+	@Test
+	@DisplayName("#834: promptVariant is a recognized key of the committed defaults resource")
+	fun promptVariantIsARecognizedFileKey() {
+		assertThat(DispatcherDefaultsResource.RECOGNIZED_KEYS.contains(DispatcherRunConfig.PROP_PROMPT_VARIANT))
+			.isEqualTo(true)
+	}
+
+	@Test
+	@DisplayName("#834: a system property beats a committed-file value for the same key")
+	fun systemPropertyBeatsFile() {
+		val config =
+			configOf(
+				mapOf(DispatcherRunConfig.PROP_HISTORY_N to "5"),
+				DispatcherRunConfig.PROP_HISTORY_N to "7"
+			)
+
+		assertThat(config.historyN).isEqualTo(7)
+	}
+
+	@Test
+	@DisplayName("#834: a committed-file value beats the code fallback constant")
+	fun fileBeatsCodeFallback() {
+		val config =
+			configOf(
+				mapOf(
+					DispatcherRunConfig.PROP_TICK_PERIOD_MS to "500",
+					DispatcherRunConfig.PROP_HISTORY_N to "5",
+					DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK to "2",
+					DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "60"
+				)
+			)
+
+		assertThat(config.tickPeriodMs).isEqualTo(500L)
+		assertThat(config.historyN).isEqualTo(5)
+		assertThat(config.maxActionsPerTick).isEqualTo(2)
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(60L)
+	}
+
+	@Test
+	@DisplayName("#834: an absent committed file falls back to the code constant, no exception")
+	fun absentFileFallsBackToCodeConstant() {
+		val config = configOf(emptyMap())
+
+		assertThat(config.tickPeriodMs).isEqualTo(DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS)
+		assertThat(config.historyN).isEqualTo(DispatcherRunConfig.DEFAULT_HISTORY_N)
+		assertThat(config.maxActionsPerTick).isEqualTo(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK)
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
+	}
+
+	@Test
+	@DisplayName("#834: a malformed committed-file value falls back to the code constant, no exception")
+	fun malformedFileValueFallsBackToCodeConstant() {
+		val config =
+			configOf(
+				mapOf(
+					DispatcherRunConfig.PROP_HISTORY_N to "three",
+					DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK to "0"
+				)
+			)
+
+		assertThat(config.historyN).isEqualTo(DispatcherRunConfig.DEFAULT_HISTORY_N)
+		// 0 is out of range for a cap, not merely unparseable — same treatment as the -D case.
+		assertThat(config.maxActionsPerTick).isEqualTo(DispatcherRunConfig.DEFAULT_MAX_ACTIONS_PER_TICK)
+	}
+
+	@Test
+	@DisplayName(
+		"#834 regression lock: the shipped properties file yields exactly the values the sweep chose"
+	)
+	fun shippedFileYieldsChosenDefaults() {
+		// No system properties, no injected file map: exercises the real classpath resource end to
+		// end. The lock still forbids silent drift; its expectation for historyN moved once, when
+		// #834's sweep chose 0 over 3 (c7Clean 8/10 vs 0/10, across all four factorial cells).
+		// See docs/GOAL_10_SP2C11_SWEEP_REPORT.md.
+		val config = DispatcherRunConfig.fromProperties()
+
+		assertThat(config.tickPeriodMs).isEqualTo(0L)
+		assertThat(config.historyN).isEqualTo(0)
+		assertThat(config.maxActionsPerTick).isEqualTo(3)
+		assertThat(config.inferenceTimeoutSeconds).isEqualTo(30L)
 	}
 }

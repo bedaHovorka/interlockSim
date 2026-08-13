@@ -262,6 +262,176 @@ class DefaultDispatcherRunRecorderTest {
 		r.logFinalSummary()
 	}
 
+	// ── Latency percentiles (Issue #834, SP2c.11) ─────────────────────────────
+
+	@Test
+	fun `latency fields are null when no ticks carried a latency — absent is not zero`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0))
+
+		val snap = r.snapshot()
+		// Review finding #3 (Issue #834): nothing was measured, so the fields are null (absent),
+		// never 0L (which would misread as "the model answered in 0 ms").
+		assertThat(snap.latencyP50Ms).isNull()
+		assertThat(snap.latencyP95Ms).isNull()
+		assertThat(snap.latencyMaxMs).isNull()
+	}
+
+	@Test
+	fun `latency fields are null when the recorder has seen no ticks at all`() {
+		val snap = recorder().snapshot()
+		assertThat(snap.latencyP50Ms).isNull()
+		assertThat(snap.latencyP95Ms).isNull()
+		assertThat(snap.latencyMaxMs).isNull()
+	}
+
+	@Test
+	fun `a single latency sample is reported for p50, p95 and max`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = 250L))
+
+		val snap = r.snapshot()
+		assertThat(snap.latencyP50Ms).isEqualTo(250L)
+		assertThat(snap.latencyP95Ms).isEqualTo(250L)
+		assertThat(snap.latencyMaxMs).isEqualTo(250L)
+	}
+
+	@Test
+	fun `an even-sized latency sample set computes p50 by nearest-rank`() {
+		val r = recorder()
+		listOf(400L, 100L, 300L, 200L).forEach { latency ->
+			r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = latency))
+		}
+
+		val snap = r.snapshot()
+		// sorted: 100, 200, 300, 400 -> nearest-rank(50) = ceil(0.5 * 4) = rank 2 -> 200
+		assertThat(snap.latencyP50Ms).isEqualTo(200L)
+		assertThat(snap.latencyMaxMs).isEqualTo(400L)
+	}
+
+	@Test
+	fun `an odd-sized latency sample set computes p50 as the middle element`() {
+		val r = recorder()
+		listOf(500L, 100L, 300L).forEach { latency ->
+			r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = latency))
+		}
+
+		val snap = r.snapshot()
+		// sorted: 100, 300, 500 -> middle is 300
+		assertThat(snap.latencyP50Ms).isEqualTo(300L)
+		assertThat(snap.latencyMaxMs).isEqualTo(500L)
+	}
+
+	@Test
+	fun `p95 is not confused with max on a larger latency sample set`() {
+		val r = recorder()
+		(1..20).map { it * 10L }.shuffled().forEach { latency ->
+			r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = latency))
+		}
+
+		val snap = r.snapshot()
+		// sorted: 10, 20, ..., 200 -> nearest-rank(95) = ceil(0.95 * 20) = 19th element = 190
+		assertThat(snap.latencyP95Ms).isEqualTo(190L)
+		assertThat(snap.latencyMaxMs).isEqualTo(200L)
+	}
+
+	@Test
+	fun `ticks with a null latency do not contribute a sample`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 1.0, latencyMs = null))
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 2.0, latencyMs = 100L))
+
+		val snap = r.snapshot()
+		assertThat(snap.latencyP50Ms).isEqualTo(100L)
+		assertThat(snap.latencyMaxMs).isEqualTo(100L)
+	}
+
+	@Test
+	fun `latency samples recorded after finish do not affect the frozen snapshot`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0, latencyMs = 100L))
+		val frozen = r.finish(RunEndCause.MANUAL_STOP)
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 2.0, latencyMs = 9000L))
+
+		assertThat(frozen.latencyMaxMs).isEqualTo(100L)
+	}
+
+	// ── Railway outcomes (Issue #834, SP2c.11) ───────────────────────────────
+
+	@Test
+	fun `railway outcome figures are absent - not zero - when none were recorded`() {
+		val outcome = recorder().snapshot().railwayOutcome
+
+		// Every figure must be null. A `0` here would read as "the railway moved nothing",
+		// which is a measurement; the truth is that nothing measured it.
+		assertThat(outcome.journeysCompleted).isNull()
+		assertThat(outcome.trainsEntered).isNull()
+		assertThat(outcome.trainsExited).isNull()
+		assertThat(outcome.maxConcurrentTrains).isNull()
+		assertThat(outcome.blockTransitions).isNull()
+		assertThat(outcome.conflicts).isNull()
+		assertThat(outcome.failedReservations).isNull()
+	}
+
+	@Test
+	fun `recordRailwayOutcome figures appear in the snapshot`() {
+		val r = recorder()
+		r.recordRailwayOutcome(
+			RailwayOutcome(
+				journeysCompleted = 7L,
+				trainsEntered = 13L,
+				trainsExited = 11L,
+				maxConcurrentTrains = 2L,
+				blockTransitions = 173L,
+				conflicts = 4L,
+				failedReservations = 9L
+			)
+		)
+
+		val outcome = r.snapshot().railwayOutcome
+		assertThat(outcome.journeysCompleted).isEqualTo(7L)
+		assertThat(outcome.trainsEntered).isEqualTo(13L)
+		assertThat(outcome.trainsExited).isEqualTo(11L)
+		assertThat(outcome.maxConcurrentTrains).isEqualTo(2L)
+		assertThat(outcome.blockTransitions).isEqualTo(173L)
+		assertThat(outcome.conflicts).isEqualTo(4L)
+		assertThat(outcome.failedReservations).isEqualTo(9L)
+	}
+
+	/**
+	 * A measured zero and an unmeasured figure must not collapse into the same value: a run in
+	 * which the dispatcher admitted no train at all is a finding, and a run nobody measured is not.
+	 */
+	@Test
+	fun `a measured zero is reported as zero and stays distinguishable from absent`() {
+		val r = recorder()
+		r.recordRailwayOutcome(RailwayOutcome(trainsEntered = 0L))
+
+		val outcome = r.snapshot().railwayOutcome
+		assertThat(outcome.trainsEntered).isEqualTo(0L)
+		// Nothing was recorded for the remaining figures, so they stay absent.
+		assertThat(outcome.trainsExited).isNull()
+	}
+
+	@Test
+	fun `railway outcome recorded after finish does not affect the frozen snapshot`() {
+		val r = recorder()
+		r.recordRailwayOutcome(RailwayOutcome(trainsEntered = 1L))
+		val frozen = r.finish(RunEndCause.MANUAL_STOP)
+		r.recordRailwayOutcome(RailwayOutcome(trainsEntered = 99L))
+
+		assertThat(frozen.railwayOutcome.trainsEntered).isEqualTo(1L)
+	}
+
+	@Test
+	fun `logFinalSummary does not throw when the railway outcome is absent`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_NO_OP, simTime = 1.0))
+		r.finish(RunEndCause.MANUAL_STOP)
+		// Must not throw even though every railway figure is null.
+		r.logFinalSummary()
+	}
+
 	// ── Helpers ─────────────────────────────────────────────────────────────
 
 	private fun makeOutcome(

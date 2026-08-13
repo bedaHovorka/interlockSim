@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunReportAggregator
@@ -22,9 +23,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TimeoutNoOpCause
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 import kotlin.streams.asSequence
 
@@ -155,6 +159,7 @@ class AiSweepDriver(
 	): SweepRunOutcome {
 		val logDir = outputRoot.resolve(RUN_LOG_DIR)
 		Files.createDirectories(logDir)
+		val logFile = logDir.resolve("${run.runId}.log")
 		val request =
 			SweepProcessRequest(
 				mainClass = mainClass,
@@ -162,7 +167,7 @@ class AiSweepDriver(
 				endTimeSeconds = run.endTimeSeconds,
 				systemProperties = run.cell.systemProperties(run.runId, outputRoot.toString()),
 				timeoutSeconds = timeoutSeconds,
-				logFile = logDir.resolve("${run.runId}.log")
+				logFile = logFile
 			)
 
 		val result =
@@ -173,12 +178,18 @@ class AiSweepDriver(
 				SweepProcessResult(exitCode = null, timedOut = false)
 			}
 
+		// Scanned once the child is done, regardless of how it ended: a timeout or a crash can
+		// still carry FATAL evidence in its log, and a run that exits 0 needs it patched into the
+		// run JSON the child already wrote. See FatalExceptionScanner's KDoc for why this is a log
+		// scan rather than in-process capture.
+		val fatalScan = FatalExceptionScanner.scan(logFile)
+
 		if (result.timedOut) {
 			logger.error {
 				"[aiSweep] ${run.runId} exceeded its ${timeoutSeconds}s budget and was killed — " +
 					"recording TIMEOUT_ABORT"
 			}
-			writeAbortSnapshot(run, RunEndCause.TIMEOUT_ABORT)
+			writeAbortSnapshot(run, RunEndCause.TIMEOUT_ABORT, fatalScan)
 			return SweepRunOutcome.ABORTED
 		}
 
@@ -187,7 +198,7 @@ class AiSweepDriver(
 			// Exit 1 is Main's TERMINATED_EARLY, which the run itself already persisted as
 			// TIMEOUT_ABORT; anything else means the child died before it could record anything.
 			if (run.runId !in existingRunIds(outputRoot)) {
-				writeAbortSnapshot(run, RunEndCause.CRASH)
+				writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan)
 			}
 			return SweepRunOutcome.FAILED
 		}
@@ -197,10 +208,11 @@ class AiSweepDriver(
 			// dispatcher, or persistence failed. Counting it as completed would inflate the
 			// denominator with a run that has no measurement behind it.
 			logger.error { "[aiSweep] ${run.runId} exited 0 but wrote no run JSON — recording CRASH" }
-			writeAbortSnapshot(run, RunEndCause.CRASH)
+			writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan)
 			return SweepRunOutcome.FAILED
 		}
 
+		patchFatalExceptionInfo(outputRoot, run.runId, fatalScan)
 		return SweepRunOutcome.COMPLETED
 	}
 
@@ -231,12 +243,93 @@ class AiSweepDriver(
 
 	private fun writeAbortSnapshot(
 		run: SweepRun,
-		cause: RunEndCause
+		cause: RunEndCause,
+		fatalScan: FatalExceptionScanResult
 	) {
 		try {
-			store.write(abortedSnapshot(run.runId, run.cell.arm, run.cell.runParameters(), cause))
+			store.write(abortedSnapshot(run.runId, run.cell.arm, run.cell.runParameters(), cause, fatalScan))
 		} catch (e: IOException) {
 			logger.error(e) { "[aiSweep] could not record the aborted run ${run.runId}" }
+		}
+	}
+
+	/**
+	 * Finds the run JSON the child already wrote for [runId] and, when [fatalScan] measured
+	 * something, rewrites it in place to carry the finding.
+	 *
+	 * ## Why "in place" and not [RunSnapshotStore.write]
+	 *
+	 * [RunSnapshotStore.write] always mints a fresh `<timestamp>-<runId>.json` file name.
+	 * Calling it again for a run that already has a file would leave **two** JSON files for the
+	 * same [runId] under [outputRoot], and [RunSnapshotStore.readAll] has no way to know they are
+	 * the same run — the arm's `runCount` would silently double-count it. Overwriting the exact
+	 * file the child wrote, atomically (temp file + [StandardCopyOption.ATOMIC_MOVE], the same
+	 * pattern `DefaultRunSnapshotStore.write` uses), keeps the one-file-per-run invariant intact.
+	 *
+	 * Does nothing when [fatalScan] itself is absent (`count == null`): [DispatcherRunSnapshot]'s
+	 * own fields already default to `null`, so there is nothing to add, and leaving the pristine
+	 * file alone is strictly simpler — and strictly safer — than writing back a value it already
+	 * has.
+	 *
+	 * Best-effort like every other post-hoc write in this class: a failure here logs a WARN and
+	 * leaves the run JSON as the child wrote it (fatal-exception fields absent), it never fails
+	 * the run or the sweep.
+	 */
+	private fun patchFatalExceptionInfo(
+		outputRoot: Path,
+		runId: String,
+		fatalScan: FatalExceptionScanResult
+	) {
+		if (fatalScan.count == null) return
+		try {
+			val file = findRunFile(outputRoot, runId)
+			if (file == null) {
+				logger.warn { "[aiSweep] no run file found for $runId — its FATAL-scan result was not recorded" }
+				return
+			}
+			val original = json.decodeFromString(DispatcherRunSnapshot.serializer(), Files.readString(file))
+			val patched =
+				original.copy(
+					fatalExceptionCount = fatalScan.count,
+					fatalExceptionFirstMessage = fatalScan.firstMessage
+				)
+			val tmp = Files.createTempFile(file.parent, "run-patch-", ".json.tmp")
+			try {
+				Files.writeString(tmp, json.encodeToString(DispatcherRunSnapshot.serializer(), patched))
+				Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+			} catch (e: IOException) {
+				Files.deleteIfExists(tmp)
+				throw e
+			}
+			if (fatalScan.count > 0) {
+				logger.error {
+					"[aiSweep] $runId recorded ${fatalScan.count} FATAL SimulationException occurrence(s) — " +
+						"first: ${fatalScan.firstMessage}"
+				}
+			}
+		} catch (e: IOException) {
+			logger.warn(e) { "[aiSweep] could not patch $runId's run JSON with its FATAL-scan result" }
+		} catch (e: SerializationException) {
+			logger.warn(e) { "[aiSweep] could not patch $runId's run JSON with its FATAL-scan result — parse error" }
+		}
+	}
+
+	/** Full path to the run JSON [RunSnapshotStore] wrote for [runId] under [root], or `null` if none. */
+	private fun findRunFile(
+		root: Path,
+		runId: String
+	): Path? {
+		if (!Files.isDirectory(root)) return null
+		return try {
+			Files.walk(root).use { stream ->
+				stream
+					.asSequence()
+					.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".json") }
+					.firstOrNull { RUN_FILE_NAME.matchEntire(it.fileName.toString())?.groupValues?.get(1) == runId }
+			}
+		} catch (e: IOException) {
+			logger.warn(e) { "[aiSweep] could not scan $root while looking for $runId's run file" }
+			null
 		}
 	}
 
@@ -271,6 +364,13 @@ class AiSweepDriver(
 
 		/** `<yyyyMMdd-HHmmss>-<runId>.json`, as written by `DefaultRunSnapshotStore`. */
 		private val RUN_FILE_NAME = Regex("""\d{8}-\d{6}-(.+)\.json""")
+
+		/** Mirrors `DefaultRunSnapshotStore`'s own [Json] config so a patched file reads identically. */
+		private val json =
+			Json {
+				prettyPrint = true
+				encodeDefaults = true
+			}
 	}
 }
 
@@ -401,12 +501,21 @@ class ForkedJvmSweepProcessRunner : SweepProcessRunner {
  * Every rate is `0.0` and every counter `0` — not because those are measured values, but because
  * the run produced none. `completedNaturally = false` is what the aggregator's pass predicate
  * reads, so such a run counts against the arm exactly as it should.
+ *
+ * The railway figures are the exception: they are recorded **absent**, not zero. See the comment
+ * at the `railwayOutcome` argument below. [fatalScan] follows the same absent-vs-zero rule.
+ *
+ * @param fatalScan The run's log scanned for FATAL `SimulationException` occurrences before this
+ *   snapshot was built, so an aborted or crashed run can still carry the finding — a timeout or a
+ *   crash does not rule out the log having recorded a FATAL earlier in the same run. Defaults to
+ *   an absent scan for call sites (tests) that have no log to scan.
  */
 internal fun abortedSnapshot(
 	runId: String,
 	arm: DispatcherArm,
 	params: RunParameters,
-	cause: RunEndCause
+	cause: RunEndCause,
+	fatalScan: FatalExceptionScanResult = FatalExceptionScanResult()
 ): DispatcherRunSnapshot =
 	DispatcherRunSnapshot(
 		runId = runId,
@@ -439,7 +548,14 @@ internal fun abortedSnapshot(
 		// RunReportAggregator.runPassed reads.
 		c7Clean = true,
 		completedNaturally = false,
-		endCause = cause
+		endCause = cause,
+		// Issue #834 (SP2c.11): the one group of figures that must NOT be zeroed here. Every
+		// counter above is zero because the run genuinely produced none; the railway figures are
+		// absent because the run never got far enough for anything to read them. Writing 0 would
+		// enter an unmeasured run into the sweep as one where no train moved — a measurement.
+		railwayOutcome = RailwayOutcome.UNMEASURED,
+		fatalExceptionCount = fatalScan.count,
+		fatalExceptionFirstMessage = fatalScan.firstMessage
 	)
 
 private fun zeroed(keys: List<String>): Map<String, Long> = keys.associateWith { 0L }

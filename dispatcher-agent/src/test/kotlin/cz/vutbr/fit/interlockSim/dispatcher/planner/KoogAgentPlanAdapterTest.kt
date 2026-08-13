@@ -15,7 +15,9 @@ import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
@@ -218,6 +220,159 @@ class KoogAgentPlanAdapterTest {
 		val result =
 			runBlocking { adapter(koogAgent, fallback, Duration.ofMillis(50)).plan(observation) }
 		assertThat(result).containsExactly(DispatchDecision.NoAction)
+	}
+
+	// ── Idle-station classification (Issue #834) ──────────────────────────────
+
+	/**
+	 * Issue #834: the project owner reported a correct "nothing to do" LLM cycle on an empty
+	 * station being mis-scored as a rule-based-fallback run failure
+	 * (`fallback: reason=EMPTY_NO_TOOLS ... ollamaSuccessRate=27%`). An idle station — no
+	 * approved (active) trains and no unapproved (queued) trains — with no LLM emissions must be
+	 * reported as [TickOutcome.LLM_NO_OP] and the fallback dispatcher must never be consulted.
+	 */
+	@Test
+	@DisplayName("idle station (no active or queued trains) with no LLM emissions reports LLM_NO_OP, not RULE_FALLBACK")
+	fun `idle station with no LLM emissions reports LLM_NO_OP and skips fallback`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val idleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 0)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(idleObservation) }
+
+		assertThat(result).isEmpty()
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_NO_OP)
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("non-idle station (an active train, no emissions) still falls back (RULE_FALLBACK)")
+	fun `non-idle station with an active train and no LLM emissions still falls back`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val recorded = mutableListOf<TickRecord>()
+		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("non-idle station (a queued train, no emissions) still falls back (RULE_FALLBACK)")
+	fun `non-idle station with a queued train and no LLM emissions still falls back`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val recorded = mutableListOf<TickRecord>()
+		val nonIdleObservation =
+			observationWithQueue(
+				unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A")),
+				approvedTrainCount = 0
+			)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	/**
+	 * [SimulationSnapshot.EMPTY] is the pre-first-capture sentinel — it carries no train
+	 * positions and therefore *looks* idle without being a real idle tick (e.g. the very first
+	 * cycle before [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot] has
+	 * ever run on the kDisco thread). A cycle observing it must keep the pre-#834 RULE_FALLBACK
+	 * behaviour rather than being scored as a successful no-op.
+	 */
+	@Test
+	@DisplayName("SimulationSnapshot.EMPTY sentinel with no emissions falls back despite looking idle (guard)")
+	fun `EMPTY sentinel snapshot with no emissions falls back despite looking idle`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val recorded = mutableListOf<TickRecord>()
+		// `observation` (the class-level fixture) uses SimulationSnapshot.EMPTY with no queued
+		// trains — structurally idle-looking but the pre-first-capture sentinel.
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	/**
+	 * `SinkHolder.tryEmit` counts [DispatchAction.NoOp] as "acted" so the fallback correctly does
+	 * not run on top of it (see [SinkHolder]'s KDoc), but an emission set consisting *only* of
+	 * `no_op` is a no-op tick, not an action tick — it must be reported as [TickOutcome.LLM_NO_OP],
+	 * not [TickOutcome.LLM_ACTIONS] (Issue #834, required change 2).
+	 */
+	@Test
+	@DisplayName("an explicit no_op-only emission reports LLM_NO_OP, not LLM_ACTIONS")
+	fun `only NoOp emissions report LLM_NO_OP`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.NoOp)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(result).isEmpty()
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_NO_OP)
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("a no_op emission alongside a real action still reports LLM_ACTIONS")
+	fun `NoOp plus a real action reports LLM_ACTIONS`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.NoOp)
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
+		coVerify(exactly = 0) { fallback.decide(any()) }
 	}
 
 	/**
@@ -448,5 +603,143 @@ class KoogAgentPlanAdapterTest {
 
 		assertThat(first, "first cycle uses the rule-based fallback").isEmpty()
 		assertThat(second, "second cycle reaches the LLM").containsExactly(DispatchDecision.NoAction)
+	}
+
+	// ── Cycle latency (Issue #834, SP2c.11) ────────────────────────────────────
+	//
+	// Every reported TickRecord must carry a non-null, non-negative latencyMs — including the
+	// timeout ending, where the elapsed time IS the deadline (a real, interesting measurement,
+	// not a missing one). Tests assert only `>= 0` / non-null, never a tight bound, per the
+	// no-clock-flakiness rule.
+
+	@Test
+	@DisplayName("a successful LLM_ACTIONS cycle reports a non-null, non-negative latency")
+	fun `successful cycle reports non-null non-negative latency`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
+		assertThat(recorded.first().latencyMs).isNotNull()
+		assertThat(recorded.first().latencyMs!!).isGreaterThanOrEqualTo(0L)
+	}
+
+	@Test
+	@DisplayName("an idle-station LLM_NO_OP cycle reports a non-null, non-negative latency")
+	fun `idle no-op cycle reports non-null non-negative latency`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val idleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 0)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(idleObservation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_NO_OP)
+		assertThat(recorded.first().latencyMs).isNotNull()
+		assertThat(recorded.first().latencyMs!!).isGreaterThanOrEqualTo(0L)
+	}
+
+	@Test
+	@DisplayName("a non-idle empty-no-tools RULE_FALLBACK cycle reports a non-null, non-negative latency")
+	fun `non-idle empty-no-tools fallback cycle reports non-null non-negative latency`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val recorded = mutableListOf<TickRecord>()
+		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(nonIdleObservation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(recorded.first().latencyMs).isNotNull()
+		assertThat(recorded.first().latencyMs!!).isGreaterThanOrEqualTo(0L)
+	}
+
+	@Test
+	@DisplayName("a timed-out cycle reports a non-null, non-negative latency — the measured elapsed time IS the deadline")
+	fun `timed-out cycle reports non-null non-negative latency`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			delay(500)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, Duration.ofMillis(50))
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(recorded.first().latencyMs).isNotNull()
+		assertThat(recorded.first().latencyMs!!).isGreaterThanOrEqualTo(0L)
+	}
+
+	@Test
+	@DisplayName("an exception thrown during inference reports a non-null, non-negative latency")
+	fun `exception during inference reports non-null non-negative latency`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } throws RuntimeException("boom")
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		runBlocking { planAdapter.plan(observation) }
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(recorded.first().latencyMs).isNotNull()
+		assertThat(recorded.first().latencyMs!!).isGreaterThanOrEqualTo(0L)
+	}
+
+	@Test
+	@DisplayName("a slower cycle reports a greater or equal latency than a faster one (relative ordering, no tight bound)")
+	fun `slower cycle reports greater or equal latency than a faster one`() {
+		val fastAgent = mockk<KoogDispatchAgent>()
+		coEvery { fastAgent.decideAsync(any()) } returns emptyList()
+		val slowAgent = mockk<KoogDispatchAgent>()
+		coEvery { slowAgent.decideAsync(any()) } coAnswers {
+			delay(80)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val fastObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+		val slowObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+
+		val fastRecorded = mutableListOf<TickRecord>()
+		val fastAdapter = adapter(fastAgent, fallback)
+		fastAdapter.tickListener = PlannerTickListener { fastRecorded.add(it) }
+		runBlocking { fastAdapter.plan(fastObservation) }
+
+		val slowRecorded = mutableListOf<TickRecord>()
+		val slowAdapter = adapter(slowAgent, fallback)
+		slowAdapter.tickListener = PlannerTickListener { slowRecorded.add(it) }
+		runBlocking { slowAdapter.plan(slowObservation) }
+
+		assertThat(slowRecorded.first().latencyMs!!)
+			.isGreaterThanOrEqualTo(fastRecorded.first().latencyMs!!)
 	}
 }

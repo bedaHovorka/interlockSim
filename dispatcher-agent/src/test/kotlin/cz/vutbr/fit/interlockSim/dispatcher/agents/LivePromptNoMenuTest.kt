@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import ai.koog.agents.core.agent.AIAgent
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
@@ -44,6 +45,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
@@ -134,9 +137,16 @@ class LivePromptNoMenuTest {
 	@Nested
 	@DisplayName("Surface 1 — KoogAgentFactory-assembled system prompt (buildSystemPrompt + topology)")
 	inner class SystemPromptSurface {
-		@Test
+		/**
+		 * Parameterised over [PromptVariant] since Issue #834 (SP2c.11): C9 binds the prompt the
+		 * model is actually sent, so it binds every selectable variant of it, not merely whichever
+		 * one happens to be the default. A revision that reintroduced a numbered procedure would
+		 * otherwise reach a real sweep run untested.
+		 */
+		@ParameterizedTest
+		@EnumSource(PromptVariant::class)
 		@DisplayName("no numbered-option lines, no 'option'/'choose one'/'select' token")
-		fun systemPromptHasNoMenuArtifacts() {
+		fun systemPromptHasNoMenuArtifacts(variant: PromptVariant) {
 			loadShuntingLoopContext().use { context ->
 				val agentService = KoogAgentFactoryTest.CapturingAgentService()
 				val factory =
@@ -147,7 +157,8 @@ class LivePromptNoMenuTest {
 						perceptionPort = fakePerceptionPort(),
 						commandQueue = ActuatorCommandQueue(),
 						dispatchLoopSensorPort = fakeSensorPort(),
-						sinkHolder = SinkHolder()
+						sinkHolder = SinkHolder(),
+						promptVariant = variant
 					)
 
 				runBlocking { factory.createAgent(context) }
@@ -283,6 +294,75 @@ class LivePromptNoMenuTest {
 			assertThat(prompt).contains("OUTCOMES OF YOUR PREVIOUS ACTIONS") // task B0 block, drained
 			assertThat(prompt).contains("Train #3") // queued train rendered
 			assertThat(prompt).contains("YOUR LAST") // non-empty cycle history
+		}
+
+		// ── Issue #834 (SP2c.11, task 8): the deduped same-tick same-target rendering ──────────
+
+		/**
+		 * Two active trains whose owned inputs both resolve to the same
+		 * [BlockInputObservation.toSeparatorName] -- the scenario
+		 * [cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopResolver.resolveAll] dedups. Checked
+		 * against the same no-menu surface as [capturedRepresentativePrompt] plus the additional
+		 * constraint that the loser's line must not misstate the railway as occupied/blocked.
+		 */
+		private fun capturedDedupedPrompt(): String {
+			val aiAgent = mockk<AIAgent<String, String>>()
+			val prompts = mutableListOf<String>()
+			coEvery { aiAgent.run(any(), null) } answers {
+				prompts.add(firstArg())
+				"done"
+			}
+			val agent = KoogDispatchAgentImpl(aiAgent)
+
+			val observation =
+				DispatchObservation(
+					snapshot =
+						SimulationSnapshot.EMPTY.copy(
+							trainPositions =
+								listOf(
+									TrainPositionReading(
+										trainId = "Train #1",
+										velocity = 5.0,
+										acceleration = 0.0,
+										totalDistance = 0.0,
+										frontSectionName = null
+									),
+									TrainPositionReading(
+										trainId = "Train #2",
+										velocity = 5.0,
+										acceleration = 0.0,
+										totalDistance = 0.0,
+										frontSectionName = null
+									)
+								)
+						),
+					unapprovedTrains = emptyList(),
+					innerBlockInputs =
+						listOf(
+							blockInput(towardSemaphoreName = "doB1", toSeparatorName = "sharedSep", ownerTrainId = "Train #1"),
+							blockInput(towardSemaphoreName = "doC1", toSeparatorName = "sharedSep", ownerTrainId = "Train #2")
+						),
+					outerBlockInputs = emptyList()
+				)
+
+			runBlocking { agent.decideAsync(observation) }
+			return prompts.single()
+		}
+
+		@Test
+		@DisplayName("deduped cycle message: no numbered-option lines, no 'option'/'choose one'/'select' token")
+		fun dedupedCycleMessageHasNoMenuArtifacts() {
+			NoMenuAssertions.assertNoMenuArtifacts(capturedDedupedPrompt())
+		}
+
+		@Test
+		@DisplayName("deduped cycle message: the losing train's line never claims the track is occupied or blocked")
+		fun dedupedCycleMessageLoserLineNeverImpliesTrackIsBlockedOrOccupied() {
+			val prompt = capturedDedupedPrompt()
+			val loserLine = prompt.lineSequence().first { it.contains("Train #2") }
+
+			assertThat(loserLine.lowercase()).doesNotContain("blocked")
+			assertThat(loserLine.lowercase()).doesNotContain("occupied")
 		}
 	}
 }

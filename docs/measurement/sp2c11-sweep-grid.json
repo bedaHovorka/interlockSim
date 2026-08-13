@@ -1,0 +1,15 @@
+{
+  "endTimeSeconds": 600,
+  "repeat": 10,
+  "perRunTimeoutSeconds": 900,
+  "axes": {
+    "example": ["shuntingLoopAI"],
+    "model": ["qwen2.5:7b-instruct"],
+    "temperature": [0.28, 0.5],
+    "tickPeriodMs": [0],
+    "historyN": [0, 3],
+    "maxActionsPerTick": [3],
+    "inferenceTimeoutSeconds": [30, 90],
+    "promptVariant": ["REVISED"]
+  }
+}

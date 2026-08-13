@@ -64,6 +64,33 @@ private fun Scope.requireContextSource(): DefaultSimulationContext =
 		?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 
 /**
+ * Builds the [RunParameters] recorded for a rule-based-arm run from [runConfig].
+ *
+ * Extracted to a standalone, non-Koin function so tests can exercise the exact mapping the
+ * `scoped<DispatcherRunRecorder>` binding below uses — including a non-default
+ * [DispatcherRunConfig.inferenceTimeoutSeconds] read from an injected property lookup — without
+ * needing a live Koin scope. Constructing a [DispatcherRunConfig] never needs Koin at all.
+ *
+ * `temperature`/`model`/`promptVariant` stay at their "no prompt" values (`0.0`/`""`/`""`)
+ * because a rule-based run has no prompt at all — see [RunParameters.model]'s and
+ * [RunParameters.promptVariant]'s own KDoc for why the report's "rule-based" label depends on
+ * exactly these sentinels rather than the LLM-arm defaults.
+ *
+ * @since Issue #834 (SP2c.11 — inferenceTimeoutSeconds/promptVariant threading)
+ */
+internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParameters =
+	RunParameters(
+		tickPeriodMs = runConfig.tickPeriodMs,
+		historyN = runConfig.historyN,
+		temperature = 0.0,
+		maxActionsPerTick = runConfig.maxActionsPerTick,
+		model = "",
+		seed = null,
+		inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds,
+		promptVariant = ""
+	)
+
+/**
  * Koin DI module for `:dispatcher-agent`'s components: the rule-based/LLM dispatcher, the Ollama
  * executor and tool registry, and the per-simulation sensor/actuator ports and agent factory.
  *
@@ -125,9 +152,11 @@ val dispatcherAgentModule: Module =
 		// No Spring Boot: uses lightweight Koin DI instead.
 		single<AgentService> { DefaultAgentService(get(), get()) } // OllamaSimpleExecutor, OllamaExecutorConfig
 
-		// Per-run knobs read from -D system properties, so the sweep driver can vary them
-		// between forked runs. Absent properties reproduce the previous defaults exactly, so
-		// a plain `java -jar … example shuntingLoopAI 600` is unchanged.
+		// Per-run knobs read from -D system properties, falling back to the committed
+		// dispatcher-defaults.properties resource and then to the code constant (Issue #834,
+		// SP2c.11 — see DispatcherRunConfig's "Configuration precedence" KDoc). Absent -D
+		// properties and an absent/unchanged resource reproduce the previous defaults exactly,
+		// so a plain `java -jar … example shuntingLoopAI 600` is unchanged.
 		single<DispatcherRunConfig> { DispatcherRunConfig.fromProperties() }
 
 		// Ollama executor configuration (singleton).
@@ -137,7 +166,11 @@ val dispatcherAgentModule: Module =
 		// model and temperature are the two grid axes that were already live; they are
 		// overridden here rather than in OllamaExecutorConfig.default() so the environment-variable
 		// contract (OLLAMA_BASE_URL — machine configuration) stays separate from the sweep's
-		// per-run contract (-D properties — measurement parameters).
+		// per-run contract (-D properties — measurement parameters). OllamaExecutorConfig.default()
+		// itself now resolves modelName/temperature against the same committed
+		// dispatcher-defaults.properties resource DispatcherRunConfig reads (Issue #834); runConfig's
+		// -D-only override below still wins over that file, giving the full
+		// -D property > committed file > code constant chain without reading the file twice.
 		single<OllamaExecutorConfig> {
 			val runConfig = get<DispatcherRunConfig>()
 			OllamaExecutorConfig.default().let { base ->
@@ -311,7 +344,11 @@ val dispatcherAgentModule: Module =
 					// Same scoped AppliedOutcomeChannel instance wireDispatcherAgent (ExampleRegistry)
 					// hands to DispatchDecisionApplier as its outcomeSink below — this is what closes
 					// the live feedback loop end to end.
-					outcomeFeed = get<AppliedOutcomeChannel>()
+					outcomeFeed = get<AppliedOutcomeChannel>(),
+					// Which system-prompt revision this run assembles (#834, SP2c.11). Read from the
+					// same DispatcherRunConfig every other per-run knob comes from, so the sweep's
+					// existing forked-JVM `-D` mechanism selects the A/B arm with no new channel.
+					promptVariant = get<DispatcherRunConfig>().promptVariant
 				)
 			}
 
@@ -337,19 +374,8 @@ val dispatcherAgentModule: Module =
 					// runs have to be resumable by the same file-name scan.
 					runId = get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
 					arm = DispatcherArm.RULE_BASED,
-					// Report what this run was actually given. `tickPeriodMs` genuinely applies to
-					// the rule-based arm too — it also runs through AgentLoopDriver. `temperature`/
-					// `model` stay empty because a rule-based run has neither, which is what the
-					// report's "rule-based" label means.
-					params =
-						RunParameters(
-							tickPeriodMs = get<DispatcherRunConfig>().tickPeriodMs,
-							historyN = get<DispatcherRunConfig>().historyN,
-							temperature = 0.0,
-							maxActionsPerTick = get<DispatcherRunConfig>().maxActionsPerTick,
-							model = "",
-							seed = null
-						)
+					// Report what this run was actually given — see ruleBasedRunParameters's KDoc.
+					params = ruleBasedRunParameters(get<DispatcherRunConfig>())
 				)
 			}
 

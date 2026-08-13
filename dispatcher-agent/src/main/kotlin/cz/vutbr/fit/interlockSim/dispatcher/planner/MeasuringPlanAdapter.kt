@@ -182,6 +182,13 @@ class MeasuringPlanAdapter(
 			}
 		}
 		logger.info { formatSummaryLine("final summary", getMetricsSnapshot()) }
+		// Issue #834 review finding #6: successRate here is not comparable to a pre-#834 run's —
+		// #834 reclassified idle ticks (former RULE_FALLBACK) to LLM_NO_OP, and REVISED's cap-full
+		// no_op converts former fallback ticks into LLM successes. Read it as a within-#834 figure.
+		logger.info {
+			"[MeasuringPlanAdapter] note: successRate is reclassified in #834 and not comparable " +
+				"to pre-#834 runs"
+		}
 	}
 
 	// ── Internal helpers ──────────────────────────────────────────────────────

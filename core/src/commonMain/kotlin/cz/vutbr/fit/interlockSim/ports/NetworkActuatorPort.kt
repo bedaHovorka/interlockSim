@@ -91,8 +91,9 @@ interface NetworkActuatorPort {
 	 *   the network throws [IllegalArgumentException] (unknown names must fail fast — they are
 	 *   not "no route").
 	 *
-	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid but
-	 * no topological path connects them.  [RouteRequestResult.Conflict] is returned when a
+	 * [RouteRequestResult.NoRouteExists] is returned when no topological path connects the
+	 * requested endpoints, and also for a residual kernel refusal that never reached
+	 * pathfinding — see that type's own KDoc.  [RouteRequestResult.Conflict] is returned when a
 	 * path exists but a block along it is already owned by another train — it carries the
 	 * conflicting block name and the owning train name so a dispatcher can wait for that
 	 * specific train rather than retrying blindly.
@@ -253,13 +254,24 @@ sealed class RouteRequestResult {
 	) : RouteRequestResult()
 
 	/**
-	 * No topological path exists between the requested endpoints.
+	 * No route was established between the requested endpoints, and retrying the identical
+	 * request will always yield the same result.  The dispatcher should log this as an error.
 	 *
-	 * Both endpoints are valid InOuts or Semaphores in the network, but the topology graph
-	 * connects no path between them (e.g. disconnected sub-networks).  The dispatcher should
-	 * log this as an error; retrying the same request will always yield the same result.
+	 * Two kernel outcomes produce it:
+	 *
+	 * - **No topological path** — the endpoints are as requested, but the topology graph connects
+	 *   no path between them (e.g. disconnected sub-networks).  Maps from
+	 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NoPathExists].
+	 * - **A residual interlocking refusal that never reached pathfinding** — the kernel denied
+	 *   before attempting a reservation, so no candidate-path count and no owning train exist to
+	 *   report.  Maps from
+	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]
+	 *   (Issue #834): it is reported here rather than as [AllPathsBlocked] because there is no
+	 *   count to report and the refusal is not contention.
+	 *
 	 * Note: an unknown (non-existent) endpoint name is **not** this result — it throws
-	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute].
+	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute], which validates endpoint
+	 * names before consulting the kernel.
 	 *
 	 * @property fromEndpointName The requested entry point name.
 	 * @property toEndpointName   The requested exit point name.
@@ -321,10 +333,12 @@ sealed class RouteRequestResult {
 	 * [DefaultNetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]
 	 * constructs this on the legacy/no-facade path directly from
 	 * `ReservationResult.NonContiguousStart`, and on the facade path (production dispatcher-agent
-	 * runs) from `RouteResponse.Denied.originNotContiguous` -- the discriminant
-	 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through from the same
-	 * kernel result. Every other denial reason still collapses to [AllPathsBlocked] `(0)` on the
-	 * facade path (Issue #893, task A-R1b).
+	 * runs) from
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart]
+	 * -- the discriminant [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through
+	 * from the same kernel result. Since Issue #834 (task alpha-7a) the facade path classifies
+	 * **every** denial on that exhaustive `DenialCause`, so both paths yield the same
+	 * [RouteRequestResult] for the same kernel outcome (invariant I4).
 	 *
 	 * @property fromEndpointName The rejected origin name, as requested.
 	 * @property reason English explanation naming the origin and the legal origins for this
@@ -334,5 +348,35 @@ sealed class RouteRequestResult {
 	data class OriginNotContiguous(
 		val fromEndpointName: String,
 		val reason: String
+	) : RouteRequestResult()
+
+	/**
+	 * One of the four ESA-11 route conditions refused the route (the four-condition
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.requestRoute] path). Maps from
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.ConditionFailed].
+	 *
+	 * Distinct from [NoRouteExists] (which carries the endpoint-resolution residual
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]) and
+	 * from [AllPathsBlocked]/[Conflict] (which carry a candidate-path count / a blocking owner
+	 * from the reservation service): a four-condition refusal does not go through pathfinding, so
+	 * neither a count nor an owner exists to report. The [retryable] flag is the only
+	 * machine-readable signal a caller gets — it preserves the transient-vs-permanent split so a
+	 * caller does not collapse contention (a block occupied by another train) onto the permanent
+	 * [NoRouteExists] side. This result exists because #834 stopped inventing a count/owner for
+	 * denials that have neither (review finding #2).
+	 *
+	 * @property reason The kernel's human-readable denial reason, forwarded verbatim from
+	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.Denied.reason]. Suitable for
+	 *   dispatcher display and LLM feedback (the same role [OriginNotContiguous.reason] plays).
+	 * @property retryable `true` when the underlying reason is transient contention (another
+	 *   train holds a resource; retrying the same request later can succeed); `false` when it is
+	 *   a permanent dispatcher output defect (unknown name, empty route, mismatched signal,
+	 *   un-clearable signal) — an identical retry fails identically. Forwarded unchanged from
+	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.ConditionFailed.retryable].
+	 * @since Issue #834 (SP2c.11 — Goal 10, review finding #2)
+	 */
+	data class ConditionFailed(
+		val reason: String,
+		val retryable: Boolean
 	) : RouteRequestResult()
 }

@@ -16,6 +16,7 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
@@ -545,6 +546,103 @@ class KoogAgentFactoryTest {
 				"If a tool call for a train is rejected twice in one tick, stop acting on that train " +
 					"and move on or reply."
 			)
+		}
+	}
+
+	// ── Issue #834 (SP2c.11): the prompt-variant seam ──────────────────────────────────────
+
+	/**
+	 * Every pinned-phrase assertion above builds its factory without naming a variant, so all
+	 * of them are assertions about [PromptVariant.BASELINE] — that is what makes them the
+	 * proof that the baseline still reproduces PR #896's prompt exactly. These two tests close
+	 * the remaining gap: that `createAgent` assembles the *selected* variant's instruction half
+	 * rather than always the default one. The per-variant text contract itself lives in
+	 * [PromptVariantTest]; here we only care that the constructor argument reaches the prompt.
+	 */
+	@Nested
+	@DisplayName("createAgent assembles the selected PromptVariant (Issue #834)")
+	inner class PromptVariantSelection {
+		private fun assembledPromptFor(variant: PromptVariant?): String {
+			val agentService = CapturingAgentService()
+			val sinkHolder = SinkHolder()
+			val factory =
+				if (variant == null) {
+					KoogAgentFactory(
+						toolRegistry = ToolGroupRegistry(),
+						ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+						agentService = agentService,
+						perceptionPort = fakePerceptionPort(),
+						commandQueue = ActuatorCommandQueue(),
+						dispatchLoopSensorPort = fakeSensorPort(),
+						sinkHolder = sinkHolder
+					)
+				} else {
+					KoogAgentFactory(
+						toolRegistry = ToolGroupRegistry(),
+						ollamaConfig = OllamaExecutorConfig.forLocalTesting(),
+						agentService = agentService,
+						perceptionPort = fakePerceptionPort(),
+						commandQueue = ActuatorCommandQueue(),
+						dispatchLoopSensorPort = fakeSensorPort(),
+						sinkHolder = sinkHolder,
+						promptVariant = variant
+					)
+				}
+			loadShuntingLoopContext().use { context -> runBlocking { factory.createAgent(context) } }
+			return requireNotNull(agentService.capturedSystemPrompt)
+		}
+
+		@Test
+		@DisplayName("a factory built without a variant assembles BASELINE, unchanged from before the seam")
+		fun defaultsToBaseline() {
+			val prompt = assembledPromptFor(null)
+
+			assertThat(
+				prompt.startsWith(
+					KoogAgentFactory.buildSystemPrompt(
+						SinkHolder().maxActionsPerTick,
+						PromptVariant.BASELINE
+					)
+				)
+			).isEqualTo(true)
+		}
+
+		@Test
+		@DisplayName("a factory built with REVISED assembles REVISED, not the default")
+		fun selectsTheRequestedVariant() {
+			val prompt = assembledPromptFor(PromptVariant.REVISED)
+
+			assertThat(
+				prompt.startsWith(
+					KoogAgentFactory.buildSystemPrompt(
+						SinkHolder().maxActionsPerTick,
+						PromptVariant.REVISED
+					)
+				)
+			).isEqualTo(true)
+			assertThat(prompt).isNotEqualTo(assembledPromptFor(null))
+		}
+
+		/**
+		 * The topology half is variant-independent by construction (#834 AC7 keeps
+		 * [StationTopologySerializer] out of the prompt rebuild), so switching variants must move
+		 * the instruction half and nothing else.
+		 */
+		@Test
+		@DisplayName("both variants append the identical, untouched STATION TOPOLOGY block")
+		fun topologyHalfIsVariantIndependent() {
+			// Split at the exact seam createAgent joins on, not at the first "STATION TOPOLOGY"
+			// occurrence: both variants' instruction halves also mention that section by name.
+			val maxActions = SinkHolder().maxActionsPerTick
+			val baselineTopology =
+				assembledPromptFor(PromptVariant.BASELINE)
+					.removePrefix(KoogAgentFactory.buildSystemPrompt(maxActions, PromptVariant.BASELINE))
+			val revisedTopology =
+				assembledPromptFor(PromptVariant.REVISED)
+					.removePrefix(KoogAgentFactory.buildSystemPrompt(maxActions, PromptVariant.REVISED))
+
+			assertThat(baselineTopology).contains("STATION TOPOLOGY")
+			assertThat(revisedTopology).isEqualTo(baselineTopology)
 		}
 	}
 

@@ -9,7 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherDefaultsResource
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Duration
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Configuration for the Ollama LLM executor.
@@ -31,8 +36,11 @@ import java.time.Duration
  *
  * @property ollamaEndpoint HTTP endpoint of local Ollama instance (default: `http://localhost:11434`,
  *   overridable via the `OLLAMA_BASE_URL` environment variable — see [default])
- * @property modelName Ollama model tag, e.g. "qwen2.5:7b-instruct" (per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md)
- * @property temperature Model sampling temperature (0.0–1.0, default 0.28). Chosen after a live
+ * @property modelName Ollama model tag, e.g. "qwen2.5:7b-instruct" (per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md).
+ *   [default]'s code-fallback constant is [DEFAULT_MODEL_NAME]; see [default] for the full
+ *   `-D` property > committed file > code constant precedence (Issue #834, SP2c.11).
+ * @property temperature Model sampling temperature (0.0–1.0, default 0.28; see [default] for the
+ *   full `-D` property > committed file > code constant precedence, Issue #834, SP2c.11). Chosen after a live
  *   incident where the LLM hallucinated a nonexistent endpoint name (`"kA"`/`"kB"`) instead of
  *   copying one from its system prompt's topology. Per `docs/GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md`
  *   §7 (A4), the LLM dispatcher is explicitly **not** this project's reproducibility anchor —
@@ -143,16 +151,60 @@ data class OllamaExecutorConfig(
 		 * under `network_mode: host` — but `host.docker.internal` does (verified on Windows 11 +
 		 * Docker Desktop 29.5.3, WSL2 backend, including from a `network_mode: host` container
 		 * matching `app`'s actual config). Set `OLLAMA_BASE_URL=http://host.docker.internal:11434`
-		 * in that scenario.
+		 * in that scenario. `OLLAMA_BASE_URL` stays an environment variable, never a `-D` property
+		 * or a [fileProperties] key: it is machine configuration (which host has Ollama), not a
+		 * tunable dispatcher default.
 		 *
-		 * @param env Environment variables to read the override from; defaults to the real
-		 *   process environment. Exposed as a parameter so tests can inject a fake map instead
-		 *   of mutating real environment variables.
+		 * [modelName][OllamaExecutorConfig.modelName] and [temperature][OllamaExecutorConfig.temperature]
+		 * resolve from [fileProperties] (committed `dispatcher-defaults.properties`, falling back to
+		 * [DEFAULT_MODEL_NAME]/[DEFAULT_TEMPERATURE] on an absent/malformed entry) — the code-constant
+		 * tier of Issue #834's `-D` property > committed file > code constant precedence. The `-D`
+		 * property tier is applied one layer up, in `DispatcherAgentModule`'s
+		 * `runConfig.model ?: base.modelName` override: [DispatcherRunConfig.fromProperties] reads
+		 * the same keys from `-D` flags only (no file fallback there — see its KDoc "Configuration
+		 * precedence" section for why splitting the file-read here, rather than duplicating it in
+		 * both classes, avoids two competing sources of the same value) and wins when a value is
+		 * given.
+		 *
+		 * @param env Environment variables to read the [ollamaEndpoint] override from; defaults to
+		 *   the real process environment. Exposed as a parameter so tests can inject a fake map
+		 *   instead of mutating real environment variables.
+		 * @param fileProperties Committed-resource lookup for [modelName]/[temperature], defaulting
+		 *   to [DispatcherDefaultsResource.shipped]. Injectable so tests can pin the file tier
+		 *   without depending on the real classpath resource's contents.
 		 */
-		fun default(env: Map<String, String> = System.getenv()): OllamaExecutorConfig =
+		fun default(
+			env: Map<String, String> = System.getenv(),
+			fileProperties: (String) -> String? = { key -> DispatcherDefaultsResource.shipped.lookup(key) }
+		): OllamaExecutorConfig =
 			OllamaExecutorConfig(
-				ollamaEndpoint = env[OLLAMA_BASE_URL_ENV_VAR]?.takeIf { it.isNotBlank() } ?: DEFAULT_OLLAMA_ENDPOINT
+				ollamaEndpoint = env[OLLAMA_BASE_URL_ENV_VAR]?.takeIf { it.isNotBlank() } ?: DEFAULT_OLLAMA_ENDPOINT,
+				modelName = resolveModelName(fileProperties),
+				temperature = resolveTemperature(fileProperties)
 			)
+
+		/** File-tier resolution for [OllamaExecutorConfig.modelName]; see [default]'s KDoc. */
+		private fun resolveModelName(fileProperties: (String) -> String?): String =
+			fileProperties(DispatcherRunConfig.PROP_MODEL)?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL_NAME
+
+		/**
+		 * File-tier resolution for [OllamaExecutorConfig.temperature]; see [default]'s KDoc. A
+		 * present-but-unparseable value is a WARN plus [DEFAULT_TEMPERATURE], mirroring
+		 * [DispatcherRunConfig]'s "log and fall back, never fail the run" policy for a bad `-D`
+		 * value.
+		 */
+		private fun resolveTemperature(fileProperties: (String) -> String?): Float {
+			val raw =
+				fileProperties(DispatcherRunConfig.PROP_TEMPERATURE)?.takeIf { it.isNotBlank() }
+					?: return DEFAULT_TEMPERATURE
+			return raw.toFloatOrNull() ?: run {
+				logger.warn {
+					"Ignoring unparseable ${DispatcherRunConfig.PROP_TEMPERATURE}='$raw' in " +
+						"dispatcher-defaults.properties; using $DEFAULT_TEMPERATURE"
+				}
+				DEFAULT_TEMPERATURE
+			}
+		}
 
 		/**
 		 * Create a test config for local Ollama testing (@Tag("ollama-test")).

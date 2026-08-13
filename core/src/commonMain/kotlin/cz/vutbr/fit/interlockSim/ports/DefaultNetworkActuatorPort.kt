@@ -117,24 +117,7 @@ class DefaultNetworkActuatorPort(
 						"requestRoute: denied by interlocking for $trainName " +
 							"($fromEndpointName → $toEndpointName): ${response.reason}"
 					}
-					if (response.originNotContiguous) {
-						// Issue #893 (task A-R1b): the kernel identified this specifically as a
-						// non-contiguous-origin rejection (ReservationResult.NonContiguousStart),
-						// surfaced by DefaultInterlockingFacade.requestRouteByEndpoints via the
-						// originNotContiguous flag. Map it the same way the legacy/no-facade branch
-						// below does, reason string preserved verbatim.
-						logger.warn {
-							"requestRoute: non-contiguous origin for $trainName " +
-								"($fromEndpointName → $toEndpointName): ${response.reason}"
-						}
-						RouteRequestResult.OriginNotContiguous(fromEndpointName, response.reason)
-					} else {
-						// Every other interlocking denial still collapses to AllPathsBlocked(0);
-						// callers retry on the next tick. The specific reason is logged above and
-						// in the facade. Widening this to other RouteResponse.Denied causes is a
-						// spin-off candidate, not part of task A-R1b.
-						RouteRequestResult.AllPathsBlocked(0)
-					}
+					classifyDenial(trainName, fromEndpointName, toEndpointName, response)
 				}
 			}
 		}
@@ -188,6 +171,109 @@ class DefaultNetworkActuatorPort(
 			}
 		}
 	}
+
+	/**
+	 * Translates an [InterlockingFacade.RouteResponse.Denied] into the [RouteRequestResult] the
+	 * legacy/no-facade branch of [requestRoute] would produce for the very same kernel outcome.
+	 *
+	 * ## Why this is exhaustive, with no `else`
+	 *
+	 * This `when` branches on [InterlockingFacade.RouteResponse.DenialCause] with no fallback, so
+	 * adding a cause is a **compile error here** rather than a silent collapse. That compile-time
+	 * property is the entire point of the type: its absence is what produced the defect Issue #834
+	 * task alpha-7a fixes. Before that task every denial except the contiguity rejection became
+	 * `AllPathsBlocked(0)`, which
+	 *
+	 * - made [cz.vutbr.fit.interlockSim.ports.RouteRequestResult.NoRouteExists] and
+	 *   [cz.vutbr.fit.interlockSim.ports.RouteRequestResult.Conflict] production-unreachable on
+	 *   this branch (the LLM dispatcher always wires a facade),
+	 * - reported `attemptedPaths = 0`, contradicting that result's own contract and reaching the
+	 *   model as *"all paths blocked (0 path(s) attempted)"*, and
+	 * - told the agent to retry, on a later tick, a request that could never succeed — while
+	 *   booking the failure as ordinary contention, which the sweep's invalid-output metric
+	 *   deliberately excludes.
+	 *
+	 * The mapping is chosen so that **identical `ReservationResult` ⇒ identical
+	 * `RouteRequestResult` on both branches**; see the branch-equivalence property in
+	 * `DefaultNetworkActuatorPortTest`.
+	 *
+	 * [InterlockingFacade.RouteResponse.DenialCause.Other] — a denial with no reservation behind
+	 * it, so no candidate-path count exists — maps to `NoRouteExists`, never to `AllPathsBlocked`:
+	 * a fabricated count of `0` is worse than no count, and such a denial is not contention.
+	 *
+	 * @since Issue #834 (SP2c.11 — Goal 10, task alpha-7a)
+	 */
+	private fun classifyDenial(
+		trainName: String,
+		fromEndpointName: String,
+		toEndpointName: String,
+		response: InterlockingFacade.RouteResponse.Denied
+	): RouteRequestResult =
+		when (val cause = response.cause) {
+			is InterlockingFacade.RouteResponse.DenialCause.NoPath -> {
+				logger.debug { "requestRoute: no topology path $fromEndpointName → $toEndpointName" }
+				RouteRequestResult.NoRouteExists(fromEndpointName, toEndpointName)
+			}
+			is InterlockingFacade.RouteResponse.DenialCause.AllPathsBlocked -> {
+				logger.debug {
+					"requestRoute: all paths blocked $fromEndpointName → $toEndpointName " +
+						"(attempted: ${cause.attemptedPaths})"
+				}
+				RouteRequestResult.AllPathsBlocked(cause.attemptedPaths)
+			}
+			is InterlockingFacade.RouteResponse.DenialCause.Conflict -> {
+				logger.warn {
+					"requestRoute: conflict reserving $fromEndpointName → $toEndpointName for " +
+						"$trainName — block '${cause.blockName ?: "unnamed"}' " +
+						"owned by '${cause.existingOwner}'"
+				}
+				RouteRequestResult.Conflict(
+					blockName = cause.blockName,
+					existingOwner = cause.existingOwner
+				)
+			}
+			is InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart -> {
+				// Issue #893 (task A-R1b): the kernel identified this specifically as a
+				// non-contiguous-origin rejection (ReservationResult.NonContiguousStart). Map it
+				// the same way the legacy/no-facade branch does, reason preserved verbatim -- the
+				// agent prompt renders it unchanged (AppliedOutcome.OriginNotContiguous).
+				logger.warn {
+					"requestRoute: non-contiguous origin for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${response.reason}"
+				}
+				RouteRequestResult.OriginNotContiguous(fromEndpointName, response.reason)
+			}
+			is InterlockingFacade.RouteResponse.DenialCause.Other -> {
+				// Residual: the kernel denied without attempting a reservation (e.g. an endpoint
+				// it could not resolve), so no candidate-path count and no owning train exist.
+				// Reported as a permanent refusal rather than contention -- see this method's KDoc.
+				logger.warn {
+					"requestRoute: denied without a reservation outcome for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${response.reason}"
+				}
+				RouteRequestResult.NoRouteExists(fromEndpointName, toEndpointName)
+			}
+			is InterlockingFacade.RouteResponse.DenialCause.ConditionFailed -> {
+				// A four-condition requestRoute refusal (Issue #834 review finding #2): the kernel
+				// denied before/without a reservation-service outcome, so there is no candidate-path
+				// count and no owning train — but unlike Other, the retryability flag is meaningful
+				// (a block occupied by another train is transient; an empty route is permanent).
+				// Preserve the flag rather than collapsing onto NoRouteExists (which would mislabel
+				// transient contention as permanent) or AllPathsBlocked (which would invent a count).
+				if (cause.retryable) {
+					logger.warn {
+						"requestRoute: four-condition refusal (transient) for $trainName " +
+							"($fromEndpointName → $toEndpointName): ${response.reason}"
+					}
+				} else {
+					logger.warn {
+						"requestRoute: four-condition refusal (permanent) for $trainName " +
+							"($fromEndpointName → $toEndpointName): ${response.reason}"
+					}
+				}
+				RouteRequestResult.ConditionFailed(response.reason, cause.retryable)
+			}
+		}
 
 	override fun releaseRoute(trainName: String): Boolean {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }

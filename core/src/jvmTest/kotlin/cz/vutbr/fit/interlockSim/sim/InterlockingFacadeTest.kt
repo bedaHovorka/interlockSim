@@ -135,7 +135,13 @@ class InterlockingFacadeTest : KoinTestBase() {
 		val response = facade.requestRoute(trainId, entrySignal, route, clearedAspect)
 
 		assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
-		assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).isNotEmpty()
+		response as InterlockingFacade.RouteResponse.Denied
+		assertThat(response.reason).isNotEmpty()
+		// Review finding #2 (Issue #834): an empty route is a permanent dispatcher output defect,
+		// so its cause is ConditionFailed(retryable = false), not the residual Other.
+		assertThat(response.cause)
+			.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
+		assertThat((response.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isFalse()
 	}
 
 	/**
@@ -384,9 +390,15 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
-			val reason = (response as InterlockingFacade.RouteResponse.Denied).reason
+			val denied = response as InterlockingFacade.RouteResponse.Denied
+			val reason = denied.reason
 			assertThat(reason).isNotEmpty()
 			assertThat(registry.getOwner(u1)).isNull()
+			// Review finding #2 (Issue #834): a block occupied by another train is transient
+			// contention, so its cause is ConditionFailed(retryable = true), never the residual Other.
+			assertThat(denied.cause)
+				.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
+			assertThat((denied.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isTrue()
 		}
 
 		@Test
@@ -410,6 +422,12 @@ class InterlockingFacadeTest : KoinTestBase() {
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
 			// Blocks were reserved before the switch lock failed; the atomic rollback must free them.
 			assertThat(registry.getOwner(u1)).isNull()
+			// Review finding #2 (Issue #834): a switch locked by another train is transient
+			// contention (ConditionFailed.retryable = true), surfaced as a ConditionFailed cause.
+			val denied = response as InterlockingFacade.RouteResponse.Denied
+			assertThat(denied.cause)
+				.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
+			assertThat((denied.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isTrue()
 		}
 
 		@Test
@@ -541,7 +559,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
-			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("poloze")
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("is not in position")
 			// Denied at condition 2, before any lock is acquired.
 			assertThat(v1.locked).isFalse()
 			assertThat(registry.getOwner(u1)).isNull()
@@ -566,7 +584,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
-			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("Odvratná")
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("Flank switch")
 		}
 
 		@Test
@@ -644,7 +662,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
 			val reason = (response as InterlockingFacade.RouteResponse.Denied).reason
-			assertThat(reason).contains("návěstidlo")
+			assertThat(reason).contains("Unknown signal")
 		}
 
 		@Test
@@ -690,7 +708,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
 			val reason = (response as InterlockingFacade.RouteResponse.Denied).reason
-			assertThat(reason).contains("neodpovídá počátku cesty")
+			assertThat(reason).contains("does not match route origin")
 			assertThat(registry.getOwner(u1)).isNull() // no locks acquired
 		}
 

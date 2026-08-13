@@ -706,6 +706,14 @@ class DispatchDecisionApplier(
 				}
 				onFailedReservation()
 			}
+			is RouteRequestResult.ConditionFailed -> {
+				logger.warn {
+					"ReservePath: four-condition refusal for ${decision.trainId} " +
+						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}" +
+						"${if (result.retryable) ", transient" else ", permanent"}): ${result.reason}"
+				}
+				onFailedReservation()
+			}
 		}
 	}
 
@@ -844,6 +852,10 @@ class DispatchDecisionApplier(
 				handleRequestRouteOriginNotContiguous(decision, result, correlation)
 				ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS
 			}
+			is RouteRequestResult.ConditionFailed -> {
+				handleRequestRouteConditionFailed(decision, result, correlation)
+				ApplyFailureCode.CONDITION_FAILED
+			}
 		}
 	}
 
@@ -870,6 +882,40 @@ class DispatchDecisionApplier(
 				trainId = decision.trainName,
 				fromEndpointName = decision.fromEndpointName,
 				toEndpointName = decision.toEndpointName,
+				reason = result.reason,
+				id = it.id,
+				tickIndex = it.tickIndex
+			)
+		}
+	}
+
+	/**
+	 * Handles the [RouteRequestResult.ConditionFailed] branch of [applyRequestRoute] — extracted
+	 * for the same reason as [handleRequestRouteOriginNotContiguous] (detekt LongMethod budget).
+	 *
+	 * Publishes [AppliedOutcome.ConditionFailed] so the agent learns the four-condition interlocking
+	 * refusal carried a retryability flag (Issue #834, review finding #2): a transient refusal
+	 * (contention) reads differently from a permanent one (an output defect an identical retry would
+	 * reproduce), and the [ApplyFailureCode.CONDITION_FAILED] the branch returns collapses that
+	 * distinction — the prose here preserves it.
+	 */
+	private fun handleRequestRouteConditionFailed(
+		decision: DispatchDecision.RequestRoute,
+		result: RouteRequestResult.ConditionFailed,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.warn {
+			"DispatchDecisionApplier: RequestRoute four-condition refusal for " +
+				"${decision.trainName} (${decision.fromEndpointName} → " +
+				"${decision.toEndpointName}${if (result.retryable) ", transient" else ", permanent"}): " +
+				result.reason
+		}
+		publishOutcome(correlation) {
+			AppliedOutcome.ConditionFailed(
+				trainId = decision.trainName,
+				fromEndpointName = decision.fromEndpointName,
+				toEndpointName = decision.toEndpointName,
+				retryable = result.retryable,
 				reason = result.reason,
 				id = it.id,
 				tickIndex = it.tickIndex

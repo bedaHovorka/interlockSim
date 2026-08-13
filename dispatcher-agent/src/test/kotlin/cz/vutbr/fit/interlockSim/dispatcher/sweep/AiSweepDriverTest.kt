@@ -16,10 +16,16 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
+import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -237,6 +243,84 @@ class AiSweepDriverTest {
 				.systemProperties
 				.containsKey("interlocksim.dispatcher.inferenceTimeoutSeconds")
 		assertThat(hasProperty).isFalse()
+	}
+
+	// ── FATAL-exception log scanning (measurement-integrity fix for #834's C2 condition) ──────
+
+	private fun runnerWritingLogAndSnapshot(logContent: String): SweepProcessRunner =
+		SweepProcessRunner { request ->
+			Files.writeString(request.logFile, logContent)
+			val runId = request.systemProperties.getValue("interlocksim.dispatcher.runId")
+			DefaultRunSnapshotStore(outputRoot).write(
+				abortedSnapshot(
+					runId,
+					DispatcherArm.LLM_TOOL_CALLING,
+					SweepAxes().cells().single().runParameters(),
+					RunEndCause.NATURAL_COMPLETION
+				).copy(completedNaturally = true)
+			)
+			SweepProcessResult(exitCode = 0, timedOut = false)
+		}
+
+	@Test
+	@DisplayName(
+		"a real PathSeparatorChangeException[FATAL] line in the child's log — not a hand-typed " +
+			"literal — is patched into the persisted run JSON"
+	)
+	fun fatalExceptionInLogIsPatchedIntoTheRunJson() {
+		// PathSeparatorChangeException, not SimulationException: this is exactly the reachable
+		// switch-setup producer that a class-name-prefix-only scanner would have missed, so this
+		// test exercises the real end-to-end shape, not an assumed literal.
+		val realLine =
+			PathSeparatorChangeException(
+				"switch doesn't join this segments",
+				mockk<PathSeparator>(relaxed = true)
+			).toString()
+		driverWith(runnerWritingLogAndSnapshot("$realLine\n")).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written).hasSize(1)
+		assertThat(written.single().fatalExceptionCount).isEqualTo(1L)
+		assertThat(written.single().fatalExceptionFirstMessage).isEqualTo(realLine)
+	}
+
+	@Test
+	@DisplayName("a run whose log is clean reports fatalExceptionCount = 0, not absent")
+	fun cleanLogReportsZeroFatalExceptionsNotAbsent() {
+		val runner = runnerWritingLogAndSnapshot("Simulation completed normally\n")
+		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written.single().fatalExceptionCount).isEqualTo(0L)
+		assertThat(written.single().fatalExceptionFirstMessage).isNull()
+	}
+
+	@Test
+	@DisplayName("a run whose log was never written keeps fatalExceptionCount absent, not zero")
+	fun missingLogKeepsFatalExceptionCountAbsent() {
+		// The default RecordingRunner never touches request.logFile — the same shape as a real
+		// ForkedJvmSweepProcessRunner that could not create the log file at all.
+		driverWith(RecordingRunner()).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written.single().fatalExceptionCount).isNull()
+	}
+
+	@Test
+	@DisplayName("a timed-out run still carries a FATAL finding (a real TrackOperationException line) from its log")
+	fun timedOutRunStillCarriesAFatalFindingFromItsLog() {
+		val realLine =
+			TrackOperationException("track operation failed", mockk<StaticTrack>(relaxed = true)).toString()
+		val runner =
+			SweepProcessRunner { request ->
+				Files.writeString(request.logFile, "$realLine\n")
+				SweepProcessResult(exitCode = null, timedOut = true)
+			}
+		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written.single().endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(written.single().fatalExceptionCount).isEqualTo(1L)
 	}
 
 	@Test

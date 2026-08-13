@@ -253,8 +253,9 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	// ------------------------------------------------------------------
 
 	/**
-	 * Regression test: reservePath() is polled once per simulated second by callers like
-	 * ShuntingLoop/MultiTrainLoop while a train is queued behind a busy shared block. Each
+	 * Regression test: reservePath() is polled once per control step — every 2.0 simulated
+	 * seconds, since ShuntingLoop/MultiTrainLoop hold 1.0 at the end of `iteration()` and another
+	 * 1.0 in `interLoopSleep()` — while a train is queued behind a busy shared block. Each
 	 * such retry against the SAME still-unresolved contention must NOT re-emit
 	 * [ConflictDetectedEvent] -- it is a one-shot signal for the first observation of a
 	 * given (trainId, block) contention, not a per-tick heartbeat.

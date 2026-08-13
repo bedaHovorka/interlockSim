@@ -11,10 +11,12 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
@@ -25,6 +27,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import java.time.Duration
+import kotlin.time.TimeSource
 
 /**
  * [DispatcherPlanner] backed by the Koog LLM agent with a deterministic [Dispatcher] fallback.
@@ -66,17 +69,26 @@ import java.time.Duration
  *    posted to the same queue in the same drain cycle — risking the duplicate-`ReservePath`
  *    train-freeze regression `DispatchDecisionApplier`'s own KDoc documents as a past incident,
  *    from a new source. A deliberately emitted `no_op` also counts as "acted" (the LLM chose to
- *    do nothing), so the fallback does not run on top of an explicit no-op either.
- * 2. LLM cycle completes **and the LLM invoked no actuator tool** (the LLM truly did nothing this
- *    cycle — `decideAsync` returned empty and the emission counter is zero) → fall back to
- *    [fallbackDispatcher]. Nothing was posted this cycle, so there is no double-dispatch risk;
- *    and because the LLM is stateless across cycles (a fresh `singleRunStrategy()` execution per
- *    [KoogDispatchAgent.decideAsync] — the agent itself is cached and reused; see
- *    [KoogAgentFactory]), a no-op cycle is not a preamble to a later routing cycle — not falling
- *    back would leave queued trains never routed, stalled at their entry signal indefinitely.
- *    The fallback supplies both admission and routing.
- * 3. LLM times out → fall back to [fallbackDispatcher]
- * 4. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
+ *    do nothing), so the fallback does not run on top of an explicit no-op either — but is
+ *    reported as [TickOutcome.LLM_NO_OP] rather than [TickOutcome.LLM_ACTIONS] when *every*
+ *    emission this cycle was `no_op` (Issue #834, required change 2): a no-op tick is not an
+ *    action tick even though both skip the fallback for the same double-dispatch reason.
+ * 2. LLM cycle completes, invoked no actuator tool, and the station is **idle** — no approved
+ *    (active) trains and no unapproved (queued) trains (Issue #834) → do NOT fall back; report
+ *    [TickOutcome.LLM_NO_OP]. There is nothing to dispatch, so a correctly-idle LLM cycle must not
+ *    be scored as a rule-based-fallback run failure (the defect Issue #834 reports:
+ *    `fallback: reason=EMPTY_NO_TOOLS ... ollamaSuccessRate=27%` on an empty station). See
+ *    [isIdleStation] for the exact predicate and its [SimulationSnapshot.EMPTY] guard.
+ * 3. LLM cycle completes, invoked no actuator tool, and the station is **not idle** (an active or
+ *    queued train the LLM left unaddressed) — the LLM truly failed to produce anything this cycle
+ *    → fall back to [fallbackDispatcher]. Nothing was posted this cycle, so there is no
+ *    double-dispatch risk; and because the LLM is stateless across cycles (a fresh
+ *    `singleRunStrategy()` execution per [KoogDispatchAgent.decideAsync] — the agent itself is
+ *    cached and reused; see [KoogAgentFactory]), a no-op cycle is not a preamble to a later
+ *    routing cycle — not falling back would leave queued trains never routed, stalled at their
+ *    entry signal indefinitely. The fallback supplies both admission and routing.
+ * 4. LLM times out → fall back to [fallbackDispatcher]
+ * 5. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
  *
  * ## How "the LLM acted via tools" is detected
  *
@@ -208,16 +220,44 @@ class KoogAgentPlanAdapter(
 
 	/**
 	 * Produces dispatch decisions by consulting the Koog LLM agent, falling back to
-	 * [fallbackDispatcher] on empty result, timeout, or any exception.
+	 * [fallbackDispatcher] on an empty result on a non-idle station, on timeout, or on any
+	 * exception. An empty result on an *idle* station (no active or queued trains, per
+	 * [isIdleStation]) is a correct no-op, not a fallback trigger — see "Fallback priority" above
+	 * (Issue #834).
 	 *
 	 * The fallback is invoked transparently — callers observe valid decisions regardless
 	 * of which path (LLM or rule-based) produced them.
 	 *
+	 * ## Latency measurement (Issue #834, SP2c.11)
+	 *
+	 * [cycleListener] and [tickListener] both receive a latency figure via
+	 * [TickRecord.latencyMs], measured with a monotonic clock ([TimeSource.Monotonic]) around the
+	 * `withTimeout { a.decideAsync(observation) }` call only — deliberately **not** the whole
+	 * `plan()` attempt. Including [getOrCreateAgent] would fold the one-time
+	 * `OllamaModelPrewarmer.warmUp` cost into the very first cycle's sample, making it a durable
+	 * outlier that skews every run's p95. The mark is taken right before `withTimeout` starts (the
+	 * cheap `commandQueue`/`sinkHolder` bookkeeping calls before it are negligible next to an LLM
+	 * round-trip) so the measured window is, as closely as this call boundary allows, the
+	 * inference itself.
+	 *
+	 * All four cycle endings report a latency computed from that same mark:
+	 * - **success** / **idle no-op**: elapsed time once `withTimeout` returns.
+	 * - **timeout**: elapsed time at the moment [TimeoutCancellationException] is caught — this is
+	 *   not a missing measurement, it IS the deadline, and is exactly as real and reportable as
+	 *   any other cycle's latency.
+	 * - **exception**: elapsed time at the moment the exception is caught, when it was thrown
+	 *   from inside the measured window (the common case — a network or parsing failure during
+	 *   `decideAsync`). The one exception to "always non-null" is a [getOrCreateAgent] failure: no
+	 *   mark exists yet because inference never started, so [TickRecord.latencyMs] is `null` for
+	 *   that specific sub-case — honestly reporting "no cycle latency exists" rather than
+	 *   inventing a number for work that was never attempted.
+	 *
 	 * @param observation Read-only snapshot of the current railway network state.
 	 * @return Non-null list of decisions; may be the rule-based fallback result.
 	 */
-	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> =
-		try {
+	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> {
+		var cycleStart: TimeSource.Monotonic.ValueTimeMark? = null
+		return try {
 			// Agent creation is deliberately INSIDE the try: createAgent runs
 			// OllamaModelPrewarmer.warmUp — real network I/O that can fail — and if that call sat
 			// outside the try its exception would escape plan() altogether, propagating out of
@@ -231,10 +271,14 @@ class KoogAgentPlanAdapter(
 			// zero the per-cycle emission counter so actedThisCycle() reflects only this cycle.
 			commandQueue.advanceCorrelationCycle()
 			sinkHolder.resetCycleEmissionCount()
+			// Latency mark starts here, deliberately after agent creation — see "Latency
+			// measurement" above.
+			cycleStart = TimeSource.Monotonic.markNow()
 			val decisions =
 				withTimeout(inferenceTimeout.toMillis()) {
 					a.decideAsync(observation)
 				}
+			val latencyMs = cycleStart.elapsedNow().inWholeMilliseconds
 			if (sinkHolder.actedThisCycle() || decisions.isNotEmpty()) {
 				// The LLM acted via its actuator tools (the emissions were already posted to the
 				// queue through sinkHolder.current) and/or returned decisions directly. Either way
@@ -242,19 +286,57 @@ class KoogAgentPlanAdapter(
 				// empty returned list with tool emissions is the normal, successful outcome:
 				// decideAsync always returns empty (see KoogDispatchAgentImpl); the load-bearing
 				// signal is the emission counter.
+				//
+				// The `decisions.isNotEmpty()` disjunct is therefore dead-on-purpose under the
+				// current KoogDispatchAgentImpl: decideAsync posts every decision through actuator
+				// tools and returns an empty list, so `decisions` is always empty here. It is kept
+				// as a defensive guard against a future decideAsync that returns decisions directly
+				// (the contract allows it — `plan` returns `List<DispatchDecision>`); if that ever
+				// ships, this disjunct is what makes those decisions count instead of silently
+				// falling back. Do not reason about it as a live path today.
+				//
+				// The emitted actions further split LLM_ACTIONS from LLM_NO_OP (Issue #834,
+				// required change 2): a cycle whose only tool emission(s) were an explicit no_op
+				// is a no-op tick, not an action tick, even though actedThisCycle() is true for
+				// both (see SinkHolder's KDoc on why no_op counts as "acted" for the
+				// double-dispatch guard).
+				val emittedThisCycle = sinkHolder.emittedActionsThisCycle()
+				val outcome =
+					if (emittedThisCycle.isNotEmpty() && emittedThisCycle.all { it is DispatchAction.NoOp }) {
+						TickOutcome.LLM_NO_OP
+					} else {
+						TickOutcome.LLM_ACTIONS
+					}
 				logger.debug {
 					"KoogAgentPlanAdapter: LLM cycle acted via tools " +
 						"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
 				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
-				reportTick(TickOutcome.LLM_ACTIONS, observation.snapshot.simTime)
+				reportTick(outcome, observation.snapshot.simTime, latencyMs)
 				decisions
+			} else if (isIdleStation(observation)) {
+				// The LLM completed a cycle with no decisions and no tool emissions, and the
+				// station is idle — no active or queued trains, so there is genuinely nothing to
+				// dispatch. This is a correct, healthy outcome (Issue #834), not a failure: report
+				// it as LLM_NO_OP and do NOT consult the fallback dispatcher (there is nothing for
+				// it to do either, and consulting it would mis-score a correct cycle as a
+				// rule-based-fallback run failure — the exact defect #834 reports).
+				logger.debug {
+					"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions on " +
+						"an idle station (no active or queued trains) — reporting LLM_NO_OP, not " +
+						"falling back (simTime=${observation.snapshot.simTime})"
+				}
+				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
+				reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime, latencyMs)
+				emptyList()
 			} else {
-				// The LLM completed a cycle but neither acted via tools nor returned a decision —
-				// it truly did nothing this cycle. Nothing was posted, so there is no
-				// double-dispatch risk; the fallback supplies both admission and routing.
-				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation) {
+				// The LLM completed a cycle but neither acted via tools nor returned a decision,
+				// and the station is NOT idle (there is an active or queued train the LLM left
+				// unaddressed) — it truly failed to produce anything this cycle. Nothing was
+				// posted, so there is no double-dispatch risk; the fallback supplies both
+				// admission and routing.
+				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation, latencyMs) {
 					logger.warn {
 						"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
 							"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
@@ -262,7 +344,10 @@ class KoogAgentPlanAdapter(
 				}
 			}
 		} catch (e: TimeoutCancellationException) {
-			runFallback(FallbackReason.TIMEOUT, observation) {
+			// cycleStart is always set here: TimeoutCancellationException can only originate from
+			// inside the withTimeout block, which starts after the mark is taken. The elapsed time
+			// is the deadline itself — a real, reportable latency, not a missing one.
+			runFallback(FallbackReason.TIMEOUT, observation, cycleStart?.elapsedNow()?.inWholeMilliseconds) {
 				logger.warn {
 					"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +
 						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
@@ -272,31 +357,64 @@ class KoogAgentPlanAdapter(
 			// Parent coroutine was cancelled — propagate rather than swallow.
 			throw e
 		} catch (e: Exception) {
-			runFallback(FallbackReason.EXCEPTION, observation) {
+			// cycleStart is null only if getOrCreateAgent() itself threw — inference never
+			// started, so there is no cycle latency to report (null, not a fabricated 0).
+			runFallback(FallbackReason.EXCEPTION, observation, cycleStart?.elapsedNow()?.inWholeMilliseconds) {
 				logger.warn(e) {
 					"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
 						"(simTime=${observation.snapshot.simTime})"
 				}
 			}
 		}
+	}
 
 	/**
 	 * Runs the shared rule-based-fallback sequence: log via [logAction], notify [cycleListener],
 	 * report [TickOutcome.RULE_FALLBACK] (the fallback dispatcher always actually runs and
 	 * returns decisions here — a dispatching event, not a no-op), then delegate to
-	 * [fallbackDispatcher]. Shared by all three fallback sites in [plan] (empty LLM cycle,
-	 * inference timeout, LLM exception) so they cannot drift out of sync with each other.
+	 * [fallbackDispatcher]. Shared by all three fallback sites in [plan] (empty LLM cycle on a
+	 * non-idle station — see [isIdleStation], inference timeout, LLM exception) so they cannot
+	 * drift out of sync with each other.
+	 *
+	 * @param latencyMs Cycle latency to report alongside the tick, or `null` if no meaningful
+	 *   inference attempt was measured for this cycle — see [plan]'s "Latency measurement" KDoc.
 	 */
 	private fun runFallback(
 		reason: FallbackReason,
 		observation: DispatchObservation,
+		latencyMs: Long?,
 		logAction: () -> Unit
 	): List<DispatchDecision> {
 		logAction()
 		cycleListener?.onFallback(reason, observation.snapshot.simTime)
-		reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime)
+		reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
 		return fallbackDispatcher.decide(observation)
 	}
+
+	/**
+	 * `true` when [observation] describes an idle station: no approved (active) trains and no
+	 * unapproved (queued) trains — there is genuinely nothing for a dispatcher to do this cycle.
+	 *
+	 * Deliberately narrow (Issue #834): defined *only* as
+	 * `approvedTrainCount == 0 && unapprovedTrains.isEmpty()`, not the wider "no action was
+	 * applicable" (e.g. every queued train blocked, every reservation already extended). The
+	 * wider variant was considered and rejected during planning — it would fold genuine LLM
+	 * failures on a busy station into the same success bucket as this narrow, unambiguous case.
+	 *
+	 * **Guards against [SimulationSnapshot.EMPTY]** — the pre-first-capture sentinel returned by
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.snapshot] before the first on-thread
+	 * `captureSnapshot()` call. It carries no train positions and therefore looks idle by the
+	 * predicate above without being a real idle tick, so a cycle observing it must keep the
+	 * pre-#834 fallback behaviour. Checked by reference identity (`!==`) against the singleton,
+	 * which is both the cheapest possible check and the only one that cannot misclassify a
+	 * genuinely idle *real* snapshot (structural equality would also match a real snapshot whose
+	 * fields all happen to equal [SimulationSnapshot.EMPTY]'s defaults, e.g. `simTime == 0.0`
+	 * with zero trains at the very start of a run).
+	 */
+	private fun isIdleStation(observation: DispatchObservation): Boolean =
+		observation.snapshot !== SimulationSnapshot.EMPTY &&
+			observation.approvedTrainCount == 0 &&
+			observation.unapprovedTrains.isEmpty()
 
 	/**
 	 * Publishes one completed cycle to the tick listener and to [cycleHistory].
@@ -309,12 +427,18 @@ class KoogAgentPlanAdapter(
 	 * On a `RULE_FALLBACK` cycle that list is normally empty even though the fallback dispatcher
 	 * did act — deliberately: [cycleHistory] is the model's memory of its own behaviour, and the
 	 * outcome name already tells it the cycle was taken over.
+	 *
+	 * @param latencyMs Cycle latency measured by [plan] (see its "Latency measurement" KDoc), or
+	 *   `null` when this cycle never reached the measured window. Forwarded to
+	 *   [TickRecord.latencyMs]; not part of [cycleHistory] (the model's own memory does not need
+	 *   its own timing).
 	 */
 	private fun reportTick(
 		outcome: TickOutcome,
-		simTime: Double
+		simTime: Double,
+		latencyMs: Long?
 	) {
-		tickListener?.onTick(TickRecord(outcome, simTime))
+		tickListener?.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
 	}
 

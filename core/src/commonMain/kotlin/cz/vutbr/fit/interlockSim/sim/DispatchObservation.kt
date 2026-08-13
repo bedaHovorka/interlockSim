@@ -76,12 +76,20 @@ data class QueuedTrainObservation(
  *
  * @property blockId Name of the track block.
  * @property towardSemaphoreName Name of the semaphore at this input.
- * @property toSeparatorName Next separator one section ahead toward the owner
- *   train's destination — a semaphore, or the destination InOut for the final
- *   section — pre-computed by the shell as the first FREE candidate (see
- *   [ShuntingLoop]). `null` when no FREE next separator exists, in which case the
- *   dispatcher emits [DispatchDecision.NoAction] for this input (the train waits
- *   and is reconsidered next tick).
+ * @property toSeparatorName The first FREE next separator one section ahead (InOuts
+ *   prioritised over semaphores) — a semaphore, or the destination InOut for the
+ *   final section — pre-computed by the shell (see [ShuntingLoop]).
+ *   **Destination-agnostic**: `PathReservationService.findNextReservationTarget`
+ *   takes only a start separator, so it cannot know where the train is headed —
+ *   like a real interlocking granting *"postav jízdní cestu od X k Y"*, start and
+ *   end are given to it; knowing the destination is the dispatcher's job. Because
+ *   InOuts are always prioritised, the nearest exit wins whenever a branch
+ *   terminating at an InOut competes with one continuing into the station; on
+ *   `vyhybna.xml`'s two-InOut passing loop both branches lead to the same exit, so
+ *   this happens to look destination-directed there. `null` when no FREE next
+ *   separator exists, in which case the dispatcher emits
+ *   [DispatchDecision.NoAction] for this input (the train waits and is
+ *   reconsidered next tick).
  *
  *   **Populated only where a forward reservation is possible** (Issue #749). The shell
  *   resolves it exclusively for inputs satisfying

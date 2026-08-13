@@ -201,6 +201,41 @@ class MeasuringPlanAdapterTest {
 		}
 	}
 
+	// ── Idle station (Issue #834) ─────────────────────────────────────────────
+
+	/**
+	 * Issue #834: the project owner reported the exact log line this guards against —
+	 * `fallback: reason=EMPTY_NO_TOOLS simTime=314.0s fallbackTotal=27 ollamaSuccessRate=27%` —
+	 * produced by an idle-station "nothing to do" cycle. An idle station (no active or queued
+	 * trains) with no LLM emissions must count toward [PlannerMetricsSnapshot.ollamaSuccessCount],
+	 * not [PlannerMetricsSnapshot.fallbacksByReason]`[FallbackReason.EMPTY_NO_TOOLS]`.
+	 */
+	@Nested
+	@DisplayName("idle station: LLM completes with no decisions and no tool emissions")
+	inner class IdleStationNoOp {
+		// Deliberately not SimulationSnapshot.EMPTY (the pre-first-capture sentinel, which must
+		// keep the old fallback behaviour) — a distinct, structurally-idle snapshot instance,
+		// simTime matching the owner's reported log line.
+		private val idleObservation =
+			observation.copy(snapshot = SimulationSnapshot.EMPTY.copy(simTime = 314.0))
+
+		@Test
+		fun `counts toward ollamaSuccessCount, not fallbacksByReason EMPTY_NO_TOOLS`() {
+			val agent = mockk<KoogDispatchAgent>()
+			coEvery { agent.decideAsync(any()) } returns emptyList()
+			val fallback = mockk<Dispatcher>()
+			val adapter = measuring(agent, fallback)
+
+			runBlocking { adapter.plan(idleObservation) }
+
+			val snapshot = adapter.getMetricsSnapshot()
+			assertThat(snapshot.ollamaSuccessCount).isEqualTo(1L)
+			assertThat(snapshot.fallbackCount).isZero()
+			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(0L)
+			assertThat(snapshot.ollamaSuccessRate).isEqualTo(1.0)
+		}
+	}
+
 	// ── Fallback reason: TIMEOUT ──────────────────────────────────────────────
 
 	@Nested
