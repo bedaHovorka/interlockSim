@@ -112,6 +112,26 @@ class DefaultInterlockingFacade(
 	 */
 	private val clearedSignals: MutableMap<String, DynamicRailSemaphore> = mutableMapOf()
 
+	/**
+	 * A four-condition [requestRoute] denial: the human-readable [reason] plus the [retryable]
+	 * flag forwarded as `DenialCause.ConditionFailed(retryable)`. The helpers below return this
+	 * instead of a bare `String?` so the cause is accurate *per underlying reason* — several
+	 * helpers can produce both a permanent output defect (unknown name) and a transient
+	 * contention (occupied/locked) from one check, and collapsing them to a single site-level
+	 * retryable would mislabel one of the two (review finding #2; ruling sanity-checked with
+	 * gemma4).
+	 *
+	 * `retryable = true` = transient track contention (another train holds a resource; clears on
+	 * its own); `retryable = false` = a permanent dispatcher output defect (unknown name, empty
+	 * route, mismatched signal, un-clearable signal) — an identical retry fails identically.
+	 *
+	 * @since Issue #834 (SP2c.11 — Goal 10, review finding #2)
+	 */
+	private data class ConditionDenial(
+		val reason: String,
+		val retryable: Boolean
+	)
+
 	override fun requestRoute(
 		trainId: String,
 		entrySignal: SignalId,
@@ -125,51 +145,65 @@ class DefaultInterlockingFacade(
 		}
 
 		// Precondition (C1): a route with no blocks protects nothing — never clear a signal for it.
+		// Permanent output defect: an identical retry has the same empty route.
 		if (route.blocks.isEmpty()) {
-			logger.info { "Route denied for trainId=$trainId: prázdná jízdní cesta" }
-			return InterlockingFacade.RouteResponse.Denied("Prázdná jízdní cesta – žádné úseky")
+			logger.info { "Route denied for trainId=$trainId: empty route" }
+			return InterlockingFacade.RouteResponse.Denied(
+				"Empty route — no track sections",
+				InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = false)
+			)
 		}
 
 		// Precondition (I5): the signal to clear must be the route's entry separator.
+		// Permanent output defect: the dispatcher named a signal that is not the route's origin.
 		if (entrySignal.name != route.from.name) {
 			logger.info {
-				"Route denied for trainId=$trainId: návěstidlo ${entrySignal.name} neodpovídá počátku cesty ${route.from.name}"
+				"Route denied for trainId=$trainId: signal ${entrySignal.name} does not match route origin ${route.from.name}"
 			}
 			return InterlockingFacade.RouteResponse.Denied(
-				"Návěstidlo ${entrySignal.name} neodpovídá počátku cesty ${route.from.name}"
+				"Signal ${entrySignal.name} does not match route origin ${route.from.name}",
+				InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = false)
 			)
 		}
 
 		// Condition 1: Check route freedom (all blocks must be FREE)
-		val freedomCheckReason = checkRouteFreedom(route)
-		if (freedomCheckReason != null) {
-			logger.info { "Route denied for trainId=$trainId: $freedomCheckReason" }
-			return InterlockingFacade.RouteResponse.Denied(freedomCheckReason)
+		checkRouteFreedom(route)?.let { denial ->
+			logger.info { "Route denied for trainId=$trainId: ${denial.reason}" }
+			return InterlockingFacade.RouteResponse.Denied(
+				denial.reason,
+				InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = denial.retryable)
+			)
 		}
 
 		// Condition 2: Check switch positions (running and flank switches)
-		val switchCheckReason = checkSwitchPositions(route)
-		if (switchCheckReason != null) {
-			logger.info { "Route denied for trainId=$trainId: $switchCheckReason" }
-			return InterlockingFacade.RouteResponse.Denied(switchCheckReason)
+		checkSwitchPositions(route)?.let { denial ->
+			logger.info { "Route denied for trainId=$trainId: ${denial.reason}" }
+			return InterlockingFacade.RouteResponse.Denied(
+				denial.reason,
+				InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = denial.retryable)
+			)
 		}
 
 		// Conditions 3 & 4: Lock the route atomically (blocks via registry, switches via lock())
-		val lockReason = lockRouteAtomic(trainId, route)
-		if (lockReason != null) {
-			logger.info { "Route denied for trainId=$trainId: $lockReason" }
-			return InterlockingFacade.RouteResponse.Denied(lockReason)
+		lockRouteAtomic(trainId, route)?.let { denial ->
+			logger.info { "Route denied for trainId=$trainId: ${denial.reason}" }
+			return InterlockingFacade.RouteResponse.Denied(
+				denial.reason,
+				InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = denial.retryable)
+			)
 		}
 
 		// C2: never return Granted unless the signal actually shows clearedAspect. If the signal
 		// is unknown or the aspect is unmappable, clearSignal returns null and we roll back the
-		// locks just acquired so no state leaks.
+		// locks just acquired so no state leaks. Both sub-cases are permanent (output/map defect),
+		// not contention.
 		val clearedSemaphore = clearSignal(entrySignal, clearedAspect, trainId)
 		if (clearedSemaphore == null) {
 			env.getRoutingServices().getPathReservationService().releasePath(trainId)
-			logger.info { "Route denied for trainId=$trainId: návěstidlo ${entrySignal.name} nelze zklidnit" }
+			logger.info { "Route denied for trainId=$trainId: signal ${entrySignal.name} cannot be cleared" }
 			return InterlockingFacade.RouteResponse.Denied(
-				"Návěstidlo ${entrySignal.name} nelze zklidnit (neznámé návěstidlo nebo neplatný návestní aspekt)"
+				"Signal ${entrySignal.name} cannot be cleared (unknown signal or invalid signal aspect)",
+				InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = false)
 			)
 		}
 
@@ -328,14 +362,17 @@ class DefaultInterlockingFacade(
 	 * Condition 1: Check that all blocks in the route are FREE — neither physically occupied
 	 * nor reserved for another train (via [PathReservationRegistry.isBlockAvailable]).
 	 *
-	 * @return null if all blocks are free, otherwise a Czech denial reason.
+	 * @return null if all blocks are free, otherwise a [ConditionDenial]. An *unknown* block name
+	 *   is a permanent output defect (`retryable = false`); a block occupied/reserved by another
+	 *   train is transient contention (`retryable = true`).
 	 */
-	private fun checkRouteFreedom(route: TrainRoute): String? {
+	private fun checkRouteFreedom(route: TrainRoute): ConditionDenial? {
 		for (blockId in route.blocks) {
-			val block = blockByName[blockId.name] ?: return "Neznámý úsek ${blockId.name}"
+			val block =
+				blockByName[blockId.name] ?: return ConditionDenial("Unknown track section ${blockId.name}", retryable = false)
 			if (!registry.isBlockAvailable(block)) {
-				val owner = block.trainName ?: block.occupant?.name ?: "neznámý vlak"
-				return "Úsek ${blockId.name} obsazen vlakem $owner"
+				val owner = block.trainName ?: block.occupant?.name ?: "unknown train"
+				return ConditionDenial("Track section ${blockId.name} occupied by train $owner", retryable = true)
 			}
 		}
 		return null // All blocks are free
@@ -350,14 +387,17 @@ class DefaultInterlockingFacade(
 	 * [lockSwitches] (condition 3/4), which rolls back blocks if a switch turns out to be locked
 	 * by another train.
 	 *
-	 * @return null if all switches are in the required position, otherwise a Czech denial reason.
+	 * @return null if all switches are in the required position, otherwise a [ConditionDenial]. An
+	 *   *unknown* switch name is a permanent output defect (`retryable = false`); a switch not in
+	 *   the required position is treated as transient (`retryable = true`): another train may be
+	 *   holding/locking it in a different position, which clears when that train releases it.
 	 */
-	private fun checkSwitchPositions(route: TrainRoute): String? {
+	private fun checkSwitchPositions(route: TrainRoute): ConditionDenial? {
 		for (switchSetting in route.running) {
-			checkSwitchAvailable(switchSetting, "Výhybka")?.let { return it }
+			checkSwitchAvailable(switchSetting, "Switch")?.let { return it }
 		}
 		for (switchSetting in route.flank) {
-			checkSwitchAvailable(switchSetting, "Odvratná výhybka")?.let { return it }
+			checkSwitchAvailable(switchSetting, "Flank switch")?.let { return it }
 		}
 		return null // All switches are in the required position
 	}
@@ -365,12 +405,17 @@ class DefaultInterlockingFacade(
 	private fun checkSwitchAvailable(
 		switchSetting: SwitchSetting,
 		label: String
-	): String? {
-		val switch = switchByName[switchSetting.switch.name] ?: return "Neznámá výhybka ${switchSetting.switch.name}"
+	): ConditionDenial? {
+		val switch =
+			switchByName[switchSetting.switch.name]
+				?: return ConditionDenial("Unknown switch ${switchSetting.switch.name}", retryable = false)
 		val requiredConf = switchSetting.position.toConf()
 		if (switch.conf != requiredConf) {
-			return "$label ${switchSetting.switch.name} není v poloze ${switchSetting.position} " +
-				"(požadováno ${requiredConf.name}, aktuálně ${switch.conf.name})"
+			return ConditionDenial(
+				"$label ${switchSetting.switch.name} is not in position ${switchSetting.position} " +
+					"(required ${requiredConf.name}, actual ${switch.conf.name})",
+				retryable = true
+			)
 		}
 		return null
 	}
@@ -383,29 +428,30 @@ class DefaultInterlockingFacade(
 	 * [DynamicTrackBlock.setUpPath]. Switches are locked via [PathReservationRegistry.registerSwitches]
 	 * once verified free. Any failure rolls back everything acquired so far.
 	 *
-	 * @return null if all locks acquired successfully, otherwise a Czech denial reason.
+	 * @return null if all locks acquired successfully, otherwise a [ConditionDenial]. An *unknown*
+	 *   entry-signal name is a permanent output defect (`retryable = false`); a registration
+	 *   conflict, a low-level lock failure, or a switch locked by another train are all transient
+	 *   contention (`retryable = true`).
 	 */
 	private fun lockRouteAtomic(
 		trainId: String,
 		route: TrainRoute
-	): String? {
+	): ConditionDenial? {
 		val blocks = route.blocks.map { blockByName.getValue(it.name) }
 		val switches = (route.running + route.flank).map { switchByName.getValue(it.switch.name) }
 
 		val fromSeparator = if (blocks.isEmpty()) null else semaphoreByName[route.from.name]
 		if (blocks.isNotEmpty() && fromSeparator == null) {
-			return "Neznámé návěstidlo ${route.from.name}"
+			return ConditionDenial("Unknown signal ${route.from.name}", retryable = false)
 		}
 
 		if (fromSeparator != null) {
-			val blockReason = registerBlocks(trainId, blocks, fromSeparator)
-			if (blockReason != null) return blockReason
+			registerBlocks(trainId, blocks, fromSeparator)?.let { return it }
 		}
 
-		val switchReason = lockSwitches(trainId, switches)
-		if (switchReason != null) {
+		lockSwitches(trainId, switches)?.let { switchDenial ->
 			if (fromSeparator != null) rollbackBlocks(trainId, blocks, fromSeparator)
-			return switchReason
+			return switchDenial
 		}
 
 		return null // All locks acquired successfully
@@ -414,16 +460,20 @@ class DefaultInterlockingFacade(
 	/**
 	 * Registers and physically reserves [blocks] for [trainId], rolling back on partial failure.
 	 *
-	 * @return null on success, otherwise a Czech denial reason (nothing left reserved).
+	 * @return null on success, otherwise a [ConditionDenial] (transient contention; nothing left
+	 *   reserved).
 	 */
 	private fun registerBlocks(
 		trainId: String,
 		blocks: List<DynamicTrackBlock>,
 		fromSeparator: DynamicPathSeparator
-	): String? {
+	): ConditionDenial? {
 		when (val result = registry.registerAtomic(trainId, blocks)) {
 			is PathReservationRegistry.RegistrationResult.Conflict ->
-				return "Úsek ${result.conflictingBlock.name ?: "?"} obsazen vlakem ${result.existingOwner}"
+				return ConditionDenial(
+					"Track section ${result.conflictingBlock.name ?: "?"} occupied by train ${result.existingOwner}",
+					retryable = true
+				)
 			PathReservationRegistry.RegistrationResult.Success -> Unit
 		}
 
@@ -437,7 +487,7 @@ class DefaultInterlockingFacade(
 			logger.error(e) { "Failed to reserve blocks for trainId=$trainId: ${e.message}" }
 			reservedSoFar.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
 			registry.unregister(trainId)
-			return "Úsek nelze zamknout"
+			return ConditionDenial("Track section cannot be locked", retryable = true)
 		}
 		return null
 	}
@@ -455,12 +505,13 @@ class DefaultInterlockingFacade(
 	 * Locks [switches] for [trainId] via [PathReservationRegistry.registerSwitches], after
 	 * verifying none are already locked by a different train.
 	 *
-	 * @return null on success, otherwise a Czech denial reason (nothing left locked).
+	 * @return null on success, otherwise a [ConditionDenial] (transient contention — the switch
+	 *   is locked by another train; nothing left locked).
 	 */
 	private fun lockSwitches(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
-	): String? {
+	): ConditionDenial? {
 		// Authoritative switch lock-conflict check (M6). Condition 2 above only verifies position;
 		// lock-ownership is checked here, immediately before registration. This is the single
 		// point that decides a switch is free to lock, so [lockRouteAtomic] rolls back any blocks
@@ -470,7 +521,7 @@ class DefaultInterlockingFacade(
 		// window between the position check and the lock.
 		for (switch in switches) {
 			if (switch.locked && registry.getSwitchOwner(switch) != trainId) {
-				return "Výhybka ${switch.name} je zafixovaná"
+				return ConditionDenial("Switch ${switch.name} is locked", retryable = true)
 			}
 		}
 		registry.registerSwitches(trainId, switches)

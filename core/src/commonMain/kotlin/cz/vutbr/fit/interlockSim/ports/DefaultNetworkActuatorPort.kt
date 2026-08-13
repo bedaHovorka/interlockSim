@@ -253,6 +253,26 @@ class DefaultNetworkActuatorPort(
 				}
 				RouteRequestResult.NoRouteExists(fromEndpointName, toEndpointName)
 			}
+			is InterlockingFacade.RouteResponse.DenialCause.ConditionFailed -> {
+				// A four-condition requestRoute refusal (Issue #834 review finding #2): the kernel
+				// denied before/without a reservation-service outcome, so there is no candidate-path
+				// count and no owning train — but unlike Other, the retryability flag is meaningful
+				// (a block occupied by another train is transient; an empty route is permanent).
+				// Preserve the flag rather than collapsing onto NoRouteExists (which would mislabel
+				// transient contention as permanent) or AllPathsBlocked (which would invent a count).
+				if (cause.retryable) {
+					logger.warn {
+						"requestRoute: four-condition refusal (transient) for $trainName " +
+							"($fromEndpointName → $toEndpointName): ${response.reason}"
+					}
+				} else {
+					logger.warn {
+						"requestRoute: four-condition refusal (permanent) for $trainName " +
+							"($fromEndpointName → $toEndpointName): ${response.reason}"
+					}
+				}
+				RouteRequestResult.ConditionFailed(response.reason, cause.retryable)
+			}
 		}
 
 	override fun releaseRoute(trainName: String): Boolean {

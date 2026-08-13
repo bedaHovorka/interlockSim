@@ -246,6 +246,30 @@ sealed interface AppliedOutcome {
 		override val tickIndex: Long
 	) : AppliedOutcome
 
+	/**
+	 * `request_route` failed because one of the four ESA-11 route conditions refused it (the
+	 * four-condition [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.requestRoute] path). The
+	 * [retryable] flag carries the transient-vs-permanent split the single outcome variant cannot:
+	 * `true` is track contention (a block occupied or switch locked by another train — retry
+	 * later, like [Blocked]/[Conflicted]); `false` is a permanent dispatcher output defect (empty
+	 * route, mismatched entry signal, unknown name, un-clearable signal — fix the request, like
+	 * [NoRoute]/[OriginNotContiguous]). [reason] is the kernel's prose, fed back to the model.
+	 *
+	 * Not produced on the production `request_route` path (which uses `requestRouteByEndpoints`);
+	 * see [cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode.CONDITION_FAILED].
+	 */
+	data class ConditionFailed(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		/** `true` = transient contention (retry later); `false` = permanent output defect. */
+		val retryable: Boolean,
+		/** Kernel denial reason prose, fed back to the agent. */
+		val reason: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
 	/** `cancel_route` completed; [anyReleased] is `true` if at least one block was released. */
 	data class Released(
 		val trainId: String,

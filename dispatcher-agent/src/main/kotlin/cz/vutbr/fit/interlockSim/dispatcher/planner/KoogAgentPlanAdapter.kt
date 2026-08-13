@@ -287,6 +287,14 @@ class KoogAgentPlanAdapter(
 				// decideAsync always returns empty (see KoogDispatchAgentImpl); the load-bearing
 				// signal is the emission counter.
 				//
+				// The `decisions.isNotEmpty()` disjunct is therefore dead-on-purpose under the
+				// current KoogDispatchAgentImpl: decideAsync posts every decision through actuator
+				// tools and returns an empty list, so `decisions` is always empty here. It is kept
+				// as a defensive guard against a future decideAsync that returns decisions directly
+				// (the contract allows it — `plan` returns `List<DispatchDecision>`); if that ever
+				// ships, this disjunct is what makes those decisions count instead of silently
+				// falling back. Do not reason about it as a live path today.
+				//
 				// The emitted actions further split LLM_ACTIONS from LLM_NO_OP (Issue #834,
 				// required change 2): a cycle whose only tool emission(s) were an explicit no_op
 				// is a no-op tick, not an action tick, even though actedThisCycle() is true for

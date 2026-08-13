@@ -42,7 +42,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * @property iqrValidAt1 IQR of `validAt1` across all runs.
  * @property medianCorrectAt1 Median `correctAt1` across all runs; `null` when no oracle data.
  * @property iqrCorrectAt1 IQR of `correctAt1`; `null` when no oracle data.
- * @property p95LatencyMs 95th-percentile of per-run `latencyP95Ms` values.
+ * @property p95LatencyMs 95th-percentile of per-run `latencyP95Ms` values; `null` when no run in
+ *   the arm measured latency (rule-based arm, or every run failed before inference started) —
+ *   runs with `null` `latencyP95Ms` are skipped, not counted as `0` (absent is not zero).
  * @property allC7Clean Whether every aggregated snapshot had `c7Clean = true`.
  * @property rejectionCounts Total rejection counts per [RejectionCode] across all runs.
  * @property applyFailureCounts Total apply-failure counts per [ApplyFailureCode] across all runs.
@@ -65,7 +67,7 @@ data class ArmReport(
 	val iqrValidAt1: Double,
 	val medianCorrectAt1: Double?,
 	val iqrCorrectAt1: Double?,
-	val p95LatencyMs: Long,
+	val p95LatencyMs: Long?,
 	val allC7Clean: Boolean,
 	val rejectionCounts: Map<RejectionCode, Long>,
 	val applyFailureCounts: Map<ApplyFailureCode, Long>,

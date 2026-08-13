@@ -95,7 +95,7 @@ class RunReportAggregator(
 				iqrValidAt1 = 0.0,
 				medianCorrectAt1 = null,
 				iqrCorrectAt1 = null,
-				p95LatencyMs = 0L,
+				p95LatencyMs = null,
 				allC7Clean = true,
 				rejectionCounts = emptyMap(),
 				applyFailureCounts = emptyMap(),
@@ -119,7 +119,10 @@ class RunReportAggregator(
 		val hasOracle = snapshots.any { it.correctAt1 != null }
 		val correctAt1s = if (hasOracle) snapshots.mapNotNull { it.correctAt1 }.sorted() else null
 
-		val latencies = snapshots.map { it.latencyP95Ms }.sorted()
+		// Skip runs whose latencyP95Ms is null (absent, not zero — see nearestRankPercentile's
+		// "absent is not zero" convention) so a rule-based arm with no inference latency does not
+		// pull the cross-run p95 down to 0.
+		val latencies = snapshots.mapNotNull { it.latencyP95Ms }.sorted()
 
 		val rejectionCounts =
 			aggregateEnumCounts(
@@ -154,7 +157,7 @@ class RunReportAggregator(
 			iqrValidAt1 = iqr(validAt1s),
 			medianCorrectAt1 = correctAt1s?.let { median(it) },
 			iqrCorrectAt1 = correctAt1s?.let { iqr(it) },
-			p95LatencyMs = percentile95(latencies),
+			p95LatencyMs = if (latencies.isEmpty()) null else percentile95(latencies),
 			allC7Clean = allC7Clean,
 			rejectionCounts = rejectionCounts,
 			applyFailureCounts = applyFailureCounts,
@@ -223,7 +226,7 @@ class RunReportAggregator(
 					"| ${fmtRate(r.medianNoOpRate)} " +
 					"| ${fmtRate(r.medianValidAt1)} " +
 					"| ${r.medianCorrectAt1?.let { fmtRate(it) } ?: "n/a"} " +
-					"| ${r.p95LatencyMs} " +
+					"| ${fmtLatency(r.p95LatencyMs)} " +
 					"| ${boolSymbol(r.allC7Clean)} |"
 			)
 		}
@@ -406,10 +409,11 @@ class RunReportAggregator(
 		sb.appendLine("|---|---|---|---|---|---|")
 
 		for (r in reports) {
-			// Compute cross-run aggregates from raw snapshots
-			val p50s = r.snapshots.map { it.latencyP50Ms }.sorted()
-			val p95s = r.snapshots.map { it.latencyP95Ms }.sorted()
-			val maxes = r.snapshots.map { it.latencyMaxMs }.sorted()
+			// Compute cross-run aggregates from raw snapshots. Runs with a null latency figure
+			// (absent, not zero) are skipped so a rule-based arm does not pull the percentiles to 0.
+			val p50s = r.snapshots.mapNotNull { it.latencyP50Ms }.sorted()
+			val p95s = r.snapshots.mapNotNull { it.latencyP95Ms }.sorted()
+			val maxes = r.snapshots.mapNotNull { it.latencyMaxMs }.sorted()
 
 			val deadlineMisses =
 				r.snapshots.sumOf { snap ->
@@ -419,9 +423,9 @@ class RunReportAggregator(
 			sb.appendLine(
 				"| ${r.arm} " +
 					"| ${r.params.tickPeriodMs} " +
-					"| ${percentile50(p50s)} " +
-					"| ${percentile95(p95s)} " +
-					"| ${maxes.lastOrNull() ?: 0L} " +
+					"| ${fmtLatency(if (p50s.isEmpty()) null else percentile50(p50s))} " +
+					"| ${fmtLatency(if (p95s.isEmpty()) null else percentile95(p95s))} " +
+					"| ${fmtLatency(maxes.lastOrNull())} " +
 					"| $deadlineMisses |"
 			)
 		}
@@ -474,6 +478,12 @@ class RunReportAggregator(
 		val cellReports =
 			reports.flatMap { report ->
 				if (report.snapshots.isEmpty()) {
+					// An arm with no snapshots still renders a placeholder Parameter Sweep row:
+					// [aggregate] fills its `params` with the default RunParameters (rule-based arm,
+					// unset seed), and the railway figures render as `n/a`. This is the intentional
+					// fallback pinned by `renderMarkdown falls back to placeholders …` and `… zero
+					// runs renders both tables without throwing` — an empty arm must show it exists
+					// with defaults, not vanish from the sweep.
 					listOf(report)
 				} else {
 					report.snapshots
@@ -514,7 +524,8 @@ class RunReportAggregator(
 		for ((r, _) in ranked) {
 			val invalidActionRate = medianInvalidActionRate(r.snapshots)
 			val repairRate = median(r.snapshots.map { it.repairSuccessRate }.sorted())
-			val p50 = percentile50(r.snapshots.map { it.latencyP50Ms }.sorted())
+			val p50s = r.snapshots.mapNotNull { it.latencyP50Ms }.sorted()
+			val p50 = if (p50s.isEmpty()) null else percentile50(p50s)
 			val ruleFallbackTicks = r.snapshots.sumOf { it.ticksByOutcome[TickOutcome.RULE_FALLBACK.name] ?: 0L }
 			sb.appendLine(
 				paramsRowPrefix(r) +
@@ -527,8 +538,8 @@ class RunReportAggregator(
 					"| ${fmtRate(repairRate)} " +
 					"| ${fmtRate(r.medianValidAt1)} " +
 					"| ${r.medianCorrectAt1?.let { fmtRate(it) } ?: "n/a"} " +
-					"| $p50 " +
-					"| ${r.p95LatencyMs} " +
+					"| ${fmtLatency(p50)} " +
+					"| ${fmtLatency(r.p95LatencyMs)} " +
 					"| ${boolSymbol(r.allC7Clean)} " +
 					"| $ruleFallbackTicks |"
 			)
@@ -574,7 +585,10 @@ class RunReportAggregator(
 		sb.appendLine()
 		sb.appendLine(
 			"- **LLM Success** — median `llmSuccessRate` (ticks counted as an LLM success ÷ total ticks) " +
-				"across the cell's runs."
+				"across the cell's runs. **Not comparable to pre-#834 runs:** #834 reclassified idle ticks " +
+				"(former `RULE_FALLBACK`) to `LLM_NO_OP` and REVISED's cap-full `no_op` converts former " +
+				"fallback ticks into LLM successes, so this rate is structurally higher than a pre-#834 " +
+				"run's even at identical railway behaviour — read it as a within-#834 comparison only."
 		)
 		sb.appendLine(
 			"- **Invalid-action rate** — rejected actions ÷ emitted actions (`rejectionsByCode` sum " +
@@ -591,7 +605,8 @@ class RunReportAggregator(
 		)
 		sb.appendLine(
 			"- **p50 / p95 latency ms** — median / 95th percentile of the cell's per-run tick-latency " +
-				"percentiles."
+				"percentiles. `—` means no run in the cell measured inference latency (rule-based arm, or " +
+				"every cycle failed before inference started) — *not measured*, never *measured as none*."
 		)
 		sb.appendLine(
 			"- **C7 clean** — whether every run in the cell was C7-clean (no RULE_FALLBACK/SAFETY_NET-authored " +
@@ -699,6 +714,13 @@ class RunReportAggregator(
 		return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2.0
 	}
 
+	/**
+	 * Coarse interquartile range for the cross-run latency spread. Uses crude hinge indices
+	 * (`(n-1)/4` and `3(n-1)/4`) rather than a proper interpolated hinge — acceptable as a
+	 * noise-floor indicator at the sweep's small n (10 per arm), where the difference is a
+	 * fraction of a sample and the value is read as "is there spread at all", not as a precise
+	 * quartile.
+	 */
 	private fun iqr(sorted: List<Double>): Double {
 		if (sorted.size < 2) return 0.0
 		val q1 = sorted[(sorted.size - 1) / 4]
@@ -706,6 +728,16 @@ class RunReportAggregator(
 		return q3 - q1
 	}
 
+	/**
+	 * Cross-run 95th percentile of per-run latencies. Uses a **linear-index** formula
+	 * `idx = (n-1)*95/100`, deliberately different from the **per-run** [nearestRankPercentile]
+	 * (`ceil(p/100*n)`). The two answer different questions: per-run percentiles describe a
+	 * single run's tick-latency distribution (nearest-rank, the conventional single-sample
+	 * estimator), while this one aggregates *one latency figure per run* across the arm's N runs
+	 * (linear interpolation across runs). Both are only ever called on a non-empty list — the
+	 * `0L` empty guard is unreachable from [appendLatency], which skips null/empty latency arms
+	 * before calling this.
+	 */
 	private fun percentile95(sorted: List<Long>): Long {
 		if (sorted.isEmpty()) return 0L
 		val idx = ((sorted.size - 1) * 95 / 100).coerceIn(0, sorted.size - 1)
@@ -741,6 +773,13 @@ class RunReportAggregator(
 
 	/** `n/a` for a [value] that was never measured, never a bare `0` that would misread as a finding. */
 	private fun fmtNullableLong(value: Long?): String = value?.toString() ?: "n/a"
+
+	/**
+	 * `—` for a latency that was never measured (rule-based / pre-inference-failure runs), never a
+	 * bare `0` that would misread as "the model answered in 0 ms" — the "absent is not zero"
+	 * convention [nearestRankPercentile] documents.
+	 */
+	private fun fmtLatency(value: Long?): String = value?.toString() ?: "—"
 
 	private fun gateSymbol(passed: Boolean): String = if (passed) "✅ PASS" else "❌ FAIL"
 

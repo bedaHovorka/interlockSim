@@ -314,6 +314,53 @@ class NextHopResolverTest {
 		}
 
 		@Test
+		@DisplayName(
+			"synthetic multi-eligible-input data: resolveAll takes the train's FIRST eligible input and " +
+				"does not fall back to a later free one — the accepted divergence from checkAllInputs"
+		)
+		fun resolveAllShortCircuitsAtFirstEligibleInputPerTrainDivergingFromCheckAllInputsOnSyntheticData() {
+			// Real-domain invariant: a train owns at most ONE eligible input per tick
+			// (nextSemaphore is single-valued, isSetUpPath is directional — see NextHopResolver's
+			// KDoc). This test deliberately violates it: T2 owns TWO both-eligible inputs. T1's
+			// earlier input claims sepX first, so T2's first eligible input (→sepX) is already
+			// claimed. resolveAll decides T2 at that first input and reports ClaimedByAnotherTrain,
+			// never falling back to T2's second, still-free input (→sepY) — where
+			// RuleBasedDispatcher.checkAllInputs (per-input, no per-train short-circuit) would skip
+			// the claimed sepX and grant T2 a route to sepY. This divergence is accepted design (it
+			// keeps resolve pure and the per-train outcome a single hop) and never arises on the
+			// real topologies this dispatcher runs on.
+			val t1Input =
+				input(
+					towardSemaphoreName = "doA1",
+					toSeparatorName = "sepX",
+					ownerTrainId = "T1",
+					isApproachingThisInput = true
+				)
+			val t2FirstInput =
+				input(
+					towardSemaphoreName = "doB1",
+					toSeparatorName = "sepX",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val t2SecondInput =
+				input(
+					towardSemaphoreName = "doB2",
+					toSeparatorName = "sepY",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val obs = observation(innerBlockInputs = listOf(t1Input, t2FirstInput, t2SecondInput))
+
+			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doA1", toSeparatorName = "sepX"))
+			// T2 is decided at its first eligible input (doB1→sepX, already claimed); it does NOT
+			// fall back to doB2→sepY — this is the point where resolveAll diverges from checkAllInputs.
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = "sepX"))
+		}
+
+		@Test
 		@DisplayName("a single train is unaffected: resolveAll agrees with resolve for every existing outcome shape")
 		fun singleTrainResolveAllAgreesWithResolve() {
 			val hopInput =

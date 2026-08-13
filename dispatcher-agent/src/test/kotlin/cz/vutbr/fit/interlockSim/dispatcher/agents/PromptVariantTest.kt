@@ -100,6 +100,10 @@ class PromptVariantTest {
 		/**
 		 * Flipping this is a measurement decision, not a refactoring: with a non-BASELINE default,
 		 * every run that never asked for a variant would silently change arms.
+		 *
+		 * Note (Issue #834 review finding #4): this pins the **parse-failure fallback**, not the
+		 * shipped default. The shipped default is `REVISED`, set in `dispatcher-defaults.properties`;
+		 * `PromptVariant.DEFAULT` is only what a malformed or absent value falls back to.
 		 */
 		@Test
 		@DisplayName("the default variant is BASELINE, so an unconfigured run keeps PR #896's prompt")

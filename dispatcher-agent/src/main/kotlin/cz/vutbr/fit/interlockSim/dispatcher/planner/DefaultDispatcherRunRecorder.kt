@@ -49,8 +49,9 @@ import java.util.concurrent.atomic.AtomicReference
  * [buildSnapshot] takes a point-in-time copy and derives [DispatcherRunSnapshot.latencyP50Ms],
  * [DispatcherRunSnapshot.latencyP95Ms] and [DispatcherRunSnapshot.latencyMaxMs] from it using
  * [nearestRankPercentile] (nearest-rank convention — see its KDoc). An empty sample set (no
- * ticks carried a latency, e.g. an all-rule-based run) yields `0L` for all three fields,
- * preserving the pre-#834 behaviour for runs with nothing to measure.
+ * ticks carried a latency, e.g. an all-rule-based run) yields `null` for all three fields — the
+ * same "absent is not zero" convention [RailwayOutcome] uses: `null` means *not measured*,
+ * never *measured as none*. A `0` would misread as "the model answered in 0 ms".
  *
  * ## Railway outcomes (Issue #834, SP2c.11)
  *
@@ -211,6 +212,13 @@ class DefaultDispatcherRunRecorder(
 				"blockTransitions=${formatFigure(railway.blockTransitions)} " +
 				"conflicts=${formatFigure(railway.conflicts)} " +
 				"failedReservations=${formatFigure(railway.failedReservations)}"
+		}
+		// Issue #834 review finding #6: llmSuccessRate above is reclassified in #834 (idle ticks
+		// moved RULE_FALLBACK -> LLM_NO_OP, and REVISED's cap-full no_op turns former fallback ticks
+		// into LLM successes) and is not comparable to a pre-#834 run's rate.
+		logger.info {
+			"[DispatcherRunRecorder] note: llmSuccessRate is reclassified in #834 and not comparable " +
+				"to pre-#834 runs"
 		}
 	}
 

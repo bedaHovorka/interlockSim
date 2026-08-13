@@ -156,13 +156,55 @@ interface InterlockingFacade {
 			data object NonContiguousStart : DenialCause
 
 			/**
-			 * Residual cause: a denial with no reservation outcome behind it, so no
-			 * candidate-path count and no conflicting owner exist to report.
+			 * One of the four ESA-11 route conditions ([requestRoute]) failed. Distinct from
+			 * [Other] (the endpoint-resolution residual): this cause has a four-condition denial
+			 * behind it, not an unresolvable endpoint, and it carries a [retryable] flag so a
+			 * caller routing it through
+			 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.requestRoute]'s
+			 * `classifyDenial` does not collapse transient contention onto the permanent
+			 * [NoPath]/[NonContiguousStart] side the way [Other] →
+			 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.RouteRequestResult.NoRouteExists]
+			 * would.
 			 *
-			 * Covers the endpoint-resolution failures of [requestRouteByEndpoints] and every
-			 * denial produced by the four-condition [requestRoute] (empty route, entry-signal
-			 * mismatch, occupied block, wrong switch position, un-clearable signal), which does
-			 * not go through the reservation service at all.
+			 * `retryable` is decided per underlying reason at the denial site (a
+			 * traffic-simulation-expert ruling, sanity-checked with gemma4):
+			 * - **Permanent** (`retryable = false`) — a dispatcher *output defect*: an identical
+			 *   retry fails identically. Empty route, entry-signal mismatch, and any *unknown
+			 *   name* (unknown block/switch/signal the route references) — these are defects in
+			 *   the requested route or the network map, not track contention.
+			 * - **Transient** (`retryable = true`) — track *contention* that clears on its own:
+			 *   a block OCCUPIED/RESERVED by another train (C1), a switch held in the wrong
+			 *   position or locked by another train (C2/C3), an atomic-lock conflict where another
+			 *   train grabbed a resource first (C3/C4). Retrying the same request later can
+			 *   succeed once the other train releases the resource.
+			 *
+			 * The signal-un-clearable denial (the entry signal is unknown or the requested aspect
+			 * has no Signal equivalent) is permanent (`retryable = false`): it is an output/map
+			 * defect, not "ahead occupied".
+			 *
+			 * Only [requestRoute] (the four-condition kernel) produces this cause;
+			 * [requestRouteByEndpoints] never does — it goes through the reservation service and
+			 * sets [NoPath]/[AllPathsBlocked]/[Conflict]/[NonContiguousStart] instead.
+			 *
+			 * @property retryable `true` when the underlying reason is transient contention
+			 *   (another train holds a resource); `false` when it is a permanent dispatcher
+			 *   output defect (unknown name, empty route, mismatched signal, un-clearable signal).
+			 *   See [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade.requestRoute] for the
+			 *   per-reason assignment.
+			 * @since Issue #834 (SP2c.11 — Goal 10, review finding #2)
+			 */
+			data class ConditionFailed(
+				val retryable: Boolean
+			) : DenialCause
+
+			/**
+			 * Residual cause: a denial with no reservation outcome behind it and no four-condition
+			 * failure behind it either, so no candidate-path count, conflicting owner, or
+			 * retryability flag exists to report.
+			 *
+			 * Covers the endpoint-resolution failures of [requestRouteByEndpoints] (an unknown
+			 * endpoint name). Four-condition [requestRoute] denials use [ConditionFailed], not
+			 * this cause.
 			 *
 			 * Callers must **not** classify this as contention — there is no count to report and
 			 * a retry is not indicated. See
@@ -203,8 +245,10 @@ interface InterlockingFacade {
 			 *   expressed before [DenialCause] existed.
 			 */
 			@Deprecated(
-				"Pass a DenialCause instead: it distinguishes all five denial causes, not two.",
-				ReplaceWith("InterlockingFacade.RouteResponse.Denied(reason, cause)")
+				"Pass a DenialCause instead: it distinguishes all six denial causes, not two.",
+				ReplaceWith(
+					"Denied(reason, if (originNotContiguous) DenialCause.NonContiguousStart else DenialCause.Other)"
+				)
 			)
 			constructor(
 				reason: String,
@@ -239,10 +283,10 @@ interface InterlockingFacade {
 	 * **Preconditions (validated before the four conditions):**
 	 *
 	 * - [route.blocks] must be non-empty — a route with no track sections is denied
-	 *   (`"Prázdná jízdní cesta"`). A real route always protects at least one block.
+	 *   (`"Empty route — no track sections"`). A real route always protects at least one block.
 	 * - [entrySignal] must identify the same signal as [route.from] — the signal the kernel
 	 *   clears must be the route's entry separator. A mismatch is denied
-	 *   (`"Návěstidlo … neodpovídá počátku cesty"`).
+	 *   (`"Signal X does not match route origin Y"`).
 	 *
 	 * **Conditions checked (in order):**
 	 *

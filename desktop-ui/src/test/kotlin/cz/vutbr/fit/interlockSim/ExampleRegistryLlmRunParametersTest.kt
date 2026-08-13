@@ -79,6 +79,12 @@ class ExampleRegistryLlmRunParametersTest {
 	 * Agreement with [SweepCell.runParameters]: an LLM cell's abort snapshot must match what the
 	 * live LLM example would record for the equivalent settings, or an aborted sweep run groups
 	 * into a different report cell than its completed siblings.
+	 *
+	 * The live path is built from [DispatcherRunConfig.fromProperties] + [OllamaExecutorConfig.default]
+	 * (the same file-tier resolution the abort path now uses for an omitted axis, review finding #7,
+	 * Issue #834), with the cell's pinned axes applied as overrides. Building the live path from code
+	 * defaults instead would only agree on the one configuration where the committed file happens to
+	 * equal the code constants — exactly the blind spot the previous test had.
 	 */
 	@Test
 	@DisplayName("SweepCell.runParameters() agrees with the live LLM path for an equivalent cell")
@@ -94,6 +100,11 @@ class ExampleRegistryLlmRunParametersTest {
 				inferenceTimeoutSeconds = 90L
 			)
 
+		// The live path is the forked child's own resolution, and the child inherits no parent -D
+		// flags — so for an omitted axis it resolves file > code. fromProperties(properties = { null })
+		// mirrors that; the abort path (SweepCell.runParameters) uses the same call.
+		val baseRunConfig = DispatcherRunConfig.fromProperties(properties = { null })
+
 		val fromAbortPath = cell.runParameters()
 		val fromLivePath =
 			registry.llmRunParameters(
@@ -102,7 +113,51 @@ class ExampleRegistryLlmRunParametersTest {
 					tickPeriodMs = cell.tickPeriodMs,
 					historyN = cell.historyN,
 					maxActionsPerTick = cell.maxActionsPerTick,
-					inferenceTimeoutSeconds = 90L
+					inferenceTimeoutSeconds = 90L,
+					promptVariant = baseRunConfig.promptVariant
+				)
+			)
+
+		assertThat(fromAbortPath).isEqualTo(fromLivePath)
+	}
+
+	/**
+	 * The omitted-axis case (review finding #7, Issue #834): an LLM cell that pins *none* of
+	 * model/temperature/inferenceTimeoutSeconds/promptVariant must still agree with the live path,
+	 * because both resolve every omitted axis through the same file-tier resolution
+	 * ([DispatcherRunConfig.fromProperties] + [OllamaExecutorConfig.default]). The previous test
+	 * could not detect this — it pinned model and temperature, the only configuration where the old
+	 * hardcoded `""`/`0.0`/`PromptVariant.DEFAULT` abort path coincidentally agreed with the live path.
+	 */
+	@Test
+	@DisplayName("agreement holds for an LLM cell that omits model, temperature, timeout and promptVariant")
+	fun agreesWithLiveLlmPathForAllAxesOmitted() {
+		val cell =
+			SweepCell(
+				example = "shuntingLoopAI",
+				model = null,
+				temperature = null,
+				tickPeriodMs = 250L,
+				historyN = 5,
+				maxActionsPerTick = 2,
+				inferenceTimeoutSeconds = null,
+				promptVariant = null
+			)
+
+		val baseExecutor = OllamaExecutorConfig.default()
+		// Mirrors the forked child (no parent -D inheritance) — see agreesWithLiveLlmPath above.
+		val baseRunConfig = DispatcherRunConfig.fromProperties(properties = { null })
+
+		val fromAbortPath = cell.runParameters()
+		val fromLivePath =
+			registry.llmRunParameters(
+				OllamaExecutorConfig(modelName = baseExecutor.modelName, temperature = baseExecutor.temperature),
+				DispatcherRunConfig(
+					tickPeriodMs = cell.tickPeriodMs,
+					historyN = cell.historyN,
+					maxActionsPerTick = cell.maxActionsPerTick,
+					inferenceTimeoutSeconds = baseRunConfig.inferenceTimeoutSeconds,
+					promptVariant = baseRunConfig.promptVariant
 				)
 			)
 

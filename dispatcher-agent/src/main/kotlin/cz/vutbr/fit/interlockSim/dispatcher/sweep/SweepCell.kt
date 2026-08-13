@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.sweep
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
@@ -112,11 +113,34 @@ data class SweepCell(
 	 * `RunParameters`, or the LLM arm's `llmRunParameters`) produces for an equivalent
 	 * [DispatcherRunConfig] — otherwise an aborted run of this cell groups into a different
 	 * report cell than its completed siblings, corrupting [RunReportAggregator]'s per-cell stats.
-	 * `inferenceTimeoutSeconds` mirrors [systemProperties]'s `null` handling: `null` here means
-	 * "leave [KoogAgentPlanAdapter]'s own default in place", so the *recorded* value must be that
-	 * same default, not `null` (this field is non-nullable on [RunParameters]). `promptVariant`
-	 * resolves the same way — `null` means "leave [DispatcherRunConfig.promptVariant]'s own
-	 * resolution in place", so the recorded value is [PromptVariant.DEFAULT]'s name.
+	 *
+	 * ## How each arm resolves an omitted axis
+	 *
+	 * The rule-based arm records the empty-string sentinel for [model] and [promptVariant] and
+	 * `0.0` for [temperature] — it never assembles a prompt or contacts Ollama, so those axes are
+	 * not part of its identity. [inferenceTimeoutSeconds] still mirrors [systemProperties]'s `null`
+	 * handling (`null` means "leave [KoogAgentPlanAdapter]'s own default in place"), so the recorded
+	 * value is that default, not `null` (the field is non-nullable on [RunParameters]).
+	 *
+	 * The LLM arm resolves an **omitted** [model]/[temperature]/[promptVariant] through the same
+	 * file-tier resolution the live path uses — [DispatcherRunConfig.fromProperties] for
+	 * [promptVariant] and [inferenceTimeoutSeconds], [OllamaExecutorConfig.default] for [model] and
+	 * [temperature] — so this abort snapshot records the value the forked child actually ran with
+	 * (e.g. the committed `REVISED` prompt and `qwen2.5:7b-instruct` model), not a hardcoded
+	 * `""`/`0.0`/[PromptVariant.DEFAULT] that the file has since diverged from.
+	 *
+	 * The `fromProperties` call is made with its system-property tier disabled
+	 * (`properties = { null }`). This snapshot is recorded by the **parent** sweep driver, but a
+	 * completed run of the same cell is recorded by the **forked child**, which inherits no parent
+	 * `-D` flags — so for an omitted axis the child's own `fromProperties` resolves file > code.
+	 * Matching the child requires this snapshot to do the same; reading `System.getProperty`
+	 * here would let a parent launched with `-Dinterlocksim.dispatcher.*` diverge from its own
+	 * completed children — the exact mis-grouping finding #7 exists to prevent. Review finding #7
+	 * (Issue #834): the previous `model ?: ""` / `temperature ?: 0.0` / `promptVariant ?:
+	 * PromptVariant.DEFAULT` only agreed with the live path on the one configuration where the
+	 * file's committed values happened to equal the code constants — an omitted-axis LLM run that
+	 * aborted would have grouped into a spurious Parameter Sweep cell, splitting its failure out
+	 * of the real cell and inflating that cell's apparent passing rate.
 	 *
 	 * ## Which cells have no prompt at all
 	 *
@@ -130,18 +154,49 @@ data class SweepCell(
 	 * run's recorder is armed from, so this abort snapshot and the live recording can never
 	 * disagree about which arm a run belongs to.
 	 */
-	fun runParameters(): RunParameters =
-		RunParameters(
+	fun runParameters(): RunParameters {
+		// The rule-based arm never assembles a prompt or contacts Ollama, so its omitted axes are
+		// the empty/zero sentinel, never the file-tier LLM values.
+		if (arm == DispatcherArm.RULE_BASED) {
+			return RunParameters(
+				tickPeriodMs = tickPeriodMs,
+				historyN = historyN,
+				temperature = temperature ?: 0.0,
+				maxActionsPerTick = maxActionsPerTick,
+				model = model ?: "",
+				seed = null,
+				inferenceTimeoutSeconds = inferenceTimeoutSeconds ?: KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
+				promptVariant = ""
+			)
+		}
+		// LLM arm: resolve omitted model/temperature/promptVariant/inferenceTimeoutSeconds through
+		// the same file-tier resolution the live path (DispatcherAgentModule's
+		// runConfig ?: OllamaExecutorConfig.default()) uses, then override with this cell's pinned
+		// values.
+		//
+		// The system-property tier is deliberately skipped here: this abort snapshot is recorded by
+		// the *parent* sweep driver, but a completed run of the same cell is recorded by the *forked
+		// child*, which receives only this cell's -D flags (ProcessBuilder passes no parent -D
+		// inheritance — AiSweepDriver builds the java command from exactly systemProperties()). For
+		// an omitted axis the child has no -D flag, so its own fromProperties() resolves file > code.
+		// Reading System.getProperty here would let a parent launched with
+		// -Dinterlocksim.dispatcher.* diverge from its own completed children — the exact
+		// mis-grouping finding #7 exists to prevent. fromProperties(properties = { null }) resolves
+		// file > code, matching the child for an omitted axis regardless of parent -D.
+		val executorDefault = OllamaExecutorConfig.default()
+		val runConfigDefault = DispatcherRunConfig.fromProperties(properties = { null })
+		return RunParameters(
 			tickPeriodMs = tickPeriodMs,
 			historyN = historyN,
-			temperature = temperature ?: 0.0,
+			temperature = (temperature ?: executorDefault.temperature).toDouble(),
 			maxActionsPerTick = maxActionsPerTick,
-			model = model ?: "",
+			model = model ?: executorDefault.modelName,
 			seed = null,
-			inferenceTimeoutSeconds = inferenceTimeoutSeconds ?: KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
-			promptVariant =
-				if (arm == DispatcherArm.RULE_BASED) "" else (promptVariant ?: PromptVariant.DEFAULT).name
+			inferenceTimeoutSeconds =
+				inferenceTimeoutSeconds ?: runConfigDefault.inferenceTimeoutSeconds,
+			promptVariant = (promptVariant ?: runConfigDefault.promptVariant).name
 		)
+	}
 
 	private fun sanitise(raw: String): String = raw.replace(Regex("[^A-Za-z0-9.-]"), "-")
 }

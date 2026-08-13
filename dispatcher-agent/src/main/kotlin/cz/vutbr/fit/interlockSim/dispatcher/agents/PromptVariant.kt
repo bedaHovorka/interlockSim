@@ -23,7 +23,10 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  * [cz.vutbr.fit.interlockSim.dispatcher.planner.RunReportAggregator] already splits report rows by
  * it, so two cells differing only in variant never merge into one measured number.
  *
- * Nothing in this codebase claims [REVISED] is an improvement. The sweep decides that.
+ * Nothing in this codebase claims [REVISED] is an improvement on its own — the sweep does. The
+ * sweep has now run (docs/GOAL_10_SP2C11_SWEEP_REPORT.md), REVISED ships as the committed default
+ * through `dispatcher-defaults.properties` (`interlocksim.dispatcher.promptVariant=REVISED`), and
+ * [DEFAULT] stays [BASELINE] only as the parse-failure safety net, not the shipped default.
  *
  * @since Issue #834 (SP2c.11 — prompt rebuild as a swept parameter)
  */
@@ -48,12 +51,15 @@ enum class PromptVariant {
 
 	companion object {
 		/**
-		 * The variant used when nothing selects one.
+		 * The variant used when no value is recognized — the parse-failure fallback, **not** the
+		 * shipped default.
 		 *
-		 * [BASELINE] on purpose: the default must reproduce the behaviour that already exists, so
-		 * that adding this seam changes no run that does not ask to be changed. Flipping this
-		 * constant is a measurement decision, not a refactoring one — it belongs in the same commit
-		 * as the sweep evidence that justifies it.
+		 * [BASELINE] on purpose: a malformed or absent `promptVariant` value (bad `-D` flag, missing
+		 * or typo'd key in `dispatcher-defaults.properties`) must reproduce the behaviour that
+		 * already exists rather than silently switch the prompt, so a broken config never masquerades
+		 * as a measurement of [REVISED]. The shipped default is set in
+		 * `dispatcher-defaults.properties` (`=REVISED`, per the sweep); this constant is only what
+		 * that file's value is replaced with when parsing it fails.
 		 */
 		val DEFAULT: PromptVariant = BASELINE
 

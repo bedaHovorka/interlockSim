@@ -18,6 +18,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
@@ -317,6 +318,41 @@ class RequestRouteApplyFailureCodeTest {
 		assertThat(originOutcome.reason).isEqualTo(reason)
 	}
 
+	/**
+	 * Review finding #2 (Issue #834): a four-condition interlocking refusal (route freedom / C1,
+	 * switch / C2, atomic lock / C3-C4, signal un-clearable) is its own denial cause, distinct from
+	 * the endpoint-resolution residual [RouteRequestResult.NoRouteExists]. The new
+	 * [RouteRequestResult.ConditionFailed] carries a `retryable` flag so transient contention is
+	 * not mislabelled as a permanent defect. This test pins only the applier's mapping; the
+	 * facade-wired sibling below proves reachability through the production wiring.
+	 */
+	@Test
+	@DisplayName("ConditionFailed -> APPLIED_THEN_FAILED, applyFailure CONDITION_FAILED, onDecisionApplied fires")
+	fun conditionFailedIsAppliedThenFailed() {
+		val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
+		every { networkActuator.requestRoute(any(), any(), any()) } returns
+			RouteRequestResult.ConditionFailed("Block U1 occupied by train T2", retryable = true)
+		val outcomes = mutableListOf<ActionOutcome>()
+		var decisionAppliedCount = 0
+		val queue = ActuatorCommandQueue()
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = networkActuator,
+				onApproveTrain = {},
+				onDecisionApplied = { decisionAppliedCount++ },
+				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
+			)
+
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		applier.onControlStep()
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().phase).isEqualTo(ActionPhase.APPLIED_THEN_FAILED)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.CONDITION_FAILED)
+		assertThat(decisionAppliedCount).isEqualTo(1)
+	}
+
 	// ── Issue #834 task alpha-7a: every denial cause survives the facade branch ─────
 
 	/**
@@ -449,6 +485,45 @@ class RequestRouteApplyFailureCodeTest {
 		val prompt = renderPrompt(blocked)
 		assertThat(prompt).contains("3 path(s) attempted")
 		assertThat(prompt).doesNotContain("0 path(s) attempted")
+	}
+
+	/**
+	 * Review finding #2 (Issue #834): a four-condition `Denied` with cause
+	 * [InterlockingFacade.RouteResponse.DenialCause.ConditionFailed] reaches the applier as
+	 * [ApplyFailureCode.CONDITION_FAILED] through the facade-wired port, with the `retryable` flag
+	 * and the reason prose intact in [AppliedOutcome.ConditionFailed]. This is the wiring
+	 * `DispatcherAgentModule` builds in production; the four-condition `requestRoute` is not the
+	 * production path (production goes through `requestRouteByEndpoints`, where `Other` is the
+	 * genuine endpoint-resolution residual), but the branch is total so a future caller routing
+	 * four-condition denials through the port gets the right code instead of a collapsed
+	 * `ALL_PATHS_BLOCKED`.
+	 */
+	@Test
+	@DisplayName(
+		"ConditionFailed through a facade-wired port -> CONDITION_FAILED + AppliedOutcome.ConditionFailed carrying retryable and reason"
+	)
+	fun conditionFailedThroughFacadeWiredPortIsConditionFailed() {
+		val reason = "Block U1 occupied by train T2"
+		val (outcomes, published) =
+			applyThroughFacadeWiredPort(
+				InterlockingFacade.RouteResponse.Denied(
+					reason,
+					InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = true)
+				)
+			)
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().phase).isEqualTo(ActionPhase.APPLIED_THEN_FAILED)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.CONDITION_FAILED)
+
+		assertThat(published).hasSize(1)
+		assertThat(published.first()).isInstanceOf(AppliedOutcome.ConditionFailed::class)
+		val failed = published.first() as AppliedOutcome.ConditionFailed
+		assertThat(failed.trainId).isEqualTo("T1")
+		assertThat(failed.fromEndpointName).isEqualTo("zA")
+		assertThat(failed.toEndpointName).isEqualTo("doA1")
+		assertThat(failed.retryable).isTrue()
+		assertThat(failed.reason).isEqualTo(reason)
 	}
 
 	/**

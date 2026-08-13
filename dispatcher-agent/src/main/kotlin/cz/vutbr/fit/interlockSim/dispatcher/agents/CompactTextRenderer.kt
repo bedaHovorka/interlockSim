@@ -212,6 +212,13 @@ class CompactTextRenderer : ObservationRenderer {
 				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
 					"ORIGIN_NOT_CONTIGUOUS (from ${outcome.fromEndpointName})"
 
+			// Issue #834 review finding #2: four-condition refusal. Not produced on the production
+			// request_route path; kept total by the same exhaustiveness property as the siblings.
+			is AppliedOutcome.ConditionFailed ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
+					"CONDITION_FAILED (${if (outcome.retryable) "transient" else "permanent"}) — " +
+					outcome.reason
+
 			is AppliedOutcome.Released -> {
 				val status = if (outcome.anyReleased) "RELEASED" else "NO_RESERVATION"
 				"cancel_route ${outcome.trainId} : $status"

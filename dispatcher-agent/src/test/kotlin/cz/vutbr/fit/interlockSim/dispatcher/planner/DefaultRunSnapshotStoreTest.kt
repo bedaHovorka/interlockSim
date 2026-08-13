@@ -178,6 +178,12 @@ class DefaultRunSnapshotStoreTest {
 		// JSON above and must decode to their defaults, not fail the whole file.
 		assertThat(legacy.params.inferenceTimeoutSeconds).isEqualTo(KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS)
 		assertThat(legacy.params.promptVariant).isEqualTo(RunParameters.DEFAULT_PROMPT_VARIANT)
+		// Review finding #3 (Issue #834): the latency fields widened from Long to Long?; a v1 file
+		// that stored concrete values must still decode them (not collapse to null), and a stored 0
+		// would decode to Long?(0) — absent is not zero now works both directions.
+		assertThat(legacy.latencyP50Ms).isEqualTo(100L)
+		assertThat(legacy.latencyP95Ms).isEqualTo(200L)
+		assertThat(legacy.latencyMaxMs).isEqualTo(300L)
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────

@@ -46,6 +46,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.MethodSource
 import kotlin.test.assertFailsWith
 
@@ -516,6 +517,37 @@ class DefaultNetworkActuatorPortTest {
 			assertThat(result).isInstanceOf<RouteRequestResult.OriginNotContiguous>()
 			result as RouteRequestResult.OriginNotContiguous
 			assertThat(result.fromEndpointName).isEqualTo("A")
+			assertThat(result.reason).isEqualTo(reason)
+		}
+
+		/**
+		 * Review finding #2 (Issue #834): a four-condition [InterlockingFacade.requestRoute] refusal
+		 * carries a [InterlockingFacade.RouteResponse.DenialCause.ConditionFailed] cause with a
+		 * retryable flag. The facade branch must preserve that flag (and the reason) into
+		 * [RouteRequestResult.ConditionFailed] rather than collapsing transient contention onto the
+		 * permanent [RouteRequestResult.NoRouteExists] side the way [DenialCause.Other] does.
+		 */
+		@ParameterizedTest
+		@CsvSource("true", "false")
+		@DisplayName("Denied with DenialCause.ConditionFailed(retryable) preserves retryable and reason")
+		fun deniedConditionFailedPreservesRetryableAndReason(retryable: Boolean) {
+			val a = inOut("A")
+			val b = inOut("B")
+			val facade = mockk<InterlockingFacade>()
+			val reason = if (retryable) "Block U7 occupied by train T2" else "Empty route — no blocks"
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied(
+					reason,
+					InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable)
+				)
+
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.ConditionFailed>()
+			result as RouteRequestResult.ConditionFailed
+			assertThat(result.retryable).isEqualTo(retryable)
 			assertThat(result.reason).isEqualTo(reason)
 		}
 

@@ -14,6 +14,7 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEmpty
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
@@ -231,6 +232,28 @@ class RunReportAggregatorTest {
 		val report = aggregator.aggregate(snapshots)
 		// Sorted latencies: 100..1000; p95 index = (10-1)*95/100 = 8 → value at index 8 = 900
 		assertThat(report.p95LatencyMs).isEqualTo(900L)
+	}
+
+	@Test
+	fun `p95LatencyMs is null when every run has null latency, and skips null runs when some are present`() {
+		// Review finding #3 (Issue #834): an unmeasured run has null latencyP95Ms (absent, not
+		// zero). The cross-run p95 must skip nulls rather than count them as 0, and be null only
+		// when *every* run is unmeasured — never a bare 0 that would misread as "answered in 0 ms".
+		val allNull =
+			(1..10).map { i ->
+				snapshot(runId = "rule$i", latencyP50Ms = null, latencyP95Ms = null, latencyMaxMs = null)
+			}
+		assertThat(aggregator.aggregate(allNull).p95LatencyMs).isNull()
+
+		// 8 measured runs (100..800) + 2 unmeasured (null, skipped) -> p95 over the 8:
+		// idx = (8-1)*95/100 = 6 -> sorted[6] = 700 (the cross-run linear-index percentile95).
+		val mixed =
+			(1..8).map { i -> snapshot(runId = "lat$i", latencyP95Ms = (i * 100L)) } +
+				listOf(
+					snapshot(runId = "rule1", latencyP95Ms = null),
+					snapshot(runId = "rule2", latencyP95Ms = null)
+				)
+		assertThat(aggregator.aggregate(mixed).p95LatencyMs).isEqualTo(700L)
 	}
 
 	@Test
@@ -608,8 +631,9 @@ class RunReportAggregatorTest {
 		noOpRate: Double = 0.0,
 		invalidOutputRate: Double = 0.0,
 		repairSuccessRate: Double = 0.0,
-		latencyP50Ms: Long = 100L,
-		latencyP95Ms: Long = 200L,
+		latencyP50Ms: Long? = 100L,
+		latencyP95Ms: Long? = 200L,
+		latencyMaxMs: Long? = 300L,
 		rejections: Map<RejectionCode, Long> = emptyMap(),
 		applyFailures: Map<ApplyFailureCode, Long> = emptyMap(),
 		authorCounts: Map<ActionAuthor, Long> = emptyMap(),
@@ -658,7 +682,7 @@ class RunReportAggregatorTest {
 			oracleAgreementAt1 = null,
 			latencyP50Ms = latencyP50Ms,
 			latencyP95Ms = latencyP95Ms,
-			latencyMaxMs = 300L,
+			latencyMaxMs = latencyMaxMs,
 			actionsByAuthor = authorCounts.mapKeys { it.key.name },
 			unattributedApplies = 0L,
 			terminalFallbackEngaged = fallback,

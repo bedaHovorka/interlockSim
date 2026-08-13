@@ -832,6 +832,18 @@ class PathReservationRegistry(
 	 * un-rolled-back exit) but it changes the trade-off recorded under "Resource Safety" below and
 	 * is deliberately filed as separate work.
 	 *
+	 * **Scope of that reclamation (review finding #8, Issue #834).** `OrphanReservationSweeper`
+	 * lives in `dispatcher-agent` and is wired only in `desktop-ui`/`dispatcher-agent` (via
+	 * `ExampleRegistry`). `:fast-sim` wires `wireSynchronousDispatcher(ctx, loop)` with
+	 * `interlockingFacade = null` — the legacy `reservePath` → `mergePathInfo` branch — and does
+	 * **not** wire the sweeper; neither does a bare-`:core` host that calls `reservePath` directly.
+	 * In those hosts the orphaned tail persists for the rest of the run: the abort is still an
+	 * improvement over the prior throw (no simulation thread dies), but the fail-safe reclamation
+	 * the paragraph above describes is a `desktop-ui`/`dispatcher-agent` property, not a universal
+	 * one. Releasing the tail in `mergePathInfo` itself — the transactionally-complete option the
+	 * previous paragraph already files as "separate work" — is the only fix that would hold in
+	 * `:fast-sim` and bare-`:core` too.
+	 *
 	 * ## Algorithm
 	 *
 	 * 0. Abort unless the new path continues the stored one (new.start == old.target)
@@ -900,8 +912,10 @@ class PathReservationRegistry(
 	 * `old`. This means `TrainNavigationService` will not guide the train through those new blocks
 	 * — the train effectively ignores the just-reserved segment. This is intentional: it is always
 	 * better than storing a malformed PathInfo (#316), and it is recoverable, because
-	 * `OrphanReservationSweeper` reclaims the divergent tail and resets its signals to STOP. The
-	 * train will retry on its next dispatch tick.
+	 * `OrphanReservationSweeper` reclaims the divergent tail and resets its signals to STOP — in
+	 * the hosts that wire it; see the "Scope of that reclamation" caveat above for `:fast-sim` and
+	 * bare-`:core`, where the tail is left unreclaimed. The train will retry on its next dispatch
+	 * tick.
 	 *
 	 * @param trainId Owner of the PathInfo being merged (used in the abort WARNs)
 	 * @param old Previous PathInfo (Tail may still be navigating through this)

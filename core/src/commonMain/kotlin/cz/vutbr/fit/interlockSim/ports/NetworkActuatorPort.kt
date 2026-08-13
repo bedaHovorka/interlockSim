@@ -349,4 +349,34 @@ sealed class RouteRequestResult {
 		val fromEndpointName: String,
 		val reason: String
 	) : RouteRequestResult()
+
+	/**
+	 * One of the four ESA-11 route conditions refused the route (the four-condition
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.requestRoute] path). Maps from
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.ConditionFailed].
+	 *
+	 * Distinct from [NoRouteExists] (which carries the endpoint-resolution residual
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]) and
+	 * from [AllPathsBlocked]/[Conflict] (which carry a candidate-path count / a blocking owner
+	 * from the reservation service): a four-condition refusal does not go through pathfinding, so
+	 * neither a count nor an owner exists to report. The [retryable] flag is the only
+	 * machine-readable signal a caller gets — it preserves the transient-vs-permanent split so a
+	 * caller does not collapse contention (a block occupied by another train) onto the permanent
+	 * [NoRouteExists] side. This result exists because #834 stopped inventing a count/owner for
+	 * denials that have neither (review finding #2).
+	 *
+	 * @property reason The kernel's human-readable denial reason, forwarded verbatim from
+	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.Denied.reason]. Suitable for
+	 *   dispatcher display and LLM feedback (the same role [OriginNotContiguous.reason] plays).
+	 * @property retryable `true` when the underlying reason is transient contention (another
+	 *   train holds a resource; retrying the same request later can succeed); `false` when it is
+	 *   a permanent dispatcher output defect (unknown name, empty route, mismatched signal,
+	 *   un-clearable signal) — an identical retry fails identically. Forwarded unchanged from
+	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.ConditionFailed.retryable].
+	 * @since Issue #834 (SP2c.11 — Goal 10, review finding #2)
+	 */
+	data class ConditionFailed(
+		val reason: String,
+		val retryable: Boolean
+	) : RouteRequestResult()
 }

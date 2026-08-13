@@ -100,16 +100,21 @@ class SweepCellTest {
 	}
 
 	/**
-	 * An LLM cell that names no variant leaves [DispatcherRunConfig.promptVariant]'s own
-	 * resolution in place, so the recorded value is [PromptVariant.DEFAULT]'s name — a real
-	 * prompt identity, never the "untracked" sentinel the pre-Task-11 stand-in wrote.
+	 * An LLM cell that names no variant resolves [DispatcherRunConfig.promptVariant] through the
+	 * same file-tier resolution the live path uses (`DispatcherRunConfig.fromProperties()`, which
+	 * reads the committed `dispatcher-defaults.properties`), so the recorded value is the variant
+	 * the forked child actually ran with — not a hardcoded [PromptVariant.DEFAULT] that the committed
+	 * file has since diverged from (review finding #7, Issue #834). The shipped default is `REVISED`,
+	 * so this asserts agreement with the live resolution rather than pinning a constant that would
+	 * break the moment the file's committed default changes.
 	 */
 	@Test
-	@DisplayName("an LLM cell with no variant records PromptVariant.DEFAULT, not the untracked sentinel")
-	fun llmCellRecordsDefaultPromptVariant() {
+	@DisplayName("an LLM cell with no variant records the file-tier-resolved variant, not a hardcoded constant")
+	fun llmCellRecordsFileTierPromptVariant() {
 		val params = llmCell().runParameters()
 
-		assertThat(params.promptVariant).isEqualTo(PromptVariant.DEFAULT.name)
+		val liveResolved = DispatcherRunConfig.fromProperties().promptVariant.name
+		assertThat(params.promptVariant).isEqualTo(liveResolved)
 		assertThat(params.promptVariant).isNotEqualTo(RunParameters.DEFAULT_PROMPT_VARIANT)
 	}
 

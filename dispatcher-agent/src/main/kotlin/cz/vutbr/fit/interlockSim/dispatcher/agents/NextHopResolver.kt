@@ -44,9 +44,21 @@ import cz.vutbr.fit.interlockSim.sim.DispatchObservation
  * [resolveAll] is the cycle-scoped entry point added to close that gap: it applies
  * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs]'s own `claimedSeparators`
  * dedup — the same fixed evaluation order over
- * [DispatchObservation.innerBlockInputs]`+`[DispatchObservation.outerBlockInputs] — so the two
- * arms can never disagree about which train gets a given separator this tick. Adding this as a
- * second, batch-oriented entry point rather than making [resolve] itself stateful (e.g. a hidden
+ * [DispatchObservation.innerBlockInputs]`+`[DispatchObservation.outerBlockInputs]. The two arms
+ * agree about which train gets a given separator this tick **on real data**, where at most one
+ * input per train is ever eligible per tick — the same domain invariant
+ * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] itself relies on
+ * ([cz.vutbr.fit.interlockSim.objects.core.TrackOccupant.nextSemaphore] is single-valued and
+ * [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.isSetUpPath] is directional, so a
+ * real block's occupant approaches at most one input and a real reserved block is set up toward at
+ * most one input). On **synthetic** data that violates that invariant — one train owning two
+ * both-eligible inputs — the arms can diverge: [resolveAll] short-circuits at the train's *first*
+ * eligible input (it never falls back to a later one), where `checkAllInputs` evaluates every
+ * input independently and can grant the train a route via a later, still-free input. That
+ * divergence is accepted and pinned by
+ * [NextHopResolverTest][cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopResolverTest]; it never
+ * arises on the real topologies this dispatcher runs on. Adding [resolveAll] as a second,
+ * batch-oriented entry point rather than making [resolve] itself stateful (e.g. a hidden
  * mutable `claimedSeparators` field on the object) keeps [resolve] pure and its existing
  * single-train tests valid unchanged, while [resolveAll] stays equally pure and deterministic in
  * its own right: same `trainIds`/`observation` pair ⇒ same output map, no mutable state carried
@@ -90,8 +102,18 @@ object NextHopResolver {
 	 * KDoc). A separator that would qualify as more than one requested train's [NextHopOutcome.Hop]
 	 * target is granted to exactly one of them — the winner determined by
 	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs]'s own fixed evaluation
-	 * order over [DispatchObservation.innerBlockInputs]`+`[DispatchObservation.outerBlockInputs],
-	 * so the rule-based and LLM arms can never disagree about who gets a given separator this tick.
+	 * order over [DispatchObservation.innerBlockInputs]`+`[DispatchObservation.outerBlockInputs].
+	 *
+	 * The per-train short-circuit (a train is *decided* by its first eligible input — see
+	 * [decidedTrains] below) matches `checkAllInputs`'s per-input behaviour **on real data**, where
+	 * a train owns at most one eligible input per tick (see this object's KDoc for the domain
+	 * invariant). On synthetic data where one train owns two both-eligible inputs the arms diverge:
+	 * this function reports the train's first eligible input's outcome and never falls back to a
+	 * later, still-free one, where `checkAllInputs` evaluates every input and can grant via a later
+	 * one. That divergence is accepted design (it is what keeps [resolve] pure and the per-train
+	 * outcome a single hop) and is pinned by
+	 * [NextHopResolverTest][cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopResolverTest].
+	 *
 	 * Every other requested train keeps exactly the outcome [resolve] would have given it alone.
 	 *
 	 * Pure and deterministic: the same `trainIds`/[observation] pair always returns an `==`-equal
@@ -105,6 +127,10 @@ object NextHopResolver {
 	): Map<String, NextHopOutcome> {
 		val inputs = observation.innerBlockInputs + observation.outerBlockInputs
 		val claimedSeparators = mutableSetOf<String>()
+		// Per-train short-circuit: a train is decided by its FIRST eligible input (the eligible
+		// check above precedes this add). On real data a train has at most one eligible input per
+		// tick, so this never skips a usable later input; on synthetic multi-eligible-input data it
+		// is the point where this function diverges from checkAllInputs (see this object's KDoc).
 		val decidedTrains = mutableSetOf<String>()
 		val hopByTrain = mutableMapOf<String, NextHopOutcome.Hop>()
 		val claimedAwayByTrain = mutableMapOf<String, String>()
@@ -199,6 +225,12 @@ sealed interface NextHopOutcome {
 	 * order (same-tick same-target dedup, mirroring
 	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs]'s `claimedSeparators`).
 	 * [resolve] alone can never produce this outcome — it has no visibility into other trains.
+	 *
+	 * Because [NextHopResolver.resolveAll] decides a train at its *first* eligible input, this
+	 * outcome can also arise on synthetic data where the train owns a second, still-free eligible
+	 * input that `checkAllInputs` would have granted instead — see this object's KDoc for that
+	 * accepted divergence. On real data (one eligible input per train per tick) this is purely the
+	 * same-tick same-target race `checkAllInputs`'s `claimedSeparators` models.
 	 *
 	 * Like [NoSectionReservable], this is never evidence the track ahead is occupied or
 	 * blocked: the section exists and is being reserved this very cycle, just for a different

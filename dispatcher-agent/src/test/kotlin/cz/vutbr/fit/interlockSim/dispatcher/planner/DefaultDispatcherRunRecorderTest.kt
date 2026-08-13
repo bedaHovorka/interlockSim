@@ -265,22 +265,24 @@ class DefaultDispatcherRunRecorderTest {
 	// ── Latency percentiles (Issue #834, SP2c.11) ─────────────────────────────
 
 	@Test
-	fun `latency fields are zero when no ticks carried a latency`() {
+	fun `latency fields are null when no ticks carried a latency — absent is not zero`() {
 		val r = recorder()
 		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0))
 
 		val snap = r.snapshot()
-		assertThat(snap.latencyP50Ms).isEqualTo(0L)
-		assertThat(snap.latencyP95Ms).isEqualTo(0L)
-		assertThat(snap.latencyMaxMs).isEqualTo(0L)
+		// Review finding #3 (Issue #834): nothing was measured, so the fields are null (absent),
+		// never 0L (which would misread as "the model answered in 0 ms").
+		assertThat(snap.latencyP50Ms).isNull()
+		assertThat(snap.latencyP95Ms).isNull()
+		assertThat(snap.latencyMaxMs).isNull()
 	}
 
 	@Test
-	fun `latency fields are zero when the recorder has seen no ticks at all`() {
+	fun `latency fields are null when the recorder has seen no ticks at all`() {
 		val snap = recorder().snapshot()
-		assertThat(snap.latencyP50Ms).isEqualTo(0L)
-		assertThat(snap.latencyP95Ms).isEqualTo(0L)
-		assertThat(snap.latencyMaxMs).isEqualTo(0L)
+		assertThat(snap.latencyP50Ms).isNull()
+		assertThat(snap.latencyP95Ms).isNull()
+		assertThat(snap.latencyMaxMs).isNull()
 	}
 
 	@Test

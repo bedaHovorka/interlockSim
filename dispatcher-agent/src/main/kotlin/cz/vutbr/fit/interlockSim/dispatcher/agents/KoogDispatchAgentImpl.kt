@@ -131,7 +131,9 @@ class KoogDispatchAgentImpl(
 	 * exactly the measurement #834's sweep exists to take. [NextHopResolver.resolveAll] applies the
 	 * same same-tick `claimedSeparators` dedup
 	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs] applies, so this prompt and
-	 * the rule-based arm can never disagree about which train gets a given separator this tick.
+	 * the rule-based arm agree about which train gets a given separator this tick on real data
+	 * (where a train owns at most one eligible input per tick — see [NextHopResolver]'s KDoc for
+	 * that domain invariant and the accepted synthetic-data divergence).
 	 */
 	private fun buildUserPrompt(observation: DispatchObservation): String =
 		buildString {
@@ -342,6 +344,14 @@ class KoogDispatchAgentImpl(
 			is AppliedOutcome.OriginNotContiguous ->
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — ${outcome.reason}"
+
+			// Issue #834 review finding #2: a four-condition interlocking refusal. The kernel's
+			// reason already explains the refusal; retryable is surfaced so the model does not
+			// retry a permanent output defect. Not produced on the production request_route path.
+			is AppliedOutcome.ConditionFailed ->
+				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
+					"REFUSED — ${outcome.reason}" +
+					(if (outcome.retryable) " (retry later)" else " (fix the request)")
 
 			is AppliedOutcome.Released ->
 				if (outcome.anyReleased) {

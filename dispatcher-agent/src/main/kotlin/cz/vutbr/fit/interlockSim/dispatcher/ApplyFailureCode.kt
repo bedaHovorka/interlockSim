@@ -28,7 +28,8 @@ package cz.vutbr.fit.interlockSim.dispatcher
  * and excluded from the invalid-output rate.
  *
  * [ALL_PATHS_BLOCKED], [CONFLICT], and [NO_ROUTE_EXISTS] map one-to-one to the `:core`
- * `RouteRequestResult` non-success sealed subtypes and are read-only.
+ * `RouteRequestResult` non-success sealed subtypes they mirror; [ORIGIN_NOT_CONTIGUOUS] and
+ * [CONDITION_FAILED] mirror the remaining two. All are read-only.
  */
 enum class ApplyFailureCode {
 	/**
@@ -105,6 +106,33 @@ enum class ApplyFailureCode {
 	 * Fires on both the facade and legacy actuator paths, so a zero count is meaningful evidence.
 	 */
 	ORIGIN_NOT_CONTIGUOUS,
+
+	/**
+	 * One of the four ESA-11 route conditions refused the route (the four-condition
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.requestRoute] path), distinct from
+	 * [ORIGIN_NOT_CONTIGUOUS] (a non-contiguous origin is reported as its own code on both the
+	 * facade and legacy paths).
+	 *
+	 * Maps to `RouteRequestResult.ConditionFailed` (`:core`, read-only), which carries a
+	 * `retryable` flag: `true` is transient contention (a block occupied/switch locked by another
+	 * train — semantically akin to [ALL_PATHS_BLOCKED]/[CONFLICT]); `false` is a permanent
+	 * dispatcher output defect (empty route, mismatched entry signal, unknown name, un-clearable
+	 * signal — semantically akin to [NO_ROUTE_EXISTS]/[ORIGIN_NOT_CONTIGUOUS]). The single enum
+	 * value cannot itself split the two; the flag on the result and the rendered `reason` prose
+	 * do.
+	 *
+	 * **Not currently emitted in production** — production `request_route` tool calls go through
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.requestRouteByEndpoints], which never
+	 * produces a four-condition `ConditionFailed` (it sets [NO_PATH]/[ALL_PATHS_BLOCKED]/
+	 * [CONFLICT]/[ORIGIN_NOT_CONTIGUOUS] instead). This code exists so the exhaustive
+	 * `RouteRequestResult` → `ApplyFailureCode` mapping in [DispatchDecisionApplier] stays total
+	 * and a future caller of the four-condition path does not silently drop its refusals. The
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator] pre-populates it with a
+	 * zero count so it stays present in summaries.
+	 *
+	 * @since Issue #834 (SP2c.11 — Goal 10, review finding #2)
+	 */
+	CONDITION_FAILED,
 
 	/**
 	 * A command was dropped at apply time because it was structurally invalid in a way that

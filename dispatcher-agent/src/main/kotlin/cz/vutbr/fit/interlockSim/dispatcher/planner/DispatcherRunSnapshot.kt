@@ -44,6 +44,11 @@ import kotlinx.serialization.Serializable
  * make version 1 files fail to decode — `readAll` would then skip them with a WARN rather than
  * crash, but they would be silently lost from any aggregate. Give new fields defaults.
  *
+ * Type-widening a field from `Long` to `Long?` (as #834 review finding #3 did to the three latency
+ * fields) is backward-compatible without a version bump: a stored `0` decodes into `Long?(0)`, and
+ * only *new* rule-based / pre-inference-failure runs write `null`. The "absent is not zero"
+ * convention is then honest for the latency figures the way it already is for [railwayOutcome].
+ *
  * This is not hypothetical for [RunParameters]: its own properties were entirely non-defaulted
  * until Issue #834 (SP2c.11) added [RunParameters.inferenceTimeoutSeconds] and
  * [RunParameters.promptVariant] in this same version-2 wave. Both were given defaults precisely
@@ -79,9 +84,12 @@ import kotlinx.serialization.Serializable
  * @property validAt1 Fraction of single-action ticks where the action was valid (0.0–1.0).
  * @property correctAt1 Fraction of valid single-action ticks that were also correct (oracle match); `null` when no oracle.
  * @property oracleAgreementAt1 Fraction of ticks where the LLM's top action matched the oracle's; `null` when no oracle.
- * @property latencyP50Ms Median tick latency in milliseconds.
- * @property latencyP95Ms 95th-percentile tick latency in milliseconds.
- * @property latencyMaxMs Maximum tick latency in milliseconds.
+ * @property latencyP50Ms Median tick latency in milliseconds; `null` when no tick carried a
+ *   meaningful latency (e.g. the rule-based arm, or an LLM run whose every cycle failed before
+ *   inference started) — *not measured*, never *measured as none* (see
+ *   [nearestRankPercentile]'s "absent is not zero" convention).
+ * @property latencyP95Ms 95th-percentile tick latency in milliseconds; `null` when unmeasured.
+ * @property latencyMaxMs Maximum tick latency in milliseconds; `null` when unmeasured.
  * @property actionsByAuthor Count of actions per [ActionAuthor] name.
  * @property unattributedApplies Count of applied decisions whose correlation entry was missing.
  * @property terminalFallbackEngaged Whether the terminal fallback guard engaged during this run.
@@ -134,9 +142,9 @@ data class DispatcherRunSnapshot(
 	val validAt1: Double,
 	val correctAt1: Double?,
 	val oracleAgreementAt1: Double?,
-	val latencyP50Ms: Long,
-	val latencyP95Ms: Long,
-	val latencyMaxMs: Long,
+	val latencyP50Ms: Long? = null,
+	val latencyP95Ms: Long? = null,
+	val latencyMaxMs: Long? = null,
 	/** Count of actions per [ActionAuthor]; keys are [ActionAuthor] names. */
 	val actionsByAuthor: Map<String, Long>,
 	val unattributedApplies: Long,

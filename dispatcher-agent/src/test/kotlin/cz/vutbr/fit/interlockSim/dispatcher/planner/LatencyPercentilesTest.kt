@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -23,10 +24,12 @@ import org.junit.jupiter.api.Test
 @DisplayName("nearestRankPercentile")
 class LatencyPercentilesTest {
 	@Test
-	fun `empty sample set yields zero`() {
-		assertThat(nearestRankPercentile(emptyList(), 50.0)).isEqualTo(0L)
-		assertThat(nearestRankPercentile(emptyList(), 95.0)).isEqualTo(0L)
-		assertThat(nearestRankPercentile(emptyList(), 100.0)).isEqualTo(0L)
+	fun `empty sample set yields null — absent is not zero`() {
+		// Review finding #3 (Issue #834): an empty sample set means *not measured*, never
+		// *measured as none* — null, not 0L (which would misread as "the model answered in 0 ms").
+		assertThat(nearestRankPercentile(emptyList(), 50.0)).isNull()
+		assertThat(nearestRankPercentile(emptyList(), 95.0)).isNull()
+		assertThat(nearestRankPercentile(emptyList(), 100.0)).isNull()
 	}
 
 	@Test

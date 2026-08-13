@@ -139,6 +139,11 @@ fun DispatchDecision.applyToolDrivenToActuator(
 					toolDrivenLogger.warn {
 						"$logPrefix: RequestRoute origin not contiguous for $trainName — ${result.reason}"
 					}
+				is RouteRequestResult.ConditionFailed ->
+					toolDrivenLogger.warn {
+						"$logPrefix: RequestRoute four-condition refusal for $trainName " +
+							"(${if (result.retryable) "transient" else "permanent"}): ${result.reason}"
+					}
 			}
 		}
 		DispatchDecision.NoAction,
