@@ -165,7 +165,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Workers for each entry/exit point
 	 */
-	private var workers: MutableMap<DynamicInOut, InOutWorker> = HashMap()
+	private var workers: MutableMap<DynamicInOut, InOutWorker> = mutableMapOf()
 
 	/**
 	 * Cache of dynamic InOut wrappers (lazily created)
