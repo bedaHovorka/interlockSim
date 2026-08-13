@@ -133,8 +133,8 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 3`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_FATAL_EXCEPTION_FIELDS)
+	fun `current schema version is 4`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_TERMINATED_EARLY_CAUSE)
 	}
 
 	@Test
@@ -237,6 +237,9 @@ class DispatcherRunSnapshotTest {
 	private companion object {
 		/** Pinned literally so a future bump has to touch this test deliberately. */
 		private const val SCHEMA_VERSION_WITH_FATAL_EXCEPTION_FIELDS: Int = 3
+
+		/** Pinned literally so a future bump has to touch this test deliberately. */
+		private const val SCHEMA_VERSION_WITH_TERMINATED_EARLY_CAUSE: Int = 4
 
 		private val json =
 			Json {

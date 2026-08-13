@@ -689,7 +689,7 @@ class RunReportAggregatorTest {
 			terminalFallbackTickIndex = if (fallback) 5L else null,
 			c7Clean = c7Clean,
 			completedNaturally = completedNaturally,
-			endCause = if (completedNaturally) RunEndCause.NATURAL_COMPLETION else RunEndCause.TIMEOUT_ABORT,
+			endCause = if (completedNaturally) RunEndCause.NATURAL_COMPLETION else RunEndCause.TERMINATED_EARLY,
 			railwayOutcome = railwayOutcome,
 			fatalExceptionCount = fatalExceptionCount,
 			fatalExceptionFirstMessage = fatalExceptionFirstMessage

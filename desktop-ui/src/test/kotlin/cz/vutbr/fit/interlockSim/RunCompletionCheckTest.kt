@@ -133,7 +133,7 @@ class RunCompletionCheckTest {
 	@DisplayName("only a completed run maps to NATURAL_COMPLETION")
 	fun outcomeMapsToRunEndCause() {
 		assertThat(RunOutcome.COMPLETED.toRunEndCause()).isEqualTo(RunEndCause.NATURAL_COMPLETION)
-		assertThat(RunOutcome.TERMINATED_EARLY.toRunEndCause()).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(RunOutcome.TERMINATED_EARLY.toRunEndCause()).isEqualTo(RunEndCause.TERMINATED_EARLY)
 		assertThat(RunOutcome.NOT_STARTED.toRunEndCause()).isEqualTo(RunEndCause.CRASH)
 	}
 }

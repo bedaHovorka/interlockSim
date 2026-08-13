@@ -165,8 +165,14 @@ data class DispatcherRunSnapshot(
 		 * - **2** — SP2c.11 (#834), added [railwayOutcome].
 		 * - **3** — measurement-integrity fix for #834's C2 condition, added
 		 *   [fatalExceptionCount] and [fatalExceptionFirstMessage].
+		 * - **4** — Issue #909, added [RunEndCause.TERMINATED_EARLY] to distinguish a
+		 *   simulation event-queue drain (deadlock) from a wall-clock TIMEOUT_ABORT.
+		 *   Old run JSONs that stored `"endCause": "TIMEOUT_ABORT"` for a
+		 *   [RunOutcome.TERMINATED_EARLY] headless run remain decodable: the enum value
+		 *   still exists in [RunEndCause]. They will continue to report `completedNaturally
+		 *   = false`, which is the correct gate behaviour.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 3
+		const val CURRENT_SCHEMA_VERSION: Int = 4
 	}
 
 	init {

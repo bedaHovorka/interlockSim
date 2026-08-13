@@ -52,17 +52,19 @@ enum class RunOutcome(
  * reintroduced one layer up.
  *
  * - [RunOutcome.COMPLETED] → [RunEndCause.NATURAL_COMPLETION]
- * - [RunOutcome.TERMINATED_EARLY] → [RunEndCause.TIMEOUT_ABORT] — the run stopped short of its
- *   requested horizon; #847's own design already names this cause for a run it had to cut off.
+ * - [RunOutcome.TERMINATED_EARLY] → [RunEndCause.TERMINATED_EARLY] — the kDisco event queue
+ *   drained before the requested horizon (deadlock or early process exit). This is deliberately
+ *   distinct from [RunEndCause.TIMEOUT_ABORT], which is reserved for the sweep driver killing the
+ *   JVM on wall-clock. See Issue #909 for the disambiguation rationale.
  * - [RunOutcome.NOT_STARTED] → [RunEndCause.CRASH] — setup failed, so no simulation ran.
  *   Unreachable in practice, since nothing is persisted when no context was built.
  *
- * @since Issue #847 round 4 (PR #891)
+ * @since Issue #847 round 4 (PR #891); updated Issue #909 (disambiguate TERMINATED_EARLY)
  */
 fun RunOutcome.toRunEndCause(): RunEndCause =
 	when (this) {
 		RunOutcome.COMPLETED -> RunEndCause.NATURAL_COMPLETION
-		RunOutcome.TERMINATED_EARLY -> RunEndCause.TIMEOUT_ABORT
+		RunOutcome.TERMINATED_EARLY -> RunEndCause.TERMINATED_EARLY
 		RunOutcome.NOT_STARTED -> RunEndCause.CRASH
 	}
 
