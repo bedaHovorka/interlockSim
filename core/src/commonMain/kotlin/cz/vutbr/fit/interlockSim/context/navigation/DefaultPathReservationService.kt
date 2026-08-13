@@ -14,6 +14,7 @@ import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -2389,9 +2390,31 @@ class DefaultPathReservationService(
 			// Path is conceptually: inOut.inSemaphore → blocks → target
 			// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
 			start is DynamicInOut -> {
+				val firstBlock = forwardBlocks.first()
+				// Issue #911: mirror startFacesTravelDirection's fail-open tolerance for a
+				// route extension's non-adjacent start (Issue #893 task A1). A route extension
+				// re-invokes reservePath with the ORIGINAL start; once every block adjacent to
+				// it is already owned, forwardBlocks.first() is several hops away and is not
+				// literally an end of this InOut's track, so maxSpeed(start) throws
+				// SimulationException[FATAL] instead of returning a value. There is nothing new
+				// to configure at a boundary this InOut does not bound -- the adjacent block
+				// already carries the speed set by the original grant
+				// (PathReservationRegistry.resetUnrecordedStartSignal's KDoc documents this
+				// exact steady state) -- so treat the START as already configured rather than
+				// failing the whole candidate. A genuine configuration failure below (e.g.
+				// setUpSpeed itself throwing) still fails closed, unchanged.
+				val maxSpeed =
+					try {
+						firstBlock.maxSpeed(start)
+					} catch (e: SimulationException) {
+						logger.debug(e) {
+							"reservePath: Could not resolve maxSpeed for InOut START ${start.name} " +
+								"toward $firstBlock (likely non-adjacent, e.g. a route extension); " +
+								"treating as already configured"
+						}
+						return true
+					}
 				try {
-					val firstBlock = forwardBlocks.first()
-					val maxSpeed = firstBlock.maxSpeed(start)
 					// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
 					// For valid direction: from=anti(inSem.dir), to=inSem.dir
 					// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
