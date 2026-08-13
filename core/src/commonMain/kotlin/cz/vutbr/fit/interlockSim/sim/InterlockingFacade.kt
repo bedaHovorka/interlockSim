@@ -156,6 +156,26 @@ interface InterlockingFacade {
 			data object NonContiguousStart : DenialCause
 
 			/**
+			 * The candidate that came closest was **permanently** impossible, not merely busy: a
+			 * candidate's START semaphore faced away from the requested direction of travel (G4),
+			 * or a switch along a candidate could not be set to the position the route required.
+			 * Maps from
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible].
+			 *
+			 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention and
+			 * clears on its own; this one will not, while the network topology and signal facings
+			 * stay as they are. Must never be re-sorted into [AllPathsBlocked] — folding it in is
+			 * exactly the malformation Issue #903 exists to prevent (the same class [NonContiguousStart]
+			 * was already carved out of [AllPathsBlocked] to fix, per Issue #893).
+			 *
+			 * @property reason English explanation of which permanent-impossibility class fired.
+			 * @since Issue #903
+			 */
+			data class GeometricallyImpossible(
+				val reason: String
+			) : DenialCause
+
+			/**
 			 * One of the four ESA-11 route conditions ([requestRoute]) failed. Distinct from
 			 * [Other] (the endpoint-resolution residual): this cause has a four-condition denial
 			 * behind it, not an unresolvable endpoint, and it carries a [retryable] flag so a

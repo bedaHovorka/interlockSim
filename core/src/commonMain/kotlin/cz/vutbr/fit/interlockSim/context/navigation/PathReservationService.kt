@@ -171,6 +171,35 @@ interface PathReservationService {
 			val startName: String,
 			val reason: String
 		) : ReservationResult()
+
+		/**
+		 * The candidate that came closest was **permanently** impossible, not merely busy: a
+		 * candidate's START semaphore faced away from the requested direction of travel (G4), or
+		 * a switch along a candidate could not be set to the position the route required.
+		 *
+		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention (a block
+		 * occupied/reserved by another train) and clears on its own, so a caller should simply
+		 * retry next tick. This one will never succeed for the identical request while the
+		 * network topology and signal facings stay as they are -- the caller (or the LLM
+		 * dispatcher behind it) has to ask for a different route. Collapsing the two hides a
+		 * dispatcher-output defect inside a routine-traffic counter, exactly the malformation
+		 * class [NonContiguousStart] (Issue #893) was carved out of [AllPathsBlocked] to fix
+		 * (`PATH_RESERVATION_ARCHITECTURE.md` §5: G4 and the contiguity precondition are "the
+		 * same malformation class -- a route the train cannot actually use").
+		 *
+		 * Set whenever **any** candidate in the attempt hits this failure mode, even if other
+		 * candidates in the same attempt were only ordinarily blocked -- first-hit-wins, mirroring
+		 * how [NonContiguousStart] already short-circuits ahead of blocked-candidate tracking
+		 * (traffic-simulation-expert ruling, Issue #903: the fact one candidate is permanently
+		 * impossible is real and permanent information regardless of what other candidates did).
+		 *
+		 * @property reason English explanation of which permanent-impossibility class fired
+		 *   (rear-facing START or unconfigurable switch) and which candidate hit it.
+		 * @since Issue #903
+		 */
+		data class GeometricallyImpossible(
+			val reason: String
+		) : ReservationResult()
 	}
 
 	/**

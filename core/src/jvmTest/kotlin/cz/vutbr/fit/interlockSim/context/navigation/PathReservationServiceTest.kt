@@ -2676,7 +2676,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - second train
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			// Issue #903: among the semaphores reservePathToAnyNextSemaphore tries for the
+			// second train, at least one candidate is a permanent geometric impossibility
+			// (rear-facing START or unconfigurable switch), not merely blocked by the first
+			// train -- first-hit-wins classification surfaces that instead of AllPathsBlocked.
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		}
 	}
 
@@ -3031,9 +3035,12 @@ class PathReservationServiceTest : KoinTestBase() {
 			// case this test does not intend to exercise.
 			val result = service.reservePath("rearTrain", doA1, doB1, maxDepth = 2)
 
+			// Issue #903: a rear-facing START is a permanent geometric impossibility, not
+			// ordinary contention -- it must never be reported as AllPathsBlocked (which the
+			// dispatcher's invalid-output rate excludes and which invites a pointless retry).
 			assertThat(result)
 				.withMessage("a rear-facing START must not be granted a route")
-				.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+				.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
 			assertThat(registry.getBlocks("rearTrain"))
 				.withMessage("a rejected start must reserve nothing")

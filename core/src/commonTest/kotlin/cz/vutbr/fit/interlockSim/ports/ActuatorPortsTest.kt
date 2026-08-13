@@ -385,6 +385,7 @@ class ActuatorPortsTest {
 				is RouteRequestResult.Conflict -> "conflict"
 				is RouteRequestResult.OriginNotContiguous -> "origin-not-contiguous"
 				is RouteRequestResult.ConditionFailed -> "condition-failed"
+				is RouteRequestResult.GeometricallyImpossible -> "geometrically-impossible"
 			}
 		assertThat(describe(RouteRequestResult.Reserved("T1", 3))).isEqualTo("reserved")
 		assertThat(describe(RouteRequestResult.NoRouteExists("A", "B"))).isEqualTo("no-route")
@@ -394,6 +395,8 @@ class ActuatorPortsTest {
 			.isEqualTo("origin-not-contiguous")
 		assertThat(describe(RouteRequestResult.ConditionFailed("reason", retryable = true)))
 			.isEqualTo("condition-failed")
+		assertThat(describe(RouteRequestResult.GeometricallyImpossible("reason")))
+			.isEqualTo("geometrically-impossible")
 	}
 
 	@Test

@@ -349,6 +349,20 @@ class DefaultInterlockingFacade(
 					InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart
 				)
 			}
+			is PathReservationService.ReservationResult.GeometricallyImpossible -> {
+				// Issue #903: a permanent impossibility (rear-facing START or unconfigurable
+				// switch), not ordinary contention. The GeometricallyImpossible cause lets
+				// DefaultNetworkActuatorPort map this denial to its own
+				// RouteRequestResult.GeometricallyImpossible, excluded from the contention bucket.
+				logger.info {
+					"Route DENIED for trainId=$trainId: geometrically impossible " +
+						"($fromEndpointName → $toEndpointName): ${result.reason}"
+				}
+				InterlockingFacade.RouteResponse.Denied(
+					result.reason,
+					InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible(result.reason)
+				)
+			}
 		}
 	}
 

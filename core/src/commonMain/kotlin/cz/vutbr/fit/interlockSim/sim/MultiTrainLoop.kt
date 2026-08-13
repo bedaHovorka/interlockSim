@@ -351,6 +351,14 @@ open class MultiTrainLoop(
 							"MultiTrainLoop: non-contiguous origin for ${train.name}: ${result.reason}"
 						}
 					}
+					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
+						// Issue #903: a permanent impossibility (rear-facing START or
+						// unconfigurable switch) for this candidate, not ordinary contention.
+						// Logged at WARN and the outer loop moves on to the next candidate path.
+						logger.warn {
+							"MultiTrainLoop: geometrically impossible route for ${train.name}: ${result.reason}"
+						}
+					}
 				}
 			} finally {
 				for (resource in acquired) {

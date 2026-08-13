@@ -212,6 +212,13 @@ class CompactTextRenderer : ObservationRenderer {
 				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
 					"ORIGIN_NOT_CONTIGUOUS (from ${outcome.fromEndpointName})"
 
+			// Issue #903: permanent geometric impossibility (rear-facing START or unconfigurable
+			// switch), not ordinary contention. Surfaced with the full reason, mirroring
+			// ConditionFailed below rather than OriginNotContiguous's minimal shape.
+			is AppliedOutcome.GeometricallyImpossible ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
+					"GEOMETRICALLY_IMPOSSIBLE — ${outcome.reason}"
+
 			// Issue #834 review finding #2: four-condition refusal. Not produced on the production
 			// request_route path; kept total by the same exhaustiveness property as the siblings.
 			is AppliedOutcome.ConditionFailed ->

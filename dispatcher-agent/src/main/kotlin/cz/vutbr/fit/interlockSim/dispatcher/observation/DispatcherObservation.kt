@@ -270,6 +270,28 @@ sealed interface AppliedOutcome {
 		override val tickIndex: Long
 	) : AppliedOutcome
 
+	/**
+	 * `request_route` failed because the candidate that came closest was **permanently**
+	 * impossible, not merely busy: a candidate's START semaphore faced away from the requested
+	 * direction of travel (G4), or a switch along a candidate could not be set to the position
+	 * the route required.
+	 *
+	 * Unlike [Blocked], retrying the identical request is futile while the network topology and
+	 * signal facings stay as they are — the agent has to ask for a different route, which is why
+	 * [reason] is carried verbatim from `DefaultPathReservationService`.
+	 *
+	 * @since Issue #903
+	 */
+	data class GeometricallyImpossible(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		/** English explanation from the reservation kernel naming the impossibility class. */
+		val reason: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
 	/** `cancel_route` completed; [anyReleased] is `true` if at least one block was released. */
 	data class Released(
 		val trainId: String,

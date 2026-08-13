@@ -379,4 +379,33 @@ sealed class RouteRequestResult {
 		val reason: String,
 		val retryable: Boolean
 	) : RouteRequestResult()
+
+	/**
+	 * The candidate that came closest was **permanently** impossible, not merely busy: a
+	 * candidate's START semaphore faced away from the requested direction of travel (G4), or a
+	 * switch along a candidate could not be set to the position the route required. Maps from
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible]
+	 * via
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible].
+	 *
+	 * Distinct from [AllPathsBlocked] on purpose, exactly as [OriginNotContiguous] is: retrying
+	 * the identical request while the network topology and signal facings stay as they are will
+	 * always fail, and counting it as contention would hide a dispatcher-output defect inside a
+	 * routine-traffic metric (Issue #903, same reasoning as Issue #893).
+	 *
+	 * ## Produced on both the facade and the legacy/no-facade path
+	 *
+	 * [DefaultNetworkActuatorPort] constructs this on the legacy/no-facade path directly from
+	 * `ReservationResult.GeometricallyImpossible`, and on the facade path (production
+	 * dispatcher-agent runs) from `DenialCause.GeometricallyImpossible` — the discriminant
+	 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through from the same
+	 * kernel result, so both branches yield the same [RouteRequestResult] for the same kernel
+	 * outcome (invariant I4, same as [OriginNotContiguous]).
+	 *
+	 * @property reason English explanation of which permanent-impossibility class fired.
+	 * @since Issue #903
+	 */
+	data class GeometricallyImpossible(
+		val reason: String
+	) : RouteRequestResult()
 }

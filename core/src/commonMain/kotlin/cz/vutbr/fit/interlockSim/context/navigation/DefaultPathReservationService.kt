@@ -524,6 +524,12 @@ class DefaultPathReservationService(
 		// Used to emit ReservationConflictDetected when AllPathsBlocked is about to be returned.
 		var firstBlockedConflict: Pair<DynamicTrackBlock, String>? = null
 
+		// Issue #903: tracks whether ANY candidate hit a permanent geometric impossibility
+		// (rear-facing START or unconfigurable switch), as opposed to ordinary contention.
+		// First-hit-wins: set once, never overwritten, and takes priority over
+		// firstBlockedConflict at the fallthrough return (traffic-simulation-expert ruling).
+		var firstGeometricFailure: String? = null
+
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in candidatePaths.withIndex()) {
 			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
@@ -625,6 +631,14 @@ class DefaultPathReservationService(
 						// so try the remaining candidate paths like the other failure modes
 						// (blocks-not-free, atomic-reservation-fail) rather than giving up early —
 						// SP0.11 review follow-up (was `return AllPathsBlocked(1)`).
+						// Issue #903: this is a PERMANENT impossibility, not ordinary contention --
+						// record it (first-hit-wins) so the fallthrough return can classify it
+						// correctly instead of reporting AllPathsBlocked.
+						firstGeometricFailure =
+							recordGeometricFailureOnce(
+								firstGeometricFailure,
+								"Switch along candidate $index could not be configured for the requested route"
+							)
 						continue
 					}
 
@@ -635,7 +649,7 @@ class DefaultPathReservationService(
 						// reservePathToAnyNextSemaphore does, so a signal-config failure can reset
 						// exactly what THIS attempt recorded before it failed (Issue #893, task A5).
 						val clearedBeforeStart = clearedSemaphores[trainId]?.toSet() ?: emptySet()
-						val signalConfigured = configureStartSignal(trainId, start, forwardBlocks)
+						val signalResult = configureStartSignal(trainId, start, forwardBlocks)
 
 						// Rollback reservation if signal configuration failed
 						// This prevents trains from waiting indefinitely at STOP signals.
@@ -646,7 +660,13 @@ class DefaultPathReservationService(
 						// released; the train's earlier hops survive so it keeps waiting for its
 						// through route. The candidate is then rolled back cleanly, so try the
 						// remaining candidate paths like the other failure modes.
-						if (!signalConfigured) {
+						if (signalResult != StartSignalResult.Configured) {
+							// Issue #903: a G4 rejection is a PERMANENT impossibility, not ordinary
+							// contention -- record it (first-hit-wins) so the fallthrough return can
+							// classify it correctly. A genuine configuration exception stays folded
+							// into ordinary contention/rollback, unchanged.
+							firstGeometricFailure =
+								recordG4FailureOnce(firstGeometricFailure, signalResult, index)
 							// Issue #893 task A5: configureStartSignal can leave a PARTIAL aspect
 							// write behind -- the underlying config call sets the physical aspect
 							// and still throws before recordClearedSemaphore runs. Reset the
@@ -745,20 +765,45 @@ class DefaultPathReservationService(
 			}
 		}
 
-		// All paths tried, all were blocked.
-		// No BlockEvent.ReservationConflictDetected emission here (Goal 3): a blocked-path
-		// outcome is routine "path busy, will retry" contention for the collision-warning layer.
-		// The contention is recorded so [flushUnresolvedConflicts] can surface it if it never
-		// resolves before the run ends (see the class-level disambiguation comment).
-		//
-		// ConflictDetectedEvent (Goal 9 SP1) IS emitted mid-run (it does not trigger an
-		// automatic simulation pause, so it can be delivered without the false-positive-pause
-		// problem that led to the Goal 3 restriction) -- but only the FIRST time a given
-		// (trainId, block) contention is observed; see [recordContentionAndEmitIfNew].
+		// All paths tried, all were blocked or impossible.
+		// Issue #903: a permanent geometric impossibility on ANY candidate takes priority over
+		// AllPathsBlocked -- first-hit-wins (traffic-simulation-expert ruling). Extracted into
+		// [classifyExhaustedAttempt] so this branching stays out of reservePath's own cyclomatic
+		// complexity count.
+		return classifyExhaustedAttempt(trainId, firstGeometricFailure, firstBlockedConflict, candidatePaths.size)
+	}
+
+	/**
+	 * Classifies the outcome of [reservePath] once every candidate path has been tried and none
+	 * succeeded. Extracted so this branching stays out of [reservePath]'s own cyclomatic
+	 * complexity count (Issue #903 review follow-up).
+	 *
+	 * A permanent geometric impossibility (Issue #903) takes priority over ordinary contention:
+	 * it is checked first and, when present, reported instead of [AllPathsBlocked] -- a
+	 * permanent impossibility is not contention and must not be recorded/reported as such.
+	 *
+	 * Otherwise: no [BlockEvent.ReservationConflictDetected] emission here (Goal 3) -- a
+	 * blocked-path outcome is routine "path busy, will retry" contention for the
+	 * collision-warning layer. The contention is recorded so [flushUnresolvedConflicts] can
+	 * surface it if it never resolves before the run ends (see the class-level disambiguation
+	 * comment). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted mid-run (it does not trigger an
+	 * automatic simulation pause, so it can be delivered without the false-positive-pause problem
+	 * that led to the Goal 3 restriction) -- but only the FIRST time a given (trainId, block)
+	 * contention is observed; see [recordContentionAndEmitIfNew].
+	 */
+	private fun classifyExhaustedAttempt(
+		trainId: String,
+		firstGeometricFailure: String?,
+		firstBlockedConflict: Pair<DynamicTrackBlock, String>?,
+		attemptedPaths: Int
+	): PathReservationService.ReservationResult {
+		if (firstGeometricFailure != null) {
+			return PathReservationService.ReservationResult.GeometricallyImpossible(firstGeometricFailure)
+		}
 		firstBlockedConflict?.let { (blockedBlock, owningTrain) ->
 			recordContentionAndEmitIfNew(trainId, blockedBlock, owningTrain)
 		}
-		return PathReservationService.ReservationResult.AllPathsBlocked(candidatePaths.size)
+		return PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths)
 	}
 
 	/**
@@ -1150,6 +1195,20 @@ class DefaultPathReservationService(
 							"'$trainId': ${result.reason}"
 					}
 					return result
+				}
+				// Issue #903: unlike NonContiguousStart (which is about `start` and therefore
+				// identical for every candidate here), this depends on the specific candidate
+				// path to `semaphore`, so it does not doom every remaining attempt -- keep
+				// trying, but preserve the more informative reason (first-hit-wins) via
+				// [firstHitWinsGeometricResult] instead of falling back to a plain AllPathsBlocked
+				// if every candidate exhausts.
+				is PathReservationService.ReservationResult.GeometricallyImpossible -> {
+					logger.trace {
+						"reservePathToAnyNextSemaphore: Path to $semaphore geometrically impossible " +
+							"(${result.reason}), trying next"
+					}
+					lastResult = firstHitWinsGeometricResult(lastResult, result)
+					continue
 				}
 			}
 		}
@@ -2329,31 +2388,95 @@ class DefaultPathReservationService(
 	}
 
 	/**
+	 * Outcome of [configureStartSignal], distinguishing a permanent G4 rear-facing rejection
+	 * (Issue #903) from any other configuration failure (unsupported START type, or a genuine
+	 * exception from the underlying signal-configuration call) so the caller can classify the
+	 * candidate correctly instead of folding both into ordinary contention.
+	 *
+	 * @since Issue #903
+	 */
+	private enum class StartSignalResult {
+		/** The start signal/inSemaphore was configured (or treated as already configured). */
+		Configured,
+
+		/** G4: an adjacent semaphore START faces away from the requested direction of travel. */
+		RejectedG4,
+
+		/** Any other failure: unsupported START type, or a genuine configuration exception. */
+		ConfigFailed
+	}
+
+	/**
+	 * First-hit-wins recorder for [reservePath]'s `firstGeometricFailure` tracker (Issue #903):
+	 * returns [current] unchanged if already set, otherwise [reason]. Extracted so the call site
+	 * in [reservePath]'s candidate loop stays a single line, keeping that method's cyclomatic
+	 * complexity under threshold.
+	 */
+	private fun recordGeometricFailureOnce(
+		current: String?,
+		reason: String
+	): String? = current ?: reason
+
+	/**
+	 * First-hit-wins recorder for [reservePathToAnyNextSemaphore]'s `lastResult` tracker
+	 * (Issue #903): keeps the first [PathReservationService.ReservationResult.GeometricallyImpossible]
+	 * seen across candidate semaphores rather than letting a later plain contention result
+	 * overwrite the more informative one. Extracted so the call site stays a single line,
+	 * keeping [reservePathToAnyNextSemaphore] under its line-count threshold.
+	 */
+	private fun firstHitWinsGeometricResult(
+		current: PathReservationService.ReservationResult?,
+		candidate: PathReservationService.ReservationResult.GeometricallyImpossible
+	): PathReservationService.ReservationResult =
+		if (current is PathReservationService.ReservationResult.GeometricallyImpossible) current else candidate
+
+	/**
+	 * [recordGeometricFailureOnce], specialised for the G4 rejection case: only records a reason
+	 * when [signalResult] is [StartSignalResult.RejectedG4] (a genuine configuration exception —
+	 * [StartSignalResult.ConfigFailed] — must not be recorded as a geometric impossibility).
+	 */
+	private fun recordG4FailureOnce(
+		current: String?,
+		signalResult: StartSignalResult,
+		candidateIndex: Int
+	): String? =
+		if (signalResult == StartSignalResult.RejectedG4) {
+			recordGeometricFailureOnce(
+				current,
+				"START semaphore for candidate $candidateIndex faces away from the requested direction of travel"
+			)
+		} else {
+			current
+		}
+
+	/**
 	 * Configure the START separator's signal for a freshly reserved candidate (Step 2g).
 	 *
 	 * Extracted from [reservePath] so the candidate-loop body stays under the cyclomatic
-	 * complexity threshold. Returns `true` when the start signal/inSemaphore was configured
-	 * for the reserved [forwardBlocks], `false` when configuration threw — in which case the
-	 * caller rolls the candidate back via [rollbackUnconfigurableCandidate] and continues to
-	 * the next candidate.
+	 * complexity threshold. Returns [StartSignalResult.Configured] when the start
+	 * signal/inSemaphore was configured for the reserved [forwardBlocks], and a specific failure
+	 * variant otherwise — in which case the caller rolls the candidate back via
+	 * [rollbackUnconfigurableCandidate] and continues to the next candidate.
 	 *
 	 * - START is a [DynamicRailSemaphore]: configure it for the first forward block.
 	 * - START is a [DynamicInOut]: configure its embedded `inSemaphore` (train entering from
 	 *   the external network). `inSemaphore.direction() == anti(InOut.direction())` per
 	 *   `InOut.kt`, so `from = InOut.direction()` and `to = anti(InOut.direction())`.
-	 * - Any other START type: no signal to configure → `false` (rolls the candidate back).
+	 * - Any other START type: no signal to configure → [StartSignalResult.ConfigFailed] (rolls
+	 *   the candidate back).
 	 *
 	 * @param start The candidate's start separator (semaphore or InOut).
 	 * @param forwardBlocks The blocks just reserved for this candidate (first one drives the
 	 *   signal's allowed speed).
-	 * @return `true` on successful configuration, `false` on failure or unsupported START.
-	 * @since Issue #742 SP0.11 review follow-up (extracted from reservePath Step 2g)
+	 * @return [StartSignalResult.Configured] on success; a failure variant otherwise.
+	 * @since Issue #742 SP0.11 review follow-up (extracted from reservePath Step 2g); return
+	 *   type widened from `Boolean` to [StartSignalResult] by Issue #903.
 	 */
 	private fun configureStartSignal(
 		trainId: String,
 		start: DynamicPathSeparator,
 		forwardBlocks: List<DynamicTrackBlock>
-	): Boolean =
+	): StartSignalResult =
 		when {
 			// Case 1: START is a semaphore -> configure it (train departing from semaphore)
 			start is DynamicRailSemaphore -> {
@@ -2369,7 +2492,7 @@ class DefaultPathReservationService(
 						"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
 							"away from the requested direction of travel toward ${forwardBlocks.first()}"
 					}
-					false
+					StartSignalResult.RejectedG4
 				} else {
 					try {
 						environment.configureSemaphoreSignal(start, forwardBlocks.first())
@@ -2377,12 +2500,12 @@ class DefaultPathReservationService(
 						logger.debug {
 							"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
 						}
-						true
+						StartSignalResult.Configured
 					} catch (e: Exception) {
 						logger.warn(e) {
 							"reservePath: Semaphore signal configuration failed - rolling back reservation"
 						}
-						false
+						StartSignalResult.ConfigFailed
 					}
 				}
 			}
@@ -2412,7 +2535,7 @@ class DefaultPathReservationService(
 								"toward $firstBlock (likely non-adjacent, e.g. a route extension); " +
 								"treating as already configured"
 						}
-						return true
+						return StartSignalResult.Configured
 					}
 				try {
 					// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
@@ -2430,15 +2553,15 @@ class DefaultPathReservationService(
 					logger.debug {
 						"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
 					}
-					true
+					StartSignalResult.Configured
 				} catch (e: Exception) {
 					logger.warn(e) {
 						"reservePath: InOut inSemaphore configuration failed - rolling back reservation"
 					}
-					false
+					StartSignalResult.ConfigFailed
 				}
 			}
-			else -> false
+			else -> StartSignalResult.ConfigFailed
 		}
 
 	/**

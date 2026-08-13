@@ -164,9 +164,14 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 
 		val result = service.reservePath("faultTrain", doA1, zA)
 
+		// Issue #903: reservePath finds more than one topological candidate from doA1 to zA
+		// (vyhybna is a loop network); alongside the direct candidate this fault injection
+		// targets, at least one alternate candidate hits a permanent geometric impossibility
+		// (an unconfigurable switch on the longer loop route) -- first-hit-wins classification
+		// surfaces that over the direct candidate's injected exception.
 		assertThat(result)
 			.withMessage("a signal-config failure must fail the reservation")
-			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
 		assertThat(registry.getBlocks("faultTrain"))
 			.withMessage("a rolled-back candidate must hold no blocks")
@@ -220,9 +225,12 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 		faultyEnvironment.armed = true
 		val extension = service.reservePath("extendTrain", doA1, inOutA)
 
+		// Issue #903: same reasoning as the first test in this file -- an alternate topological
+		// candidate hits a permanent geometric impossibility, which first-hit-wins classification
+		// surfaces over the direct candidate's injected exception.
 		assertThat(extension)
 			.withMessage("the injected fault must fail the extension attempt")
-			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		assertThat(registry.getBlocks("extendTrain").toSet())
 			.withMessage("a failed extension must not touch the train's earlier, still-valid blocks")
 			.isEqualTo(blocksBefore)

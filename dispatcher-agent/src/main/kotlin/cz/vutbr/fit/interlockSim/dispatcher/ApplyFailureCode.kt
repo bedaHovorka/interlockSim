@@ -142,5 +142,23 @@ enum class ApplyFailureCode {
 	 * system should never produce it.  Its appearance in metrics indicates a gap in
 	 * [ActionValidator] coverage.
 	 */
-	DROPPED_INVALID
+	DROPPED_INVALID,
+
+	/**
+	 * The candidate that came closest was **permanently** impossible, not merely busy: a
+	 * candidate's START semaphore faced away from the requested direction of travel (G4), or a
+	 * switch along a candidate could not be set to the position the route required.
+	 *
+	 * Maps to `RouteRequestResult.GeometricallyImpossible` (`:core`, read-only).
+	 *
+	 * **Is** an LLM failure, unlike [ALL_PATHS_BLOCKED] — same framing as
+	 * [ORIGIN_NOT_CONTIGUOUS]. Contention clears on its own and a retry eventually succeeds; a
+	 * geometrically impossible route never will while the network topology and signal facings
+	 * stay as they are — the dispatcher has to ask for a different route. Counting the two
+	 * together would hide exactly the defect this code exists to measure, the same malformation
+	 * class [ORIGIN_NOT_CONTIGUOUS] was carved out of [ALL_PATHS_BLOCKED] to fix.
+	 *
+	 * @since Issue #903
+	 */
+	GEOMETRICALLY_IMPOSSIBLE
 }

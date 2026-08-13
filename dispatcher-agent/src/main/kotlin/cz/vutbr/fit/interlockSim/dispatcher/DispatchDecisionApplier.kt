@@ -714,6 +714,13 @@ class DispatchDecisionApplier(
 				}
 				onFailedReservation()
 			}
+			is RouteRequestResult.GeometricallyImpossible -> {
+				logger.warn {
+					"ReservePath: geometrically impossible for ${decision.trainId} " +
+						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}): ${result.reason}"
+				}
+				onFailedReservation()
+			}
 		}
 	}
 
@@ -856,6 +863,10 @@ class DispatchDecisionApplier(
 				handleRequestRouteConditionFailed(decision, result, correlation)
 				ApplyFailureCode.CONDITION_FAILED
 			}
+			is RouteRequestResult.GeometricallyImpossible -> {
+				handleRequestRouteGeometricallyImpossible(decision, result, correlation)
+				ApplyFailureCode.GEOMETRICALLY_IMPOSSIBLE
+			}
 		}
 	}
 
@@ -916,6 +927,37 @@ class DispatchDecisionApplier(
 				fromEndpointName = decision.fromEndpointName,
 				toEndpointName = decision.toEndpointName,
 				retryable = result.retryable,
+				reason = result.reason,
+				id = it.id,
+				tickIndex = it.tickIndex
+			)
+		}
+	}
+
+	/**
+	 * Handles the [RouteRequestResult.GeometricallyImpossible] branch of [applyRequestRoute] —
+	 * extracted for the same reason as [handleRequestRouteOriginNotContiguous] (detekt
+	 * LongMethod budget).
+	 *
+	 * Publishes [AppliedOutcome.GeometricallyImpossible] so the agent learns the requested route
+	 * is permanently impossible (rear-facing START or unconfigurable switch), not merely busy.
+	 *
+	 * @since Issue #903
+	 */
+	private fun handleRequestRouteGeometricallyImpossible(
+		decision: DispatchDecision.RequestRoute,
+		result: RouteRequestResult.GeometricallyImpossible,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.warn {
+			"DispatchDecisionApplier: RequestRoute geometrically impossible for " +
+				"${decision.trainName}: ${result.reason}"
+		}
+		publishOutcome(correlation) {
+			AppliedOutcome.GeometricallyImpossible(
+				trainId = decision.trainName,
+				fromEndpointName = decision.fromEndpointName,
+				toEndpointName = decision.toEndpointName,
 				reason = result.reason,
 				id = it.id,
 				tickIndex = it.tickIndex

@@ -169,6 +169,16 @@ class DefaultNetworkActuatorPort(
 				}
 				RouteRequestResult.OriginNotContiguous(fromEndpointName, result.reason)
 			}
+			is PathReservationService.ReservationResult.GeometricallyImpossible -> {
+				// Issue #903: a permanent impossibility (rear-facing START or unconfigurable
+				// switch), not ordinary contention. Surfaced as its own result rather than folded
+				// into AllPathsBlocked, same reasoning as NonContiguousStart above.
+				logger.warn {
+					"requestRoute: geometrically impossible route for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${result.reason}"
+				}
+				RouteRequestResult.GeometricallyImpossible(result.reason)
+			}
 		}
 	}
 
@@ -272,6 +282,16 @@ class DefaultNetworkActuatorPort(
 					}
 				}
 				RouteRequestResult.ConditionFailed(response.reason, cause.retryable)
+			}
+			is InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible -> {
+				// Issue #903: the kernel identified this specifically as a permanent geometric
+				// impossibility (ReservationResult.GeometricallyImpossible). Map it the same way
+				// the legacy/no-facade branch does, reason preserved verbatim.
+				logger.warn {
+					"requestRoute: geometrically impossible route for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${cause.reason}"
+				}
+				RouteRequestResult.GeometricallyImpossible(cause.reason)
 			}
 		}
 
