@@ -90,6 +90,18 @@ class Train :
 		private const val MINIMAL_DECELERATION = -3
 
 		/**
+		 * Maximum number of 5-second retries when no topological path exists from the origin
+		 * InOut before calling [SimulationEnvironment.errorStop].
+		 *
+		 * A train that cannot find any continuation from its entry point has a misconfigured
+		 * network. After this many retries the simulation is stopped rather than looping
+		 * silently forever.
+		 *
+		 * @see Issue #905
+		 */
+		internal const val MAX_ORIGIN_NO_PATH_RETRIES = 5
+
+		/**
 		 * Formats the structured TRAIN_APPROVED message payload.
 		 * The format is consumed by [TextReporter]'s regex: `train="([^"]+)"`.
 		 */
@@ -136,6 +148,12 @@ class Train :
 			// Only the Front writes it — see [isFront].
 			if (isFront) this@Train.entrySeparator = where
 
+			// Counts how many consecutive NoTopologicalPath results were returned at the
+			// origin InOut (current == null). Used to enforce the bounded-retry policy
+			// (Issue #905): after MAX_ORIGIN_NO_PATH_RETRIES retries the simulation stops
+			// via env.errorStop rather than looping silently forever.
+			var originNoPathRetries = 0
+
 			while (true) {
 				// Check if we've reached the destination InOut BEFORE querying for path
 				if (where is DynamicInOut && current != null) {
@@ -171,18 +189,26 @@ class Train :
 					when (pathResult) {
 						is PathResult.Available -> pathResult.path
 						is PathResult.NoTopologicalPath -> {
-							// Permanent condition - no path exists in network topology
-							if (where is DynamicInOut) {
-								// At destination InOut, this is expected (train has arrived)
-								null
+							// Permanent condition - no path exists in network topology.
+							// Note: the destination case (where is DynamicInOut && current != null)
+							// is already handled at the top of the loop and never reaches here.
+							if (where is DynamicInOut && current == null) {
+								// At origin InOut with no topological continuation.
+								// This is a configuration error; do NOT break — fall through to
+								// the bounded-retry handler below (Issue #905, AC2).
+								logger.warn {
+									"Train $number: No topological path from origin InOut '${where.name}' " +
+										"(attempt ${originNoPathRetries + 1}/$MAX_ORIGIN_NO_PATH_RETRIES). " +
+										"Network may be misconfigured."
+								}
 							} else {
 								// Not at destination, this is an error
 								logger.error {
 									"Train $number: No topological path exists from $where. " +
 										"Network may be misconfigured or train reached dead-end."
 								}
-								null
 							}
+							null
 						}
 						is PathResult.OwnershipConflict -> {
 							// Temporary condition - blocks reserved for different train
@@ -196,35 +222,63 @@ class Train :
 				next = path?.getNext(current)
 
 				if (path == null || next == null) {
-					if (where is DynamicInOut) break
-					// Train should wait for dispatcher to reserve next path
+					// Destination (where is DynamicInOut && current != null) is handled at the
+					// top of this loop before the path query; it never falls through to here.
+					// At the origin (current == null) we must NOT break — the train waits for
+					// the dispatcher to reserve a path (Issue #905, AC1).
 					// Stop motor completely to prevent creeping motion during passivation
 					motor.cancelAccelerating()
 					this@Train.stop()
 
-					if (pathResult is PathResult.OwnershipConflict) {
-						/**
-						 * Event-Driven Wait (Issue #582, Goal 1 SP3)
-						 *
-						 * Instead of polling with a fixed 5-second hold, suspend until the
-						 * dispatcher reserves the path. kDisco re-evaluates the condition
-						 * after every discrete event (including block releases), so the train
-						 * resumes exactly when the path becomes available.
-						 *
-						 * The motor has already been stopped, so there is no creeping risk.
-						 */
-						logger.debug {
-							"Train $number: event-driven wait for path reservation at $where"
+					when {
+						pathResult is PathResult.OwnershipConflict -> {
+							/**
+							 * Event-Driven Wait (Issue #582, Goal 1 SP3)
+							 *
+							 * Instead of polling with a fixed 5-second hold, suspend until the
+							 * dispatcher reserves the path. kDisco re-evaluates the condition
+							 * after every discrete event (including block releases), so the train
+							 * resumes exactly when the path becomes available.
+							 *
+							 * The motor has already been stopped, so there is no creeping risk.
+							 *
+							 * This branch is now also reached at the origin (Issue #905, AC1):
+							 * an OwnershipConflict at the entry InOut resolves the instant the
+							 * dispatcher makes the reservation.
+							 */
+							logger.debug {
+								"Train $number: event-driven wait for path reservation at $where"
+							}
+							waitUntil(env.createPathAvailableCondition(name, where))
 						}
-						waitUntil(env.createPathAvailableCondition(name, where))
-					} else {
-						/**
-						 * Polling Mechanism Trade-off (Issue #291, PR #358)
-						 *
-						 * For permanent failures (no topological path) keep the conservative
-						 * 5-second retry so the train does not freeze silently.
-						 */
-						hold(5.0) // Wait 5 seconds before retrying path request
+						pathResult is PathResult.NoTopologicalPath && where is DynamicInOut && current == null -> {
+							/**
+							 * Bounded retry for origin InOut with no topological continuation (Issue #905, AC2).
+							 *
+							 * No unbounded silent loop: after MAX_ORIGIN_NO_PATH_RETRIES retries the
+							 * simulation stops via env.errorStop, naming the misconfigured InOut.
+							 */
+							originNoPathRetries++
+							if (originNoPathRetries >= MAX_ORIGIN_NO_PATH_RETRIES) {
+								env.errorStop(
+									SimulationException(
+										"Train $name: No topological path from origin InOut '${where.name}' " +
+											"after $MAX_ORIGIN_NO_PATH_RETRIES retries. Network is misconfigured."
+									)
+								)
+								return
+							}
+							hold(5.0)
+						}
+						else -> {
+							/**
+							 * Polling Mechanism Trade-off (Issue #291, PR #358)
+							 *
+							 * For permanent failures (no topological path) keep the conservative
+							 * 5-second retry so the train does not freeze silently.
+							 */
+							hold(5.0) // Wait 5 seconds before retrying path request
+						}
 					}
 					continue // Restart loop to retry path request
 				}
