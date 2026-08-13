@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
@@ -339,6 +340,35 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			assertStoredIsExactly(trainId, stored)
 			assertThat(stored.target).isEqualTo(semaphoreZB) // still the OLD target
 			assertThat(stored.reservedPath.size).isEqualTo(3) // 3, not 3 + 3
+		}
+
+		@Test
+		fun `registerPathInfo reports Aborted for a non-contiguous new path`() {
+			// Issue #904: the caller (reservePath) needs a typed signal that the merge was
+			// aborted, not just the stored PathInfo staying unchanged, so it can release the
+			// resources it just acquired for the candidate that produced the aborted merge.
+			val trainId = "train_904_abort_signal"
+
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
+			)
+
+			val outcome =
+				registry.registerPathInfo(
+					trainId,
+					createPathInfo(
+						start = switchVA,
+						target = semaphoreZA,
+						path = listOf(switchVA, trackZBtoVB, semaphoreZA)
+					)
+				)
+
+			assertThat(outcome).isInstanceOf<PathReservationRegistry.MergeOutcome.Aborted>()
 		}
 
 		@Test

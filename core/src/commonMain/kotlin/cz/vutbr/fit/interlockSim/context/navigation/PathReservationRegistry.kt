@@ -113,6 +113,39 @@ class PathReservationRegistry(
 	}
 
 	/**
+	 * Outcome of [registerPathInfo] / [mergePathInfo], distinguishing a genuine merge from an
+	 * abort so the caller can react to the abort instead of assuming the stored [PathInfo] now
+	 * reflects what it just registered.
+	 *
+	 * Precedent: [StartSignalResult][DefaultPathReservationService] (Issue #903) is the same
+	 * "a call that used to silently swallow its failure now needs to report why" shape.
+	 *
+	 * @since Issue #904
+	 */
+	sealed class MergeOutcome {
+		/** The [PathInfo] now stored for the train — merged on [Merged], unchanged on [Aborted]. */
+		abstract val pathInfo: PathInfo
+
+		/** The stored [PathInfo] is [pathInfo] — either the first registration, or a genuine merge. */
+		data class Merged(
+			override val pathInfo: PathInfo
+		) : MergeOutcome()
+
+		/**
+		 * The merge was aborted (Issue #834's fail-safe: non-contiguous new start, duplicated new
+		 * start, or the 3rd-occurrence cycle guard). The stored [PathInfo] is unchanged and equals
+		 * [pathInfo] — the pre-merge value — by reference.
+		 *
+		 * @property reason English explanation of which abort condition fired, forwarded from
+		 *   [mergePathInfo]'s own WARN log.
+		 */
+		data class Aborted(
+			override val pathInfo: PathInfo,
+			val reason: String
+		) : MergeOutcome()
+	}
+
+	/**
 	 * Reason for a registration conflict.
 	 *
 	 * Distinguishes between two distinct safety-critical failure modes:
@@ -729,13 +762,16 @@ class PathReservationRegistry(
 	 *
 	 * @param trainId The train identifier
 	 * @param newPathInfo Complete path metadata to register or merge
+	 * @return [MergeOutcome.Merged] on a genuine merge (or first registration); [MergeOutcome.Aborted]
+	 *   when [mergePathInfo]'s fail-safe abort fired and the stored `PathInfo` is unchanged.
 	 * @since Issue #295/#296 Phase 3
 	 * @since Issue #296 Phase 8 (PathInfo extension fix)
+	 * @since Issue #904 (return type widened from `Unit` to [MergeOutcome])
 	 */
 	fun registerPathInfo(
 		trainId: String,
 		newPathInfo: PathInfo
-	) {
+	): MergeOutcome {
 		val oldPathInfo = trainToPathInfo[trainId]
 
 		if (oldPathInfo == null) {
@@ -746,11 +782,12 @@ class PathReservationRegistry(
 					"path length=${newPathInfo.reservedPath.size})"
 			}
 			trainToPathInfo[trainId] = newPathInfo
-			return
+			return MergeOutcome.Merged(newPathInfo)
 		}
 
 		// Merge old and new PathInfo (pass trainId for switch cleanup)
-		val mergedPathInfo = mergePathInfo(trainId, oldPathInfo, newPathInfo)
+		val outcome = mergePathInfo(trainId, oldPathInfo, newPathInfo)
+		val mergedPathInfo = outcome.pathInfo
 		trainToPathInfo[trainId] = mergedPathInfo
 
 		logger.debug {
@@ -768,6 +805,7 @@ class PathReservationRegistry(
 				"start=${mergedPathInfo.start}, target=${mergedPathInfo.target}, " +
 				"path length=${mergedPathInfo.reservedPath.size}"
 		}
+		return outcome
 	}
 
 	private fun addElementWithCycleDetection(
@@ -776,19 +814,20 @@ class PathReservationRegistry(
 		trainId: String,
 		old: PathInfo,
 		new: PathInfo
-	): PathInfo? {
+	): String? {
 		if (element is cz.vutbr.fit.interlockSim.objects.core.PathSeparator &&
 			mergedPath.any { it == element }
 		) {
 			val occurrenceCount = mergedPath.count { it == element }
 			if (occurrenceCount >= 2) {
 				// 3rd occurrence — infinite loop detected (Issue #316)
+				val reason =
+					"merge for train $trainId would create cycle (separator $element at 3+ occurrences)"
 				logger.warn {
-					"mergePathInfo: merge for train $trainId would create cycle (separator $element at 3+ occurrences). " +
-						"Keeping existing valid PathInfo unchanged. " +
+					"mergePathInfo: $reason. Keeping existing valid PathInfo unchanged. " +
 						"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
 				}
-				return old
+				return reason
 			}
 			// 2nd occurrence — legitimate circular route
 			logger.info {
@@ -818,31 +857,24 @@ class PathReservationRegistry(
 	 * exception here therefore did not fail a run loudly — it killed the simulation thread while
 	 * the run still wrote a well-formed result file, i.e. it fabricated a measurement.
 	 *
-	 * **Why "never throw" is safe on its own, without releasing anything at abort time.** An abort
-	 * leaves an *orphaned RESERVED tail*: blocks this train owns that the stored PathInfo does not
-	 * cover, some of them behind a cleared aspect. That state is not permanent, because it is
-	 * exactly what `OrphanReservationSweeper` is for — it detects a route held un-travelled past
-	 * its staleness threshold and hands it to
-	 * `RegistryPartialRouteReleaser.releaseUntravelledTail`, which frees the tail's blocks *and*
-	 * drives every semaphore governing them back to STOP (G1) before they become available to
-	 * anyone else. So the worst an abort can produce is a temporarily over-reserved, temporarily
-	 * over-permissive tail that the sweeper reclaims fail-safe; a thrown exception, by contrast, is
-	 * unrecoverable for the whole run. Releasing the tail *here* instead would be the
-	 * transactionally complete answer (the PR #901 standard applied to `reservePath`'s last
-	 * un-rolled-back exit) but it changes the trade-off recorded under "Resource Safety" below and
-	 * is deliberately filed as separate work.
+	 * **Transactional completion at abort time (Issue #904).** An abort here no longer leaves an
+	 * orphaned RESERVED tail: [DefaultPathReservationService.reservePath] inspects the returned
+	 * [MergeOutcome] at both of its call sites (Step 2i, and the already-owned early return) and,
+	 * on [MergeOutcome.Aborted], releases exactly what *that* `reservePath` invocation acquired
+	 * for the rejected candidate — blocks, switch locks, and the signal it cleared, driven back
+	 * to STOP (G1) — using the same scoped-rollback helpers Step 2g's own signal-failure rollback
+	 * already uses. This applies the PR #901 standard (no exit from `reservePath` leaves resources
+	 * unreleased without rollback) to the one exit that previously didn't meet it, and it holds in
+	 * every host — `:fast-sim` and bare-`:core` included — because it no longer depends on
+	 * anything outside this call.
 	 *
-	 * **Scope of that reclamation (review finding #8, Issue #834).** `OrphanReservationSweeper`
-	 * lives in `dispatcher-agent` and is wired only in `desktop-ui`/`dispatcher-agent` (via
-	 * `ExampleRegistry`). `:fast-sim` wires `wireSynchronousDispatcher(ctx, loop)` with
-	 * `interlockingFacade = null` — the legacy `reservePath` → `mergePathInfo` branch — and does
-	 * **not** wire the sweeper; neither does a bare-`:core` host that calls `reservePath` directly.
-	 * In those hosts the orphaned tail persists for the rest of the run: the abort is still an
-	 * improvement over the prior throw (no simulation thread dies), but the fail-safe reclamation
-	 * the paragraph above describes is a `desktop-ui`/`dispatcher-agent` property, not a universal
-	 * one. Releasing the tail in `mergePathInfo` itself — the transactionally-complete option the
-	 * previous paragraph already files as "separate work" — is the only fix that would hold in
-	 * `:fast-sim` and bare-`:core` too.
+	 * **`OrphanReservationSweeper`'s role is narrower now, not gone.** Before this fix, the sweeper
+	 * (in `dispatcher-agent`, wired only in `desktop-ui`/`dispatcher-agent` via `ExampleRegistry`)
+	 * was the *only* mechanism that ever reclaimed a merge-abort's orphaned tail — and only in the
+	 * hosts that wire it; `:fast-sim` and bare-`:core` never reclaimed it at all. The sweeper still
+	 * has an independent, legitimate job: reclaiming a route held un-travelled past its staleness
+	 * threshold and phantom-owner routes (a train that exited without releasing). It is simply no
+	 * longer relied on for *this* residue, because there is none left to reclaim.
 	 *
 	 * ## Algorithm
 	 *
@@ -899,38 +931,37 @@ class PathReservationRegistry(
 	 *
 	 * ## Resource Safety
 	 *
-	 * `mergePathInfo()` is a **pure data-structure operation** — it does not acquire or
-	 * release track blocks or switches. All resource locking happens in
+	 * `mergePathInfo()` itself is still a **pure data-structure operation** — it does not acquire
+	 * or release track blocks or switches. All resource locking happens in
 	 * `DefaultPathReservationService.reservePath()` via `registerAtomic()` and
 	 * `registerSwitches()`, which use their own tracking maps (`trainToBlocks` /
-	 * `trainToSwitches`). Those maps are independent of PathInfo, so `releasePath()` can
-	 * still find and free all resources even when `return old` aborts the PathInfo merge.
+	 * `trainToSwitches`), independent of PathInfo.
 	 *
-	 * **PathInfo / block divergence (accepted trade-off):** When `return old` fires — for any of
-	 * the three abort reasons — the train's `trainToBlocks` entry already contains the newly
-	 * reserved blocks (step 2d in `reservePath()`), but `trainToPathInfo` still holds the pre-merge
-	 * `old`. This means `TrainNavigationService` will not guide the train through those new blocks
-	 * — the train effectively ignores the just-reserved segment. This is intentional: it is always
-	 * better than storing a malformed PathInfo (#316), and it is recoverable, because
-	 * `OrphanReservationSweeper` reclaims the divergent tail and resets its signals to STOP — in
-	 * the hosts that wire it; see the "Scope of that reclamation" caveat above for `:fast-sim` and
-	 * bare-`:core`, where the tail is left unreclaimed. The train will retry on its next dispatch
-	 * tick.
+	 * **PathInfo / block divergence — resolved by the caller (Issue #904):** When this method
+	 * returns [MergeOutcome.Aborted], the train's `trainToBlocks` entry momentarily contains the
+	 * newly reserved blocks (step 2d in `reservePath()`) while `trainToPathInfo` still holds the
+	 * pre-merge value — but `reservePath` itself resolves that divergence before returning to its
+	 * own caller: it inspects the [MergeOutcome], sees the abort, and releases exactly those newly
+	 * reserved blocks (and any switches locked, and any signal cleared) for the rejected candidate.
+	 * The divergence therefore never outlives the `reservePath` call that created it — there is no
+	 * window in which `trainToBlocks` and `trainToPathInfo` disagree from any other caller's point
+	 * of view, and nothing is left for a later sweep to reclaim.
 	 *
 	 * @param trainId Owner of the PathInfo being merged (used in the abort WARNs)
 	 * @param old Previous PathInfo (Tail may still be navigating through this)
 	 * @param new New PathInfo (Front just reserved this)
-	 * @return Merged PathInfo covering both old and new paths, or [old] unchanged if the merge was
-	 *         aborted: [new] does not start at `old.target`, `new.start` is duplicated inside
-	 *         [new], or the merge would create a third occurrence of a separator (cycle guard).
-	 *         Never throws.
-	 * @since Issue #296 Phase 8; never-throw abort semantics from Issue #834 (SP2c.11)
+	 * @return [MergeOutcome.Merged] wrapping the merged PathInfo, or [MergeOutcome.Aborted]
+	 *         wrapping [old] unchanged if the merge was aborted: [new] does not start at
+	 *         `old.target`, `new.start` is duplicated inside [new], or the merge would create a
+	 *         third occurrence of a separator (cycle guard). Never throws.
+	 * @since Issue #296 Phase 8; never-throw abort semantics from Issue #834 (SP2c.11); return
+	 *   type widened from `PathInfo` to [MergeOutcome] by Issue #904.
 	 */
 	private fun mergePathInfo(
 		trainId: String,
 		old: PathInfo,
 		new: PathInfo
-	): PathInfo {
+	): MergeOutcome {
 		logger.trace {
 			"mergePathInfo: merging old path ${old.start}->${old.target} " +
 				"with new ${new.start}->${new.target} for '$trainId'"
@@ -940,14 +971,17 @@ class PathReservationRegistry(
 		// that starts somewhere else produces two adjacent separators; navigation truncates there
 		// safely, so the train never teleports, but everything past the seam becomes an orphaned
 		// RESERVED tail behind a cleared aspect the train will never reach. Abort fail-safe.
+		// Issue #904: the caller now releases exactly what it acquired for this attempt, so the
+		// tail is no longer orphaned -- it never gets a chance to persist.
 		if (new.start != old.target) {
+			val reason =
+				"non-contiguous merge for train $trainId — new path starts at ${new.start} but " +
+					"the stored path ends at ${old.target}"
 			logger.warn {
-				"mergePathInfo: aborting non-contiguous merge for train $trainId — new path starts at " +
-					"${new.start} but the stored path ends at ${old.target}. " +
-					"Keeping existing valid PathInfo unchanged. " +
+				"mergePathInfo: aborting $reason. Keeping existing valid PathInfo unchanged. " +
 					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
 			}
-			return old
+			return MergeOutcome.Aborted(old, reason)
 		}
 
 		// Step 0b: new.start must occur exactly once in its own path (see "Preconditions" above).
@@ -956,13 +990,14 @@ class PathReservationRegistry(
 		// with nothing catching it. Abort the same fail-safe way instead; never throw from here.
 		val occurrences = new.reservedPath.count { it == new.start }
 		if (occurrences != 1) {
+			val reason =
+				"merge with duplicated new start for train $trainId — ${new.start} appears " +
+					"$occurrences times in the new path, expected exactly 1 at its beginning"
 			logger.warn {
-				"mergePathInfo: aborting merge with duplicated new start for train $trainId — " +
-					"${new.start} appears $occurrences times in the new path, expected exactly 1 at its " +
-					"beginning. Keeping existing valid PathInfo unchanged. " +
+				"mergePathInfo: aborting $reason. Keeping existing valid PathInfo unchanged. " +
 					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
 			}
-			return old
+			return MergeOutcome.Aborted(old, reason)
 		}
 
 		// Step 1: Create merged path starting from old path
@@ -984,8 +1019,8 @@ class PathReservationRegistry(
 					"mergePathInfo: skipping overlap element $element (old.target == new.start)"
 				}
 			} else {
-				val cycleAbort = addElementWithCycleDetection(element, mergedPath, trainId, old, new)
-				if (cycleAbort != null) return cycleAbort
+				val cycleAbortReason = addElementWithCycleDetection(element, mergedPath, trainId, old, new)
+				if (cycleAbortReason != null) return MergeOutcome.Aborted(old, cycleAbortReason)
 			}
 		}
 
@@ -999,11 +1034,13 @@ class PathReservationRegistry(
 				"(overlap: ${if (skipFirst) "yes" else "no"})"
 		}
 
-		return PathInfo(
-			start = old.start, // Keep original start (where Tail might still be)
-			target = new.target,
-			reservedPath = mergedPath,
-			entryDirections = mergedDirections
+		return MergeOutcome.Merged(
+			PathInfo(
+				start = old.start, // Keep original start (where Tail might still be)
+				target = new.target,
+				reservedPath = mergedPath,
+				entryDirections = mergedDirections
+			)
 		)
 	}
 

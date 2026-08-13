@@ -550,6 +550,10 @@ class DefaultPathReservationService(
 				// All blocks in this path are already owned by this train
 				// Configure START semaphore before returning (may be from different position)
 				// configureSemaphoreSignal is idempotent, safe to call multiple times
+				// Issue #904: snapshot BEFORE configureAlreadyOwnedStartSignal so a merge abort
+				// below can reset exactly what THIS call cleared, not a pre-existing reservation's
+				// signal (mirrors Step 2g/2i's own clearedBeforeStart snapshots).
+				val clearedBeforeStart = snapshotClearedSemaphores(trainId)
 				if (blocks.isNotEmpty()) {
 					configureAlreadyOwnedStartSignal(trainId, start, blocks)
 				}
@@ -571,7 +575,14 @@ class DefaultPathReservationService(
 
 				// FIX (Issue #296): Register PathInfo for already-owned blocks
 				val pathInfo = pathInfoBuilder.buildPathInfo(start, target, path)
-				registry.registerPathInfo(trainId, pathInfo)
+				val mergeOutcome = registry.registerPathInfo(trainId, pathInfo)
+				// Issue #904: this branch acquires no NEW blocks or switches -- the whole point is
+				// that the train already owns everything -- so an abort has nothing to roll back on
+				// that side. The only discrepancy a merge abort can leave here is a signal this call
+				// just (re-)cleared for a merge that never happened; reset it back to STOP (G1),
+				// still report Success since the train's actual block ownership is correct and
+				// unchanged (traffic-simulation-expert ruling, Issue #904).
+				resetSignalsIfMergeAborted(mergeOutcome, trainId, start, clearedBeforeStart)
 
 				// Resolved -- this train is no longer contending for any block.
 				clearBlockedTracking(trainId)
@@ -625,6 +636,11 @@ class DefaultPathReservationService(
 					// scoped rollback below (and the signal-config rollback in Step 2g) only
 					// release THIS candidate's new switches, never the train's earlier hops.
 					val priorSwitches = registry.getSwitches(trainId).toSet()
+					// Snapshot the semaphore-clearing delta the same way, BEFORE any of this
+					// candidate's Step 2g/2h/2i signal work runs, so a rollback at any of those
+					// steps (including Step 2i's merge-abort rollback, Issue #904) can reset
+					// exactly what THIS candidate cleared (Issue #893 task A5).
+					val clearedBeforeCandidate = snapshotClearedSemaphores(trainId)
 					if (!configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)) {
 						// Unconfigurable switch makes THIS candidate physically impossible. The
 						// candidate has already been rolled back inside configureAndRegisterSwitches,
@@ -645,10 +661,6 @@ class DefaultPathReservationService(
 					// Step 2g: Configure semaphore signal after successful reservation
 					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
 					if (forwardBlocks.isNotEmpty()) {
-						// Snapshot the delta the same way the bypass-rollback in
-						// reservePathToAnyNextSemaphore does, so a signal-config failure can reset
-						// exactly what THIS attempt recorded before it failed (Issue #893, task A5).
-						val clearedBeforeStart = clearedSemaphores[trainId]?.toSet() ?: emptySet()
 						val signalResult = configureStartSignal(trainId, start, forwardBlocks)
 
 						// Rollback reservation if signal configuration failed
@@ -673,10 +685,7 @@ class DefaultPathReservationService(
 							// before/after delta of clearedSemaphores (covers anything that WAS
 							// recorded), then explicitly drive the candidate START itself back to
 							// STOP for the unrecorded case resetSemaphoreSet's delta cannot see.
-							val clearedByThisAttempt =
-								(clearedSemaphores[trainId] ?: emptySet()) - clearedBeforeStart
-							resetSemaphoreSet(trainId, clearedByThisAttempt)
-							resetUnrecordedStartSignal(trainId, start, clearedBeforeStart)
+							resetCandidateSignals(trainId, start, clearedBeforeCandidate)
 							rollbackUnconfigurableCandidate(
 								trainId,
 								forwardBlocks,
@@ -705,10 +714,33 @@ class DefaultPathReservationService(
 					// successfully, so no rollback path can leave a poisoned PathInfo behind —
 					// a PathInfo pointing at an unusable route permanently stalls the train
 					// (isPathExtendedBeyond suppresses the corrective re-reservation).
-					registry.registerPathInfo(trainId, pathInfo)
+					// Issue #904: register the FORWARD-ONLY segment, not `pathInfo` (which starts
+					// at the original `start` and would falsely non-contiguous-abort on every
+					// route extension that reuses it, per forwardOnlyPathInfo's KDoc).
+					val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
+					val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
+					// If the registry's merge fail-safe STILL aborted
+					// (PathReservationRegistry.mergePathInfo's KDoc lists the three reasons) --
+					// now only the genuinely pathological ones, duplicated new-start or the
+					// cycle guard -- release exactly what THIS candidate acquired --
+					// transactionally complete, matching Step 2g's own rollback -- rather than
+					// leaving an orphaned RESERVED tail for OrphanReservationSweeper (which is
+					// not even wired in :fast-sim or bare-:core).
+					if (rollbackIfMergeAborted(
+							mergeOutcome,
+							trainId,
+							start,
+							forwardBlocks,
+							pathInfo,
+							priorSwitches,
+							clearedBeforeCandidate
+						)
+					) {
+						continue
+					}
 					logger.debug {
-						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions, " +
-							"reserved path has ${pathInfo.reservedPath.length()} elements"
+						"reservePath: Registered PathInfo for $trainId with ${mergeCandidate.entryDirections.size} entry directions, " +
+							"reserved path has ${mergeCandidate.reservedPath.length()} elements"
 					}
 
 					// Emit BlockReserved for each successfully reserved block
@@ -2416,6 +2448,117 @@ class DefaultPathReservationService(
 		current: String?,
 		reason: String
 	): String? = current ?: reason
+
+	/**
+	 * Issue #904 root-cause fix (traffic-simulation-expert ruling): builds the PathInfo passed to
+	 * [PathReservationRegistry.registerPathInfo] using the FORWARD-ONLY segment of [path] --
+	 * starting where [forwardBlocks] actually begins, not at [start].
+	 *
+	 * `PathInfoBuilder.buildPathInfo` always sets `PathInfo.start = start`. A route EXTENSION
+	 * that reuses the train's ORIGINAL start (the shape Issue #911 already established happens
+	 * in production) passes a `start` that no longer bounds the first forward block -- every
+	 * block adjacent to it is already owned. Building the merge candidate from that `start`
+	 * therefore makes `new.start != old.target` on every such call, not a rare shape but the
+	 * routine one, and [PathReservationRegistry.mergePathInfo]'s Step 0a fail-safe aborts every
+	 * time, discarding a legitimate extension. Starting the merge candidate where the NEW blocks
+	 * actually begin makes `new.start` agree with `old.target` naturally, so the merge succeeds
+	 * and properly extends PathInfo instead of aborting -- leaving [rollbackIfMergeAborted]'s
+	 * rollback to fire only for genuinely pathological aborts (duplicated new-start, the
+	 * 3rd-occurrence cycle guard), not for this routine extension shape.
+	 *
+	 * @param path The FULL candidate path (including any already-owned prefix).
+	 * @param forwardBlocks The blocks this candidate newly reserves (excludes any already-owned
+	 *   prefix by construction, see [reservePath] Step 2a.5).
+	 */
+	private fun forwardOnlyPathInfo(
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		path: List<TrackSection>,
+		forwardBlocks: List<DynamicTrackBlock>
+	): cz.vutbr.fit.interlockSim.objects.paths.PathInfo {
+		var currentSeparator = start
+		for ((index, section) in path.withIndex()) {
+			if (section.getTrackBlock() in forwardBlocks) {
+				return pathInfoBuilder.buildPathInfo(currentSeparator, target, path.subList(index, path.size))
+			}
+			val staticNext = section.getSecondEnd(currentSeparator)
+			currentSeparator = environment.toDynamic(staticNext)
+		}
+		// No already-owned prefix to trim -- the ordinary, non-extension case.
+		return pathInfoBuilder.buildPathInfo(start, target, path)
+	}
+
+	/**
+	 * `clearedSemaphores[trainId]`, defaulting to an empty set. Extracted so every snapshot call
+	 * site in [reservePath] stays branch-free (a bare elvis `?:` at the call site would otherwise
+	 * count against that method's own cyclomatic complexity).
+	 */
+	private fun snapshotClearedSemaphores(trainId: String): Set<DynamicRailSemaphore> =
+		clearedSemaphores[trainId]?.toSet() ?: emptySet()
+
+	/**
+	 * Reset exactly the semaphores THIS candidate cleared since [clearedBeforeCandidate] (Issue
+	 * #893 task A5 / Issue #904): the before/after delta of [clearedSemaphores] (covers anything
+	 * recorded), then [start] itself for the unrecorded partial-write case
+	 * [resetSemaphoreSet]'s delta cannot see. Extracted so every rollback call site in
+	 * [reservePath] stays a single line.
+	 */
+	private fun resetCandidateSignals(
+		trainId: String,
+		start: DynamicPathSeparator,
+		clearedBeforeCandidate: Set<DynamicRailSemaphore>
+	) {
+		resetSemaphoreSet(trainId, snapshotClearedSemaphores(trainId) - clearedBeforeCandidate)
+		resetUnrecordedStartSignal(trainId, start, clearedBeforeCandidate)
+	}
+
+	/**
+	 * The already-owned early-return branch's merge-abort handling (Issue #904, traffic-simulation-expert
+	 * ruling Q2): this branch acquires no new blocks or switches, so an abort has nothing to roll
+	 * back on that side. The only discrepancy is a signal this call may have just (re-)cleared for
+	 * a merge that never happened; reset it back to STOP (G1) if the merge aborted, otherwise do
+	 * nothing. Extracted so the call site in [reservePath] stays branch-free.
+	 */
+	private fun resetSignalsIfMergeAborted(
+		mergeOutcome: PathReservationRegistry.MergeOutcome,
+		trainId: String,
+		start: DynamicPathSeparator,
+		clearedBeforeCandidate: Set<DynamicRailSemaphore>
+	) {
+		if (mergeOutcome !is PathReservationRegistry.MergeOutcome.Aborted) return
+		resetCandidateSignals(trainId, start, clearedBeforeCandidate)
+	}
+
+	/**
+	 * Step 2i's merge-abort handling (Issue #904): if [mergeOutcome] is
+	 * [PathReservationRegistry.MergeOutcome.Aborted], release exactly what THIS candidate
+	 * acquired -- blocks, switches and cleared signal -- transactionally complete, matching Step
+	 * 2g's own rollback, rather than leaving an orphaned RESERVED tail for
+	 * `OrphanReservationSweeper` (not wired in `:fast-sim` or bare-`:core`). Extracted so the
+	 * `is Aborted` check and its rollback body stay out of [reservePath]'s own cyclomatic
+	 * complexity count; the caller still needs its own `if (...) continue` since a non-local
+	 * `continue` cannot live inside this helper.
+	 *
+	 * @return `true` if the merge aborted (and the candidate was rolled back); `false` if it merged.
+	 */
+	private fun rollbackIfMergeAborted(
+		mergeOutcome: PathReservationRegistry.MergeOutcome,
+		trainId: String,
+		start: DynamicPathSeparator,
+		forwardBlocks: List<DynamicTrackBlock>,
+		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo,
+		priorSwitches: Set<DynamicRailSwitch>,
+		clearedBeforeCandidate: Set<DynamicRailSemaphore>
+	): Boolean {
+		if (mergeOutcome !is PathReservationRegistry.MergeOutcome.Aborted) return false
+		logger.warn {
+			"reservePath: merge aborted for $trainId (${mergeOutcome.reason}) -- releasing " +
+				"this candidate's blocks, switches and signal instead of leaving an orphaned tail"
+		}
+		resetCandidateSignals(trainId, start, clearedBeforeCandidate)
+		rollbackUnconfigurableCandidate(trainId, forwardBlocks, extractUniqueSwitches(pathInfo), priorSwitches)
+		return true
+	}
 
 	/**
 	 * First-hit-wins recorder for [reservePathToAnyNextSemaphore]'s `lastResult` tracker
