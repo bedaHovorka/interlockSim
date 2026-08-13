@@ -26,7 +26,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * |-----|---------------|
  * | Conflicts | [BlockEvent.ReservationConflictDetected] — each event is one conflict |
  * | Delay | [BlockEvent.BlockReserved] sets a timer; [BlockEvent.OccupancySet] closes it |
- * | Throughput | [BlockEvent.BlockReleased] when a train's reservation count → 0 |
+ * | Throughput | [BlockEvent.BlockReleased] when a train's reservation count → 0, **and** the train has had at least one [BlockEvent.OccupancySet] (physically moved) |
  * | Utilization | [BlockEvent.OccupancySet] / [BlockEvent.OccupancyCleared] vs total blocks |
  *
  * ## Listener contract
@@ -92,8 +92,25 @@ class DefaultMetricsCollectionService(
 	 * Train IDs that have had at least one [BlockEvent.BlockReserved] event.
 	 * Used to distinguish "train completed" (count → 0 after being >0) from
 	 * "train never started" (count stays 0).
+	 *
+	 * Entries are removed when a train is counted as completed (reservation count
+	 * drops to zero while the train has physically moved), so the set is bounded
+	 * by the number of trains that are active-but-not-yet-finished at any moment.
 	 */
 	private val knownTrains: MutableSet<String> = mutableSetOf()
+
+	/**
+	 * Train IDs that have had at least one [BlockEvent.OccupancySet] event,
+	 * i.e. trains that have physically entered at least one block.
+	 *
+	 * A train whose reserved blocks are reclaimed by the [OrphanReservationSweeper]
+	 * without ever moving will never appear here, so it will not be credited as a
+	 * completed journey in [onBlockReleased].
+	 *
+	 * Entries are removed when a train is counted as completed, resetting the
+	 * "has moved" flag for any subsequent journey the same train-ID makes.
+	 */
+	private val movedTrains: MutableSet<String> = mutableSetOf()
 
 	// ── Total block count ─────────────────────────────────────────────────────
 
@@ -186,11 +203,29 @@ class DefaultMetricsCollectionService(
 		val newCount = (activeReservationCount[event.trainId] ?: 1) - 1
 		if (newCount <= 0) {
 			activeReservationCount.remove(event.trainId)
-			if (event.trainId in knownTrains) {
+			// Only credit a completed journey when the train is known (reserved at
+			// least one block) AND has physically moved (entered at least one block).
+			// This prevents routes reclaimed by the OrphanReservationSweeper — or any
+			// other release that fires before the train occupies a block — from being
+			// mis-credited as finished journeys.
+			if (event.trainId in knownTrains && event.trainId in movedTrains) {
 				completedTrains++
 				logger.info {
 					"Train completed journey: trainId=${event.trainId} t=${event.time} " +
 						"totalCompleted=$completedTrains — ${buildSummary()}"
+				}
+				// Prune both sets so the same event cannot be double-counted on a
+				// subsequent orphan-release for the same train ID, and so the sets
+				// remain bounded by the number of active-but-unfinished trains.
+				knownTrains -= event.trainId
+				movedTrains -= event.trainId
+			} else if (event.trainId in knownTrains) {
+				// The reservation count reached zero but the train never physically
+				// moved — stale route reclaimed by sweeper or similar.  Prune the
+				// known-trains entry so a future journey for the same ID starts clean.
+				knownTrains -= event.trainId
+				logger.debug {
+					"Orphan route released for non-moving train: trainId=${event.trainId} t=${event.time} — not counted as completed journey"
 				}
 			}
 		} else {
@@ -201,6 +236,11 @@ class DefaultMetricsCollectionService(
 
 	private fun onOccupancySet(event: BlockEvent.OccupancySet) {
 		currentlyOccupied += event.block
+		// event.occupant.name is Train.name — the same string used as trainId in
+		// BlockReserved / BlockReleased events for the same physical train.
+		// Registering it here as a "moved" signal prevents counting orphan routes
+		// (reclaimed by OrphanReservationSweeper) that never had OccupancySet events.
+		movedTrains += event.occupant.name
 		val reservedAt = blockReservedAt[event.block]
 		if (reservedAt != null) {
 			val wait = (event.time - reservedAt).coerceAtLeast(0.0)
