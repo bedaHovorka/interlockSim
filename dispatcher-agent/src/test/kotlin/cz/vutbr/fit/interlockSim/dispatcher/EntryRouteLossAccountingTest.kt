@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
+import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
@@ -65,6 +66,29 @@ private class RouteHidingContext(
 		}
 
 	override fun getRoutingServices(): RoutingServices = routing
+
+	/**
+	 * [SimulationEnvironment.createPathAvailableCondition] is a *default* interface method whose
+	 * body calls `getRoutingServices()`. Kotlin's `by delegate` forwards the call itself, but the
+	 * default body still resolves `getRoutingServices()` against the delegate's own `this` — not
+	 * against this wrapper — so without this override the condition silently reads the *real*,
+	 * un-hidden navigation service (where the admission reservation genuinely exists) instead of
+	 * [routing]. That made `waitUntil(createPathAvailableCondition(...))` in `Train.kt` resolve
+	 * `true` on its very first synchronous check, so it never suspended into kDisco's wait-notice
+	 * list — the Front just looped `continue` → query → true → `continue` forever at a single
+	 * frozen simulated instant (`Dispatchers.Unconfined` never yields), paying for one real
+	 * `findReservedPathForTrain` graph walk per iteration. That is what turned this test into an
+	 * unbounded CPU-bound hang once Issue #905 let the origin case reach `waitUntil` instead of
+	 * breaking out immediately — independent of `END_TIME` or how many trains are admitted, since
+	 * the loop above never reaches a genuine suspension point either way.
+	 */
+	override fun createPathAvailableCondition(
+		trainId: String,
+		separator: PathSeparator
+	): Condition =
+		Condition {
+			routing.getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
+		}
 }
 
 /**
@@ -78,24 +102,31 @@ private class RouteHidingContext(
  * "terminate having never moved, and still count as exited" — which would corrupt the
  * journeys-completed / trains-admitted counters #834 and #895 depend on.
  *
- * The second half of that is **not what happens**, and this test pins the real behaviour:
+ * The second half of that is **not what happens**, and this test pins the real behaviour.
  *
- * 1. The `Front` does break out on its first loop iteration, having produced zero movement.
- * 2. `Train.actions()` does **not** follow it. After `Process.activate(front)` it parks in
- *    `waitUntilCrossing { (getLength() - dtMin) - front.getTotalDistance() }`, a level-triggered
- *    wait on a distance the train will never cover. The `Train` process therefore never
- *    terminates, and nothing ever re-activates it.
+ * **Updated for Issue #905** (traffic-simulation-expert ruling, see PR #918): `Train.kt` no
+ * longer breaks at the origin InOut. Since this scenario's [RouteHidingNavigationService] hides
+ * the route *unconditionally, forever* — not the transient conflict a real dispatcher eventually
+ * resolves — the train's `Front` instead parks forever in the event-driven
+ * `waitUntil(env.createPathAvailableCondition(...))` branch (Issue #582), which never becomes
+ * true because the hidden route never reappears. That is an accepted, unbounded wait by design:
+ * `OwnershipConflict` is a temporary condition everywhere else in `Front.actions()` too (#905
+ * AC1), and only `NoTopologicalPath` — a permanent misconfiguration — gets a bounded retry
+ * (#905 AC2). The observable effect this test actually pins is unchanged either way:
+ *
+ * 1. The `Front` never moves the train (zero movement, whether it broke immediately or parks in
+ *    `waitUntil` — both produce zero `totalDistance`).
+ * 2. The `Train` process never terminates, and nothing ever re-activates it.
  * 3. `ShuntingLoop.iteration()` increments `trainsExitedCount` only for approved trains whose
  *    `terminated()` is true. A never-terminating train is never counted — so the exited counter
  *    **under**-reports here, it does not over-report.
  *
  * The real defect in this state is a different and quieter one, recorded here rather than fixed:
  * the stalled train holds its admission slot forever and stays at the head of its `InOutWorker`
- * queue, so the station jams. `Front.separatorAction` also throws a FATAL `SimulationException`
- * ("Path to semaphore first element must match current position: null") on the way out, on the
- * `Front`'s own coroutine, where it is reported but does not stop the run. Both are `core/`
- * behaviour questions that need a traffic-simulation-expert ruling (TEAM.md), so #834 task 9
- * deliberately changed no `core/` behaviour.
+ * queue, so the station jams. This is deliberate: a route hidden *permanently* (as opposed to the
+ * transient conflict #905 fixes recovery for) has no dispatcher action that can ever un-stick it,
+ * so admission-slot recovery does not apply here — see `docs/INTERLOCKING_SCOPE_LIMITATIONS.md`
+ * §B1.
  *
  * ## Reachability in production wiring (why this needs an injected navigation service)
  *
@@ -128,8 +159,8 @@ class EntryRouteLossAccountingTest {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@DisplayName("front breaks at the entry InOut: zero movement, zero exits, no termination")
+	@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+	@DisplayName("route hidden forever at the entry InOut: zero movement, zero exits, no termination")
 	fun trainThatNeverEnteredIsNeverCountedAsExited() {
 		val context = fixture.loadShuntingLoopContext()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
@@ -149,12 +180,20 @@ class EntryRouteLossAccountingTest {
 		val terminatedDuringRun = mutableListOf<String>()
 		val movedDuringRun = mutableListOf<String>()
 		var exitedDuringRun = 0
+		var admittedOne = false
 
 		loop.controlStepListener =
 			ControlStepListener {
-				// Admit whatever is queued — no dispatcher needed: the trains never move, so no
-				// forward reservations are ever required.
-				loop.getQueuedTrains().firstOrNull()?.let { loop.approveQueuedTrain(it.trainId) }
+				// Admit exactly one train, once. The scenario only needs a single stalled train to
+				// pin the counting invariant; the real fix for the hang this scenario used to
+				// trigger is RouteHidingContext.createPathAvailableCondition above — this one-shot
+				// admission is just belt-and-suspenders so the rest of the network stays quiet.
+				if (!admittedOne) {
+					loop.getQueuedTrains().firstOrNull()?.let {
+						loop.approveQueuedTrain(it.trainId)
+						admittedOne = true
+					}
+				}
 
 				loop.getApprovedTrains().forEach { train ->
 					if (train.terminated()) terminatedDuringRun.add(train.name)
@@ -172,18 +211,27 @@ class EntryRouteLossAccountingTest {
 		// …and none of them ever moved.
 		assertThat(movedDuringRun, name = "trains that moved").isEmpty()
 
-		// The load-bearing assertions. A train whose Front broke at the entry InOut is parked
-		// forever in Train.actions(), so it is never observed terminated and never counted as
-		// exited. If either of these ever starts failing, the counters #834/#895 rely on have begun
-		// crediting a journey that never happened, and the "make the counting honest" fix that
-		// task 9 found unnecessary becomes necessary.
+		// The load-bearing assertions. A train whose route is hidden forever at the entry InOut is
+		// parked forever in Train.actions(), so it is never observed terminated and never counted
+		// as exited. If either of these ever starts failing, the counters #834/#895 rely on have
+		// begun crediting a journey that never happened, and the "make the counting honest" fix
+		// that task 9 found unnecessary becomes necessary.
 		assertThat(terminatedDuringRun, name = "trains observed terminated").isEmpty()
 		assertThat(exitedDuringRun, name = "trains exited (peak during run)").isEqualTo(0)
 		assertThat(loop.getTrainsExited(), name = "trains exited (final)").isEqualTo(0)
 	}
 
 	private companion object {
-		/** Long enough for the generator to queue trains and for several control steps to observe them. */
-		const val END_TIME: Long = 60L
+		/**
+		 * Long enough for the generator to queue a train and for a couple of control steps
+		 * (`ShuntingLoop`'s control period is 1.0 simulated second) to observe it — but no longer.
+		 * "Never terminates / never exits" is unfalsifiable at any finite horizon, so a longer
+		 * `END_TIME` would not make the assertions any more meaningful: with
+		 * `RouteHidingContext.createPathAvailableCondition` fixed to consult the hiding view (see
+		 * its KDoc), the stalled train's `Front` genuinely suspends after one check, so two control
+		 * ticks are enough for a reintroduced origin break-and-terminate regression to trip this
+		 * test immediately.
+		 */
+		const val END_TIME: Long = 3L
 	}
 }
