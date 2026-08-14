@@ -353,6 +353,44 @@ class RequestRouteApplyFailureCodeTest {
 		assertThat(decisionAppliedCount).isEqualTo(1)
 	}
 
+	/**
+	 * Issue #903: a candidate that is permanently geometrically impossible (rear-facing START or
+	 * an unconfigurable switch) must reach the applier as its own [ApplyFailureCode], distinct
+	 * from ordinary contention ([ApplyFailureCode.ALL_PATHS_BLOCKED]) — otherwise the dispatcher
+	 * would keep retrying an identical request that can never succeed. This test pins only the
+	 * applier's mapping (mirrors [conditionFailedIsAppliedThenFailed] above).
+	 */
+	@Test
+	@DisplayName(
+		"GeometricallyImpossible -> APPLIED_THEN_FAILED, applyFailure GEOMETRICALLY_IMPOSSIBLE, onDecisionApplied fires"
+	)
+	fun geometricallyImpossibleIsAppliedThenFailed() {
+		val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
+		every { networkActuator.requestRoute(any(), any(), any()) } returns
+			RouteRequestResult.GeometricallyImpossible(
+				"Switch along candidate 0 could not be configured for the requested route"
+			)
+		val outcomes = mutableListOf<ActionOutcome>()
+		var decisionAppliedCount = 0
+		val queue = ActuatorCommandQueue()
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = networkActuator,
+				onApproveTrain = {},
+				onDecisionApplied = { decisionAppliedCount++ },
+				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
+			)
+
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		applier.onControlStep()
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().phase).isEqualTo(ActionPhase.APPLIED_THEN_FAILED)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.GEOMETRICALLY_IMPOSSIBLE)
+		assertThat(decisionAppliedCount).isEqualTo(1)
+	}
+
 	// ── Issue #834 task alpha-7a: every denial cause survives the facade branch ─────
 
 	/**
