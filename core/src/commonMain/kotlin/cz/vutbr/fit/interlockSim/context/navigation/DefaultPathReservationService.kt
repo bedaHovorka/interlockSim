@@ -1110,7 +1110,6 @@ class DefaultPathReservationService(
 		}
 
 		// Extract the DynamicTrackBlock from the 'next' parameter for validation
-		// next is a TrackSection, which could be a DynamicTrackBlock or other type
 		val nextBlock = next.getTrackBlock() as? DynamicTrackBlock
 		if (nextBlock == null) {
 			logger.warn {
@@ -1152,8 +1151,7 @@ class DefaultPathReservationService(
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
-					// FIX: Validate that the reserved path actually goes through the 'next' block
-					// This prevents alternative routes that bypass the intended track section
+					// FIX: validate the reserved path goes through the required 'next' block
 					if (!result.reservedBlocks.contains(nextBlock)) {
 						logger.debug {
 							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"
@@ -1183,7 +1181,7 @@ class DefaultPathReservationService(
 						// PathInfo cannot be un-merged (merge has cycle-guard abort semantics), so
 						// restore the pre-attempt snapshot registered value instead.
 						registry.restorePathInfo(trainId, pathInfoBefore)
-						lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
+						lastResult = recordBlocked(lastResult, attemptCount)
 						continue
 					}
 
@@ -1200,7 +1198,7 @@ class DefaultPathReservationService(
 					logger.trace {
 						"reservePathToAnyNextSemaphore: Path to $semaphore blocked, trying next"
 					}
-					lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
+					lastResult = recordBlocked(lastResult, attemptCount)
 					continue
 				}
 				is PathReservationService.ReservationResult.Conflict -> {
@@ -1215,7 +1213,7 @@ class DefaultPathReservationService(
 					logger.warn {
 						"reservePathToAnyNextSemaphore: No topological path to $semaphore (unexpected)"
 					}
-					lastResult = PathReservationService.ReservationResult.NoPathExists
+					lastResult = recordAttemptResult(lastResult, PathReservationService.ReservationResult.NoPathExists)
 					continue
 				}
 				is PathReservationService.ReservationResult.NonContiguousStart -> {
@@ -1228,18 +1226,15 @@ class DefaultPathReservationService(
 					}
 					return result
 				}
-				// Issue #903: unlike NonContiguousStart (which is about `start` and therefore
-				// identical for every candidate here), this depends on the specific candidate
-				// path to `semaphore`, so it does not doom every remaining attempt -- keep
-				// trying, but preserve the more informative reason (first-hit-wins) via
-				// [firstHitWinsGeometricResult] instead of falling back to a plain AllPathsBlocked
-				// if every candidate exhausts.
+				// Issue #903: candidate-specific (unlike NonContiguousStart, which is about
+				// `start`), so keep trying; recordAttemptResult preserves the geometric reason
+				// over a later AllPathsBlocked if every candidate exhausts.
 				is PathReservationService.ReservationResult.GeometricallyImpossible -> {
 					logger.trace {
 						"reservePathToAnyNextSemaphore: Path to $semaphore geometrically impossible " +
 							"(${result.reason}), trying next"
 					}
-					lastResult = firstHitWinsGeometricResult(lastResult, result)
+					lastResult = recordAttemptResult(lastResult, result)
 					continue
 				}
 			}
@@ -2561,17 +2556,42 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * First-hit-wins recorder for [reservePathToAnyNextSemaphore]'s `lastResult` tracker
-	 * (Issue #903): keeps the first [PathReservationService.ReservationResult.GeometricallyImpossible]
-	 * seen across candidate semaphores rather than letting a later plain contention result
-	 * overwrite the more informative one. Extracted so the call site stays a single line,
-	 * keeping [reservePathToAnyNextSemaphore] under its line-count threshold.
+	 * Single write path for [reservePathToAnyNextSemaphore]'s `lastResult` tracker (Issue #903).
+	 *
+	 * `GeometricallyImpossible` is a PERMANENT impossibility (rear-facing START or unconfigurable
+	 * switch), not ordinary contention: once seen for one candidate semaphore, it must win over
+	 * any later contention result (`AllPathsBlocked`, `NoPathExists`, or the bypass-rollback
+	 * branch's `AllPathsBlocked`) so the caller -- [cz.vutbr.fit.interlockSim.sim.InOutWorker] on
+	 * the train-navigation path -- throws [cz.vutbr.fit.interlockSim.exceptions.SimulationException]
+	 * instead of spinning on `waitUntil(pathFree)` retrying a path that will never become
+	 * available. Before Issue #903's fix, the `AllPathsBlocked` / `NoPathExists` / bypass-rollback
+	 * branches wrote `lastResult` directly and silently overwrote an earlier geometric result.
+	 *
+	 * Also implements first-hit-wins among multiple geometric candidates: the first reason is
+	 * kept as the most informative for diagnostics.
+	 *
+	 * Extracted so every `lastResult` assignment in [reservePathToAnyNextSemaphore] routes through
+	 * one helper, making the priority self-enforcing and keeping each call site a single line
+	 * (the loop body stays under its line-count threshold).
 	 */
-	private fun firstHitWinsGeometricResult(
+	private fun recordAttemptResult(
 		current: PathReservationService.ReservationResult?,
-		candidate: PathReservationService.ReservationResult.GeometricallyImpossible
+		candidate: PathReservationService.ReservationResult
 	): PathReservationService.ReservationResult =
 		if (current is PathReservationService.ReservationResult.GeometricallyImpossible) current else candidate
+
+	/**
+	 * Convenience for [recordAttemptResult] wrapping the common
+	 * [PathReservationService.ReservationResult.AllPathsBlocked] case, keeping the two
+	 * `lastResult` call sites in [reservePathToAnyNextSemaphore] single-line (the fully
+	 * qualified `AllPathsBlocked(attemptCount)` argument would otherwise exceed the line
+	 * length limit and force a multi-line form that pushes the method over its length cap).
+	 */
+	private fun recordBlocked(
+		current: PathReservationService.ReservationResult?,
+		attemptCount: Int
+	): PathReservationService.ReservationResult =
+		recordAttemptResult(current, PathReservationService.ReservationResult.AllPathsBlocked(attemptCount))
 
 	/**
 	 * [recordGeometricFailureOnce], specialised for the G4 rejection case: only records a reason

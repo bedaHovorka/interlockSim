@@ -2685,6 +2685,82 @@ class PathReservationServiceTest : KoinTestBase() {
 			// train -- first-hit-wins classification surfaces that instead of AllPathsBlocked.
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		}
+
+		/**
+		 * Issue #903 regression: a `[GeometricallyImpossible, AllPathsBlocked]` candidate
+		 * ordering (geometric FIRST, contention SECOND) must return `GeometricallyImpossible`,
+		 * not `AllPathsBlocked`. Under the old unconditional `lastResult` overwrite, the three
+		 * contention branches (bypass-rollback, AllPathsBlocked, NoPathExists) silently replaced
+		 * an earlier geometric result, so `InOutWorker` would spin on `waitUntil(pathFree)`
+		 * retrying a path that will never become available. The fix routes every `lastResult`
+		 * write through `recordAttemptResult`, which preserves the permanent geometric result.
+		 *
+		 * This MUST fail under the old unconditional-overwrite logic (revert the fix and the
+		 * assertion below flips to `AllPathsBlocked`).
+		 *
+		 * Fixture `geometric-priority.xml` (header comment documents the topology): `doB1` is
+		 * the START; `InOutC` (geometric candidate, route needs the unconfigurable vB A<->D
+		 * join) is enumerated FIRST because `prioritizeInOuts` puts InOuts before semaphores;
+		 * `B` (contention candidate, route via the configurable vB A<->F MAIN) is enumerated
+		 * SECOND. A blocker reservation from `B` to `zB` owns the zB-B block, so the B candidate
+		 * hits an owned block (AllPathsBlocked) while InOutC's candidate stays free up to the
+		 * unconfigurable switch (GeometricallyImpossible).
+		 */
+		@Test
+		fun `geometric candidate enumerated before contention is preserved over the contention result`() {
+			// Fresh context from the geometric-priority fixture (the class-level @BeforeEach
+			// loads vyhybna.xml, so this test builds its own context/service for this topology).
+			val ctx =
+				simulationContextFactory.createContext(
+					editingContextFactory.createContext(TestFixtures.loadGeometricPriorityXml()) as EditingContext
+				) as DefaultSimulationContext
+			val svc = ctx.getRoutingServices().getPathReservationService()
+
+			fun semByName(name: String): DynamicRailSemaphore {
+				val grid = ctx.getRailWayNetGrid()
+				for (x in 0 until grid.cols) {
+					for (y in 0 until grid.rows) {
+						val cell =
+							grid[
+								cz.vutbr.fit.interlockSim.util
+									.Point(x, y)
+							]
+						if (cell is DynamicRailSemaphore && cell.name == name) return cell
+					}
+				}
+				error("Semaphore $name not found in geometric-priority fixture")
+			}
+
+			fun inOutByName(name: String): DynamicInOut =
+				ctx
+					.getInOuts()
+					.map { ctx.toDynamic(it) }
+					.filterIsInstance<DynamicInOut>()
+					.single { it.name == name }
+
+			val doB1 = semByName("doB1")
+			val zB = semByName("zB")
+			val b = inOutByName("B")
+
+			// Blocker: reserve B -> zB, owning the zB-B block so the B candidate (doB1 -> vB ->
+			// zB -> B) hits an owned block and classifies as AllPathsBlocked (contention), while
+			// InOutC's candidate (doB1 -> vB -> InOutC) stays free up to unconfigurable vB.
+			val blockerResult = svc.reservePath("blocker", b, zB)
+			assertThat(blockerResult)
+				.withMessage("blocker B -> zB must succeed to seed the contention on the B candidate")
+				.isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Probe: oriented overload from doB1. Candidates enumerate as [InOutC, B]
+			// (prioritizeInOuts). InOutC (first) -> GeometricallyImpossible; B (second) ->
+			// AllPathsBlocked. recordAttemptResult must preserve the geometric result.
+			val result = svc.reservePathToAnyNextSemaphore("probe", doB1)
+
+			assertThat(result)
+				.withMessage(
+					"a geometric candidate enumerated BEFORE a contention candidate must surface " +
+						"GeometricallyImpossible, not be overwritten by the later AllPathsBlocked"
+				).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		}
 	}
 
 	@Nested
