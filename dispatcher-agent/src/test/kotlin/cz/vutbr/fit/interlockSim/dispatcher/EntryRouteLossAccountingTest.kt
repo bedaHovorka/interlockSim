@@ -45,20 +45,30 @@ import java.util.concurrent.TimeUnit
  * `Train.actions()`'s admission gate answering from the real, un-hidden state. That is precisely
  * the asymmetry the scenario needs: the train is cleared to start, and only then does the route
  * appear to be gone.
+ *
+ * The hidden [result] defaults to [PathResult.OwnershipConflict] (the §B1 / Issue #834 scenario,
+ * where the train parks forever in the event-driven `waitUntil` and never terminates).  Passing
+ * [PathResult.NoTopologicalPath] drives the Issue #905 AC2 arm instead: the `Front` takes the
+ * bounded-retry branch at the origin `DynamicInOut` and, after
+ * [Train.MAX_ORIGIN_NO_PATH_RETRIES] attempts, calls `env.errorStop`.
+ *
+ * @see RouteHidingContext
  */
-private class RouteHidingNavigationService(
-	private val delegate: TrainNavigationService
+internal class RouteHidingNavigationService(
+	private val delegate: TrainNavigationService,
+	private val result: PathResult = PathResult.OwnershipConflict
 ) : TrainNavigationService by delegate {
 	override fun findReservedPathForTrain(
 		trainId: String,
 		separator: PathSeparator
-	): PathResult = PathResult.OwnershipConflict
+	): PathResult = result
 }
 
 /** Serves [nav] in place of the real train-navigation service; everything else is the real context. */
-private class RouteHidingContext(
+internal class RouteHidingContext(
 	private val delegate: SimulationContext,
-	nav: TrainNavigationService
+	nav: TrainNavigationService,
+	private val onErrorStop: ((Throwable) -> Unit)? = null
 ) : SimulationContext by delegate {
 	private val routing =
 		object : RoutingServices by delegate.getRoutingServices() {
@@ -66,6 +76,16 @@ private class RouteHidingContext(
 		}
 
 	override fun getRoutingServices(): RoutingServices = routing
+
+	/**
+	 * Captures every `env.errorStop(error)` invocation this wrapper forwards to the delegate, so a
+	 * test can assert the stop reason (e.g. the InOut name in the Issue #905 AC2 message) without
+	 * parsing stderr.  The call is still forwarded so the simulation actually shuts down.
+	 */
+	override fun errorStop(error: Throwable) {
+		onErrorStop?.invoke(error)
+		delegate.errorStop(error)
+	}
 
 	/**
 	 * [SimulationEnvironment.createPathAvailableCondition] is a *default* interface method whose

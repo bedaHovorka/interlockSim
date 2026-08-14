@@ -196,10 +196,16 @@ class Train :
 								// At origin InOut with no topological continuation.
 								// This is a configuration error; do NOT break — fall through to
 								// the bounded-retry handler below (Issue #905, AC2).
-								val originInOut = where
+								// 1-based attempt counter; the final attempt (== MAX) immediately
+								// triggers env.errorStop in the handler below, so word it as the
+								// terminal attempt rather than another retry (Issue #905, AC2).
+								// Capture the InOut name as a val so the warn lambda does not have to
+								// smart-cast `where` (a var mutated later in the loop) to DynamicInOut.
+								val originName = where.name
 								logger.warn {
-									"Train $number: No topological path from origin InOut '${originInOut.name}' " +
-										"(attempt ${originNoPathRetries + 1}/$MAX_ORIGIN_NO_PATH_RETRIES). " +
+									"Train $number: No topological path from origin InOut '$originName' " +
+										"(attempt ${originNoPathRetries + 1}/$MAX_ORIGIN_NO_PATH_RETRIES; " +
+										"simulation stops after $MAX_ORIGIN_NO_PATH_RETRIES attempts). " +
 										"Network may be misconfigured."
 								}
 							} else {
