@@ -22,10 +22,11 @@ import kotlinx.serialization.Serializable
  *
  * ## Schema versioning
  *
- * [schemaVersion] is incremented whenever fields are added or removed so that the SP2c.23
- * aggregator can detect and handle old JSON files without crashing.  Current version: **3**
- * (version 2 added [railwayOutcome], Issue #834/SP2c.11; version 3 added [fatalExceptionCount]
- * and [fatalExceptionFirstMessage], the measurement-integrity fix for #834's C2 condition).
+ * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
+ * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
+ * handle old JSON files without crashing.  Current version: **4** (version 2 added
+ * [railwayOutcome], Issue #834/SP2c.11; version 3 added [fatalExceptionCount] and
+ * [fatalExceptionFirstMessage], the measurement-integrity fix for #834's C2 condition).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
