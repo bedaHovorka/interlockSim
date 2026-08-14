@@ -42,6 +42,14 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * state change.  The current snapshot is always visible in logs, satisfying the
  * Goal 10 requirement that metrics are observable in stdout/log without a GUI.
  *
+ * ## Thread safety
+ *
+ * This class is **not thread-safe**. It is intended to be driven solely by the
+ * kDisco event stream — i.e. the single-threaded `emitCustom` callbacks that
+ * fire inside `runBlocking { context.run() }`. [getSnapshot] is meant to be
+ * polled after `context.run()` completes, not concurrently from another thread
+ * while events are being processed.
+ *
  * ## Constructor
  *
  * @param env The simulation environment used to subscribe to block events.
@@ -225,7 +233,8 @@ class DefaultMetricsCollectionService(
 				// known-trains entry so a future journey for the same ID starts clean.
 				knownTrains -= event.trainId
 				logger.debug {
-					"Orphan route released for non-moving train: trainId=${event.trainId} t=${event.time} — not counted as completed journey"
+					"Orphan route released for non-moving train: trainId=${event.trainId} " +
+						"t=${event.time} — not counted as completed journey"
 				}
 			}
 		} else {

@@ -161,6 +161,21 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 	}
 
 	@Test
+	fun `mid-journey train that reserved and moved but was not released does not increment completedTrains`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		// Train reserves a block and physically enters it, but no BlockReleased
+		// has arrived yet — it is still mid-journey. movedTrains membership alone
+		// is insufficient to credit a completed journey; the reservation count
+		// must also drop to zero.
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
+
+		assertThat(service.getSnapshot().completedTrains).isZero()
+	}
+
+	@Test
 	fun `completedTrains counts each train at most once per journey - no double-counting on re-release`() {
 		val service = DefaultMetricsCollectionService()
 		val blockA = realBlock()
