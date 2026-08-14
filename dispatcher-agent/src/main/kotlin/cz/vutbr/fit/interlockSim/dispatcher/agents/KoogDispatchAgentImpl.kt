@@ -345,6 +345,13 @@ class KoogDispatchAgentImpl(
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — ${outcome.reason}"
 
+			// Issue #903: a permanent impossibility (rear-facing START or unconfigurable switch),
+			// not ordinary contention -- the model must not retry the identical request. The
+			// kernel's reason is carried through verbatim, same reasoning as OriginNotContiguous.
+			is AppliedOutcome.GeometricallyImpossible ->
+				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
+					"REFUSED — ${outcome.reason}"
+
 			// Issue #834 review finding #2: a four-condition interlocking refusal. The kernel's
 			// reason already explains the refusal; retryable is surfaced so the model does not
 			// retry a permanent output defect. Not produced on the production request_route path.

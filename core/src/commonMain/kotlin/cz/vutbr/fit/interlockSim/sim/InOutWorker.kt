@@ -155,6 +155,19 @@ class InOutWorker(
 						logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
 						throw SimulationException(errorMsg)
 					}
+					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
+						// Issue #903, same reasoning as the NonContiguousStart branch above: this
+						// is a permanent impossibility (rear-facing START or unconfigurable
+						// switch), not ordinary contention, so `continue`-and-retry via
+						// waitUntil(pathFree) would spin without advancing simulation time -- the
+						// condition it waits on is path AVAILABILITY, which this failure mode
+						// leaves untouched.
+						val errorMsg =
+							"InOut ${inOut.name} - Route geometrically impossible for train " +
+								"$trainId: ${result.reason}"
+						logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
+						throw SimulationException(errorMsg)
+					}
 				}
 			} catch (e: Exception) {
 				logger.warn {

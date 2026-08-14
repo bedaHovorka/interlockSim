@@ -144,6 +144,10 @@ fun DispatchDecision.applyToolDrivenToActuator(
 						"$logPrefix: RequestRoute four-condition refusal for $trainName " +
 							"(${if (result.retryable) "transient" else "permanent"}): ${result.reason}"
 					}
+				is RouteRequestResult.GeometricallyImpossible ->
+					toolDrivenLogger.warn {
+						"$logPrefix: RequestRoute geometrically impossible for $trainName — ${result.reason}"
+					}
 			}
 		}
 		DispatchDecision.NoAction,

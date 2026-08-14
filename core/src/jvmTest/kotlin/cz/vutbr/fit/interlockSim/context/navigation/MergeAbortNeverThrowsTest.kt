@@ -56,14 +56,28 @@ import org.koin.test.inject
  * Both are exercised here against real `vyhybna.xml` track objects, because the whole point is
  * the state left behind in the interlocking, not the call sequence.
  *
- * ## What "abort" must look like from the caller's side
+ * ## What "abort" must look like from the caller's side (updated by Issue #904)
  *
- * `Success`, no exception, blocks still RESERVED to this train, and `getPathInfo(train).target`
- * still the **old** target — the stored PathInfo is never truncated or partially updated
- * (invariant I2, the #316 rule). The newly reserved blocks that the aborted merge left out of
- * the PathInfo become an orphaned RESERVED tail; that tail is reclaimable by
- * `OrphanReservationSweeper` → `RegistryPartialRouteReleaser.releaseUntravelledTail`, which also
- * drives its semaphores back to STOP. See `dispatcher-agent`'s `MergeAbortSimSurvivalTest`.
+ * No exception either way, and a genuine abort never truncates or partially updates the stored
+ * PathInfo (invariant I2, the #316 rule). Per the traffic-simulation-expert Issue #904 ruling,
+ * plus a root-cause fix discovered while implementing it:
+ *
+ * - **Step 2i** used to build its merge candidate from the caller-supplied `start`, which for a
+ *   route EXTENSION reusing its ORIGINAL start (the shape Issue #911 already established happens
+ *   in production) made `new.start != old.target` on *every* such call -- not a rare shape, the
+ *   routine one -- so the merge spuriously aborted for legitimate extensions. The fix builds the
+ *   merge candidate from the FORWARD-ONLY segment instead (starting where the new blocks
+ *   actually begin), so `new.start` agrees with `old.target` and the merge genuinely SUCCEEDS
+ *   for this shape (see [step2iMergeAbortDoesNotThrow], which now pins a real merge, not an
+ *   abort). Step 2i's rollback (transactionally complete, matching the #901 standard) now fires
+ *   only for genuinely pathological aborts -- duplicated new-start, the 3rd-occurrence cycle
+ *   guard -- where it releases exactly what the rejected candidate acquired and tries the next
+ *   candidate; an exhausted attempt with no other failure mode reports `AllPathsBlocked`. There
+ *   is no orphaned RESERVED tail left for `OrphanReservationSweeper` to reclaim either way.
+ * - **The already-owned early return** acquires no new blocks/switches -- the train already owns
+ *   everything -- so an abort there has nothing to roll back; it still reports `Success` (the
+ *   train's actual block ownership is correct and unchanged), only resetting the signal it may
+ *   have just re-cleared. See `dispatcher-agent`'s `MergeAbortSimSurvivalTest`.
  *
  * ## Topology (vyhybna.xml)
  *
@@ -129,7 +143,7 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 	): PathReservationService.ReservationResult = service.reservePath(trainId, start, target)
 
 	@Test
-	@DisplayName("Step 2i: a non-contiguous merge aborts, reservePath still returns Success")
+	@DisplayName("Step 2i: a route extension reusing its original start now MERGES instead of aborting (Issue #904)")
 	fun step2iMergeAbortDoesNotThrow() {
 		// Given: the train holds zA → doA1
 		assertThat(reserve(zA, doA1))
@@ -138,16 +152,19 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 		assertThat(storedBefore).isNotNull()
 		assertThat(storedBefore!!.target).isEqualTo(doA1)
 
-		// When: it requests zA → doB1. Step 0 passes (zA still bounds a held block), the extra
-		// block doA1–doB1 is genuinely new, so the request reaches Step 2i — where the merge is
-		// non-contiguous, because new.start (zA) != old.target (doA1).
+		// When: it requests zA → doB1, reusing the ORIGINAL start zA (not the current front
+		// doA1) -- exactly the route-extension shape Issue #911 already established happens in
+		// production. Step 0 passes (zA still bounds a held block); the extra block doA1–doB1 is
+		// genuinely new.
 		val result = reserve(zA, doB1)
 
-		// Then: no exception escaped reservePath, and it still reports Success.
+		// Then (Issue #904 root-cause fix): reservePath now builds the Step 2i merge candidate
+		// from the FORWARD-ONLY segment (starting at doA1, where the new block actually begins),
+		// not from the caller-supplied zA -- so new.start (doA1) equals old.target (doA1) and the
+		// merge SUCCEEDS, properly extending PathInfo, instead of spuriously aborting on every
+		// such extension. This is a real, correct extension, not an orphaned tail.
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		// The blocks really are reserved to this train — the abort is a PathInfo-only decision
-		// and must not touch block ownership (invariant I1).
 		val held = registry.getBlocks(trainId)
 		assertThat(held.isNotEmpty()).isTrue()
 		held.forEach { block ->
@@ -158,9 +175,12 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 			).isTrue()
 		}
 
-		// And the stored PathInfo is byte-for-byte the pre-merge object: same instance, old target.
-		assertThat(registry.getPathInfo(trainId)!!.target).isEqualTo(doA1)
-		assertThat(registry.getPathInfo(trainId) === storedBefore).isTrue()
+		// The PathInfo genuinely advanced: front moved from doA1 to doB1, tail stayed at zA.
+		val merged = registry.getPathInfo(trainId)
+		assertThat(merged).isNotNull()
+		assertThat(merged!!.start).isEqualTo(zA)
+		assertThat(merged.target).isEqualTo(doB1)
+		assertThat(merged !== storedBefore).isTrue()
 	}
 
 	@Test

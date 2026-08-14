@@ -71,6 +71,14 @@ object TestFixtures {
 
 	fun loadSwitchBetweenSemaphoresXml(): InputStream = fixture("switch-between-semaphores.xml")
 
+	/**
+	 * Issue #903 regression fixture: a candidate ordering where the GEOMETRIC candidate
+	 * (unconfigurable switch) is enumerated FIRST and a CONTENTION candidate SECOND,
+	 * exercising the `recordAttemptResult` priority in `reservePathToAnyNextSemaphore`.
+	 * See `geometric-priority.xml` header comment for the topology.
+	 */
+	fun loadGeometricPriorityXml(): InputStream = fixture("geometric-priority.xml")
+
 	/** Load a named InOut-validation fixture (e.g. "zero-inouts.xml", "single-inout.xml"). */
 	fun loadInvalidInOutXml(fixtureName: String): InputStream = fixture(fixtureName)
 

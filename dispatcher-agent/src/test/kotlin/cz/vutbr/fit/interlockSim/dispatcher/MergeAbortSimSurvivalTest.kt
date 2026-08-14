@@ -12,11 +12,11 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
-import assertk.assertions.isTrue
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
@@ -28,8 +28,6 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -38,11 +36,9 @@ import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.util.BlockIdentity
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import io.mockk.every
-import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -78,11 +74,12 @@ import java.util.concurrent.atomic.AtomicInteger
  *   afterwards. The injection is done through the registry rather than through a contrived
  *   topology because what is under test is the *thread survival*, not the route that produces
  *   the shape.
- * - [orphanedTailFromAnAbortIsReclaimableAndItsAspectsReturnToStop] pins invariant I3: after an
- *   abort, the RESERVED tail that the aborted merge left out of the PathInfo is still reclaimable
- *   by [RegistryPartialRouteReleaser] (the [OrphanReservationSweeper]'s releaser), and the
- *   semaphores that were cleared for it come back to STOP. That reclaimability is what makes
- *   "never throw, just keep `old`" safe on its own, without releasing anything at abort time.
+ * - [mergeAbortedReservePathLeavesNoOrphanedTail] pins the Issue #904 update to invariant I3:
+ *   `reservePath` itself now releases exactly what an aborted candidate acquired -- blocks,
+ *   switches, and the signal it cleared, driven back to STOP -- before the abort can ever
+ *   surface. There is no orphaned RESERVED tail left for `OrphanReservationSweeper`
+ *   (`RegistryPartialRouteReleaser`) to reclaim later; the old "never throw, just keep `old`,
+ *   rely on the sweeper" trade-off no longer applies to this exit.
  * - [cleanBaselineRunLogsNoMergeAbortWarning] is the inertness gate: a plain `vyhybna` run must
  *   never trip either new WARN.
  *
@@ -263,66 +260,46 @@ class MergeAbortSimSurvivalTest {
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
-	@DisplayName("the orphaned tail left by an abort is reclaimable and its aspects return to STOP")
-	fun orphanedTailFromAnAbortIsReclaimableAndItsAspectsReturnToStop() {
-		val trainId = "Train #1"
+	@DisplayName(
+		"a merge-aborted reservePath call leaves no orphaned tail -- nothing for the sweeper to reclaim (Issue #904)"
+	)
+	fun mergeAbortedReservePathLeavesNoOrphanedTail() {
+		val trainId = "Train #904 probe"
 		val zA = separatorAt(14, 8)
-		val doB1 = separatorAt(25, 8)
+		val doA1 = separatorAt(16, 8)
 		val zB = separatorAt(27, 8)
 
-		// Given: a held route zA → doB1 whose first block the train is standing on ...
-		service().reservePath(trainId, zA, doB1)
-		val head =
-			registry().getBlocks(trainId).firstOrNull { zA in it.ends() }
-				?: error("No reserved block bounded by zA")
-		head.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId })
+		// Given: a PathInfo with NO real reservation behind it -- the FIRST-ever
+		// registerPathInfo call for this trainId, so it stores directly (no merge, no
+		// blocks/switches/signal acquired). Its target (zB, unrelated to the real reservation
+		// below) will not match a genuinely reserved candidate's start, the same "probe train,
+		// no footprint" shape [pathologicalMergeOnSimThreadDoesNotKillTheRun] already uses.
+		registry().registerPathInfo(trainId, seedPathInfo(zB))
 
-		// ... and a second, non-contiguous request whose merge ABORTS (new.start = zA, but the
-		// stored path already ends at doB1). Its blocks are reserved and doB1 is cleared into the
-		// new section BEFORE the merge is even attempted, so this is exactly the orphaned-tail
-		// shape an abort creates: RESERVED track behind a proceed aspect, outside the PathInfo.
-		service().reservePath(trainId, zA, zB)
+		// When: a REAL reservation. The train's footprint is empty (no blocks/switches ever
+		// registered for it), so Step 0's contiguity check passes vacuously for any start
+		// (Issue #893's documented exemption) -- this genuinely reserves blocks, locks vA, and
+		// clears zA's signal (Steps 2d-2h) before Step 2i's merge sees new.start (zA) !=
+		// old.target (zB, from the seed) and aborts. This reproduces the genuine abort shape
+		// Issue #904's root-cause fix does NOT eliminate -- unlike the ordinary "extend using
+		// the original start" pattern (Issue #911's shape), which now merges cleanly instead of
+		// aborting, so the corruption must be set up this way rather than via two real
+		// `reservePath` calls on the same train.
+		service().reservePath(trainId, zA, doA1)
 		assertThat(warningsContaining(NON_CONTIGUOUS_WARN)).isNotEmpty()
-		assertThat(registry().getPathInfo(trainId)!!.target).isEqualTo(doB1) // PathInfo untouched
+		assertThat(registry().getPathInfo(trainId)!!.target).isEqualTo(zB) // PathInfo untouched
 
-		val tail =
-			registry().getBlocks(trainId).filter {
-				it.getState() == TrackFacility.State.RESERVED && it.occupant == null
-			}
-		assertThat(tail).isNotEmpty()
-		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
-
-		// Guard against a vacuous G1 assertion: the abort must really have left proceed aspects
-		// standing for track the train will never reach — that is the damage being repaired.
-		val litInsideTail =
-			tail
-				.flatMap { it.ends().toList() }
-				.filterIsInstance<DynamicRailSemaphore>()
-				.distinct()
-				.filter { it.signal.isAllowing() }
-		assertThat(litInsideTail, "semaphores lit inside the orphaned tail").isNotEmpty()
-
-		// When: the sweeper's releaser reclaims the un-travelled tail (arch doc §6 row 6).
-		val releaser =
-			RegistryPartialRouteReleaser(
-				registry = registry(),
-				pathReservationService = service()
-			)
-		val released = releaser.releaseUntravelledTail(trainId, tailIds)
-
-		// Then: the tail really came free — the abort left nothing that pins it.
-		assertThat(released, "released ids").isNotEmpty()
-		released.forEach { id ->
-			val block = tail.single { BlockIdentity.stableBlockId(it) == id }
-			assertThat(block.getState(), "state of released block $id").isEqualTo(TrackFacility.State.FREE)
-			assertThat(block.trainName != trainId, "released block $id no longer owned by $trainId").isTrue()
-		}
-
-		// And no proceed aspect outlives the reservation (G1).
-		litInsideTail.forEach { semaphore ->
-			assertThat(semaphore.signal.name, "aspect of ${semaphore.name} after tail release")
-				.isEqualTo("STOP")
-		}
+		// Then: the train's ownership is back to exactly what it was before the aborted attempt
+		// -- there was nothing before, so there must be nothing after either.
+		assertThat(registry().getBlocks(trainId))
+			.withMessage("a merge-abort must release exactly the blocks THIS attempt acquired")
+			.isEmpty()
+		assertThat(registry().getSwitches(trainId))
+			.withMessage("a merge-abort must release any switches THIS attempt locked")
+			.isEmpty()
+		assertThat((zA as DynamicRailSemaphore).signal.isAllowing())
+			.withMessage("a merge-abort must not leave a proceed aspect standing over an abandoned candidate")
+			.isFalse()
 	}
 
 	@Test

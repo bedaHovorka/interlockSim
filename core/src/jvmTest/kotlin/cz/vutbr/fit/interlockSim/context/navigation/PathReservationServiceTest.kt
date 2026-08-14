@@ -21,6 +21,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEqualTo
+import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -38,6 +39,8 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
@@ -1569,6 +1572,46 @@ class PathReservationServiceTest : KoinTestBase() {
 	}
 
 	/**
+	 * Issue #911: the InOut branch of [DefaultPathReservationService.configureStartSignal]
+	 * must fail OPEN on a route-extension's non-adjacent `start`/`forwardBlocks.first()` pair,
+	 * mirroring the semaphore branch's existing [DefaultPathReservationService.startFacesTravelDirection]
+	 * tolerance (Issue #893 task A1). A route extension re-invokes `reservePath` with the
+	 * train's ORIGINAL start; once every block adjacent to that start is already owned, the
+	 * first genuinely new `forwardBlocks.first()` is several hops away -- not literally an end
+	 * of the InOut's block, so `SimpleTrack.maxSpeed(start)` throws.
+	 *
+	 * ## Ruling (traffic-simulation-expert; binding)
+	 *
+	 * Treat as already configured and return `true`, exactly as the semaphore branch does --
+	 * the InOut's `inSemaphore` carries no extra authority that would make this branch behave
+	 * differently, and direction/entry-point correctness is enforced earlier by
+	 * `rejectNonContiguousStart`, not by this guard.
+	 */
+	@Nested
+	inner class InOutRouteExtensionTests {
+		@Test
+		fun `reservePath extension from InOut succeeds when start no longer bounds the first forward block`() {
+			// Arrange -- reserve only the first hop from inOut1, so inOut1 itself remains the
+			// train's registered start while the block(s) immediately adjacent to it become
+			// already-owned.
+			val next = navigator.getNextTrackSection(inOut1, null)
+			assertThat(next).isNotNull()
+			val firstHop = service.reservePathToAnyNextSemaphore("t1", inOut1, next!!)
+			assertThat(firstHop).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(registry.getBlocks("t1")).isNotEmpty()
+
+			// Act -- extend with the SAME original start (inOut1). forwardBlocks.first() is now
+			// a block several hops down the path, not literally an end of inOut1's track.
+			val extension = service.reservePath("t1", inOut1, inOut2)
+
+			// Assert -- the extension must succeed and cover the full 7-block inOut1->inOut2
+			// path (SuccessfulReservation's baseline), not roll back and retry forever.
+			assertThat(extension).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(registry.getBlocks("t1")).hasSize(7)
+		}
+	}
+
+	/**
 	 * Signal clearing and route release must be symmetric: a proceed aspect may not outlive
 	 * the reservation that produced it.
 	 *
@@ -2636,7 +2679,87 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - second train
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			// Issue #903: among the semaphores reservePathToAnyNextSemaphore tries for the
+			// second train, at least one candidate is a permanent geometric impossibility
+			// (rear-facing START or unconfigurable switch), not merely blocked by the first
+			// train -- first-hit-wins classification surfaces that instead of AllPathsBlocked.
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		}
+
+		/**
+		 * Issue #903 regression: a `[GeometricallyImpossible, AllPathsBlocked]` candidate
+		 * ordering (geometric FIRST, contention SECOND) must return `GeometricallyImpossible`,
+		 * not `AllPathsBlocked`. Under the old unconditional `lastResult` overwrite, the three
+		 * contention branches (bypass-rollback, AllPathsBlocked, NoPathExists) silently replaced
+		 * an earlier geometric result, so `InOutWorker` would spin on `waitUntil(pathFree)`
+		 * retrying a path that will never become available. The fix routes every `lastResult`
+		 * write through `recordAttemptResult`, which preserves the permanent geometric result.
+		 *
+		 * This MUST fail under the old unconditional-overwrite logic (revert the fix and the
+		 * assertion below flips to `AllPathsBlocked`).
+		 *
+		 * Fixture `geometric-priority.xml` (header comment documents the topology): `doB1` is
+		 * the START; `InOutC` (geometric candidate, route needs the unconfigurable vB A<->D
+		 * join) is enumerated FIRST because `prioritizeInOuts` puts InOuts before semaphores;
+		 * `B` (contention candidate, route via the configurable vB A<->F MAIN) is enumerated
+		 * SECOND. A blocker reservation from `B` to `zB` owns the zB-B block, so the B candidate
+		 * hits an owned block (AllPathsBlocked) while InOutC's candidate stays free up to the
+		 * unconfigurable switch (GeometricallyImpossible).
+		 */
+		@Test
+		fun `geometric candidate enumerated before contention is preserved over the contention result`() {
+			// Fresh context from the geometric-priority fixture (the class-level @BeforeEach
+			// loads vyhybna.xml, so this test builds its own context/service for this topology).
+			val ctx =
+				simulationContextFactory.createContext(
+					editingContextFactory.createContext(TestFixtures.loadGeometricPriorityXml()) as EditingContext
+				) as DefaultSimulationContext
+			val svc = ctx.getRoutingServices().getPathReservationService()
+
+			fun semByName(name: String): DynamicRailSemaphore {
+				val grid = ctx.getRailWayNetGrid()
+				for (x in 0 until grid.cols) {
+					for (y in 0 until grid.rows) {
+						val cell =
+							grid[
+								cz.vutbr.fit.interlockSim.util
+									.Point(x, y)
+							]
+						if (cell is DynamicRailSemaphore && cell.name == name) return cell
+					}
+				}
+				error("Semaphore $name not found in geometric-priority fixture")
+			}
+
+			fun inOutByName(name: String): DynamicInOut =
+				ctx
+					.getInOuts()
+					.map { ctx.toDynamic(it) }
+					.filterIsInstance<DynamicInOut>()
+					.single { it.name == name }
+
+			val doB1 = semByName("doB1")
+			val zB = semByName("zB")
+			val b = inOutByName("B")
+
+			// Blocker: reserve B -> zB, owning the zB-B block so the B candidate (doB1 -> vB ->
+			// zB -> B) hits an owned block and classifies as AllPathsBlocked (contention), while
+			// InOutC's candidate (doB1 -> vB -> InOutC) stays free up to unconfigurable vB.
+			val blockerResult = svc.reservePath("blocker", b, zB)
+			assertThat(blockerResult)
+				.withMessage("blocker B -> zB must succeed to seed the contention on the B candidate")
+				.isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Probe: oriented overload from doB1. Candidates enumerate as [InOutC, B]
+			// (prioritizeInOuts). InOutC (first) -> GeometricallyImpossible; B (second) ->
+			// AllPathsBlocked. recordAttemptResult must preserve the geometric result.
+			val result = svc.reservePathToAnyNextSemaphore("probe", doB1)
+
+			assertThat(result)
+				.withMessage(
+					"a geometric candidate enumerated BEFORE a contention candidate must surface " +
+						"GeometricallyImpossible, not be overwritten by the later AllPathsBlocked"
+				).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		}
 	}
 
@@ -2771,6 +2894,97 @@ class PathReservationServiceTest : KoinTestBase() {
 			switches.forEach { switch ->
 				assertThat(switch.locked).isFalse()
 			}
+		}
+	}
+
+	/**
+	 * Issue #904: `reservePath`'s Step 2i `registerPathInfo` call must release exactly what
+	 * *this* call acquired (blocks, switches, cleared signal) when the registry's merge
+	 * aborts -- transactionally complete, matching the #901 standard applied everywhere else
+	 * in `reservePath`. Before this fix the abort left an orphaned RESERVED tail relying on
+	 * `OrphanReservationSweeper` to reclaim it later (never, in `:fast-sim`/bare-`:core`).
+	 *
+	 * The merge abort is reached by directly corrupting the registry's stored `PathInfo`
+	 * target (the same technique `MergeAbortSimSurvivalTest`, dispatcher-agent, uses) after a
+	 * REAL reservation has established the train's physical footprint -- so the subsequent
+	 * `reservePath` call is a legitimate, contiguous request that genuinely reserves new
+	 * resources before Step 2i's merge rejects the corrupted target.
+	 */
+	@Nested
+	inner class MergeAbortResourceRelease {
+		@Test
+		fun `reservePath releases blocks switches and signal when the Step 2i merge aborts`() {
+			val zA = findSemaphoreByName("zA")
+			val doA1 = findSemaphoreByName("doA1")
+			val zB = findSemaphoreByName("zB")
+			val trainId = "t904_step2i"
+
+			// Seed a PathInfo with NO real reservation behind it (this is the FIRST-ever
+			// registerPathInfo call for this trainId, so it stores directly -- no merge, no
+			// blocks/switches/signal acquired). This gives the train a PathInfo whose target
+			// (zB, unrelated to the real reservation below) will not match a genuinely reserved
+			// candidate's start -- mirroring the "probe train, no footprint" technique
+			// MergeAbortSimSurvivalTest (dispatcher-agent) already uses for the same reason:
+			// registerPathInfo is a pure data-structure operation (I1) uncoupled from
+			// trainToBlocks, so this cannot corrupt anything real.
+			val seedPath = ArrayPath(simulationContext)
+			seedPath.add(zB)
+			registry.registerPathInfo(
+				trainId,
+				PathInfo(start = zB, target = zB, reservedPath = seedPath, entryDirections = emptyMap())
+			)
+
+			// Act: a REAL reservation, using the same zA -> doA1 pair the "golden equivalence"
+			// case in MergeAbortNeverThrowsTest proves is a plain, single-candidate, no-G4,
+			// no-switch-surprise route. The train's footprint is empty (no blocks/switches ever
+			// registered for it), so Step 0's contiguity check passes vacuously for any start
+			// (Issue #893's documented exemption) -- this genuinely reserves blocks, locks vA,
+			// and clears zA's signal (Steps 2d-2h) before Step 2i's merge sees new.start (zA)
+			// != old.target (zB, from the seed) and aborts.
+			// maxDepth=3 restricts topological search to the single direct zA-doA1 route, the
+			// same technique StartDirectionTests uses to exclude vyhybna's longer sibling-branch
+			// alternate -- otherwise an unrelated unconfigurable switch on that alternate
+			// candidate would override this attempt's classification (Issue #903 first-hit-wins)
+			// and mask what THIS test verifies. Confirmed single-candidate: the result below is
+			// AllPathsBlocked(attemptedPaths=1), not GeometricallyImpossible.
+			val extension = service.reservePath(trainId, zA, doA1, maxDepth = 3)
+
+			// Assert: the extension's own newly-acquired blocks/switches must not leak -- there
+			// was nothing before this attempt, so there must be nothing after it either.
+			assertThat(registry.getBlocks(trainId))
+				.withMessage("a merge-abort must release exactly the blocks THIS attempt acquired")
+				.isEmpty()
+			assertThat(registry.getSwitches(trainId))
+				.withMessage("a merge-abort must release any switches THIS attempt locked")
+				.isEmpty()
+
+			// Assert: zA's signal must not be left showing a proceed aspect for a route the
+			// registry no longer considers part of the train's path (G1 hazard).
+			assertThat(zA.signal)
+				.withMessage("a merge-abort must not leave a proceed aspect standing over an abandoned candidate")
+				.isEqualTo(Signal.STOP)
+
+			// The extension itself is not usable -- it's not what the caller asked for, and the
+			// train's original (seeded) PathInfo must survive unchanged.
+			assertThat(extension)
+				.withMessage("a merge-abort must not be reported as a successful reservation")
+				.isNotInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(registry.getPathInfo(trainId)!!.target)
+				.withMessage("a merge-abort must not touch the stored PathInfo")
+				.isEqualTo(zB)
+		}
+
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid[Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
 		}
 	}
 
@@ -2989,11 +3203,14 @@ class PathReservationServiceTest : KoinTestBase() {
 			// around vyhybna's sibling branch (doA1 -> vA -> doA2 -> doB2 -> vB -> doB1)
 			// whose first forward block is not even adjacent to doA1 -- an unrelated edge
 			// case this test does not intend to exercise.
-			val result = service.reservePath("rearTrain", doA1, doB1, maxDepth = 2)
+			val result = service.reservePath("rearTrain", doA1, doB1, maxDepth = 3)
 
+			// Issue #903: a rear-facing START is a permanent geometric impossibility, not
+			// ordinary contention -- it must never be reported as AllPathsBlocked (which the
+			// dispatcher's invalid-output rate excludes and which invites a pointless retry).
 			assertThat(result)
 				.withMessage("a rear-facing START must not be granted a route")
-				.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+				.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
 			assertThat(registry.getBlocks("rearTrain"))
 				.withMessage("a rejected start must reserve nothing")

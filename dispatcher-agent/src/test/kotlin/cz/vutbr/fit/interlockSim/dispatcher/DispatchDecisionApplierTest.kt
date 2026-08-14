@@ -238,6 +238,19 @@ class DispatchDecisionApplierTest {
 
 			applier.onControlStep() // must not throw
 		}
+
+		@Test
+		@DisplayName("GeometricallyImpossible result does not throw")
+		fun geometricallyImpossible_doesNotThrow() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.GeometricallyImpossible(
+					"Switch along candidate 0 could not be configured for the requested route"
+				)
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+
+			applier.onControlStep() // must not throw
+		}
 	}
 
 	// ── Tool-driven decision exception isolation (Goal 10 incident fix) ──────

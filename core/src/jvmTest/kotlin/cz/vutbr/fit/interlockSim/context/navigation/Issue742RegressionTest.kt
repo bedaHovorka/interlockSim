@@ -160,8 +160,10 @@ class Issue742RegressionTest : KoinTestBase() {
 		val diversion = service.reservePath(trainId, semaphoreDoB1, semaphoreDoB2)
 
 		// The reservation must FAIL — the train has to wait for its through route instead.
+		// Issue #903: an unconfigurable switch is a permanent geometric impossibility, not
+		// ordinary contention -- it must not be reported as AllPathsBlocked.
 		assertThat(diversion)
-			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
 		// No blocks may leak from the failed candidate (k2 / junction blocks stay free).
 		assertThat(registry.getBlocks(trainId)).isEqualTo(blocksAfterEntry)
@@ -261,9 +263,10 @@ class Issue742RegressionTest : KoinTestBase() {
 		// (but fail after setting up the lock, then rollback)
 		val impossible = service.reservePath(trainId, semaphoreDoA1, semaphoreDoB2)
 
-		// Must fail cleanly
+		// Must fail cleanly. Issue #903: an unconfigurable switch is a permanent geometric
+		// impossibility, not ordinary contention -- it must not be reported as AllPathsBlocked.
 		assertThat(impossible)
-			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
 		// Verify NO NEW blocks are registered
 		assertThat(registry.getBlocks(trainId).toSet()).isEqualTo(blocksBeforeAttempt)
@@ -330,9 +333,11 @@ class Issue742RegressionTest : KoinTestBase() {
 
 		// Phase 2: Attempt impossible extension that would lock vB
 		// (rollbackUnconfigurableCandidate should filter vB out, not unlocking vA)
+		// Issue #903: an unconfigurable switch is a permanent geometric impossibility, not
+		// ordinary contention -- it must not be reported as AllPathsBlocked.
 		val phase2 = service.reservePath(trainId, semaphoreDoB1, semaphoreDoB2)
 		assertThat(phase2)
-			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
 		// After rollback, Phase 1 switches must still be registered (not double-unlocked)
 		val switchesAfterPhase2 = registry.getSwitches(trainId).toSet()
@@ -359,9 +364,11 @@ class Issue742RegressionTest : KoinTestBase() {
 		// This triggers reservation of forwardBlocks, then rollback when switch cannot
 		// be configured. rollbackUnconfigurableCandidate must cancel each block before
 		// unregistering it (line 1950: block.cancelPathSetup(reservedFrom))
+		// Issue #903: an unconfigurable switch is a permanent geometric impossibility, not
+		// ordinary contention -- it must not be reported as AllPathsBlocked.
 		val impossible = service.reservePath(trainId, semaphoreDoA1, semaphoreDoB2)
 		assertThat(impossible)
-			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
 		// After rollback, all forwardBlocks must be unregistered
 		val remainingBlocks = registry.getBlocks(trainId).toSet()

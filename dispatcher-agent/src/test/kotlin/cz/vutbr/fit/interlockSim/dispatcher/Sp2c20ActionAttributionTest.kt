@@ -617,7 +617,10 @@ class Sp2c20ActionAttributionTest {
 					"ORIGIN_NOT_CONTIGUOUS",
 					// Issue #834 review finding #2: four-condition interlocking refusal code.
 					"CONDITION_FAILED",
-					"DROPPED_INVALID"
+					"DROPPED_INVALID",
+					// Issue #903: permanent geometric impossibility (rear-facing START or
+					// unconfigurable switch), excluded from ALL_PATHS_BLOCKED's contention bucket.
+					"GEOMETRICALLY_IMPOSSIBLE"
 				)
 			)
 		}

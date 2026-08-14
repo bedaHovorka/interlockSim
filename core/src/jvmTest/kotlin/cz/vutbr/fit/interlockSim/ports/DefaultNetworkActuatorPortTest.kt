@@ -987,6 +987,9 @@ class DefaultNetworkActuatorPortTest {
 				PathReservationService.ReservationResult.NonContiguousStart(
 					startName = "A",
 					reason = "T1 holds no block bounded by 'A'; legal origins: B"
+				),
+				PathReservationService.ReservationResult.GeometricallyImpossible(
+					reason = "START semaphore for candidate 0 faces away from the requested direction of travel"
 				)
 			)
 		}

@@ -162,11 +162,26 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 		val service =
 			DefaultPathReservationService(navigator, faultyEnvironment, registry, pathInfoBuilder, routeFinder)
 
-		val result = service.reservePath("faultTrain", doA1, zA)
+		// maxDepth = 3 restricts the topological search to the single direct doA1 -> zA route,
+		// the same technique the MergeAbortResourceRelease sibling test (PathReservationServiceTest)
+		// and StartDirectionTests use to exclude vyhybna's longer sibling-branch alternate --
+		// otherwise an unconfigurable switch on that alternate candidate would be classified as
+		// GeometricallyImpossible (Issue #903 first-hit-wins) and mask what THIS test actually
+		// verifies: the START-aspect rollback after this direct candidate's injected signal-config
+		// fault (ConfigFailed, not a geometric rejection).
+		val result = service.reservePath("faultTrain", doA1, zA, maxDepth = 3)
 
+		// With only the direct candidate, the injected ConfigFailed is ordinary contention (no
+		// geometric rejection is reached), so the exhausted-attempt classifier returns
+		// AllPathsBlocked(attemptedPaths = 1) -- NOT GeometricallyImpossible, which would come from
+		// the excluded alternate candidate's unconfigurable switch and is decoupled from this
+		// test's purpose (pinning the START-aspect rollback).
 		assertThat(result)
-			.withMessage("a signal-config failure must fail the reservation")
+			.withMessage("a signal-config failure must fail the reservation as AllPathsBlocked")
 			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		assertThat((result as PathReservationService.ReservationResult.AllPathsBlocked).attemptedPaths)
+			.withMessage("maxDepth=3 yields exactly the one direct candidate")
+			.isEqualTo(1)
 
 		assertThat(registry.getBlocks("faultTrain"))
 			.withMessage("a rolled-back candidate must hold no blocks")
@@ -206,7 +221,7 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 		val service =
 			DefaultPathReservationService(navigator, faultyEnvironment, registry, pathInfoBuilder, routeFinder)
 
-		val initial = service.reservePath("extendTrain", doA1, zA)
+		val initial = service.reservePath("extendTrain", doA1, zA, maxDepth = 3)
 		assertThat(initial)
 			.withMessage("the setup reservation must succeed so doA1 is legitimately cleared first")
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
@@ -218,11 +233,22 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 
 		// Re-arm: only THIS second attempt's own re-config of doA1 must fail.
 		faultyEnvironment.armed = true
-		val extension = service.reservePath("extendTrain", doA1, inOutA)
+		// maxDepth = 4 restricts the extension's topological search to the single direct
+		// doA1 -> A route (doA1 -> vA -> zA -> A, three sections), excluding vyhybna's longer
+		// sibling-branch alternate whose unconfigurable switch would otherwise be classified
+		// GeometricallyImpossible (Issue #903) and mask this test's actual concern: the
+		// START-aspect rollback after the injected ConfigFailed on doA1's re-config.
+		val extension = service.reservePath("extendTrain", doA1, inOutA, maxDepth = 4)
 
+		// With only the direct candidate, the injected ConfigFailed is ordinary contention, so
+		// the exhausted-attempt classifier returns AllPathsBlocked(1) -- NOT GeometricallyImpossible
+		// (which would come from the excluded alternate and is decoupled from this test's purpose).
 		assertThat(extension)
-			.withMessage("the injected fault must fail the extension attempt")
+			.withMessage("the injected fault must fail the extension attempt as AllPathsBlocked")
 			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		assertThat((extension as PathReservationService.ReservationResult.AllPathsBlocked).attemptedPaths)
+			.withMessage("maxDepth=4 yields exactly the one direct candidate")
+			.isEqualTo(1)
 		assertThat(registry.getBlocks("extendTrain").toSet())
 			.withMessage("a failed extension must not touch the train's earlier, still-valid blocks")
 			.isEqualTo(blocksBefore)
