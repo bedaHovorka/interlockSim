@@ -62,6 +62,16 @@ import java.util.concurrent.atomic.AtomicInteger
  * the lock-step barrier below must only be released when [DispatchTickLoop.runTick]
  * actually did work (returned a non-null [cz.vutbr.fit.interlockSim.dispatcher.agents.TickRecord]).
  *
+ * **Issue #907 — barrier now also in production wiring:** the same per-tick lock-step
+ * barrier used here (`decisionsApplied`) is now also wired into the production
+ * rule-based path via [cz.vutbr.fit.interlockSim.ExampleRegistry.wireDispatcherAgent]
+ * (`barrierControlStep = true`). This runner therefore exercises the same
+ * correctness property as production: the sim thread does not drain the queue until
+ * the driver has posted decisions for that tick. The two wirings differ in their
+ * driver implementation (this runner uses [DispatchTickLoop]; production uses
+ * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]), but their per-tick
+ * ordering guarantee is equivalent.
+ *
  * @since Issue #540 (SP0.1 — Goal 10 Stage A3); extracted from
  *   `RuleBasedDispatcherDeterminismTest` in Issue #746 (SP0.11c) so the heavy-test
  *   variant added for that issue's verification bar shares identical wiring.

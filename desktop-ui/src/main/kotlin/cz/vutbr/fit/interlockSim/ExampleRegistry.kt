@@ -64,6 +64,7 @@ import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
 import java.time.Duration
 import java.util.UUID
+import java.util.concurrent.Semaphore
 
 /**
  * Registry of available simulation examples.
@@ -157,7 +158,7 @@ class ExampleRegistry {
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				val loop = ShuntingLoop(context, time)
-				wireDispatcherAgent(context, loop, NoOpSimulationController)
+				wireDispatcherAgent(context, loop, NoOpSimulationController, barrierControlStep = true)
 				context.setMainProcess(loop)
 				context
 			}
@@ -413,7 +414,7 @@ class ExampleRegistry {
 				// The scoped DelegatingSimulationController is handed to the driver here;
 				// gui.SimulationController attaches the live SimulationRunner as its
 				// delegate when the run starts (and detaches it on stop).
-				wireDispatcherAgent(context, loop, context.scope.get<DelegatingSimulationController>())
+				wireDispatcherAgent(context, loop, context.scope.get<DelegatingSimulationController>(), barrierControlStep = true)
 				context.setMainProcess(loop)
 				context
 			}
@@ -546,7 +547,14 @@ class ExampleRegistry {
 		// SP2c.20 follow-up (#843): the un-wrapped KoogAgentPlanAdapter behind plannerOverride
 		// (when plannerOverride is a MeasuringPlanAdapter wrapping one), so AgentLoopDriver can
 		// attribute each cycle correctly via its tickListener. null for rule-based examples.
-		plannerTickSource: KoogAgentPlanAdapter? = null
+		plannerTickSource: KoogAgentPlanAdapter? = null,
+		// Issue #907: when true, the sim thread blocks on a per-tick semaphore between
+		// driverSignal.signal() and applier.onControlStep(), ensuring the driver's decisions for
+		// tick N are in the queue before onControlStep() drains it. This closes the OS-scheduler
+		// race that made the rule-based arm non-reproducible at 600 s.
+		// Must NOT be set for LLM-backed planners: their inference latency (10-25 s) would
+		// freeze the sim thread for the duration of each LLM call.
+		barrierControlStep: Boolean = false
 	) {
 		// Goal 10 dispatcher-cannot-approve-trains fix: resolve the SAME NetworkPerceptionPort /
 		// NetworkActuatorPort instances the Koin-scoped KoogAgentFactory uses for its tools,
@@ -707,9 +715,19 @@ class ExampleRegistry {
 			)
 		context.scope.declare(orphanSweeper)
 
+		// Issue #907: per-tick semaphore used when barrierControlStep = true to lock-step the
+		// sim thread with the driver thread. One permit is released by the driver after each
+		// real cycle; the sim thread acquires it before draining the queue, ensuring tick-N
+		// decisions are in the queue when onControlStep() runs.
+		val barrierSemaphore = if (barrierControlStep) Semaphore(0) else null
+
 		loop.controlStepListener =
 			ControlStepListener {
 				driverSignal.signal()
+				// Issue #907: when barrierControlStep is true, block until the driver has posted its
+				// decisions for this tick before draining the queue. This is the same lock-step
+				// ordering the determinism-test runner uses (RuleBasedDispatcherDeterminismRunner:206-211).
+				barrierSemaphore?.acquireUninterruptibly()
 				applier.onControlStep()
 				// After the applier, so a route requested this tick is not judged stale before it
 				// has had a single tick to be travelled.
@@ -726,7 +744,37 @@ class ExampleRegistry {
 		val driverLoop =
 			AgentDriverLoop(
 				isActive = loop::isSimActive,
-				runCycle = driver::runCycle
+				// Issue #907: when barrierControlStep is true, wrap runCycle to release the semaphore
+				// exactly when the driver completes a full cycle (runCycle returned true — decisions
+				// were sensed, decided, and posted). A no-op cycle (signal timeout, runCycle returns
+				// false) must NOT release: if the barrier fires without a real decision batch in the
+				// queue, onControlStep() drains an empty queue and the admission-cap race this barrier
+				// exists to prevent re-opens. The sim thread stays blocked until the NEXT real cycle —
+				// which is safe because the signal fires once per tick and the driver processes it.
+				//
+				// Shutdown safety: the ControlStepListener (where the sim thread blocks) runs INSIDE
+				// ShuntingLoop.iteration(). The iteration cannot complete — and isSimActive() cannot
+				// flip to false — while the listener is blocked. So the driver always wakes (the signal
+				// was fired before the block) and completes this runCycle() before isActive() ever
+				// returns false. If runCycle() throws (only possible with an LLM planner; not possible
+				// with the rule-based planner that is the only enabled-barrier use case), release the
+				// semaphore defensively so the sim thread can unblock rather than deadlocking.
+				runCycle =
+					if (barrierSemaphore != null) {
+						{
+							var didWork = false
+							try {
+								didWork = driver.runCycle()
+								if (didWork) barrierSemaphore.release()
+							} catch (e: Throwable) {
+								barrierSemaphore.release()
+								throw e
+							}
+							didWork
+						}
+					} else {
+						driver::runCycle
+					}
 			)
 		context.scope.declare(driverLoop)
 		loop.agentDriverAction = { driverLoop.run() }
