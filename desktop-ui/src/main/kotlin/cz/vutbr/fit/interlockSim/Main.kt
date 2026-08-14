@@ -196,8 +196,8 @@ class Main {
 				// but that driver is #847 — the task blocked on this pipeline producing anything —
 				// so build/reports/dispatcher-runs/ was never created by any run at all.
 				//
-				// TERMINATED_EARLY maps to TIMEOUT_ABORT: a run that stopped short of its requested
-				// horizon is not a natural completion, and #846's pass criterion is
+				// TERMINATED_EARLY maps to RunEndCause.TERMINATED_EARLY: a run that stopped short
+				// of its requested horizon is not a natural completion, and #846's pass criterion is
 				// `completedNaturally && !terminalFallbackEngaged && c7Clean`.
 				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause())
 			} // context closed after simulation

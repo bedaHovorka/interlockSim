@@ -12,8 +12,10 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -186,6 +188,61 @@ class DefaultRunSnapshotStoreTest {
 		assertThat(legacy.latencyMaxMs).isEqualTo(300L)
 	}
 
+	/**
+	 * Schema-version-3 backward compatibility for the `endCause` enum (Issue #909, SP2c).
+	 *
+	 * v4 added [RunEndCause.TERMINATED_EARLY] but kept [RunEndCause.TIMEOUT_ABORT]; existing persisted
+	 * v3 run JSONs that stored `"endCause": "TIMEOUT_ABORT"` (every headless run killed by the sweep
+	 * driver's wall-clock watchdog, before #909 split that case off from a genuine deadlock) must
+	 * still decode. That guarantee is documented on [DispatcherRunSnapshot] but was not pinned by a
+	 * test, so this pins it against a **literal** v3 document — not a round-trip, which would silently
+	 * track any future enum change and stop testing backward compatibility at all.
+	 *
+	 * The decoded run comes back with `endCause = TIMEOUT_ABORT`, `completedNaturally = false`, and
+	 * its own `schemaVersion = 3` (preserved, not rewritten to the current one). The aggregator's
+	 * [RunReportAggregator.runPassed] predicate must treat it as non-passing: a wall-clock kill is
+	 * not a clean completion, and a single passing-rated TIMEOUT_ABORT would let a hung arm sail
+	 * through the A4 gate.
+	 *
+	 * This is a literal-JSON test, not a round-trip: were `TIMEOUT_ABORT` removed from [RunEndCause],
+	 * the direct `decodeFromString` below would throw `SerializationException` and the test would fail
+	 * loudly, instead of the store's `readAll` silently WARN-and-skipping the file and masking the
+	 * regression as an empty result.
+	 */
+	@Test
+	fun `readAll still decodes a literal schema-version-3 TIMEOUT_ABORT run and the aggregator counts it non-passing`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+		Files.writeString(armDir.resolve("legacy-v3-timeout-abort.json"), SCHEMA_V3_TIMEOUT_ABORT_JSON)
+
+		// 1. The store's WARN-and-skip readAll path must still read it (not skip it).
+		val results = store.readAll(tmpDir)
+		assertThat(results).hasSize(1)
+		val legacy = results.first()
+		assertThat(legacy.runId).isEqualTo("legacy-v3-timeout-abort-001")
+		// The file's own version is preserved, not rewritten to the current one.
+		assertThat(legacy.schemaVersion).isEqualTo(3)
+		assertThat(legacy.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(legacy.completedNaturally).isEqualTo(false)
+		// v3-era fields decode too: the scan ran clean.
+		assertThat(legacy.fatalExceptionCount).isEqualTo(0L)
+		assertThat(legacy.fatalExceptionFirstMessage).isNull()
+
+		// 2. Direct decode of the literal JSON so the failure is a thrown exception, not a silent
+		//    skip, if TIMEOUT_ABORT is ever removed from the enum.
+		val direct = SCHEMA_V3_JSON.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V3_TIMEOUT_ABORT_JSON)
+		assertThat(direct.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(direct.completedNaturally).isEqualTo(false)
+		assertThat(direct.schemaVersion).isEqualTo(3)
+
+		// 3. The aggregator's per-run gate predicate must treat this run as non-passing.
+		val aggregator = RunReportAggregator(store)
+		assertThat(aggregator.runPassed(legacy)).isFalse()
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	private fun buildSnapshot(
@@ -305,5 +362,77 @@ class DefaultRunSnapshotStoreTest {
 				"endCause": "NATURAL_COMPLETION"
 			}
 			""".trimIndent()
+
+		/**
+		 * A literal schema-version-3 run document, exactly as `DefaultRunSnapshotStore` wrote it
+		 * before Issue #909 added [RunEndCause.TERMINATED_EARLY] (schema version 4). A v3-era store
+		 * wrote every headless watchdog kill as `"endCause": "TIMEOUT_ABORT"`; v4 keeps that enum
+		 * value so these files stay readable, and this fixture pins that. Written out in full
+		 * rather than derived from the current serializer, for the same reason as [SCHEMA_V1_JSON]:
+		 * a derived fixture would silently track every future schema/enum change and stop testing
+		 * backward compatibility at all. Includes the v3-added `fatalExceptionCount` /
+		 * `fatalExceptionFirstMessage` fields and the v2-added `railwayOutcome` /
+		 * `inferenceTimeoutSeconds` / `promptVariant` fields exactly as a v3-era store wrote them
+		 * with `encodeDefaults = true`.
+		 */
+		private val SCHEMA_V3_TIMEOUT_ABORT_JSON =
+			"""
+			{
+				"schemaVersion": 3,
+				"runId": "legacy-v3-timeout-abort-001",
+				"arm": "RULE_BASED",
+				"params": {
+					"tickPeriodMs": 500,
+					"historyN": 10,
+					"temperature": 0.0,
+					"maxActionsPerTick": 3,
+					"model": "",
+					"seed": null,
+					"inferenceTimeoutSeconds": 30,
+					"promptVariant": "unspecified"
+				},
+				"totalTicks": 3,
+				"ticksByOutcome": { "LLM_ACTIONS": 3 },
+				"timeoutNoOpByCause": { "DEADLINE_MISS": 0 },
+				"llmSuccessRate": 1.0,
+				"noOpRate": 0.0,
+				"invalidOutputRate": 0.0,
+				"repairSuccessRate": 0.0,
+				"emittedByActionType": {},
+				"rejectionsByCode": {},
+				"applyFailuresByCode": {},
+				"validAt1": 0.0,
+				"correctAt1": null,
+				"oracleAgreementAt1": null,
+				"latencyP50Ms": 100,
+				"latencyP95Ms": 200,
+				"latencyMaxMs": 300,
+				"actionsByAuthor": {},
+				"unattributedApplies": 0,
+				"terminalFallbackEngaged": false,
+				"terminalFallbackTickIndex": null,
+				"c7Clean": true,
+				"completedNaturally": false,
+				"endCause": "TIMEOUT_ABORT",
+				"railwayOutcome": {
+					"journeysCompleted": null,
+					"trainsEntered": null,
+					"trainsExited": null,
+					"maxConcurrentTrains": null,
+					"blockTransitions": null,
+					"conflicts": null,
+					"failedReservations": null
+				},
+				"fatalExceptionCount": 0,
+				"fatalExceptionFirstMessage": null
+			}
+			""".trimIndent()
+
+		/** Decoder matching the store's own configuration, used for direct literal-JSON decodes. */
+		private val SCHEMA_V3_JSON =
+			Json {
+				prettyPrint = true
+				encodeDefaults = true
+			}
 	}
 }

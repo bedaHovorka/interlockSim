@@ -78,8 +78,8 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 		val outcome = get<Main>().classifyRun(600.0, 600.0, dispatcherStoppedByFailures = true)
 
 		assertThat(outcome).isEqualTo(RunOutcome.TERMINATED_EARLY)
-		// TERMINATED_EARLY is what makes the run count against its arm: it maps to TIMEOUT_ABORT,
-		// so RunReport's `completedNaturally` pass criterion is false.
+		// TERMINATED_EARLY is what makes the run count against its arm: it maps to
+		// RunEndCause.TERMINATED_EARLY, so RunReport's `completedNaturally` pass criterion is false.
 		assertThat(outcome.exitCode).isEqualTo(1)
 	}
 

@@ -196,7 +196,7 @@ class AiSweepDriver(
 		if (result.exitCode != 0) {
 			logger.error { "[aiSweep] ${run.runId} exited with ${result.exitCode}" }
 			// Exit 1 is Main's TERMINATED_EARLY, which the run itself already persisted as
-			// TIMEOUT_ABORT; anything else means the child died before it could record anything.
+			// TERMINATED_EARLY (Issue #909); anything else means the child died before it could record anything.
 			if (run.runId !in existingRunIds(outputRoot)) {
 				writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan)
 			}

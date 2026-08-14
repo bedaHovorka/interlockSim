@@ -130,11 +130,31 @@ class DispatcherRunSnapshotTest {
 			.hasMessage("ticksByOutcome.values.sum()=2 must equal totalTicks=1")
 	}
 
+	// ── endCause vocabulary (Issue #909, SP2c — TERMINATED_EARLY vs TIMEOUT_ABORT) ────────────
+
+	/**
+	 * The new [RunEndCause.TERMINATED_EARLY] value (Issue #909) must survive encode→decode so a run
+	 * whose event queue drained early is not silently re-filed under a different cause on reload.
+	 * `snapshotWith` defaults to [RunEndCause.NATURAL_COMPLETION], so this pins the new value
+	 * specifically rather than re-testing the default.
+	 */
+	@Test
+	fun `serialization round-trips a snapshot whose endCause is TERMINATED_EARLY`() {
+		val snap = snapshotWith().copy(endCause = RunEndCause.TERMINATED_EARLY, completedNaturally = false)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"endCause\": \"TERMINATED_EARLY\"")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.endCause).isEqualTo(RunEndCause.TERMINATED_EARLY)
+		assertThat(decoded.completedNaturally).isEqualTo(false)
+	}
+
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 3`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_FATAL_EXCEPTION_FIELDS)
+	fun `current schema version is 4`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_TERMINATED_EARLY_CAUSE)
 	}
 
 	@Test
@@ -237,6 +257,9 @@ class DispatcherRunSnapshotTest {
 	private companion object {
 		/** Pinned literally so a future bump has to touch this test deliberately. */
 		private const val SCHEMA_VERSION_WITH_FATAL_EXCEPTION_FIELDS: Int = 3
+
+		/** Pinned literally so a future bump has to touch this test deliberately. */
+		private const val SCHEMA_VERSION_WITH_TERMINATED_EARLY_CAUSE: Int = 4
 
 		private val json =
 			Json {
