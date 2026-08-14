@@ -66,6 +66,7 @@ class DefaultRunSnapshotStore(
 			Json {
 				prettyPrint = true
 				encodeDefaults = true
+				ignoreUnknownKeys = true
 			}
 	}
 

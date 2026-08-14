@@ -437,6 +437,7 @@ class DefaultRunSnapshotStoreTest {
 			Json {
 				prettyPrint = true
 				encodeDefaults = true
+				ignoreUnknownKeys = true
 			}
 	}
 }
