@@ -17,7 +17,22 @@ import java.nio.file.Path
 private val logger = KotlinLogging.logger {}
 
 /**
- * What one run's log revealed about `SimulationException[FATAL]` occurrences.
+ * What one run's log revealed about `SimulationException[FATAL]` log occurrences.
+ *
+ * ## What is counted
+ *
+ * [count] counts every line in the run's log that matches [FatalExceptionScanner.FATAL_MARKER_PATTERN]
+ * — i.e. every `SimulationException` (or subclass) that logged `[FATAL]: … at time` anywhere in
+ * its output. This covers:
+ *
+ * - caught exceptions whose handler called `logger.warn(e)` with the throwable attached (Logback
+ *   appends the exception's `toString()` to the log line), and
+ * - genuinely uncaught exceptions that the JVM's `Thread.uncaughtExceptionHandler` printed via
+ *   `Throwable.printStackTrace()` to `System.err` (which the sweep driver redirects into the same
+ *   log file).
+ *
+ * The scanner cannot distinguish these two cases from the log text alone. See
+ * [FatalExceptionScanner] for the full rationale.
  *
  * ## Absent is not zero
  *
@@ -39,20 +54,30 @@ data class FatalExceptionScanResult(
 )
 
 /**
- * Scans a sweep run's per-run log file for evidence that a `FATAL` `SimulationException` was
- * thrown — and swallowed — during the run.
+ * Scans a sweep run's per-run log file for `FATAL`-severity `SimulationException` occurrences.
  *
- * ## Why this can only be detected from the log, not from the process
+ * ## What this scanner detects
  *
- * kDisco launches every simulation process on a dedicated `SupervisorJob` with no
- * `CoroutineExceptionHandler` — `Simulation.kt:101`, commented "so one process failure doesn't
- * cancel others" — and the surrounding `catch` only covers `ProcessTerminatedException`
- * (`Simulation.kt:163-175`). A `FATAL` [cz.vutbr.fit.interlockSim.exceptions.SimulationException]
- * thrown from inside a `Train` process coroutine (`process.actions()`, launched at
- * `Simulation.kt:163`) is therefore never caught anywhere inside the simulation: it becomes an
- * *uncaught* coroutine exception, and with no handler installed, kotlinx.coroutines' JVM default
- * falls through to `Thread.uncaughtExceptionHandler`, which prints it via
- * `Throwable.printStackTrace()` to `System.err`.
+ * [scan] counts every log line that matches [FATAL_MARKER_PATTERN] — a `[FATAL]: … at time`
+ * fragment produced by `SimulationException.toString()` (or any subclass that does not override
+ * `toString()`). A match can originate from two sources:
+ *
+ * - A **caught-and-logged** exception whose catch handler called `logger.warn(e)` with the
+ *   throwable attached — Logback appends the exception's `toString()` to the log line.
+ * - A **genuinely uncaught** exception absorbed by kDisco's `SupervisorJob` (no
+ *   `CoroutineExceptionHandler` installed — `Simulation.kt:101`, `catch` at `:163-175` covers
+ *   only `ProcessTerminatedException`) — in that case kotlinx.coroutines falls through to
+ *   `Thread.uncaughtExceptionHandler`, which prints via `Throwable.printStackTrace()` to
+ *   `System.err`. [ForkedJvmSweepProcessRunner] redirects `System.err` into the per-run log
+ *   (`redirectErrorStream(true)` + `redirectOutput(logFile)`), so the text lands where this
+ *   scanner reads it.
+ *
+ * The scanner **cannot distinguish these two cases** from the log text alone. A nonzero
+ * [FatalExceptionScanResult.count] means the log contained at least one FATAL marker of
+ * *either* kind — see [DispatcherRunSnapshot.loggedFatalSimExceptionCount]'s KDoc for how that
+ * finding should be interpreted.
+ *
+ * ## Why the pattern is subclass-agnostic
  *
  * `SimulationException.toString()` builds its text from the **runtime** class's simple name, not
  * the literal text `"SimulationException"` (`SimulationException.kt:82-85`: `this::class.simpleName`
@@ -71,10 +96,6 @@ data class FatalExceptionScanResult(
  * future `SimulationException` subclass without needing to enumerate it by name: see
  * [FATAL_MARKER_PATTERN].
  *
- * [ForkedJvmSweepProcessRunner] redirects the child's stderr into its per-run log file
- * (`redirectErrorStream(true)` + `redirectOutput(logFile)`), so that evidence lands exactly where
- * this scanner reads it.
- *
  * ## Why not capture it in-process instead
  *
  * A `CoroutineExceptionHandler` installed on the simulation's scope would be strictly more
@@ -89,13 +110,6 @@ data class FatalExceptionScanResult(
  * scanning is therefore not a compromise chosen for convenience — every option that stays out of
  * `core/` has to observe the run from the outside, and the log is the only outside artifact this
  * driver already keeps per run.
- *
- * The switch/track sites above are ordinary *reachable* failure paths — unlike Issue #905 (a
- * FATAL from `Front.separatorAction`, `Train.kt:644`, on an origin-abandon path), which the
- * traffic-simulation-expert ruled "not reachable on the current wiring" for the examples this
- * sweep runs. This scanner does not depend on any single defect being reachable — only on the
- * `SupervisorJob` absorption mechanism being real for *any* FATAL `SimulationException`, and #905
- * remains useful context for what an absorbed FATAL looks like end to end.
  */
 object FatalExceptionScanner {
 	/**
@@ -110,6 +124,12 @@ object FatalExceptionScanner {
 	 * `cz.vutbr.fit.interlockSim.exceptions.EditorException` occurrence: `EditorException` shares
 	 * the identical class-name/severity/message `toString()` shape but has no time component, so
 	 * the two hierarchies are otherwise textually indistinguishable.
+	 *
+	 * This pattern matches any line that contains the FATAL marker, whether the exception was
+	 * caught and logged (e.g. via `logger.warn(e)`) or uncaught and printed by the JVM's
+	 * `Thread.uncaughtExceptionHandler`. The scanner cannot distinguish the two cases from the log
+	 * text alone; see [FatalExceptionScanner]'s KDoc and
+	 * [DispatcherRunSnapshot.loggedFatalSimExceptionCount] for how that is documented.
 	 */
 	internal val FATAL_MARKER_PATTERN: Regex = Regex("""\[FATAL]:.*\bat time\b""")
 

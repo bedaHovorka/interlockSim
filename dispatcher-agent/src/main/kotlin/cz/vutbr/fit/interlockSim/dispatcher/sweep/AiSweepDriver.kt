@@ -290,8 +290,8 @@ class AiSweepDriver(
 			val original = json.decodeFromString(DispatcherRunSnapshot.serializer(), Files.readString(file))
 			val patched =
 				original.copy(
-					fatalExceptionCount = fatalScan.count,
-					fatalExceptionFirstMessage = fatalScan.firstMessage
+					loggedFatalSimExceptionCount = fatalScan.count,
+					loggedFatalSimExceptionFirstMessage = fatalScan.firstMessage
 				)
 			val tmp = Files.createTempFile(file.parent, "run-patch-", ".json.tmp")
 			try {
@@ -554,8 +554,8 @@ internal fun abortedSnapshot(
 		// absent because the run never got far enough for anything to read them. Writing 0 would
 		// enter an unmeasured run into the sweep as one where no train moved — a measurement.
 		railwayOutcome = RailwayOutcome.UNMEASURED,
-		fatalExceptionCount = fatalScan.count,
-		fatalExceptionFirstMessage = fatalScan.firstMessage
+		loggedFatalSimExceptionCount = fatalScan.count,
+		loggedFatalSimExceptionFirstMessage = fatalScan.firstMessage
 	)
 
 private fun zeroed(keys: List<String>): Map<String, Long> = keys.associateWith { 0L }

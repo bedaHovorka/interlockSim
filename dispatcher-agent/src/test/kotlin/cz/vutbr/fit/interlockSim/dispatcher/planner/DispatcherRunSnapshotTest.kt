@@ -39,8 +39,8 @@ class DispatcherRunSnapshotTest {
 		applyFailuresByCode: Map<String, Long> = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED.name to 3L),
 		actionsByAuthor: Map<String, Long> = mapOf(ActionAuthor.LLM.name to 4L),
 		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
-		fatalExceptionCount: Long? = null,
-		fatalExceptionFirstMessage: String? = null
+		loggedFatalSimExceptionCount: Long? = null,
+		loggedFatalSimExceptionFirstMessage: String? = null
 	): DispatcherRunSnapshot =
 		DispatcherRunSnapshot(
 			runId = "typed-view-001",
@@ -78,8 +78,8 @@ class DispatcherRunSnapshotTest {
 			completedNaturally = true,
 			endCause = RunEndCause.NATURAL_COMPLETION,
 			railwayOutcome = railwayOutcome,
-			fatalExceptionCount = fatalExceptionCount,
-			fatalExceptionFirstMessage = fatalExceptionFirstMessage
+			loggedFatalSimExceptionCount = loggedFatalSimExceptionCount,
+			loggedFatalSimExceptionFirstMessage = loggedFatalSimExceptionFirstMessage
 		)
 
 	@Test
@@ -153,8 +153,8 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 4`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_TERMINATED_EARLY_CAUSE)
+	fun `current schema version is 5`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_FIELD_RENAME)
 	}
 
 	@Test
@@ -163,55 +163,56 @@ class DispatcherRunSnapshotTest {
 		assertThat(snap.schemaVersion).isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
 		assertThat(snap.railwayOutcome).isEqualTo(RailwayOutcome.UNMEASURED)
 		assertThat(snap.railwayOutcome.journeysCompleted).isNull()
-		assertThat(snap.fatalExceptionCount).isNull()
-		assertThat(snap.fatalExceptionFirstMessage).isNull()
+		assertThat(snap.loggedFatalSimExceptionCount).isNull()
+		assertThat(snap.loggedFatalSimExceptionFirstMessage).isNull()
 	}
 
-	// ── Fatal-exception fields (measurement-integrity fix for #834's C2 condition) ────────────
+	// ── Fatal-exception fields (measurement-integrity fix for #834's C2 condition, renamed #913) ──
 
 	@Test
-	fun `serialization round-trips a snapshot carrying a measured fatal-exception count of zero`() {
-		val snap = snapshotWith(fatalExceptionCount = 0L, fatalExceptionFirstMessage = null)
+	fun `serialization round-trips a snapshot carrying a measured logged-fatal-sim-exception count of zero`() {
+		val snap = snapshotWith(loggedFatalSimExceptionCount = 0L, loggedFatalSimExceptionFirstMessage = null)
 
 		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
-		assertThat(encoded).contains("\"fatalExceptionCount\": 0")
+		assertThat(encoded).contains("\"loggedFatalSimExceptionCount\": 0")
 
 		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
-		assertThat(decoded.fatalExceptionCount).isEqualTo(0L)
-		assertThat(decoded.fatalExceptionFirstMessage).isNull()
+		assertThat(decoded.loggedFatalSimExceptionCount).isEqualTo(0L)
+		assertThat(decoded.loggedFatalSimExceptionFirstMessage).isNull()
 	}
 
 	@Test
-	fun `serialization round-trips a snapshot carrying a nonzero fatal-exception finding`() {
+	fun `serialization round-trips a snapshot carrying a nonzero logged-fatal-sim-exception finding`() {
 		val snap =
 			snapshotWith(
-				fatalExceptionCount = 3L,
-				fatalExceptionFirstMessage = "SimulationException[FATAL]: pathToSemaphore null at time 12.5"
+				loggedFatalSimExceptionCount = 3L,
+				loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: pathToSemaphore null at time 12.5"
 			)
 
 		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
 		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
 
 		assertThat(decoded).isEqualTo(snap)
-		assertThat(decoded.fatalExceptionCount).isEqualTo(3L)
-		assertThat(decoded.fatalExceptionFirstMessage)
+		assertThat(decoded.loggedFatalSimExceptionCount).isEqualTo(3L)
+		assertThat(decoded.loggedFatalSimExceptionFirstMessage)
 			.isEqualTo("SimulationException[FATAL]: pathToSemaphore null at time 12.5")
 	}
 
 	/**
 	 * Absent must survive the JSON round-trip as absent, exactly like [RailwayOutcome]'s own
-	 * absent-vs-zero guarantee. Were `fatalExceptionCount` encoded as `0` for a run whose log was
-	 * never scanned, a sweep would rank that run as measured-clean rather than not-measured.
+	 * absent-vs-zero guarantee. Were `loggedFatalSimExceptionCount` encoded as `0` for a run
+	 * whose log was never scanned, a sweep would rank that run as measured-clean rather than
+	 * not-measured.
 	 */
 	@Test
-	fun `serialization round-trips an absent fatal-exception scan as JSON null, never as zero`() {
-		val snap = snapshotWith(fatalExceptionCount = null, fatalExceptionFirstMessage = null)
+	fun `serialization round-trips an absent logged-fatal-sim-exception scan as JSON null, never as zero`() {
+		val snap = snapshotWith(loggedFatalSimExceptionCount = null, loggedFatalSimExceptionFirstMessage = null)
 
 		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
-		assertThat(encoded).contains("\"fatalExceptionCount\": null")
+		assertThat(encoded).contains("\"loggedFatalSimExceptionCount\": null")
 
 		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
-		assertThat(decoded.fatalExceptionCount).isNull()
+		assertThat(decoded.loggedFatalSimExceptionCount).isNull()
 	}
 
 	@Test
@@ -260,6 +261,9 @@ class DispatcherRunSnapshotTest {
 
 		/** Pinned literally so a future bump has to touch this test deliberately. */
 		private const val SCHEMA_VERSION_WITH_TERMINATED_EARLY_CAUSE: Int = 4
+
+		/** Pinned literally so a future bump has to touch this test deliberately. */
+		private const val SCHEMA_VERSION_WITH_FIELD_RENAME: Int = 5
 
 		private val json =
 			Json {
