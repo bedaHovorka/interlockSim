@@ -37,8 +37,17 @@ import java.util.concurrent.atomic.AtomicLong
  * that falls behind the sim therefore always wakes to the *latest* captured snapshot
  * instead of working through a queue of stale ones — which is safe here because
  * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] recomputes its decisions from
- * scratch on every call (state-based, not edge-triggered): reacting to the current
- * network state a tick later than it changed is a latency cost, not a correctness one.
+ * scratch on every call (state-based, not edge-triggered), so a coalesced tick means the
+ * driver wakes to the latest state rather than a stale one — no information is permanently
+ * lost. However, a one-tick delay CAN flip a live-count-based admission cap (e.g.
+ * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier.applyApproveTrain]
+ * evaluates the cap against the live active-train count at apply time), which cascades
+ * through the remainder of the schedule. The production rule-based wiring
+ * ([cz.vutbr.fit.interlockSim.ExampleRegistry.wireDispatcherAgent] with
+ * `barrierControlStep = true`) closes that race with a per-tick semaphore, ensuring
+ * tick-N decisions are in the queue before `onControlStep()` drains it. This class's
+ * coalescing semantics are correct regardless — the barrier is a property of the wiring,
+ * not of the signal itself.
  *
  * ## Why this replaces the wall-clock poll
  *
