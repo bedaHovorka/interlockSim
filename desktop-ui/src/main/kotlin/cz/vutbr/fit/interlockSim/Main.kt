@@ -180,7 +180,8 @@ class Main {
 				// would report COMPLETED and the aggregator would count a dead run as a passing
 				// data point. Read inside `use` -- the scope is gone once the context closes.
 				val dispatcherGaveUp = it.scope.getOrNull<AgentDriverLoop>()?.stoppedByFailures == true
-				outcome = classifyRun(simTimeTracker.lastSimTime, requestedEndTime, dispatcherGaveUp)
+				val reachedSimTime = resolveReachedSimTime(simTimeTracker.lastSimTime, it.lastRunEndTime)
+				outcome = classifyRun(reachedSimTime, requestedEndTime, dispatcherGaveUp)
 				// Issue #847 rounds 3 and 4: report what the dispatcher actually did — routes the
 				// orphan sweeper reclaimed, the planner's final cycle counts, and the
 				// control-tick-to-decision chain. Read inside `use`: the scope is gone once the
@@ -267,6 +268,26 @@ class Main {
 		)
 		return true
 	}
+
+	/**
+	 * Resolves the simulated time to feed into [classifyRun], combining the two independent time
+	 * signals available once a headless run finishes (Issue #929).
+	 *
+	 * [SimulationTimeTracker.lastSimTime] is derived purely from the report-event stream
+	 * (TRAIN/NODE events). Queued-but-never-admitted trains are event-less by design, so once the
+	 * last moving train finishes, the tracker's value freezes below the requested end time even
+	 * though the kDisco kernel's own clock ([SimulationContext.lastRunEndTime]) kept advancing
+	 * silently to the real end time. Taking the maximum of the two prevents a short-horizon run
+	 * that actually completed from being misclassified as [RunOutcome.TERMINATED_EARLY].
+	 *
+	 * @param trackerSimTime [SimulationTimeTracker.lastSimTime] after the run finished.
+	 * @param contextEndTime [SimulationContext.lastRunEndTime] after the run finished, or `null`
+	 *   if the run never actually invoked the kDisco kernel.
+	 */
+	internal fun resolveReachedSimTime(
+		trackerSimTime: Double,
+		contextEndTime: Double?
+	): Double = maxOf(trackerSimTime, contextEndTime ?: 0.0)
 
 	/**
 	 * Classifies a finished headless run into the [RunOutcome] that becomes the process exit code.

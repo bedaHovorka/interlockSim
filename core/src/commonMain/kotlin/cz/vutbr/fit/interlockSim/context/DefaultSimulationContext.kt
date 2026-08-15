@@ -242,6 +242,15 @@ open class DefaultSimulationContext(
 	@kotlin.concurrent.Volatile
 	private var currentController: SimulationController? = null
 
+	/**
+	 * Backing field for [lastRunEndTime]. Set from the kernel's own clock ([sim.time]) in the
+	 * `finally` block of [run], right before the [Simulation] reference is released.
+	 *
+	 * @since Issue #929
+	 */
+	final override var lastRunEndTime: Double? = null
+		private set
+
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
 	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
 
@@ -1374,7 +1383,9 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
-			flushUnresolvedReservationConflicts(sim.time())
+			val kernelEndTime = sim.time()
+			flushUnresolvedReservationConflicts(kernelEndTime)
+			lastRunEndTime = kernelEndTime
 			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
 			currentController = null
 		}
