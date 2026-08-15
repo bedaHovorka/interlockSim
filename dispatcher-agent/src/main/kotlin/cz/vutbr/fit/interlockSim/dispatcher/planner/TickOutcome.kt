@@ -28,15 +28,50 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * were mis-scored as [RULE_FALLBACK] via the undifferentiated `FallbackReason.EMPTY_NO_TOOLS`
  * path, which is why `noOpRate` read `0` in every run measured before that fix.
  *
- * | Outcome | Meaning | [tickClass] | Counts as LLM success |
- * |---|---|---|---|
- * | [LLM_ACTIONS] | ≥ 1 valid action emitted and accepted by the action validator | [TickClass.SUCCESS] | yes |
- * | [LLM_NO_OP] | LLM **explicitly** emitted `no_op` | [TickClass.SUCCESS] | yes |
- * | [LLM_REPAIRED] | First output invalid; the single repair attempt produced valid output | [TickClass.SUCCESS] | yes (also `repairSuccessCount`) |
- * | [TIMEOUT_NOOP] | Safe do-nothing applied by the harness; carries a [TimeoutNoOpCause] | [TickClass.DEGRADED] | no |
- * | [LLM_EXCEPTION] | Non-cancellation throwable from the LLM path | [TickClass.DEGRADED] | no |
- * | [LLM_ABANDONED] | Terminal fallback engaged; LLM arm retired for the rest of the run | [TickClass.RUN_FAILURE] | no |
- * | [RULE_FALLBACK] | A deterministic planner originated the dispatching actions this tick | [TickClass.RUN_FAILURE] | no |
+ * | Outcome | Meaning | [tickClass] | Counts as LLM success | Counts toward actionable-rate denominator |
+ * |---|---|---|---|---|
+ * | [LLM_ACTIONS] | ≥ 1 valid action emitted and accepted by the action validator | [TickClass.SUCCESS] | yes | yes |
+ * | [LLM_NO_OP] | LLM **explicitly** emitted `no_op` | [TickClass.SUCCESS] | yes | yes |
+ * | [LLM_REPAIRED] | First output invalid; the single repair attempt produced valid output | [TickClass.SUCCESS] | yes (also `repairSuccessCount`) | yes |
+ * | [LLM_SILENT_NONACTIONABLE] | LLM answered silently (no tool emissions, no decisions) and the fallback oracle confirmed there was nothing legal to do | [TickClass.NONACTIONABLE] | no | **no** |
+ * | [TIMEOUT_NOOP] | Safe do-nothing applied by the harness; carries a [TimeoutNoOpCause] | [TickClass.DEGRADED] | no | yes |
+ * | [LLM_EXCEPTION] | Non-cancellation throwable from the LLM path | [TickClass.DEGRADED] | no | yes |
+ * | [LLM_ABANDONED] | Terminal fallback engaged; LLM arm retired for the rest of the run | [TickClass.RUN_FAILURE] | no | yes |
+ * | [RULE_FALLBACK] | A deterministic planner originated the dispatching actions this tick | [TickClass.RUN_FAILURE] | no | yes |
+ *
+ * ## [LLM_SILENT_NONACTIONABLE] (Issue #927 — actionable-rate metric redesign)
+ *
+ * Before this outcome existed, a silent LLM cycle on a non-idle station always fell back to
+ * [RULE_FALLBACK] — even when the fallback dispatcher itself found nothing legal to do
+ * (`fallbackDispatcher.decide(observation)` returned an empty list). That mis-scored a
+ * genuinely non-actionable tick (a parked-tail regime with approved trains present but nothing
+ * legal to change) as a dispatch failure, decoupling `llmSuccessRate` from actual dispatch
+ * quality — one measured run scored 84.6% while the railway moved nothing (journeys 0/7).
+ *
+ * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan] now still consults the
+ * fallback dispatcher on a silent, non-idle cycle (needed either way — to get real decisions, or
+ * to discover there are none) but reports [LLM_SILENT_NONACTIONABLE] instead of [RULE_FALLBACK]
+ * when that consultation returns zero decisions. [RULE_FALLBACK] is reserved for the case where
+ * the fallback dispatcher actually found and dispatched something — a genuine miss the LLM should
+ * have caught.
+ *
+ * **Oracle caveat:** `decide() == 0` is the rule dispatcher's judgment, not domain ground truth —
+ * it can itself decline to act while trains wait (e.g. every path legitimately blocked). This is
+ * acceptable for metric classification (a strictly more informed classification than the
+ * two-way split it replaces) but is not a liveness guarantee: a run can still fail to progress
+ * while reporting a clean actionable-rate. The A4 gate is therefore actionable-rate **and**
+ * railway outcome (see [RunReportAggregator.runPassed]), never actionable-rate alone.
+ *
+ * ## Why [TickClass.NONACTIONABLE] and not [TickClass.DEGRADED] (Issue #927)
+ *
+ * [TickClass.DEGRADED] means the harness had to intervene with a no-dispatching-action outcome
+ * because the LLM did not produce a usable result — [TIMEOUT_NOOP] and [LLM_EXCEPTION] are both
+ * cases where something went wrong on the LLM path. [LLM_SILENT_NONACTIONABLE] is different in
+ * kind: the LLM's silence turned out to be *correct* (the fallback oracle independently confirmed
+ * nothing was actionable), so there is nothing degraded about the tick — folding it into
+ * [TickClass.DEGRADED] would make a correct-but-silent tick indistinguishable from a genuine
+ * harness intervention. [TickClass.NONACTIONABLE] is a fourth, dedicated bucket for exactly this
+ * case, keeping [TickClass.DEGRADED]'s meaning ("the harness had to intervene") intact.
  *
  * ## Migration from [FallbackReason]
  *
@@ -60,6 +95,15 @@ enum class TickOutcome {
 
 	/** First output invalid; the single repair attempt produced valid output. */
 	LLM_REPAIRED,
+
+	/**
+	 * LLM answered silently (no tool emissions, no decisions) on a non-idle station, and
+	 * `fallbackDispatcher.decide(observation)` — consulted as an oracle, not to dispatch —
+	 * independently confirmed there was nothing legal to do this tick. A correct-but-silent
+	 * outcome, not a fallback: see [TickOutcome]'s "LLM_SILENT_NONACTIONABLE" KDoc section
+	 * (Issue #927).
+	 */
+	LLM_SILENT_NONACTIONABLE,
 
 	/**
 	 * Safe do-nothing applied by the harness because the LLM did not produce a usable result
@@ -96,6 +140,7 @@ val TickOutcome.tickClass: TickClass
 	get() =
 		when (this) {
 			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED -> TickClass.SUCCESS
+			TickOutcome.LLM_SILENT_NONACTIONABLE -> TickClass.NONACTIONABLE
 			TickOutcome.TIMEOUT_NOOP, TickOutcome.LLM_EXCEPTION -> TickClass.DEGRADED
 			TickOutcome.LLM_ABANDONED, TickOutcome.RULE_FALLBACK -> TickClass.RUN_FAILURE
 		}
@@ -109,6 +154,18 @@ val TickOutcome.countsAsLlmSuccess: Boolean
 	get() = tickClass == TickClass.SUCCESS
 
 /**
+ * Whether this [TickOutcome] counts toward the actionable-rate denominator (Issue #927 — the
+ * `actionableTickRate` metric on [DispatcherRunSnapshot]). `true` for every [TickOutcome] except
+ * [TickOutcome.LLM_SILENT_NONACTIONABLE]: a tick where the fallback oracle confirmed nothing was
+ * legal to do was never actionable in the first place, so excluding it from the denominator (as
+ * well as the numerator, via [countsAsLlmSuccess] already being `false` for it) keeps the rate
+ * from being diluted by ticks that could not have counted as a dispatch success or failure
+ * either way. See the class-level table on [TickOutcome] for the full mapping.
+ */
+val TickOutcome.countsTowardActionableRate: Boolean
+	get() = this != TickOutcome.LLM_SILENT_NONACTIONABLE
+
+/**
  * [ActionAuthor] that should be attributed to every decision posted this tick, given this
  * [TickOutcome].
  *
@@ -118,6 +175,10 @@ val TickOutcome.countsAsLlmSuccess: Boolean
  *
  * - LLM-success outcomes ([TickOutcome.LLM_ACTIONS], [TickOutcome.LLM_NO_OP],
  *   [TickOutcome.LLM_REPAIRED]) → [ActionAuthor.LLM].
+ * - [TickOutcome.LLM_SILENT_NONACTIONABLE] → [ActionAuthor.LLM] as well, despite not being a
+ *   [TickClass.SUCCESS] outcome: no decisions were posted either way (the tick was silent), so
+ *   the author tag only affects attribution bookkeeping, not safety — and the cycle that produced
+ *   the silence was still an LLM cycle, not a fallback dispatch (Issue #927).
  * - No-dispatching-action outcomes ([TickOutcome.TIMEOUT_NOOP], [TickOutcome.LLM_EXCEPTION]) →
  *   [ActionAuthor.TIMEOUT_NOOP].
  * - Deterministic-fallback outcomes ([TickOutcome.LLM_ABANDONED], [TickOutcome.RULE_FALLBACK]) →
@@ -126,7 +187,9 @@ val TickOutcome.countsAsLlmSuccess: Boolean
 val TickOutcome.toActionAuthor: ActionAuthor
 	get() =
 		when (this) {
-			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED -> ActionAuthor.LLM
+			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED,
+			TickOutcome.LLM_SILENT_NONACTIONABLE
+			-> ActionAuthor.LLM
 			TickOutcome.TIMEOUT_NOOP, TickOutcome.LLM_EXCEPTION -> ActionAuthor.TIMEOUT_NOOP
 			TickOutcome.LLM_ABANDONED, TickOutcome.RULE_FALLBACK -> ActionAuthor.RULE_FALLBACK
 		}

@@ -58,6 +58,7 @@ class DispatcherRunSnapshotTest {
 			ticksByOutcome = ticksByOutcome,
 			timeoutNoOpByCause = timeoutNoOpByCause,
 			llmSuccessRate = 1.0,
+			actionableTickRate = 1.0,
 			noOpRate = 0.0,
 			invalidOutputRate = 0.0,
 			repairSuccessRate = 0.0,
@@ -153,8 +154,8 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 5`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_FIELD_RENAME)
+	fun `current schema version is 6`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_ACTIONABLE_RATE)
 	}
 
 	@Test
@@ -255,14 +256,93 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded.railwayOutcome.trainsEntered).isNull()
 	}
 
+	// ── actionableTickRate / schema version 6 (Issue #927) ────────────────────
+
+	@Test
+	fun `schema version 6 round-trips actionableTickRate`() {
+		val snap = snapshotWith().copy(actionableTickRate = 0.6)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"actionableTickRate\": 0.6")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.actionableTickRate).isEqualTo(0.6)
+		assertThat(decoded.schemaVersion).isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
+	}
+
+	/**
+	 * A literal schema-version-5 document — exactly as written before Issue #927 added
+	 * [DispatcherRunSnapshot.actionableTickRate] — must still decode. Written out in full rather
+	 * than derived from the current serializer, for the same reason as the version-1/version-3
+	 * fixtures pinned in `DefaultRunSnapshotStoreTest`: a derived fixture would silently track
+	 * every future schema change and stop testing backward compatibility at all.
+	 *
+	 * Per [DispatcherRunSnapshot.actionableTickRate]'s own KDoc, the field defaults to
+	 * [DispatcherRunSnapshot.llmSuccessRate] when absent from the JSON — the correct value for
+	 * this data, since a pre-#927 run's `ticksByOutcome` cannot contain
+	 * [TickOutcome.LLM_SILENT_NONACTIONABLE].
+	 */
+	@Test
+	fun `a version-5 fixture still loads with actionableTickRate defaulted to llmSuccessRate`() {
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V5_JSON)
+
+		assertThat(decoded.schemaVersion).isEqualTo(5)
+		assertThat(decoded.llmSuccessRate).isEqualTo(0.75)
+		assertThat(decoded.actionableTickRate).isEqualTo(0.75)
+	}
+
 	private companion object {
 		/** Pinned literally so a future bump has to touch this test deliberately. */
-		private const val SCHEMA_VERSION_WITH_FIELD_RENAME: Int = 5
+		private const val SCHEMA_VERSION_WITH_ACTIONABLE_RATE: Int = 6
 
 		private val json =
 			Json {
 				prettyPrint = true
 				encodeDefaults = true
 			}
+
+		/**
+		 * A literal schema-version-5 run document, exactly as `DefaultRunSnapshotStore` wrote it
+		 * before Issue #927 added `actionableTickRate`. No `actionableTickRate` key is present.
+		 */
+		private val SCHEMA_V5_JSON =
+			"""
+			{
+				"schemaVersion": 5,
+				"runId": "legacy-v5-001",
+				"arm": "RULE_BASED",
+				"params": {
+					"tickPeriodMs": 500,
+					"historyN": 10,
+					"temperature": 0.0,
+					"maxActionsPerTick": 3,
+					"model": "",
+					"seed": null
+				},
+				"totalTicks": 4,
+				"ticksByOutcome": { "LLM_ACTIONS": 3, "RULE_FALLBACK": 1 },
+				"timeoutNoOpByCause": { "DEADLINE_MISS": 0 },
+				"llmSuccessRate": 0.75,
+				"noOpRate": 0.0,
+				"invalidOutputRate": 0.0,
+				"repairSuccessRate": 0.0,
+				"emittedByActionType": {},
+				"rejectionsByCode": {},
+				"applyFailuresByCode": {},
+				"validAt1": 0.0,
+				"correctAt1": null,
+				"oracleAgreementAt1": null,
+				"latencyP50Ms": 100,
+				"latencyP95Ms": 200,
+				"latencyMaxMs": 300,
+				"actionsByAuthor": {},
+				"unattributedApplies": 0,
+				"terminalFallbackEngaged": false,
+				"terminalFallbackTickIndex": null,
+				"c7Clean": true,
+				"completedNaturally": true,
+				"endCause": "NATURAL_COMPLETION"
+			}
+			""".trimIndent()
 	}
 }

@@ -22,12 +22,16 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * ## Gate logic (A4)
  *
  * ```
- * runPassed  = completedNaturally && !terminalFallbackEngaged && c7Clean
+ * runPassed  = completedNaturally && !terminalFallbackEngaged && c7Clean &&
+ *              actionableTickRate >= RunReportAggregator.MIN_ACTIONABLE_RATE
  * gatePassed = runCount >= 10 && passingRuns >= 8 && snapshots.all { it.c7Clean }
  * ```
  *
  * A **single** non-`c7Clean` run fails the whole arm even at 10/10 completions.  C7 is a
- * deterministic-component correctness gate, not a majority vote.
+ * deterministic-component correctness gate, not a majority vote. The `actionableTickRate`
+ * threshold is Issue #927's addition — the A4 gate must be actionable-rate **and** railway
+ * outcome, since a rate check alone is gameable in both directions (see
+ * [RunReportAggregator.MIN_ACTIONABLE_RATE]'s KDoc for the provisional threshold value).
  *
  * @property arm Which dispatcher implementation this report covers.
  * @property params Representative [RunParameters] cell (all aggregated runs must share the same params).
@@ -36,6 +40,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * @property gatePassed Whether the A4 arm-level gate is satisfied.
  * @property medianLlmSuccessRate Median `llmSuccessRate` across all runs.
  * @property iqrLlmSuccessRate Interquartile range of `llmSuccessRate` across all runs.
+ * @property medianActionableTickRate Median `actionableTickRate` across all runs (Issue #927).
  * @property medianNoOpRate Median `noOpRate` across all runs.
  * @property iqrNoOpRate IQR of `noOpRate` across all runs.
  * @property medianValidAt1 Median `validAt1` across all runs.
@@ -61,6 +66,7 @@ data class ArmReport(
 	val gatePassed: Boolean,
 	val medianLlmSuccessRate: Double,
 	val iqrLlmSuccessRate: Double,
+	val medianActionableTickRate: Double,
 	val medianNoOpRate: Double,
 	val iqrNoOpRate: Double,
 	val medianValidAt1: Double,

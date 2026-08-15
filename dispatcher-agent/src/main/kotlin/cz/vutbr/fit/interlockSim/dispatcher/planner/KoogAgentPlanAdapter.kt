@@ -80,13 +80,16 @@ import kotlin.time.TimeSource
  *    `fallback: reason=EMPTY_NO_TOOLS ... ollamaSuccessRate=27%` on an empty station). See
  *    [isIdleStation] for the exact predicate and its [SimulationSnapshot.EMPTY] guard.
  * 3. LLM cycle completes, invoked no actuator tool, and the station is **not idle** (an active or
- *    queued train the LLM left unaddressed) — the LLM truly failed to produce anything this cycle
- *    → fall back to [fallbackDispatcher]. Nothing was posted this cycle, so there is no
- *    double-dispatch risk; and because the LLM is stateless across cycles (a fresh
+ *    queued train the LLM left unaddressed) — the LLM produced nothing this cycle → consult
+ *    [fallbackDispatcher] either way (Issue #927): nothing was posted this cycle, so there is no
+ *    double-dispatch risk, and because the LLM is stateless across cycles (a fresh
  *    `singleRunStrategy()` execution per [KoogDispatchAgent.decideAsync] — the agent itself is
- *    cached and reused; see [KoogAgentFactory]), a no-op cycle is not a preamble to a later
- *    routing cycle — not falling back would leave queued trains never routed, stalled at their
- *    entry signal indefinitely. The fallback supplies both admission and routing.
+ *    cached and reused; see [KoogAgentFactory]), a silent cycle is not a preamble to a later
+ *    routing cycle — not consulting the fallback would leave queued trains never routed, stalled
+ *    at their entry signal indefinitely. If the fallback finds and dispatches something, that is
+ *    a genuine miss, reported as [TickOutcome.RULE_FALLBACK]; if it too finds nothing legal to
+ *    do, the tick was never actionable, reported as [TickOutcome.LLM_SILENT_NONACTIONABLE] —
+ *    see [runFallback]'s "Outcome classification" KDoc.
  * 4. LLM times out → fall back to [fallbackDispatcher]
  * 5. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
  *
@@ -333,13 +336,15 @@ class KoogAgentPlanAdapter(
 			} else {
 				// The LLM completed a cycle but neither acted via tools nor returned a decision,
 				// and the station is NOT idle (there is an active or queued train the LLM left
-				// unaddressed) — it truly failed to produce anything this cycle. Nothing was
-				// posted, so there is no double-dispatch risk; the fallback supplies both
-				// admission and routing.
+				// unaddressed). Consult the fallback dispatcher either way — to get real
+				// decisions, or to discover there are none (Issue #927): a fallback that itself
+				// finds nothing legal to do means this tick was never actionable in the first
+				// place, not a genuine dispatch miss. runFallback classifies the reported
+				// TickOutcome from the returned decision list — see its KDoc.
 				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation, latencyMs) {
 					logger.warn {
 						"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
-							"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
+							"consulting rule-based fallback (simTime=${observation.snapshot.simTime})"
 					}
 				}
 			}
@@ -370,11 +375,24 @@ class KoogAgentPlanAdapter(
 
 	/**
 	 * Runs the shared rule-based-fallback sequence: log via [logAction], notify [cycleListener],
-	 * report [TickOutcome.RULE_FALLBACK] (the fallback dispatcher always actually runs and
-	 * returns decisions here — a dispatching event, not a no-op), then delegate to
-	 * [fallbackDispatcher]. Shared by all three fallback sites in [plan] (empty LLM cycle on a
-	 * non-idle station — see [isIdleStation], inference timeout, LLM exception) so they cannot
-	 * drift out of sync with each other.
+	 * consult [fallbackDispatcher], then report the [TickOutcome] the consultation earned.
+	 * Shared by all three fallback sites in [plan] (empty LLM cycle on a non-idle station — see
+	 * [isIdleStation], inference timeout, LLM exception) so they cannot drift out of sync with
+	 * each other.
+	 *
+	 * ## Outcome classification (Issue #927)
+	 *
+	 * For [reason] == [FallbackReason.EMPTY_NO_TOOLS] (the LLM answered silently on a non-idle
+	 * station), the reported outcome depends on what [fallbackDispatcher] actually found:
+	 * - `decide()` returns **> 0** decisions → [TickOutcome.RULE_FALLBACK] — a genuine miss, the
+	 *   fallback actually dispatches something the LLM should have caught.
+	 * - `decide()` returns **0** decisions → [TickOutcome.LLM_SILENT_NONACTIONABLE] — the
+	 *   fallback oracle confirms the tick was never actionable in the first place.
+	 *
+	 * For the other two [reason] values (`TIMEOUT`, `EXCEPTION`) the LLM path itself failed —
+	 * whatever [fallbackDispatcher] returns is always reported as [TickOutcome.RULE_FALLBACK],
+	 * unchanged from before #927: a timed-out or exception-throwing cycle is a genuine LLM-side
+	 * failure regardless of how many decisions the fallback happens to find.
 	 *
 	 * @param latencyMs Cycle latency to report alongside the tick, or `null` if no meaningful
 	 *   inference attempt was measured for this cycle — see [plan]'s "Latency measurement" KDoc.
@@ -387,8 +405,15 @@ class KoogAgentPlanAdapter(
 	): List<DispatchDecision> {
 		logAction()
 		cycleListener?.onFallback(reason, observation.snapshot.simTime)
-		reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
-		return fallbackDispatcher.decide(observation)
+		val decisions = fallbackDispatcher.decide(observation)
+		val outcome =
+			if (reason == FallbackReason.EMPTY_NO_TOOLS && decisions.isEmpty()) {
+				TickOutcome.LLM_SILENT_NONACTIONABLE
+			} else {
+				TickOutcome.RULE_FALLBACK
+			}
+		reportTick(outcome, observation.snapshot.simTime, latencyMs)
+		return decisions
 	}
 
 	/**

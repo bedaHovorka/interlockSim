@@ -238,6 +238,62 @@ class DefaultDispatcherRunRecorderTest {
 		assertThat(snap.llmSuccessRate).isEqualTo(2.0 / 3.0)
 	}
 
+	// ── actionableTickRate (Issue #927) ────────────────────────────────────────
+
+	@Test
+	fun `actionableTickRate is zero when totalTicks is zero`() {
+		val snap = recorder().snapshot()
+		assertThat(snap.actionableTickRate).isEqualTo(0.0)
+	}
+
+	@Test
+	fun `actionableTickRate excludes LLM_SILENT_NONACTIONABLE ticks from both numerator and denominator`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0)) // actionable success
+		r.onTick(TickRecord(TickOutcome.LLM_NO_OP, simTime = 2.0)) // actionable success
+		r.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 3.0)) // actionable, not a success
+		r.onTick(TickRecord(TickOutcome.LLM_SILENT_NONACTIONABLE, simTime = 4.0)) // excluded entirely
+		r.onTick(TickRecord(TickOutcome.LLM_SILENT_NONACTIONABLE, simTime = 5.0)) // excluded entirely
+
+		val snap = r.snapshot()
+		// totalTicks = 5, but the actionable-rate denominator excludes the two
+		// LLM_SILENT_NONACTIONABLE ticks: 2 successes / 3 actionable ticks.
+		assertThat(snap.totalTicks).isEqualTo(5L)
+		assertThat(snap.actionableTickRate).isEqualTo(2.0 / 3.0)
+	}
+
+	@Test
+	fun `llmSuccessRate keeps its own contract unchanged — every tick still counts in its denominator`() {
+		// #927 does not change llmSuccessRate itself, only introduces actionableTickRate
+		// alongside it — this pins that llmSuccessRate's denominator still includes
+		// LLM_SILENT_NONACTIONABLE ticks (they are not an LLM success, so they dilute the rate,
+		// same as a RULE_FALLBACK tick would).
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0)) // success
+		r.onTick(TickRecord(TickOutcome.LLM_SILENT_NONACTIONABLE, simTime = 2.0)) // not a success
+
+		val snap = r.snapshot()
+		assertThat(snap.totalTicks).isEqualTo(2L)
+		assertThat(snap.llmSuccessRate).isEqualTo(1.0 / 2.0)
+		// actionableTickRate excludes the LLM_SILENT_NONACTIONABLE tick from the denominator too,
+		// so it reads 1.0 (1 success / 1 actionable tick) — structurally higher than
+		// llmSuccessRate for the same data, which is the whole point of #927.
+		assertThat(snap.actionableTickRate).isEqualTo(1.0)
+	}
+
+	@Test
+	fun `actionableTickRate is zero when every tick is LLM_SILENT_NONACTIONABLE`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.LLM_SILENT_NONACTIONABLE, simTime = 1.0))
+		r.onTick(TickRecord(TickOutcome.LLM_SILENT_NONACTIONABLE, simTime = 2.0))
+
+		val snap = r.snapshot()
+		assertThat(snap.totalTicks).isEqualTo(2L)
+		// Actionable-rate denominator is 0 -> reported as 0.0, the same "absent denominator"
+		// convention as llmSuccessRate/noOpRate use for a zero-tick run.
+		assertThat(snap.actionableTickRate).isEqualTo(0.0)
+	}
+
 	@Test
 	fun `timeoutNoOpByCause DEADLINE_MISS is counted`() {
 		val r = recorder()

@@ -271,6 +271,59 @@ class KoogAgentPlanAdapterTest {
 		coVerify(exactly = 1) { fallback.decide(any()) }
 	}
 
+	/**
+	 * Issue #927: a silent LLM cycle on a non-idle station used to always report
+	 * [TickOutcome.RULE_FALLBACK], even when the fallback dispatcher itself found nothing legal
+	 * to do — mis-scoring a genuinely non-actionable tick as a dispatch failure. When
+	 * `fallbackDispatcher.decide()` returns an empty list, the tick must be reported as
+	 * [TickOutcome.LLM_SILENT_NONACTIONABLE] instead.
+	 */
+	@Test
+	@DisplayName("non-idle station, no emissions, fallback also finds nothing reports LLM_SILENT_NONACTIONABLE")
+	fun `non-idle station with no LLM emissions and an empty fallback reports LLM_SILENT_NONACTIONABLE`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns emptyList()
+		val recorded = mutableListOf<TickRecord>()
+		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
+
+		assertThat(result).isEmpty()
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	/**
+	 * Regression guard (Issue #927): when the fallback dispatcher DOES find and dispatch
+	 * something on a silent non-idle cycle, that remains a genuine miss reported as
+	 * [TickOutcome.RULE_FALLBACK] — the split only kicks in when the fallback also finds nothing.
+	 */
+	@Test
+	@DisplayName("non-idle station, no emissions, fallback finds a decision still reports RULE_FALLBACK")
+	fun `non-idle station with no LLM emissions and a non-empty fallback still reports RULE_FALLBACK`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns fallbackDecisions
+		val recorded = mutableListOf<TickRecord>()
+		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
 	@Test
 	@DisplayName("non-idle station (a queued train, no emissions) still falls back (RULE_FALLBACK)")
 	fun `non-idle station with a queued train and no LLM emissions still falls back`() {
