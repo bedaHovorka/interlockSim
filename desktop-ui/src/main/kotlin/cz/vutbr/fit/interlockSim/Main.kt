@@ -287,7 +287,7 @@ class Main {
 	internal fun resolveReachedSimTime(
 		trackerSimTime: Double,
 		contextEndTime: Double?
-	): Double = maxOf(trackerSimTime, contextEndTime ?: 0.0)
+	): Double = maxOf(trackerSimTime, contextEndTime ?: trackerSimTime)
 
 	/**
 	 * Classifies a finished headless run into the [RunOutcome] that becomes the process exit code.

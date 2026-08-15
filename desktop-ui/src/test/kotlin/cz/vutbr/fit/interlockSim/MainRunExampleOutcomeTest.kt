@@ -120,4 +120,31 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 
 		assertThat(reachedSimTime).isEqualTo(12.5)
 	}
+
+	@Test
+	@DisplayName(
+		"resolveReachedSimTime returns the tracker value exactly when the context never ran, even below 0 (#929)"
+	)
+	fun resolveReachedSimTimeFallsBackToTrackerValueBelowZero() {
+		// Contract guard, not a live-scenario regression: trackerSimTime is a monotonic max from
+		// Process.time() starting at 0.0, so it is never negative in production. This pins the
+		// documented "fall back to the tracker's value" contract -- the previous `?: 0.0` fallback
+		// would have returned 0.0 here, not -3.0, so the existing positive-value test above could
+		// not distinguish the two implementations.
+		val reachedSimTime = get<Main>().resolveReachedSimTime(-3.0, null)
+
+		assertThat(reachedSimTime).isEqualTo(-3.0)
+	}
+
+	@Test
+	@DisplayName(
+		"resolveReachedSimTime keeps the tracker value when the kernel ended earlier than the last report event"
+	)
+	fun resolveReachedSimTimeKeepsTrackerWhenKernelEndedEarlier() {
+		// Guards the maxOf combiner against a future refactor that always prefers contextEndTime:
+		// when the kernel's own end time is below the tracker's, the tracker must win.
+		val reachedSimTime = get<Main>().resolveReachedSimTime(5.0, 2.0)
+
+		assertThat(reachedSimTime).isEqualTo(5.0)
+	}
 }
