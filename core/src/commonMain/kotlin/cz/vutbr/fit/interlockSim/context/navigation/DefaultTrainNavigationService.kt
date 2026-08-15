@@ -80,14 +80,14 @@ class DefaultTrainNavigationService(
 		trainId: String,
 		separator: PathSeparator
 	): PathResult {
-		logger.info {
+		logger.debug {
 			"findReservedPathForTrain: train '$trainId' requesting path from $separator"
 		}
 
 		// Step 1: Get PathInfo for this train (Issue #295/#296 Phase 5)
 		val pathInfo = registry.getPathInfo(trainId)
 		if (pathInfo == null) {
-			logger.info {
+			logger.debug {
 				"findReservedPathForTrain: no PathInfo registered for train '$trainId'"
 			}
 			return if (hasTopologicalContinuation(separator)) {
@@ -104,7 +104,7 @@ class DefaultTrainNavigationService(
 		// If separator not in PathInfo, return OwnershipConflict (train should wait for proper reservation)
 		// Issue #296 Phase 8: Removed fallback mechanism - it returned wrong-direction blocks
 		if (nextTrackSection == null) {
-			logger.info {
+			logger.debug {
 				"findReservedPathForTrain: separator $separator not in PathInfo, " +
 					"returning OwnershipConflict (train should wait for new path reservation)"
 			}
