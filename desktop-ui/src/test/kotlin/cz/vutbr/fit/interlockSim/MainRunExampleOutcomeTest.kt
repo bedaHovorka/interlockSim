@@ -91,4 +91,60 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 
 		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
 	}
+
+	@Test
+	@DisplayName(
+		"a frozen report-event time signal combined with the kernel's own end time reports COMPLETED (#929)"
+	)
+	fun frozenEventStreamWithKernelEndTimeReportsCompleted() {
+		// Reproduces #929: at short horizons, queued-but-never-admitted trains are event-less by
+		// design, so SimulationTimeTracker.lastSimTime (the only signal derived from the
+		// report-event stream) freezes below the requested end time once the last moving train
+		// finishes -- even though the kDisco kernel's own clock (SimulationContext.lastRunEndTime)
+		// silently kept advancing to the real end time. Without combining the two signals, this
+		// scenario would misclassify a completed run as TERMINATED_EARLY.
+		val requestedEndTime = 30.0
+		val frozenTrackerSimTime = 5.0 // last TRAIN/NODE event fired long before the horizon
+		val kernelEndTime = 30.0 // the kernel itself reached the requested horizon
+
+		val reachedSimTime = get<Main>().resolveReachedSimTime(frozenTrackerSimTime, kernelEndTime)
+		val outcome = get<Main>().classifyRun(reachedSimTime, requestedEndTime)
+
+		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
+	}
+
+	@Test
+	@DisplayName("resolveReachedSimTime falls back to the tracker's value when the context never ran (#929)")
+	fun resolveReachedSimTimeFallsBackWhenContextNeverRan() {
+		val reachedSimTime = get<Main>().resolveReachedSimTime(12.5, null)
+
+		assertThat(reachedSimTime).isEqualTo(12.5)
+	}
+
+	@Test
+	@DisplayName(
+		"resolveReachedSimTime returns the tracker value exactly when the context never ran, even below 0 (#929)"
+	)
+	fun resolveReachedSimTimeFallsBackToTrackerValueBelowZero() {
+		// Contract guard, not a live-scenario regression: trackerSimTime is a monotonic max from
+		// Process.time() starting at 0.0, so it is never negative in production. This pins the
+		// documented "fall back to the tracker's value" contract -- the previous `?: 0.0` fallback
+		// would have returned 0.0 here, not -3.0, so the existing positive-value test above could
+		// not distinguish the two implementations.
+		val reachedSimTime = get<Main>().resolveReachedSimTime(-3.0, null)
+
+		assertThat(reachedSimTime).isEqualTo(-3.0)
+	}
+
+	@Test
+	@DisplayName(
+		"resolveReachedSimTime keeps the tracker value when the kernel ended earlier than the last report event"
+	)
+	fun resolveReachedSimTimeKeepsTrackerWhenKernelEndedEarlier() {
+		// Guards the maxOf combiner against a future refactor that always prefers contextEndTime:
+		// when the kernel's own end time is below the tracker's, the tracker must win.
+		val reachedSimTime = get<Main>().resolveReachedSimTime(5.0, 2.0)
+
+		assertThat(reachedSimTime).isEqualTo(5.0)
+	}
 }

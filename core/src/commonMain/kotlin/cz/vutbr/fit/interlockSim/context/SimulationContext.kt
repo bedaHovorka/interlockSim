@@ -143,6 +143,25 @@ interface SimulationContext :
 	fun run(controller: SimulationController = NoOpSimulationController)
 
 	/**
+	 * The kDisco kernel clock value ([cz.ksimulantenbande.kdisco.Simulation.time]) at the moment
+	 * the most recently completed [run] returned, or `null` if [run] has never been called.
+	 *
+	 * This is the kernel's own notion of "how far simulated time actually advanced," independent
+	 * of the report-event stream. It exists because the report-event-derived time signal (e.g.
+	 * `SimulationTimeTracker.lastSimTime` in desktop-ui) can freeze below the requested end time
+	 * even when the kernel itself reached it: queued-but-never-admitted trains are event-less by
+	 * design, so once the last moving train finishes, no further TRAIN/NODE report events fire,
+	 * even though the kernel clock keeps advancing silently.
+	 *
+	 * Callers that classify whether a run actually completed (vs. terminated early) should combine
+	 * this value with the report-event-derived time signal, taking the maximum of the two, rather
+	 * than relying on the report-event stream alone.
+	 *
+	 * @since Issue #929
+	 */
+	val lastRunEndTime: Double?
+
+	/**
 	 * Remove report types from logging.
 	 * @param types Report types to disable
 	 */
