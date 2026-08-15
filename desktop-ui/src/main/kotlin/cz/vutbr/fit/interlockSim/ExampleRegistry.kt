@@ -489,6 +489,26 @@ class ExampleRegistry {
 				// SimulationController.STOPPED handler) can retrieve it after the run ends
 				// and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
 				context.scope.declare(aiPlanner)
+				// Issue #928: DispatcherAgentModule binds the recorder with arm = RULE_BASED and
+				// model = "" for EVERY context. createShuntingLoopAIExample (the console variant)
+				// overrides this since #847 round 4, but this GUI variant never did — so every GUI
+				// shuntingLoopAI run was written to dispatcher-runs/rule_based/ under an empty model
+				// name, silently merging the two arms whose comparison is the whole point of A4.
+				// Override with what this example actually runs, mirroring createShuntingLoopAIExample.
+				context.scope.declare<DispatcherRunRecorder>(
+					DefaultDispatcherRunRecorder(
+						// Issue #847 (SP2c.24): the sweep driver assigns a deterministic run id per grid
+						// cell and passes it in, so an interrupted sweep can tell from the file names
+						// which cells already have a result and resume instead of restarting.
+						runId = context.scope.get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						params =
+							llmRunParameters(
+								context.scope.get<OllamaExecutorConfig>(),
+								context.scope.get<DispatcherRunConfig>()
+							)
+					)
+				)
 				wireDispatcherAgent(
 					context,
 					loop,

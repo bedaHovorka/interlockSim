@@ -94,6 +94,23 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("the GUI AI example records under the LLM arm, not the hard-coded rule-based default")
+	fun guiAiExampleRecordsUnderTheLlmArm() {
+		// Issue #928: createShuntingLoopAIGuiExample never declared the LLM_TOOL_CALLING recorder
+		// override that createShuntingLoopAIExample (the console variant) has had since #847 round 4,
+		// so every GUI shuntingLoopAI run fell through to the Koin-default RULE_BASED binding and was
+		// written to disk mislabeled, polluting measurement data.
+		val context = createExample("createShuntingLoopAIGuiExample", "shuntingLoopAI")
+		val recorder = checkNotNull(context.scope.getOrNull<DispatcherRunRecorder>())
+
+		val snapshot = recorder.snapshot()
+
+		assertThat(snapshot.arm, "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
+		assertThat(snapshot.params.model, "recorded model").isNotEmpty()
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("the rule-based example still records under the rule-based arm")
 	fun ruleBasedExampleRecordsUnderTheRuleBasedArm() {
 		val context = createExample("createShuntingLoopExample", "shuntingLoop")
