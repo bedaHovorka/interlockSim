@@ -227,9 +227,13 @@ class DefaultRunSnapshotStoreTest {
 		assertThat(legacy.schemaVersion).isEqualTo(3)
 		assertThat(legacy.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
 		assertThat(legacy.completedNaturally).isEqualTo(false)
-		// v3-era fields decode too: the scan ran clean.
-		assertThat(legacy.fatalExceptionCount).isEqualTo(0L)
-		assertThat(legacy.fatalExceptionFirstMessage).isNull()
+		// v3-era `fatalExceptionCount` is stored in the literal JSON, but after the v5 field
+		// rename it is decoded under the new name `loggedFatalSimExceptionCount`. Because the JSON
+		// key no longer matches, kotlinx.serialization supplies the default (null). Old files
+		// written with `fatalExceptionCount` are therefore treated as "not scanned" — the honest
+		// value for a run whose log was measured under a now-superseded field name.
+		assertThat(legacy.loggedFatalSimExceptionCount).isNull()
+		assertThat(legacy.loggedFatalSimExceptionFirstMessage).isNull()
 
 		// 2. Direct decode of the literal JSON so the failure is a thrown exception, not a silent
 		//    skip, if TIMEOUT_ABORT is ever removed from the enum.
@@ -433,6 +437,7 @@ class DefaultRunSnapshotStoreTest {
 			Json {
 				prettyPrint = true
 				encodeDefaults = true
+				ignoreUnknownKeys = true
 			}
 	}
 }

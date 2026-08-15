@@ -280,35 +280,35 @@ class AiSweepDriverTest {
 
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
 		assertThat(written).hasSize(1)
-		assertThat(written.single().fatalExceptionCount).isEqualTo(1L)
-		assertThat(written.single().fatalExceptionFirstMessage).isEqualTo(realLine)
+		assertThat(written.single().loggedFatalSimExceptionCount).isEqualTo(1L)
+		assertThat(written.single().loggedFatalSimExceptionFirstMessage).isEqualTo(realLine)
 	}
 
 	@Test
-	@DisplayName("a run whose log is clean reports fatalExceptionCount = 0, not absent")
-	fun cleanLogReportsZeroFatalExceptionsNotAbsent() {
+	@DisplayName("a run whose log is clean reports loggedFatalSimExceptionCount = 0, not absent")
+	fun cleanLogReportsZeroLoggedFatalSimExceptionsNotAbsent() {
 		val runner = runnerWritingLogAndSnapshot("Simulation completed normally\n")
 		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)
 
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
-		assertThat(written.single().fatalExceptionCount).isEqualTo(0L)
-		assertThat(written.single().fatalExceptionFirstMessage).isNull()
+		assertThat(written.single().loggedFatalSimExceptionCount).isEqualTo(0L)
+		assertThat(written.single().loggedFatalSimExceptionFirstMessage).isNull()
 	}
 
 	@Test
-	@DisplayName("a run whose log was never written keeps fatalExceptionCount absent, not zero")
-	fun missingLogKeepsFatalExceptionCountAbsent() {
+	@DisplayName("a run whose log was never written keeps loggedFatalSimExceptionCount absent, not zero")
+	fun missingLogKeepsLoggedFatalSimExceptionCountAbsent() {
 		// The default RecordingRunner never touches request.logFile — the same shape as a real
 		// ForkedJvmSweepProcessRunner that could not create the log file at all.
 		driverWith(RecordingRunner()).run(grid(repeat = 1), outputRoot, mainClass)
 
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
-		assertThat(written.single().fatalExceptionCount).isNull()
+		assertThat(written.single().loggedFatalSimExceptionCount).isNull()
 	}
 
 	@Test
-	@DisplayName("a timed-out run still carries a FATAL finding (a real TrackOperationException line) from its log")
-	fun timedOutRunStillCarriesAFatalFindingFromItsLog() {
+	@DisplayName("a timed-out run still carries a logged FATAL finding (a real TrackOperationException line) from its log")
+	fun timedOutRunStillCarriesALoggedFatalFindingFromItsLog() {
 		val realLine =
 			TrackOperationException("track operation failed", mockk<StaticTrack>(relaxed = true)).toString()
 		val runner =
@@ -320,7 +320,7 @@ class AiSweepDriverTest {
 
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
 		assertThat(written.single().endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
-		assertThat(written.single().fatalExceptionCount).isEqualTo(1L)
+		assertThat(written.single().loggedFatalSimExceptionCount).isEqualTo(1L)
 	}
 
 	@Test

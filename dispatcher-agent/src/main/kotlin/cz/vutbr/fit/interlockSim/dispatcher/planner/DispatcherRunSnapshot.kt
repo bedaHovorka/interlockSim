@@ -24,14 +24,15 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing.  Current version: **4** (version 2 added
- * [railwayOutcome], Issue #834/SP2c.11; version 3 added [fatalExceptionCount] and
- * [fatalExceptionFirstMessage], the measurement-integrity fix for #834's C2 condition).
+ * handle old JSON files without crashing.  Current version: **5** (version 2 added
+ * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
+ * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
+ * fields to their current names, Issue #913).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
- * **Older run JSONs stay readable.** [railwayOutcome], [fatalExceptionCount] and
- * [fatalExceptionFirstMessage] all carry defaults ([RailwayOutcome.UNMEASURED] and `null`
+ * **Older run JSONs stay readable.** [railwayOutcome], [loggedFatalSimExceptionCount] and
+ * [loggedFatalSimExceptionFirstMessage] all carry defaults ([RailwayOutcome.UNMEASURED] and `null`
  * respectively), so kotlinx.serialization supplies them for any document that lacks the key, and
  * [RunSnapshotStore.readAll] only skips files whose version is *greater* than
  * [CURRENT_SCHEMA_VERSION]. A version 1 or 2 run therefore loads with every railway figure and
@@ -103,18 +104,19 @@ import kotlinx.serialization.Serializable
  *   and `null` means *not measured*, never *measured as none*; see [RailwayOutcome]. Defaults to
  *   [RailwayOutcome.UNMEASURED], which is both the honest value for a run nobody measured and
  *   what keeps schema-version-1 files decodable (see "Schema versioning" above).
- * @property fatalExceptionCount Number of FATAL `SimulationException` occurrences — including
- *   subclasses such as `PathSeparatorChangeException` and `TrackOperationException`, not only the
- *   base class — found by scanning this run's log; see
- *   `cz.vutbr.fit.interlockSim.dispatcher.sweep.FatalExceptionScanner`. `null` means the scan
+ * @property loggedFatalSimExceptionCount Number of `[FATAL]: … at time` occurrences — matching
+ *   any `SimulationException` subclass, not only the base class — found in this run's log by
+ *   [cz.vutbr.fit.interlockSim.dispatcher.sweep.FatalExceptionScanner]. The match covers both
+ *   caught exceptions whose handler called `logger.warn(e)` (Logback appends the exception's
+ *   `toString()` to the log line) and uncaught exceptions printed by the JVM's
+ *   `Thread.uncaughtExceptionHandler`. The scanner cannot distinguish the two cases from the log
+ *   text alone; a nonzero value warrants manual inspection of the log. `null` means the log scan
  *   itself could not run (log missing or unreadable) — *not measured*, never *measured as none*;
- *   `0` is the positive finding that the log was read in full and contained no FATAL marker. A
- *   nonzero value means kDisco's `SupervisorJob` absorbed a FATAL error during this run and it
- *   still completed and exited 0 — the run should be treated as a discarded data point, not a
- *   passing one, even though the gate predicate itself (deliberately) does not read this field.
- *   `null` for any run recorded before this field existed.
- * @property fatalExceptionFirstMessage The first matching log line (trimmed), verbatim; `null`
- *   whenever [fatalExceptionCount] is `null` or `0`.
+ *   `0` is the positive finding that the log was read in full and contained no FATAL marker.
+ *   `null` for any run recorded before this field existed (including runs that stored
+ *   `fatalExceptionCount` under the pre-rename field name).
+ * @property loggedFatalSimExceptionFirstMessage The first matching log line (trimmed), verbatim;
+ *   `null` whenever [loggedFatalSimExceptionCount] is `null` or `0`.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -155,8 +157,8 @@ data class DispatcherRunSnapshot(
 	val completedNaturally: Boolean,
 	val endCause: RunEndCause?,
 	val railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
-	val fatalExceptionCount: Long? = null,
-	val fatalExceptionFirstMessage: String? = null
+	val loggedFatalSimExceptionCount: Long? = null,
+	val loggedFatalSimExceptionFirstMessage: String? = null
 ) {
 	companion object {
 		/**
@@ -165,15 +167,24 @@ data class DispatcherRunSnapshot(
 		 * - **1** — SP2c.22 (#845), the original run-identity schema.
 		 * - **2** — SP2c.11 (#834), added [railwayOutcome].
 		 * - **3** — measurement-integrity fix for #834's C2 condition, added
-		 *   [fatalExceptionCount] and [fatalExceptionFirstMessage].
+		 *   [loggedFatalSimExceptionCount] and [loggedFatalSimExceptionFirstMessage] (under the
+		 *   now-superseded names `fatalExceptionCount` / `fatalExceptionFirstMessage`).
 		 * - **4** — Issue #909, added [RunEndCause.TERMINATED_EARLY] to distinguish a
 		 *   simulation event-queue drain (deadlock) from a wall-clock TIMEOUT_ABORT.
 		 *   Old run JSONs that stored `"endCause": "TIMEOUT_ABORT"` for a
 		 *   [RunOutcome.TERMINATED_EARLY] headless run remain decodable: the enum value
 		 *   still exists in [RunEndCause]. They will continue to report `completedNaturally
 		 *   = false`, which is the correct gate behaviour.
+		 * - **5** — Issue #913, renamed `fatalExceptionCount` →
+		 *   [loggedFatalSimExceptionCount] and `fatalExceptionFirstMessage` →
+		 *   [loggedFatalSimExceptionFirstMessage] to accurately describe what the scanner
+		 *   detects (any FATAL SimulationException occurrence in the log — caught-and-logged
+		 *   or uncaught-and-printed — not specifically absorbed/uncaught ones). Runs written
+		 *   under versions 3/4 that stored `fatalExceptionCount` will decode with
+		 *   [loggedFatalSimExceptionCount] = `null` (not measured), which is the honest
+		 *   value: the old field name is not read by the new code.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 4
+		const val CURRENT_SCHEMA_VERSION: Int = 5
 	}
 
 	init {

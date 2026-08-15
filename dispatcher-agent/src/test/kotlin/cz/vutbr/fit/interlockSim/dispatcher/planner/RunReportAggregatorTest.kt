@@ -511,11 +511,11 @@ class RunReportAggregatorTest {
 		(10..16).forEach { idx -> assertThat(cells[idx]).isEqualTo("n/a") }
 	}
 
-	// ── FATAL exceptions (measurement-integrity fix for #834's C2 condition) ──────────────────
+	// ── Logged FATAL simulation exceptions (measurement-integrity fix for #834's C2 condition, renamed #913) ──
 
 	@Test
 	fun `a run with no fatal-exception scan renders n slash a in Per-Run Detail, not a bare zero`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "unscanned", fatalExceptionCount = null)))
+		val report = aggregator.aggregate(listOf(snapshot(runId = "unscanned", loggedFatalSimExceptionCount = null)))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val row = md.lines().first { it.startsWith("| ${DispatcherArm.RULE_BASED} | unscanned ") }
@@ -524,7 +524,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `a run whose log was scanned clean renders zero in Per-Run Detail, not n slash a`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "clean", fatalExceptionCount = 0L)))
+		val report = aggregator.aggregate(listOf(snapshot(runId = "clean", loggedFatalSimExceptionCount = 0L)))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val row = md.lines().first { it.startsWith("| ${DispatcherArm.RULE_BASED} | clean ") }
@@ -532,30 +532,33 @@ class RunReportAggregatorTest {
 	}
 
 	@Test
-	fun `no run with a FATAL renders the reassuring FATAL Exceptions message, not a table`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "ok1", fatalExceptionCount = 0L)))
+	fun `no run with a logged FATAL renders the reassuring message in the section, not a table`() {
+		val report = aggregator.aggregate(listOf(snapshot(runId = "ok1", loggedFatalSimExceptionCount = 0L)))
 		val md = aggregator.renderMarkdown(listOf(report))
 
-		assertThat(md).transform("contains heading") { it.contains("## FATAL Exceptions") }.isTrue()
+		assertThat(md)
+			.transform("contains heading") { it.contains("## Logged FATAL Simulation Exceptions") }
+			.isTrue()
 		assertThat(md)
 			.transform("contains the no-FATAL message") { it.contains("No run recorded a FATAL `SimulationException`") }
 			.isTrue()
 	}
 
 	@Test
-	fun `a run with a FATAL is listed in the FATAL Exceptions section with its count and first message`() {
+	fun `a run with a logged FATAL is listed in the section with its count and first message`() {
 		val flagged =
 			snapshot(
 				runId = "doomed",
 				arm = DispatcherArm.LLM_TOOL_CALLING,
-				fatalExceptionCount = 2L,
-				fatalExceptionFirstMessage = "SimulationException[FATAL]: pathToSemaphore null at time 12.5"
+				loggedFatalSimExceptionCount = 2L,
+				loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: pathToSemaphore null at time 12.5"
 			)
-		val clean = snapshot(runId = "ok2", fatalExceptionCount = 0L)
+		val clean = snapshot(runId = "ok2", loggedFatalSimExceptionCount = 0L)
 		val report = aggregator.aggregate(listOf(flagged, clean))
 		val md = aggregator.renderMarkdown(listOf(report))
 
-		val section = md.substringAfter("## FATAL Exceptions").substringBefore("## Per-Run Detail")
+		val section =
+			md.substringAfter("## Logged FATAL Simulation Exceptions").substringBefore("## Per-Run Detail")
 		assertThat(section).transform("lists the flagged run") { it.contains("| LLM_TOOL_CALLING | doomed | 2 |") }.isTrue()
 		assertThat(section)
 			.transform("includes the first message") { it.contains("pathToSemaphore null at time 12.5") }
@@ -646,8 +649,8 @@ class RunReportAggregatorTest {
 		promptVariant: String = RunParameters.DEFAULT_PROMPT_VARIANT,
 		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
 		ruleFallbackTicks: Long = 0L,
-		fatalExceptionCount: Long? = null,
-		fatalExceptionFirstMessage: String? = null
+		loggedFatalSimExceptionCount: Long? = null,
+		loggedFatalSimExceptionFirstMessage: String? = null
 	): DispatcherRunSnapshot {
 		val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
 		outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
@@ -691,8 +694,8 @@ class RunReportAggregatorTest {
 			completedNaturally = completedNaturally,
 			endCause = if (completedNaturally) RunEndCause.NATURAL_COMPLETION else RunEndCause.TERMINATED_EARLY,
 			railwayOutcome = railwayOutcome,
-			fatalExceptionCount = fatalExceptionCount,
-			fatalExceptionFirstMessage = fatalExceptionFirstMessage
+			loggedFatalSimExceptionCount = loggedFatalSimExceptionCount,
+			loggedFatalSimExceptionFirstMessage = loggedFatalSimExceptionFirstMessage
 		)
 	}
 

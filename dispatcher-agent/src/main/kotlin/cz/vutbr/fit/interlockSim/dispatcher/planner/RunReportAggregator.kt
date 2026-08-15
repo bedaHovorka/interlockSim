@@ -241,7 +241,7 @@ class RunReportAggregator(
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | RunId | Ticks | LLM_ACTIONS | LLM_NO_OP | LLM_REPAIRED | TIMEOUT_NOOP | " +
-				"RULE_FALLBACK | End cause | C7 clean | Fallback tick | FATAL exceptions |"
+				"RULE_FALLBACK | End cause | C7 clean | Fallback tick | logged FATAL sim exceptions |"
 		)
 		sb.appendLine(
 			"|---|---|---|---|---|---|---|---|---|---|---|---|"
@@ -261,7 +261,7 @@ class RunReportAggregator(
 						"| ${snap.endCause ?: "in-progress"} " +
 						"| ${boolSymbol(snap.c7Clean)} " +
 						"| ${snap.terminalFallbackTickIndex ?: "-"} " +
-						"| ${fmtNullableLong(snap.fatalExceptionCount)} |"
+						"| ${fmtNullableLong(snap.loggedFatalSimExceptionCount)} |"
 				)
 			}
 		}
@@ -269,50 +269,50 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * Flags every run that recorded at least one FATAL `SimulationException` occurrence (including
-	 * subclasses such as `PathSeparatorChangeException`/`TrackOperationException`, not only the
-	 * base class — see `FatalExceptionScanner`'s KDoc, the measurement-integrity fix for #834's C2
-	 * condition).
+	 * Flags every run that recorded at least one FATAL `SimulationException` occurrence in its log
+	 * (including subclasses such as `PathSeparatorChangeException`/`TrackOperationException`, not
+	 * only the base class — see `FatalExceptionScanner`'s KDoc). The count covers both
+	 * caught-and-logged and uncaught occurrences; the scanner cannot distinguish them from the log
+	 * text alone.
 	 *
 	 * Rendered near the top of the report, ahead of every other section, because a flagged run
-	 * had *something* invalid happen during it and kDisco's `SupervisorJob` absorbed the error —
-	 * the run still completed and exited `0`, so nothing else in this report would otherwise
-	 * distinguish it from a genuinely clean run. The gate predicate ([runPassed] and
-	 * [ArmReport.gatePassed]) deliberately does not read [DispatcherRunSnapshot.fatalExceptionCount] — this
-	 * section exists so a human deciding whether to keep or discard a run's data has the fact in
-	 * front of them, not buried in a per-run log file nobody re-opens.
+	 * had at least one FATAL `SimulationException` appear somewhere in its output. The gate
+	 * predicate ([runPassed] and [ArmReport.gatePassed]) deliberately does not read
+	 * [DispatcherRunSnapshot.loggedFatalSimExceptionCount] — this section exists so a human
+	 * deciding whether to keep or discard a run's data has the fact in front of them, not buried
+	 * in a per-run log file nobody re-opens.
 	 */
 	private fun appendFatalExceptions(
 		sb: StringBuilder,
 		reports: List<ArmReport>
 	) {
-		val flagged = reports.flatMap { it.snapshots }.filter { (it.fatalExceptionCount ?: 0L) > 0L }
+		val flagged = reports.flatMap { it.snapshots }.filter { (it.loggedFatalSimExceptionCount ?: 0L) > 0L }
 
-		sb.appendLine("## FATAL Exceptions")
+		sb.appendLine("## Logged FATAL Simulation Exceptions")
 		sb.appendLine()
 		if (flagged.isEmpty()) {
 			sb.appendLine(
-				"No run recorded a FATAL `SimulationException` occurrence. (A run whose log could not be " +
-					"scanned shows `n/a`, not a count, for `FATAL exceptions` in Per-Run Detail below — " +
-					"absence of a finding, not a clean bill.)"
+				"No run recorded a FATAL `SimulationException` occurrence in its log. (A run whose log " +
+					"could not be scanned shows `n/a`, not a count, for `logged FATAL sim exceptions` in " +
+					"Per-Run Detail below — absence of a finding, not a clean bill.)"
 			)
 			sb.appendLine()
 			return
 		}
 
 		sb.appendLine(
-			"> A `FATAL` `SimulationException` was thrown and absorbed by kDisco's `SupervisorJob` — the " +
-				"run still completed and exited 0. Every run listed here measured something invalid and " +
-				"should be treated as a discarded data point, not a passing one; the gate predicate above " +
-				"does not do this automatically."
+			"> A `FATAL` `SimulationException` was logged during these runs. This covers both caught " +
+				"exceptions whose handler called `logger.warn(e)` and genuinely uncaught ones absorbed " +
+				"by kDisco's `SupervisorJob`; the scanner cannot distinguish the two from the log text " +
+				"alone. Inspect the per-run log for the first message below to determine the kind."
 		)
 		sb.appendLine()
 		sb.appendLine("| Arm | RunId | Count | First message |")
 		sb.appendLine("|---|---|---|---|")
 		for (snap in flagged) {
 			sb.appendLine(
-				"| ${snap.arm} | ${snap.runId} | ${snap.fatalExceptionCount} | " +
-					"${mdEscapeCell(snap.fatalExceptionFirstMessage)} |"
+				"| ${snap.arm} | ${snap.runId} | ${snap.loggedFatalSimExceptionCount} | " +
+					"${mdEscapeCell(snap.loggedFatalSimExceptionFirstMessage)} |"
 			)
 		}
 		sb.appendLine()
