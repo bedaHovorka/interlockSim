@@ -257,12 +257,6 @@ class DispatcherRunSnapshotTest {
 
 	private companion object {
 		/** Pinned literally so a future bump has to touch this test deliberately. */
-		private const val SCHEMA_VERSION_WITH_FATAL_EXCEPTION_FIELDS: Int = 3
-
-		/** Pinned literally so a future bump has to touch this test deliberately. */
-		private const val SCHEMA_VERSION_WITH_TERMINATED_EARLY_CAUSE: Int = 4
-
-		/** Pinned literally so a future bump has to touch this test deliberately. */
 		private const val SCHEMA_VERSION_WITH_FIELD_RENAME: Int = 5
 
 		private val json =

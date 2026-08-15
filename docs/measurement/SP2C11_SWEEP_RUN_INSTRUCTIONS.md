@@ -157,13 +157,15 @@ spuriously — not because anything about the dispatcher regressed.
   than once per train. `trainsExited` is termination-gated and is the figure `RunReportAggregator`
   itself already sorts cells by (Issue #906). State this explicitly when presenting the numbers;
   don't let a `journeysCompleted` figure stand in for it unqualified.
-- **A run with `fatalExceptionCount > 0` is not a clean data point.** kDisco's `SupervisorJob`
-  absorbs a FATAL `SimulationException` from any process coroutine, so a run can complete and exit
-  0 with a dead train inside it. The sweep records `fatalExceptionCount` /
-  `fatalExceptionFirstMessage` per run and the report surfaces them, but the gate predicate
-  deliberately does **not** exclude such runs from `runPassed`. Say so explicitly wherever those
-  runs' other numbers are quoted — do not let a fatal-tainted run's decision-hygiene score stand in
-  for a clean one.
+- **A run with `loggedFatalSimExceptionCount > 0` is not a clean data point.** A nonzero count
+  means the run's log contained at least one `[FATAL]` `SimulationException` occurrence — either
+  caught and logged (via `logger.warn(e)`) or genuinely uncaught and absorbed by kDisco's
+  `SupervisorJob`; the scanner cannot tell which from the log text alone. Either way a run can
+  complete and exit 0 with a dead train inside it. The sweep records
+  `loggedFatalSimExceptionCount` / `loggedFatalSimExceptionFirstMessage` per run and the report
+  surfaces them, but the gate predicate deliberately does **not** exclude such runs from
+  `runPassed`. Say so explicitly wherever those runs' other numbers are quoted — do not let a
+  fatal-tainted run's decision-hygiene score stand in for a clean one.
 - **What the prompt A/B can and cannot show.** `REVISED` teaches an explicit `no_op` for the
   cap-full/nothing-to-do state, which converts ticks `BASELINE` would score `RULE_FALLBACK` into
   `LLM_NO_OP` *successes* without necessarily moving a single train. Read the stage-1 comparison on
