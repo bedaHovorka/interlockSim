@@ -70,6 +70,21 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 		) as DefaultSimulationContext
 	}
 
+	/**
+	 * Both the console ([createShuntingLoopAIExample]) and GUI ([createShuntingLoopAIGuiExample])
+	 * AI examples must override the Koin-default RULE_BASED recorder with the LLM_TOOL_CALLING arm
+	 * and a real model, so the per-run JSON is not mislabeled (#847 / #928).
+	 */
+	private fun assertRecordsUnderLlmArm(factoryMethod: String) {
+		val context = createExample(factoryMethod, "shuntingLoopAI")
+		val recorder = checkNotNull(context.scope.getOrNull<DispatcherRunRecorder>())
+
+		val snapshot = recorder.snapshot()
+
+		assertThat(snapshot.arm, "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
+		assertThat(snapshot.params.model, "recorded model").isNotEmpty()
+	}
+
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("a snapshot store is resolvable, so a finished run has somewhere to be written")
@@ -82,14 +97,17 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("the AI example records under the LLM arm, not the hard-coded rule-based default")
-	fun aiExampleRecordsUnderTheLlmArm() {
-		val context = createExample("createShuntingLoopAIExample", "shuntingLoopAI")
-		val recorder = checkNotNull(context.scope.getOrNull<DispatcherRunRecorder>())
+	fun aiExampleRecordsUnderTheLlmArm() = assertRecordsUnderLlmArm("createShuntingLoopAIExample")
 
-		val snapshot = recorder.snapshot()
-
-		assertThat(snapshot.arm, "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
-		assertThat(snapshot.params.model, "recorded model").isNotEmpty()
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("the GUI AI example records under the LLM arm, not the hard-coded rule-based default")
+	fun guiAiExampleRecordsUnderTheLlmArm() {
+		// Issue #928: createShuntingLoopAIGuiExample never declared the LLM_TOOL_CALLING recorder
+		// override that createShuntingLoopAIExample (the console variant) has had since #847 round 4,
+		// so every GUI shuntingLoopAI run fell through to the Koin-default RULE_BASED binding and was
+		// written to disk mislabeled, polluting measurement data.
+		assertRecordsUnderLlmArm("createShuntingLoopAIGuiExample")
 	}
 
 	@Test
