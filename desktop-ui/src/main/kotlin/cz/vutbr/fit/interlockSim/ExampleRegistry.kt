@@ -414,7 +414,7 @@ class ExampleRegistry {
 				// The scoped DelegatingSimulationController is handed to the driver here;
 				// gui.SimulationController attaches the live SimulationRunner as its
 				// delegate when the run starts (and detaches it on stop).
-				wireDispatcherAgent(context, loop, context.scope.get<DelegatingSimulationController>(), barrierControlStep = true)
+				wireDispatcherAgent(context, loop, context.scope.get<DelegatingSimulationController>())
 				context.setMainProcess(loop)
 				context
 			}
@@ -554,6 +554,11 @@ class ExampleRegistry {
 		// race that made the rule-based arm non-reproducible at 600 s.
 		// Must NOT be set for LLM-backed planners: their inference latency (10-25 s) would
 		// freeze the sim thread for the duration of each LLM call.
+		// Must NOT be set for the GUI rule-based arm either: throttle() runs inside the barrier
+		// window, so the sim thread blocks for the full SimulationRunner.throttle() sleep (~2 s in
+		// 1x mode), roughly halving GUI animation smoothness. The GUI is interactive and has no
+		// reproducibility requirement; #907 targets the 600 s headless measurement runs. Enabled
+		// only for the console/headless rule-based arm (NoOpSimulationController call site).
 		barrierControlStep: Boolean = false
 	) {
 		// Goal 10 dispatcher-cannot-approve-trains fix: resolve the SAME NetworkPerceptionPort /
@@ -758,19 +763,21 @@ class ExampleRegistry {
 				// was fired before the block) and completes this runCycle() before isActive() ever
 				// returns false. If runCycle() throws (only possible with an LLM planner; not possible
 				// with the rule-based planner that is the only enabled-barrier use case), release the
-				// semaphore defensively so the sim thread can unblock rather than deadlocking.
+				// semaphore defensively so the sim thread can unblock rather than deadlocking. This
+				// also covers the AgentDriverLoop maxConsecutiveFailures exit (10 consecutive throws):
+				// it is unreachable for the rule-based planner because runCycle() cannot throw, so the
+				// driver thread never returns while the sim is blocked on the barrier.
 				runCycle =
 					if (barrierSemaphore != null) {
 						{
-							var didWork = false
 							try {
-								didWork = driver.runCycle()
+								val didWork = driver.runCycle()
 								if (didWork) barrierSemaphore.release()
+								didWork
 							} catch (e: Throwable) {
 								barrierSemaphore.release()
 								throw e
 							}
-							didWork
 						}
 					} else {
 						driver::runCycle
