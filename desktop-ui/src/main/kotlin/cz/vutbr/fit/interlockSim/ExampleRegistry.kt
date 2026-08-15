@@ -62,6 +62,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
+import org.koin.core.scope.Scope
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.Semaphore
@@ -255,6 +256,27 @@ class ExampleRegistry {
 		)
 
 	/**
+	 * Overrides the Koin-scoped [DispatcherRunRecorder] (bound `DispatcherAgentModule`-wide with
+	 * arm = RULE_BASED / empty model) with the LLM_TOOL_CALLING arm and the run's actual
+	 * [RunParameters], so the per-run JSON identifies its own arm. Used by both
+	 * [createShuntingLoopAIExample] (console) and [createShuntingLoopAIGuiExample] (GUI).
+	 * Issue #847 round 4 (R4-5) / #928.
+	 */
+	private fun declareLlmToolCallingRecorder(scope: Scope) {
+		scope.declare<DispatcherRunRecorder>(
+			DefaultDispatcherRunRecorder(
+				// Issue #847 (SP2c.24): the sweep driver assigns a deterministic run id per grid
+				// cell and passes it in, so an interrupted sweep can tell from the file names
+				// which cells already have a result and resume instead of restarting.
+				runId = scope.get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				params =
+					llmRunParameters(scope.get<OllamaExecutorConfig>(), scope.get<DispatcherRunConfig>())
+			)
+		)
+	}
+
+	/**
 	 * Creates a headless shunting loop AI simulation example for console mode (Issue #873).
 	 *
 	 * Identical to [createShuntingLoopAIGuiExample] in planner construction but wires the
@@ -331,20 +353,7 @@ class ExampleRegistry {
 				// dispatcher-runs/rule_based/ under an empty model name, silently merging the two arms
 				// whose comparison is the whole point of A4. Override with what this example actually
 				// runs, so the per-run JSON identifies its own arm and parameters.
-				context.scope.declare<DispatcherRunRecorder>(
-					DefaultDispatcherRunRecorder(
-						// Issue #847 (SP2c.24): the sweep driver assigns a deterministic run id per grid
-						// cell and passes it in, so an interrupted sweep can tell from the file names
-						// which cells already have a result and resume instead of restarting.
-						runId = context.scope.get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
-						arm = DispatcherArm.LLM_TOOL_CALLING,
-						params =
-							llmRunParameters(
-								context.scope.get<OllamaExecutorConfig>(),
-								context.scope.get<DispatcherRunConfig>()
-							)
-					)
-				)
+				declareLlmToolCallingRecorder(context.scope)
 				val pacingController =
 					ThrottlingSimulationController(
 						initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
@@ -495,20 +504,7 @@ class ExampleRegistry {
 				// shuntingLoopAI run was written to dispatcher-runs/rule_based/ under an empty model
 				// name, silently merging the two arms whose comparison is the whole point of A4.
 				// Override with what this example actually runs, mirroring createShuntingLoopAIExample.
-				context.scope.declare<DispatcherRunRecorder>(
-					DefaultDispatcherRunRecorder(
-						// Issue #847 (SP2c.24): the sweep driver assigns a deterministic run id per grid
-						// cell and passes it in, so an interrupted sweep can tell from the file names
-						// which cells already have a result and resume instead of restarting.
-						runId = context.scope.get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
-						arm = DispatcherArm.LLM_TOOL_CALLING,
-						params =
-							llmRunParameters(
-								context.scope.get<OllamaExecutorConfig>(),
-								context.scope.get<DispatcherRunConfig>()
-							)
-					)
-				)
+				declareLlmToolCallingRecorder(context.scope)
 				wireDispatcherAgent(
 					context,
 					loop,
