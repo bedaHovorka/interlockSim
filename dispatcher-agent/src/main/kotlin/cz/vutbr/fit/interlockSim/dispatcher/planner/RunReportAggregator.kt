@@ -24,12 +24,18 @@ import java.time.format.DateTimeFormatter
  * ## Gate logic (A4)
  *
  * ```
- * runPassed  = completedNaturally && !terminalFallbackEngaged && c7Clean
+ * runPassed  = completedNaturally && !terminalFallbackEngaged && c7Clean &&
+ *              actionableTickRate >= MIN_ACTIONABLE_RATE
  * gatePassed = runCount >= 10 && passingRuns >= 8 && snapshots.all { it.c7Clean }
  * ```
  *
  * A **single** non-`c7Clean` run fails the whole arm even at 10/10 completions.
  * C7 is a deterministic-component correctness gate, not a majority vote.
+ *
+ * The `actionableTickRate` threshold (Issue #927) makes the gate *actionable-rate AND railway
+ * outcome*, not actionable-rate alone: a measured run at `tickPeriodMs=20000` scored
+ * `llmSuccessRate=0.846` on a railway that moved nothing (journeys 0/7), proving a rate check by
+ * itself is gameable. [MIN_ACTIONABLE_RATE] is a provisional placeholder — see its own KDoc.
  *
  * ## Sections rendered
  *
@@ -59,11 +65,65 @@ class RunReportAggregator(
 		/** Minimum passing-run count for the arm gate. */
 		private const val MIN_PASSING_RUNS = 8
 
+		/**
+		 * Minimum [DispatcherRunSnapshot.actionableTickRate] a run must clear to pass
+		 * [runPassed] (Issue #927).
+		 *
+		 * **Provisional placeholder.** This value was not derived from a measurement — Task 3 of
+		 * the #927/#926 milestone sets the real threshold after a re-baseline sweep run under the
+		 * corrected metric (see `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` for the sweep methodology).
+		 * `0.5` merely wires the gate mechanism so the "AND railway outcome" composition exists
+		 * and is tested; do not treat it as a validated number.
+		 */
+		const val MIN_ACTIONABLE_RATE: Double = 0.5
+
 		/** Column count of the Parameter Sweep "Decision Hygiene" table (for its separator row). */
 		private const val HYGIENE_TABLE_COLUMNS = 22
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
 		private const val OUTCOMES_TABLE_COLUMNS = 17
+
+		/**
+		 * Column headers of the "Arm Comparison" table — the single source for both its header row
+		 * and its separator row, so adding/removing a column cannot desync the two (Issue #927
+		 * review: the separator was previously hand-counted).
+		 */
+		private val ARM_COMPARISON_COLUMNS =
+			listOf(
+				"Arm",
+				"Runs",
+				"Passing",
+				"Gate",
+				"LLM Success (median)",
+				"Actionable Rate (median)",
+				"NoOp (median)",
+				"validAt1 (median)",
+				"correctAt1 (median)",
+				"p95 latency ms",
+				"C7 clean"
+			)
+
+		/**
+		 * Column headers of the "Per-Run Detail" table — single source for its header and
+		 * separator rows (Issue #927 review: the separator was previously hand-counted).
+		 */
+		private val PER_RUN_DETAIL_COLUMNS =
+			listOf(
+				"Arm",
+				"RunId",
+				"Ticks",
+				"LLM_ACTIONS",
+				"LLM_NO_OP",
+				"LLM_REPAIRED",
+				"LLM_SILENT_NONACTIONABLE",
+				"TIMEOUT_NOOP",
+				"RULE_FALLBACK",
+				"Actionable Rate",
+				"End cause",
+				"C7 clean",
+				"Fallback tick",
+				"logged FATAL sim exceptions"
+			)
 
 		private val REPORT_TS_FMT: DateTimeFormatter =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC)
@@ -89,6 +149,7 @@ class RunReportAggregator(
 				gatePassed = false,
 				medianLlmSuccessRate = 0.0,
 				iqrLlmSuccessRate = 0.0,
+				medianActionableTickRate = 0.0,
 				medianNoOpRate = 0.0,
 				iqrNoOpRate = 0.0,
 				medianValidAt1 = 0.0,
@@ -113,6 +174,7 @@ class RunReportAggregator(
 		val gatePassed = runCount >= MIN_RUN_COUNT && passingRuns >= MIN_PASSING_RUNS && allC7Clean
 
 		val llmSuccessRates = snapshots.map { it.llmSuccessRate }.sorted()
+		val actionableTickRates = snapshots.map { it.actionableTickRate }.sorted()
 		val noOpRates = snapshots.map { it.noOpRate }.sorted()
 		val validAt1s = snapshots.map { it.validAt1 }.sorted()
 
@@ -151,6 +213,7 @@ class RunReportAggregator(
 			gatePassed = gatePassed,
 			medianLlmSuccessRate = median(llmSuccessRates),
 			iqrLlmSuccessRate = iqr(llmSuccessRates),
+			medianActionableTickRate = median(actionableTickRates),
 			medianNoOpRate = median(noOpRates),
 			iqrNoOpRate = iqr(noOpRates),
 			medianValidAt1 = median(validAt1s),
@@ -196,10 +259,14 @@ class RunReportAggregator(
 
 	/**
 	 * Per-run pass predicate: the run completed naturally, the terminal fallback never engaged,
-	 * and no C7 violation was observed.
+	 * no C7 violation was observed, and (Issue #927) [DispatcherRunSnapshot.actionableTickRate]
+	 * clears [MIN_ACTIONABLE_RATE] — a provisional placeholder pending the Task 3 re-baseline.
 	 */
 	fun runPassed(snapshot: DispatcherRunSnapshot): Boolean =
-		snapshot.completedNaturally && !snapshot.terminalFallbackEngaged && snapshot.c7Clean
+		snapshot.completedNaturally &&
+			!snapshot.terminalFallbackEngaged &&
+			snapshot.c7Clean &&
+			snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
 
 	// ── Table renderers ───────────────────────────────────────────────────────
 
@@ -209,13 +276,8 @@ class RunReportAggregator(
 	) {
 		sb.appendLine("## Arm Comparison")
 		sb.appendLine()
-		sb.appendLine(
-			"| Arm | Runs | Passing | Gate | LLM Success (median) | NoOp (median) | " +
-				"validAt1 (median) | correctAt1 (median) | p95 latency ms | C7 clean |"
-		)
-		sb.appendLine(
-			"|---|---|---|---|---|---|---|---|---|---|"
-		)
+		sb.appendLine("| " + ARM_COMPARISON_COLUMNS.joinToString(" | ") + " |")
+		sb.appendLine("|" + "---|".repeat(ARM_COMPARISON_COLUMNS.size))
 		for (r in reports) {
 			sb.appendLine(
 				"| ${r.arm} " +
@@ -223,6 +285,7 @@ class RunReportAggregator(
 					"| ${r.passingRuns} " +
 					"| ${gateSymbol(r.gatePassed)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
+					"| ${fmtRate(r.medianActionableTickRate)} " +
 					"| ${fmtRate(r.medianNoOpRate)} " +
 					"| ${fmtRate(r.medianValidAt1)} " +
 					"| ${r.medianCorrectAt1?.let { fmtRate(it) } ?: "n/a"} " +
@@ -239,13 +302,8 @@ class RunReportAggregator(
 	) {
 		sb.appendLine("## Per-Run Detail")
 		sb.appendLine()
-		sb.appendLine(
-			"| Arm | RunId | Ticks | LLM_ACTIONS | LLM_NO_OP | LLM_REPAIRED | TIMEOUT_NOOP | " +
-				"RULE_FALLBACK | End cause | C7 clean | Fallback tick | logged FATAL sim exceptions |"
-		)
-		sb.appendLine(
-			"|---|---|---|---|---|---|---|---|---|---|---|---|"
-		)
+		sb.appendLine("| " + PER_RUN_DETAIL_COLUMNS.joinToString(" | ") + " |")
+		sb.appendLine("|" + "---|".repeat(PER_RUN_DETAIL_COLUMNS.size))
 		for (r in reports) {
 			for (snap in r.snapshots) {
 				val byOutcome = snap.ticksByOutcome
@@ -256,8 +314,10 @@ class RunReportAggregator(
 						"| ${byOutcome[TickOutcome.LLM_ACTIONS.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.LLM_NO_OP.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.LLM_REPAIRED.name] ?: 0L} " +
+						"| ${byOutcome[TickOutcome.LLM_SILENT_NONACTIONABLE.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.TIMEOUT_NOOP.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.RULE_FALLBACK.name] ?: 0L} " +
+						"| ${fmtRate(snap.actionableTickRate)} " +
 						"| ${snap.endCause ?: "in-progress"} " +
 						"| ${boolSymbol(snap.c7Clean)} " +
 						"| ${snap.terminalFallbackTickIndex ?: "-"} " +

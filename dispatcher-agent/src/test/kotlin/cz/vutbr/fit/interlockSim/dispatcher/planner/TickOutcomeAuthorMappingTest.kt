@@ -32,6 +32,13 @@ class TickOutcomeAuthorMappingTest {
 	}
 
 	@ParameterizedTest
+	@EnumSource(TickOutcome::class, names = ["LLM_SILENT_NONACTIONABLE"])
+	@DisplayName("LLM_SILENT_NONACTIONABLE maps to ActionAuthor.LLM despite not being a SUCCESS outcome (Issue #927)")
+	fun llmSilentNonactionableMapsToLlm(outcome: TickOutcome) {
+		assertThat(outcome.toActionAuthor).isEqualTo(ActionAuthor.LLM)
+	}
+
+	@ParameterizedTest
 	@EnumSource(TickOutcome::class, names = ["TIMEOUT_NOOP", "LLM_EXCEPTION"])
 	@DisplayName("no-dispatching outcomes map to ActionAuthor.TIMEOUT_NOOP")
 	fun noDispatchOutcomesMapToTimeoutNoop(outcome: TickOutcome) {

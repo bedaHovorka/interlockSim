@@ -58,7 +58,10 @@ import java.util.concurrent.atomic.AtomicLong
  * - [controller.awaitIfPaused][SimulationController.awaitIfPaused] and
  *   [controller.throttle][SimulationController.throttle] are called at the end of every tick
  *   that ran (same position as in [AgentLoopDriver.runCycle]) — the loop is still async and
- *   still needs a pacing controller.
+ *   still needs a pacing controller. Since Issue #926, the sim-time delta passed to
+ *   [SimulationController.throttle] is adjusted by the wall-clock time step 4 (DECIDE) already
+ *   spent (`emissionNanos`, converted to sim-time units and clamped at `0.0`) — see the [runTick]
+ *   step 7 KDoc for the full rationale. Mirrors the identical fix in [AgentLoopDriver.runCycle].
  *
  * ## Intra-tick optimistic projection (C6)
  *
@@ -341,9 +344,22 @@ class DispatchTickLoop(
 
 		// 7. PACE — honour pause/step requests, then throttle wall-clock time.
 		// Mirrors AgentLoopDriver.runCycle steps 4.
+		//
+		// #926: the raw simDelta must not be thrown at throttle() unadjusted — step 4 (DECIDE)
+		// above may have blocked on real (async LLM) inference for a while (emissionNanos), and
+		// that wall-clock time was already "spent" from the operator's point of view. Passing the
+		// full simDelta to throttle() on top of that would double-count it, sleeping again for
+		// time that has already elapsed. emissionWallElapsedInSimUnits converts emissionNanos into
+		// the same sim-time units as simDelta (via the controller's active speed multiplier — the
+		// same conversion throttle() itself applies internally, just inverted), so it can be
+		// subtracted before throttling. Clamped at 0.0: if step 4 alone took longer than the
+		// sim-time budget for this tick, there is no throttling left to do — a negative duration
+		// would be meaningless. This mirrors the fix already applied to AgentLoopDriver.runCycle.
 		controller.awaitIfPaused()
 		val simDelta = obs0.simTime - prevSimTime
-		controller.throttle(simDelta)
+		val emissionWallElapsedInSimUnits =
+			(emissionNanos.toDouble() / NANOS_PER_SECOND) * controller.currentSpeedMultiplier()
+		controller.throttle(maxOf(0.0, simDelta - emissionWallElapsedInSimUnits))
 
 		// F2 real-time ratio reporting:
 		// simDelta is the simulation time elapsed since the previous tick.

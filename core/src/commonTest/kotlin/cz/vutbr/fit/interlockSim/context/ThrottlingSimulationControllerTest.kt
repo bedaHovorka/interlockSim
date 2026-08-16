@@ -189,4 +189,17 @@ class ThrottlingSimulationControllerTest {
 		// Should not throw
 		ThrottlingSimulationController(initialSpeedMultiplier = ThrottlingSimulationController.MAX_SPEED)
 	}
+
+	@Test
+	fun `currentSpeedMultiplier reflects the configured speedMultiplier`() {
+		val controller = ThrottlingSimulationController(initialSpeedMultiplier = 3.0)
+		assertThat(controller.currentSpeedMultiplier()).isEqualTo(3.0)
+	}
+
+	@Test
+	fun `currentSpeedMultiplier reflects speedMultiplier updates`() {
+		val controller = ThrottlingSimulationController(initialSpeedMultiplier = 1.0)
+		controller.speedMultiplier = 4.0
+		assertThat(controller.currentSpeedMultiplier()).isEqualTo(4.0)
+	}
 }

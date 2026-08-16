@@ -49,6 +49,65 @@ class RunReportAggregatorTest {
 		assertThat(aggregator.runPassed(snapshot(completedNaturally = true, fallback = false, c7Clean = false))).isFalse()
 	}
 
+	// ── Actionable-rate gate composition (Issue #927) ──────────────────────────
+
+	@Test
+	fun `runPassed fails below MIN_ACTIONABLE_RATE even when every other condition passes`() {
+		val belowThreshold =
+			snapshot(
+				completedNaturally = true,
+				fallback = false,
+				c7Clean = true,
+				actionableTickRate = RunReportAggregator.MIN_ACTIONABLE_RATE - 0.01
+			)
+		assertThat(aggregator.runPassed(belowThreshold)).isFalse()
+	}
+
+	@Test
+	fun `runPassed passes at or above MIN_ACTIONABLE_RATE when every other condition passes`() {
+		val atThreshold =
+			snapshot(
+				completedNaturally = true,
+				fallback = false,
+				c7Clean = true,
+				actionableTickRate = RunReportAggregator.MIN_ACTIONABLE_RATE
+			)
+		assertThat(aggregator.runPassed(atThreshold)).isTrue()
+	}
+
+	/**
+	 * Proves the "AND" composition (Issue #927): a run with a clean railway outcome (good
+	 * completedNaturally/fallback/c7Clean) but a low actionable rate must still fail, and a run
+	 * with a high actionable rate but a dirty railway outcome must also still fail — neither
+	 * factor alone can carry the gate.
+	 */
+	@Test
+	fun `runPassed requires both a passing railway outcome AND an adequate actionable rate`() {
+		val goodRailwayLowRate =
+			snapshot(completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 0.1)
+		val badRailwayHighRate =
+			snapshot(completedNaturally = false, fallback = false, c7Clean = true, actionableTickRate = 1.0)
+		val bothGood =
+			snapshot(completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 1.0)
+
+		assertThat(aggregator.runPassed(goodRailwayLowRate)).isFalse()
+		assertThat(aggregator.runPassed(badRailwayHighRate)).isFalse()
+		assertThat(aggregator.runPassed(bothGood)).isTrue()
+	}
+
+	@Test
+	fun `aggregate computes median actionableTickRate correctly`() {
+		val snapshots =
+			listOf(
+				snapshot(runId = "a1", actionableTickRate = 0.4),
+				snapshot(runId = "a2", actionableTickRate = 0.7),
+				snapshot(runId = "a3", actionableTickRate = 0.9)
+			)
+		val report = aggregator.aggregate(snapshots)
+		// Sorted: [0.4, 0.7, 0.9] -> median is 0.7
+		assertThat(report.medianActionableTickRate).isEqualTo(0.7)
+	}
+
 	@Test
 	fun `gatePassed requires runCount ge 10 and passingRuns ge 8 and all c7Clean`() {
 		// 10 passing runs, all c7Clean → gate passes
@@ -631,6 +690,7 @@ class RunReportAggregatorTest {
 		fallback: Boolean = false,
 		c7Clean: Boolean = true,
 		llmSuccessRate: Double = 1.0,
+		actionableTickRate: Double = llmSuccessRate,
 		noOpRate: Double = 0.0,
 		invalidOutputRate: Double = 0.0,
 		repairSuccessRate: Double = 0.0,
@@ -674,6 +734,7 @@ class RunReportAggregatorTest {
 			ticksByOutcome = outcomes,
 			timeoutNoOpByCause = TimeoutNoOpCause.entries.associate { it.name to 0L },
 			llmSuccessRate = llmSuccessRate,
+			actionableTickRate = actionableTickRate,
 			noOpRate = noOpRate,
 			invalidOutputRate = invalidOutputRate,
 			repairSuccessRate = repairSuccessRate,

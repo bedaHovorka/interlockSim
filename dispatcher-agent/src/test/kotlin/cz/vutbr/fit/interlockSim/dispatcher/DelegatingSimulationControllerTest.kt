@@ -57,6 +57,9 @@ class DelegatingSimulationControllerTest {
 		var throttleThrowsInterrupted: Boolean = false
 		var lastThrottleDelta: Double? = null
 
+		@Volatile
+		var speedMultiplier: Double = 1.0
+
 		override suspend fun awaitIfPaused() {
 			calls += "awaitIfPaused"
 		}
@@ -88,6 +91,11 @@ class DelegatingSimulationControllerTest {
 			calls += "requestResume"
 			paused = false
 		}
+
+		override fun currentSpeedMultiplier(): Double {
+			calls += "currentSpeedMultiplier"
+			return speedMultiplier
+		}
 	}
 
 	@Nested
@@ -109,6 +117,14 @@ class DelegatingSimulationControllerTest {
 
 			runBlocking { controller.awaitIfPaused() }
 			// Reaching this point without a timeout is the assertion.
+		}
+
+		@Test
+		@DisplayName("currentSpeedMultiplier is 1.0 with the NoOp delegate (Issue #926)")
+		fun currentSpeedMultiplierIsOneWithNoOp() {
+			val controller = DelegatingSimulationController()
+
+			assertThat(controller.currentSpeedMultiplier()).isEqualTo(1.0)
 		}
 	}
 
@@ -148,6 +164,17 @@ class DelegatingSimulationControllerTest {
 			controller.requestPause()
 
 			assertThat(delegate.calls).containsExactly("requestPause")
+		}
+
+		@Test
+		@DisplayName("currentSpeedMultiplier forwards to the delegate (Issue #926)")
+		fun currentSpeedMultiplierForwards() {
+			val delegate = RecordingDelegate()
+			delegate.speedMultiplier = 3.5
+			val controller = DelegatingSimulationController().apply { this.delegate = delegate }
+
+			assertThat(controller.currentSpeedMultiplier()).isEqualTo(3.5)
+			assertThat(delegate.calls).containsExactly("currentSpeedMultiplier")
 		}
 	}
 

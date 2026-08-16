@@ -24,10 +24,10 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing.  Current version: **5** (version 2 added
+ * handle old JSON files without crashing.  Current version: **6** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
- * fields to their current names, Issue #913).
+ * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -77,6 +77,20 @@ import kotlinx.serialization.Serializable
  * @property ticksByOutcome Per-[TickOutcome] tick counts as string-keyed map; must sum to [totalTicks].
  * @property timeoutNoOpByCause Per-[TimeoutNoOpCause] counts for [TickOutcome.TIMEOUT_NOOP] ticks.
  * @property llmSuccessRate Fraction of ticks counted as LLM successes (0.0–1.0); `0.0` when [totalTicks] = 0.
+ *   Denominator is [totalTicks] — every tick, including [TickOutcome.LLM_SILENT_NONACTIONABLE]
+ *   ones (Issue #927 does not change this rate's own contract; it introduces
+ *   [actionableTickRate] alongside it).
+ * @property actionableTickRate Fraction of *actionable* ticks (denominator: ticks where
+ *   [TickOutcome.countsTowardActionableRate] is `true`, i.e. [totalTicks] minus
+ *   [TickOutcome.LLM_SILENT_NONACTIONABLE] ticks) that counted as an LLM success (numerator:
+ *   same [TickOutcome.countsAsLlmSuccess] ticks as [llmSuccessRate]'s numerator). `0.0` when the
+ *   actionable-rate denominator is `0`. Issue #927: unlike [llmSuccessRate], a silent-but-correct
+ *   tick is excluded from both numerator and denominator here, so a run with many genuinely
+ *   non-actionable ticks does not get penalized (or padded) by them. Defaults to [llmSuccessRate]
+ *   for a decoded pre-#927 (schema version < 6) snapshot: those files predate
+ *   [TickOutcome.LLM_SILENT_NONACTIONABLE] entirely, so their `ticksByOutcome` never contains it
+ *   and the two rates are, in fact, identical for that data — see [DefaultDispatcherRunRecorder]'s
+ *   `logFinalSummary` for the caveat this default carries forward.
  * @property noOpRate Fraction of ticks that were [TickOutcome.LLM_NO_OP] (0.0–1.0).
  * @property invalidOutputRate Fraction of ticks that were [TickOutcome.TIMEOUT_NOOP] (0.0–1.0).
  * @property repairSuccessRate Fraction of [TickOutcome.LLM_REPAIRED] ticks among all ticks (0.0–1.0).
@@ -134,6 +148,14 @@ data class DispatcherRunSnapshot(
 	/** Per-[TimeoutNoOpCause] counts; keys are [TimeoutNoOpCause] names. */
 	val timeoutNoOpByCause: Map<String, Long>,
 	val llmSuccessRate: Double,
+	/**
+	 * Defaults to [llmSuccessRate] so a decoded pre-#927 (schema version < 6) snapshot — whose
+	 * `ticksByOutcome` cannot contain [TickOutcome.LLM_SILENT_NONACTIONABLE] because that outcome
+	 * did not exist yet — decodes to the exact value it would have computed had the field always
+	 * existed: with zero such ticks, [actionableTickRate]'s numerator and denominator collapse to
+	 * [llmSuccessRate]'s own. See this property's own KDoc above for the full contract.
+	 */
+	val actionableTickRate: Double = llmSuccessRate,
 	val noOpRate: Double,
 	val invalidOutputRate: Double,
 	val repairSuccessRate: Double,
@@ -183,8 +205,26 @@ data class DispatcherRunSnapshot(
 		 *   under versions 3/4 that stored `fatalExceptionCount` will decode with
 		 *   [loggedFatalSimExceptionCount] = `null` (not measured), which is the honest
 		 *   value: the old field name is not read by the new code.
+		 * - **6** — Issue #927, added [actionableTickRate] alongside [llmSuccessRate]. A
+		 *   genuinely non-actionable silent tick ([TickOutcome.LLM_SILENT_NONACTIONABLE]) is
+		 *   excluded from the new [actionableTickRate]'s denominator instead of counting as a
+		 *   dispatch failure; [llmSuccessRate]'s own denominator is unchanged (it still counts
+		 *   every tick). Runs written under versions 1-5 predate that outcome entirely, so their
+		 *   `ticksByOutcome` never contains it and [actionableTickRate] defaults to
+		 *   [llmSuccessRate] on decode — the value it would have computed anyway, since that
+		 *   outcome's count is structurally zero in that data.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 5
+		const val CURRENT_SCHEMA_VERSION: Int = 6
+
+		/**
+		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded
+		 * from older files (schema < this) predate [TickOutcome.LLM_SILENT_NONACTIONABLE], so
+		 * their [actionableTickRate] is defaulted to [llmSuccessRate] rather than genuinely
+		 * measured — see [DefaultDispatcherRunRecorder]'s comparability note. Pinned to `6`
+		 * (not [CURRENT_SCHEMA_VERSION]) so a future unrelated schema bump does not re-flag
+		 * version-6 files, which DO carry a genuine [actionableTickRate].
+		 */
+		const val SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE: Int = 6
 	}
 
 	init {

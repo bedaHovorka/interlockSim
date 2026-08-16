@@ -84,6 +84,13 @@ class SimulationRunnerTest {
 	}
 
 	@Test
+	@DisplayName("currentSpeedMultiplier reflects speedMultiplier (Issue #926)")
+	fun currentSpeedMultiplierReflectsSpeedMultiplier() {
+		runner.speedMultiplier = 2.5
+		assertThat(runner.currentSpeedMultiplier()).isEqualTo(2.5)
+	}
+
+	@Test
 	@DisplayName("stepTimeDelta below 0.001 throws")
 	fun stepTimeDeltaBelowLowerBoundThrows() {
 		assertThrows(IllegalArgumentException::class.java) { runner.stepTimeDelta = 0.0009 }

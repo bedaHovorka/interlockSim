@@ -198,6 +198,7 @@ class DefaultDispatcherRunRecorder(
 			"[DispatcherRunRecorder] final summary runId=${snap.runId} arm=${snap.arm.name} " +
 				"totalTicks=${snap.totalTicks} " +
 				"llmSuccessRate=${formatRate(snap.llmSuccessRate)} " +
+				"actionableTickRate=${formatRate(snap.actionableTickRate)} " +
 				"noOpRate=${formatRate(snap.noOpRate)} " +
 				"invalidOutputRate=${formatRate(snap.invalidOutputRate)} " +
 				"c7Clean=${snap.c7Clean} " +
@@ -220,6 +221,23 @@ class DefaultDispatcherRunRecorder(
 			"[DispatcherRunRecorder] note: llmSuccessRate is reclassified in #834 and not comparable " +
 				"to pre-#834 runs"
 		}
+		// Issue #927: actionableTickRate is a defaulted, not a genuinely measured, figure for any
+		// snapshot decoded from a pre-#927 (schema version < 6) file — those files predate
+		// TickOutcome.LLM_SILENT_NONACTIONABLE entirely, so the recorder that produced them could
+		// never separate a genuinely non-actionable silent tick from a real RULE_FALLBACK tick.
+		// The defaulted value (equal to llmSuccessRate — see DispatcherRunSnapshot's KDoc) is the
+		// correct value for that data, but it is not the same claim as a run measured under the
+		// current taxonomy. This branch is unreachable on the live path (buildSnapshot always
+		// stamps CURRENT_SCHEMA_VERSION), but guards any future caller that reuses this method
+		// against a snapshot loaded from an older file.
+		if (snap.schemaVersion < DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE) {
+			logger.info {
+				"[DispatcherRunRecorder] note: actionableTickRate is defaulted (schema version " +
+					"${snap.schemaVersion} predates Issue #927) and is not a genuine measurement — it " +
+					"equals llmSuccessRate because pre-#927 snapshots cannot distinguish " +
+					"LLM_SILENT_NONACTIONABLE ticks from RULE_FALLBACK ticks"
+			}
+		}
 	}
 
 	// ── Internal helpers ──────────────────────────────────────────────────────
@@ -240,11 +258,21 @@ class DefaultDispatcherRunRecorder(
 			byOutcome.entries
 				.filter { (k, _) -> TickOutcome.valueOf(k).countsAsLlmSuccess }
 				.sumOf { it.value }
+		// Issue #927: the actionable-rate denominator excludes LLM_SILENT_NONACTIONABLE ticks (a
+		// silent-but-correct tick that was never actionable in the first place). The numerator is
+		// deliberately the same successCount as llmSuccessRate's — countsAsLlmSuccess is already
+		// false for LLM_SILENT_NONACTIONABLE, so it contributes to neither.
+		val actionableDenominator =
+			byOutcome.entries
+				.filter { (k, _) -> TickOutcome.valueOf(k).countsTowardActionableRate }
+				.sumOf { it.value }
 		val noOpCount = byOutcome[TickOutcome.LLM_NO_OP.name] ?: 0L
 		val timeoutNoOpCount = byOutcome[TickOutcome.TIMEOUT_NOOP.name] ?: 0L
 		val repairedCount = byOutcome[TickOutcome.LLM_REPAIRED.name] ?: 0L
 
 		val llmSuccessRate = if (total > 0L) successCount.toDouble() / total.toDouble() else 0.0
+		val actionableTickRate =
+			if (actionableDenominator > 0L) successCount.toDouble() / actionableDenominator.toDouble() else 0.0
 		val noOpRate = if (total > 0L) noOpCount.toDouble() / total.toDouble() else 0.0
 		val invalidOutputRate = if (total > 0L) timeoutNoOpCount.toDouble() / total.toDouble() else 0.0
 		val repairSuccessRate = if (total > 0L) repairedCount.toDouble() / total.toDouble() else 0.0
@@ -269,6 +297,7 @@ class DefaultDispatcherRunRecorder(
 			ticksByOutcome = byOutcome,
 			timeoutNoOpByCause = byCause,
 			llmSuccessRate = llmSuccessRate,
+			actionableTickRate = actionableTickRate,
 			noOpRate = noOpRate,
 			invalidOutputRate = invalidOutputRate,
 			repairSuccessRate = repairSuccessRate,

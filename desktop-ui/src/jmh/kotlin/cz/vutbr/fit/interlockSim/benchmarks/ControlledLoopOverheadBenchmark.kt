@@ -172,6 +172,8 @@ open class ControlledLoopOverheadBenchmark {
 		override fun requestResume() {
 			// No-op: benchmark runs headless.
 		}
+
+		override fun currentSpeedMultiplier(): Double = 1.0
 	}
 
 	/**

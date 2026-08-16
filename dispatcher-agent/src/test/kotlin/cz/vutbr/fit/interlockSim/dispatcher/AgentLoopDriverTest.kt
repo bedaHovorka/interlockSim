@@ -14,6 +14,10 @@ import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isLessThan
+import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isSameAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
@@ -33,6 +37,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -149,6 +154,8 @@ class AgentLoopDriverTest {
 					override fun requestPause() = Unit
 
 					override fun requestResume() = Unit
+
+					override fun currentSpeedMultiplier(): Double = 1.0
 				}
 
 			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controllerWithOrder)
@@ -181,6 +188,8 @@ class AgentLoopDriverTest {
 					override fun requestPause() = Unit
 
 					override fun requestResume() = Unit
+
+					override fun currentSpeedMultiplier(): Double = 1.0
 				}
 
 			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, orderedController)
@@ -262,7 +271,13 @@ class AgentLoopDriverTest {
 
 			runBlocking { makeDriver().runCycle() }
 
-			assertThat(controller.lastThrottleDelta).isEqualTo(5.0)
+			// #926: the delta is the raw simDelta minus the (real, monotonic-clock-measured) wall
+			// time spent inside planner.plan(), clamped at 0.0 — so it lies in [0.0, simDelta].
+			// Only assert that valid range here; a wall-clock-budget lower bound (e.g. > 4.9) would
+			// be flaky under CI GC/scheduler pauses. See PlannerWallTimeThrottleAdjustment for the
+			// dedicated subtraction/clamp tests.
+			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(5.0)
+			assertThat(controller.lastThrottleDelta).isGreaterThanOrEqualTo(0.0)
 		}
 
 		@Test
@@ -277,8 +292,11 @@ class AgentLoopDriverTest {
 				driver.runCycle() // prevSimTime = 3.0 → delta = 4.0
 			}
 
-			// The second throttle call should receive delta = 7.0 - 3.0 = 4.0
-			assertThat(controller.lastThrottleDelta).isEqualTo(4.0)
+			// The second throttle call should receive delta = 7.0 - 3.0 = 4.0, minus a negligible
+			// wall-clock adjustment (#926 — see firstCycleDeltaEqualsSnapshotSimTime above). Assert
+			// only the valid [0.0, 4.0] range to avoid CI wall-clock flakiness.
+			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(4.0)
+			assertThat(controller.lastThrottleDelta).isGreaterThanOrEqualTo(0.0)
 		}
 
 		@Test
@@ -296,7 +314,10 @@ class AgentLoopDriverTest {
 				driver.runCycle() // snapshot still 10.0 → skipped (early return)
 			}
 
-			assertThat(controller.lastThrottleDelta).isEqualTo(10.0)
+			// #926: negligible wall-clock adjustment (see firstCycleDeltaEqualsSnapshotSimTime above).
+			// Assert only the valid [0.0, 10.0] range to avoid CI wall-clock flakiness.
+			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(10.0)
+			assertThat(controller.lastThrottleDelta).isGreaterThanOrEqualTo(0.0)
 			assertThat(controller.throttleCalls).isEqualTo(1)
 			assertThat(controller.awaitCalls).isEqualTo(2)
 			coVerify(exactly = 1) { planner.plan(any()) }
@@ -470,6 +491,70 @@ class AgentLoopDriverTest {
 		}
 	}
 
+	// ── Throttle double-count fix (Issue #926) ───────────────────────────────────
+
+	@Nested
+	@DisplayName("Throttle delta accounts for wall time spent inside planner.plan()")
+	inner class PlannerWallTimeThrottleAdjustment {
+		/**
+		 * Regression test for the throttle double-count defect (#926): before the fix,
+		 * `runCycle()` passed the full `simDelta` to [SimulationController.throttle]
+		 * regardless of how much wall-clock time `planner.plan()` had already consumed
+		 * (e.g. blocking on LLM inference) — so the sim-pacing sleep on top of that
+		 * already-elapsed wall time slowed every cycle far beyond the intended pace.
+		 *
+		 * The fix subtracts the wall time actually spent inside `planner.plan()`,
+		 * converted to sim-time units via the controller's active speed multiplier,
+		 * before calling [SimulationController.throttle]. A sleep can only ever run
+		 * *long* (scheduler jitter), never short, so the resulting throttle delta must
+		 * be strictly less than the raw `simDelta` and can be bounded below the
+		 * pre-fix value with a comfortable jitter margin.
+		 */
+		@Test
+		@DisplayName("throttle delta is reduced by planner wall time * speed multiplier")
+		fun throttleDeltaSubtractsPlannerWallTime() {
+			controller.speedMultiplier = 2.0
+			every { perceptionPort.snapshot() } returns emptySnapshot(10.0)
+			val sleepMs = 100L
+			coEvery { planner.plan(any()) } coAnswers {
+				delay(sleepMs)
+				listOf(DispatchDecision.NoAction)
+			}
+
+			runBlocking { makeDriver().runCycle() }
+
+			assertThat(controller.throttleCalls).isEqualTo(1)
+			// Pre-fix (buggy) behaviour would have passed exactly 10.0 — assert strictly less.
+			assertThat(controller.lastThrottleDelta).isLessThan(10.0)
+			// wallElapsedInSimUnits >= 0.1s * 2.0x = 0.2s (delay() never returns early), so the
+			// adjusted delta must be at most 9.8; a generous upper margin absorbs scheduler jitter.
+			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(9.85)
+			// Sanity floor: the adjustment should not be wildly larger than expected either.
+			assertThat(controller.lastThrottleDelta).isGreaterThan(9.0)
+		}
+
+		/**
+		 * Clamp test: when the wall time spent inside `planner.plan()` (scaled by the speed
+		 * multiplier) exceeds the raw `simDelta`, the adjusted delta must clamp at `0.0` rather
+		 * than go negative — a negative duration passed to `throttle()` would be nonsensical.
+		 */
+		@Test
+		@DisplayName("throttle delta clamps at 0.0 when planner wall time exceeds the sim-time budget")
+		fun throttleDeltaClampsAtZeroWhenPlannerExceedsBudget() {
+			controller.speedMultiplier = 1.0
+			every { perceptionPort.snapshot() } returns emptySnapshot(0.01)
+			coEvery { planner.plan(any()) } coAnswers {
+				delay(50L)
+				listOf(DispatchDecision.NoAction)
+			}
+
+			runBlocking { makeDriver().runCycle() }
+
+			assertThat(controller.throttleCalls).isEqualTo(1)
+			assertThat(controller.lastThrottleDelta).isEqualTo(0.0)
+		}
+	}
+
 	// ── Signal-based pacing (SP0.11c, Issue #746) ────────────────────────────────
 
 	@Nested
@@ -586,6 +671,9 @@ class AgentLoopDriverTest {
 		var lastThrottleDelta: Double = Double.NaN
 			private set
 
+		/** Speed multiplier reported by [currentSpeedMultiplier]; test-configurable. Defaults to 1.0x. */
+		var speedMultiplier: Double = 1.0
+
 		override suspend fun awaitIfPaused() {
 			awaitCalls++
 		}
@@ -604,5 +692,7 @@ class AgentLoopDriverTest {
 		override fun requestPause() = Unit
 
 		override fun requestResume() = Unit
+
+		override fun currentSpeedMultiplier(): Double = speedMultiplier
 	}
 }

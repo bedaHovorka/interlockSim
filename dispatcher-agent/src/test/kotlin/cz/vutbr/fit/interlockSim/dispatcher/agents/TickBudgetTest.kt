@@ -214,6 +214,8 @@ class TickBudgetTest {
 			override fun pollStepTime(): Double? = null
 
 			override fun throttle(simDeltaSeconds: Double) = Unit
+
+			override fun currentSpeedMultiplier(): Double = 1.0
 		}
 
 		@Test

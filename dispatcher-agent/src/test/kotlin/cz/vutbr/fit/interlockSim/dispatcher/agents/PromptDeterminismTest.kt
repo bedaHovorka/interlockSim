@@ -135,5 +135,7 @@ class PromptDeterminismTest {
 		override fun requestPause() = Unit
 
 		override fun requestResume() = Unit
+
+		override fun currentSpeedMultiplier(): Double = 1.0
 	}
 }

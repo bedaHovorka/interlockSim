@@ -308,4 +308,6 @@ class RecordingPacingController(
 	override fun requestResume() {
 		delegate.requestResume()
 	}
+
+	override fun currentSpeedMultiplier(): Double = delegate.currentSpeedMultiplier()
 }

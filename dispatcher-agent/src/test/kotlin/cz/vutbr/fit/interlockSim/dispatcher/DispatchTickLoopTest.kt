@@ -16,7 +16,10 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isLessThan
+import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
@@ -133,6 +136,9 @@ class DispatchTickLoopTest {
 			private set
 		val throttleDeltas: MutableList<Double> = mutableListOf()
 
+		/** Speed multiplier reported by [currentSpeedMultiplier]; test-configurable. Defaults to 1.0x. */
+		var speedMultiplier: Double = 1.0
+
 		override suspend fun awaitIfPaused() {
 			awaitIfPausedCount++
 		}
@@ -150,6 +156,8 @@ class DispatchTickLoopTest {
 		override fun requestPause() = Unit
 
 		override fun requestResume() = Unit
+
+		override fun currentSpeedMultiplier(): Double = speedMultiplier
 	}
 
 	/** Returns scripted [await] results; the last entry repeats once exhausted. */
@@ -1115,7 +1123,16 @@ class DispatchTickLoopTest {
 				h.loop.runTick()
 			}
 
-			assertThat(h.controller.throttleDeltas).containsExactly(10.0, 7.5)
+			// #926: each delta is the raw simDelta minus the (real, System.nanoTime()-measured) wall
+			// time spent inside step 4 (DECIDE), clamped at 0.0 — so each lies in [0.0, simDelta].
+			// Only assert that valid range here; wall-clock-budget lower bounds (e.g. > 9.9) would
+			// be flaky under CI GC/scheduler pauses. See EmissionWallTimeThrottleAdjustment for the
+			// dedicated subtraction/clamp tests.
+			assertThat(h.controller.throttleDeltas).hasSize(2)
+			assertThat(h.controller.throttleDeltas[0]).isLessThanOrEqualTo(10.0)
+			assertThat(h.controller.throttleDeltas[0]).isGreaterThanOrEqualTo(0.0)
+			assertThat(h.controller.throttleDeltas[1]).isLessThanOrEqualTo(7.5)
+			assertThat(h.controller.throttleDeltas[1]).isGreaterThanOrEqualTo(0.0)
 		}
 
 		@Test
@@ -1133,6 +1150,95 @@ class DispatchTickLoopTest {
 			}
 
 			assertThat(h.controller.awaitIfPausedCount).isEqualTo(2)
+		}
+	}
+
+	// ── Throttle double-count fix (Issue #926, DispatchTickLoop side) ──────────────────────
+
+	@Nested
+	@DisplayName("Throttle double-count fix: emission wall time is subtracted before throttling (#926)")
+	inner class EmissionWallTimeThrottleAdjustment {
+		/**
+		 * Regression test for the throttle double-count defect (#926) on the [DispatchTickLoop]
+		 * pacing path: before the fix, step 7 (PACE) passed the full `simDelta` to
+		 * [SimulationController.throttle] regardless of how much wall-clock time step 4 (DECIDE,
+		 * measured by `emissionNanos`) had already consumed — so the sim-pacing sleep on top of
+		 * that already-elapsed wall time double-counted it, slowing every tick far beyond the
+		 * intended pace. This mirrors the fix already applied to [AgentLoopDriver.runCycle]
+		 * (see [AgentLoopDriverTest.PlannerWallTimeThrottleAdjustment]).
+		 *
+		 * The fix subtracts the wall time actually spent inside [DispatchTickLoop.runEmission],
+		 * converted to sim-time units via the controller's active speed multiplier, before calling
+		 * [SimulationController.throttle]. A sleep can only ever run *long* (scheduler jitter),
+		 * never short, so the resulting throttle delta must be strictly less than the raw
+		 * `simDelta` and can be bounded below the pre-fix value with a comfortable jitter margin.
+		 */
+		@Test
+		@DisplayName("throttle delta is reduced by emission wall time * speed multiplier")
+		fun throttleDeltaSubtractsEmissionWallTime() {
+			val controller = RecordingController()
+			controller.speedMultiplier = 2.0
+			val sleepMs = 100L
+			val slowEmission =
+				EmissionStrategy { _, _ ->
+					delay(sleepMs)
+					emptyList()
+				}
+			val loop =
+				DispatchTickLoop(
+					observations = { observation(tick = 1L, simTime = 10.0) },
+					annotator = annotator,
+					renderer = ObservationRenderer { "" },
+					emission = slowEmission,
+					validator = validator,
+					queue = ActuatorCommandQueue(),
+					budget = NoTimeoutBudget,
+					controller = controller
+				)
+
+			runBlocking { loop.runTick() }
+
+			assertThat(controller.throttleDeltas).hasSize(1)
+			// Pre-fix (buggy) behaviour would have passed exactly 10.0 — assert strictly less.
+			assertThat(controller.throttleDeltas[0]).isLessThan(10.0)
+			// wallElapsedInSimUnits >= 0.1s * 2.0x = 0.2s (delay() never returns early), so the
+			// adjusted delta must be at most 9.8; a generous upper margin absorbs scheduler jitter.
+			assertThat(controller.throttleDeltas[0]).isLessThanOrEqualTo(9.85)
+			// Sanity floor: the adjustment should not be wildly larger than expected either.
+			assertThat(controller.throttleDeltas[0]).isGreaterThan(9.0)
+		}
+
+		/**
+		 * Clamp test: when the wall time spent inside step 4 (scaled by the speed multiplier)
+		 * exceeds the raw `simDelta`, the adjusted delta must clamp at `0.0` rather than go
+		 * negative — a negative duration passed to `throttle()` would be nonsensical.
+		 */
+		@Test
+		@DisplayName("throttle delta clamps at 0.0 when emission wall time exceeds the sim-time budget")
+		fun throttleDeltaClampsAtZeroWhenEmissionExceedsBudget() {
+			val controller = RecordingController()
+			controller.speedMultiplier = 1.0
+			val slowEmission =
+				EmissionStrategy { _, _ ->
+					delay(50L)
+					emptyList()
+				}
+			val loop =
+				DispatchTickLoop(
+					observations = { observation(tick = 1L, simTime = 0.01) },
+					annotator = annotator,
+					renderer = ObservationRenderer { "" },
+					emission = slowEmission,
+					validator = validator,
+					queue = ActuatorCommandQueue(),
+					budget = NoTimeoutBudget,
+					controller = controller
+				)
+
+			runBlocking { loop.runTick() }
+
+			assertThat(controller.throttleDeltas).hasSize(1)
+			assertThat(controller.throttleDeltas[0]).isEqualTo(0.0)
 		}
 	}
 
