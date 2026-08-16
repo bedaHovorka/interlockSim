@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -250,14 +251,24 @@ class KoogAgentPlanAdapterTest {
 		coVerify(exactly = 0) { fallback.decide(any()) }
 	}
 
+	/**
+	 * Production-faithful guard for Issue #927: with a REAL [RuleBasedDispatcher] as the fallback
+	 * (the production wiring — see ExampleRegistry), a silent LLM cycle on a non-idle station where
+	 * the rule oracle genuinely finds nothing to do must report [TickOutcome.LLM_SILENT_NONACTIONABLE].
+	 *
+	 * [RuleBasedDispatcher.decide] honours the [Dispatcher] contract "never empty" by returning
+	 * `listOf(NoAction)` when nothing is actionable, so the classification must be on actionable
+	 * content — not list emptiness. This is the test that the original `isEmpty()` predicate failed:
+	 * against a contract-compliant dispatcher the non-actionable branch was unreachable.
+	 */
 	@Test
-	@DisplayName("non-idle station (an active train, no emissions) still falls back (RULE_FALLBACK)")
-	fun `non-idle station with an active train and no LLM emissions still falls back`() {
+	@DisplayName("real RuleBasedDispatcher finding nothing actionable reports LLM_SILENT_NONACTIONABLE")
+	fun `real RuleBasedDispatcher finding nothing actionable reports LLM_SILENT_NONACTIONABLE`() {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
-		val fallbackDecisions = listOf(DispatchDecision.NoAction)
-		val fallback = mockk<Dispatcher>()
-		every { fallback.decide(any()) } returns fallbackDecisions
+		// Real production fallback — no mock. An active train with no queued trains and no block
+		// inputs gives RuleBasedDispatcher nothing to admit or advance → listOf(NoAction).
+		val fallback: Dispatcher = RuleBasedDispatcher()
 		val recorded = mutableListOf<TickRecord>()
 		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
 		val planAdapter = adapter(koogAgent, fallback)
@@ -267,24 +278,25 @@ class KoogAgentPlanAdapterTest {
 
 		assertThat(result).containsExactly(DispatchDecision.NoAction)
 		assertThat(recorded).hasSize(1)
-		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
-		coVerify(exactly = 1) { fallback.decide(any()) }
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
 	}
 
 	/**
 	 * Issue #927: a silent LLM cycle on a non-idle station used to always report
 	 * [TickOutcome.RULE_FALLBACK], even when the fallback dispatcher itself found nothing legal
 	 * to do — mis-scoring a genuinely non-actionable tick as a dispatch failure. When
-	 * `fallbackDispatcher.decide()` returns an empty list, the tick must be reported as
-	 * [TickOutcome.LLM_SILENT_NONACTIONABLE] instead.
+	 * `fallbackDispatcher.decide()` returns only [DispatchDecision.NoAction] (the
+	 * contract-compliant "nothing actionable" signal — `decide()` is never empty), the tick must
+	 * be reported as [TickOutcome.LLM_SILENT_NONACTIONABLE] instead.
 	 */
 	@Test
-	@DisplayName("non-idle station, no emissions, fallback also finds nothing reports LLM_SILENT_NONACTIONABLE")
-	fun `non-idle station with no LLM emissions and an empty fallback reports LLM_SILENT_NONACTIONABLE`() {
+	@DisplayName("non-idle station, no emissions, fallback finds nothing actionable reports LLM_SILENT_NONACTIONABLE")
+	fun `non-idle station with no LLM emissions and a nothing-actionable fallback reports LLM_SILENT_NONACTIONABLE`() {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
 		val fallback = mockk<Dispatcher>()
-		every { fallback.decide(any()) } returns emptyList()
+		// Contract-compliant "nothing actionable": decide() returns listOf(NoAction), never empty.
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
 		val recorded = mutableListOf<TickRecord>()
 		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
 		val planAdapter = adapter(koogAgent, fallback)
@@ -292,7 +304,7 @@ class KoogAgentPlanAdapterTest {
 
 		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
 
-		assertThat(result).isEmpty()
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
 		assertThat(recorded).hasSize(1)
 		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
 		coVerify(exactly = 1) { fallback.decide(any()) }
@@ -300,15 +312,16 @@ class KoogAgentPlanAdapterTest {
 
 	/**
 	 * Regression guard (Issue #927): when the fallback dispatcher DOES find and dispatch
-	 * something on a silent non-idle cycle, that remains a genuine miss reported as
-	 * [TickOutcome.RULE_FALLBACK] — the split only kicks in when the fallback also finds nothing.
+	 * something actionable on a silent non-idle cycle, that remains a genuine miss reported as
+	 * [TickOutcome.RULE_FALLBACK] — the split only kicks in when the fallback also finds nothing
+	 * actionable.
 	 */
 	@Test
-	@DisplayName("non-idle station, no emissions, fallback finds a decision still reports RULE_FALLBACK")
-	fun `non-idle station with no LLM emissions and a non-empty fallback still reports RULE_FALLBACK`() {
+	@DisplayName("non-idle station, no emissions, fallback finds an actionable decision still reports RULE_FALLBACK")
+	fun `non-idle station with no LLM emissions and an actionable fallback still reports RULE_FALLBACK`() {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
-		val fallbackDecisions = listOf(DispatchDecision.NoAction)
+		val fallbackDecisions = listOf(DispatchDecision.ApproveTrain("T-1"))
 		val fallback = mockk<Dispatcher>()
 		every { fallback.decide(any()) } returns fallbackDecisions
 		val recorded = mutableListOf<TickRecord>()
@@ -318,20 +331,26 @@ class KoogAgentPlanAdapterTest {
 
 		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
 
-		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(result).containsExactly(DispatchDecision.ApproveTrain("T-1"))
 		assertThat(recorded).hasSize(1)
 		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
 		coVerify(exactly = 1) { fallback.decide(any()) }
 	}
 
+	/**
+	 * Production-faithful guard for Issue #927: with a REAL [RuleBasedDispatcher] as the fallback,
+	 * a silent LLM cycle on a non-idle station where the rule oracle DOES find something
+	 * actionable (a queued train to admit) must report [TickOutcome.RULE_FALLBACK] — a genuine
+	 * miss the LLM should have caught.
+	 */
 	@Test
-	@DisplayName("non-idle station (a queued train, no emissions) still falls back (RULE_FALLBACK)")
-	fun `non-idle station with a queued train and no LLM emissions still falls back`() {
+	@DisplayName("non-idle station, no emissions, real RuleBasedDispatcher admits a queued train reports RULE_FALLBACK")
+	fun `non-idle station with a queued train and a real RuleBasedDispatcher reports RULE_FALLBACK`() {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
-		val fallbackDecisions = listOf(DispatchDecision.NoAction)
-		val fallback = mockk<Dispatcher>()
-		every { fallback.decide(any()) } returns fallbackDecisions
+		// Real production fallback. A queued train with free capacity → RuleBasedDispatcher admits
+		// it (ApproveTrain), so the fallback found something actionable → genuine miss.
+		val fallback: Dispatcher = RuleBasedDispatcher()
 		val recorded = mutableListOf<TickRecord>()
 		val nonIdleObservation =
 			observationWithQueue(
@@ -343,22 +362,25 @@ class KoogAgentPlanAdapterTest {
 
 		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
 
-		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(result).containsExactly(DispatchDecision.ApproveTrain("Train #1"))
 		assertThat(recorded).hasSize(1)
 		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
-		coVerify(exactly = 1) { fallback.decide(any()) }
 	}
 
 	/**
 	 * [SimulationSnapshot.EMPTY] is the pre-first-capture sentinel — it carries no train
 	 * positions and therefore *looks* idle without being a real idle tick (e.g. the very first
 	 * cycle before [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot] has
-	 * ever run on the kDisco thread). A cycle observing it must keep the pre-#834 RULE_FALLBACK
-	 * behaviour rather than being scored as a successful no-op.
+	 * ever run on the kDisco thread). A cycle observing it must NOT be scored as a successful
+	 * no-op ([TickOutcome.LLM_NO_OP]); the [isIdleStation] sentinel guard routes it through the
+	 * fallback. Under #927, when the fallback also finds nothing actionable (only
+	 * [DispatchDecision.NoAction]), the tick is reported as [TickOutcome.LLM_SILENT_NONACTIONABLE]
+	 * — still not a success, so the #834 guard's intent (never score the sentinel as LLM_NO_OP)
+	 * is preserved.
 	 */
 	@Test
-	@DisplayName("SimulationSnapshot.EMPTY sentinel with no emissions falls back despite looking idle (guard)")
-	fun `EMPTY sentinel snapshot with no emissions falls back despite looking idle`() {
+	@DisplayName("SimulationSnapshot.EMPTY sentinel with no emissions is not scored as LLM_NO_OP (guard)")
+	fun `EMPTY sentinel snapshot with no emissions is not scored as LLM_NO_OP`() {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
 		val fallbackDecisions = listOf(DispatchDecision.NoAction)
@@ -374,7 +396,7 @@ class KoogAgentPlanAdapterTest {
 
 		assertThat(result).containsExactly(DispatchDecision.NoAction)
 		assertThat(recorded).hasSize(1)
-		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
 		coVerify(exactly = 1) { fallback.decide(any()) }
 	}
 
@@ -489,8 +511,8 @@ class KoogAgentPlanAdapterTest {
 	}
 
 	@Test
-	@DisplayName("tickListener fires TickOutcome.RULE_FALLBACK on the empty-no-tools fallback")
-	fun `tickListener fires RULE_FALLBACK on empty-no-tools fallback`() {
+	@DisplayName("tickListener fires LLM_SILENT_NONACTIONABLE on the empty-no-tools fallback when nothing is actionable")
+	fun `tickListener fires LLM_SILENT_NONACTIONABLE on empty-no-tools fallback with nothing actionable`() {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
 		val fallback = mockk<Dispatcher>()
@@ -502,7 +524,7 @@ class KoogAgentPlanAdapterTest {
 		runBlocking { planAdapter.plan(observation) }
 
 		assertThat(recorded).hasSize(1)
-		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
 	}
 
 	@Test
@@ -538,6 +560,30 @@ class KoogAgentPlanAdapterTest {
 
 		runBlocking { planAdapter.plan(observation) }
 
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+	}
+
+	/**
+	 * Issue #927 review (tick-accounting ordering): for TIMEOUT/EXCEPTION the tick must be
+	 * reported BEFORE [fallbackDispatcher.decide] is called, so a fallback that itself throws
+	 * cannot drop the cycle from tick accounting. The fallback's exception still propagates out
+	 * of [plan], but the RULE_FALLBACK tick is recorded first — the failure mode where accurate
+	 * accounting matters most.
+	 */
+	@Test
+	@DisplayName("exception fallback whose decide() also throws still records the RULE_FALLBACK tick before propagating")
+	fun `exception fallback that also throws still records the tick before propagating`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } throws RuntimeException("llm boom")
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } throws RuntimeException("fallback boom")
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+
+		assertFailure { runBlocking { planAdapter.plan(observation) } }
+			.isInstanceOf(RuntimeException::class.java)
 		assertThat(recorded).hasSize(1)
 		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
 	}
@@ -707,7 +753,7 @@ class KoogAgentPlanAdapterTest {
 	}
 
 	@Test
-	@DisplayName("a non-idle empty-no-tools RULE_FALLBACK cycle reports a non-null, non-negative latency")
+	@DisplayName("a non-idle empty-no-tools LLM_SILENT_NONACTIONABLE cycle reports a non-null, non-negative latency")
 	fun `non-idle empty-no-tools fallback cycle reports non-null non-negative latency`() {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
@@ -721,7 +767,7 @@ class KoogAgentPlanAdapterTest {
 		runBlocking { planAdapter.plan(nonIdleObservation) }
 
 		assertThat(recorded).hasSize(1)
-		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
 		assertThat(recorded.first().latencyMs).isNotNull()
 		assertThat(recorded.first().latencyMs!!).isGreaterThanOrEqualTo(0L)
 	}

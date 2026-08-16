@@ -230,7 +230,7 @@ class DefaultDispatcherRunRecorder(
 		// current taxonomy. This branch is unreachable on the live path (buildSnapshot always
 		// stamps CURRENT_SCHEMA_VERSION), but guards any future caller that reuses this method
 		// against a snapshot loaded from an older file.
-		if (snap.schemaVersion < 6) {
+		if (snap.schemaVersion < DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE) {
 			logger.info {
 				"[DispatcherRunRecorder] note: actionableTickRate is defaulted (schema version " +
 					"${snap.schemaVersion} predates Issue #927) and is not a genuine measurement — it " +

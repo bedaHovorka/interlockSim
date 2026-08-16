@@ -83,6 +83,48 @@ class RunReportAggregator(
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
 		private const val OUTCOMES_TABLE_COLUMNS = 17
 
+		/**
+		 * Column headers of the "Arm Comparison" table — the single source for both its header row
+		 * and its separator row, so adding/removing a column cannot desync the two (Issue #927
+		 * review: the separator was previously hand-counted).
+		 */
+		private val ARM_COMPARISON_COLUMNS =
+			listOf(
+				"Arm",
+				"Runs",
+				"Passing",
+				"Gate",
+				"LLM Success (median)",
+				"Actionable Rate (median)",
+				"NoOp (median)",
+				"validAt1 (median)",
+				"correctAt1 (median)",
+				"p95 latency ms",
+				"C7 clean"
+			)
+
+		/**
+		 * Column headers of the "Per-Run Detail" table — single source for its header and
+		 * separator rows (Issue #927 review: the separator was previously hand-counted).
+		 */
+		private val PER_RUN_DETAIL_COLUMNS =
+			listOf(
+				"Arm",
+				"RunId",
+				"Ticks",
+				"LLM_ACTIONS",
+				"LLM_NO_OP",
+				"LLM_REPAIRED",
+				"LLM_SILENT_NONACTIONABLE",
+				"TIMEOUT_NOOP",
+				"RULE_FALLBACK",
+				"Actionable Rate",
+				"End cause",
+				"C7 clean",
+				"Fallback tick",
+				"logged FATAL sim exceptions"
+			)
+
 		private val REPORT_TS_FMT: DateTimeFormatter =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC)
 	}
@@ -234,13 +276,8 @@ class RunReportAggregator(
 	) {
 		sb.appendLine("## Arm Comparison")
 		sb.appendLine()
-		sb.appendLine(
-			"| Arm | Runs | Passing | Gate | LLM Success (median) | Actionable Rate (median) | " +
-				"NoOp (median) | validAt1 (median) | correctAt1 (median) | p95 latency ms | C7 clean |"
-		)
-		sb.appendLine(
-			"|---|---|---|---|---|---|---|---|---|---|---|"
-		)
+		sb.appendLine("| " + ARM_COMPARISON_COLUMNS.joinToString(" | ") + " |")
+		sb.appendLine("|" + "---|".repeat(ARM_COMPARISON_COLUMNS.size))
 		for (r in reports) {
 			sb.appendLine(
 				"| ${r.arm} " +
@@ -265,14 +302,8 @@ class RunReportAggregator(
 	) {
 		sb.appendLine("## Per-Run Detail")
 		sb.appendLine()
-		sb.appendLine(
-			"| Arm | RunId | Ticks | LLM_ACTIONS | LLM_NO_OP | LLM_REPAIRED | LLM_SILENT_NONACTIONABLE | " +
-				"TIMEOUT_NOOP | RULE_FALLBACK | Actionable Rate | End cause | C7 clean | Fallback tick | " +
-				"logged FATAL sim exceptions |"
-		)
-		sb.appendLine(
-			"|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
-		)
+		sb.appendLine("| " + PER_RUN_DETAIL_COLUMNS.joinToString(" | ") + " |")
+		sb.appendLine("|" + "---|".repeat(PER_RUN_DETAIL_COLUMNS.size))
 		for (r in reports) {
 			for (snap in r.snapshots) {
 				val byOutcome = snap.ticksByOutcome

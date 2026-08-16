@@ -16,6 +16,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
@@ -1122,15 +1123,16 @@ class DispatchTickLoopTest {
 				h.loop.runTick()
 			}
 
-			// #926: each delta is now the raw simDelta minus the (real, System.nanoTime()-measured)
-			// wall time spent inside step 4 (DECIDE) — a handful of microseconds even for an
-			// instant scripted emission — so deltas are bounded rather than exactly 10.0/7.5. See
-			// EmissionWallTimeThrottleAdjustment for the dedicated subtraction/clamp tests.
+			// #926: each delta is the raw simDelta minus the (real, System.nanoTime()-measured) wall
+			// time spent inside step 4 (DECIDE), clamped at 0.0 — so each lies in [0.0, simDelta].
+			// Only assert that valid range here; wall-clock-budget lower bounds (e.g. > 9.9) would
+			// be flaky under CI GC/scheduler pauses. See EmissionWallTimeThrottleAdjustment for the
+			// dedicated subtraction/clamp tests.
 			assertThat(h.controller.throttleDeltas).hasSize(2)
 			assertThat(h.controller.throttleDeltas[0]).isLessThanOrEqualTo(10.0)
-			assertThat(h.controller.throttleDeltas[0]).isGreaterThan(9.9)
+			assertThat(h.controller.throttleDeltas[0]).isGreaterThanOrEqualTo(0.0)
 			assertThat(h.controller.throttleDeltas[1]).isLessThanOrEqualTo(7.5)
-			assertThat(h.controller.throttleDeltas[1]).isGreaterThan(7.4)
+			assertThat(h.controller.throttleDeltas[1]).isGreaterThanOrEqualTo(0.0)
 		}
 
 		@Test

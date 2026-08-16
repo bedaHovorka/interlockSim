@@ -59,7 +59,11 @@ class AgentLoopDriverTickPeriodTest {
 		}
 	private val planner: DispatcherPlanner =
 		mockk(relaxed = true) { coEvery { plan(any()) } returns listOf(DispatchDecision.NoAction) }
-	private val controller: SimulationController = mockk(relaxed = true)
+
+	// #926: pin currentSpeedMultiplier() to 1.0 — a relaxed mock defaults Double to 0.0, which
+	// would zero out the wall-time subtraction in the throttle delta and mask the fix.
+	private val controller: SimulationController =
+		mockk(relaxed = true) { every { currentSpeedMultiplier() } returns 1.0 }
 
 	private fun driver(tickPeriodMs: Long) =
 		AgentLoopDriver(

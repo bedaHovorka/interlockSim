@@ -384,15 +384,32 @@ class KoogAgentPlanAdapter(
 	 *
 	 * For [reason] == [FallbackReason.EMPTY_NO_TOOLS] (the LLM answered silently on a non-idle
 	 * station), the reported outcome depends on what [fallbackDispatcher] actually found:
-	 * - `decide()` returns **> 0** decisions → [TickOutcome.RULE_FALLBACK] — a genuine miss, the
-	 *   fallback actually dispatches something the LLM should have caught.
-	 * - `decide()` returns **0** decisions → [TickOutcome.LLM_SILENT_NONACTIONABLE] — the
-	 *   fallback oracle confirms the tick was never actionable in the first place.
+	 * - `decide()` returns at least one **actionable** decision (not just
+	 *   [DispatchDecision.NoAction]) → [TickOutcome.RULE_FALLBACK] — a genuine miss, the fallback
+	 *   actually dispatches something the LLM should have caught.
+	 * - `decide()` returns **only [DispatchDecision.NoAction]** →
+	 *   [TickOutcome.LLM_SILENT_NONACTIONABLE] — the fallback oracle confirms the tick was never
+	 *   actionable in the first place.
+	 *
+	 * Note: the [Dispatcher.decide] contract guarantees the returned list is never empty
+	 * (implementations return `listOf(NoAction)` when nothing is actionable), so the split is on
+	 * whether the decisions contain anything actionable — not on list emptiness. An `isEmpty()`
+	 * check would be dead code against any contract-compliant dispatcher and would let the
+	 * non-actionable classification never fire in production.
 	 *
 	 * For the other two [reason] values (`TIMEOUT`, `EXCEPTION`) the LLM path itself failed —
 	 * whatever [fallbackDispatcher] returns is always reported as [TickOutcome.RULE_FALLBACK],
 	 * unchanged from before #927: a timed-out or exception-throwing cycle is a genuine LLM-side
 	 * failure regardless of how many decisions the fallback happens to find.
+	 *
+	 * ## Tick-accounting ordering
+	 *
+	 * For `TIMEOUT`/`EXCEPTION` the tick is reported BEFORE [fallbackDispatcher.decide] is
+	 * called, so a throwing fallback cannot drop the cycle from tick accounting (the pre-#927
+	 * ordering). For `EMPTY_NO_TOOLS` the tick is reported AFTER `decide()` returns, because the
+	 * outcome depends on the oracle's result; if `decide()` throws there, the exception escapes
+	 * to [plan]'s `EXCEPTION` handler, which reports `RULE_FALLBACK` via this method — so the
+	 * cycle is still accounted for, never silently dropped.
 	 *
 	 * @param latencyMs Cycle latency to report alongside the tick, or `null` if no meaningful
 	 *   inference attempt was measured for this cycle — see [plan]'s "Latency measurement" KDoc.
@@ -405,9 +422,23 @@ class KoogAgentPlanAdapter(
 	): List<DispatchDecision> {
 		logAction()
 		cycleListener?.onFallback(reason, observation.snapshot.simTime)
+		// TIMEOUT/EXCEPTION: always RULE_FALLBACK. Report the tick BEFORE consulting the
+		// fallback so a throwing fallback dispatcher cannot drop this cycle from accounting.
+		if (reason != FallbackReason.EMPTY_NO_TOOLS) {
+			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
+			return fallbackDispatcher.decide(observation)
+		}
+		// EMPTY_NO_TOOLS: the outcome depends on what the fallback oracle finds, so decide()
+		// must run before the tick is reported. If decide() throws, the exception escapes to
+		// plan()'s EXCEPTION handler, which reports RULE_FALLBACK above — the cycle is still
+		// accounted for (as a degraded RULE_FALLBACK), never silently dropped.
 		val decisions = fallbackDispatcher.decide(observation)
+		// The Dispatcher contract guarantees decide() never returns empty (it returns
+		// listOf(NoAction) when nothing is actionable), so classify on whether the fallback
+		// found anything genuinely actionable, not on list emptiness.
+		val nothingActionable = decisions.all { it is DispatchDecision.NoAction }
 		val outcome =
-			if (reason == FallbackReason.EMPTY_NO_TOOLS && decisions.isEmpty()) {
+			if (nothingActionable) {
 				TickOutcome.LLM_SILENT_NONACTIONABLE
 			} else {
 				TickOutcome.RULE_FALLBACK

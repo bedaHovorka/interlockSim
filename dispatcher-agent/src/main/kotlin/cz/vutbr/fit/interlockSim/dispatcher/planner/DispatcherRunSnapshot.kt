@@ -205,15 +205,26 @@ data class DispatcherRunSnapshot(
 		 *   under versions 3/4 that stored `fatalExceptionCount` will decode with
 		 *   [loggedFatalSimExceptionCount] = `null` (not measured), which is the honest
 		 *   value: the old field name is not read by the new code.
-		 * - **6** — Issue #927, added [actionableTickRate] alongside [llmSuccessRate] so a
+		 * - **6** — Issue #927, added [actionableTickRate] alongside [llmSuccessRate]. A
 		 *   genuinely non-actionable silent tick ([TickOutcome.LLM_SILENT_NONACTIONABLE]) is
-		 *   excluded from the headline success rate's denominator instead of counting as a
-		 *   dispatch failure. Runs written under versions 1-5 predate that outcome entirely, so
-		 *   their `ticksByOutcome` never contains it and [actionableTickRate] defaults to
+		 *   excluded from the new [actionableTickRate]'s denominator instead of counting as a
+		 *   dispatch failure; [llmSuccessRate]'s own denominator is unchanged (it still counts
+		 *   every tick). Runs written under versions 1-5 predate that outcome entirely, so their
+		 *   `ticksByOutcome` never contains it and [actionableTickRate] defaults to
 		 *   [llmSuccessRate] on decode — the value it would have computed anyway, since that
 		 *   outcome's count is structurally zero in that data.
 		 */
 		const val CURRENT_SCHEMA_VERSION: Int = 6
+
+		/**
+		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded
+		 * from older files (schema < this) predate [TickOutcome.LLM_SILENT_NONACTIONABLE], so
+		 * their [actionableTickRate] is defaulted to [llmSuccessRate] rather than genuinely
+		 * measured — see [DefaultDispatcherRunRecorder]'s comparability note. Pinned to `6`
+		 * (not [CURRENT_SCHEMA_VERSION]) so a future unrelated schema bump does not re-flag
+		 * version-6 files, which DO carry a genuine [actionableTickRate].
+		 */
+		const val SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE: Int = 6
 	}
 
 	init {

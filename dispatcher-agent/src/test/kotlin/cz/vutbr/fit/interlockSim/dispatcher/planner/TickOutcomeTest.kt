@@ -94,7 +94,8 @@ class TickOutcomeTest {
 		@ParameterizedTest
 		@EnumSource(
 			TickOutcome::class,
-			names = ["LLM_SILENT_NONACTIONABLE", "TIMEOUT_NOOP", "LLM_EXCEPTION", "LLM_ABANDONED", "RULE_FALLBACK"]
+			names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED"],
+			mode = org.junit.jupiter.params.provider.EnumSource.Mode.EXCLUDE
 		)
 		fun `non-success outcomes do not count as LLM success`(outcome: TickOutcome) {
 			assertThat(outcome.countsAsLlmSuccess).isFalse()
