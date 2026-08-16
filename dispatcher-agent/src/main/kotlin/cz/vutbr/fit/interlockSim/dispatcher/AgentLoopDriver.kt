@@ -25,6 +25,9 @@ import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
+import kotlin.math.max
+import kotlin.time.DurationUnit
+import kotlin.time.TimeSource
 
 /**
  * Drives the dispatcher sense→decide→act loop from outside the kDisco kernel,
@@ -39,7 +42,9 @@ import kotlinx.coroutines.delay
  *    [DispatchDecisionApplier] drains and applies them on the kDisco thread
  * 4. **PACE**: calls [SimulationController.awaitIfPaused] to honour pause/step
  *    requests, then [SimulationController.throttle] with the simulation-time delta
- *    since the previous cycle
+ *    since the previous cycle, minus the wall-clock time already spent inside
+ *    [DispatcherPlanner.plan] (converted to sim-time units) — see [runCycle]'s KDoc
+ *    and Issue #926 for why that subtraction is necessary
  *
  * ## Threading
  *
@@ -272,13 +277,27 @@ class AgentLoopDriver(
 	 *    the driver thread.
 	 * 4. **PACE** — [SimulationController.awaitIfPaused] is called first (honours
 	 *    pause/step requests), then [SimulationController.throttle] with the
-	 *    simulation-time delta since the previous cycle (wall-clock pacing).
+	 *    simulation-time delta since the previous cycle, adjusted per #926 below
+	 *    (wall-clock pacing).
 	 *
-	 * The simulation-time delta passed to [SimulationController.throttle] is the
-	 * simulation time elapsed since the previous cycle.  There is no previous
+	 * The simulation-time delta passed to [SimulationController.throttle] starts from the
+	 * simulation time elapsed since the previous cycle. There is no previous
 	 * cycle on the first call, so that delta is taken from the loop's start
 	 * baseline — the same initial-delta convention used by the controlled event
 	 * loop in [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext].
+	 *
+	 * ## Throttle double-count fix (Issue #926)
+	 *
+	 * The wall-clock time actually spent inside [DispatcherPlanner.plan] during DECIDE — which
+	 * can block for seconds on an async LLM call — is measured with a
+	 * [kotlin.time.TimeSource.Monotonic] mark and subtracted from the simulation-time delta
+	 * before it reaches [SimulationController.throttle]. Without this adjustment, `throttle()`
+	 * would sleep for the *full* delta on top of the wall-clock time already elapsed inside
+	 * `plan()`, double-counting that time and slowing every cycle far beyond the intended pace.
+	 * The wall-clock measurement is converted into the same units as the simulation-time delta
+	 * via [SimulationController.currentSpeedMultiplier] before subtraction, and the result is
+	 * clamped at `0.0` (never negative) when `plan()` alone already consumed more wall-clock
+	 * time than the tick's sim-time budget allows.
 	 *
 	 * @return `true` if a full cycle actually ran (a decision batch — possibly empty —
 	 *   was computed and posted, and [SimulationController.throttle] was called);
@@ -310,7 +329,9 @@ class AgentLoopDriver(
 				innerBlockInputs = tick.innerBlockInputs,
 				outerBlockInputs = tick.outerBlockInputs
 			)
+		val planStart = TimeSource.Monotonic.markNow()
 		val decisions = planner.plan(observation)
+		val planWallElapsed = planStart.elapsedNow()
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
 
 		// Attribute this cycle's decisions correctly instead of silently defaulting to
@@ -336,9 +357,22 @@ class AgentLoopDriver(
 		}
 
 		// 4. PACE — honour pause/step requests, then throttle wall-clock time.
+		//
+		// #926: the raw simDelta must not be thrown at throttle() unadjusted — planner.plan()
+		// above may have blocked on real (async LLM) inference for a while, and that wall-clock
+		// time was already "spent" from the operator's point of view. Passing the full simDelta
+		// to throttle() on top of that would double-count it, sleeping again for time that has
+		// already elapsed. wallElapsedInSimUnits converts the wall time actually spent inside
+		// plan() into the same sim-time units as simDelta (via the controller's active speed
+		// multiplier — the same conversion throttle() itself applies internally, just inverted),
+		// so it can be subtracted before throttling. Clamped at 0.0: if plan() alone took longer
+		// than the sim-time budget for this tick, there is no throttling left to do — a negative
+		// duration would be meaningless.
 		controller.awaitIfPaused()
 		val simDelta = snapshot.simTime - prevSimTime
-		controller.throttle(simDelta)
+		val wallElapsedInSimUnits =
+			planWallElapsed.toDouble(DurationUnit.SECONDS) * controller.currentSpeedMultiplier()
+		controller.throttle(max(0.0, simDelta - wallElapsedInSimUnits))
 		awaitMinimumCyclePeriod()
 		prevSimTime = snapshot.simTime
 		hasProcessedSnapshot = true

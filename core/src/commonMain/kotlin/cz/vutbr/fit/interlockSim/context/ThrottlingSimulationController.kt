@@ -113,6 +113,9 @@ class ThrottlingSimulationController(
 		// No-op: headless runs are never paused
 	}
 
+	/** Returns the currently configured [speedMultiplier]. */
+	override fun currentSpeedMultiplier(): Double = speedMultiplierBacking
+
 	companion object {
 		/** Minimum valid speed multiplier. Alias of [SimulationPacing.MIN_SPEED]. */
 		const val MIN_SPEED: Double = SimulationPacing.MIN_SPEED

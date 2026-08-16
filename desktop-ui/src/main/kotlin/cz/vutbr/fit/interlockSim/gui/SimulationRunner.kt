@@ -341,6 +341,9 @@ class SimulationRunner(
 		}
 	}
 
+	/** Returns the currently configured [speedMultiplier]. */
+	override fun currentSpeedMultiplier(): Double = speedMultiplierBacking
+
 	companion object {
 		const val MIN_SPEED: Double = SimulationPacing.MIN_SPEED
 		const val MAX_SPEED: Double = SimulationPacing.MAX_SPEED

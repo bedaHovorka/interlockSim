@@ -74,6 +74,8 @@ class CollisionDetectionActivationTest : KoinTestBase() {
 		override fun requestResume() {
 			// No-op: not needed for this test
 		}
+
+		override fun currentSpeedMultiplier(): Double = 1.0
 	}
 
 	@Test

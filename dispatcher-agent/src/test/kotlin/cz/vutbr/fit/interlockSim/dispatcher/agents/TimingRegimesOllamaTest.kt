@@ -93,6 +93,8 @@ class TimingRegimesOllamaTest {
 		override fun pollStepTime(): Double? = null
 
 		override fun throttle(simDeltaSeconds: Double) = Unit
+
+		override fun currentSpeedMultiplier(): Double = 1.0
 	}
 
 	/** Trivial no-argument perception tool — kept minimal, same shape as the sibling ollama-tests. */

@@ -100,6 +100,8 @@ class DispatchTickLoopStabilityHeavyTest {
 		override fun requestPause() = Unit
 
 		override fun requestResume() = Unit
+
+		override fun currentSpeedMultiplier(): Double = 1.0
 	}
 
 	private fun observation(tick: Long): DispatcherObservation =

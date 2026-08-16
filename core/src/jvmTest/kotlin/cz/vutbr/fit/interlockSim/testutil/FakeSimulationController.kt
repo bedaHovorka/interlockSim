@@ -130,4 +130,9 @@ class FakeSimulationController(
 	override fun requestResume() {
 		requestResumeCalls++
 	}
+
+	/** Test-configurable speed multiplier; defaults to 1.0x. */
+	var speedMultiplier: Double = 1.0
+
+	override fun currentSpeedMultiplier(): Double = speedMultiplier
 }

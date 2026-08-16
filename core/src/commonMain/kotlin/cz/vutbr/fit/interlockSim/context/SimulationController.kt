@@ -151,6 +151,23 @@ interface SimulationController {
 	 * @since Issue #872 (SP2c.26 follow-up I1)
 	 */
 	fun requestResume()
+
+	/**
+	 * Returns the controller's currently active wall-clock speed multiplier (1.0 = real-time,
+	 * 2.0 = twice as fast, 0.5 = half speed).
+	 *
+	 * Added so external callers that only hold a [SimulationController] reference — notably
+	 * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] — can convert wall-clock durations
+	 * they measure themselves (e.g. time spent inside an async planner call) into sim-time units
+	 * before calling [throttle], without [throttle]'s own signature changing.
+	 *
+	 * Implementations with no real notion of a multiplier (headless/no-op controllers) must
+	 * return `1.0`.
+	 *
+	 * @return the active speed multiplier; always `1.0` for controllers that do not vary pacing
+	 * @since Issue #926 (Goal 10 Wave 2 — throttle double-count fix)
+	 */
+	fun currentSpeedMultiplier(): Double
 }
 
 /**
@@ -167,6 +184,7 @@ interface SimulationController {
  * - [pollStepTime] always returns `null`
  * - [requestPause] does nothing
  * - [requestResume] does nothing
+ * - [currentSpeedMultiplier] always returns `1.0`
  */
 object NoOpSimulationController : SimulationController {
 	override suspend fun awaitIfPaused() {
@@ -190,4 +208,6 @@ object NoOpSimulationController : SimulationController {
 	override fun requestResume() {
 		// No-op: headless / no-GUI runs are never paused
 	}
+
+	override fun currentSpeedMultiplier(): Double = 1.0
 }

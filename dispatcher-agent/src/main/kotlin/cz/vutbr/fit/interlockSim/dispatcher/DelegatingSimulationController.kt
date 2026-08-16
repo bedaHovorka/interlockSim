@@ -150,6 +150,16 @@ class DelegatingSimulationController : SimulationController {
 		delegate.requestResume()
 	}
 
+	/**
+	 * Forwards to the [delegate]'s active speed multiplier.
+	 *
+	 * With the default [NoOpSimulationController] delegate, this returns `1.0` — see
+	 * [NoOpSimulationController.currentSpeedMultiplier].
+	 *
+	 * @since Issue #926 (Goal 10 Wave 2 — throttle double-count fix)
+	 */
+	override fun currentSpeedMultiplier(): Double = delegate.currentSpeedMultiplier()
+
 	companion object {
 		/** Poll interval while waiting out a pause; coarse is fine — no new observations arrive while paused. */
 		private const val PAUSE_POLL_MS: Long = 10L
