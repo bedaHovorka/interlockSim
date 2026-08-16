@@ -162,11 +162,29 @@ class DefaultMetricsCollectionService(
 				averageWaitSeconds = avgWait,
 				occupiedBlocks = occupied,
 				totalBlocks = total,
-				utilization = utilization
+				utilization = utilization,
+				trainsHoldingReservations = activeReservationCount.size,
+				heldBlocks = blockReservedAt.size
 			)
 		logger.debug { "Metrics snapshot queried: $snapshot" }
 		return snapshot
 	}
+
+	override fun reportUnreleasedReservations(): Set<String> {
+		val leaked = activeReservationCount.keys.toSet()
+		if (leaked.isNotEmpty()) {
+			logger.warn {
+				"Unreleased block reservations at run end: ${leaked.size} train(s) still hold " +
+					"$blockReservedAtSize reservation(s) — ${leaked.sorted().joinToString(", ")}. " +
+					"Their journeys were never credited and those blocks were never returned to the " +
+					"network (see Issue #936)."
+			}
+		}
+		return leaked
+	}
+
+	/** Outstanding reservation count, named so the WARN above stays inside the line-length limit. */
+	private val blockReservedAtSize: Int get() = blockReservedAt.size
 
 	override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) {
 		listeners += listener

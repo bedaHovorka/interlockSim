@@ -75,4 +75,24 @@ interface MetricsCollectionService {
 	 * @param listener The callback to remove.
 	 */
 	fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit)
+
+	/**
+	 * Ids of trains that still hold at least one block reservation, logged at WARN when non-empty.
+	 *
+	 * Intended to be called **once, at run end, on a quiesced simulation**, where a non-empty result
+	 * means reservations leaked: those trains never had their counts drained, so their journeys were
+	 * never credited and the blocks they hold were never returned to the network. Called mid-run it
+	 * simply lists the trains under way, which is not a fault.
+	 *
+	 * Issue #936 is the failure that motivated it: a granted full-span route froze a train's stored
+	 * path, and every later hop-wise request was refused as non-contiguous, so the reservations were
+	 * never released. Nothing in the metrics surfaced that — `completedTrains` merely failed to
+	 * increment, which is indistinguishable from a slow run.
+	 *
+	 * Returns the set rather than only logging so the condition is assertable in tests without a
+	 * log-capture harness.
+	 *
+	 * @return Train ids with outstanding reservations; empty when every train settled cleanly.
+	 */
+	fun reportUnreleasedReservations(): Set<String>
 }

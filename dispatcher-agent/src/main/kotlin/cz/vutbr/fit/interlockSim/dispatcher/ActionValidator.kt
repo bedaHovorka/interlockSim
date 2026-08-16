@@ -59,6 +59,15 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  *   Captured once at agent construction — topology is static and never changes during a run.
  * @param blockIds Exact set of block IDs. Used to detect
  *   [RejectionCode.ENDPOINT_IS_BLOCK_ID] before the endpoint-existence check.
+ * @param inOutNames The InOut subset of [validEndpointNames], used to detect
+ *   [RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT]. Defaults to empty, which disables that check.
+ *
+ *   **This validator has no production construction site** — the live rejection of full-span routes
+ *   happens in
+ *   [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool.execute], which is on the
+ *   agent's actual tool path. The rule is mirrored here so the two layers cannot disagree if this
+ *   validator is ever wired up; anyone doing that wiring must pass `inOutNames`, or the check ships
+ *   silently disabled.
  * @param maxActionsPerTick Maximum number of non-[DispatchAction.NoOp] valid actions allowed
  *   in one [validateBatch] call. Defaults to `3`.
  *
@@ -67,7 +76,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 class ActionValidator(
 	private val validEndpointNames: Set<String>,
 	private val blockIds: Set<String>,
-	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK
+	private val maxActionsPerTick: Int = DEFAULT_MAX_ACTIONS_PER_TICK,
+	private val inOutNames: Set<String> = emptySet()
 ) {
 	companion object {
 		/** Default per-tick action limit used when [maxActionsPerTick] is not specified. */
@@ -231,6 +241,7 @@ class ActionValidator(
 		validateRequestRouteConflict(action, observation)?.let { return it }
 		validateRequestRouteDestinationAndOrigin(action, trainInList)?.let { return it }
 		validateRequestRoutePathAvailability(action, observation)?.let { return it }
+		validateRequestRouteSpan(action)?.let { return it }
 
 		return ValidationVerdict.Valid
 	}
@@ -385,6 +396,31 @@ class ActionValidator(
 			)
 		}
 		return null
+	}
+
+	/**
+	 * Rejects a route whose two endpoints are both InOuts — a reservation spanning the station from
+	 * entry to exit (Issue #936). See [RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT] for what granting
+	 * one does to the reservation registry.
+	 *
+	 * Runs **last** among the `request_route` checks on purpose: more specific diagnoses (wrong
+	 * train phase, wrong destination, no free path) are more useful to the model than the shape
+	 * complaint, and several existing validator scenarios use an InOut pair incidentally while
+	 * testing those other codes.
+	 *
+	 * Inert when [inOutNames] is empty, or when the network has no Signals at all and a full span
+	 * is therefore the only expressible route.
+	 */
+	private fun validateRequestRouteSpan(action: DispatchAction.RequestRoute): ValidationVerdict.Rejected? {
+		if (inOutNames.isEmpty()) return null
+		if (validEndpointNames.size <= inOutNames.size) return null
+		if (action.fromEndpointName !in inOutNames || action.toEndpointName !in inOutNames) return null
+		return rejected(
+			RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT,
+			"Route '${action.fromEndpointName}' → '${action.toEndpointName}' runs from one end of the " +
+				"station to the other: both are entry/exit points, so it holds every block in between. " +
+				"Reserve one section at a time, targeting a Signal."
+		)
 	}
 
 	private fun validateCancelRoute(

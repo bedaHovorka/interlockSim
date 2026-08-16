@@ -256,9 +256,76 @@ object StationTopologySerializer {
 		if (topology.inOuts.size < 2) return
 		val exampleFrom = topology.inOuts[0]
 		val exampleTo = topology.inOuts[1]
+		val entryTarget = topology.signals.firstOrNull()?.name
+		if (entryTarget == null) {
+			appendFullSpanExample(sb, exampleFrom, exampleTo)
+		} else {
+			appendEntryRouteExample(sb, exampleFrom, exampleTo, entryTarget)
+		}
+		appendSectionHopExample(sb, topology)
+		val exampleWrongBlock = topology.blocks.firstOrNull { it.name != exampleFrom && it.name != exampleTo }
+		if (exampleWrongBlock != null) {
+			sb
+				.append(" Do NOT pass \"")
+				.append(exampleWrongBlock.name)
+				.append("\" as an endpoint — it is a Block ID, which names a piece of track, not a route endpoint.")
+		}
+	}
+
+	/**
+	 * The primary worked example: the **entry route**, from the train's entry InOut to the first
+	 * Signal beyond it (Issue #936).
+	 *
+	 * The example used to route InOut→InOut, spanning the station in one reservation. That is the
+	 * shape the model copied — measured at roughly two calls per run — and granting one froze the
+	 * train's stored path so every later hop-wise request was refused as non-contiguous, costing
+	 * 3-4 of 5 journeys per run. It is now rejected outright
+	 * ([cz.vutbr.fit.interlockSim.dispatcher.RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT]), so teaching
+	 * it here would only buy a guaranteed rejection every cycle.
+	 *
+	 * The destination is still named, because the model must know where the train is heading; what
+	 * changed is that the example reserves the first section toward it rather than the whole way.
+	 */
+	private fun appendEntryRouteExample(
+		sb: StringBuilder,
+		exampleFrom: String,
+		destination: String,
+		entryTarget: String
+	) {
 		sb
-			.append("\n\nEXAMPLE (end-to-end route). Never invent a train name: use an id copied from ")
+			.append("\n\nEXAMPLE (entry route). Never invent a train name: use an id copied from ")
 			.append("the \"Queued\" or \"Active\" train list in this cycle's message, shown here as ")
+			.append(TRAIN_NAME_PLACEHOLDER)
+			.append(". A route reserves ONE section at a time, never the whole station: to start a ")
+			.append("train that entered at \"")
+			.append(exampleFrom)
+			.append("\" and is bound for \"")
+			.append(destination)
+			.append("\", call request_route(trainName=")
+			.append(TRAIN_NAME_PLACEHOLDER)
+			.append(", fromEndpointName=\"")
+			.append(exampleFrom)
+			.append("\", toEndpointName=\"")
+			.append(entryTarget)
+			.append("\"), then keep reserving forward section by section as it advances. A route ")
+			.append("whose two endpoints are BOTH entry/exit points is refused.")
+	}
+
+	/**
+	 * Fallback worked example for a network with no Signals at all, where an InOut-to-InOut route is
+	 * the only thing anyone could express and is therefore still legal (Issue #936 — the rejection
+	 * rule is likewise inert on such a network). No production station looks like this; it exists so
+	 * degenerate test fixtures still get a usable example.
+	 */
+	private fun appendFullSpanExample(
+		sb: StringBuilder,
+		exampleFrom: String,
+		exampleTo: String
+	) {
+		sb
+			.append("\n\nEXAMPLE (whole-network route — this network has no Signals to stop at). ")
+			.append("Never invent a train name: use an id copied from the \"Queued\" or \"Active\" ")
+			.append("train list in this cycle's message, shown here as ")
 			.append(TRAIN_NAME_PLACEHOLDER)
 			.append(". To route that train from \"")
 			.append(exampleFrom)
@@ -271,14 +338,6 @@ object StationTopologySerializer {
 			.append("\", toEndpointName=\"")
 			.append(exampleTo)
 			.append("\").")
-		appendSectionHopExample(sb, topology)
-		val exampleWrongBlock = topology.blocks.firstOrNull { it.name != exampleFrom && it.name != exampleTo }
-		if (exampleWrongBlock != null) {
-			sb
-				.append(" Do NOT pass \"")
-				.append(exampleWrongBlock.name)
-				.append("\" as an endpoint — it is a Block ID, which names a piece of track, not a route endpoint.")
-		}
 	}
 
 	/**

@@ -80,6 +80,23 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 	}
 
 	/**
+	 * Two distinct real blocks, for scenarios where a train holds more than one reservation.
+	 *
+	 * Uses the shunting fixture rather than [NetworkResources.LINEAR_TRACK_XML], whose single block
+	 * cannot express "released one reservation, still holds another".
+	 */
+	private fun realBlockPair(): Pair<DynamicTrackBlock, DynamicTrackBlock> {
+		val ctx =
+			CommonTestFixtures.parseSimulationContext(
+				NetworkResources.VYHYBNA_XML,
+				DefaultSimulationProcessFactory()
+			)
+		context = ctx
+		val blocks = ctx.getGraph().values().toList()
+		return blocks[0] to blocks[1]
+	}
+
+	/**
 	 * Get a real [DefaultSimulationContext] built from [NetworkResources.LINEAR_TRACK_XML].
 	 *
 	 * The linear-track fixture has exactly one track block, so `getGraph().size() == 1`.
@@ -129,6 +146,89 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 			BlockEvent.ReservationConflictDetected(block, "T1", "T3", time = 10.0)
 		)
 		assertThat(service.getSnapshot().conflictCount).isEqualTo(2)
+	}
+
+	// ── Leaked reservations (Issue #936) ──────────────────────────────────────
+
+	@Test
+	fun `a clean journey leaves no train holding reservations`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.OccupancyCleared(block, time = 19.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 20.0))
+
+		assertThat(service.getSnapshot().trainsHoldingReservations).isZero()
+		assertThat(service.getSnapshot().completedTrains).isEqualTo(1)
+	}
+
+	/**
+	 * Issue #936: the failure this gauge exists to catch. A full-span route grant reserves blocks
+	 * the train never traverses, so its reservation count never drains to zero — the journey is
+	 * never credited and the blocks stay held for the rest of the run. The train is invisible in
+	 * every other metric: `completedTrains` simply fails to increment.
+	 */
+	@Test
+	fun `a train whose reservations are never released is reported as holding them`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockOne, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockTwo, "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockOne, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.OccupancyCleared(blockOne, time = 19.0))
+		// blockTwo is never released — the reservation leaks.
+		service.handleBlockEvent(BlockEvent.BlockReleased(blockOne, "T1", time = 20.0))
+
+		assertThat(service.getSnapshot().trainsHoldingReservations).isEqualTo(1)
+		assertThat(service.getSnapshot().completedTrains).isZero()
+	}
+
+	/**
+	 * A train is briefly between blocks whenever its tail clears one before its front occupies the
+	 * next, so physical occupancy is not a usable "train has left" signal. The gauge counts trains
+	 * with outstanding *reservations*, which is unaffected by that transient — one train mid-journey
+	 * must read as one, never two.
+	 */
+	@Test
+	fun `a train between blocks is counted once and not twice`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockOne, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockTwo, "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockOne, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.OccupancyCleared(blockOne, time = 19.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockTwo, NamedOccupant("T1"), time = 20.0))
+
+		assertThat(service.getSnapshot().trainsHoldingReservations).isEqualTo(1)
+	}
+
+	@Test
+	fun `reportUnreleasedReservations names the trains still holding blocks`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockOne, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockTwo, "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockOne, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(blockOne, "T1", time = 20.0))
+
+		assertThat(service.reportUnreleasedReservations()).isEqualTo(setOf("T1"))
+	}
+
+	@Test
+	fun `reportUnreleasedReservations is empty after a clean journey`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 20.0))
+
+		assertThat(service.reportUnreleasedReservations()).isEqualTo(emptySet())
 	}
 
 	// ── Train completion (throughput) ─────────────────────────────────────────

@@ -56,6 +56,12 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * @param occupiedBlocks Number of currently physically occupied blocks.
  * @param totalBlocks Total blocks in the railway network.
  * @param utilization Fraction of blocks currently occupied (0.0–1.0).
+ * @param trainsHoldingReservations Number of trains that currently hold at least one reserved
+ *   block. Mid-run this is simply the trains under way; **at run end it is a leak gauge** — a
+ *   train still counted here never had its reservations drained, so its journey was never credited
+ *   and the blocks it holds were never returned to the network (Issue #936).
+ * @param heldBlocks Number of block reservations outstanding across all trains, the block-level
+ *   companion to [trainsHoldingReservations].
  *
  * @since Issue #672 (Goal 6 SP1)
  */
@@ -68,5 +74,7 @@ data class MetricsSnapshot(
 	val averageWaitSeconds: Double,
 	val occupiedBlocks: Int,
 	val totalBlocks: Int,
-	val utilization: Double
+	val utilization: Double,
+	val trainsHoldingReservations: Int = 0,
+	val heldBlocks: Int = 0
 )

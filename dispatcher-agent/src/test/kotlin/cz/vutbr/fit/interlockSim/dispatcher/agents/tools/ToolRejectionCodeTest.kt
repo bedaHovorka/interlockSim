@@ -370,16 +370,53 @@ class ToolRejectionCodeTest {
 		assertThat(result).isInstanceOf(ToolResult.Success::class)
 	}
 
+	/**
+	 * Issue #936: a route from one InOut to the other spans the whole station. Granting one installs
+	 * a full-span `PathInfo`, which the Step 0a merge fail-safe then freezes — every later hop-wise
+	 * request is non-contiguous with it, so the train's reservations never drain and the blocks it
+	 * never traverses stay held for the rest of the run.
+	 *
+	 * Pointing at the train's own declared destination does not make it safe: that is exactly the
+	 * shape measured poisoning the runs, and it is the shape the destination rule at
+	 * [RejectionCode.TARGET_NOT_TRAIN_DESTINATION] deliberately lets through.
+	 */
 	@Test
-	@DisplayName("a route to the train's declared destination is accepted")
-	fun correctlyDirectedRouteIsAccepted() {
+	@DisplayName("a route from one InOut to the other is rejected even when it names the declared destination")
+	fun fullSpanRouteToDeclaredDestinationIsRejected() {
 		val result =
 			runBlocking {
 				requestRouteTool(queued = listOf("Train #1"), destination = "A")
 					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "B", "toEndpointName" to "A"))
 			}
 
-		assertThat(result).isInstanceOf(ToolResult.Success::class)
+		assertThat(errorOf(result).rejection, "rejection code")
+			.isEqualTo(RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT)
+	}
+
+	/**
+	 * Issue #936: a rejection message is the model's next-cycle instruction, so no rejection may
+	 * offer the full-span route as the way out. The wrong-InOut message used to end with "Either
+	 * request the end-to-end route with toEndpointName='<destination>'", which sent the model
+	 * straight into the shape [RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT] now refuses.
+	 */
+	@Test
+	@DisplayName("no request_route rejection tells the model to request an end-to-end route")
+	fun rejectionsDoNotCoachTheFullSpanRoute() {
+		val wrongInOutTarget =
+			runBlocking {
+				requestRouteTool(queued = listOf("Train #1"), destination = "A")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "B"))
+			}
+		val fullSpan =
+			runBlocking {
+				requestRouteTool(queued = listOf("Train #1"), destination = "A")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "B", "toEndpointName" to "A"))
+			}
+
+		assertThat(errorOf(wrongInOutTarget).message, "wrong-InOut message").doesNotContain("end-to-end")
+		assertThat(errorOf(fullSpan).message, "full-span message").doesNotContain("end-to-end")
+		assertThat(errorOf(fullSpan).message, "full-span message names Signals as the way out")
+			.contains("Signal")
 	}
 
 	@Test
@@ -422,7 +459,7 @@ class ToolRejectionCodeTest {
 		val result =
 			runBlocking {
 				requestRouteTool(queued = listOf("Train #1"))
-					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "A", "toEndpointName" to "B"))
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "A", "toEndpointName" to "doA1"))
 			}
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)

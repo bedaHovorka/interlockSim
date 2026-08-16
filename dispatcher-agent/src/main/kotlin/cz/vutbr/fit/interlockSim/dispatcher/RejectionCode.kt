@@ -110,6 +110,32 @@ enum class RejectionCode {
 	TARGET_NOT_TRAIN_DESTINATION,
 
 	/**
+	 * Both `fromEndpointName` and `toEndpointName` are InOuts, so the route would span the station
+	 * from entry to exit and hold every block in between (Issue #936).
+	 *
+	 * ## Why this is a hard rejection rather than a preference
+	 *
+	 * A granted full-span route installs a `PathInfo` covering the whole station. The Step 0a
+	 * fail-safe in
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry] then refuses to merge
+	 * any later hop-wise route into it — a hop starts at an intermediate signal, never at the
+	 * frozen path's end — so the stale path survives for the rest of the run. The train's
+	 * reservation count never drains (its journey is never credited) and every block the full-span
+	 * grant reserved but the train does not traverse stays RESERVED, unavailable to every other
+	 * train. Measured across the `shuntingLoopAI` runs of Issue #936 this cost 3-4 of 5 journeys
+	 * per run.
+	 *
+	 * This is also the ESA-11 reading: a route is set between adjacent main signals. An entry route
+	 * starts at the entry point and an exit route ends at the exit point, but no single route runs
+	 * entry-to-exit.
+	 *
+	 * Distinct from [TARGET_NOT_TRAIN_DESTINATION], which fires when the target is the *wrong*
+	 * InOut. This one fires even when the target is the train's declared destination — being
+	 * correctly directed does not make a full-span reservation safe.
+	 */
+	ROUTE_SPANS_ENTRY_TO_EXIT,
+
+	/**
 	 * Every track block visible in the current observation is already owned (reserved or
 	 * occupied) by another train; no path to any endpoint is plausibly free.
 	 *

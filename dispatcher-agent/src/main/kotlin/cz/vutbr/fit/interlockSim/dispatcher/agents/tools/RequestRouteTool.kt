@@ -123,10 +123,10 @@ class RequestRouteTool(
 
 	override val description: String =
 		"Request the interlocking to find and atomically reserve a free path for a named train, between " +
-			"any two endpoints from the InOuts or Signals lists. A Signal-to-Signal route reserves one " +
-			"section and is usually preferable to an InOut-to-InOut route, which holds every block in " +
-			"between. Fire-and-forget: returns once the request is emitted; the reservation outcome shows " +
-			"up in the next cycle's message."
+			"any two endpoints from the InOuts or Signals lists. Reserve ONE section at a time: at least " +
+			"one endpoint must be a Signal. A route from one InOut to another spans the whole station, " +
+			"holds every block in between, and is refused. Fire-and-forget: returns once the request is " +
+			"emitted; the reservation outcome shows up in the next cycle's message."
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(
@@ -217,6 +217,11 @@ class RequestRouteTool(
 					)
 			} ?: trainName
 
+		// Runs after train resolution so an unresolvable name is still reported as UNKNOWN_TRAIN
+		// (identity before shape), but ahead of the destination block below, which is skipped
+		// whenever the destination is unknown — a full span must be refused either way.
+		fullSpanError(fromEndpointName, toEndpointName)?.let { return it }
+
 		declaredDestinationOf(resolvedTrainName)?.let { destination ->
 			// A train cannot set out FROM the place it is trying to reach. This holds whatever the
 			// target is, so unlike the destination check below it also catches the section-route
@@ -234,9 +239,8 @@ class RequestRouteTool(
 				return ToolResult.Error(
 					"Train '$resolvedTrainName' runs to '$destination', not to '$toEndpointName'. " +
 						"A route to the opposite end of the station sends it the wrong way and reserves the " +
-						"whole line against itself. Either request the end-to-end route with " +
-						"toEndpointName='$destination', or request a section route whose toEndpointName is a " +
-						"Signal on the way there.",
+						"whole line against itself. Request a section route whose toEndpointName is a " +
+						"Signal on the way to '$destination'.",
 					rejection = RejectionCode.TARGET_NOT_TRAIN_DESTINATION
 				)
 			}
@@ -300,6 +304,50 @@ class RequestRouteTool(
 				?.firstOrNull { it.trainId == trainId }
 				?.destinationInOutName
 		return (queued ?: activePerceptionOf(trainId)?.destinationInOutName)?.takeIf { it.isNotBlank() }
+	}
+
+	/**
+	 * Refuses a route whose two endpoints are both InOuts — a reservation spanning the station from
+	 * entry to exit (Issue #936).
+	 *
+	 * ## Why this is checked before the train is even resolved
+	 *
+	 * The shape is illegal regardless of which train asked, so it does not belong inside the
+	 * `declaredDestinationOf(...)` block that guards the other endpoint rules: that block is skipped
+	 * whenever the destination is unknown (no ports wired, or a train that is neither queued nor
+	 * active), and a full-span reservation is exactly as damaging in that case. See
+	 * [RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT] for what a granted one does to the registry.
+	 *
+	 * ## Why "both endpoints are InOuts" rather than "not the last hop"
+	 *
+	 * The narrower rule — allow an InOut target only when the train is standing at the signal
+	 * immediately before it — is not expressible here: this tool holds endpoint *names*, not
+	 * topology, so it cannot tell that `zB` neighbours `B`. The both-InOut test needs no adjacency
+	 * and still separates the two cases cleanly, because a legal entry route runs InOut→Signal and a
+	 * legal exit route runs Signal→InOut. Only the whole-station span has an InOut at each end.
+	 *
+	 * Inert when [inOutNames] is empty (no topology wired — same convention as [queuedOriginError])
+	 * and when the network has no Signals at all, since a full span is then the only route anyone
+	 * could express.
+	 */
+	private fun fullSpanError(
+		fromEndpointName: String,
+		toEndpointName: String
+	): ToolResult.Error? {
+		if (inOutNames.isEmpty()) return null
+		if (validEndpointNames.size <= inOutNames.size) return null
+		if (fromEndpointName !in inOutNames || toEndpointName !in inOutNames) return null
+		val signals = (validEndpointNames - inOutNames).sorted()
+		return ToolResult.Error(
+			"A route may not run from one end of the station to the other: '$fromEndpointName' and " +
+				"'$toEndpointName' are both entry/exit points, so reserving between them holds every " +
+				"block in the station against every other train. Reserve one section at a time: set " +
+				"toEndpointName to a Signal between them — " +
+				signals.joinToString(" or ") { "'$it'" } +
+				". The train reaches '$toEndpointName' on a later request whose fromEndpointName is " +
+				"the last Signal before it.",
+			rejection = RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT
+		)
 	}
 
 	/**

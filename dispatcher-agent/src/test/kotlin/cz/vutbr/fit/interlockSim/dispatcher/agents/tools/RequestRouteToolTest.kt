@@ -157,14 +157,20 @@ class RequestRouteToolTest {
 			.contains("Do not retry with the same origin.")
 	}
 
-	/** The same call with the entry InOut as origin is the legitimate one and must pass. */
+	/**
+	 * The same call with the entry InOut as origin is the legitimate one and must pass.
+	 *
+	 * The target is a Signal rather than the far InOut because this test is about the *origin*
+	 * rule: an InOut→InOut pair is refused outright as a full-span route (Issue #936), which would
+	 * mask what is under test here.
+	 */
 	@Test
 	@DisplayName("a queued train's route starting at its entry InOut is accepted")
 	fun queuedTrainOriginAtEntryInOutIsAccepted() {
 		val result =
 			runBlocking {
 				requestRouteTool(queued = listOf("Train #1"), destination = "A")
-					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "B", "toEndpointName" to "A"))
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "B", "toEndpointName" to "doB1"))
 			}
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)
