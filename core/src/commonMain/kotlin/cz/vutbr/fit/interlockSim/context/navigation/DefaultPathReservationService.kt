@@ -524,11 +524,11 @@ class DefaultPathReservationService(
 		// Used to emit ReservationConflictDetected when AllPathsBlocked is about to be returned.
 		var firstBlockedConflict: Pair<DynamicTrackBlock, String>? = null
 
-		// Issue #903: tracks whether ANY candidate hit a permanent geometric impossibility
-		// (rear-facing START or unconfigurable switch), as opposed to ordinary contention.
-		// First-hit-wins: set once, never overwritten, and takes priority over
-		// firstBlockedConflict at the fallthrough return (traffic-simulation-expert ruling).
-		var firstGeometricFailure: String? = null
+		// Issue #903/#937: the permanent geometric impossibilities (rear-facing START or
+		// unconfigurable switch) seen across candidates — first reason kept for reporting, count
+		// kept so classifyExhaustedAttempt can tell "every candidate is impossible" (permanent)
+		// from "one is, another is merely busy" (retryable).
+		var geometricFailures = GeometricFailures()
 
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in candidatePaths.withIndex()) {
@@ -650,9 +650,9 @@ class DefaultPathReservationService(
 						// Issue #903: this is a PERMANENT impossibility, not ordinary contention --
 						// record it (first-hit-wins) so the fallthrough return can classify it
 						// correctly instead of reporting AllPathsBlocked.
-						firstGeometricFailure =
+						geometricFailures =
 							recordGeometricFailureOnce(
-								firstGeometricFailure,
+								geometricFailures,
 								"Switch along candidate $index could not be configured for the requested route"
 							)
 						continue
@@ -677,8 +677,8 @@ class DefaultPathReservationService(
 							// contention -- record it (first-hit-wins) so the fallthrough return can
 							// classify it correctly. A genuine configuration exception stays folded
 							// into ordinary contention/rollback, unchanged.
-							firstGeometricFailure =
-								recordG4FailureOnce(firstGeometricFailure, signalResult, index)
+							geometricFailures =
+								recordG4FailureOnce(geometricFailures, signalResult, index)
 							// Issue #893 task A5: configureStartSignal can leave a PARTIAL aspect
 							// write behind -- the underlying config call sets the physical aspect
 							// and still throws before recordClearedSemaphore runs. Reset the
@@ -802,7 +802,7 @@ class DefaultPathReservationService(
 		// AllPathsBlocked -- first-hit-wins (traffic-simulation-expert ruling). Extracted into
 		// [classifyExhaustedAttempt] so this branching stays out of reservePath's own cyclomatic
 		// complexity count.
-		return classifyExhaustedAttempt(trainId, firstGeometricFailure, firstBlockedConflict, candidatePaths.size)
+		return classifyExhaustedAttempt(trainId, geometricFailures, firstBlockedConflict, candidatePaths.size)
 	}
 
 	/**
@@ -810,9 +810,21 @@ class DefaultPathReservationService(
 	 * succeeded. Extracted so this branching stays out of [reservePath]'s own cyclomatic
 	 * complexity count (Issue #903 review follow-up).
 	 *
-	 * A permanent geometric impossibility (Issue #903) takes priority over ordinary contention:
-	 * it is checked first and, when present, reported instead of [AllPathsBlocked] -- a
-	 * permanent impossibility is not contention and must not be recorded/reported as such.
+	 * Reports `GeometricallyImpossible` only when **every** candidate failed geometrically
+	 * (Issue #937). Permanence is a property of the whole request, not of one candidate: if any
+	 * candidate was merely blocked it can free up, so the request is ordinary contention and the
+	 * caller must wait and retry rather than give up. The distinction is load-bearing —
+	 * [cz.vutbr.fit.interlockSim.sim.InOutWorker] throws `SimulationException` on
+	 * `GeometricallyImpossible` instead of waiting, and the dispatcher's perception tells the model
+	 * not to retry the request, so a mixed attempt misreported as permanent parks a train for the
+	 * rest of the run.
+	 *
+	 * Issue #903's first-hit-wins still governs *which reason is reported* — the earliest geometric
+	 * reason is the most informative. What changed is the permanence gate, which is an AND over
+	 * candidates rather than an OR. Candidates that fail for other reasons (atomic-reservation
+	 * failure, merge abort) record nothing, so the `count == attemptedPaths` equality treats them as
+	 * non-geometric, which is the safe direction: an unproven candidate must not contribute to a
+	 * verdict of permanent impossibility.
 	 *
 	 * Otherwise: no [BlockEvent.ReservationConflictDetected] emission here (Goal 3) -- a
 	 * blocked-path outcome is routine "path busy, will retry" contention for the
@@ -825,12 +837,12 @@ class DefaultPathReservationService(
 	 */
 	private fun classifyExhaustedAttempt(
 		trainId: String,
-		firstGeometricFailure: String?,
+		geometricFailures: GeometricFailures,
 		firstBlockedConflict: Pair<DynamicTrackBlock, String>?,
 		attemptedPaths: Int
 	): PathReservationService.ReservationResult {
-		if (firstGeometricFailure != null) {
-			return PathReservationService.ReservationResult.GeometricallyImpossible(firstGeometricFailure)
+		if (geometricFailures.reason != null && geometricFailures.count == attemptedPaths) {
+			return PathReservationService.ReservationResult.GeometricallyImpossible(geometricFailures.reason)
 		}
 		firstBlockedConflict?.let { (blockedBlock, owningTrain) ->
 			recordContentionAndEmitIfNew(trainId, blockedBlock, owningTrain)
@@ -1121,6 +1133,8 @@ class DefaultPathReservationService(
 		// Try to reserve path to each semaphore until one succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
 		var attemptCount = 0
+		// Issue #937: permanently-impossible target count; see classifyExhaustedSemaphores.
+		var geometricAttempts = 0
 		for (semaphore in semaphores) {
 			attemptCount++
 			logger.trace {
@@ -1234,15 +1248,42 @@ class DefaultPathReservationService(
 						"reservePathToAnyNextSemaphore: Path to $semaphore geometrically impossible " +
 							"(${result.reason}), trying next"
 					}
+					geometricAttempts++
 					lastResult = recordAttemptResult(lastResult, result)
 					continue
 				}
 			}
 		}
 
-		// All semaphores tried, all paths blocked
+		// All semaphores tried, none reservable.
+		return classifyExhaustedSemaphores(lastResult, geometricAttempts, attemptCount)
+	}
+
+	/**
+	 * Final classification for [reservePathToAnyNextSemaphore] once every target semaphore has been
+	 * tried, applying Issue #937's permanence gate to the outer aggregation.
+	 *
+	 * A geometric result may stand only if **every** attempted semaphore was permanently
+	 * impossible ([geometricAttempts] == [attemptCount]). If even one was merely blocked it can
+	 * free up, so the attempt is contention and the caller must wait rather than throw — the same
+	 * rule [classifyExhaustedAttempt] applies to a single `reservePath`'s candidates, and its KDoc
+	 * carries the full rationale.
+	 *
+	 * Extracted so [reservePathToAnyNextSemaphore] stays within its method-length budget.
+	 */
+	private fun classifyExhaustedSemaphores(
+		lastResult: PathReservationService.ReservationResult?,
+		geometricAttempts: Int,
+		attemptCount: Int
+	): PathReservationService.ReservationResult {
 		logger.debug {
-			"reservePathToAnyNextSemaphore: All $attemptCount path(s) blocked"
+			"reservePathToAnyNextSemaphore: all $attemptCount path(s) exhausted " +
+				"($geometricAttempts geometrically impossible)"
+		}
+		if (lastResult is PathReservationService.ReservationResult.GeometricallyImpossible &&
+			geometricAttempts < attemptCount
+		) {
+			return PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 		}
 		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 	}
@@ -2434,15 +2475,34 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * First-hit-wins recorder for [reservePath]'s `firstGeometricFailure` tracker (Issue #903):
-	 * returns [current] unchanged if already set, otherwise [reason]. Extracted so the call site
-	 * in [reservePath]'s candidate loop stays a single line, keeping that method's cyclomatic
+	 * Permanent geometric impossibilities seen while trying a request's candidate paths.
+	 *
+	 * Two facts, deliberately kept apart (Issue #937):
+	 * - [reason] is the **first** one hit, because a geometric reason is the most informative
+	 *   thing to report and later candidates must not overwrite it (the Issue #903 ruling, which
+	 *   still stands for reporting).
+	 * - [count] is how many candidates hit one, because whether the *request* is permanently
+	 *   unsatisfiable is an AND over candidates, not an OR. One impossible candidate alongside a
+	 *   merely-busy one means "wait and retry", not "give up".
+	 *
+	 * @property reason First geometric failure reason, or `null` if no candidate hit one.
+	 * @property count Number of candidates that failed geometrically.
+	 */
+	private data class GeometricFailures(
+		val reason: String? = null,
+		val count: Int = 0
+	)
+
+	/**
+	 * Records one geometric candidate failure: keeps the first [reason], increments the count
+	 * (Issue #903 for the reason, Issue #937 for the count). Extracted so the call site in
+	 * [reservePath]'s candidate loop stays a single line, keeping that method's cyclomatic
 	 * complexity under threshold.
 	 */
 	private fun recordGeometricFailureOnce(
-		current: String?,
+		current: GeometricFailures,
 		reason: String
-	): String? = current ?: reason
+	): GeometricFailures = GeometricFailures(current.reason ?: reason, current.count + 1)
 
 	/**
 	 * Issue #904 root-cause fix (traffic-simulation-expert ruling): builds the PathInfo passed to
@@ -2599,10 +2659,10 @@ class DefaultPathReservationService(
 	 * [StartSignalResult.ConfigFailed] — must not be recorded as a geometric impossibility).
 	 */
 	private fun recordG4FailureOnce(
-		current: String?,
+		current: GeometricFailures,
 		signalResult: StartSignalResult,
 		candidateIndex: Int
-	): String? =
+	): GeometricFailures =
 		if (signalResult == StartSignalResult.RejectedG4) {
 			recordGeometricFailureOnce(
 				current,

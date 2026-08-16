@@ -2679,24 +2679,33 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - second train
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
-			// Issue #903: among the semaphores reservePathToAnyNextSemaphore tries for the
-			// second train, at least one candidate is a permanent geometric impossibility
-			// (rear-facing START or unconfigurable switch), not merely blocked by the first
-			// train -- first-hit-wins classification surfaces that instead of AllPathsBlocked.
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+			// Issue #937: the second train's candidates are mixed — one is a permanent geometric
+			// impossibility (rear-facing START or unconfigurable switch), but another is merely
+			// held by the first train, which will release it on moving. A mixed attempt is
+			// contention, not permanent impossibility, so the second train must be told to wait.
+			// Under #903's first-hit-wins this reported GeometricallyImpossible, which makes
+			// InOutWorker throw and kills the run over a blockage that clears by itself.
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 		}
 
 		/**
-		 * Issue #903 regression: a `[GeometricallyImpossible, AllPathsBlocked]` candidate
-		 * ordering (geometric FIRST, contention SECOND) must return `GeometricallyImpossible`,
-		 * not `AllPathsBlocked`. Under the old unconditional `lastResult` overwrite, the three
-		 * contention branches (bypass-rollback, AllPathsBlocked, NoPathExists) silently replaced
-		 * an earlier geometric result, so `InOutWorker` would spin on `waitUntil(pathFree)`
-		 * retrying a path that will never become available. The fix routes every `lastResult`
-		 * write through `recordAttemptResult`, which preserves the permanent geometric result.
+		 * Issue #937: a `[GeometricallyImpossible, AllPathsBlocked]` mixed attempt must return
+		 * `AllPathsBlocked`, because the attempt as a whole is **not** permanently impossible —
+		 * the contention candidate can become free, and then a retry succeeds.
 		 *
-		 * This MUST fail under the old unconditional-overwrite logic (revert the fix and the
-		 * assertion below flips to `AllPathsBlocked`).
+		 * ## Why this reverses the Issue #903 ruling on this case
+		 *
+		 * #903 fixed a real defect: the contention branches silently overwrote an earlier
+		 * geometric result, losing it entirely. Its remedy was first-hit-wins, which conflated
+		 * two separate questions — *which reason is worth reporting* (a geometric one, yes) and
+		 * *whether the request is permanently unsatisfiable* (only if EVERY candidate is). The
+		 * second must be an AND over candidates. Reporting one impossible candidate as a verdict
+		 * on the whole attempt parks a train forever on ordinary contention:
+		 * `InOutWorker` throws `SimulationException` on `GeometricallyImpossible` rather than
+		 * waiting, and the renderer tells the model never to retry the request.
+		 *
+		 * The reason string still uses first-hit-wins — that part of #903 stands. Only the
+		 * permanence gate changed.
 		 *
 		 * Fixture `geometric-priority.xml` (header comment documents the topology): `doB1` is
 		 * the START; `InOutC` (geometric candidate, route needs the unconfigurable vB A<->D
@@ -2707,7 +2716,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		 * unconfigurable switch (GeometricallyImpossible).
 		 */
 		@Test
-		fun `geometric candidate enumerated before contention is preserved over the contention result`() {
+		fun `a mixed geometric and contention attempt stays retryable`() {
 			// Fresh context from the geometric-priority fixture (the class-level @BeforeEach
 			// loads vyhybna.xml, so this test builds its own context/service for this topology).
 			val ctx =
@@ -2752,13 +2761,37 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Probe: oriented overload from doB1. Candidates enumerate as [InOutC, B]
 			// (prioritizeInOuts). InOutC (first) -> GeometricallyImpossible; B (second) ->
-			// AllPathsBlocked. recordAttemptResult must preserve the geometric result.
+			// AllPathsBlocked. Not every candidate is impossible, so the attempt is retryable.
 			val result = svc.reservePathToAnyNextSemaphore("probe", doB1)
 
 			assertThat(result)
 				.withMessage(
-					"a geometric candidate enumerated BEFORE a contention candidate must surface " +
-						"GeometricallyImpossible, not be overwritten by the later AllPathsBlocked"
+					"one impossible candidate does not make the attempt permanently impossible — " +
+						"the blocked candidate can free up, so the caller must be told to wait"
+				).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		}
+
+		/**
+		 * The other half of Issue #937's gate: when there is genuinely nothing to wait for, the
+		 * permanent verdict must still be reported.
+		 *
+		 * Without this, the AND could be satisfied vacuously or the downgrade could swallow every
+		 * geometric result, and `InOutWorker` would spin on `waitUntil(pathFree)` forever instead
+		 * of failing fast on a misconfigured network — the failure mode Issue #903 fixed. The
+		 * `doB1 -> doB2` diversion on `vyhybna.xml` has exactly one candidate and it needs the
+		 * unconfigurable `vB` join, so `count == attemptedPaths` holds and the verdict stands.
+		 */
+		@Test
+		fun `an attempt whose every candidate is geometric still reports impossible`() {
+			val doB1 = findSemaphoreByName("doB1")
+			val doB2 = findSemaphoreByName("doB2")
+
+			val result = service.reservePath("all-geometric-train", doB1, doB2)
+
+			assertThat(result)
+				.withMessage(
+					"every candidate is permanently impossible, so the caller must fail fast " +
+						"rather than wait for a blockage that will never clear"
 				).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		}
 	}
