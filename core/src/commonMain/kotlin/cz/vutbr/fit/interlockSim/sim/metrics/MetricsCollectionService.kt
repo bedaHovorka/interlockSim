@@ -79,10 +79,15 @@ interface MetricsCollectionService {
 	/**
 	 * Ids of trains that still hold at least one block reservation, logged at WARN when non-empty.
 	 *
-	 * Intended to be called **once, at run end, on a quiesced simulation**, where a non-empty result
-	 * means reservations leaked: those trains never had their counts drained, so their journeys were
-	 * never credited and the blocks they hold were never returned to the network. Called mid-run it
-	 * simply lists the trains under way, which is not a fault.
+	 * Intended to be called **once, at run end, on a quiesced simulation**. A non-empty result is not
+	 * by itself a fault: it is expected when the run was stopped early (manual stop, time limit, or a
+	 * deadlock that left trains mid-journey), because those trains legitimately still hold their
+	 * sections. It is a **leak** only on a natural completion — a run that reached its scheduled end
+	 * yet still has outstanding reservations, meaning those trains' counts never drained, their
+	 * journeys were never credited, and the blocks they hold were never returned (the Issue #936
+	 * failure). The caller, which knows the run-end cause, is the one that can tell the two apart;
+	 * this method only reports the observed state and logs it for visibility. Called mid-run it simply
+	 * lists the trains under way, which is also not a fault.
 	 *
 	 * Issue #936 is the failure that motivated it: a granted full-span route froze a train's stored
 	 * path, and every later hop-wise request was refused as non-contiguous, so the reservations were

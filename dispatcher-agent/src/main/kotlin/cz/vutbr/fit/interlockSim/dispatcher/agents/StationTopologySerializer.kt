@@ -104,6 +104,10 @@ object StationTopologySerializer {
 	 */
 	private const val TRAIN_NAME_PLACEHOLDER = "<exact train id from this cycle's message>"
 
+	/** Shared `request_route` argument fragments emitted by every worked example (Issue #936 / Sonar S1192). */
+	private const val FROM_ENDPOINT_ARG = ", fromEndpointName=\""
+	private const val TO_ENDPOINT_ARG = "\", toEndpointName=\""
+
 	/**
 	 * Extracts the static [StationTopology] from a live simulation environment.
 	 *
@@ -303,9 +307,9 @@ object StationTopologySerializer {
 			.append(destination)
 			.append("\", call request_route(trainName=")
 			.append(TRAIN_NAME_PLACEHOLDER)
-			.append(", fromEndpointName=\"")
+			.append(FROM_ENDPOINT_ARG)
 			.append(exampleFrom)
-			.append("\", toEndpointName=\"")
+			.append(TO_ENDPOINT_ARG)
 			.append(entryTarget)
 			.append("\"), then keep reserving forward section by section as it advances. A route ")
 			.append("whose two endpoints are BOTH entry/exit points is refused.")
@@ -333,9 +337,9 @@ object StationTopologySerializer {
 			.append(exampleTo)
 			.append("\", call request_route(trainName=")
 			.append(TRAIN_NAME_PLACEHOLDER)
-			.append(", fromEndpointName=\"")
+			.append(FROM_ENDPOINT_ARG)
 			.append(exampleFrom)
-			.append("\", toEndpointName=\"")
+			.append(TO_ENDPOINT_ARG)
 			.append(exampleTo)
 			.append("\").")
 	}
@@ -354,12 +358,12 @@ object StationTopologySerializer {
 	) {
 		if (topology.signals.size < 2) return
 		sb
-			.append(" EXAMPLE (single section — usually preferable, because it holds fewer blocks): ")
+			.append(" EXAMPLE (single section — the legal inter-signal shape, which holds fewer blocks): ")
 			.append("request_route(trainName=")
 			.append(TRAIN_NAME_PLACEHOLDER)
-			.append(", fromEndpointName=\"")
+			.append(FROM_ENDPOINT_ARG)
 			.append(topology.signals[0].name)
-			.append("\", toEndpointName=\"")
+			.append(TO_ENDPOINT_ARG)
 			.append(topology.signals[1].name)
 			.append("\").")
 	}

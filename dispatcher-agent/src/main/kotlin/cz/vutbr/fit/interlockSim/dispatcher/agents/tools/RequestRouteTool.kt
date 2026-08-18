@@ -125,8 +125,9 @@ class RequestRouteTool(
 		"Request the interlocking to find and atomically reserve a free path for a named train, between " +
 			"any two endpoints from the InOuts or Signals lists. Reserve ONE section at a time: at least " +
 			"one endpoint must be a Signal. A route from one InOut to another spans the whole station, " +
-			"holds every block in between, and is refused. Fire-and-forget: returns once the request is " +
-			"emitted; the reservation outcome shows up in the next cycle's message."
+			"holds every block in between, and is refused — unless this network has no Signals, in which " +
+			"case a full span is the only expressible route. Fire-and-forget: returns once the request " +
+			"is emitted; the reservation outcome shows up in the next cycle's message."
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(
@@ -156,15 +157,17 @@ class RequestRouteTool(
 			DomainToolParameter(
 				name = "toEndpointName",
 				description =
-					"Where the train is going TO. For an end-to-end route this MUST be that train's " +
-						"destination — the name printed after \"->\" in its row of the train list — " +
-						"otherwise the request is rejected. For a section route it is a Signal on the way " +
-						"there. Never pass the end the train is departing from: that reserves the line " +
-						"against the train itself. Exact name, copied verbatim from the InOuts or " +
-						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
-						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
-						"there, do not call this tool. Do NOT pass a Block ID (e.g. a name from the " +
-						"Blocks list, such as \"kA\") — a Block ID names a piece of track, not an endpoint.",
+					"Where the train is going TO. An InOut is a legal target only for the FINAL section " +
+						"that reaches the train's destination — the name printed after \"->\" in its row of " +
+						"the train list — and the origin must then be a Signal, not an InOut; any other " +
+						"InOut target is rejected as the wrong destination, and one InOut to another is " +
+						"refused outright. For every other section the target is a Signal on the way there. " +
+						"Never pass the end the train is departing from: that reserves the line against " +
+						"the train itself. Exact name, copied verbatim from the InOuts or Signals list in " +
+						"the STATION TOPOLOGY section of your system prompt. Do not abbreviate, translate, " +
+						"or invent a name — if the name you want isn't listed there, do not call this " +
+						"tool. Do NOT pass a Block ID (e.g. a name from the Blocks list, such as \"kA\") — " +
+						"a Block ID names a piece of track, not an endpoint.",
 				type = DomainToolParameterType.String,
 				required = true
 			)
@@ -310,13 +313,15 @@ class RequestRouteTool(
 	 * Refuses a route whose two endpoints are both InOuts — a reservation spanning the station from
 	 * entry to exit (Issue #936).
 	 *
-	 * ## Why this is checked before the train is even resolved
+	 * ## Why this is checked outside the destination-dependent block
 	 *
 	 * The shape is illegal regardless of which train asked, so it does not belong inside the
 	 * `declaredDestinationOf(...)` block that guards the other endpoint rules: that block is skipped
 	 * whenever the destination is unknown (no ports wired, or a train that is neither queued nor
-	 * active), and a full-span reservation is exactly as damaging in that case. See
-	 * [RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT] for what a granted one does to the registry.
+	 * active), and a full-span reservation is exactly as damaging in that case. It is therefore run
+	 * after train resolution (so an unresolvable name is still reported as UNKNOWN_TRAIN — identity
+	 * before shape) but before that block. See [RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT] for what a
+	 * granted one does to the registry.
 	 *
 	 * ## Why "both endpoints are InOuts" rather than "not the last hop"
 	 *

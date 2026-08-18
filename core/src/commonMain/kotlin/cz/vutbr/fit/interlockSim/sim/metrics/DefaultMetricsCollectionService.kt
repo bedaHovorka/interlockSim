@@ -171,20 +171,20 @@ class DefaultMetricsCollectionService(
 	}
 
 	override fun reportUnreleasedReservations(): Set<String> {
-		val leaked = activeReservationCount.keys.toSet()
-		if (leaked.isNotEmpty()) {
+		val holding = activeReservationCount.keys.toSet()
+		if (holding.isNotEmpty()) {
+			val trainCount = holding.size
+			val reservationCount = blockReservedAt.size
 			logger.warn {
-				"Unreleased block reservations at run end: ${leaked.size} train(s) still hold " +
-					"$blockReservedAtSize reservation(s) — ${leaked.sorted().joinToString(", ")}. " +
-					"Their journeys were never credited and those blocks were never returned to the " +
-					"network (see Issue #936)."
+				"$trainCount train(s) still hold $reservationCount block reservation(s) at run end — " +
+					"${holding.sorted().joinToString(", ")}. This is expected when the run was stopped " +
+					"early (manual stop, time limit, or deadlock); it is a leak only on a natural " +
+					"completion, where those journeys were never credited and the blocks never " +
+					"returned (see Issue #936)."
 			}
 		}
-		return leaked
+		return holding
 	}
-
-	/** Outstanding reservation count, named so the WARN above stays inside the line-length limit. */
-	private val blockReservedAtSize: Int get() = blockReservedAt.size
 
 	override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) {
 		listeners += listener

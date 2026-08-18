@@ -14,12 +14,15 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
@@ -223,5 +226,67 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		// Metrics are context-scoped, so they remain measurable for any main process.
 		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
 		assertThat(outcome.conflicts, "conflicts").isNotNull()
+	}
+
+	// ── Leak-gauge wiring (Issue #936, review Minor #5) ──────────────────────
+
+	/**
+	 * The leak gauge has thorough unit tests on `DefaultMetricsCollectionService`, but the single
+	 * production call site — `DispatcherRunSummaries.railwayOutcomeFrom` resolving the scoped
+	 * `MetricsCollectionService` and calling `reportUnreleasedReservations()` once at run end — had
+	 * no test. A regression that drops that one line would pass every other test silently: the gauge
+	 * still works in isolation, it is just never consulted, so a leaked reservation reads as a slow
+	 * run exactly as it did before #936.
+	 *
+	 * Rather than reproduce a real #936 leak (which needs a full LLM dispatcher run) this pins the
+	 * *wiring*: a spy standing in for the scoped metrics service records whether the method was
+	 * called at all, and `railwayOutcomeFrom` is invoked on its scope. The spy returns an empty leak
+	 * set because the assertion is about the call, not the leak — the return value is deliberately
+	 * not folded into `RailwayOutcome` (see the PR), so it is not otherwise observable.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("railwayOutcomeFrom invokes the leak gauge on the scoped metrics service (Issue #936)")
+	fun railwayOutcomeFromInvokesLeakGauge() {
+		val context = createAiContext()
+		val spy = LeakGaugeSpy()
+		context.scope.declare<MetricsCollectionService>(spy)
+
+		DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
+
+		assertThat(spy.reportUnreleasedReservationsInvoked, "leak gauge invoked").isTrue()
+	}
+
+	/**
+	 * Stand-in [MetricsCollectionService] that records whether [reportUnreleasedReservations] was
+	 * called, so the wiring test can prove the production run-end path consults the leak gauge
+	 * without a log-capture harness. [getSnapshot] returns a minimal valid snapshot so the rest of
+	 * `railwayOutcomeFrom` (which reads `completedTrains`/`conflictCount`) does not throw; the
+	 * listener methods are no-ops because `railwayOutcomeFrom` never subscribes.
+	 */
+	private class LeakGaugeSpy : MetricsCollectionService {
+		var reportUnreleasedReservationsInvoked = false
+
+		override fun getSnapshot(): MetricsSnapshot =
+			MetricsSnapshot(
+				time = 0.0,
+				conflictCount = 0,
+				completedTrains = 0,
+				throughput = 0.0,
+				totalWaitSeconds = 0.0,
+				averageWaitSeconds = 0.0,
+				occupiedBlocks = 0,
+				totalBlocks = 0,
+				utilization = 0.0
+			)
+
+		override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) = Unit
+
+		override fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit) = Unit
+
+		override fun reportUnreleasedReservations(): Set<String> {
+			reportUnreleasedReservationsInvoked = true
+			return emptySet()
+		}
 	}
 }
