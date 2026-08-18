@@ -720,9 +720,10 @@ class DefaultPathReservationService(
 					val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
 					val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
 					// If the registry's merge fail-safe STILL aborted
-					// (PathReservationRegistry.mergePathInfo's KDoc lists the three reasons) --
-					// now only the genuinely pathological ones, duplicated new-start or the
-					// cycle guard -- release exactly what THIS candidate acquired --
+					// (PathReservationRegistry.mergePathInfo's KDoc lists the four reasons) --
+					// now only the genuinely pathological ones: duplicated new-start, the
+					// direction reversal guard (Issue #944), or the cycle guard -- release
+					// exactly what THIS candidate acquired --
 					// transactionally complete, matching Step 2g's own rollback -- rather than
 					// leaving an orphaned RESERVED tail for OrphanReservationSweeper (which is
 					// not even wired in :fast-sim or bare-:core).
