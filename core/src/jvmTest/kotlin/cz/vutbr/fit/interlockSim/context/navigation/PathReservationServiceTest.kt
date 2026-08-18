@@ -3512,6 +3512,117 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 	}
 
+	/**
+	 * Regression tests for Issue #938: a PathInfo whose start is a switch (vA/vB) makes every
+	 * subsequent merge non-contiguous, freezing the train's PathInfo for the rest of the run.
+	 *
+	 * Root cause: [DefaultPathReservationService.forwardOnlyPathInfo] walked the already-owned
+	 * prefix section-by-section and used whatever separator it landed on as the new PathInfo
+	 * start — even when that separator was a [DynamicRailSwitch]. Routes run signal-to-signal;
+	 * a switch is interior, never an endpoint. Using a switch as PathInfo.start meant
+	 * `new.start != old.target` on every merge attempt (old path ended at a semaphore),
+	 * triggering Step 0a's non-contiguous abort every time.
+	 *
+	 * Fix: when the trim-point separator is a [DynamicRailSwitch], [forwardOnlyPathInfo]
+	 * falls back to the original `start` (which must be a semaphore or InOut) and includes
+	 * the full path, so PathInfo is always semaphore/InOut-bounded.
+	 */
+	@Nested
+	inner class SwitchStartPathInfoRegression {
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid[Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == name) return cell
+				}
+			}
+			throw IllegalStateException("Semaphore '$name' not found in grid")
+		}
+
+		/**
+		 * Block whose two endpoint separators (by name) are [first] and [second].
+		 * vyhybna.xml blocks carry no XML name of their own; they are addressed by endpoints.
+		 */
+		private fun blockBetween(
+			first: String,
+			second: String
+		): DynamicTrackBlock {
+			fun separatorName(sep: PathSeparator): String? =
+				when (sep) {
+					is DynamicRailSemaphore -> sep.name
+					is DynamicRailSwitch -> sep.name
+					is DynamicInOut -> sep.name
+					else -> null
+				}
+			return simulationContext.getGraph().values()
+				.filterIsInstance<DynamicTrackBlock>()
+				.firstOrNull { block ->
+					block.ends().mapNotNull { separatorName(it) }.toSet() == setOf(first, second)
+				} ?: throw IllegalStateException("No block found between '$first' and '$second'")
+		}
+
+		/**
+		 * Issue #938: when the already-owned prefix of a forward reservation ends at a switch
+		 * (e.g. vB on the k2 siding branch) and the first new block is right after that switch,
+		 * [DefaultPathReservationService.forwardOnlyPathInfo] used to record the switch as
+		 * PathInfo.start. The resulting PathInfo was malformed (a route starts at a semaphore,
+		 * never at a switch), and every subsequent merge aborted with
+		 * "non-contiguous merge" because `new.start` (switch) ≠ `old.target` (semaphore).
+		 *
+		 * After the fix, a switch trim-point falls back to the original semaphore start, so the
+		 * registered PathInfo is always semaphore/InOut-bounded and the merge succeeds.
+		 *
+		 * Topology exercised (vyhybna.xml siding branch k2):
+		 * ```
+		 * doA2 → [k2_block] → doB2 → [junction_block] → vB → [vB_doB1_block] → doB1
+		 * ```
+		 * After the first hop (all 3 blocks owned), the vB_doB1_block is surgically released
+		 * so that the second reservation has k2+junction as already-owned and vB_doB1 as new.
+		 * forwardOnlyPathInfo then lands on vB (switch) as the trim-point separator.
+		 */
+		@Test
+		fun `PathInfo start is not a switch when trim-point separator is a switch (issue 938)`() {
+			// Given: the siding branch: doA2 → k2 → doB2 → junction → vB → vB_doB1 → doB1
+			val doA2 = findSemaphoreByName("doA2")
+			val doB1 = findSemaphoreByName("doB1")
+			// The block that comes AFTER the switch vB — its reservedFrom will equal doA2
+			// (tryAtomicReservation calls block.setUpPath(start=doA2, …) for all new blocks).
+			val vBDoB1Block = blockBetween("vB", "doB1")
+
+			// Reserve from doA2 to doB1 — all three blocks (k2, junction, vB_doB1) are new.
+			val result1 = service.reservePath("train1", doA2, doB1)
+			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Surgically free only vB_doB1_block so that the SECOND reservation finds
+			// k2 + junction already owned but vB_doB1 new (the trim-point will be vB, a switch).
+			// All blocks are reserved from doA2 (tryAtomicReservation uses start as the from-sep).
+			vBDoB1Block.cancelPathSetup(doA2)
+			registry.unregisterBlock("train1", vBDoB1Block)
+
+			// Clear the stored PathInfo so registering the second hop does not attempt a merge
+			// (the first PathInfo ended at doB1; we want to see forwardOnlyPathInfo's result
+			// in isolation, stored fresh as the only entry).
+			registry.restorePathInfo("train1", null)
+
+			// When: reserve from doA2 to doB1 again.
+			// forwardOnlyPathInfo walks k2 (owned) → doB2; junction (owned) → vB (switch);
+			// finds vB_doB1 (new) at trim-point vB.
+			// Before fix: returned PathInfo(start=vB) — switch-start defect.
+			// After fix:  returns PathInfo(start=doA2) — semaphore-bounded, correct.
+			val result2 = service.reservePath("train1", doA2, doB1)
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Then: PathInfo.start must be the bounding semaphore doA2, never the switch vB.
+			val pathInfo = registry.getPathInfo("train1")
+			assertThat(pathInfo).isNotNull()
+			assertThat(pathInfo!!.start)
+				.isNotInstanceOf<DynamicRailSwitch>()
+			assertThat(pathInfo.start)
+				.isEqualTo(doA2)
+		}
+	}
+
 	private class RecordingListener : BlockOccupancyListener {
 		val events = mutableListOf<BlockOccupancyEvent>()
 
