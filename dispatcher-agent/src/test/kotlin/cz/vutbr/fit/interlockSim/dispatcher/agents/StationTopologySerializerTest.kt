@@ -116,7 +116,9 @@ class StationTopologySerializerTest {
 			assertThat(prompt).contains("NOT valid request_route arguments")
 			// Issue #847 cleanup pass: anti-hallucination warning + worked example.
 			assertThat(prompt).contains("A Block ID that looks similar to an InOut name")
-			assertThat(prompt).contains("EXAMPLE (end-to-end route)")
+			// Issue #936: the worked example is the entry route now — the InOut-to-InOut form it
+			// used to demonstrate is refused as ROUTE_SPANS_ENTRY_TO_EXIT.
+			assertThat(prompt).contains("EXAMPLE (entry route)")
 
 			// Issue #847 round 2: signals are as valid as InOuts for request_route, and the prompt
 			// must say so — advertising InOuts only left the model unable to reserve single sections
@@ -193,11 +195,15 @@ class StationTopologySerializerTest {
 		)
 		assertThat(text).contains("A->B: U3, U4")
 		// Issue #847 cleanup pass: worked example, with a real Block ID contrasted against it.
-		assertThat(text).contains("from \"A\" to \"B\"")
+		// Issue #936: one signal is enough to build the entry route, so the example now reserves
+		// A -> L1 rather than spanning A -> B, while still naming B as where the train is bound.
+		assertThat(text).contains("entered at \"A\"")
+		assertThat(text).contains("bound for \"B\"")
+		assertThat(text).contains("fromEndpointName=\"A\", toEndpointName=\"L1\"")
 		assertThat(text).contains("Do NOT pass \"U3\" as an endpoint")
-		// Issue #847 round 2: a single signal cannot form a section hop, so only the end-to-end
+		// Issue #847 round 2: a single signal cannot form a section hop, so only the entry-route
 		// example is emitted here — the section example needs two signals.
-		assertThat(text).contains("EXAMPLE (end-to-end route)")
+		assertThat(text).contains("EXAMPLE (entry route)")
 		assertThat(text.contains("EXAMPLE (single section")).isEqualTo(false)
 	}
 
@@ -219,6 +225,36 @@ class StationTopologySerializerTest {
 		// which is what starved concurrent trains before this round.
 		assertThat(text).contains("EXAMPLE (single section")
 		assertThat(text).contains("fromEndpointName=\"L1\", toEndpointName=\"L2\"")
+	}
+
+	/**
+	 * Issue #936: the worked example is the shape the model copies, and it used to demonstrate
+	 * `request_route(fromEndpointName="A", toEndpointName="B")` — an InOut-to-InOut span across the
+	 * whole station. That call is now refused outright
+	 * ([cz.vutbr.fit.interlockSim.dispatcher.RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT]), so a prompt
+	 * still teaching it would spend a tool call per cycle on a guaranteed rejection.
+	 *
+	 * The measured runs behind #936 show the model emitting roughly two such calls per run in every
+	 * prompt era, which is what this example was producing.
+	 */
+	@Test
+	@DisplayName("toPromptText() never demonstrates an InOut-to-InOut route (Issue #936)")
+	fun toPromptTextDoesNotDemonstrateFullSpanRoute() {
+		val topology =
+			StationTopology(
+				inOuts = listOf("A", "B"),
+				signals = listOf(SignalId("L1"), SignalId("L2")),
+				switches = emptyList(),
+				blocks = emptyList(),
+				routes = emptyList()
+			)
+
+		val text = StationTopologySerializer.toPromptText(topology)
+
+		assertThat(text.contains("fromEndpointName=\"A\", toEndpointName=\"B\""), "full-span example")
+			.isEqualTo(false)
+		assertThat(text.contains("EXAMPLE (end-to-end route)"), "end-to-end example heading")
+			.isEqualTo(false)
 	}
 
 	@Test

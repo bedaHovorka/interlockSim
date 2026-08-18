@@ -162,10 +162,28 @@ class DefaultMetricsCollectionService(
 				averageWaitSeconds = avgWait,
 				occupiedBlocks = occupied,
 				totalBlocks = total,
-				utilization = utilization
+				utilization = utilization,
+				trainsHoldingReservations = activeReservationCount.size,
+				heldBlocks = blockReservedAt.size
 			)
 		logger.debug { "Metrics snapshot queried: $snapshot" }
 		return snapshot
+	}
+
+	override fun reportUnreleasedReservations(): Set<String> {
+		val holding = activeReservationCount.keys.toSet()
+		if (holding.isNotEmpty()) {
+			val trainCount = holding.size
+			val reservationCount = blockReservedAt.size
+			logger.warn {
+				"$trainCount train(s) still hold $reservationCount block reservation(s) at run end — " +
+					"${holding.sorted().joinToString(", ")}. This is expected when the run was stopped " +
+					"early (manual stop, time limit, or deadlock); it is a leak only on a natural " +
+					"completion, where those journeys were never credited and the blocks never " +
+					"returned (see Issue #936)."
+			}
+		}
+		return holding
 	}
 
 	override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) {

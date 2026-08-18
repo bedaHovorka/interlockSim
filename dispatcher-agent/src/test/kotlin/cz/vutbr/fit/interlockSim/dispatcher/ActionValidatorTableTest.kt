@@ -53,11 +53,18 @@ class ActionValidatorTableTest {
 		/** Default station capacity used in scenarios. */
 		const val CAPACITY = 2
 
+		/**
+		 * The InOut subset of [VALID_ENDPOINTS]; `sigA`/`sigB` are Signals. Supplying it enables the
+		 * [RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT] check (Issue #936), which is otherwise inert.
+		 */
+		val IN_OUT_NAMES: Set<String> = setOf("A", "B", "C", "D")
+
 		/** Standard validator used for single-action scenarios. maxActionsPerTick = 3 (default). */
 		val VALIDATOR =
 			ActionValidator(
 				validEndpointNames = VALID_ENDPOINTS,
-				blockIds = BLOCK_IDS
+				blockIds = BLOCK_IDS,
+				inOutNames = IN_OUT_NAMES
 			)
 
 		// ── Observation builder helpers ────────────────────────────────────────
@@ -224,6 +231,16 @@ class ActionValidatorTableTest {
 										signalAheadName = "sigA" // HELD at sigA, not sigB
 									)
 								),
+							activeCount = 1
+						)
+				),
+				// Both endpoints are InOuts: the route would span the station entry-to-exit (#936).
+				// T1 is RUNNING and bound for B, so every earlier request_route check passes and this
+				// row isolates the span rule — the codes above deliberately keep priority over it.
+				RejectionCode.ROUTE_SPANS_ENTRY_TO_EXIT to (
+					DispatchAction.RequestRoute("T1", "A", "B") to
+						obs(
+							trains = listOf(trainView("T1", TrainPhase.RUNNING, destinationInOutName = "B")),
 							activeCount = 1
 						)
 				),

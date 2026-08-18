@@ -188,7 +188,12 @@ object DispatcherRunSummaries {
 	 * @return the figures available for this run, with `null` for every one that is not.
 	 */
 	fun railwayOutcomeFrom(scope: Scope): RailwayOutcome {
-		val metrics = scope.getOrNull<MetricsCollectionService>()?.getSnapshot()
+		val metricsService = scope.getOrNull<MetricsCollectionService>()
+		// Issue #936: the one run-end, quiesced read shared by the GUI and headless paths, so it is
+		// where a leaked reservation can still be reported. Deliberately not folded into
+		// RailwayOutcome — that record is persisted, and its schema is not in this issue's scope.
+		metricsService?.reportUnreleasedReservations()
+		val metrics = metricsService?.getSnapshot()
 		// getSource is how CoreModule's own scoped definitions reach the context; the run's main
 		// process is only a ShuntingLoop for the shuntingLoop* examples, hence the safe cast.
 		val loop = scope.getSource<DefaultSimulationContext>()?.getMainProcess() as? ShuntingLoop
