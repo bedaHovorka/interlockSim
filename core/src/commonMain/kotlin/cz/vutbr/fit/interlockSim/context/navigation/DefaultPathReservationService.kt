@@ -798,10 +798,12 @@ class DefaultPathReservationService(
 		}
 
 		// All paths tried, all were blocked or impossible.
-		// Issue #903: a permanent geometric impossibility on ANY candidate takes priority over
-		// AllPathsBlocked -- first-hit-wins (traffic-simulation-expert ruling). Extracted into
-		// [classifyExhaustedAttempt] so this branching stays out of reservePath's own cyclomatic
-		// complexity count.
+		// Issue #903/#937: a permanent geometric impossibility on EVERY candidate takes priority
+		// over AllPathsBlocked — the permanence gate is an AND over candidates, not an OR (a single
+		// impossible candidate alongside a merely-busy one is contention, not a dead end). Issue
+		// #903's first-hit-wins still governs *which* reason is reported, not whether the request is
+		// unsatisfiable. Extracted into [classifyExhaustedAttempt] so this branching stays out of
+		// reservePath's own cyclomatic complexity count.
 		return classifyExhaustedAttempt(trainId, geometricFailures, firstBlockedConflict, candidatePaths.size)
 	}
 

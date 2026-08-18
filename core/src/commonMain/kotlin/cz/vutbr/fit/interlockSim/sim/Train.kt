@@ -300,10 +300,12 @@ class Train :
 							null
 						}
 						is PathResult.OwnershipConflict -> {
-							// Temporary condition - blocks reserved for different train
+							// Temporary condition - blocks reserved for different train, or the
+							// reserved path does not yet reach a forward-facing separator (PR #940:
+							// a train waiting for its route to be extended is reported here too).
 							logger.debug {
 								"Train $number: Path blocked by ownership conflict at $where, " +
-									"halting and waiting for dispatcher (will retry after 5s)"
+									"halting and waiting for dispatcher to extend the route"
 							}
 							null
 						}
