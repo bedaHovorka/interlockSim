@@ -2537,6 +2537,16 @@ class DefaultPathReservationService(
 		var currentSeparator = start
 		for ((index, section) in path.withIndex()) {
 			if (section.getTrackBlock() in forwardBlocks) {
+				// Issue #938: a route runs signal-to-signal; a switch is interior, never an
+				// endpoint. If the separator before the first new block is a DynamicRailSwitch
+				// (e.g. vA or vB on the siding branch), using it as PathInfo.start would make
+				// the merge non-contiguous (stored path ends at a semaphore; new path starts at
+				// a switch → new.start != old.target → Step 0a abort). Fall back to `start`
+				// (the bounding semaphore) and include the full path so the PathInfo is always
+				// semaphore/InOut-bounded and the merge can succeed.
+				if (currentSeparator is DynamicRailSwitch) {
+					return pathInfoBuilder.buildPathInfo(start, target, path)
+				}
 				return pathInfoBuilder.buildPathInfo(currentSeparator, target, path.subList(index, path.size))
 			}
 			val staticNext = section.getSecondEnd(currentSeparator)
