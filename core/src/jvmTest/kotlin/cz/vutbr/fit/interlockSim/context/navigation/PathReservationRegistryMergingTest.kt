@@ -682,6 +682,101 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 	}
 
 	@Nested
+	@DisplayName("Direction Reversal Guard (Issue #944)")
+	inner class DirectionReversalGuard {
+		/**
+		 * A route that sends the train straight back over the track section it has just
+		 * traversed must be refused.
+		 *
+		 * **Measured deadlock (`exampleGui shuntingLoopAI 333`).** Train #4, running B → A, was
+		 * granted `zB → doA2` (into the branch), and then a second route `doA2 → zB` — the exact
+		 * reverse of the segment it was on. The occurrence-counting cycle guard saw each of
+		 * `doB2`, `vB`, `zB` only twice, logged "LEGITIMATE CIRCULAR ROUTE" and merged, producing
+		 * an out-and-back reserved path that retraces the same section `k2` in the opposite
+		 * direction. No train can follow it: `DefaultTrainNavigationService.buildPathWithDirection`
+		 * walks the reservation, revisits a (separator, previous) pair, finds the cycle exit
+		 * `doA2` rear-facing, and returns `null` — reported as `OwnershipConflict`, on which the
+		 * train waits unbounded while holding its blocks. The layout deadlocked and the run ended
+		 * with 3 of 7 trains through.
+		 *
+		 * Counting occurrences cannot tell a genuine circular route from a reversal: both revisit
+		 * separators. The direction does distinguish them — a train continuing around a loop
+		 * leaves a separator by a *different* section than the one it arrived on, whereas a
+		 * reversal leaves by the same one.
+		 */
+		@Test
+		fun `mergePathInfo aborts a route that sends the train back over the section it just traversed`() {
+			val trainId = "train_944_reversal"
+
+			// Given: the train has reserved zB → vB → doB1 and stands at doB1, having arrived
+			// over the vB→doB1 section.
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = semaphoreZB,
+					target = semaphoreDoB1,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB, trackVBtoDoB1, semaphoreDoB1)
+				)
+			)
+			val stored = storedPathInfo(trainId)
+
+			// When: a contiguous route is requested that leads straight back the way it came.
+			// Contiguity holds (new.start == old.target == doB1) and its start appears exactly
+			// once, so this reaches the reversal check specifically rather than an earlier guard.
+			val outcome =
+				registry.registerPathInfo(
+					trainId,
+					createPathInfo(
+						start = semaphoreDoB1,
+						target = semaphoreZB,
+						path = listOf(semaphoreDoB1, trackVBtoDoB1, switchVB, trackZBtoVB, semaphoreZB)
+					)
+				)
+
+			// Then: the merge aborts fail-safe and the stored route is untouched, so
+			// reservePath releases what it acquired for the refused candidate (Issue #904).
+			assertThat(outcome).isInstanceOf<PathReservationRegistry.MergeOutcome.Aborted>()
+			assertStoredIsExactly(trainId, stored)
+			assertThat(stored.target).isEqualTo(semaphoreDoB1)
+			assertThat(stored.reservedPath.size).isEqualTo(5)
+		}
+
+		/**
+		 * The guard must not fire on ordinary forward extension — the shape every healthy train
+		 * in the measured run used (`zB → doA1` then `doA1 → A`).
+		 */
+		@Test
+		fun `mergePathInfo still merges a forward extension that leaves by a different section`() {
+			val trainId = "train_944_forward"
+
+			registry.registerPathInfo(
+				trainId,
+				createPathInfo(
+					start = inOutB,
+					target = switchVB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB, trackZBtoVB, switchVB)
+				)
+			)
+
+			val outcome =
+				registry.registerPathInfo(
+					trainId,
+					createPathInfo(
+						start = switchVB,
+						target = semaphoreDoB1,
+						path = listOf(switchVB, trackVBtoDoB1, semaphoreDoB1)
+					)
+				)
+
+			assertThat(outcome).isInstanceOf<PathReservationRegistry.MergeOutcome.Merged>()
+			val merged = registry.getPathInfo(trainId)
+			assertThat(merged).isNotNull()
+			assertThat(merged!!.target).isEqualTo(semaphoreDoB1)
+			assertThat(merged.reservedPath.size).isEqualTo(7)
+		}
+	}
+
+	@Nested
 	@DisplayName("Duplicated New Start (never throws — Issue #834)")
 	inner class CircularRouteValidation {
 		@Test

@@ -165,10 +165,13 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 		// maxDepth = 3 restricts the topological search to the single direct doA1 -> zA route,
 		// the same technique the MergeAbortResourceRelease sibling test (PathReservationServiceTest)
 		// and StartDirectionTests use to exclude vyhybna's longer sibling-branch alternate --
-		// otherwise an unconfigurable switch on that alternate candidate would be classified as
-		// GeometricallyImpossible (Issue #903 first-hit-wins) and mask what THIS test actually
-		// verifies: the START-aspect rollback after this direct candidate's injected signal-config
-		// fault (ConfigFailed, not a geometric rejection).
+		// otherwise an unconfigurable switch on that alternate candidate would surface as a
+		// geometric failure and mask what THIS test actually verifies: the START-aspect rollback
+		// after this direct candidate's injected signal-config fault (ConfigFailed, not a geometric
+		// rejection). Under Issue #937's AND-gate a mixed candidate set (one geometric, one
+		// ConfigFailed) would classify as AllPathsBlocked rather than GeometricallyImpossible, but
+		// the masking effect is the same, so excluding the alternate keeps this test on the direct
+		// candidate's behaviour alone.
 		val result = service.reservePath("faultTrain", doA1, zA, maxDepth = 3)
 
 		// With only the direct candidate, the injected ConfigFailed is ordinary contention (no

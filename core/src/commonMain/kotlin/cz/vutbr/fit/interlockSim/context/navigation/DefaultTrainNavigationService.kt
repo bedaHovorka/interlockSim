@@ -119,10 +119,24 @@ class DefaultTrainNavigationService(
 		val candidatePath = buildPathWithDirection(dynamicSeparator, nextTrackSection, pathInfo)
 		if (candidatePath == null) {
 			logger.debug {
-				"findReservedPathForTrain: no path found from $separator with direction $nextTrackSection"
+				"findReservedPathForTrain: no path found from $separator with direction $nextTrackSection" +
+					" — the reserved path does not reach a forward-facing separator yet, so the train waits"
 			}
-			// No topological path = permanent condition
-			return PathResult.NoTopologicalPath
+			// Reaching here means the train HAS a PathInfo and a next section, so topology is not in
+			// question -- the only genuine topology verdict is the hasTopologicalContinuation check
+			// above. What failed is building a movement path out of the CURRENT RESERVATION STATE,
+			// which the dispatcher can change at any moment. That is ordinary "wait for my route to
+			// be extended", not a permanent fault.
+			//
+			// The measured case: a train running A -> B is granted `A -> doA1`. `doA1` faces west, so
+			// for an eastbound train it is a rear-facing terminus that buildPathWithDirection can
+			// never accept; on reaching `zA` the walk exhausts and returns null. Reported as
+			// NoTopologicalPath, Train.actions() took its unbounded `hold(5.0)` poll and logged
+			// "No topological path exists ... train reached dead-end" every 5 s -- on a network that
+			// has no dead end at all, for a train whose route was simply not extended yet. Reported
+			// as OwnershipConflict it waits on createPathAvailableCondition and resumes the moment
+			// the dispatcher extends the route.
+			return PathResult.OwnershipConflict
 		}
 
 		// Step 3.5: Handle path transitions (Issue #296 Phase 9)

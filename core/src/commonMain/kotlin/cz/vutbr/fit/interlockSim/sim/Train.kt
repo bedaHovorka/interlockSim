@@ -102,6 +102,29 @@ class Train :
 		internal const val MAX_ORIGIN_NO_PATH_RETRIES = 5
 
 		/**
+		 * Maximum number of 5-second retries when navigation reports no usable path **mid-journey**
+		 * before calling [SimulationEnvironment.errorStop].
+		 *
+		 * The mid-journey counterpart of [MAX_ORIGIN_NO_PATH_RETRIES], which guarded only
+		 * `where is DynamicInOut && current == null`. Everything else fell into an `else` branch with
+		 * no counter, no `errorStop` and no state change between iterations, so a train that got here
+		 * logged an error every 5 s until the run's end time while holding its block against every
+		 * train behind it.
+		 *
+		 * **This bound is only sound because `NoTopologicalPath` now means what it says.**
+		 * A train waiting for the dispatcher to extend its route is reported as
+		 * [cz.vutbr.fit.interlockSim.context.navigation.PathResult.OwnershipConflict] and waits on
+		 * `createPathAvailableCondition` instead of reaching this branch — before that change a run
+		 * was measured recovering after 10 such retries, and this bound would have killed it.
+		 * Reaching here now means navigation itself cannot serve this train, which no amount of
+		 * waiting fixes.
+		 *
+		 * Deliberately more generous than the origin bound: a mid-journey train holds track, so the
+		 * diagnosis is worth a little more patience than an unadmitted one.
+		 */
+		internal const val MAX_MID_JOURNEY_NO_PATH_RETRIES = 10
+
+		/**
 		 * Formats the structured TRAIN_APPROVED message payload.
 		 * The format is consumed by [TextReporter]'s regex: `train="([^"]+)"`.
 		 */
@@ -118,6 +141,59 @@ class Train :
 	// Implementation: Either swap start/end positions OR cancel/restore events with train stationary.
 
 	private abstract inner class Site : Process() { // lepsi nazev?
+
+		/**
+		 * Consecutive mid-journey `NoTopologicalPath` results, the counterpart of the origin-InOut
+		 * retry counter. Owned by [holdOrStopAfterNoUsablePath] and reset by [actions] on every
+		 * iteration that yields a usable path, so only *consecutive* failures count — a train that
+		 * moves on has proved navigation works for it, and a later unrelated failure starts at zero.
+		 */
+		private var midJourneyNoPathRetries = 0
+
+		/**
+		 * Waits before the next path query, or stops the simulation when a mid-journey navigation
+		 * failure has repeated [MAX_MID_JOURNEY_NO_PATH_RETRIES] times.
+		 *
+		 * Before this bound existed, a mid-journey [PathResult.NoTopologicalPath] fell into an
+		 * unbounded `hold(5.0)` + `continue` with no counter, no `errorStop`, and nothing in the
+		 * cycle that could change the outcome. A measured `shuntingLoopAI` run logged the same error
+		 * 48 times — every 5 s to the end of the run — while the train held its block against every
+		 * train behind it.
+		 *
+		 * See [MAX_MID_JOURNEY_NO_PATH_RETRIES] for why bounding this is only sound now that a train
+		 * merely waiting for its route to be extended is reported as [PathResult.OwnershipConflict]
+		 * and never reaches here.
+		 *
+		 * Extracted from [actions] to keep that method inside its length and complexity budgets.
+		 *
+		 * @return `true` when the caller must return (the simulation has been stopped).
+		 */
+		private suspend fun holdOrStopAfterNoUsablePath(
+			pathResult: PathResult,
+			where: DynamicPathSeparator
+		): Boolean {
+			if (pathResult is PathResult.NoTopologicalPath) {
+				midJourneyNoPathRetries++
+				if (midJourneyNoPathRetries >= MAX_MID_JOURNEY_NO_PATH_RETRIES) {
+					env.errorStop(
+						SimulationException(
+							"Train $name: navigation reports no usable path from '$where' after " +
+								"$MAX_MID_JOURNEY_NO_PATH_RETRIES retries. The train holds track it cannot leave."
+						)
+					)
+					return true
+				}
+			}
+			/**
+			 * Polling Mechanism Trade-off (Issue #291, PR #358)
+			 *
+			 * Conservative 5-second retry so the train does not freeze silently. Also covers the
+			 * non-`NoTopologicalPath` fall-through (e.g. a path that resolved but yielded no next
+			 * section), which stays unbounded exactly as before.
+			 */
+			hold(5.0)
+			return false
+		}
 
 		/**
 		 * Whether this site is the train's [Front]. The shared [entrySeparator] field tracks the
@@ -209,19 +285,27 @@ class Train :
 										"Network may be misconfigured."
 								}
 							} else {
-								// Not at destination, this is an error
+								// Not at destination, this is an error.
+								// Deliberately does NOT claim a dead end: this branch is reached from
+								// DefaultTrainNavigationService's genuine topology check, and a train
+								// merely waiting for its route to be extended is now reported as
+								// OwnershipConflict instead of landing here (see that class for the
+								// measured case this wording sent down a false dead-end hypothesis).
 								logger.error {
-									"Train $number: No topological path exists from $where. " +
-										"Network may be misconfigured or train reached dead-end."
+									"Train $number: navigation reports no usable path from $where " +
+										"(attempt ${midJourneyNoPathRetries + 1}/$MAX_MID_JOURNEY_NO_PATH_RETRIES; " +
+										"simulation stops after $MAX_MID_JOURNEY_NO_PATH_RETRIES attempts)."
 								}
 							}
 							null
 						}
 						is PathResult.OwnershipConflict -> {
-							// Temporary condition - blocks reserved for different train
+							// Temporary condition - blocks reserved for different train, or the
+							// reserved path does not yet reach a forward-facing separator (PR #940:
+							// a train waiting for its route to be extended is reported here too).
 							logger.debug {
 								"Train $number: Path blocked by ownership conflict at $where, " +
-									"halting and waiting for dispatcher (will retry after 5s)"
+									"halting and waiting for dispatcher to extend the route"
 							}
 							null
 						}
@@ -277,18 +361,13 @@ class Train :
 							}
 							hold(5.0)
 						}
-						else -> {
-							/**
-							 * Polling Mechanism Trade-off (Issue #291, PR #358)
-							 *
-							 * For permanent failures (no topological path) keep the conservative
-							 * 5-second retry so the train does not freeze silently.
-							 */
-							hold(5.0) // Wait 5 seconds before retrying path request
-						}
+						else -> if (holdOrStopAfterNoUsablePath(pathResult, where)) return
 					}
 					continue // Restart loop to retry path request
 				}
+				// The train has a usable path: this iteration is a success, so consecutive-failure
+				// counting starts over (see MAX_MID_JOURNEY_NO_PATH_RETRIES).
+				midJourneyNoPathRetries = 0
 				val nextLength: Double = next!!.length()
 				separatorAction(where, current, next)
 

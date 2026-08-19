@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -420,6 +421,57 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 						// Assert: Path is available
 						assertThat(result).isInstanceOf(PathResult.Available::class)
+					}
+				}
+			}
+		}
+
+		/**
+		 * Regression for the "no topological path exists" deadlock.
+		 *
+		 * Reproduces a measured `shuntingLoopAI` run exactly: Train #2 runs `A -> B` (eastbound),
+		 * the dispatcher asks for `A -> doA1`, and the interlocking grants it — three blocks
+		 * reserved, no complaint. But `doA1` carries `orientation="true"`, so it faces **west**:
+		 * for an eastbound train it is a rear-facing terminus. When the train reaches `zA` — the
+		 * last point it can act on — [DefaultTrainNavigationService.buildPathWithDirection] walks
+		 * the reserved path, never reaches a forward-facing oriented separator, and returns `null`.
+		 *
+		 * That must be reported as [PathResult.OwnershipConflict], not
+		 * [PathResult.NoTopologicalPath]. Nothing here is a topology fault: `zA` continues through
+		 * block `kA` to InOut `A`, and `vyhybna.xml` has no dead end anywhere. The train is simply
+		 * waiting for the dispatcher to extend its route — the same state every other waiting train
+		 * is in — and the classification decides its fate in `Train.actions()`:
+		 * `OwnershipConflict` waits on `createPathAvailableCondition` and wakes the instant the
+		 * route is extended, while `NoTopologicalPath` takes the unbounded `hold(5.0)` poll and
+		 * logs ERROR every five seconds until the run ends.
+		 *
+		 * Measured: with the extension arriving 3 s later the train sailed through; at 39 s it
+		 * stalled for 50 s; in a run where it never arrived the train spun 48 times to the end of
+		 * the run, holding `kA` and blocking everything behind it.
+		 */
+		@Test
+		fun `findReservedPathForTrain reports a rear-facing terminus as a temporary conflict`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val doA1 = grid.getCellAt(16, 8) as DynamicRailSemaphore
+						val zA = grid.getCellAt(14, 8) as DynamicRailSemaphore
+
+						// The grant the dispatcher actually made, for an eastbound train.
+						val reservation = pathService.reservePath("train1", inOutA, doA1)
+						assertThat(reservation)
+							.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+
+						// The query the train makes on arriving at zA.
+						val result = service.findReservedPathForTrain("train1", zA)
+
+						assertThat(result).isInstanceOf(PathResult.OwnershipConflict::class)
 					}
 				}
 			}

@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -92,13 +93,13 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		// The call must fail: every candidate either bypasses the required block (rolled back) or
 		// is blocked, and one bypass candidate is permanently geometrically impossible (the
 		// sem1 -> swA -> sem2 -> swB -> B path needs swA to join F-to-G, a main-to-branch join
-		// that SIMPLE_RIGHT_FALSE cannot make). Issue #903: that permanent geometric result must
-		// surface here instead of being overwritten by the bypass-rollback branch's
-		// AllPathsBlocked -- this test's concern is the bypass-rollback signal/switch cleanup
-		// below, which runs identically regardless of the final result classification.
+		// that SIMPLE_RIGHT_FALSE cannot make). Which failure class comes back is deliberately not
+		// pinned here — this test's concern is the bypass-rollback signal/switch cleanup below,
+		// which runs identically regardless. (It is AllPathsBlocked since Issue #937, because not
+		// every candidate is geometrically impossible; PathReservationServiceTest owns that rule.)
 		assertThat(result)
-			.withMessage("a permanent geometric impossibility on a bypass candidate must surface")
-			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+			.withMessage("a reservation whose every candidate failed must not report success")
+			.isNotInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(service.getReservedBlocks("train1"))
 			.withMessage("a failed reservation must own no blocks")
 			.isEmpty()
@@ -155,13 +156,13 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 
 		// The call must fail: every candidate either bypasses the required block (rolled back) or
 		// is blocked, and the sem1 -> swA -> sem2 candidate is permanently geometrically impossible
-		// (swA must join F-to-G, a main-to-branch join SIMPLE_RIGHT_FALSE cannot make). Issue #903:
-		// that permanent geometric result must surface instead of being overwritten by the
-		// bypass-rollback branch's AllPathsBlocked -- this test's concern is the switch cleanup
-		// below, which runs identically regardless of the final result classification.
+		// (swA must join F-to-G, a main-to-branch join SIMPLE_RIGHT_FALSE cannot make). Which
+		// failure class comes back is deliberately not pinned here — this test's concern is the
+		// switch cleanup below, which runs identically regardless. (It is AllPathsBlocked since
+		// Issue #937; PathReservationServiceTest owns that rule.)
 		assertThat(result)
-			.withMessage("a permanent geometric impossibility on a bypass candidate must surface")
-			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+			.withMessage("a reservation whose every candidate failed must not report success")
+			.isNotInstanceOf<PathReservationService.ReservationResult.Success>()
 		// The transactional rollback extends the block/signal cleanup to switch state: a rejected
 		// candidate may not leave switches locked or registered to the train — that locks track
 		// the train never reserved, blocking other trains from routing through it.

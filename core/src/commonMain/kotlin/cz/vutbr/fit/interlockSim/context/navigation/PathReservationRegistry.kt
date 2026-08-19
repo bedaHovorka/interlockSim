@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyNotifier
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -808,6 +809,61 @@ class PathReservationRegistry(
 		return outcome
 	}
 
+	/**
+	 * Rejects a new route that reverses the train over the section it has just travelled.
+	 *
+	 * A train arrives at `old.target` over the last [TrackSection] of the stored route and must
+	 * leave it over a *different* one. When the new route's first section is that same section,
+	 * the merged path doubles back on itself: the train would have to reverse direction mid-route,
+	 * which is not a route extension at all but a distinct shunting movement the interlocking
+	 * never authorised.
+	 *
+	 * **Why the occurrence counter in [addElementWithCycleDetection] cannot catch this.** That
+	 * guard counts how often a separator appears and only rejects the 3rd occurrence, treating a
+	 * 2nd as a legitimate circular route. Both a genuine loop and a reversal revisit separators
+	 * twice, so counting cannot tell them apart. Direction can: a train continuing around a loop
+	 * leaves a separator by a different section than it arrived on, a reversing train by the same
+	 * one.
+	 *
+	 * **The measured deadlock (Issue #944).** In `exampleGui shuntingLoopAI 333`, Train #4
+	 * (running B → A) was granted `zB → doA2`, then `doA2 → zB`. Each of `doB2`, `vB` and `zB`
+	 * reached only two occurrences, so the merge was accepted and logged as a "LEGITIMATE
+	 * CIRCULAR ROUTE", storing an out-and-back path that retraces section `k2` in the opposite
+	 * direction. Nothing can follow such a path:
+	 * [DefaultTrainNavigationService.buildPathWithDirection] walks the reservation, revisits a
+	 * `(separator, previous)` pair, finds the cycle exit rear-facing and returns `null` — surfaced
+	 * as [PathResult.OwnershipConflict], on which the train waits unbounded while holding its
+	 * blocks. Train #4 stalled at `zB` holding the blocks Train #5 needed to leave `doB1`, and the
+	 * layout deadlocked: the dispatcher observed "no reservable sections ahead" for both trains
+	 * and correctly no-opped for the rest of the run.
+	 *
+	 * Path elements are per-block [DynamicTrackBlock] singletons, so a retraced section is the
+	 * same instance on both sides of the seam and `==` compares exactly (verified against
+	 * `vyhybna.xml`: every forward/backward separator pair yields identical element identity).
+	 *
+	 * **Interaction with commanded reversal.** `Train.reverseDirection()` (GitHub #62) is a
+	 * distinct operation — the train must be at a standstill and a delay models the driver
+	 * changing cab — and it has no production call site today, so it never reaches this guard.
+	 * Should it gain one, the train's stored authority must be **cleared** at that point and a
+	 * fresh route requested from its current position, rather than this guard being relaxed: a
+	 * reversal is a new movement requiring its own clearance, never an extension of the authority
+	 * granted for the outbound journey. Retaining the outbound path across a reversal would make
+	 * the first post-reversal route look exactly like the defect this guard exists to refuse.
+	 *
+	 * @return the abort reason, or `null` when the new route continues the stored one forward.
+	 */
+	private fun reversalAbortReason(
+		trainId: String,
+		old: PathInfo,
+		new: PathInfo
+	): String? {
+		val arrivedOver = old.reservedPath.filterIsInstance<TrackSection>().lastOrNull() ?: return null
+		val departsOver = new.reservedPath.filterIsInstance<TrackSection>().firstOrNull() ?: return null
+		if (arrivedOver != departsOver) return null
+		return "merge for train $trainId would reverse it at ${old.target} back over $arrivedOver, " +
+			"the section it just travelled"
+	}
+
 	private fun addElementWithCycleDetection(
 		element: cz.vutbr.fit.interlockSim.objects.core.PathElement,
 		mergedPath: ArrayPath,
@@ -846,8 +902,9 @@ class PathReservationRegistry(
 	 * ## This method NEVER throws (Issue #834)
 	 *
 	 * Every rejection is a **fail-safe abort**: log a WARN and `return old` unchanged. There are
-	 * three of them — non-contiguous start, duplicated new start, and the 3rd-occurrence cycle
-	 * guard — and they all behave identically from the caller's point of view.
+	 * four of them — non-contiguous start, duplicated new start, the direction reversal guard
+	 * ([reversalAbortReason], Issue #944), and the 3rd-occurrence cycle guard — and they all
+	 * behave identically from the caller's point of view.
 	 *
 	 * This is not stylistic. `registerPathInfo` is called from
 	 * [DefaultPathReservationService.reservePath] Step 2i and from its already-owned early return,
@@ -880,6 +937,7 @@ class PathReservationRegistry(
 	 *
 	 * 0. Abort unless the new path continues the stored one (new.start == old.target)
 	 * 1. Abort unless new.start appears exactly once in new.reservedPath
+	 * 1b. Abort if the new route reverses the train back over the section it just travelled
 	 * 2. Create new ArrayPath and add all elements from old path
 	 * 3. Find overlap point (old.target == new.start)
 	 * 4. Add elements from new path, skipping first occurrence if it overlaps
@@ -998,6 +1056,18 @@ class PathReservationRegistry(
 					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
 			}
 			return MergeOutcome.Aborted(old, reason)
+		}
+
+		// Step 0c: the new route must not send the train back over the section it just
+		// travelled (Issue #944). See [reversalAbortReason] for why occurrence counting alone
+		// cannot catch this.
+		val reversalReason = reversalAbortReason(trainId, old, new)
+		if (reversalReason != null) {
+			logger.warn {
+				"mergePathInfo: aborting $reversalReason. Keeping existing valid PathInfo unchanged. " +
+					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+			}
+			return MergeOutcome.Aborted(old, reversalReason)
 		}
 
 		// Step 1: Create merged path starting from old path
