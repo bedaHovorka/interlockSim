@@ -3555,7 +3555,9 @@ class PathReservationServiceTest : KoinTestBase() {
 					is DynamicInOut -> sep.name
 					else -> null
 				}
-			return simulationContext.getGraph().values()
+			return simulationContext
+				.getGraph()
+				.values()
 				.filterIsInstance<DynamicTrackBlock>()
 				.firstOrNull { block ->
 					block.ends().mapNotNull { separatorName(it) }.toSet() == setOf(first, second)
