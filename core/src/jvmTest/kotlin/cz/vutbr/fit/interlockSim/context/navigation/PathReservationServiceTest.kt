@@ -3575,53 +3575,74 @@ class PathReservationServiceTest : KoinTestBase() {
 		 * After the fix, a switch trim-point falls back to the original semaphore start, so the
 		 * registered PathInfo is always semaphore/InOut-bounded and the merge succeeds.
 		 *
-		 * Topology exercised (vyhybna.xml siding branch k2):
+		 * Topology exercised (vyhybna.xml, off the far end of the k2 siding branch):
 		 * ```
-		 * doA2 → [k2_block] → doB2 → [junction_block] → vB → [vB_doB1_block] → doB1
+		 * doB2 → [junction_block] → vB → [vB_zB_block] → zB
 		 * ```
-		 * After the first hop (all 3 blocks owned), the vB_doB1_block is surgically released
-		 * so that the second reservation has k2+junction as already-owned and vB_doB1 as new.
-		 * forwardOnlyPathInfo then lands on vB (switch) as the trim-point separator.
+		 * After the first hop (both blocks owned), the vB_zB_block is surgically released so that
+		 * the second reservation has the junction block as already-owned and vB_zB as new.
+		 * forwardOnlyPathInfo then lands on vB (a switch) as the trim-point separator, which is
+		 * exactly the shape this test pins.
+		 *
+		 * ## Why this route and not `doA2 → doB1`
+		 *
+		 * `doA2 → doB1` looks like the same shape but is doubly impossible, and must not be
+		 * reintroduced here:
+		 *
+		 * - **No switch position joins its segments at vB.** [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch]
+		 *   only wires `merging↔branch` (BRANCH) and `merging↔mainDir` (MAIN) — never
+		 *   `branch↔mainDir`. At vB, `merging` faces zB, `mainDir` faces doB1 and `branch` faces
+		 *   doB2, so entering from doB2 and leaving toward doB1 is the physically impossible
+		 *   sibling-branch diversion that
+		 *   [DefaultPathReservationService.configureSwitchesInPath] rejects (Issue #742). The only
+		 *   other candidate, `doA2 → vA → doA1 → doB1`, needs vA as `branch↔mainDir` and fails
+		 *   for the same reason — so the request is `GeometricallyImpossible`, never Success.
+		 * - **doA2 is a rear-facing START going east.** `orientation="true"` means it faces
+		 *   B→A, so the G4 guard in [DefaultPathReservationService.configureStartSignal] rejects
+		 *   it regardless of contiguity.
+		 *
+		 * The chosen route avoids both: doB2 faces A→B (forward-facing START), and vB is
+		 * traversed `branch↔merging` = BRANCH, a position that exists.
 		 */
 		@Test
 		fun `PathInfo start is not a switch when trim-point separator is a switch (issue 938)`() {
-			// Given: the siding branch: doA2 → k2 → doB2 → junction → vB → vB_doB1 → doB1
-			val doA2 = findSemaphoreByName("doA2")
-			val doB1 = findSemaphoreByName("doB1")
-			// The block that comes AFTER the switch vB — its reservedFrom will equal doA2
-			// (tryAtomicReservation calls block.setUpPath(start=doA2, …) for all new blocks).
-			val vBDoB1Block = blockBetween("vB", "doB1")
+			// Given: the branch exit past vB: doB2 → junction → vB → vB_zB → zB
+			val doB2 = findSemaphoreByName("doB2")
+			val zB = findSemaphoreByName("zB")
+			// The block that comes AFTER the switch vB — its reservedFrom will equal doB2
+			// (tryAtomicReservation calls block.setUpPath(start=doB2, …) for all new blocks).
+			val vBzBBlock = blockBetween("vB", "zB")
 
-			// Reserve from doA2 to doB1 — all three blocks (k2, junction, vB_doB1) are new.
-			val result1 = service.reservePath("train1", doA2, doB1)
+			// Reserve from doB2 to zB — both blocks (junction, vB_zB) are new.
+			val result1 = service.reservePath("train1", doB2, zB)
 			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			// Surgically free only vB_doB1_block so that the SECOND reservation finds
-			// k2 + junction already owned but vB_doB1 new (the trim-point will be vB, a switch).
-			// All blocks are reserved from doA2 (tryAtomicReservation uses start as the from-sep).
-			vBDoB1Block.cancelPathSetup(doA2)
-			registry.unregisterBlock("train1", vBDoB1Block)
+			// Surgically free only vB_zB_block so that the SECOND reservation finds the junction
+			// block already owned but vB_zB new (the trim-point will be vB, a switch).
+			// Both blocks are reserved from doB2 (tryAtomicReservation uses start as the from-sep).
+			vBzBBlock.cancelPathSetup(doB2)
+			registry.unregisterBlock("train1", vBzBBlock)
 
 			// Clear the stored PathInfo so registering the second hop does not attempt a merge
-			// (the first PathInfo ended at doB1; we want to see forwardOnlyPathInfo's result
+			// (the first PathInfo ended at zB; we want to see forwardOnlyPathInfo's result
 			// in isolation, stored fresh as the only entry).
 			registry.restorePathInfo("train1", null)
 
-			// When: reserve from doA2 to doB1 again.
-			// forwardOnlyPathInfo walks k2 (owned) → doB2; junction (owned) → vB (switch);
-			// finds vB_doB1 (new) at trim-point vB.
+			// When: reserve from doB2 to zB again.
+			// forwardOnlyPathInfo walks junction (owned) → vB (switch);
+			// finds vB_zB (new) at trim-point vB.
 			// Before fix: returned PathInfo(start=vB) — switch-start defect.
-			// After fix:  returns PathInfo(start=doA2) — semaphore-bounded, correct.
-			val result2 = service.reservePath("train1", doA2, doB1)
+			// After fix:  returns PathInfo(start=doB2) — semaphore-bounded, correct.
+			val result2 = service.reservePath("train1", doB2, zB)
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			// Then: PathInfo.start must be the bounding semaphore doA2, never the switch vB.
+			// Then: PathInfo.start must be the bounding semaphore doB2, never the switch vB.
 			val pathInfo = registry.getPathInfo("train1")
 			assertThat(pathInfo).isNotNull()
 			assertThat(pathInfo!!.start)
 				.isNotInstanceOf<DynamicRailSwitch>()
 			assertThat(pathInfo.start)
-				.isEqualTo(doA2)
+				.isEqualTo(doB2)
 		}
 	}
 
