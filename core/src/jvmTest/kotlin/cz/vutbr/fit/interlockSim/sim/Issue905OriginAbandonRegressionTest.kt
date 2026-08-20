@@ -19,7 +19,6 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -27,8 +26,6 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.mockk.every
-import io.mockk.spyk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -73,8 +70,10 @@ private val logger = KotlinLogging.logger {}
  * sim-thread mutation point is introduced, attempt the direct-reproduction test again and
  * update this note.
  *
- * Tests in this class use a `TrainNavigationService` decorator injected via MockK `spyk`
- * to simulate the theoretical race as required by AC5.
+ * Tests in this class use a `TrainNavigationService` decorator injected through
+ * [NavigationDecoratingContext] to simulate the theoretical race as required by AC5. That wrapper
+ * replaced a MockK `spyk` in Issue #943 — see its KDoc for why a spy cannot carry a scenario in
+ * which a train stays suspended.
  */
 @DisplayName("Issue #905: Origin-abandon regression (decorator approach)")
 @Tag("integration-test")
@@ -128,8 +127,7 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 		val context = loadVyhybnaContext()
 		assertThat(context.getInOuts()).isNotEmpty()
 
-		val realRouting = context.getRoutingServices()
-		val realNav = realRouting.getTrainNavigationService()
+		val realNav = context.getRoutingServices().getTrainNavigationService()
 
 		// Decorator: return OwnershipConflict for the FIRST findReservedPathForTrain at a
 		// DynamicInOut (i.e. the origin query) for each train, then delegate to the real service.
@@ -166,23 +164,15 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
 			}
 
-		// Inject the decorator via spyk: only getRoutingServices() is overridden; all other
-		// methods (run, setMainProcess, Koin scope access, kDisco internals) delegate to the
-		// real DefaultSimulationContext.
-		val spyContext = spyk(context)
-		every { spyContext.getRoutingServices() } returns
-			object : RoutingServices {
-				override fun getTopologyNavigator() = realRouting.getTopologyNavigator()
+		// Inject the decorator through a delegating wrapper: only the navigation service is
+		// replaced; everything else (Koin scope access, kDisco internals) goes to the real
+		// DefaultSimulationContext, which still owns the run.
+		val decoratedContext = NavigationDecoratingContext(context, decoratedNav)
 
-				override fun getPathReservationService() = realRouting.getPathReservationService()
-
-				override fun getTrainNavigationService() = decoratedNav
-			}
-
-		val loop = ShuntingLoop(spyContext, 120L)
-		wireSynchronousDispatcher(spyContext, loop)
-		spyContext.setMainProcess(loop)
-		spyContext.run()
+		val loop = ShuntingLoop(decoratedContext, 120L)
+		wireSynchronousDispatcher(decoratedContext, loop)
+		context.setMainProcess(loop)
+		context.run()
 
 		logger.info {
 			"Issue905 test complete: conflictCount=${conflictCount.get()}, " +
