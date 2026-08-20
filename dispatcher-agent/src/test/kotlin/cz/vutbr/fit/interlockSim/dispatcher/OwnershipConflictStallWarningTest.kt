@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -115,6 +114,10 @@ class OwnershipConflictStallWarningTest {
 	/** Stall WARNs that name [trainId]. */
 	private fun warningsNaming(trainId: String): List<String> =
 		warningsContaining(STALL_WARN_FRAGMENT).filter { it.contains(trainId) }
+
+	/** Origin stall WARNs that name [trainId]. */
+	private fun warningsNamingOrigin(trainId: String): List<String> =
+		warningsContaining(ORIGIN_STALL_WARN_FRAGMENT).filter { it.contains(trainId) }
 
 	/** WARN messages containing [fragment]. */
 	private fun warningsContaining(fragment: String): List<String> =
@@ -222,6 +225,216 @@ class OwnershipConflictStallWarningTest {
 		assertThat(warningsContaining(ORIGIN_STALL_WARN_FRAGMENT), name = "origin stall WARNs").isEmpty()
 	}
 
+	/**
+	 * A train the dispatcher never admits gets an **origin-worded** WARN that names it, before the
+	 * run is stopped. The mid-journey test stalls a train that has already left its entry `InOut`
+	 * (`current != null`); this one stalls a train **at** its entry `InOut` (`current == null`), so
+	 * it drives the `atOrigin == true` branch of the stall message (Train.kt:290–297 / 303–308) the
+	 * other test never reaches. The origin wording ("reserve its entry route" / "no entry route
+	 * reserved") is thus pinned, not left untested — the Issue #943 origin-vs-under-way distinction.
+	 */
+	@Test
+	@Timeout(value = 240, unit = TimeUnit.SECONDS)
+	fun originStallWarningNamesTheTrainOnce() {
+		val realNav = context.getRoutingServices().getTrainNavigationService()
+		val stalledTrainId = AtomicReference<String?>(null)
+		// Stall the first train that queries from its entry InOut — `separator is DynamicInOut` —
+		// forever, so it never enters a block and `current` stays null (the `atOrigin` branch).
+		val stallingNav =
+			object : TrainNavigationService {
+				override fun findReservedPathForTrain(
+					trainId: String,
+					separator: PathSeparator
+				): PathResult {
+					if (separator is DynamicInOut) {
+						stalledTrainId.compareAndSet(null, trainId)
+					}
+					return if (trainId == stalledTrainId.get() && separator is DynamicInOut) {
+						PathResult.OwnershipConflict
+					} else {
+						realNav.findReservedPathForTrain(trainId, separator)
+					}
+				}
+
+				override fun isPathReservedForTrain(
+					trainId: String,
+					separator: PathSeparator
+				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
+
+				override fun reservedSeparatorsAhead(
+					trainId: String,
+					separator: PathSeparator,
+					limit: Int
+				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+			}
+
+		val capturedErrors = CopyOnWriteArrayList<Throwable>()
+		val warningsAtErrorStop = AtomicInteger(-1)
+		val stallingContext =
+			RouteHidingContext(context, stallingNav) { error ->
+				val trainId = stalledTrainId.get()
+				val message = error.message.orEmpty()
+				if (trainId != null && message.contains(ORIGIN_ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
+					warningsAtErrorStop.compareAndSet(-1, warningsNamingOrigin(trainId).size)
+				}
+				capturedErrors.add(error)
+			}
+
+		val loop = ShuntingLoop(stallingContext, SIM_END_TIME)
+		wireSynchronousDispatcher(stallingContext, loop)
+		context.setMainProcess(loop)
+		context.run()
+
+		// The scenario engaged: a train really was stalled at its entry InOut.
+		val trainId = stalledTrainId.get()
+		assertThat(trainId, name = "stalled train id").isNotNull()
+
+		// Exactly one origin-worded WARN names it — one per stall episode, not one per wake-up.
+		assertThat(warningsNamingOrigin(trainId!!), name = "origin stall WARNs naming $trainId").hasSize(1)
+
+		// The run was stopped for that train with the origin errorStop, and its WARN preceded the stop.
+		val originStop =
+			capturedErrors.firstOrNull {
+				it.message?.contains(ORIGIN_ERROR_STOP_FRAGMENT) == true && it.message?.contains(trainId) == true
+			}
+		assertThat(originStop, name = "captured origin errorStop for $trainId").isNotNull()
+		assertThat(warningsAtErrorStop.get(), name = "origin WARNs naming $trainId logged before its errorStop")
+			.isEqualTo(1)
+	}
+
+	/**
+	 * A train that stalls, is then given its path (resolving the stall), and stalls again is named
+	 * in **two** WARNs — one per stall episode — because a successful navigation resets the wait
+	 * bookkeeping (Train.kt:517 `resetOwnershipConflictWait()`). This pins Issue #943 requirement 3:
+	 * any navigation outcome other than a further OwnershipConflict restarts the horizon clock, so a
+	 * re-stall measures from its own beginning and can WARN again. Without the reset the WARN latch
+	 * stays set and the second stall goes straight to `errorStop` with no second WARN.
+	 *
+	 * Mechanism: the decorator forces `OwnershipConflict` at one mid-journey separator until the
+	 * first WARN lands, then stops forcing it *only while the train is still at that separator* — so
+	 * the dispatcher can reserve the next section, the event-driven wait wakes on its own
+	 * path-available condition (Train.kt:281/517 resets the clock), and the train moves on. The
+	 * instant the train reaches a different separator, the decorator forces `OwnershipConflict`
+	 * again, so the train re-stalls and must WARN a second time from its own new clock.
+	 */
+	@Test
+	@Timeout(value = 360, unit = TimeUnit.SECONDS)
+	fun stallWarnsTwiceAfterResolveAndRestall() {
+		val realNav = context.getRoutingServices().getTrainNavigationService()
+		val stalledTrainId = AtomicReference<String?>(null)
+		val stalledSeparator = AtomicReference<PathSeparator?>(null) // where the first stall happens
+		val warnedForStalled = AtomicInteger(0) // flips to 1 once the first mid-journey WARN lands
+
+		// Tail-scan the appender for the first WARN naming the stalled train, so the scan stays O(n)
+		// in total events rather than O(n^2) in nav calls (the wait re-queries after every event).
+		var scanFrom = 0
+
+		fun firstWarnSeen(trainId: String): Boolean {
+			if (warnedForStalled.get() == 1) return true
+			val events = appender.list
+			while (scanFrom < events.size) {
+				val event = events[scanFrom++]
+				if (event.level == Level.WARN &&
+					event.formattedMessage.contains(trainId) &&
+					event.formattedMessage.contains(STALL_WARN_FRAGMENT)
+				) {
+					warnedForStalled.set(1)
+					return true
+				}
+			}
+			return false
+		}
+
+		val stallingNav =
+			object : TrainNavigationService {
+				override fun findReservedPathForTrain(
+					trainId: String,
+					separator: PathSeparator
+				): PathResult {
+					if (separator !is DynamicInOut && stalledTrainId.compareAndSet(null, trainId)) {
+						stalledSeparator.compareAndSet(null, separator)
+					}
+					val stalled = trainId == stalledTrainId.get() && separator !is DynamicInOut
+					if (!stalled) return realNav.findReservedPathForTrain(trainId, separator)
+
+					// Phase 1: force OwnershipConflict until the first WARN lands.
+					if (!firstWarnSeen(trainId)) return PathResult.OwnershipConflict
+
+					// Phase 2: still at the stall separator — stop forcing, so the dispatcher can
+					// reserve the next section and the wait wakes on its own path-available condition
+					// (Train.kt:281/517 resets the clock and the train moves on).
+					// Phase 3: the train has reached a different separator — force a fresh stall that
+					// must WARN anew from its own new clock.
+					val stallSep = stalledSeparator.get()
+					return if (stallSep != null && separator === stallSep) {
+						realNav.findReservedPathForTrain(trainId, separator)
+					} else {
+						PathResult.OwnershipConflict
+					}
+				}
+
+				override fun isPathReservedForTrain(
+					trainId: String,
+					separator: PathSeparator
+				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
+
+				override fun reservedSeparatorsAhead(
+					trainId: String,
+					separator: PathSeparator,
+					limit: Int
+				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+			}
+
+		val capturedErrors = CopyOnWriteArrayList<Throwable>()
+		val warningsAtErrorStop = AtomicInteger(-1)
+		val stallingContext =
+			RouteHidingContext(context, stallingNav) { error ->
+				val trainId = stalledTrainId.get()
+				val message = error.message.orEmpty()
+				if (trainId != null && message.contains(ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
+					warningsAtErrorStop.compareAndSet(-1, warningsNaming(trainId).size)
+				}
+				capturedErrors.add(error)
+			}
+
+		val loop = ShuntingLoop(stallingContext, SIM_END_TIME)
+		wireSynchronousDispatcher(stallingContext, loop)
+		context.setMainProcess(loop)
+		context.run()
+
+		val trainId = stalledTrainId.get()
+		assertThat(trainId, name = "stalled train id").isNotNull()
+
+		// Two WARNs naming the stalled train — one per stall episode, proving the latch reset.
+		val stallWarns = warningsNaming(trainId!!)
+		assertThat(stallWarns, name = "stall WARNs naming $trainId").hasSize(2)
+
+		// Each WARN fired after ~60 s of its OWN stall (the WARN horizon), so the second measured
+		// from the reset, not from the original start — proving the clock restarted. A re-stall
+		// measured from the original start would read ~120 s here.
+		val waitedSeconds =
+			stallWarns.map {
+				WARN_WAITED_REGEX
+					.find(it)
+					?.groupValues
+					?.get(1)
+					?.toInt()
+			}
+		assertThat(
+			waitedSeconds.all { it != null && it in 50..90 },
+			name = "each WARN measured ~60 s of its own stall"
+		).isEqualTo(true)
+
+		// The run was stopped for that train, and both WARNs were already logged by then.
+		val stop =
+			capturedErrors.firstOrNull {
+				it.message?.contains(ERROR_STOP_FRAGMENT) == true && it.message?.contains(trainId) == true
+			}
+		assertThat(stop, name = "captured stall errorStop for $trainId").isNotNull()
+		assertThat(warningsAtErrorStop.get(), name = "stall WARNs naming $trainId logged before its errorStop")
+			.isEqualTo(2)
+	}
+
 	private companion object {
 		/** Distinctive fragment of the mid-journey stall WARN. */
 		const val STALL_WARN_FRAGMENT = "for the dispatcher to extend its route"
@@ -231,6 +444,12 @@ class OwnershipConflictStallWarningTest {
 
 		/** Distinctive fragment of the mid-journey stall `errorStop` message. */
 		const val ERROR_STOP_FRAGMENT = "no route extension"
+
+		/** Distinctive fragment of the origin stall `errorStop` message (distinct from mid-journey). */
+		const val ORIGIN_ERROR_STOP_FRAGMENT = "no entry route reserved"
+
+		/** Extracts the `after N s` horizon value from a stall WARN, to check each episode's own clock. */
+		val WARN_WAITED_REGEX = Regex("after (\\d+) s")
 
 		/**
 		 * Long enough for admission, the train to get under way, and both horizons (60 s WARN,

@@ -117,9 +117,10 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 	 * `env.createPathAvailableCondition` becomes true, and exits normally.
 	 *
 	 * **Decorator reachability (AC5):** The first `findReservedPathForTrain` call at a
-	 * `DynamicInOut` is intercepted per-train via a `spyk`-injected decorator that returns
-	 * `PathResult.OwnershipConflict`. All subsequent calls delegate to the real service, so
-	 * on the event-driven `waitUntil` retry the path is found and the train proceeds.
+	 * `DynamicInOut` is intercepted per-train via a `NavigationDecoratingContext`-injected
+	 * decorator that returns `PathResult.OwnershipConflict`. All subsequent calls delegate to the
+	 * real service, so on the event-driven `waitUntil` retry the path is found and the train
+	 * proceeds.
 	 */
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
