@@ -200,6 +200,11 @@ class Main {
 				// TERMINATED_EARLY maps to RunEndCause.TERMINATED_EARLY: a run that stopped short
 				// of its requested horizon is not a natural completion, and #846's pass criterion is
 				// `completedNaturally && !terminalFallbackEngaged && c7Clean`.
+				//
+				// Issue #930: finishAndPersist may downgrade a NATURAL_COMPLETION to STARVED when the
+				// railway achieved nothing. The process exit code is deliberately left alone — it is
+				// already decided above from reached-versus-requested sim time, and a starved run did
+				// reach its horizon. The sweep reads the verdict from the run JSON, not from `$?`.
 				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause())
 			} // context closed after simulation
 			outcome
