@@ -20,7 +20,6 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -28,8 +27,6 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.mockk.every
-import io.mockk.spyk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -70,20 +67,18 @@ private val logger = KotlinLogging.logger {}
  * (so it is genuinely admitted and leaves the origin) and returns [PathResult.NoTopologicalPath]
  * for every query from a non-`DynamicInOut` separator — i.e. once the train is under way and
  * holding track, exactly where the production failure occurred. The `errorStop` call is captured
- * through a `spyk` on the context.
+ * through the wrapper described below.
  *
  * If the bound were removed from `Train.Site.actions()`, no `errorStop` would fire and the
  * captured list would stay empty, failing the assertion — so this cannot pass vacuously.
  *
- * ## Why `spyk` is safe here (unlike the dispatcher-agent `RouteHidingContext`)
+ * ## How the decorator is injected
  *
- * `RouteHidingContext` overrides `createPathAvailableCondition` because Kotlin's `by delegate`
- * resolves that default-interface-method body against the delegate's `this`, silently reading the
- * real navigation service. This scenario never reaches that branch: the injected result is
- * `NoTopologicalPath`, which takes the bounded-retry path, not the `OwnershipConflict`
- * event-driven `waitUntil(createPathAvailableCondition(...))` path. A MockK `spyk` resolves
- * default methods against the spy itself, so `getRoutingServices()` returns the decorated routing
- * — the same reason [Issue905OriginAbandonRegressionTest] uses `spyk` successfully.
+ * Through [NavigationDecoratingContext], a plain delegating wrapper. It replaced a MockK `spyk`
+ * here (Issue #943): the spy worked, because this scenario's `errorStop` ends the run within ~60
+ * simulated seconds, but MockK records every call made on a spy and a suspended train queries the
+ * context after every event — so the pattern does not survive being copied into a longer-running
+ * test. The wrapper carries the same guarantees with no recording; see its KDoc.
  */
 @DisplayName("PR #940: mid-journey NoTopologicalPath → bounded retries → env.errorStop (core coverage anchor)")
 @Tag("integration-test")
@@ -123,8 +118,7 @@ class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
 		val context = loadVyhybnaContext()
 		assertThat(context.getInOuts()).isNotEmpty()
 
-		val realRouting = context.getRoutingServices()
-		val realNav = realRouting.getTrainNavigationService()
+		val realNav = context.getRoutingServices().getTrainNavigationService()
 
 		// Delegate at the entry InOut (so the train is admitted and leaves the origin), then report
 		// NoTopologicalPath from every non-DynamicInOut separator — mid-journey, holding track.
@@ -152,26 +146,15 @@ class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
 				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
 			}
 
+		// The wrapper both serves the hiding navigation service and captures every errorStop while
+		// still forwarding it, so the simulation actually shuts down.
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
-		val spyContext = spyk(context)
-		every { spyContext.getRoutingServices() } returns
-			object : RoutingServices {
-				override fun getTopologyNavigator() = realRouting.getTopologyNavigator()
+		val hidingContext = NavigationDecoratingContext(context, hidingNav) { capturedErrors.add(it) }
 
-				override fun getPathReservationService() = realRouting.getPathReservationService()
-
-				override fun getTrainNavigationService() = hidingNav
-			}
-		// Capture every errorStop while still forwarding it so the simulation actually shuts down.
-		every { spyContext.errorStop(any()) } answers {
-			capturedErrors.add(firstArg())
-			callOriginal()
-		}
-
-		val loop = ShuntingLoop(spyContext, END_TIME)
-		wireSynchronousDispatcher(spyContext, loop)
-		spyContext.setMainProcess(loop)
-		spyContext.run()
+		val loop = ShuntingLoop(hidingContext, END_TIME)
+		wireSynchronousDispatcher(hidingContext, loop)
+		context.setMainProcess(loop)
+		context.run()
 
 		logger.info {
 			"mid-journey bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +

@@ -832,8 +832,12 @@ class PathReservationRegistry(
 	 * direction. Nothing can follow such a path:
 	 * [DefaultTrainNavigationService.buildPathWithDirection] walks the reservation, revisits a
 	 * `(separator, previous)` pair, finds the cycle exit rear-facing and returns `null` — surfaced
-	 * as [PathResult.OwnershipConflict], on which the train waits unbounded while holding its
-	 * blocks. Train #4 stalled at `zB` holding the blocks Train #5 needed to leave `doB1`, and the
+	 * as [PathResult.OwnershipConflict], on which the train waits while holding its blocks. That
+	 * wait is now bounded (Issue #943: one WARN after
+	 * [cz.vutbr.fit.interlockSim.sim.Train.OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS], then
+	 * `errorStop`), so the same defect would now be named in the log instead of stalling silently —
+	 * but it was unbounded when this was measured. Train #4 stalled at `zB` holding the blocks
+	 * Train #5 needed to leave `doB1`, and the
 	 * layout deadlocked: the dispatcher observed "no reservable sections ahead" for both trains
 	 * and correctly no-opped for the rest of the run.
 	 *

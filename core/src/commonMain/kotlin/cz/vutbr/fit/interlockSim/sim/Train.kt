@@ -117,12 +117,54 @@ class Train :
 		 * `createPathAvailableCondition` instead of reaching this branch — before that change a run
 		 * was measured recovering after 10 such retries, and this bound would have killed it.
 		 * Reaching here now means navigation itself cannot serve this train, which no amount of
-		 * waiting fixes.
+		 * waiting fixes. The `OwnershipConflict` wait carries its own bound for the case where the
+		 * dispatcher never acts — see [OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS] and
+		 * [OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS], which rest on the same argument.
 		 *
 		 * Deliberately more generous than the origin bound: a mid-journey train holds track, so the
 		 * diagnosis is worth a little more patience than an unadmitted one.
 		 */
 		internal const val MAX_MID_JOURNEY_NO_PATH_RETRIES = 10
+
+		/**
+		 * Simulated seconds a train may wait on a
+		 * [cz.vutbr.fit.interlockSim.context.navigation.PathResult.OwnershipConflict] before one
+		 * WARN names the stall.
+		 *
+		 * The wait itself is event-driven and correct: the train resumes the instant the dispatcher
+		 * reserves or extends its path. What was missing is a diagnostic for the case where the
+		 * dispatcher **never** does — a route whose terminus is rear-facing, so the next hop the
+		 * train needs is behind it. Such a train used to sit on the wait to the run's end time with
+		 * no log line, no counter and no bound, holding its reserved block against every train
+		 * behind it, indistinguishable in the logs and metrics from a healthy momentary wait.
+		 *
+		 * Healthy waits in `vyhybna.xml` last seconds, so a full minute without any extension is
+		 * already abnormal.
+		 *
+		 * @see Issue #943
+		 */
+		internal const val OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS = 60.0
+
+		/**
+		 * Simulated seconds a train may wait on an
+		 * [cz.vutbr.fit.interlockSim.context.navigation.PathResult.OwnershipConflict] before
+		 * [SimulationEnvironment.errorStop] ends the run.
+		 *
+		 * **This bound is only sound because the wait is event-driven.** A train merely waiting for
+		 * its route to be extended wakes on its own path-available event, so the only way to still
+		 * be on this wait after the horizon is that the dispatcher genuinely produced no such event
+		 * — no amount of further waiting fixes that. It is the same argument that justifies
+		 * [MAX_MID_JOURNEY_NO_PATH_RETRIES], and it holds for the same reason: since PR #940 the
+		 * transient "waiting for an extension" case is reported as `OwnershipConflict` rather than
+		 * misreported as `NoTopologicalPath`.
+		 *
+		 * Deliberately three times the WARN horizon: the WARN is the diagnosis and must have room
+		 * to be seen in a run that then recovers, while this bound only fires on a genuine
+		 * never-extended train.
+		 *
+		 * @see Issue #943
+		 */
+		internal const val OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS = 180.0
 
 		/**
 		 * Formats the structured TRAIN_APPROVED message payload.
@@ -151,6 +193,125 @@ class Train :
 		private var midJourneyNoPathRetries = 0
 
 		/**
+		 * Consecutive `NoTopologicalPath` results at the origin `InOut` (`current == null`), the
+		 * origin counterpart of [midJourneyNoPathRetries]. Owned by [holdOrStopAtOriginWithoutPath].
+		 * A [Site] runs [actions] once, so this holds exactly the run of one journey.
+		 */
+		private var originNoPathRetries = 0
+
+		/**
+		 * Simulated time at which the train's current, uninterrupted wait for a path reservation
+		 * began, or `null` when it is not waiting. Owned by [waitForPathOrReportStall] and cleared
+		 * by [resetOwnershipConflictWait] on every outcome that is not another ownership conflict,
+		 * so only a *continuous* stall accumulates — the same rule as [midJourneyNoPathRetries].
+		 */
+		private var ownershipConflictWaitSince: Double? = null
+
+		/** Whether the one-shot WARN for the current wait has already been emitted. */
+		private var ownershipConflictWarned = false
+
+		/**
+		 * Waits before the next path query at the origin `InOut`, or stops the simulation when the
+		 * network offers no topological continuation from it at all (Issue #905, AC2).
+		 *
+		 * No unbounded silent loop: after [MAX_ORIGIN_NO_PATH_RETRIES] retries the simulation stops
+		 * through [SimulationEnvironment.errorStop], naming the misconfigured `InOut`.
+		 *
+		 * Extracted from [actions] to keep that method inside its length and complexity budgets.
+		 *
+		 * @return `true` when the caller must return (the simulation has been stopped).
+		 */
+		private suspend fun holdOrStopAtOriginWithoutPath(where: DynamicInOut): Boolean {
+			// Navigation answered with a topology verdict, not an ownership conflict, so an earlier
+			// wait no longer counts: the stall horizon measures *consecutive* conflicts.
+			resetOwnershipConflictWait()
+			originNoPathRetries++
+			if (originNoPathRetries >= MAX_ORIGIN_NO_PATH_RETRIES) {
+				env.errorStop(
+					SimulationException(
+						"Train $name: No topological path from origin InOut '${where.name}' " +
+							"after $MAX_ORIGIN_NO_PATH_RETRIES retries. Network is misconfigured."
+					)
+				)
+				return true
+			}
+			hold(5.0)
+			return false
+		}
+
+		/**
+		 * Clears the wait bookkeeping, so a later stall is measured from its own beginning.
+		 */
+		private fun resetOwnershipConflictWait() {
+			ownershipConflictWaitSince = null
+			ownershipConflictWarned = false
+		}
+
+		/**
+		 * Suspends until the dispatcher makes this train's path available, and reports the stall
+		 * when it never does.
+		 *
+		 * The wait stays event-driven (Issue #582): kDisco re-tests the condition after every
+		 * discrete event and every integration step, so the train resumes the instant the
+		 * reservation appears. The added term `time() >= deadline` gives the wait a horizon as
+		 * well, which is what turns a never-extended train from a silent livelock into first a
+		 * WARN and then a stopped run (Issue #943).
+		 *
+		 * Two horizons, measured from the start of the current uninterrupted wait:
+		 * [OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS] emits one WARN naming the train and the
+		 * separator, and [OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS] ends the run through
+		 * [SimulationEnvironment.errorStop]. The messages distinguish a train still at its entry
+		 * `InOut` (`current == null`, holds no track) from one under way (holds a block that every
+		 * train behind it needs).
+		 *
+		 * @return `true` when the caller must return (the simulation has been stopped).
+		 */
+		private suspend fun waitForPathOrReportStall(where: DynamicPathSeparator): Boolean {
+			val since = ownershipConflictWaitSince ?: time().also { ownershipConflictWaitSince = it }
+			val available = env.createPathAvailableCondition(name, where)
+			val horizon =
+				if (ownershipConflictWarned) {
+					OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS
+				} else {
+					OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS
+				}
+			val deadline = since + horizon
+			waitUntil(Condition { available.test() || time() >= deadline })
+			if (available.test()) {
+				resetOwnershipConflictWait()
+				return false
+			}
+			val waited = (time() - since).toInt()
+			val atOrigin = current == null
+			if (!ownershipConflictWarned) {
+				ownershipConflictWarned = true
+				val errorHorizon = OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS.toInt()
+				logger.warn {
+					if (atOrigin) {
+						"$name: still waiting at entry InOut '$where' for the dispatcher to reserve its " +
+							"entry route after $waited s of simulated time (the run stops after $errorHorizon s)."
+					} else {
+						"$name: still waiting at '$where' for the dispatcher to extend its route after " +
+							"$waited s of simulated time; it holds track it cannot leave " +
+							"(the run stops after $errorHorizon s)."
+					}
+				}
+				return false
+			}
+			env.errorStop(
+				SimulationException(
+					if (atOrigin) {
+						"$name: no entry route reserved at InOut '$where' after $waited s of waiting."
+					} else {
+						"$name: no route extension at '$where' after $waited s of waiting. " +
+							"The train holds track it cannot leave."
+					}
+				)
+			)
+			return true
+		}
+
+		/**
 		 * Waits before the next path query, or stops the simulation when a mid-journey navigation
 		 * failure has repeated [MAX_MID_JOURNEY_NO_PATH_RETRIES] times.
 		 *
@@ -172,6 +333,9 @@ class Train :
 			pathResult: PathResult,
 			where: DynamicPathSeparator
 		): Boolean {
+			// Navigation served this train with something other than an ownership conflict, so an
+			// earlier wait no longer counts: the stall horizon measures *consecutive* conflicts.
+			resetOwnershipConflictWait()
 			if (pathResult is PathResult.NoTopologicalPath) {
 				midJourneyNoPathRetries++
 				if (midJourneyNoPathRetries >= MAX_MID_JOURNEY_NO_PATH_RETRIES) {
@@ -223,12 +387,6 @@ class Train :
 			// Initialize entry separator for animation (train enters network here).
 			// Only the Front writes it — see [isFront].
 			if (isFront) this@Train.entrySeparator = where
-
-			// Counts how many consecutive NoTopologicalPath results were returned at the
-			// origin InOut (current == null). Used to enforce the bounded-retry policy
-			// (Issue #905): after MAX_ORIGIN_NO_PATH_RETRIES retries the simulation stops
-			// via env.errorStop rather than looping silently forever.
-			var originNoPathRetries = 0
 
 			while (true) {
 				// Check if we've reached the destination InOut BEFORE querying for path
@@ -321,53 +479,42 @@ class Train :
 					motor.cancelAccelerating()
 					this@Train.stop()
 
-					when {
-						pathResult is PathResult.OwnershipConflict -> {
-							/**
-							 * Event-Driven Wait (Issue #582, Goal 1 SP3)
-							 *
-							 * Instead of polling with a fixed 5-second hold, suspend until the
-							 * dispatcher reserves the path. kDisco re-evaluates the condition
-							 * after every discrete event (including block releases), so the train
-							 * resumes exactly when the path becomes available.
-							 *
-							 * The motor has already been stopped, so there is no creeping risk.
-							 *
-							 * This branch is now also reached at the origin (Issue #905, AC1):
-							 * an OwnershipConflict at the entry InOut resolves the instant the
-							 * dispatcher makes the reservation.
-							 */
-							logger.debug {
-								"Train $number: event-driven wait for path reservation at $where"
+					// One exit for every bounded branch: each arm answers "has the simulation been
+					// stopped?", so the branches stay inside `actions()`'s complexity budget.
+					val stopped =
+						when {
+							pathResult is PathResult.OwnershipConflict -> {
+								/**
+								 * Event-Driven Wait (Issue #582, Goal 1 SP3)
+								 *
+								 * Instead of polling with a fixed 5-second hold, suspend until the
+								 * dispatcher reserves the path. kDisco re-evaluates the condition
+								 * after every discrete event (including block releases), so the train
+								 * resumes exactly when the path becomes available.
+								 *
+								 * The motor has already been stopped, so there is no creeping risk.
+								 *
+								 * This branch is now also reached at the origin (Issue #905, AC1):
+								 * an OwnershipConflict at the entry InOut resolves the instant the
+								 * dispatcher makes the reservation.
+								 */
+								logger.debug {
+									"Train $number: event-driven wait for path reservation at $where"
+								}
+								waitForPathOrReportStall(where)
 							}
-							waitUntil(env.createPathAvailableCondition(name, where))
+							pathResult is PathResult.NoTopologicalPath && where is DynamicInOut && current == null ->
+								holdOrStopAtOriginWithoutPath(where)
+							else -> holdOrStopAfterNoUsablePath(pathResult, where)
 						}
-						pathResult is PathResult.NoTopologicalPath && where is DynamicInOut && current == null -> {
-							/**
-							 * Bounded retry for origin InOut with no topological continuation (Issue #905, AC2).
-							 *
-							 * No unbounded silent loop: after MAX_ORIGIN_NO_PATH_RETRIES retries the
-							 * simulation stops via env.errorStop, naming the misconfigured InOut.
-							 */
-							originNoPathRetries++
-							if (originNoPathRetries >= MAX_ORIGIN_NO_PATH_RETRIES) {
-								env.errorStop(
-									SimulationException(
-										"Train $name: No topological path from origin InOut '${where.name}' " +
-											"after $MAX_ORIGIN_NO_PATH_RETRIES retries. Network is misconfigured."
-									)
-								)
-								return
-							}
-							hold(5.0)
-						}
-						else -> if (holdOrStopAfterNoUsablePath(pathResult, where)) return
-					}
+					if (stopped) return
 					continue // Restart loop to retry path request
 				}
 				// The train has a usable path: this iteration is a success, so consecutive-failure
-				// counting starts over (see MAX_MID_JOURNEY_NO_PATH_RETRIES).
+				// counting starts over (see MAX_MID_JOURNEY_NO_PATH_RETRIES) and the stall horizon
+				// of any earlier wait starts over too (see OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS).
 				midJourneyNoPathRetries = 0
+				resetOwnershipConflictWait()
 				val nextLength: Double = next!!.length()
 				separatorAction(where, current, next)
 
