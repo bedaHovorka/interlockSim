@@ -180,6 +180,99 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 			.contains(ROUTE_EXTENSION_FRAGMENT)
 	}
 
+	/**
+	 * The origin counterpart of [`never-extended route fires errorStop after the wait horizon`]:
+	 * a train the dispatcher never admits — it stalls at its **entry** `InOut` (`current == null`,
+	 * the `atOrigin == true` branch of `waitForPathOrReportStall`) — stops the run through
+	 * `env.errorStop` with the origin wording, instead of waiting silently to `END_TIME`.
+	 *
+	 * ## Why a second :core test (coverage anchor)
+	 *
+	 * The `atOrigin == true` branches of `waitForPathOrReportStall` (the WARN at `Train.kt:290-292`
+	 * and the `errorStop` at `303-304`) are exercised at runtime by `:dispatcher-agent`'s
+	 * `OwnershipConflictStallWarningTest.originStallWarningNamesTheTrainOnce`, but that coverage is
+	 * attributed to `:dispatcher-agent`'s JaCoCo report, whose `classDirectories` are scoped to its
+	 * own classes. `Train.kt` lives in `:core`, and Sonar reads only `:core`'s JaCoCo report for it,
+	 * so those origin lines showed as uncovered and the PR's new-code coverage stayed under the 80 %
+	 * gate. This test drives the origin branch from within `:core:jvmTest` so the coverage lands
+	 * where Sonar looks — the same reason [MidJourneyNoPathErrorStopRegressionTest] anchors the
+	 * mid-journey `NoTopologicalPath` bound alongside its dispatcher-agent twin.
+	 *
+	 * The WARN code (`290-292`) executes for coverage even though this test does not assert the log
+	 * line: `:core`'s test source set has logback as `runtimeOnly` only, which is why the WARN
+	 * wording itself is pinned in `:dispatcher-agent`.
+	 *
+	 * Asserts:
+	 * 1. A train was admitted (so the stall is genuinely at the entry InOut, not a no-admission no-op).
+	 * 2. `env.errorStop` fired with the **origin** wording (`"no entry route reserved"`), distinct
+	 *    from the mid-journey `"no route extension"` wording the test above asserts.
+	 */
+	@Test
+	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	fun `never-admitted origin route fires errorStop after the wait horizon`() {
+		val context = loadVyhybnaContext()
+		assertThat(context.getInOuts()).isNotEmpty()
+
+		val realNav = context.getRoutingServices().getTrainNavigationService()
+
+		// Stall exactly ONE train, the first to query from its entry InOut — `separator is
+		// DynamicInOut` — so it never leaves origin (`current` stays null, the `atOrigin` branch).
+		// isPathReservedForTrain still delegates to the real service, so the train IS admitted; its
+		// Front then sees OwnershipConflict at the entry InOut and parks in waitForPathOrReportStall.
+		val stalledTrainId = AtomicReference<String?>(null)
+		val stallingNav =
+			object : TrainNavigationService {
+				override fun findReservedPathForTrain(
+					trainId: String,
+					separator: PathSeparator
+				): PathResult {
+					if (separator is DynamicInOut) {
+						stalledTrainId.compareAndSet(null, trainId)
+					}
+					return if (trainId == stalledTrainId.get() && separator is DynamicInOut) {
+						PathResult.OwnershipConflict
+					} else {
+						realNav.findReservedPathForTrain(trainId, separator)
+					}
+				}
+
+				override fun isPathReservedForTrain(
+					trainId: String,
+					separator: PathSeparator
+				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
+
+				override fun reservedSeparatorsAhead(
+					trainId: String,
+					separator: PathSeparator,
+					limit: Int
+				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+			}
+
+		val capturedErrors = CopyOnWriteArrayList<Throwable>()
+		val stallingContext = NavigationDecoratingContext(context, stallingNav) { capturedErrors.add(it) }
+
+		val loop = ShuntingLoop(stallingContext, END_TIME)
+		wireSynchronousDispatcher(stallingContext, loop)
+		context.setMainProcess(loop)
+		context.run()
+
+		logger.info {
+			"Issue943 origin bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +
+				"trainsExited=${loop.getTrainsExited()}, errorStops=${capturedErrors.size}"
+		}
+
+		// (1) The stall is at origin: a train was admitted (it holds no track, so the rest of the
+		// layout can still work around it).
+		assertThat(loop.getTrainsEntered()).isGreaterThan(0)
+
+		// (2) The origin horizon fired with the origin wording, not the mid-journey wording.
+		val originError =
+			capturedErrors.firstOrNull { it.message?.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT) == true }
+		assertThat(originError, name = "captured origin errorStop throwable").isNotNull()
+		assertThat(originError!!.message ?: "", name = "origin errorStop message")
+			.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT)
+	}
+
 	private companion object {
 		/**
 		 * Ample room for admission, the train to reach its first semaphore, and the
@@ -191,5 +284,8 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 
 		/** Distinctive fragment of the never-extended-route `errorStop` message. */
 		const val ROUTE_EXTENSION_FRAGMENT = "no route extension"
+
+		/** Distinctive fragment of the never-admitted-origin `errorStop` message (distinct from mid-journey). */
+		const val ORIGIN_ROUTE_EXTENSION_FRAGMENT = "no entry route reserved"
 	}
 }
