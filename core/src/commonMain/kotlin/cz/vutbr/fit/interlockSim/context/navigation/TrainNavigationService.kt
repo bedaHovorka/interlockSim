@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
@@ -210,4 +211,85 @@ interface TrainNavigationService {
 		separator: PathSeparator,
 		limit: Int
 	): List<OrientedPathSeparator>
+
+	/**
+	 * Build a kDisco [Condition] that is true while a path from [separator] is reserved for
+	 * [trainId].
+	 *
+	 * ## Why the factory is here (Issue #931 f2)
+	 *
+	 * kDisco re-tests a `waitUntil` predicate after every discrete event **and** every integration
+	 * step, so a parked train re-ran a whole [findReservedPathForTrain] tens of thousands of times
+	 * per run: 10,800-40,490 evaluations per 333 s GUI run, 39k-75k headless. An implementation
+	 * that knows when its inputs last changed can skip almost all of them; a caller building a bare
+	 * lambda cannot. Hence the factory, rather than each caller writing the condition itself.
+	 *
+	 * This default body is the unoptimised one, and it is deliberately kept: several test doubles
+	 * implement this interface directly, and they must keep working without knowing anything about
+	 * caching. [DefaultTrainNavigationService] overrides it.
+	 *
+	 * ## Contract for overrides
+	 *
+	 * An override may cache the **boolean answer**. It must never cache the
+	 * [PathResult.Available] path object: `Train.Site.separatorAction` mutates the path it is
+	 * given (`removeFirst()`), which is safe only because every evaluation builds a fresh one.
+	 *
+	 * @param trainId The train that is waiting.
+	 * @param separator Where it is waiting.
+	 * @return a condition that is true exactly when [findReservedPathForTrain] returns
+	 *   [PathResult.Available].
+	 * @since Issue #931 f2 (Wave 3 — per-event pathfind churn)
+	 */
+	fun createPathAvailableCondition(
+		trainId: String,
+		separator: PathSeparator
+	): Condition = Condition { findReservedPathForTrain(trainId, separator) is PathResult.Available }
+
+	/**
+	 * How many path-available condition tests this service served, and how many of them it had to
+	 * answer by really evaluating a path.
+	 *
+	 * The gap between the two is what Issue #931 f2 bought. Defaults to
+	 * [PathEvaluationStats.UNMEASURED] because a service that does not count is *not measuring*,
+	 * which is not the same as measuring zero — the same convention
+	 * `cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome` follows.
+	 *
+	 * @since Issue #931 f2 (Wave 3 — per-event pathfind churn)
+	 */
+	fun evaluationStats(): PathEvaluationStats = PathEvaluationStats.UNMEASURED
+}
+
+/**
+ * How often a [TrainNavigationService] was asked whether a path was available, and how often it
+ * had to work the answer out.
+ *
+ * Both fields are nullable and `null` means **not measured**, never "measured as none". A service
+ * that keeps no counters must not report `0`, because a run with zero condition tests is a genuine
+ * (and alarming) finding, while an uninstrumented service is simply silent.
+ *
+ * @property conditionTests Times a path-available condition was tested.
+ * @property realEvaluations Times that test could not be answered from the cached epoch and ran a
+ *   full [TrainNavigationService.findReservedPathForTrain].
+ * @since Issue #931 f2 (Wave 3 — per-event pathfind churn)
+ */
+data class PathEvaluationStats(
+	val conditionTests: Long? = null,
+	val realEvaluations: Long? = null
+) {
+	/**
+	 * Fraction of condition tests answered without a path evaluation, or `null` when either figure
+	 * is unmeasured or no test happened at all.
+	 */
+	val cacheHitRate: Double?
+		get() {
+			val tests = conditionTests ?: return null
+			val real = realEvaluations ?: return null
+			if (tests <= 0L) return null
+			return (tests - real).toDouble() / tests.toDouble()
+		}
+
+	companion object {
+		/** The all-absent stats: this service counts nothing. */
+		val UNMEASURED: PathEvaluationStats = PathEvaluationStats()
+	}
 }

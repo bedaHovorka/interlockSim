@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
@@ -51,6 +52,9 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object DispatcherRunSummaries {
 	private val logger = KotlinLogging.logger {}
+
+	/** Scale factor for rendering a 0.0-1.0 rate as a percentage. */
+	private const val PERCENT = 100.0
 
 	/**
 	 * Which summaries were actually emitted, for wiring regression tests.
@@ -97,12 +101,40 @@ object DispatcherRunSummaries {
 		planner?.logFinalSummary()
 		sweeper?.logSummary()
 		DecisionRateReport.log(signal, driverLoop, planner)
+		logPathConditionStats(scope)
 
 		return Reported(
 			plannerSummary = planner != null,
 			sweeperSummary = sweeper != null,
 			decisionRateSummary = DecisionRateReport.line(signal, driverLoop, planner) != null
 		)
+	}
+
+	/**
+	 * Logs how much work the path-available conditions cost this run (Issue #931 f2).
+	 *
+	 * A parked train re-tests its wake-up condition after every kDisco event and every integration
+	 * step. Before the epoch cache that meant a full path evaluation each time: 10,800-40,490 per
+	 * 333 s GUI run, 39k-75k headless. This line is the before/after evidence for that change, and
+	 * it stays afterwards so a regression that defeats the cache is visible in any run's log
+	 * instead of only in a profiler.
+	 *
+	 * Deliberately log-only and **not** folded into the persisted run JSON: it measures the
+	 * simulator, not the dispatcher, and it is not a gate input. Same reasoning as the Issue #936
+	 * leak gauge in [railwayOutcomeFrom].
+	 *
+	 * Silent when the service reports unmeasured counters — a service that keeps none is not
+	 * measuring, which is not the same as measuring zero.
+	 */
+	private fun logPathConditionStats(scope: Scope) {
+		val stats = scope.getOrNull<TrainNavigationService>()?.evaluationStats() ?: return
+		val tests = stats.conditionTests ?: return
+		val real = stats.realEvaluations ?: return
+		val hitRate = stats.cacheHitRate
+		logger.info {
+			"Path-available conditions: $tests tests, $real real path evaluations" +
+				(hitRate?.let { ", ${(it * PERCENT).toInt()}% served from the reservation-epoch cache" } ?: "")
+		}
 	}
 
 	/**

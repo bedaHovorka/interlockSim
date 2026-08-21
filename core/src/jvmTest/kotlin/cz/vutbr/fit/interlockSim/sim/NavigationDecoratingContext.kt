@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -51,6 +50,10 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  * methods against the spy, which is why the `spyk` form did not need this.) The same override
  * exists for the same reason on `dispatcher-agent`'s `RouteHidingContext`.
  *
+ * Issue #931 f2 moved the condition's construction into [TrainNavigationService], so this override
+ * now delegates rather than re-inlining the body. Keeping the old inline copy would have quietly
+ * routed every test using this wrapper through the un-cached path.
+ *
  * @param delegate the real context; everything not overridden here goes straight to it
  * @param nav the navigation service the simulation must see
  * @param onErrorStop called with every `errorStop` reason before it is forwarded, or `null` when
@@ -77,8 +80,5 @@ internal class NavigationDecoratingContext(
 	override fun createPathAvailableCondition(
 		trainId: String,
 		separator: PathSeparator
-	): Condition =
-		Condition {
-			routing.getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
-		}
+	): Condition = routing.getTrainNavigationService().createPathAvailableCondition(trainId, separator)
 }

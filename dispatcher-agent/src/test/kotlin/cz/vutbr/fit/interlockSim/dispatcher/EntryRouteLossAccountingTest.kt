@@ -62,6 +62,21 @@ internal class RouteHidingNavigationService(
 		trainId: String,
 		separator: PathSeparator
 	): PathResult = result
+
+	/**
+	 * Rebuilt here rather than delegated, for the same reason [RouteHidingContext] overrides its
+	 * own copy: Kotlin's `by delegate` forwards this call to the **real** navigation service, which
+	 * would answer from the un-hidden route and wake the train this fixture needs parked.
+	 *
+	 * Before Issue #931 f2 the forwarded call landed on the interface's default body, which
+	 * resolved `findReservedPathForTrain` against the delegate and happened to produce the same
+	 * wrong answer harmlessly, because `RouteHidingContext` overrode the condition one level up.
+	 * Now the delegate returns its own cached condition, so the override has to be here too.
+	 */
+	override fun createPathAvailableCondition(
+		trainId: String,
+		separator: PathSeparator
+	): Condition = Condition { findReservedPathForTrain(trainId, separator) is PathResult.Available }
 }
 
 /** Serves [nav] in place of the real train-navigation service; everything else is the real context. */
@@ -101,14 +116,15 @@ internal class RouteHidingContext(
 	 * unbounded CPU-bound hang once Issue #905 let the origin case reach `waitUntil` instead of
 	 * breaking out immediately — independent of `END_TIME` or how many trains are admitted, since
 	 * the loop above never reaches a genuine suspension point either way.
+	 *
+	 * Issue #931 f2 moved the condition's construction into `TrainNavigationService`, so this
+	 * override now delegates instead of re-inlining the body. Keeping the old inline copy would
+	 * have quietly routed this test through the un-cached path.
 	 */
 	override fun createPathAvailableCondition(
 		trainId: String,
 		separator: PathSeparator
-	): Condition =
-		Condition {
-			routing.getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
-		}
+	): Condition = routing.getTrainNavigationService().createPathAvailableCondition(trainId, separator)
 }
 
 /**
