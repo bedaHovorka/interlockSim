@@ -19,6 +19,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -211,6 +213,24 @@ class PathReservationRegistryEpochTest : KoinTestBase() {
 			assertDoesNotBump { registry.unregisterBlock("train2", blocks.first()) }
 		}
 
+		/**
+		 * The `bumpEpoch()` sits after the `block.occupant != null || state != FREE` guard, so a
+		 * block that is still physically occupied must return early and leave the epoch alone. This
+		 * is the no-op pair the `unregisterBlockBumps` test cannot cover, because that test calls
+		 * `unregisterBlock` on a merely reserved (FREE, no occupant) block.
+		 */
+		@Test
+		@DisplayName("unregisterBlock of a block still occupied does not bump")
+		fun unregisterOccupiedBlockDoesNotBump() {
+			val block = blocks.first()
+			registry.registerAtomic("train1", listOf(block))
+			val separator = block.ends().first() as DynamicPathSeparator
+			block.setUpPath(separator, "train1")
+			block.enter(FakeTrackOccupant("train1"))
+
+			assertDoesNotBump { registry.unregisterBlock("train1", block) }
+		}
+
 		@Test
 		@DisplayName("unregisterSwitches of a train with no switches does not bump")
 		fun unregisterSwitchesOfUnknownTrainDoesNotBump() {
@@ -286,5 +306,14 @@ class PathReservationRegistryEpochTest : KoinTestBase() {
 			reservedPath = arrayPath,
 			entryDirections = emptyMap()
 		)
+	}
+
+	/** Minimal [TrackOccupant] for the occupied-no-op test, mirroring `PathReservationRegistryTest`. */
+	private class FakeTrackOccupant(
+		override val name: String
+	) : TrackOccupant {
+		override fun distanceToSemaphore(): Double = 0.0
+
+		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
 }

@@ -56,7 +56,7 @@ interface TopologyNavigator {
 	 * Get the next track section following a path separator, using pure topology traversal.
 	 *
 	 * This method navigates the railway network graph based only on static topology:
-	 * - Current switch positions (static configuration)
+	 * - Structural connectivity through separators (does NOT read switch position)
 	 * - Track block connectivity (graph structure)
 	 * - Directional flow through separators
 	 *
