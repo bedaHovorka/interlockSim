@@ -213,8 +213,14 @@ data class DispatcherRunSnapshot(
 		 *   `ticksByOutcome` never contains it and [actionableTickRate] defaults to
 		 *   [llmSuccessRate] on decode — the value it would have computed anyway, since that
 		 *   outcome's count is structurally zero in that data.
+		 * - **7** — Issue #930, added [RunEndCause.STARVED] for a run that reached its end time
+		 *   with nothing achieved on the railway. No field changed shape, so every version 1-6
+		 *   file still decodes exactly as before. Runs written under those versions recorded a
+		 *   starved run as [RunEndCause.NATURAL_COMPLETION] and will keep reporting
+		 *   `completedNaturally = true`; that is what the old code measured, and rewriting it
+		 *   on decode would invent a verdict nobody made.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 6
+		const val CURRENT_SCHEMA_VERSION: Int = 7
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

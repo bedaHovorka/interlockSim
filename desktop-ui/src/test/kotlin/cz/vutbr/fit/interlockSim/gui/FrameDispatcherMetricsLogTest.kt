@@ -12,10 +12,14 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import io.mockk.confirmVerified
@@ -156,13 +160,24 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		context.close()
 	}
 
+	/**
+	 * Issue #930 changed what this path records. `MockSimulationContext.run()` returns immediately
+	 * without moving a train, so the railway genuinely achieved nothing, and
+	 * `DispatcherRunSummaries.starvationAdjusted` records the natural completion as
+	 * [RunEndCause.STARVED]. That is the fix working: before it, this same dead run was written as
+	 * `completedNaturally = true` and counted by the A4 gate as a pass.
+	 *
+	 * The natural-versus-manual distinction this test was originally written for (SP2c.22) is still
+	 * pinned, by [runRecorderFinishCalledWithNaturalCompletionCauseOnHealthyRailway] on the healthy
+	 * side and by the manual-stop test above on the other.
+	 */
 	@Test
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName(
-		"SP2c.22: finish called with RunEndCause.NATURAL_COMPLETION when the simulation " +
-			"finishes on its own (natural-completion path)"
+		"SP2c.22 + #930: finish called with RunEndCause.STARVED when a simulation that moved " +
+			"nothing finishes on its own"
 	)
-	fun runRecorderFinishCalledWithNaturalCompletionCause() {
+	fun runRecorderFinishCalledWithStarvedCauseOnDeadRailway() {
 		val started = CountDownLatch(1)
 		// MockSimulationContext.run() returns immediately (it does not run a real kDisco
 		// loop), so SimulationController's monitor thread observes the runner has already
@@ -180,9 +195,73 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		}
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
-		verify(timeout = 5000) { runRecorder.finish(RunEndCause.NATURAL_COMPLETION) }
+		verify(timeout = 5000) { runRecorder.finish(RunEndCause.STARVED) }
 		verify(timeout = 5000) { runRecorder.logFinalSummary() }
+		SwingUtilities.invokeAndWait {
+			assertThat(frame.statusBar.isStarvedIndicatorVisible()).isTrue()
+			assertThat(frame.statusBar.starvedIndicatorText()).isEqualTo(StatusBar.STARVED_BADGE_TEXT)
+		}
 		context.close()
+	}
+
+	/**
+	 * The healthy counterpart: when the railway did achieve something, the GUI must still record a
+	 * plain [RunEndCause.NATURAL_COMPLETION] and must not raise the starvation badge. Without this,
+	 * #930's adjustment could degenerate into "every GUI run is starved" and nothing would catch it.
+	 *
+	 * The railway figures come from the scoped `MetricsCollectionService`, so declaring a stand-in
+	 * that reports one completed journey is enough — no real simulation is needed.
+	 */
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("#930: finish called with RunEndCause.NATURAL_COMPLETION when the railway made progress")
+	fun runRecorderFinishCalledWithNaturalCompletionCauseOnHealthyRailway() {
+		val started = CountDownLatch(1)
+		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		context.addPropertyChangeListener { _ -> started.countDown() }
+
+		val runRecorder = mockk<DispatcherRunRecorder>(relaxed = true)
+		context.scope.declare(runRecorder)
+		context.scope.declare<MetricsCollectionService>(CompletedJourneyMetrics())
+
+		SwingUtilities.invokeAndWait {
+			frame.setContext(context)
+			frame.startSimulation()
+		}
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		verify(timeout = 5000) { runRecorder.finish(RunEndCause.NATURAL_COMPLETION) }
+		SwingUtilities.invokeAndWait {
+			assertThat(frame.statusBar.isStarvedIndicatorVisible()).isFalse()
+		}
+		context.close()
+	}
+
+	/**
+	 * Stand-in [MetricsCollectionService] reporting one completed journey, so
+	 * `DispatcherRunSummaries.railwayOutcomeFrom` sees a railway that achieved something. Mirrors
+	 * `DispatcherRunPersistenceTest.LeakGaugeSpy`, which exists for the same reason: the real
+	 * service needs a real run behind it.
+	 */
+	private class CompletedJourneyMetrics : MetricsCollectionService {
+		override fun getSnapshot(): MetricsSnapshot =
+			MetricsSnapshot(
+				time = 0.0,
+				conflictCount = 0,
+				completedTrains = 1,
+				throughput = 0.0,
+				totalWaitSeconds = 0.0,
+				averageWaitSeconds = 0.0,
+				occupiedBlocks = 0,
+				totalBlocks = 0,
+				utilization = 0.0
+			)
+
+		override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) = Unit
+
+		override fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit) = Unit
+
+		override fun reportUnreleasedReservations(): Set<String> = emptySet()
 	}
 
 	@Test

@@ -151,11 +151,42 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded.completedNaturally).isEqualTo(false)
 	}
 
+	/**
+	 * Issue #930 (schema version 7). A starved run reached its horizon, so the only thing telling
+	 * the aggregator not to count it is this enum value. If it did not survive encode→decode, the
+	 * run would reload as some other cause and the fix would be silently undone on disk.
+	 */
+	@Test
+	fun `serialization round-trips a snapshot whose endCause is STARVED`() {
+		val snap =
+			snapshotWith(railwayOutcome = RailwayOutcome(journeysCompleted = 0L, trainsExited = 0L))
+				.copy(endCause = RunEndCause.STARVED, completedNaturally = false)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"endCause\": \"STARVED\"")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.endCause).isEqualTo(RunEndCause.STARVED)
+		assertThat(decoded.completedNaturally).isEqualTo(false)
+	}
+
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 6`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_ACTIONABLE_RATE)
+	fun `current schema version is 7`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STARVED_CAUSE)
+	}
+
+	/**
+	 * [DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE] is deliberately
+	 * pinned to 6 rather than tracking [DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION], so that an
+	 * unrelated bump does not re-flag version-6 files as carrying a defaulted rate. Issue #930's
+	 * bump to 7 is exactly such an unrelated bump, so this pins the two apart.
+	 */
+	@Test
+	fun `the actionable-rate introduction version does not follow the current schema version`() {
+		assertThat(DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE)
+			.isEqualTo(SCHEMA_VERSION_WITH_ACTIONABLE_RATE)
 	}
 
 	@Test
@@ -294,6 +325,9 @@ class DispatcherRunSnapshotTest {
 	private companion object {
 		/** Pinned literally so a future bump has to touch this test deliberately. */
 		private const val SCHEMA_VERSION_WITH_ACTIONABLE_RATE: Int = 6
+
+		/** Issue #930 added [RunEndCause.STARVED]; no field changed shape. */
+		private const val SCHEMA_VERSION_WITH_STARVED_CAUSE: Int = 7
 
 		private val json =
 			Json {

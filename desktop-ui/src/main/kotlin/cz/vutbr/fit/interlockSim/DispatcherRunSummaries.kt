@@ -17,8 +17,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DecisionRateReport
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayProgress
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.planner.progress
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -60,6 +62,25 @@ object DispatcherRunSummaries {
 		val plannerSummary: Boolean,
 		val sweeperSummary: Boolean,
 		val decisionRateSummary: Boolean
+	)
+
+	/**
+	 * What [finishAndPersist] did with one run.
+	 *
+	 * [endCause] is the cause actually recorded, which is **not** always the one the caller asked
+	 * for: a [RunEndCause.NATURAL_COMPLETION] over a railway that achieved nothing is recorded as
+	 * [RunEndCause.STARVED] (Issue #930). The GUI reads it back to show the verdict without
+	 * reading the railway a second time.
+	 *
+	 * @property file The JSON written for this run, or `null` when nothing was written — no
+	 *   dispatcher recorder, no dispatcher agent, no store, or the run was already persisted.
+	 * @property endCause The cause recorded on the snapshot.
+	 * @property railwayOutcome What the railway achieved, as read at run end.
+	 */
+	data class Persisted(
+		val file: Path?,
+		val endCause: RunEndCause,
+		val railwayOutcome: RailwayOutcome
 	)
 
 	/**
@@ -106,26 +127,33 @@ object DispatcherRunSummaries {
 	 * — because this is the last point at which the scope still holds both the simulation context
 	 * and its main process.
 	 *
-	 * @return the file written, or `null` if this context has no dispatcher recorder or store, or
-	 *   the run was already persisted.
+	 * Issue #930 also decides here whether the run is recorded as [RunEndCause.STARVED] — see
+	 * [starvationAdjusted].
+	 *
+	 * @return what was recorded, including the file written (`null` if this context has no
+	 *   dispatcher recorder or store, or the run was already persisted).
 	 */
 	fun finishAndPersist(
 		scope: Scope,
 		cause: RunEndCause
-	): Path? {
-		val recorder = scope.getOrNull<DispatcherRunRecorder>() ?: return null
+	): Persisted {
+		val outcome = railwayOutcomeFrom(scope)
+		val effectiveCause = starvationAdjusted(cause, outcome)
+		val recorder =
+			scope.getOrNull<DispatcherRunRecorder>()
+				?: return Persisted(null, effectiveCause, outcome)
 		// Issue #834 (SP2c.11): hand the recorder what the railway achieved BEFORE finishing it.
 		// finish() freezes the snapshot, so an outcome recorded afterwards would be dropped — and
 		// this is the last moment at which the scope still holds both the simulation context and
 		// its main process. Idempotent-safe: on a second finishAndPersist for the same run the
 		// recorder is already frozen and this write cannot alter the frozen snapshot.
-		recorder.recordRailwayOutcome(railwayOutcomeFrom(scope))
+		recorder.recordRailwayOutcome(outcome)
 		// finish() is idempotent by contract (SP2c.22) precisely so several callers may invoke it,
 		// so it needs no guard of its own — and an earlier version that guarded it silently stopped
 		// the GUI finishing its recorder at all, which FrameDispatcherMetricsLogTest caught. Only
 		// the *write* is deduped, further down, because writing twice would put the same run in the
 		// sweep directory twice and inflate #846's `runCount >= 10` gate.
-		val snapshot = recorder.finish(cause)
+		val snapshot = recorder.finish(effectiveCause)
 		recorder.logFinalSummary()
 
 		// The recorder and store are bound `scoped` on DefaultSimulationContext, so EVERY context can
@@ -137,21 +165,69 @@ object DispatcherRunSummaries {
 		//
 		// AgentDriverLoop is declared only by wireDispatcherAgent, so its presence is the precise
 		// signal that this context ran a dispatcher.
-		if (scope.getOrNull<AgentDriverLoop>() == null) return null
-		val store = scope.getOrNull<RunSnapshotStore>() ?: return null
+		if (scope.getOrNull<AgentDriverLoop>() == null) return Persisted(null, effectiveCause, outcome)
+		val store =
+			scope.getOrNull<RunSnapshotStore>()
+				?: return Persisted(null, effectiveCause, outcome)
 		if (!writtenRecorders.add(recorder)) {
 			logger.debug { "Run ${recorder.runId} already written; not writing it a second time" }
-			return null
+			return Persisted(null, effectiveCause, outcome)
 		}
 		return try {
-			store.write(snapshot)
+			Persisted(store.write(snapshot), effectiveCause, outcome)
 		} catch (e: IOException) {
 			// A run whose measurement file cannot be written is a lost data point, not a failed
 			// simulation: the run itself completed and its console summary is already logged. #847's
 			// sweep detects the gap from the missing file rather than from a crashed process.
 			logger.error(e) { "Failed to persist dispatcher run ${recorder.runId}" }
-			null
+			Persisted(null, effectiveCause, outcome)
 		}
+	}
+
+	/**
+	 * Turns a [RunEndCause.NATURAL_COMPLETION] over a dead railway into [RunEndCause.STARVED].
+	 *
+	 * ## Why (Issue #930)
+	 *
+	 * `RunReportAggregator.runPassed` starts with `completedNaturally`, which
+	 * `DefaultDispatcherRunRecorder` derives from the end cause. So a run recorded as
+	 * [RunEndCause.NATURAL_COMPLETION] is a passing data point no matter what the railway did — and
+	 * the GUI recorded *every* unattended run that way, because it had no liveness signal at all. A
+	 * measured `tickPeriodMs=20000` run scored as a pass with journeys 0/7 and zero trains exited.
+	 *
+	 * The check lives on this shared path rather than in the GUI so both arms get it from one
+	 * place: this is the only point on either the GUI Stop handler or the headless `Main.runExample`
+	 * that already holds the railway figures. The headless arm keeps its own `RunCompletionCheck`
+	 * time-shortfall test as well; the two are complementary, since a starved run reaches its
+	 * horizon normally and a deadlocked one does not.
+	 *
+	 * ## Only NATURAL_COMPLETION is adjusted
+	 *
+	 * [RunEndCause.MANUAL_STOP], [RunEndCause.TERMINATED_EARLY], [RunEndCause.TIMEOUT_ABORT] and
+	 * [RunEndCause.CRASH] already say something more specific about why the run ended, and all four
+	 * already yield `completedNaturally = false`. Overwriting them would lose information and gain
+	 * nothing.
+	 *
+	 * A short run that had no time to complete a journey is reported as starved, which is the
+	 * literal truth about it: it achieved nothing. The sweep grid runs 333 s and 600 s horizons, so
+	 * this is not a case the measurement pipeline hits.
+	 *
+	 * @return [cause] unchanged, or [RunEndCause.STARVED] when [cause] is a natural completion over
+	 *   a railway measured to have achieved nothing.
+	 */
+	fun starvationAdjusted(
+		cause: RunEndCause,
+		outcome: RailwayOutcome
+	): RunEndCause {
+		if (cause != RunEndCause.NATURAL_COMPLETION) return cause
+		if (outcome.progress() != RailwayProgress.STARVED) return cause
+		logger.warn {
+			"Run reached its end time but the railway achieved nothing: " +
+				"journeysCompleted=${outcome.journeysCompleted}, trainsExited=${outcome.trainsExited}, " +
+				"trainsEntered=${outcome.trainsEntered}, blockTransitions=${outcome.blockTransitions}. " +
+				"Recording it as ${RunEndCause.STARVED} so it does not count as a passing run."
+		}
+		return RunEndCause.STARVED
 	}
 
 	/**

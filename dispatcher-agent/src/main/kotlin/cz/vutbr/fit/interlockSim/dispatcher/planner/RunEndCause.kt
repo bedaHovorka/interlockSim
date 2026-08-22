@@ -40,6 +40,25 @@ enum class RunEndCause {
 	TERMINATED_EARLY,
 
 	/**
+	 * The run reached its end time, but the railway achieved nothing: no train completed a
+	 * journey and none left through an exit point.
+	 *
+	 * Distinct from [TERMINATED_EARLY], whose event queue drained early. A starved run looks
+	 * healthy from the outside — the clock reached the horizon and every process was still
+	 * alive — so without this value it is recorded as [NATURAL_COMPLETION] and counted by
+	 * [RunReportAggregator.runPassed] as a **passing** data point. A measured GUI run at
+	 * `tickPeriodMs=20000` did exactly that: journeys 0/7, trains exited 0, and
+	 * `completedNaturally=true`.
+	 *
+	 * The verdict comes from [RailwayOutcome] alone, because the GUI always reaches its end
+	 * time in wall-clock terms and so the headless time-shortfall check cannot see this at
+	 * all. See [RailwayProgress] for the exact rule and for why it is threshold-free.
+	 *
+	 * @since Issue #930 (Wave 3 — GUI starvation flag)
+	 */
+	STARVED,
+
+	/**
 	 * A watchdog or wall-clock budget expired and the sweep driver forcibly killed the JVM.
 	 *
 	 * The simulation may have been making progress at the time of the kill; the failure

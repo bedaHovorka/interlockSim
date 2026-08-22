@@ -281,9 +281,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// but nothing wrote the result, and nothing fed onTick/onActionOutcome, so the
 							// frozen snapshot was all zeroes and was then discarded. It is a no-op for a
 							// context that wired no dispatcher, and idempotent per run.
+							// Issue #930: finishAndPersist decides the cause actually recorded — a natural
+							// completion over a railway that achieved nothing becomes STARVED — and hands
+							// it back so the verdict reaches the user instead of only the log file.
 							val runScope = wiredRunScope
 							if (runScope != null) {
-								DispatcherRunSummaries.finishAndPersist(runScope, runEndCause)
+								val persisted = DispatcherRunSummaries.finishAndPersist(runScope, runEndCause)
+								statusBar.setStarvedIndicator(persisted.endCause == RunEndCause.STARVED)
 							} else {
 								// No scope captured (a context set outside the RUNNING transition): fall back to
 								// the recorder alone so the run is still finished and summarised.
@@ -813,6 +817,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Clear any stale warnings from a previous run.
 		warningPanel.clearWarnings()
 		statusBar.setWarningIndicator(false)
+		// Same for the previous run's starvation verdict (Issue #930). Cleared here, at start,
+		// and deliberately NOT in stopSimulation(): the verdict is set by the STOPPED transition
+		// and has to stay on screen until the user starts the next run.
+		statusBar.setStarvedIndicator(false)
 		conflictResolutionPanel.clearResolutions()
 
 		try {

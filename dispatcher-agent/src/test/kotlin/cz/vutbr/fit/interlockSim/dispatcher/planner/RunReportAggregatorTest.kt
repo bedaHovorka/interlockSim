@@ -49,6 +49,24 @@ class RunReportAggregatorTest {
 		assertThat(aggregator.runPassed(snapshot(completedNaturally = true, fallback = false, c7Clean = false))).isFalse()
 	}
 
+	/**
+	 * Issue #930: a starved run is recorded as [RunEndCause.STARVED], which
+	 * `DefaultDispatcherRunRecorder` turns into `completedNaturally = false`. Nothing in the gate
+	 * predicate had to change for that to be rejected — this test pins that the composition works,
+	 * so a later "simplification" of the recorder cannot silently let a dead railway pass again.
+	 */
+	@Test
+	fun `runPassed rejects a STARVED run`() {
+		val starved =
+			snapshot(completedNaturally = false, fallback = false, c7Clean = true)
+				.copy(
+					endCause = RunEndCause.STARVED,
+					railwayOutcome = RailwayOutcome(journeysCompleted = 0L, trainsExited = 0L)
+				)
+
+		assertThat(aggregator.runPassed(starved)).isFalse()
+	}
+
 	// ── Actionable-rate gate composition (Issue #927) ──────────────────────────
 
 	@Test

@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -19,6 +20,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
@@ -29,6 +31,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.module.Module
 import org.koin.test.get
 import java.nio.file.Path
@@ -90,11 +94,17 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 
 		val written = DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION)
 
-		assertThat(written, "written path").isNotNull()
+		assertThat(written.file, "written path").isNotNull()
 		val loaded = DefaultRunSnapshotStore(root).readAll(root)
 		assertThat(loaded, "snapshots read back").hasSize(1)
 		assertThat(loaded.first().arm, "arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
-		assertThat(loaded.first().endCause, "end cause").isEqualTo(RunEndCause.NATURAL_COMPLETION)
+		// No simulation is run in this test, so the railway genuinely achieved nothing: zero
+		// journeys and zero exits. Issue #930 records that as STARVED rather than as a natural
+		// completion, which is the literal truth about this context and is what stops such a run
+		// counting as a passing data point. The healthy-path counterpart is
+		// `starvationAdjusted leaves a run that made progress alone`.
+		assertThat(loaded.first().endCause, "end cause").isEqualTo(RunEndCause.STARVED)
+		assertThat(loaded.first().completedNaturally, "completed naturally").isFalse()
 	}
 
 	@Test
@@ -109,7 +119,8 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 			)
 		)
 
-		val written = checkNotNull(DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION))
+		val written =
+			checkNotNull(DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION).file)
 
 		assertThat(written.parent.fileName.toString(), "arm directory").isEqualTo("llm_tool_calling")
 	}
@@ -165,7 +176,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 
 		val written = DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION)
 
-		assertThat(written, "written path").isNull()
+		assertThat(written.file, "written path").isNull()
 		assertThat(DefaultRunSnapshotStore(root).readAll(root), "snapshots on disk").hasSize(0)
 	}
 
@@ -288,5 +299,59 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 			reportUnreleasedReservationsInvoked = true
 			return emptySet()
 		}
+	}
+
+	// ── Starvation adjustment (Issue #930) ───────────────────────────────────
+
+	/**
+	 * The whole point of #930: `RunReportAggregator.runPassed` starts with `completedNaturally`,
+	 * which is derived from the end cause, so a natural completion over a dead railway is a passing
+	 * data point. The GUI produced exactly that for every unattended run.
+	 */
+	@Test
+	@DisplayName("starvationAdjusted turns a natural completion over a dead railway into STARVED")
+	fun starvationAdjustedFlagsDeadRailway() {
+		val dead = RailwayOutcome(journeysCompleted = 0L, trainsEntered = 7L, trainsExited = 0L, blockTransitions = 3L)
+
+		val adjusted = DispatcherRunSummaries.starvationAdjusted(RunEndCause.NATURAL_COMPLETION, dead)
+
+		assertThat(adjusted, "adjusted cause").isEqualTo(RunEndCause.STARVED)
+	}
+
+	@Test
+	@DisplayName("starvationAdjusted leaves a run that made progress alone")
+	fun starvationAdjustedLeavesHealthyRun() {
+		val healthy = RailwayOutcome(journeysCompleted = 7L, trainsEntered = 7L, trainsExited = 7L)
+
+		val adjusted = DispatcherRunSummaries.starvationAdjusted(RunEndCause.NATURAL_COMPLETION, healthy)
+
+		assertThat(adjusted, "adjusted cause").isEqualTo(RunEndCause.NATURAL_COMPLETION)
+	}
+
+	/**
+	 * A run nobody measured gets no verdict — absent is not zero. Overwriting the cause here would
+	 * invent a finding, which is the failure mode `RailwayOutcome`'s KDoc exists to prevent.
+	 */
+	@Test
+	@DisplayName("starvationAdjusted leaves an unmeasured railway alone")
+	fun starvationAdjustedLeavesUnmeasuredRun() {
+		val adjusted =
+			DispatcherRunSummaries.starvationAdjusted(RunEndCause.NATURAL_COMPLETION, RailwayOutcome.UNMEASURED)
+
+		assertThat(adjusted, "adjusted cause").isEqualTo(RunEndCause.NATURAL_COMPLETION)
+	}
+
+	/**
+	 * Every other cause already says something more specific about why the run ended, and all of
+	 * them already yield `completedNaturally = false`. Overwriting them would lose information for
+	 * no gain.
+	 */
+	@ParameterizedTest
+	@EnumSource(value = RunEndCause::class, names = ["NATURAL_COMPLETION"], mode = EnumSource.Mode.EXCLUDE)
+	@DisplayName("starvationAdjusted never rewrites a cause other than NATURAL_COMPLETION")
+	fun starvationAdjustedOnlyTouchesNaturalCompletion(cause: RunEndCause) {
+		val dead = RailwayOutcome(journeysCompleted = 0L, trainsExited = 0L)
+
+		assertThat(DispatcherRunSummaries.starvationAdjusted(cause, dead), "adjusted cause").isEqualTo(cause)
 	}
 }
