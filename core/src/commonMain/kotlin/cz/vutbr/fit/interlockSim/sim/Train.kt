@@ -839,21 +839,14 @@ class Train :
 // 			});
 // 		}
 
-		/**
-		 * Issue #931 f2: the path half is built once, here, so its epoch cache survives every
-		 * re-test inside the `waitUntil` that consumes this condition. Building it inside the
-		 * lambda would create a fresh cache per test and save nothing.
-		 *
-		 * The signal half stays uncached and stays first, so it short-circuits: a semaphore aspect
-		 * is not registry state and the cache knows nothing about it.
-		 */
 		private fun allowingSignal(
 			semaphore: DynamicRailSemaphore,
 			separator: DynamicPathSeparator
-		): Condition {
-			val pathAvailable = trainNavService.createPathAvailableCondition(name, separator)
-			return Condition { semaphore.signal.isAllowing() && pathAvailable.test() }
-		}
+		): Condition =
+			Condition {
+				semaphore.signal.isAllowing() &&
+					trainNavService.findReservedPathForTrain(name, separator) is PathResult.Available
+			}
 
 		private fun fireStop() {
 			requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when stopping" }

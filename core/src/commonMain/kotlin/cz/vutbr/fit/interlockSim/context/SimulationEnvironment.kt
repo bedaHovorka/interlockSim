@@ -157,11 +157,6 @@ interface SimulationEnvironment : NetworkState {
 	 * The condition is evaluated after every discrete event, so it integrates
 	 * with kDisco event scheduling without busy-polling.
 	 *
-	 * Issue #931 f2: the condition is built by the navigation service rather than here, so the
-	 * implementation can skip a re-test whose inputs demonstrably have not moved. That is not a
-	 * detail a bare lambda at this level could know. See
-	 * [TrainNavigationService.createPathAvailableCondition].
-	 *
 	 * @param trainId The train waiting for a path
 	 * @param separator The separator where the train is waiting
 	 * @return A condition that is true when [findReservedPathForTrain] returns [PathResult.Available]
@@ -170,7 +165,10 @@ interface SimulationEnvironment : NetworkState {
 	fun createPathAvailableCondition(
 		trainId: String,
 		separator: PathSeparator
-	): Condition = getRoutingServices().getTrainNavigationService().createPathAvailableCondition(trainId, separator)
+	): Condition =
+		Condition {
+			getRoutingServices().getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
+		}
 
 	/**
 	 * Get the automatic path finding service for static Dijkstra-based route search.

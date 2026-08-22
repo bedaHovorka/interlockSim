@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -64,9 +63,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @param context Simulation environment for dynamic type conversion
  * @param registry Registry for checking block ownership
- * @param verifyEveryEvaluation Debug switch for [createPathAvailableCondition]: when `true`, every
- *   condition test recomputes and compares against the cached answer, throwing on a mismatch.
- *   Off in production — see that method's KDoc.
  * @see TrainNavigationService
  * @since Issue #295 (Phase 3 of Issue #292)
  * @since Issue #296 Phase 5 (Removed indirect recursion)
@@ -74,26 +70,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  */
 class DefaultTrainNavigationService(
 	private val context: SimulationContext,
-	private val registry: PathReservationRegistry,
-	private val verifyEveryEvaluation: Boolean = false
+	private val registry: PathReservationRegistry
 ) : TrainNavigationService {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		/**
-		 * Epoch value meaning "this condition has never really evaluated".
-		 *
-		 * [PathReservationRegistry.mutationEpoch] starts at `0` and only grows, so a negative
-		 * value can never compare equal to it and the first test always computes.
-		 */
-		private const val UNSEEN_EPOCH: Long = -1L
 	}
-
-	/** Times [createPathAvailableCondition]'s conditions were tested (Issue #931 f2). */
-	private var conditionTests: Long = 0L
-
-	/** Times such a test had to run a real [findReservedPathForTrain] (Issue #931 f2). */
-	private var realEvaluations: Long = 0L
 
 	override fun findReservedPathForTrain(
 		trainId: String,
@@ -188,10 +169,7 @@ class DefaultTrainNavigationService(
 		for (block in blocks) {
 			val owner = registry.getOwner(block)
 			if (owner != trainId) {
-				// Issue #931 f1 demoted this class of per-evaluation log; this one was missed. It
-				// fires on every failed evaluation of every waiting train — the single most common
-				// outcome for a parked train — so at INFO it dominated the log volume.
-				logger.debug {
+				logger.info {
 					"findReservedPathForTrain: block $block is not reserved for train '$trainId' " +
 						"(owner: ${owner ?: "none"}), path not available"
 				}
@@ -568,85 +546,6 @@ class DefaultTrainNavigationService(
 			"extractDynamicTrackBlocks: extracted ${seen.size} unique blocks from path with ${path.size} elements"
 		}
 		return seen.toList()
-	}
-
-	/**
-	 * Epoch-cached path-available condition (Issue #931 f2).
-	 *
-	 * ## What is cached and why it is sound
-	 *
-	 * [findReservedPathForTrain] reads exactly two pieces of mutable state, and both live in
-	 * [PathReservationRegistry]: `getPathInfo(trainId)` and `getOwner(block)`. `PathInfo` is an
-	 * immutable data class, so it can only change by being replaced in the registry.
-	 * [hasTopologicalContinuation] goes to `TopologyNavigator.getNextTrackBlock`, which reads the
-	 * **static** grid and deliberately ignores switch configuration; nothing on the path reads a
-	 * block's occupant. So while [PathReservationRegistry.mutationEpoch] is unchanged, the answer
-	 * cannot have changed either, and the re-test can be served from memory.
-	 *
-	 * The cache holds a `Boolean`. It must not hold the [PathResult] — `Train.Site.separatorAction`
-	 * calls `removeFirst()` on the path it is handed, which is safe only because every evaluation
-	 * builds a fresh one.
-	 *
-	 * ## Lifetime
-	 *
-	 * One cache per returned condition, so it lives exactly as long as the `waitUntil` that holds
-	 * it: no map, no eviction, nothing to leak. kDisco keeps the same `Condition` instance for the
-	 * whole wait (`Process.waitUntil` stores it in a `WaitNotice`), which is what makes a
-	 * per-instance cache worth having.
-	 *
-	 * ## No time-based refresh
-	 *
-	 * There is deliberately no "recompute anyway every N seconds" safety net. The epoch covers the
-	 * whole read set, so such a window would change nothing; and if the read set were ever
-	 * incomplete, a window would convert a reproducible staleness bug into a timing-dependent one
-	 * and make the evaluation counts untestable. [verifyEveryEvaluation] is the safety net instead:
-	 * it recomputes every time and fails loudly on a mismatch.
-	 */
-	override fun createPathAvailableCondition(
-		trainId: String,
-		separator: PathSeparator
-	): Condition {
-		var epochAtLastEval = UNSEEN_EPOCH
-		var lastResult = false
-		return Condition {
-			conditionTests++
-			val epoch = registry.mutationEpoch
-			if (epoch == epochAtLastEval) {
-				if (verifyEveryEvaluation) {
-					verifyCachedAnswer(trainId, separator, lastResult)
-				}
-				lastResult
-			} else {
-				realEvaluations++
-				lastResult = findReservedPathForTrain(trainId, separator) is PathResult.Available
-				epochAtLastEval = epoch
-				lastResult
-			}
-		}
-	}
-
-	override fun evaluationStats(): PathEvaluationStats =
-		PathEvaluationStats(conditionTests = conditionTests, realEvaluations = realEvaluations)
-
-	/**
-	 * Recomputes and compares against [cached], for [verifyEveryEvaluation].
-	 *
-	 * A mismatch means the registry changed the answer without changing
-	 * [PathReservationRegistry.mutationEpoch] — a missing `bumpEpoch()`. Left undetected that
-	 * stalls a train until its #943 error horizon, at which point the cause is long gone from the
-	 * log, so this fails immediately and names the train.
-	 */
-	private fun verifyCachedAnswer(
-		trainId: String,
-		separator: PathSeparator,
-		cached: Boolean
-	) {
-		val fresh = findReservedPathForTrain(trainId, separator) is PathResult.Available
-		check(fresh == cached) {
-			"Path-available cache is stale for train '$trainId' at $separator: cached=$cached, " +
-				"recomputed=$fresh, while PathReservationRegistry.mutationEpoch stayed at " +
-				"${registry.mutationEpoch}. A registry mutation is missing its bumpEpoch()."
-		}
 	}
 
 	/**

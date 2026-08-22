@@ -166,39 +166,6 @@ class PathReservationRegistry(
 	}
 
 	/**
-	 * Counts every change to this registry's reservation state.
-	 *
-	 * ## Why (Issue #931 f2)
-	 *
-	 * kDisco re-tests a `waitUntil` predicate after every discrete event and every integration
-	 * step, so a parked train re-ran a full `findReservedPathForTrain` tens of thousands of times
-	 * per run — measured at 10,800-40,490 per 333 s GUI run and 39k-75k headless. That evaluation
-	 * reads nothing but this registry: `getPathInfo` and `getOwner`. Everything else it consults
-	 * (the grid, `TopologyNavigator.getNextTrackBlock`, `PathInfo` itself) is immutable for the
-	 * lifetime of a simulation.
-	 *
-	 * So a condition that remembers the epoch of its last real evaluation can skip every re-test
-	 * that arrives while this counter is unchanged, and be certain the answer has not moved. See
-	 * `DefaultTrainNavigationService.createPathAvailableCondition`.
-	 *
-	 * ## Failure direction
-	 *
-	 * Bumping too often is harmless — it only costs a recomputation that would have happened
-	 * anyway. Bumping too rarely would let a train sleep through its own wake-up condition, so
-	 * every mutation below bumps, including the switch maps that the path evaluation does **not**
-	 * read. The bumps are placed at the points where state actually changes, not at method exits,
-	 * so the several no-mutation early returns do not invalidate anything.
-	 *
-	 * @since Issue #931 f2 (Wave 3 — per-event pathfind churn)
-	 */
-	var mutationEpoch: Long = 0L
-		private set
-
-	private fun bumpEpoch() {
-		mutationEpoch++
-	}
-
-	/**
 	 * Mapping: Train ID → List of reserved blocks
 	 */
 	private val trainToBlocks = mutableMapOf<String, MutableList<DynamicTrackBlock>>()
@@ -356,7 +323,6 @@ class PathReservationRegistry(
 			}
 			blockToTrain[block] = trainId
 		}
-		bumpEpoch()
 
 		return RegistrationResult.Success
 	}
@@ -444,7 +410,6 @@ class PathReservationRegistry(
 		// Remove train entry and PathInfo
 		trainToBlocks.remove(trainId)
 		trainToPathInfo.remove(trainId)
-		bumpEpoch()
 
 		logger.debug {
 			"unregister: Released ${blocks.size} blocks for '$trainId'"
@@ -521,7 +486,6 @@ class PathReservationRegistry(
 		// Remove from mappings
 		blockToTrain.remove(block)
 		trainToBlocks[trainId]?.remove(block)
-		bumpEpoch()
 
 		val remainingBlocks = trainToBlocks[trainId]?.size ?: 0
 		logger.debug {
@@ -662,7 +626,6 @@ class PathReservationRegistry(
 			}
 			switchToTrain[switch] = trainId
 		}
-		bumpEpoch()
 
 		logger.info {
 			"registerSwitches: Registered ${switches.size} switches for '$trainId'"
@@ -699,7 +662,6 @@ class PathReservationRegistry(
 
 		// Remove train entry
 		trainToSwitches.remove(trainId)
-		bumpEpoch()
 
 		logger.info {
 			"unregisterSwitches: Released ${switches.size} switches for '$trainId'"
@@ -746,7 +708,6 @@ class PathReservationRegistry(
 		if (trainToSwitches[trainId]?.isEmpty() == true) {
 			trainToSwitches.remove(trainId)
 		}
-		bumpEpoch()
 		logger.debug {
 			"unregisterSwitch: Released switch ${switch.hashCode()} for '$trainId'"
 		}
@@ -822,7 +783,6 @@ class PathReservationRegistry(
 					"path length=${newPathInfo.reservedPath.size})"
 			}
 			trainToPathInfo[trainId] = newPathInfo
-			bumpEpoch()
 			return MergeOutcome.Merged(newPathInfo)
 		}
 
@@ -830,7 +790,6 @@ class PathReservationRegistry(
 		val outcome = mergePathInfo(trainId, oldPathInfo, newPathInfo)
 		val mergedPathInfo = outcome.pathInfo
 		trainToPathInfo[trainId] = mergedPathInfo
-		bumpEpoch()
 
 		logger.debug {
 			"registerPathInfo: merged PathInfo for '$trainId' " +
@@ -1272,7 +1231,6 @@ class PathReservationRegistry(
 		trainId: String,
 		snapshot: PathInfo?
 	) {
-		bumpEpoch()
 		if (snapshot == null) {
 			trainToPathInfo.remove(trainId)
 			logger.debug { "restorePathInfo: removed PathInfo entry for '$trainId' (no pre-attempt PathInfo)" }
@@ -1297,7 +1255,6 @@ class PathReservationRegistry(
 		trainToSwitches.clear()
 		switchToTrain.clear()
 		trainToPathInfo.clear()
-		bumpEpoch()
 	}
 
 	/**
