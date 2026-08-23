@@ -1,0 +1,103 @@
+{
+    "schemaVersion": 7,
+    "runId": "sweep-ex-shuntingLoop_m-default_t-default_p-0_h-3_a-3_it-default_pv-default-r03",
+    "arm": "RULE_BASED",
+    "params": {
+        "tickPeriodMs": 0,
+        "historyN": 3,
+        "temperature": 0.0,
+        "maxActionsPerTick": 3,
+        "model": "",
+        "seed": null,
+        "inferenceTimeoutSeconds": 30,
+        "promptVariant": ""
+    },
+    "totalTicks": 0,
+    "ticksByOutcome": {
+        "LLM_ACTIONS": 0,
+        "LLM_REPAIRED": 0,
+        "LLM_EXCEPTION": 0,
+        "RULE_FALLBACK": 0,
+        "LLM_NO_OP": 0,
+        "LLM_SILENT_NONACTIONABLE": 0,
+        "TIMEOUT_NOOP": 0,
+        "LLM_ABANDONED": 0
+    },
+    "timeoutNoOpByCause": {
+        "EMPTY_UNPARSEABLE": 0,
+        "UNREPAIRABLE_OUTPUT": 0,
+        "DEADLINE_MISS": 0
+    },
+    "llmSuccessRate": 0.0,
+    "actionableTickRate": 0.0,
+    "noOpRate": 0.0,
+    "invalidOutputRate": 0.0,
+    "repairSuccessRate": 0.0,
+    "emittedByActionType": {
+        "ReservePath": 25,
+        "ApproveTrain": 13
+    },
+    "rejectionsByCode": {
+        "NO_ROUTE_HELD": 0,
+        "BLANK_ARGUMENT": 0,
+        "DUPLICATE_ACTION_THIS_TICK": 0,
+        "UNKNOWN_ENDPOINT": 0,
+        "ROUTE_SPANS_ENTRY_TO_EXIT": 0,
+        "ACTION_LIMIT_EXCEEDED": 0,
+        "TRAIN_NOT_ADMITTED": 0,
+        "NO_FREE_PATH": 0,
+        "TARGET_NOT_TRAIN_DESTINATION": 0,
+        "TRAIN_ALREADY_ACTIVE": 0,
+        "ORIGIN_NOT_AT_TRAIN_POSITION": 0,
+        "ROUTE_HELD_TO_DIFFERENT_TARGET": 0,
+        "TRAIN_ALREADY_EXITED": 0,
+        "TRAIN_ON_RESERVED_BLOCK": 0,
+        "UNKNOWN_TRAIN": 0,
+        "CAPACITY_FULL": 0,
+        "ROUTE_ALREADY_HELD_TO_SAME_TARGET": 0,
+        "ENDPOINT_IS_BLOCK_ID": 0,
+        "TRAIN_NOT_QUEUED": 0
+    },
+    "applyFailuresByCode": {
+        "CONFLICT": 0,
+        "CAP_EXCEEDED_APPLY": 0,
+        "ORIGIN_NOT_CONTIGUOUS": 0,
+        "NO_ROUTE_EXISTS": 0,
+        "GEOMETRICALLY_IMPOSSIBLE": 0,
+        "ALL_PATHS_BLOCKED": 0,
+        "APPROVE_REJECTED": 0,
+        "DROPPED_INVALID": 0,
+        "CONDITION_FAILED": 0
+    },
+    "validAt1": 0.0,
+    "correctAt1": null,
+    "oracleAgreementAt1": null,
+    "latencyP50Ms": null,
+    "latencyP95Ms": null,
+    "latencyMaxMs": null,
+    "actionsByAuthor": {
+        "RULE_BASED": 38,
+        "OPERATOR": 0,
+        "SAFETY_NET": 0,
+        "RULE_FALLBACK": 0,
+        "LLM": 0,
+        "TIMEOUT_NOOP": 0
+    },
+    "unattributedApplies": 0,
+    "terminalFallbackEngaged": false,
+    "terminalFallbackTickIndex": null,
+    "c7Clean": true,
+    "completedNaturally": true,
+    "endCause": "NATURAL_COMPLETION",
+    "railwayOutcome": {
+        "journeysCompleted": 11,
+        "trainsEntered": 15,
+        "trainsExited": 11,
+        "maxConcurrentTrains": 2,
+        "blockTransitions": 25,
+        "conflicts": 0,
+        "failedReservations": 0
+    },
+    "loggedFatalSimExceptionCount": 0,
+    "loggedFatalSimExceptionFirstMessage": null
+}

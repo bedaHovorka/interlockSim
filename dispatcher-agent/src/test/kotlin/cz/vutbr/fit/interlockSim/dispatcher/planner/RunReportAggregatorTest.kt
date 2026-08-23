@@ -76,6 +76,7 @@ class RunReportAggregatorTest {
 				completedNaturally = true,
 				fallback = false,
 				c7Clean = true,
+				arm = DispatcherArm.LLM_TOOL_CALLING,
 				actionableTickRate = RunReportAggregator.MIN_ACTIONABLE_RATE - 0.01
 			)
 		assertThat(aggregator.runPassed(belowThreshold)).isFalse()
@@ -88,6 +89,7 @@ class RunReportAggregatorTest {
 				completedNaturally = true,
 				fallback = false,
 				c7Clean = true,
+				arm = DispatcherArm.LLM_TOOL_CALLING,
 				actionableTickRate = RunReportAggregator.MIN_ACTIONABLE_RATE
 			)
 		assertThat(aggregator.runPassed(atThreshold)).isTrue()
@@ -101,16 +103,123 @@ class RunReportAggregatorTest {
 	 */
 	@Test
 	fun `runPassed requires both a passing railway outcome AND an adequate actionable rate`() {
+		val llm = DispatcherArm.LLM_TOOL_CALLING
 		val goodRailwayLowRate =
-			snapshot(completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 0.1)
+			snapshot(arm = llm, completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 0.1)
 		val badRailwayHighRate =
-			snapshot(completedNaturally = false, fallback = false, c7Clean = true, actionableTickRate = 1.0)
+			snapshot(arm = llm, completedNaturally = false, fallback = false, c7Clean = true, actionableTickRate = 1.0)
 		val bothGood =
-			snapshot(completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 1.0)
+			snapshot(arm = llm, completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 1.0)
 
 		assertThat(aggregator.runPassed(goodRailwayLowRate)).isFalse()
 		assertThat(aggregator.runPassed(badRailwayHighRate)).isFalse()
 		assertThat(aggregator.runPassed(bothGood)).isTrue()
+	}
+
+	/**
+	 * The measured #895 defect. A [DispatcherArm.RULE_BASED] run never consults an LLM, so it
+	 * records `totalTicks = 0` and therefore `actionableTickRate = 0.0`. Applying the #927
+	 * actionable-rate clause to it failed a control arm that had just delivered eleven train
+	 * exits on every one of its ten runs.
+	 *
+	 * The #895 campaign printed exactly that: `| RULE_BASED | 10 | 0 | FAIL | ... 0.000 ... |`,
+	 * where #847 and #834 had both published the same control arm as 10/10 PASS. The clause is a
+	 * statement about LLM decision quality and has no meaning for an arm that makes no LLM
+	 * decisions.
+	 */
+	@Test
+	fun `runPassed does not apply the actionable-rate clause to the rule-based arm`() {
+		val control =
+			snapshot(
+				arm = DispatcherArm.RULE_BASED,
+				completedNaturally = true,
+				fallback = false,
+				c7Clean = true,
+				llmSuccessRate = 0.0,
+				actionableTickRate = 0.0,
+				railwayOutcome = RailwayOutcome(journeysCompleted = 11L, trainsEntered = 15L, trainsExited = 11L)
+			)
+
+		assertThat(aggregator.runPassed(control)).isTrue()
+	}
+
+	/**
+	 * The same zero rate on an LLM arm is a real failure, not an exemption — the guard is scoped
+	 * to the arm that cannot produce the measurement, not to the value zero.
+	 */
+	@Test
+	fun `runPassed still applies the actionable-rate clause to an LLM arm`() {
+		val llm =
+			snapshot(
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				completedNaturally = true,
+				fallback = false,
+				c7Clean = true,
+				actionableTickRate = 0.0
+			)
+
+		assertThat(aggregator.runPassed(llm)).isFalse()
+	}
+
+	/**
+	 * The outcome term (#895). A run that completes naturally with a clean decision record can
+	 * still have moved almost nothing, and nothing in the pre-#895 predicate noticed.
+	 * [RunReportAggregator.MIN_TRAINS_EXITED] is derived from the deterministic control arm, not
+	 * from the LLM arm it judges.
+	 */
+	@Test
+	fun `runPassed fails a naturally completed run that moved too few trains`() {
+		val weak =
+			snapshot(
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				completedNaturally = true,
+				fallback = false,
+				c7Clean = true,
+				actionableTickRate = 1.0,
+				railwayOutcome =
+					RailwayOutcome(
+						journeysCompleted = 3L,
+						trainsEntered = 15L,
+						trainsExited = RunReportAggregator.MIN_TRAINS_EXITED - 1
+					)
+			)
+		val adequate =
+			snapshot(
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				completedNaturally = true,
+				fallback = false,
+				c7Clean = true,
+				actionableTickRate = 1.0,
+				railwayOutcome =
+					RailwayOutcome(
+						journeysCompleted = 6L,
+						trainsEntered = 15L,
+						trainsExited = RunReportAggregator.MIN_TRAINS_EXITED
+					)
+			)
+
+		assertThat(aggregator.runPassed(weak)).isFalse()
+		assertThat(aggregator.runPassed(adequate)).isTrue()
+	}
+
+	/**
+	 * An absent exit count is "not measured", never "zero" — the same rule [RailwayOutcome] and
+	 * [RailwayProgress] already follow. A run nobody measured must not be failed by a term that
+	 * had nothing to read.
+	 */
+	@Test
+	fun `runPassed ignores the outcome term when the exit count was not measured`() {
+		val unmeasured =
+			snapshot(
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				completedNaturally = true,
+				fallback = false,
+				c7Clean = true,
+				actionableTickRate = 1.0,
+				railwayOutcome = RailwayOutcome.UNMEASURED
+			)
+
+		assertThat(aggregator.runPassed(unmeasured)).isTrue()
 	}
 
 	@Test
