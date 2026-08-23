@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -83,6 +84,7 @@ import java.util.concurrent.atomic.AtomicReference
 class OwnershipConflictStallWarningTest {
 	private val xmlContextFactory = XMLContextFactory()
 	private val processFactory = DefaultSimulationProcessFactory()
+	private val fixture = LiftedStackFixture()
 
 	private lateinit var context: DefaultSimulationContext
 	private lateinit var appender: ListAppender<ILoggingEvent>
@@ -440,6 +442,49 @@ class OwnershipConflictStallWarningTest {
 		assertThat(stop, name = "captured stall errorStop for $trainId").isNotNull()
 		assertThat(warningsAtErrorStop.get(), name = "stall WARNs naming $trainId logged before its errorStop")
 			.isEqualTo(2)
+	}
+
+	/**
+	 * Calibration gate via the lifted dispatcher-agent stack: a healthy `vyhybna` run through
+	 * [AgentLoopDriver] + [DispatchDecisionApplier] + [RuleBasedDispatcher] must emit no stall
+	 * WARNs. If this fails, the WARN horizon is too tight for the lifted-stack path — raise
+	 * [Train.OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS] rather than relax the assertion.
+	 *
+	 * This test closes the calibration gap noted in Issue #946: [cleanBaselineRunLogsNoStallWarning]
+	 * exercises the synchronous wiring path ([wireSynchronousDispatcher]), where the dispatcher is
+	 * called synchronously on the kDisco sim thread once per control step, so it always acts within
+	 * the same tick as the observation. The lifted stack — which the AI/LLM dispatcher uses in
+	 * production — runs the driver on a separate thread and applies decisions asynchronously: it can
+	 * skip ticks or be delayed relative to the sim thread. With the lock-step handshake (one driver
+	 * cycle per sim tick), this test holds the same freshness guarantee as the synchronous path
+	 * while running the full production component stack, so any gap between the two wiring paths
+	 * that could let the WARN horizon fire spuriously is caught here.
+	 *
+	 * The lock-step handshake is the crucial detail: without it the driver thread and the kDisco
+	 * sim thread race freely, and the sim can advance many control steps — many simulated seconds —
+	 * before the driver posts decisions. That is the large-tickPeriodMs risk the issue names.
+	 * Lock-step eliminates the race inside this test; the corresponding guard for production is the
+	 * `SnapshotSignal` pacing that ensures the driver wakes on each control step even when
+	 * `tickPeriodMs` imposes a wall-clock floor above the control-step period.
+	 */
+	@Test
+	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	fun cleanBaselineRunLogsNoStallWarningLiftedStack() {
+		val liftedContext = fixture.loadShuntingLoopContext()
+		try {
+			// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
+			liftedContext.getInOuts()
+			val loop = ShuntingLoop(liftedContext, SIM_END_TIME)
+			val run = fixture.run(loop, liftedContext)
+
+			// Sanity: the run really did dispatch, so "no WARN" is not "no work".
+			assertThat(run.trainsExited()).isGreaterThanOrEqualTo(1)
+
+			assertThat(warningsContaining(STALL_WARN_FRAGMENT), name = "stall WARNs (lifted stack)").isEmpty()
+			assertThat(warningsContaining(ORIGIN_STALL_WARN_FRAGMENT), name = "origin stall WARNs (lifted stack)").isEmpty()
+		} finally {
+			liftedContext.close()
+		}
 	}
 
 	private companion object {

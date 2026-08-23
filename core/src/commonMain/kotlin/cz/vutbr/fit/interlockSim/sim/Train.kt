@@ -146,7 +146,43 @@ class Train :
 		 * this WARN can ever be emitted, so the two-stage escalation collapses into a single hard
 		 * stop with no diagnostic. `Issue943OwnershipConflictStallBoundTest` asserts the ordering.
 		 *
-		 * @see Issue #943
+		 * ## Relationship to `tickPeriodMs` and the dispatcher control period
+		 *
+		 * This horizon is measured in **simulated time** from the start of the current uninterrupted
+		 * wait. It is safe only when the dispatcher fires frequently enough — at most a few simulated
+		 * seconds between decisions — so that a healthy train waiting for its next extension never
+		 * reaches the horizon.
+		 *
+		 * In production the driver is typically paced by `SnapshotSignal` (signalled once per control
+		 * step), which avoids polling and ensures the snapshot boundary is tick-aligned.
+		 *
+		 * Note that `SnapshotSignal` is *coalescing* (at most one pending permit). If the driver is
+		 * slower than the control-step cadence (e.g. long inference or large `tickPeriodMs`), multiple
+		 * control steps can collapse into one driver cycle, increasing the simulated-time gap between
+		 * decisions and making this horizon easier to reach.
+		 *
+		 * **The pathological case** is a free-running lifted stack without any driver↔sim barrier and
+		 * with a large `tickPeriodMs`, where a headless sim can run much faster than wall-clock time.
+		 * In that configuration the sim may advance far in simulated time between driver cycles and a
+		 * healthy train waiting for its next extension can cross this horizon as a false positive.
+		 * each control step, and the driver processes it when it wakes — even if that wake is
+		 * deferred by `tickPeriodMs` milliseconds. As long as the driver is paced by
+		 * `SnapshotSignal`, any `tickPeriodMs` value is safe for this horizon.
+		 *
+		 * **The pathological case** is a free-running lifted stack without `SnapshotSignal` and with
+		 * a large `tickPeriodMs`, where a headless sim runs much faster than wall-clock time. In that
+		 * configuration the sim could advance thousands of simulated seconds between driver cycles
+		 * and a healthy train waiting for its next extension would cross this horizon as a false
+		 * positive. The calibration gate
+		 * `OwnershipConflictStallWarningTest.cleanBaselineRunLogsNoStallWarningLiftedStack`
+		 * (Issue #946) pins the correct behaviour under the lifted stack with the lock-step
+		 * handshake (one driver cycle per control step). Any aiSweep grid cell that uses a large
+		 * `tickPeriodMs` without `SnapshotSignal`-paced dispatch must verify that this horizon still
+		 * comfortably exceeds the resulting simulated-time gap between decisions, or adopt
+		 * `SnapshotSignal` pacing.
+		 *
+		 * Issue #943 introduced the two-stage horizon; Issue #946 added the lifted-stack calibration
+		 * gate and this documentation.
 		 */
 		internal const val OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS = 60.0
 
