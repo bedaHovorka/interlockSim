@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -110,7 +111,7 @@ class MidJourneyNoPathErrorStopTest {
 
 		val capturedError = arrayOfNulls<Throwable>(1)
 		val hidingContext =
-			RouteHidingContext(
+			NavigationDecoratingContext(
 				context,
 				MidJourneyRouteHidingNavigationService(
 					delegate = context.getRoutingServices().getTrainNavigationService()

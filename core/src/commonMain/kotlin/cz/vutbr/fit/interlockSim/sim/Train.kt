@@ -141,6 +141,11 @@ class Train :
 		 * Healthy waits in `vyhybna.xml` last seconds, so a full minute without any extension is
 		 * already abnormal.
 		 *
+		 * **Invariant:** this horizon must stay strictly below
+		 * [OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS]. Reverse the two and the run is stopped before
+		 * this WARN can ever be emitted, so the two-stage escalation collapses into a single hard
+		 * stop with no diagnostic. `Issue943OwnershipConflictStallBoundTest` asserts the ordering.
+		 *
 		 * @see Issue #943
 		 */
 		internal const val OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS = 60.0
@@ -160,7 +165,9 @@ class Train :
 		 *
 		 * Deliberately three times the WARN horizon: the WARN is the diagnosis and must have room
 		 * to be seen in a run that then recovers, while this bound only fires on a genuine
-		 * never-extended train.
+		 * never-extended train. **Invariant:** strictly greater than
+		 * [OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS], for that reason — asserted by
+		 * `Issue943OwnershipConflictStallBoundTest`.
 		 *
 		 * @see Issue #943
 		 */
@@ -281,7 +288,7 @@ class Train :
 				resetOwnershipConflictWait()
 				return false
 			}
-			val waited = (time() - since).toInt()
+			val waited = (time() - since).toInt() // truncates to whole seconds; the log reads "N s" intentionally
 			val atOrigin = current == null
 			if (!ownershipConflictWarned) {
 				ownershipConflictWarned = true

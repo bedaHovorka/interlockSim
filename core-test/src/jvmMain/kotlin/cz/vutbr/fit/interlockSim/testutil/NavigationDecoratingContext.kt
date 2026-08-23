@@ -8,7 +8,7 @@
  * Test utility: a simulation context with a decorated navigation service
  * 2026
  */
-package cz.vutbr.fit.interlockSim.sim
+package cz.vutbr.fit.interlockSim.testutil
 
 import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -31,6 +31,15 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  * context.run()
  * ```
  *
+ * ## Why it lives in `:core-test`
+ *
+ * `:core`'s `jvmTest` and `:dispatcher-agent`'s `test` are separate source sets and held one
+ * near-identical copy of this wrapper each — the second one named `RouteHidingContext` (Issue
+ * #947, item 1). `:core-test` `jvmMain` is on the test compile classpath of both, so one copy
+ * now serves both. What did *not* move is `dispatcher-agent`'s `RouteHidingNavigationService`:
+ * hiding a route is the caller's choice of [nav], not this wrapper's job, and keeping the two
+ * apart is what let the duplication collapse.
+ *
  * ## Why this exists rather than MockK `spyk`
  *
  * A `spyk(context)` with `every { spy.getRoutingServices() } returns …` reads the same and was the
@@ -48,15 +57,22 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  * `by delegate` forwards the call itself, but the default body still resolves
  * `getRoutingServices()` against the delegate's own `this` — so without this override a waiting
  * train would silently consult the real, un-decorated navigation service. (MockK resolves default
- * methods against the spy, which is why the `spyk` form did not need this.) The same override
- * exists for the same reason on `dispatcher-agent`'s `RouteHidingContext`.
+ * methods against the spy, which is why the `spyk` form did not need this.)
+ *
+ * The measured cost of getting this wrong: the condition read the real navigation service, where
+ * the reservation genuinely exists, so `waitUntil(createPathAvailableCondition(...))` in `Train.kt`
+ * resolved `true` on its very first synchronous check and never suspended into kDisco's wait-notice
+ * list. The `Front` just looped `continue` → query → `true` → `continue` forever at a single frozen
+ * simulated instant (`Dispatchers.Unconfined` never yields), paying for one real
+ * `findReservedPathForTrain` graph walk per iteration — an unbounded CPU-bound hang, independent of
+ * `END_TIME` or of how many trains were admitted.
  *
  * @param delegate the real context; everything not overridden here goes straight to it
  * @param nav the navigation service the simulation must see
  * @param onErrorStop called with every `errorStop` reason before it is forwarded, or `null` when
  *   the test does not inspect them
  */
-internal class NavigationDecoratingContext(
+class NavigationDecoratingContext(
 	private val delegate: SimulationContext,
 	nav: TrainNavigationService,
 	private val onErrorStop: ((Throwable) -> Unit)? = null

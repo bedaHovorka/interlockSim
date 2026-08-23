@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -93,8 +94,15 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		}
 
 	/**
-	 * The two horizons are positive and ordered: the WARN must precede the `errorStop`, otherwise
-	 * the run would be stopped before ever emitting the diagnostic the issue asked for.
+	 * Pins the escalation invariant the two-stage design rests on:
+	 *
+	 * ```
+	 * 0 < OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS < OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS
+	 * ```
+	 *
+	 * Reverse the two and the `errorStop` fires before the WARN can ever be emitted: the run still
+	 * stops, the test suite still passes, and the diagnostic Issue #943 was filed for silently
+	 * disappears. That is why the ordering is asserted here rather than left to the constants.
 	 */
 	@Test
 	fun `ownership-conflict horizons are positive and the WARN precedes the errorStop`() {
