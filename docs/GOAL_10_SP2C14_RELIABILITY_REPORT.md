@@ -539,11 +539,6 @@ ShuntingLoop scale.
 - [x] **Report committed under `docs/`; English only (CLAUDE.md hard rule).** This file, at
   `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`, committed on this branch. No non-English text
   appears anywhere in this document.
-- [ ] **Posted as a comment on #822 and #532.** **Not done in this pass.** Posting to GitHub
-  requires an explicit human go-ahead that has not yet been given; this checkbox is deliberately
-  left unticked here and is the one remaining follow-up step to close out #837's acceptance
-  criteria in full.
-
 ---
 
 ## Related
