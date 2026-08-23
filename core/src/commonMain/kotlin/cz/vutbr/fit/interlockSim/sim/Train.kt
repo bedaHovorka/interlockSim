@@ -153,11 +153,18 @@ class Train :
 		 * seconds between decisions — so that a healthy train waiting for its next extension never
 		 * reaches the horizon.
 		 *
-		 * In production the `SnapshotSignal` pacing ensures the
-		 * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] wakes on every
-		 * [cz.vutbr.fit.interlockSim.sim.ShuntingLoop] control step (every 2.0 simulated seconds,
-		 * per Issue #834). The wall-clock floor imposed by `tickPeriodMs` does **not** increase the
-		 * simulated-time gap between decisions: the signal is delivered on the kDisco sim thread at
+		 * In production the driver is typically paced by `SnapshotSignal` (signalled once per control
+		 * step), which avoids polling and ensures the snapshot boundary is tick-aligned.
+		 *
+		 * Note that `SnapshotSignal` is *coalescing* (at most one pending permit). If the driver is
+		 * slower than the control-step cadence (e.g. long inference or large `tickPeriodMs`), multiple
+		 * control steps can collapse into one driver cycle, increasing the simulated-time gap between
+		 * decisions and making this horizon easier to reach.
+		 *
+		 * **The pathological case** is a free-running lifted stack without any driver↔sim barrier and
+		 * with a large `tickPeriodMs`, where a headless sim can run much faster than wall-clock time.
+		 * In that configuration the sim may advance far in simulated time between driver cycles and a
+		 * healthy train waiting for its next extension can cross this horizon as a false positive.
 		 * each control step, and the driver processes it when it wakes — even if that wake is
 		 * deferred by `tickPeriodMs` milliseconds. As long as the driver is paced by
 		 * `SnapshotSignal`, any `tickPeriodMs` value is safe for this horizon.
