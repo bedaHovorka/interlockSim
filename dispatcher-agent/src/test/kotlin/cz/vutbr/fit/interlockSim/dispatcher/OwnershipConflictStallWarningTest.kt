@@ -23,10 +23,10 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
@@ -485,13 +485,6 @@ class OwnershipConflictStallWarningTest {
 		} finally {
 			liftedContext.close()
 		}
-	}
-
-		// Sanity: the run really did dispatch, so "no WARN" is not "no work".
-		assertThat(run.trainsExited()).isGreaterThanOrEqualTo(1)
-
-		assertThat(warningsContaining(STALL_WARN_FRAGMENT), name = "stall WARNs (lifted stack)").isEmpty()
-		assertThat(warningsContaining(ORIGIN_STALL_WARN_FRAGMENT), name = "origin stall WARNs (lifted stack)").isEmpty()
 	}
 
 	private companion object {
