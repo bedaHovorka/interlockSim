@@ -471,10 +471,21 @@ class OwnershipConflictStallWarningTest {
 	@Timeout(value = 180, unit = TimeUnit.SECONDS)
 	fun cleanBaselineRunLogsNoStallWarningLiftedStack() {
 		val liftedContext = fixture.loadShuntingLoopContext()
-		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
-		liftedContext.getInOuts()
-		val loop = ShuntingLoop(liftedContext, SIM_END_TIME)
-		val run = fixture.run(loop, liftedContext)
+		try {
+			// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
+			liftedContext.getInOuts()
+			val loop = ShuntingLoop(liftedContext, SIM_END_TIME)
+			val run = fixture.run(loop, liftedContext)
+
+			// Sanity: the run really did dispatch, so "no WARN" is not "no work".
+			assertThat(run.trainsExited()).isGreaterThanOrEqualTo(1)
+
+			assertThat(warningsContaining(STALL_WARN_FRAGMENT), name = "stall WARNs (lifted stack)").isEmpty()
+			assertThat(warningsContaining(ORIGIN_STALL_WARN_FRAGMENT), name = "origin stall WARNs (lifted stack)").isEmpty()
+		} finally {
+			liftedContext.close()
+		}
+	}
 
 		// Sanity: the run really did dispatch, so "no WARN" is not "no work".
 		assertThat(run.trainsExited()).isGreaterThanOrEqualTo(1)
