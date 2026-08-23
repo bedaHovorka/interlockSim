@@ -189,17 +189,3 @@ used, and spot-checking that nothing in them is itself a source of the failure m
 produce the same stall on any model, however large). This is a suggested prerequisite or parallel
 step for the run's executor, not work performed as part of this setup — no interface review was
 conducted here.
-
-## 7. What remains open
-
-This document satisfies only the first acceptance-criteria bullet of #838 ("one run on the
-identical interface... with a larger model") in its *preparation* form: the grid exists and has
-been dry-run verified. Everything else in #838's acceptance criteria is **not yet done**:
-
-- No sweep has been executed — no `qwen2.5:14b-instruct` metrics exist yet.
-- No interface-vs-capacity verdict has been reached. This document does not assert one.
-- No minimum model class has been recommended for #532.
-- No interface deficiency has been named, and no SP2c.2/.4/.11 follow-up has been filed.
-- Nothing has been posted to #822.
-
-This document unblocks #838 by making the run one command away; it does not close #838.
