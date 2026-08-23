@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
@@ -74,7 +75,7 @@ import java.util.concurrent.atomic.AtomicReference
  * separator, i.e. the first train under way and holding track — by returning
  * [PathResult.OwnershipConflict] for it forever. Every other train keeps the real service, so the
  * layout goes on working and simulated time keeps advancing around the stalled train. It is
- * injected through [RouteHidingContext], which also overrides `createPathAvailableCondition` so
+ * injected through [NavigationDecoratingContext], which also overrides `createPathAvailableCondition` so
  * the stalled train's wait condition consults the decorated service and never becomes true.
  */
 @DisplayName("Issue #943: a never-extended train is named in a WARN before the run stops")
@@ -173,7 +174,7 @@ class OwnershipConflictStallWarningTest {
 		// because of that same train: the ordering check.
 		val warningsAtErrorStop = AtomicInteger(-1)
 		val stallingContext =
-			RouteHidingContext(context, stallingNav) { error ->
+			NavigationDecoratingContext(context, stallingNav) { error ->
 				val trainId = stalledTrainId.get()
 				val message = error.message.orEmpty()
 				if (trainId != null && message.contains(ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
@@ -271,7 +272,7 @@ class OwnershipConflictStallWarningTest {
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
 		val warningsAtErrorStop = AtomicInteger(-1)
 		val stallingContext =
-			RouteHidingContext(context, stallingNav) { error ->
+			NavigationDecoratingContext(context, stallingNav) { error ->
 				val trainId = stalledTrainId.get()
 				val message = error.message.orEmpty()
 				if (trainId != null && message.contains(ORIGIN_ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
@@ -388,7 +389,7 @@ class OwnershipConflictStallWarningTest {
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
 		val warningsAtErrorStop = AtomicInteger(-1)
 		val stallingContext =
-			RouteHidingContext(context, stallingNav) { error ->
+			NavigationDecoratingContext(context, stallingNav) { error ->
 				val trainId = stalledTrainId.get()
 				val message = error.message.orEmpty()
 				if (trainId != null && message.contains(ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
@@ -412,6 +413,12 @@ class OwnershipConflictStallWarningTest {
 		// Each WARN fired after ~60 s of its OWN stall (the WARN horizon), so the second measured
 		// from the reset, not from the original start — proving the clock restarted. A re-stall
 		// measured from the original start would read ~120 s here.
+		//
+		// `toInt()` cannot lose anything here. The waited time is Double simulated seconds, but
+		// `Train.waitForPathOrReportStall` truncates it with its own `.toInt()` before formatting, so
+		// the `after N s` field this regex captures is already the whole-second integer the production
+		// code emitted. The band below is asserted against that emitted integer, not against the
+		// Double horizon constant.
 		val waitedSeconds =
 			stallWarns.map {
 				WARN_WAITED_REGEX
@@ -448,7 +455,10 @@ class OwnershipConflictStallWarningTest {
 		/** Distinctive fragment of the origin stall `errorStop` message (distinct from mid-journey). */
 		const val ORIGIN_ERROR_STOP_FRAGMENT = "no entry route reserved"
 
-		/** Extracts the `after N s` horizon value from a stall WARN, to check each episode's own clock. */
+		/**
+		 * Extracts the `after N s` horizon value from a stall WARN, to check each episode's own clock.
+		 * `\d+` and not a decimal pattern on purpose: the WARN reports whole seconds, rounded down.
+		 */
 		val WARN_WAITED_REGEX = Regex("after (\\d+) s")
 
 		/**

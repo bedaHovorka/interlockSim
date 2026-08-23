@@ -13,15 +13,13 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
-import cz.ksimulantenbande.kdisco.Condition
-import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -52,7 +50,7 @@ import java.util.concurrent.TimeUnit
  * bounded-retry branch at the origin `DynamicInOut` and, after
  * [Train.MAX_ORIGIN_NO_PATH_RETRIES] attempts, calls `env.errorStop`.
  *
- * @see RouteHidingContext
+ * @see NavigationDecoratingContext
  */
 internal class RouteHidingNavigationService(
 	private val delegate: TrainNavigationService,
@@ -62,53 +60,6 @@ internal class RouteHidingNavigationService(
 		trainId: String,
 		separator: PathSeparator
 	): PathResult = result
-}
-
-/** Serves [nav] in place of the real train-navigation service; everything else is the real context. */
-internal class RouteHidingContext(
-	private val delegate: SimulationContext,
-	nav: TrainNavigationService,
-	private val onErrorStop: ((Throwable) -> Unit)? = null
-) : SimulationContext by delegate {
-	private val routing =
-		object : RoutingServices by delegate.getRoutingServices() {
-			override fun getTrainNavigationService(): TrainNavigationService = nav
-		}
-
-	override fun getRoutingServices(): RoutingServices = routing
-
-	/**
-	 * Captures every `env.errorStop(error)` invocation this wrapper forwards to the delegate, so a
-	 * test can assert the stop reason (e.g. the InOut name in the Issue #905 AC2 message) without
-	 * parsing stderr.  The call is still forwarded so the simulation actually shuts down.
-	 */
-	override fun errorStop(error: Throwable) {
-		onErrorStop?.invoke(error)
-		delegate.errorStop(error)
-	}
-
-	/**
-	 * [SimulationEnvironment.createPathAvailableCondition] is a *default* interface method whose
-	 * body calls `getRoutingServices()`. Kotlin's `by delegate` forwards the call itself, but the
-	 * default body still resolves `getRoutingServices()` against the delegate's own `this` — not
-	 * against this wrapper — so without this override the condition silently reads the *real*,
-	 * un-hidden navigation service (where the admission reservation genuinely exists) instead of
-	 * [routing]. That made `waitUntil(createPathAvailableCondition(...))` in `Train.kt` resolve
-	 * `true` on its very first synchronous check, so it never suspended into kDisco's wait-notice
-	 * list — the Front just looped `continue` → query → true → `continue` forever at a single
-	 * frozen simulated instant (`Dispatchers.Unconfined` never yields), paying for one real
-	 * `findReservedPathForTrain` graph walk per iteration. That is what turned this test into an
-	 * unbounded CPU-bound hang once Issue #905 let the origin case reach `waitUntil` instead of
-	 * breaking out immediately — independent of `END_TIME` or how many trains are admitted, since
-	 * the loop above never reaches a genuine suspension point either way.
-	 */
-	override fun createPathAvailableCondition(
-		trainId: String,
-		separator: PathSeparator
-	): Condition =
-		Condition {
-			routing.getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
-		}
 }
 
 /**
@@ -187,7 +138,7 @@ class EntryRouteLossAccountingTest {
 		context.getInOuts()
 
 		val hidingContext =
-			RouteHidingContext(
+			NavigationDecoratingContext(
 				context,
 				RouteHidingNavigationService(context.getRoutingServices().getTrainNavigationService())
 			)
@@ -206,7 +157,7 @@ class EntryRouteLossAccountingTest {
 			ControlStepListener {
 				// Admit exactly one train, once. The scenario only needs a single stalled train to
 				// pin the counting invariant; the real fix for the hang this scenario used to
-				// trigger is RouteHidingContext.createPathAvailableCondition above — this one-shot
+				// trigger is NavigationDecoratingContext.createPathAvailableCondition above — this one-shot
 				// admission is just belt-and-suspenders so the rest of the network stays quiet.
 				if (!admittedOne) {
 					loop.getQueuedTrains().firstOrNull()?.let {
@@ -247,7 +198,7 @@ class EntryRouteLossAccountingTest {
 		 * (`ShuntingLoop`'s control period is 1.0 simulated second) to observe it — but no longer.
 		 * "Never terminates / never exits" is unfalsifiable at any finite horizon, so a longer
 		 * `END_TIME` would not make the assertions any more meaningful: with
-		 * `RouteHidingContext.createPathAvailableCondition` fixed to consult the hiding view (see
+		 * `NavigationDecoratingContext.createPathAvailableCondition` fixed to consult the hiding view (see
 		 * its KDoc), the stalled train's `Front` genuinely suspends after one check, so two control
 		 * ticks are enough for a reintroduced origin break-and-terminate regression to trip this
 		 * test immediately.

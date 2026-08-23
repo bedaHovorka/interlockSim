@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -38,7 +39,7 @@ import java.util.concurrent.TimeUnit
  * The [RouteHidingNavigationService] is wired to return [PathResult.NoTopologicalPath] for every
  * `findReservedPathForTrain` call, while the admission gate (`isPathReservedForTrain`) still
  * delegates to the real service — so the train is genuinely admitted and its `Front` then sees a
- * permanent dead-end at the entry InOut.  [RouteHidingContext] captures every `env.errorStop`
+ * permanent dead-end at the entry InOut.  [NavigationDecoratingContext] captures every `env.errorStop`
  * invocation via its `onErrorStop` callback (and still forwards it so the simulation shuts
  * down).  After `context.run()` returns the test asserts the captured [Throwable]:
  *
@@ -87,7 +88,7 @@ class Issue905OriginNoPathErrorStopTest {
 
 		val capturedError = arrayOfNulls<Throwable>(1)
 		val hidingContext =
-			RouteHidingContext(
+			NavigationDecoratingContext(
 				context,
 				RouteHidingNavigationService(
 					delegate = context.getRoutingServices().getTrainNavigationService(),

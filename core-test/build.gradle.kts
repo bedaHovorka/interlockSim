@@ -19,6 +19,7 @@ plugins {
 val assertkVersion: String by project
 val koinVersion: String by project
 val kotlinVersion: String by project
+val kdiscoVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -62,6 +63,10 @@ kotlin {
 				// when compiled outside a test source set — the junit5 variant makes them
 				// available for commonMain JVM compilation of CommonKoinTestBase.
 				implementation(kotlin("test-junit5"))
+				// kdisco: NavigationDecoratingContext overrides createPathAvailableCondition,
+				// whose return type Condition is a kDisco type. :core declares kdisco with
+				// implementation(), so it does not reach this module transitively.
+				implementation("cz.ksimulantenbande.kdisco:kdisco-core:$kdiscoVersion")
 			}
 		}
 	}
