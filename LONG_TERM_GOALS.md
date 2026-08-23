@@ -28,34 +28,61 @@ This document defines 20 prioritized functional goals for extending the Interloc
 
 ---
 
+## Goal Stages
+
+A goal can be delivered in **stages**. A stage of one goal can depend on a stage of another goal.
+
+- The **first stage carries no letter**. It is the simplest solution that does the job.
+- **Later stages carry a letter, from B upwards.** Each one extends the stage before it.
+- Later stages are **defined ad hoc**, once the real difficulty of the previous stage is known.
+  This document therefore names a later stage only after somebody decided it is needed.
+
+**Next planned after Goal 10 (stage A):**
+
+| Order | Stage | Why now |
+|---|---|---|
+| 1 | **Goal 1B** — highest priority | Closes Goal 1's unverified scale bar; everything else needs it |
+| 2 | **Goal 9B** | Specified *during* Goal 1B, built after it, from Goal 1B's findings |
+| 3 | **Goal 12** | New goal — inter-station tracks and several dispatcher agents |
+| 4 | **Goal 3B** | Collision detection on a separate thread, feeding the dispatcher |
+
 ## Goals Summary Table
 
-**Priority re-scoped 2026-07-01:** Goal 10 (AI Dispatcher Routing) is now the top-priority goal. Only Goal 10's transitive dependency chain — Goal 1 → Goal 2 → Goal 3 → Goal 9 → Goal 10 — remains **Critical**. Every other goal, including the previously-Critical Goals 4, 5, 6, 7, 8, is re-scoped to **High**. This also reconciles the doc with the dependency graph established in the GitHub issue tracker (#610, #531, #532), which added **Goal 3 as a direct prerequisite of both Goal 9 and Goal 10** — a link not present in the original 2026-01-09 planning. See "Implementation Strategy" and "Risk Assessment" below for the resulting re-plan.
+**Re-scoped 2026-08-23:** Goal 10 stage A is **complete**, so the 2026-07-01 critical path is
+closed. **Goal 1B is now the top-priority work**, followed by Goal 9B, the new Goal 12, and
+Goal 3B. Goal 11 is redefined (the old Goal 12, curved track, is folded into it) and dropped to
+**Very Low** priority. The number 12 is reused for a **new goal**: inter-station tracks and
+several dispatcher agents. See "Goal Stages" above and "Implementation Strategy" below.
 
-| ID | Title | Category | Priority | Status | Estimate |
-|----|-------|----------|----------|----------|----------|
-| 1 | Multi-Train Simulation | E: Advanced Simulation | Critical | ✅ Complete | 6 months |
-| 2 | Automatic Path Finding | E: Advanced Simulation | Critical | ✅ Complete | 3 months |
-| 3 | Collision Detection and Warning | J: Safety & Compliance | Critical | ✅ Complete | 2 months |
-| 4 | Interlocking Validation and Generation | J: Safety & Compliance | High | 🆕 Open (#660) | 4 months |
-| 5 | Save and Restore Simulation State | I: System Operations | High | 🆕 Open (#666) | 3 months |
-| 6 | Performance Metrics Collection | F: Research & Analysis | High | 🆕 Open (#659) | 2 months |
-| 7 | Simulation Speed Control | I: System Operations | High | ✅ Complete | 1 month |
-| 8 | Pause and Single-Step Simulation | I: System Operations | High | ✅ Complete | 1 month |
-| 9 | Automatic Conflict Detection and Resolution | A: Intelligent Automation | **Critical** | ✅ Complete | 4 months |
-| 10 | AI Dispatcher Routing | A: Intelligent Automation | **Critical** | 🆕 Open (#532) | 6 months |
-| 11 | Track Gradients Physics | E: Advanced Simulation | High | 🆕 Open (#664) | 2 months |
-| 12 | Curved Track Modeling | E: Advanced Simulation | High | 🆕 Open (#665) | 2 months |
-| 13 | Graphical Timetable Visualization | F: Research & Analysis | High | 🆕 Open (#661) | 3 months |
-| 14 | Custom Train Types | E: Advanced Simulation | High | 🆕 Open (#667) | 2 months |
-| 15 | Railway Interlocking Tutorials | C: Educational | High | 🆕 Open (#668) | 3 months |
-| 16 | Signal Explanation Mode | C: Educational | High | 🆕 Open (#669) | 2 months |
-| 17 | CSV/Excel Export | D: Data Integration | High | 🆕 Open (#662) | 1 month |
-| 18 | Visual Train Timeline | F: Research & Analysis | High | 🆕 Open (#663) | 3 months |
-| 19 | Czech Timetable Import | D: Data Integration | High | 🆕 Open (#670) | 4 months |
-| 20 | Comprehensive Accessibility | B: User Experience | Medium | 🆕 Open (#671) | 3 months |
+**Priority re-scoped 2026-07-01 (historical):** Goal 10 (AI Dispatcher Routing) was made the top-priority goal. Only Goal 10's transitive dependency chain — Goal 1 → Goal 2 → Goal 3 → Goal 9 → Goal 10 — remains **Critical**. Every other goal, including the previously-Critical Goals 4, 5, 6, 7, 8, is re-scoped to **High**. This also reconciles the doc with the dependency graph established in the GitHub issue tracker (#610, #531, #532), which added **Goal 3 as a direct prerequisite of both Goal 9 and Goal 10** — a link not present in the original 2026-01-09 planning. See "Implementation Strategy" and "Risk Assessment" below for the resulting re-plan.
 
-**Total Development Estimate: 57 months (17 months complete — Goals 1, 2, 3, 7, 8, 9; 40 months remaining)**
+| ID | Stage | Title | Category | Priority | Status | Estimate |
+|----|-------|-------|----------|----------|----------|----------|
+| 1 | — | Multi-Train Simulation | E: Advanced Simulation | Critical | ✅ Complete | 6 months |
+| 1 | **B** | Scale and Routing Test Scenarios | E: Advanced Simulation | **Critical (next)** | 🆕 Open (#591) | 4 months |
+| 2 | — | Automatic Path Finding | E: Advanced Simulation | Critical | ✅ Complete | 3 months |
+| 3 | — | Collision Detection and Warning | J: Safety & Compliance | Critical | ✅ Complete | 2 months |
+| 3 | **B** | Snapshot Collision Detection on a Separate Thread | J: Safety & Compliance | High | 🆕 Planned | 2 months |
+| 4 | — | Interlocking Validation and Generation | J: Safety & Compliance | High | 🆕 Open (#660) | 4 months |
+| 5 | — | Save and Restore Simulation State | I: System Operations | High | 🆕 Open (#666) | 3 months |
+| 6 | — | Performance Metrics Collection | F: Research & Analysis | High | 🆕 Open (#659) | 2 months |
+| 7 | — | Simulation Speed Control | I: System Operations | High | ✅ Complete | 1 month |
+| 8 | — | Pause and Single-Step Simulation | I: System Operations | High | ✅ Complete | 1 month |
+| 9 | — | Automatic Conflict Detection and Resolution | A: Intelligent Automation | Critical | ✅ Complete | 4 months |
+| 9 | **B** | Realistic Conflict Resolution and Command Threading | A: Intelligent Automation | **High (next)** | 🆕 Planned | 4 months |
+| 10 | **A** | AI Dispatcher Routing | A: Intelligent Automation | **Critical** | ✅ Complete (#532) | 6 months |
+| 11 | — | Track Physics: Gradients and Curves *(redefined — old Goal 12 folded in)* | E: Advanced Simulation | **Very Low** | 🆕 Open (#664, #665) | 3 months |
+| 12 | — | Inter-station Tracks and Multiple Dispatcher Agents *(new goal)* | A: Intelligent Automation | High | 🆕 Open (#821) | 5 months |
+| 13 | — | Graphical Timetable Visualization | F: Research & Analysis | High | 🆕 Open (#661) | 3 months |
+| 14 | — | Custom Train Types | E: Advanced Simulation | High | 🆕 Open (#667) | 2 months |
+| 15 | — | Railway Interlocking Tutorials | C: Educational | High | 🆕 Open (#668) | 3 months |
+| 16 | — | Signal Explanation Mode | C: Educational | High | 🆕 Open (#669) | 2 months |
+| 17 | — | CSV/Excel Export | D: Data Integration | High | 🆕 Open (#662) | 1 month |
+| 18 | — | Visual Train Timeline | F: Research & Analysis | High | 🆕 Open (#663) | 3 months |
+| 19 | — | Czech Timetable Import | D: Data Integration | High | 🆕 Open (#670) | 4 months |
+| 20 | — | Comprehensive Accessibility | B: User Experience | Medium | 🆕 Open (#671) | 3 months |
+
+**Total Development Estimate: 71 months (23 months complete — Goals 1, 2, 3, 7, 8, 9, and Goal 10 stage A; 48 months remaining, including the newly named stages 1B, 9B, 3B and the new Goal 12)**
 
 ---
 
@@ -262,7 +289,7 @@ Users can pause the simulation at any moment and advance it one event at a time 
 ### Goal 9: Automatic Conflict Detection and Resolution
 
 **Category:** A: Intelligent Automation
-**Priority:** Critical *(re-scoped 2026-07-01 from High — direct dependency of Goal 10, now the top-priority goal)*
+**Priority:** Critical *(re-scoped 2026-07-01 from High — direct dependency of Goal 10; superseded by Goal 9B, see "Planned Next Stages")*
 **Development Estimate:** 4 months
 **Status:** ✅ COMPLETE
 
@@ -297,82 +324,309 @@ Users receive automatic detection of routing conflicts when multiple trains requ
 - `AutoConflictResolutionService` (SP5) is intentionally inert in production — it is
   the headless wiring point for Goal 10's deliberative dispatcher and remains
   documented-deferred (see its KDoc "Usage (SP2b pattern)").
+- **SP2c.4 ruling (#827, 2026-07-30):** `AutoConflictResolutionService` is **demoted to an
+  information source and frozen there by test**. It has zero production call sites and is not
+  reachable in `shuntingLoopAI`, so it does not violate Goal 10's "no deterministic policy
+  component may originate a dispatching action" non-goal. Goal 9's `ConflictDetectedEvent` now
+  feeds **affordance-line text** only (`ConflictHintLatch` → `AffordanceAnnotator`); the LLM
+  dispatcher stays the only actor. This also delivers Goal 10's B2 amendment.
 
 ---
 
 ### Goal 10: AI Dispatcher Routing
 
 **Category:** A: Intelligent Automation
-**Priority:** Critical *(re-scoped 2026-07-01 from High — this is now the project's top-priority goal)*
+**Priority:** Critical *(re-scoped 2026-07-01 — was the project's top-priority goal)*
 **Development Estimate:** 6 months
-**Status:** 🆕 OPEN (#532)
+**Status:** ✅ **COMPLETE (stage A, 2026-08-23)** — tracked in #532
 
 **User Value:**
-Users can enable an AI-powered dispatcher that automatically routes trains through complex junctions, managing switch positions and signal states without manual intervention. The AI explains its decisions and allows human override at any time.
+Users can enable an AI-powered dispatcher that automatically routes trains through complex junctions, managing switch positions and signal states without manual intervention. The dispatcher explains its decisions and allows human override at any time.
 
-**Success Criteria:**
+**Success Criteria (as amended 2026-07-30; #532 governs):**
 - Autonomous operation handling all routine routing decisions
 - Manual override capability at any point
-- Explainable decisions (user can query "why this route?")
-- Performance matching or exceeding average human dispatcher
+- Explainable decisions — the user can ask "why this route?" **and** "what else was available?"
+- Reliability at ShuntingLoop scale, measured as a success rate over N ≥ 10 runs
+- *Dropped:* "performance matching or exceeding the average human dispatcher". No human-dispatcher
+  baseline can be collected in this project, so the criterion was unfalsifiable.
 
-**Dependencies:** Goal 2 (pathfinding, ✅ complete), Goal 9 (conflict resolution), Goal 3 (collision detection — added 2026-07-01, per detailed design in #532: the deliberative dispatcher routes around predictive TTC warnings and uses the headless auto-pause/halt API from Goal 3 SP4/SP5)
+**Dependencies:** Goal 2 (pathfinding, ✅ complete), Goal 9 (conflict resolution, ✅ complete), Goal 3 (collision detection — added 2026-07-01, per the detailed design in #532)
 
 **Implementation Notes:**
-- Start with rule-based dispatcher; add ML/optimization later
-- High complexity - modular design for incremental enhancement
-- Consider integration with agent-architect's AI research
-- **Top priority as of 2026-07-01:** all other goals are scoped around not blocking this one; only its transitive dependency chain (Goal 1 → 2 → 3 → 9 → 10) is Critical
+- Rule-based dispatcher first, LLM dispatcher behind the same seam
+- Modular design for incremental enhancement
+- The `Dispatcher` seam and `RuleBasedDispatcher` live in `:core`; the Koog + Ollama agent stack
+  lives in the `:dispatcher-agent` module
 
 ---
 
-### Goal 11: Track Gradients Physics
+#### Goal 10 stage A — completion notes (2026-08-23)
+
+**What shipped:**
+- The `Dispatcher` seam plus the deterministic `RuleBasedDispatcher`
+  (`core/src/commonMain/.../sim/`), refactored out of `ShuntingLoop`.
+- An LLM dispatcher on Koog + a local Ollama model, in the `:dispatcher-agent` module:
+  `DispatchTickLoop`, four actuator tools, `ActionValidator`, `AffordanceAnnotator`,
+  `DispatchDecisionApplier`.
+- Authority: `DispatcherMode` AUTO / SEMI_AUTO / MANUAL with a persistent override,
+  `SemiAutoApprovalGateway`, and `DispatcherControlPanel` in `:desktop-ui`.
+- Explainability: recorded rationale per decision, plus the affordance annotation shown at that
+  tick, so "why this route?" also answers "what else was available?".
+- A measurement layer: per-run JSON records, a cross-run aggregator, and a headless sweep driver
+  (`aiSweep`, manual only — never in CI).
+
+**Amended acceptance contract** (owner-decided 2026-07-30, recorded in #822 §7; #532's body is
+the governing text):
+
+| ID | What it says now |
+|---|---|
+| **A4** | A **measured** success rate: N ≥ 10 runs, gate at **≥ 8/10**, with zero `RULE_FALLBACK` and zero `SAFETY_NET` action attributions in any run. A per-run author breakdown is mandatory. One non-`c7Clean` run fails the whole arm. |
+| **A5** | Demoted and reframed. At ShuntingLoop scale, report **reliability**, not optimality. The optimality comparison moves to Praha (#591) and must there meet an **OR/MILP** yardstick, not only `RuleBasedDispatcher`. |
+| **A6** | Split. Real-time ratio ≥ 1× gates the `RuleBasedDispatcher` only. The LLM arm runs acceptance with a **paused clock** (ratio not applicable) and reports wall-clock separately, ungated. |
+| **B2** | Explainability also reports the affordance annotation of that tick. |
+| **Non-goal** | The LLM is not responsible for action legality and is **not inside the safety envelope**. The interlocking shields all actions. |
+| **Non-goal** | **No deterministic policy component may originate a dispatching action during an LLM run.** |
+| **Paramount example** | `vyhybna.xml` proves **reliability under autonomy**, not optimality. Praha is where a non-deterministic policy has something to win. |
+| **Determinism (P8)** | What is delivered is **prompt determinism**: the same recorded snapshot sequence produces a byte-identical prompt sequence. A sampling **seed cannot reach Ollama through Koog 1.1.1**, so decode determinism is not available on the tool-calling path. It is reachable only on a future JSON-only decision mode. |
+
+**Measured A4 outcome** (`docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`, 60 runs,
+`qwen2.5:7b-instruct`, `vyhybna.xml`, 600 simulated seconds):
+
+| Arm / cell | Runs | Passing | Gate (≥ 8/10) |
+|---|---|---|---|
+| `RULE_BASED` (two independent control sets) | 10 + 10 | 10 + 10 | ✅ PASS |
+| `LLM_TOOL_CALLING`, temperature 0.28, history 3 | 10 | 0 | ❌ FAIL |
+| `LLM_TOOL_CALLING`, temperature 0.5, history 3 | 10 | 0 | ❌ FAIL |
+| `LLM_TOOL_CALLING`, temperature 0.28, history 0 *(shipped default)* | 10 | 5 | ❌ FAIL |
+| `LLM_TOOL_CALLING`, temperature 0.5, history 0 | 10 | 3 | ❌ FAIL |
+| `LLM_CONSTRAINED_JSON` | 0 | 0 | ❌ FAIL — not yet measured (#890) |
+
+Stated plainly: **the rule-based arm meets A4; the LLM arm does not, in any measured
+configuration.** The best cell reaches 5 of 10, three passing runs short of the bar.
+`SAFETY_NET` attributions are **zero everywhere** — the deterministic admission net is gone and
+stayed gone — while `RULE_FALLBACK` attributions (87 and 14) are the mechanical cause of every
+failed autonomy check.
+
+The dominant failure is **structural, not decision quality**: 13 of the 40 LLM runs ended
+`TERMINATED_EARLY` on a route-extension stall — a train stands at a STOP signal holding track it
+cannot leave because the model stops extending its route. This is a dispatcher decision failure,
+not a `:core` defect. Whether it is an **interface** problem or a **model-capacity** problem is
+still open: #838 prepared the larger-model diagnostic grid but no run has been made
+(`docs/GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md`).
+
+**Why stage A closes anyway.** The acceptance contract was deliberately rewritten so that an
+honest LLM failure rate is publishable rather than hidden. It is now published. The rule-based
+arm carries the reproducibility guarantee, and the **interlocking — not the LLM — carries
+safety**, so an unreliable LLM arm cannot make the simulator unsafe. Raising the LLM success
+rate is continuing work; it is not a reason to hold stage A open.
+
+**Moved out of Goal 10.** The old "Goal 10b" work — the agent-to-agent operating language for
+inter-dispatcher coordination (#821, GitHub milestone *AI2 Protocol*) — moves into the **new
+Goal 12**.
+
+---
+
+### Goal 11: Track Physics — Gradients and Curves
 
 **Category:** E: Advanced Simulation
-**Priority:** High
-**Development Estimate:** 2 months
+**Priority:** **Very Low** *(redefined 2026-08-23; was High)*
+**Development Estimate:** 3 months
+**Status:** 🆕 OPEN (#664 gradients; #665 curves, already retitled "joined with 11")
+
+**Redefined 2026-08-23:** the old Goal 12 (Curved Track Modeling) is **folded into this goal**.
+Gradients and curves are one physics goal, because they share the same equations and the same
+editor work. The number 12 is reused for a new goal.
 
 **User Value:**
-Users can model track gradients (uphill and downhill sections) that realistically affect train acceleration, braking, and energy consumption. This enables accurate simulation of mountainous routes and timetable validation.
+Users can model track gradients and curves that realistically affect train acceleration, braking, speed limits, and energy use. This enables accurate simulation of hilly and winding routes and validation of timetables.
+
+**Scope, deliberately restricted:**
+- Keep to what Czech railway conditions really demand, and to what is easy to model and cheap to
+  compute. A hump yard ("seřazovací nádraží") uses terrain gradients and some crossing tracks.
+- Linear models only in this stage. Non-linear terrain is a later-stage concern of Goal 12, not
+  of this goal.
+- **The differential-equation solver stays in the application.** The simulator is a combined
+  discrete-event and continuous simulation, and dropping the continuous half would close the
+  door on this goal and on every later terrain feature. This is the main reason the solver is
+  kept even while this goal waits.
 
 **Success Criteria:**
-- Configurable grade percentage for each track section
-- Accurate physics impact on acceleration and braking
-- Visual indication of gradients in track editor
+- Configurable grade percentage and curve radius per track section
+- Correct effect on acceleration, braking, and speed limit
+- Visual indication of gradients and curves in the track editor
 - Energy consumption calculation for gradient sections
+- Gradients and curves interact correctly in one physics pass
 
 **Dependencies:** None (physics extension)
 
 **Implementation Notes:**
-- Extend existing physics model in Train class
-- Foundation for Goal 12 (curved tracks)
+- Extend the existing physics model in the `Train` class
+- Consider superelevation (cant) only if a real scenario needs it
 - Required for accurate Goal 19 (Czech timetable) validation
 
 ---
 
-### Goal 12: Curved Track Modeling
+### Goal 12: Inter-station Tracks and Multiple Dispatcher Agents
 
-**Category:** E: Advanced Simulation
-**Priority:** High
-**Development Estimate:** 2 months
+**Category:** A: Intelligent Automation
+**Priority:** High *(new goal, defined 2026-08-23 — fourth in the next-stage order)*
+**Development Estimate:** 5 months
+**Status:** 🆕 OPEN — absorbs #821 (milestone *AI2 Protocol*: #575, #577, #578)
+
+**New goal 2026-08-23.** The number 12 previously held "Curved Track Modeling", which is now
+part of Goal 11.
 
 **User Value:**
-Users can model curved track sections with automatic speed restrictions based on curve radius. This enables realistic simulation of speed-restricted curves and accurate journey time calculation.
+Users can connect two stations with a real inter-station track and give each station its own dispatcher agent. The two dispatchers must agree on the direction of travel before a train may enter the track between them, exactly as Czech railway rules require. This is also the proof that agent-to-agent coordination works.
 
 **Success Criteria:**
-- Configurable curve radius for track sections
-- Automatic speed limit calculation based on radius
-- Visual representation of curves in editor
-- Correct physics interaction with gradients (Goal 11)
+- Two shunting loops, each driven by its own dispatcher agent, in **one** simulation context
+- The two dispatchers negotiate the direction of the track between them, and no train enters
+  against the agreed direction
+- All trains complete their journeys with no conflict events and no operator action
 
-**Dependencies:** Goal 11 (gradients - physics foundation)
+**Scope (first stage):**
+- **A2A proof:** two shunting loops with their own agents. Join the east end of loop 1 to the
+  west end of loop 2.
+- **`InOut` refactor:** today's behaviour becomes `RandomInOut`; `JoinedInOut` is two InOuts
+  linked by an `InterstationTrack`.
+- **`SimpleInterstationTrack`:** several kilometres long, 3 km by default. Only **one train at a
+  time**, even in the agreed direction. At the InOut position it is FREE in the direction leaving
+  the station, and has an entry signal ("vjezdové návěstidlo") in the direction toward the
+  station, with a distant signal ("předvěst") ahead of it at braking distance ("zábrzdná
+  vzdálenost").
+- **Negotiation protocol:** reuse the merged inter-agent message protocol — sealed `Message` and
+  8 speech acts in `dispatcher-agent/.../lang/proto/Message.kt` (PR #765) — and the operating
+  language of the Czech railway rules ("dopravní předpisy"). Dispatchers renegotiate direction
+  often.
+- **Programmatic wiring only.** Editor support for inter-station tracks is a later stage.
+- Study the sibling project `../OpenCybele1` for its inter-station and inter-agent communication
+  (see its `docs/message-ontology.md`).
 
-**Implementation Notes:**
-- Extend physics model for centrifugal effects
-- Consider superelevation (cant) modeling
-- Required for accurate Goal 19 validation
+**Prepared for, but not built in, the first stage:**
+- `InterstationTrackWithBlockPost` — the Czech "hradlo": up to 2 trains in one direction, but at
+  most 1 before and 1 after the block post
+- Automatic block signalling, and two independent single-direction tracks between stations, where
+  the direction is normally fixed for a long period — better throughput and a simpler decision
+  between the two stations
+
+**Later stages:**
+- A chain of several shunting loops — Jindřichův Hradec → Nová Bystřice.
+- A `MainDispatcher` above the station dispatchers. It enforces safety and the timetable and
+  judges the negotiation between dispatchers. It talks **only** to subordinate dispatchers and
+  never uses the tools that control a station directly. Trains can complain to it, for example
+  when one waits too long in a station, and it can resolve collision detections (Goal 9B).
+  No micromanagement. It needs a different model from the station dispatcher — bigger context,
+  smaller memory, faster; try gemma4. Its context is a simple chain or graph of stations and
+  inter-station tracks with current and maximum capacity, plus the number of trains inside and
+  the trains outside the system at the InOuts of the leaf stations (see `../OpenCybele1`).
+- Non-linear terrain modelling on inter-station tracks (needs Goal 11).
+
+**Dependencies:** Goal 10 stage A (✅ complete — the dispatcher seam and agent stack), Goal 1B
+(scale and routing scenarios)
 
 ---
+
+## Planned Next Stages
+
+These three sections describe the stages planned after Goal 10 stage A. They sit together, in the
+order they will be worked, rather than beside their first stages. See "Goal Stages" above.
+
+### Goal 1B: Scale and Routing Test Scenarios
+
+**Category:** E: Advanced Simulation
+**Priority:** **Critical — the top-priority work as of 2026-08-23**
+**Development Estimate:** 4 months
+**Status:** 🆕 OPEN — GitHub milestone *Goal 1B*, currently holding #591
+
+**Paramount example:** the **Praha hlavní nádraží 5-train scenario** (owner decision
+2026-07-11). Goal 10 keeps `vyhybna.xml` as its paramount example; the Praha scale scenario moves
+here.
+
+**User Value:**
+The scale bar that Goal 1 left unverified is finally closed, with routing tested on real station layouts instead of a two-switch loop.
+
+**Scope.** Build a fresh task plan out of #591's test expectations, its `.md` documents, its code
+comments, and the current state of the code. Note that **#591 is an issue, not a pull request**;
+its work lives on the branch `feat/issue-591-scale-validation`, where the 5-train case passes and
+the 20-train stress case livelocks. The plan must cover:
+
+- What must be implemented as new, and what must be revisited
+- Extension of the routing tests
+- Generalising the shunting loop into a station
+- More complex models, in order of difficulty: Červený Újezd first, Praha last (Praha is hard)
+- The refactors this needs
+- Tuning of prompts and tool descriptions
+- Routing cleanup: smaller classes as simpler testable units, duplicate checks, facades (Goal 10
+  already ships `DefaultInterlockingFacade`), and other design patterns
+- A large review of kDisco for deadlocks, race conditions, and weak points, including research
+  into existing scanners — this produces **new kDisco issues that become prerequisites of this
+  goal**
+- At least the kDisco package upgrade (kdisco#53)
+- During the work, write the realistic demands on Goal 9B into an extra `.md` file as part of each
+  task — at least a revision, as a retrospective
+
+**Exit condition:** #591's failing tests are green at the end of the whole plan. That issue is
+therefore created **last** in the plan. It runs with low traffic — long lambda times in the
+parameters, and a low maximum of concurrent trains.
+
+**Open questions to answer when the plan is written:**
+- Is each item already part of some goal or issue?
+- Does it depend on an existing open issue?
+- Is the multi-loop example only usable with an agent?
+
+**Dependencies:** Goal 1 (✅ complete), Goal 2 (✅ complete), Goal 10 stage A (✅ complete)
+
+---
+
+### Goal 9B: Realistic Conflict Resolution and Command Threading
+
+**Category:** A: Intelligent Automation
+**Priority:** High — second in the next-stage order
+**Development Estimate:** 4 months
+**Status:** 🆕 PLANNED — **specified during Goal 1B, built after it**
+
+**Why.** Goal 9 as shipped is judged **not realistic** (owner decision 2026-07-11). Goal 9B
+rebuilds conflict resolution so that the suggestions are realistic and are actually carried out,
+using Goal 10's dispatcher, the Czech railway rules, and the findings written down during Goal 1B.
+
+**Scope:**
+- The **dispatcher runs on its own thread**, because a non-deterministic decision needs its own
+  compute time. This means refactoring Goal 10's SB0.
+- A **queue of high-level commands** — routes, and Goal 9B conflict-resolution commands.
+- A **routing and command-resolving thread**. It also reads snapshots of the simulation thread.
+  It makes **deterministic decisions only**, turning high-level commands into low-level ones.
+  This needs Goal 1B's routing cleanup first.
+- A **queue of low-level commands**. In an emergency the dispatcher may write into it directly.
+- The **simulation thread**, with coroutines inside it, because their overhead is small.
+- Open question to settle during the work: can the design also optimise unusual and emergency
+  situations?
+
+**Target scenario:** Praha hlavní nádraží at full traffic, with the maximum number of concurrent
+trains.
+
+**Dependencies:** Goal 9 (✅ complete), Goal 10 stage A (✅ complete), Goal 1B
+
+---
+
+### Goal 3B: Snapshot Collision Detection on a Separate Thread
+
+**Category:** J: Safety & Compliance
+**Priority:** High — fourth in the next-stage order
+**Development Estimate:** 2 months
+**Status:** 🆕 PLANNED
+
+**Scope:**
+- Detect collisions from a **simulation snapshot**, on a separate thread
+- The result is also an **input for the dispatcher**, not only a warning for the user
+- Extends Goal 9B's resolution suggestions
+
+**Dependencies:** Goal 3 (✅ complete), Goal 9B
+
+---
+
+## Detailed Goal Descriptions (continued)
 
 ### Goal 13: Graphical Timetable Visualization
 
@@ -527,7 +781,7 @@ Users can import Czech railway timetables in GVD/KADR format to simulate real-wo
 - Generate train schedules from imported data
 - Validate simulation results against timetable
 
-**Dependencies:** Goal 11, Goal 12 (physics for accurate timing)
+**Dependencies:** Goal 11 (gradient and curve physics, for accurate timing)
 
 **Implementation Notes:**
 - Requires GVD/KADR format research and documentation
@@ -561,7 +815,13 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 
 ## Implementation Strategy
 
-**Re-planned 2026-07-01** around Goal 10 as the top-priority goal. Phase 0 below is Goal 10's critical path and takes precedence over everything else; Phases 1-2 hold the re-scoped High/Medium work and can proceed in parallel with (but never ahead of) Phase 0 if a second developer is available.
+**Re-planned 2026-08-23.** Phase 0 is **finished**: Goal 3, Goal 9, and Goal 10 stage A are all
+complete. The new highest-priority block is **Phase 0B** below — Goal 1B, then Goal 9B, then
+Goal 12, then Goal 3B. Phases 1-2 hold the remaining High/Medium work and can proceed in parallel
+with, but never ahead of, Phase 0B if a second developer is available.
+
+*Historical:* the 2026-07-01 plan put Goal 10 at the top and made Goal 3 → Goal 9 → Goal 10 the
+only critical path. That path is now closed.
 
 ### ✅ Already complete (pre-dates this re-plan)
 
@@ -574,22 +834,37 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 
 **Complete total: 11 months** (already delivered; excluded from the remaining-effort totals below).
 
-### Phase 0: Critical Path to Goal 10 (highest priority — strictly sequential)
+### ✅ Phase 0: Critical Path to Goal 10 — COMPLETE (2026-08-23)
 
-**Objective:** Close out the only remaining Critical-priority chain: Goal 3 → Goal 9 → Goal 10. Nothing in Phases 1-2 should take developer time away from this phase.
+| Goal | Title | Months | Status | Tracking |
+|------|-------|--------|--------|----------|
+| 3 | Collision Detection and Warning | 2 | ✅ Complete | #610 |
+| 9 | Automatic Conflict Detection and Resolution | 4 | ✅ Complete | #531 |
+| 10 | AI Dispatcher Routing (stage A) | 6 | ✅ Complete | #532 |
 
-| Goal | Title | Months | Rationale | Tracking |
-|------|-------|--------|-----------|----------|
-| 3 | Collision Detection and Warning | 2 | Direct prerequisite of Goal 9 and Goal 10 (added to the dependency graph 2026-07-01) | #610, in progress |
-| 9 | Automatic Conflict Detection and Resolution | 4 | Direct prerequisite of Goal 10 | #531 |
-| 10 | AI Dispatcher Routing | 6 | **Top-priority goal** | #532 |
+**Phase 0 Total: 12 months, delivered.**
 
-**Phase 0 Total: 12 months sequential** (no parallelization benefit — each step strictly depends on the last).
-
-**Deliverables:**
+**Delivered:**
 - Collision warnings + auto-pause/halt (Goal 3)
 - Ranked, learnable conflict resolution (Goal 9)
-- Autonomous, explainable AI dispatcher with human override (Goal 10)
+- Autonomous, explainable AI dispatcher with human override (Goal 10 stage A). The LLM arm's
+  measured success rate is published and is **below** the A4 bar — see Goal 10's completion
+  notes.
+
+### Phase 0B: Next Stages (highest priority — strictly sequential)
+
+**Objective:** close Goal 1's unverified scale bar, then rebuild conflict resolution on realistic
+demands, then connect stations to each other. Nothing in Phases 1-2 should take developer time
+away from this phase.
+
+| Order | Goal | Title | Months | Rationale | Tracking |
+|-------|------|-------|--------|-----------|----------|
+| 1 | 1B | Scale and Routing Test Scenarios | 4 | **Top-priority work.** Closes #591; produces the routing cleanup and the kDisco review everything else needs | #591, milestone *Goal 1B* |
+| 2 | 9B | Realistic Conflict Resolution and Command Threading | 4 | Specified during Goal 1B, built from its findings | — |
+| 3 | 12 | Inter-station Tracks and Multiple Dispatcher Agents | 5 | Needs the Goal 10 dispatcher seam and Goal 1B's routing cleanup | #821 |
+| 4 | 3B | Snapshot Collision Detection on a Separate Thread | 2 | Feeds Goal 9B's resolution suggestions | — |
+
+**Phase 0B Total: 15 months sequential** (each step depends on the one before it).
 
 ### Phase 1: High-Priority Enhancement (parallel to Phase 0, non-blocking)
 
@@ -600,17 +875,16 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 | 6 | Performance Metrics | 2 | No dependencies; foundation for Goals 13, 17, 18 | #659 |
 | 5 | Save/Restore State | 3 | Dependencies (Goals 7, 8) already complete; foundation for Goals 15, 18 | #666 |
 | 4 | Interlocking Validation | 4 | Depends on Goal 2 (done) + Goal 3 (Phase 0) | #660 |
-| 11 | Track Gradients | 2 | No dependencies; foundation for Goal 12 | #664 |
-| 12 | Curved Tracks | 2 | Depends on Goal 11 | #665 |
+| 11 | Track Physics: Gradients and Curves | 3 | No dependencies. **Very Low priority** — kept because the differential-equation solver must stay in the application | #664, #665 |
 | 14 | Custom Train Types | 2 | No dependencies | #667 |
 | 16 | Signal Explanation | 2 | No dependencies | #669 |
 | 13 | Graphical Timetable | 3 | Depends on Goal 6 | #661 |
 | 17 | CSV/Excel Export | 1 | Depends on Goal 6 | #662 |
 | 18 | Visual Timeline | 3 | Depends on Goal 6 + Goal 5 | #663 |
 | 15 | Tutorials | 3 | Depends on Goal 5 | #668 |
-| 19 | Czech Timetable Import | 4 | Depends on Goal 11 + Goal 12 | #670 |
+| 19 | Czech Timetable Import | 4 | Depends on Goal 11 | #670 |
 
-**Phase 1 Total: 31 months sequential, ~16-18 months with parallelization** (most items are independent leaves or single-hop dependents — high parallelization potential, unlike Phase 0).
+**Phase 1 Total: 30 months sequential, ~16-18 months with parallelization** (most items are independent leaves or single-hop dependents — high parallelization potential, unlike Phase 0).
 
 ### Phase 2: Medium-Priority Polish
 
@@ -627,22 +901,28 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 | Phase | Sequential | Parallel (2 devs) |
 |-------|------------|-------------------|
 | ✅ Complete (Goals 1, 2, 7, 8) | 11 months | — (done) |
-| Phase 0: Critical Path to Goal 10 | 12 months | 12 months *(no parallelization — strictly sequential)* |
-| Phase 1: High-Priority Enhancement | 31 months | ~16-18 months |
+| ✅ Phase 0: Critical Path to Goal 10 (Goals 3, 9, 10A) | 12 months | — (done) |
+| Phase 0B: Next Stages (1B → 9B → 12 → 3B) | 15 months | 15 months *(no parallelization — strictly sequential)* |
+| Phase 1: High-Priority Enhancement | 30 months | ~16-18 months |
 | Phase 2: Medium-Priority Polish | 3 months | ~2 months (absorbed) |
-| **Total (all 20 goals)** | **57 months** | **~36 months** |
-| **Remaining (excl. complete)** | **46 months** | **~30-32 months** |
+| **Total (all goals and named stages)** | **71 months** | **~46 months** |
+| **Remaining (excl. complete)** | **48 months** | **~33-35 months** |
 
 **Resource Options:**
-- 1 developer: Phase 0 alone is a ~1-year commitment before Goal 10 ships; full remaining scope ~3.5-4 years.
-- 2 developers: 1 dedicated to Phase 0 (Goal 3 → Goal 9 → Goal 10, cannot be parallelized further), 1 covering Phase 1/2 in the background — Goal 10 ships in ~1 year instead of waiting behind Phase 1/2 work.
-- Phased funding: fund Phase 0 to completion first (it's the only path to the top-priority goal); revisit Phase 1/2 scope afterward.
+- 1 developer: Phase 0B alone is a ~1.3-year commitment; full remaining scope ~4 years.
+- 2 developers: 1 dedicated to Phase 0B (1B → 9B → 12 → 3B, cannot be parallelized further), 1 covering Phase 1/2 in the background.
+- Phased funding: fund Phase 0B to completion first (Goal 1B unblocks everything after it); revisit Phase 1/2 scope afterward.
 
 ---
 
 ## Risk Assessment
 
-**Re-scoped 2026-07-01:** risk priority now follows Goal 10's critical path (Goal 3 → Goal 9 → Goal 10). Goal 1's risk is resolved (complete). Goal 9 is promoted out of Medium-Risk into High-Risk, since it now sits directly on the only path to the top-priority goal. Goal 4's demotion to High priority does not reduce its underlying technical risk (still formal-verification-heavy) — it stays Medium-Risk, just no longer schedule-critical.
+**Re-scoped 2026-08-23:** Goal 10's critical path is closed, so risk priority now follows
+**Phase 0B**: Goal 1B → Goal 9B → Goal 12 → Goal 3B. Goal 1B inherits the highest schedule risk,
+because it owns the kDisco deadlock and race-condition review that everything after it depends on.
+Goal 11 is Very Low priority and carries no schedule risk.
+
+**Re-scoped 2026-07-01 (historical):** risk priority followed Goal 10's critical path (Goal 3 → Goal 9 → Goal 10). Goal 1's risk is resolved (complete). Goal 9 is promoted out of Medium-Risk into High-Risk, since it now sits directly on the only path to the top-priority goal. Goal 4's demotion to High priority does not reduce its underlying technical risk (still formal-verification-heavy) — it stays Medium-Risk, just no longer schedule-critical.
 
 ### High-Risk Goals
 
@@ -652,19 +932,29 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 
 **Goal 9: Automatic Conflict Detection and Resolution** *(promoted from Medium-Risk 2026-07-01 — now on Goal 10's critical path)*
 - **Risk:** Algorithm complexity for temporal conflicts (future resource contention, configurable lookahead); ranking-and-learning loop (`DispatcherPreferenceStore`) is new design surface with no prior art in this codebase.
-- **Impact:** Critical - directly blocks Goal 10, the top-priority goal. Unlike before the re-plan, there is no other goal to fall back to while this is being worked.
+- **Impact (historical):** Critical — it directly blocked Goal 10. Both are now complete; the open risk moved to Goal 9B, which rebuilds this machinery on realistic demands.
 - **Mitigation:**
   - Start with simple spatial-conflict detection (#580) before temporal (#583), enhance iteratively — sequencing already reflected in #531's sub-task order
   - Keep preference learning (#592) as the last sub-task, behind a working rule-based ranking engine (#588)
 
-**Goal 10: AI Dispatcher Routing** *(re-scoped 2026-07-01 — now the top-priority goal, not a non-blocking capstone)*
-- **Risk:** Planning algorithm complexity; integration challenges with pathfinding; explainability requirements may limit algorithm choices.
-- **Impact:** Critical - this is now the project's top priority. Previously assessed as "not blocking other goals"; that framing no longer applies since every other goal is explicitly scoped to not compete with this one for developer time.
+**✅ Resolved (stage A) — Goal 10: AI Dispatcher Routing**
+- **Risk (historical):** planning algorithm complexity; integration with pathfinding; explainability requirements limiting algorithm choices.
+- **Outcome:** stage A complete 2026-08-23. The mitigations held: the rule-based dispatcher came
+  first and passes A4 at 10/10, the seam kept the LLM swappable, and SEMI_AUTO exists as a
+  fallback. **One risk was realised:** the LLM arm's measured success rate is below the ≥ 8/10
+  gate in every configuration, on a route-extension stall. That is now a Goal 12 and Goal 1B
+  concern, not a Goal 10 blocker, because the interlocking — not the LLM — carries safety.
+
+**Goal 1B: Scale and Routing Test Scenarios** *(new highest schedule risk 2026-08-23)*
+- **Risk:** the 20-train Praha stress case livelocks today; the kDisco deadlock and race-condition
+  review may produce prerequisite kDisco issues of unknown size; routing cleanup touches code that
+  Goal 10 depends on.
+- **Impact:** Critical — Goal 9B, Goal 12, and Goal 3B all wait behind it.
 - **Mitigation:**
-  - Start with rule-based dispatcher before ML approaches
-  - Modular design for incremental enhancement
-  - Define clear interface between planning and execution
-  - Accept semi-autonomous mode as fallback
+  - Order the models by difficulty: Červený Újezd first, Praha last
+  - Run with low traffic first — long lambda times, low maximum of concurrent trains
+  - Create the #591 closing task **last** in the plan, so the failing tests are the exit condition
+  - Research existing scanners before hand-auditing kDisco
 
 **Goal 19: Czech Timetable Import**
 - **Risk:** GVD/KADR format may be undocumented, proprietary, or vary between sources; data quality inconsistencies
@@ -685,13 +975,18 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 ### Dependency Risks
 
 ```
-Critical Path 0 (was "Path 1", renumbered as top priority 2026-07-01): Foundation -> Safety -> AI
-  Goal 1 (multi-train, done) -> Goal 2 (pathfinding, done) -> Goal 3 (collision, in progress)
-    -> Goal 9 (conflict) -> Goal 10 (AI dispatcher)
-  Risk: This is now the ONLY schedule-critical path. A delay anywhere in Goal 3, 9, or 10
-  delays the top-priority goal directly, with no other goal absorbing the slack.
-  Note: Goal 3 was not originally on this path in the 2026-01-09 plan — added 2026-07-01
-  per #531/#532's detailed dependency design.
+Critical Path 0 (CLOSED 2026-08-23): Foundation -> Safety -> AI
+  Goal 1 (done) -> Goal 2 (done) -> Goal 3 (done) -> Goal 9 (done) -> Goal 10 stage A (done)
+  Kept for historical record only.
+
+Critical Path 0B (the ONLY schedule-critical path as of 2026-08-23): Scale -> Realism -> Network
+  Goal 1B (scale + routing cleanup + kDisco review)
+    -> Goal 9B (realistic conflict resolution, specified during 1B)
+    -> Goal 12 (inter-station tracks, several dispatcher agents)
+    -> Goal 3B (snapshot collision detection)
+  Risk: a delay in Goal 1B delays all three stages behind it, with no other goal absorbing the
+  slack. Goal 1B also owns an unbounded piece of work — the kDisco deadlock and race-condition
+  review — whose findings become its own prerequisites.
 
 Critical Path 1: Safety Chain (re-scoped to High priority, no longer schedule-critical)
   Goal 1 (multi-train, done) -> Goal 3 (collision, shared with Path 0) -> Goal 4 (interlocking)
@@ -805,8 +1100,9 @@ The following categories of goals were deferred for future consideration:
 
 ---
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Created:** 2026-01-09
-**Last Revised:** 2026-07-01 — re-prioritized around Goal 10 as the top-priority goal; only its dependency chain (Goal 1 → 2 → 3 → 9 → 10) remains Critical; Implementation Strategy, Total Development Effort, and Risk Assessment restructured accordingly; Goal 9/Goal 10 dependency lines reconciled with the GitHub issue tracker (#531, #532) to include Goal 3
+**Last Revised:** 2026-08-23 (#839, SP2c.16) — added the **Goal Stages** convention; marked **Goal 10 stage A complete** and recorded the amended acceptance contract (#822 §7) together with SP2c.14's measured A4 result, including the LLM arm's failure to reach the ≥ 8/10 gate; corrected the P8 determinism claim (a sampling seed cannot reach Ollama through Koog 1.1.1 — prompt determinism only); **redefined Goal 11** to cover gradients *and* curves at Very Low priority, folding in the old Goal 12; **created a new Goal 12** for inter-station tracks and multiple dispatcher agents, absorbing #821; added brief **Goal 1B, 9B, 3B** sections and the new Phase 0B (1B → 9B → 12 → 3B); restructured Implementation Strategy, Total Development Effort, and Risk Assessment accordingly
+**Previously Revised:** 2026-07-01 — re-prioritized around Goal 10 as the top-priority goal; only its dependency chain (Goal 1 → 2 → 3 → 9 → 10) remained Critical; Goal 9/Goal 10 dependency lines reconciled with the GitHub issue tracker (#531, #532) to include Goal 3
 **Approved By:** traffic-simulation-expert, agent-architect, kotlin-tech-lead, railway-engineer
-**Next Review:** After Phase 0 (Goal 10) completion
+**Next Review:** After Goal 1B completion

@@ -124,7 +124,7 @@ whether one is warranted is thrashing, not being decisive. §6 reads the no-op r
 ### 3.3 If the LLM arms fail the gate, this report says so plainly
 
 They do, in both campaigns, at every parameter cell measured. §10 states the per-arm verdict
-without hedging, gives the per-outcome breakdown behind it, and points at SP2c.15 (#839)'s
+without hedging, gives the per-outcome breakdown behind it, and points at SP2c.15 (#838)'s
 interface-vs-capacity diagnostic for what the failure does and does not tell us about model
 capability. A negative result is a result.
 
@@ -439,7 +439,7 @@ dispatcher decision failure — the model stops extending a specific train's rou
 interlocking refusing a valid request — **not** a `core/` defect; the bounded wait that surfaces it
 is working exactly as #943 designed it.
 
-SP2c.15 (#839) is the designated follow-up for the diagnostic question this raises: whether the
+SP2c.15 (#838) is the designated follow-up for the diagnostic question this raises: whether the
 stall is an **interface** problem (the prompt/tool surface not making "extend this train's route"
 salient enough at the right tick) or a **capacity** problem (the model, at 7B parameters, cannot
 sustain attention on multiple trains' outstanding obligations across dozens of ticks). This report
@@ -553,7 +553,7 @@ ShuntingLoop scale.
   work whose `historyN = 0` cell is Campaign B here; `docs/GOAL_10_SP2C11_SWEEP_REPORT.md`
 - [#890](https://github.com/bedaHovorka/interlockSim/issues/890) — the `LLM_CONSTRAINED_JSON`
   data gap (§7)
-- [#839](https://github.com/bedaHovorka/interlockSim/issues/839) — SP2c.15, the
+- [#838](https://github.com/bedaHovorka/interlockSim/issues/838) — SP2c.15, the
   interface-vs-capacity diagnostic follow-up for §8's stall pattern
 - [#591](https://github.com/bedaHovorka/interlockSim/issues/591) — Praha, the OR/MILP optimality
   comparison this report defers to (§11)
