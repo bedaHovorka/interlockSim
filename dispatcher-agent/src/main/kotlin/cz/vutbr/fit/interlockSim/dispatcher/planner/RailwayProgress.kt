@@ -46,27 +46,42 @@ enum class RailwayProgress {
  * - [journeysCompleted][RailwayOutcome.journeysCompleted] absent → [RailwayProgress.UNMEASURED].
  *   Absent is not zero (see [RailwayOutcome]); a run nobody measured gets no verdict, and the
  *   caller leaves its end cause alone.
- * - No journey completed **and** no train exited → [RailwayProgress.STARVED].
- *   [trainsExited][RailwayOutcome.trainsExited] is absent for any example whose main process is
- *   not a `ShuntingLoop`; an absent exit count cannot contradict a measured zero journey count,
- *   so it does not block the verdict.
+ * - [trainsExited][RailwayOutcome.trainsExited] present → **it decides alone**: zero is
+ *   [RailwayProgress.STARVED], anything else is [RailwayProgress.MADE_PROGRESS].
+ * - [trainsExited][RailwayOutcome.trainsExited] absent → fall back to the journey count, since
+ *   the exit count is absent for any example whose main process is not a `ShuntingLoop` and an
+ *   absent count cannot contradict a measured zero.
  * - Otherwise → [RailwayProgress.MADE_PROGRESS].
  *
- * ## Why it is threshold-free
+ * ## Why the exit count outranks the journey count (Issue #895)
  *
- * A *partially* starved run — the reporter's original journeys 2/7 case — is deliberately
- * reported as [RailwayProgress.MADE_PROGRESS] here. How many of the admitted trains must finish
- * before a run counts is a **gate threshold**, and a threshold that is not derived from a
- * measurement is exactly what [RunReportAggregator.MIN_ACTIONABLE_RATE] is already flagged as.
- * That question belongs to the #895 re-baseline sweep, not to this classifier. Zero-versus-
- * nonzero needs no measurement to justify it.
+ * The rule was originally "no journey completed **and** no train exited", which let a single
+ * journey veto the verdict. The #895 re-baseline sweep measured what that costs: one run admitted
+ * five trains, ran for 228 simulated seconds, let **none** of them leave, and still recorded
+ * `journeysCompleted = 1` — so it was classified [RailwayProgress.MADE_PROGRESS].
+ *
+ * `journeysCompleted` increments when a train's reservation count reaches zero, with no
+ * termination and no movement predicate (Issue #906), so it can fire for a train that never
+ * finished. `trainsExited` is termination-gated. Where the two disagree the termination-gated
+ * counter is the one to believe.
+ *
+ * ## Why it is still threshold-free
+ *
+ * A *partially* starved run — the reporter's original journeys 2/7 case — is still
+ * [RailwayProgress.MADE_PROGRESS]. #895 asked whether a fraction should decide this and the
+ * measurement said no: across its 40 LLM runs, healthy runs that completed naturally went as low
+ * as 33 % of admitted trains while runs that deadlocked reached 45 %, so the two populations
+ * overlap and no fraction separates them. Zero-versus-nonzero needs no measurement to justify it;
+ * a fraction would need one, and there is none.
  *
  * @return what the railway achieved, or [RailwayProgress.UNMEASURED] when it was not measured.
  */
 fun RailwayOutcome.progress(): RailwayProgress {
-	val journeys = journeysCompleted ?: return RailwayProgress.UNMEASURED
-	val exited = trainsExited ?: 0L
-	return if (journeys == 0L && exited == 0L) {
+	journeysCompleted ?: return RailwayProgress.UNMEASURED
+	val exited = trainsExited
+	return if (exited != null) {
+		if (exited == 0L) RailwayProgress.STARVED else RailwayProgress.MADE_PROGRESS
+	} else if (journeysCompleted == 0L) {
 		RailwayProgress.STARVED
 	} else {
 		RailwayProgress.MADE_PROGRESS

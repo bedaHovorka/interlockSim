@@ -25,17 +25,20 @@ import java.time.format.DateTimeFormatter
  *
  * ```
  * runPassed  = completedNaturally && !terminalFallbackEngaged && c7Clean &&
- *              actionableTickRate >= MIN_ACTIONABLE_RATE
+ *              (arm == RULE_BASED || actionableTickRate >= MIN_ACTIONABLE_RATE) &&
+ *              (trainsExited == null || trainsExited >= MIN_TRAINS_EXITED)
  * gatePassed = runCount >= 10 && passingRuns >= 8 && snapshots.all { it.c7Clean }
  * ```
  *
  * A **single** non-`c7Clean` run fails the whole arm even at 10/10 completions.
  * C7 is a deterministic-component correctness gate, not a majority vote.
  *
- * The `actionableTickRate` threshold (Issue #927) makes the gate *actionable-rate AND railway
- * outcome*, not actionable-rate alone: a measured run at `tickPeriodMs=20000` scored
- * `llmSuccessRate=0.846` on a railway that moved nothing (journeys 0/7), proving a rate check by
- * itself is gameable. [MIN_ACTIONABLE_RATE] is a provisional placeholder — see its own KDoc.
+ * The `actionableTickRate` threshold (Issue #927) was introduced to make the gate
+ * *actionable-rate AND railway outcome*, after a measured run at `tickPeriodMs=20000` scored
+ * `llmSuccessRate=0.846` on a railway that moved nothing (journeys 0/7). Issue #895 measured that
+ * both of its terms were decision-hygiene terms and that neither read the railway, so the outcome
+ * half is now [MIN_TRAINS_EXITED]. Both constants are measured — see their own KDoc, and
+ * `docs/GOAL_10_I895_REBASELINE_REPORT.md` for the campaign that set them.
  *
  * ## Sections rendered
  *
@@ -66,16 +69,49 @@ class RunReportAggregator(
 		private const val MIN_PASSING_RUNS = 8
 
 		/**
-		 * Minimum [DispatcherRunSnapshot.actionableTickRate] a run must clear to pass
-		 * [runPassed] (Issue #927).
+		 * Minimum [DispatcherRunSnapshot.actionableTickRate] an **LLM** run must clear to pass
+		 * [runPassed] (Issue #927, measured by Issue #895).
 		 *
-		 * **Provisional placeholder.** This value was not derived from a measurement — Task 3 of
-		 * the #927/#926 milestone sets the real threshold after a re-baseline sweep run under the
-		 * corrected metric (see `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` for the sweep methodology).
-		 * `0.5` merely wires the gate mechanism so the "AND railway outcome" composition exists
-		 * and is tested; do not treat it as a validated number.
+		 * Measured, no longer a placeholder. Across #895's 40 LLM runs the rate ranged 0.647 to
+		 * 1.000, and among the 23 runs that both completed naturally and cleared [MIN_TRAINS_EXITED]
+		 * the lowest was **0.810**. `0.8` sits just under that, so it fails no run that campaign
+		 * considers healthy while still catching a collapse in decision quality.
+		 *
+		 * **It is a tripwire, not a discriminator, and #895 says so plainly.** Every threshold from
+		 * 0.3 to 0.6 passed 40 of 40 runs, and this value changes no verdict in that campaign either.
+		 * The clause does not separate a run that moved eleven trains from one that moved none — #895
+		 * measured six runs with a flawless decision record completing well and six deadlocking. That
+		 * separation is the job of [MIN_TRAINS_EXITED] and of `completedNaturally`, not of this value.
+		 *
+		 * Not applied to [DispatcherArm.RULE_BASED] — see [runPassed].
 		 */
-		const val MIN_ACTIONABLE_RATE: Double = 0.5
+		const val MIN_ACTIONABLE_RATE: Double = 0.8
+
+		/**
+		 * Minimum [RailwayOutcome.trainsExited] a run must reach to pass [runPassed] (Issue #895).
+		 *
+		 * This is the gate's **railway-outcome** term. #927 described the gate as "actionable rate
+		 * AND railway outcome", but both of its terms measured decision hygiene; nothing in the
+		 * predicate read what the railway actually achieved.
+		 *
+		 * Derived from the **deterministic control arm**, deliberately not from the LLM arm it
+		 * judges: across #895's twenty rule-based runs the arm delivered exactly 11 exits every time,
+		 * with zero variance, on `vyhybna.xml` at a 600 s horizon. Half of that, rounded up, is `6` —
+		 * an LLM run that moves less than half of what the deterministic dispatcher moves is not
+		 * doing the job.
+		 *
+		 * **Also a tripwire on today's data**: each of the eight runs that passed #895's gate had
+		 * already exited 8 to 11 trains, and every naturally completed run below that failed on
+		 * `c7Clean` first. It exists so a future throughput regression cannot pass a gate that only
+		 * reads decision records.
+		 *
+		 * **Network- and horizon-specific.** `11` is a property of `vyhybna.xml` at 600 s with
+		 * `RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS = 2`. Re-derive this constant from the
+		 * control arm before reading the gate on a different network or horizon.
+		 *
+		 * An absent exit count is "not measured", never "zero" — see [runPassed].
+		 */
+		const val MIN_TRAINS_EXITED: Long = 6
 
 		/** Column count of the Parameter Sweep "Decision Hygiene" table (for its separator row). */
 		private const val HYGIENE_TABLE_COLUMNS = 22
@@ -258,15 +294,35 @@ class RunReportAggregator(
 	// ── Gate predicate ────────────────────────────────────────────────────────
 
 	/**
-	 * Per-run pass predicate: the run completed naturally, the terminal fallback never engaged,
-	 * no C7 violation was observed, and (Issue #927) [DispatcherRunSnapshot.actionableTickRate]
-	 * clears [MIN_ACTIONABLE_RATE] — a provisional placeholder pending the Task 3 re-baseline.
+	 * Per-run pass predicate: the run completed naturally, the terminal fallback never engaged, no
+	 * C7 violation was observed, its decision rate cleared [MIN_ACTIONABLE_RATE] (Issue #927) and
+	 * its railway moved at least [MIN_TRAINS_EXITED] trains out (Issue #895).
+	 *
+	 * Two scoping rules, both measured by #895:
+	 *
+	 * - **The actionable-rate clause does not apply to [DispatcherArm.RULE_BASED].** That arm
+	 *   consults no LLM, so it records `totalTicks = 0` and an `actionableTickRate` of `0.0`.
+	 *   Applying an LLM decision-quality clause to it failed a control arm that had just delivered
+	 *   eleven exits on every one of ten runs — #895 printed `| RULE_BASED | 10 | 0 | FAIL |` where
+	 *   #847 and #834 had both published the same arm as 10/10 PASS.
+	 * - **An absent [RailwayOutcome.trainsExited] does not fail the outcome term.** Absent is "not
+	 *   measured", never "zero", the same rule [RailwayProgress] follows. That counter is absent for
+	 *   any example whose main process is not a `ShuntingLoop`.
 	 */
 	fun runPassed(snapshot: DispatcherRunSnapshot): Boolean =
 		snapshot.completedNaturally &&
 			!snapshot.terminalFallbackEngaged &&
 			snapshot.c7Clean &&
-			snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
+			actionableRateAcceptable(snapshot) &&
+			railwayOutcomeAcceptable(snapshot)
+
+	/** See [runPassed] for why the rule-based arm is exempt. */
+	private fun actionableRateAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
+		snapshot.arm == DispatcherArm.RULE_BASED || snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
+
+	/** See [runPassed] for why an absent exit count cannot fail a run. */
+	private fun railwayOutcomeAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
+		snapshot.railwayOutcome.trainsExited?.let { it >= MIN_TRAINS_EXITED } ?: true
 
 	// ── Table renderers ───────────────────────────────────────────────────────
 

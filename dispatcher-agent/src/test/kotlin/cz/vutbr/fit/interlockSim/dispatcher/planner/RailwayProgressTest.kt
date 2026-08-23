@@ -78,15 +78,45 @@ class RailwayProgressTest {
 
 			assertThat(outcome.progress()).isEqualTo(RailwayProgress.STARVED)
 		}
+
+		/**
+		 * The measured #895 leak. Arm 1 `t=0.5 r03` of the re-baseline campaign admitted five
+		 * trains, ran for 228 simulated seconds and let **none** of them leave, yet recorded
+		 * `journeysCompleted = 1`. Under the previous rule that single journey vetoed the verdict
+		 * and the run was classified `MADE_PROGRESS`.
+		 *
+		 * `journeysCompleted` increments when a train's reservation count reaches zero, with no
+		 * termination and no movement predicate (Issue #906), so it can fire for a train that
+		 * never finished. `trainsExited` is termination-gated. When the termination-gated counter
+		 * is present it therefore decides alone.
+		 */
+		@Test
+		@DisplayName("a measured journey with no train out is starved (#895)")
+		fun measuredJourneyWithoutExitIsStarved() {
+			val outcome =
+				RailwayOutcome(
+					journeysCompleted = 1L,
+					trainsEntered = 5L,
+					trainsExited = 0L,
+					blockTransitions = 3L
+				)
+
+			assertThat(outcome.progress()).isEqualTo(RailwayProgress.STARVED)
+		}
 	}
 
 	@Nested
 	@DisplayName("Made progress")
 	inner class MadeProgress {
+		/**
+		 * A completed journey is progress **only** when the termination-gated counter does not
+		 * contradict it. See [RailwayProgressTest.Starved.measuredJourneyWithoutExitIsStarved]
+		 * for the case where it does.
+		 */
 		@Test
-		@DisplayName("one completed journey is progress")
+		@DisplayName("one completed journey with a train out is progress")
 		fun oneJourneyIsProgress() {
-			val outcome = RailwayOutcome(journeysCompleted = 1L, trainsExited = 0L)
+			val outcome = RailwayOutcome(journeysCompleted = 1L, trainsExited = 1L)
 
 			assertThat(outcome.progress()).isEqualTo(RailwayProgress.MADE_PROGRESS)
 		}
