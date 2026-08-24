@@ -18,6 +18,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
+import cz.vutbr.fit.interlockSim.PROGRAM_LLM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
@@ -65,6 +66,27 @@ class FrameTest : AbstractFrameTestBase() {
 	fun frameHasCorrectTitle() {
 		runOnEDT {
 			assertThat(frame.title).isEqualTo(PROGRAM_FULL_NAME)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("appTitle replaces the base window title")
+	fun appTitleReplacesBaseWindowTitle() {
+		// Issue #839: LLM-driven runs show a different base title.
+		runOnEDT {
+			frame.appTitle = PROGRAM_LLM_FULL_NAME
+
+			assertThat(frame.title).isEqualTo(PROGRAM_LLM_FULL_NAME)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("appTitle defaults to the plain program title")
+	fun appTitleDefaultsToPlainProgramTitle() {
+		runOnEDT {
+			assertThat(frame.appTitle).isEqualTo(PROGRAM_FULL_NAME)
 		}
 	}
 

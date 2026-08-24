@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Last Updated:** 2026-07-19
+**Last Updated:** 2026-08-24
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -113,15 +113,20 @@ The status bar shows `Speed: X.Xx` whenever the speed differs from `1.0x`.
 
 ### Directory Structure
 
-- `core/` - KMP `:core` subproject (domain model, simulation engine, XML)
-- `desktop-ui/` - JVM `:desktop-ui` subproject (GUI, DI bootstrap, Main entry)
-- `fast-sim/` - native `:fast-sim` subproject (linuxX64 CLI binary, **requires Linux host**)
-  - `desktop-ui/src/main/kotlin/` - Main source code
-  - `desktop-ui/src/test/kotlin/` - Test source code
-  - `desktop-ui/src/main/resources/` - Resource files (XML examples)
-  - `desktop-ui/docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
-- `docs/` - Project documentation
-- `desktop-ui/build/` - Compiled outputs, JARs, test results
+Gradle subprojects (see `settings.gradle.kts`):
+
+- `core/` - KMP `:core` (domain model, simulation engine, XML); targets `jvm` + `linuxX64`
+- `core-test/` - KMP `:core-test` (shared test fixtures; `commonMain`/`jvmMain` only)
+- `dispatcher-agent/` - JVM `:dispatcher-agent` (Goal 10 dispatcher: Koog agents, Ollama executor, sweep)
+- `desktop-ui/` - JVM `:desktop-ui` (GUI, DI bootstrap, `Main` entry point)
+- `fast-sim/` - native `:fast-sim` (linuxX64 CLI binary, **requires Linux host**; included only when present)
+
+Other directories:
+
+- `docs/` - Project documentation, including `docs/measurement/` sweep grids
+- `text/` - LaTeX thesis sources
+- `desktop-ui/docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
+- `desktop-ui/build/libs/interlockSim.jar` - Packaged application (produced by `shadowJar`)
 
 ## Docker Setup (Recommended)
 
@@ -165,7 +170,7 @@ For X11 forwarding troubleshooting, authentication setup, SELinux configuration 
 
 ### Core Components
 
-**Main entry point:** `cz.vutbr.fit.interlockSim.Main` - handles three modes: `sim`, `edit`, `example`
+**Main entry point:** `cz.vutbr.fit.interlockSim.Main` - handles six modes: `sim`, `simgui`, `edit`, `example`, `exampleGui`, `aiSweep` (see `VALID_MODES` in `Main.kt`)
 
 **Context system:**
 - `Context<out C : Cell>` - Base abstraction for railway network configuration
@@ -245,7 +250,7 @@ For complete navigation services architecture, Koin DI integration patterns, and
   - See `docs/ANIMATION_ARCHITECTURE.md` for technical details
 
 **XML Configuration:**
-- Railway networks defined in XML format (schema: `src/main/resources/.../data.xsd`)
+- Railway networks defined in XML format (schema: `core/src/commonMain/resources/cz/vutbr/fit/interlockSim/resource/data.xsd`)
 - Example: `vyhybna.xml` (shunting loop), `praha.xml`
 - Elements: RailSwitch, RailSemaphore, InOut (entry/exit points)
 
@@ -265,21 +270,50 @@ For complete navigation services architecture, Koin DI integration patterns, and
 
 ### Package Structure
 
+All production code is Kotlin. There is no `src/main/java` any more; each subproject has its
+own source sets.
+
 ```
-src/
-├── main/java/cz/vutbr/fit/interlockSim/
-│   ├── Main.java              - Application entry point
-│   ├── context/               - Context management and factories
-│   ├── gui/                   - Graphical editor
-│   ├── objects/               - Domain model
-│   ├── sim/                   - Simulation scenarios
-│   ├── util/                  - Utilities
-│   └── xml/                   - XML parsing
-└── test/java/cz/vutbr/fit/interlockSim/
-    ├── context/               - Context tests
-    ├── sim/                   - Simulation tests
-    ├── testutil/              - Test utilities (TestFixtures, TestTopologies)
-    └── xml/                   - XML validation tests
+core/src/
+├── commonMain/kotlin/cz/vutbr/fit/interlockSim/
+│   ├── context/       - Context management and factories
+│   ├── di/            - Koin modules
+│   ├── domain/        - Domain value types
+│   ├── exceptions/    - Domain exceptions
+│   ├── objects/       - Domain model (tracks, cells, paths)
+│   ├── pathfinding/   - Route search
+│   ├── ports/         - Ports for the dispatcher seam
+│   ├── sim/           - Simulation engine and scenarios
+│   ├── util/          - Utilities
+│   └── xml/           - XML model (expect declarations)
+├── commonTest/kotlin/ - Multiplatform tests
+├── jvmMain/kotlin/    - JVM actuals: context/, util/, xml/ (parsing, factories)
+├── jvmTest/kotlin/    - JVM-only tests, incl. testutil/ (TestTopologies)
+└── nativeMain/, nativeInterop/ - linuxX64 actuals and libxml2 interop
+
+core-test/src/{commonMain,jvmMain}/kotlin/  - Shared test fixtures (TestFixtures)
+
+dispatcher-agent/src/
+├── main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/
+│   ├── agents/        - Koog agent definitions and prompts
+│   ├── di/            - Dispatcher Koin modules
+│   ├── executor/      - Ollama executor
+│   ├── observation/   - Run observation and metrics
+│   ├── planner/       - Plan adapters, run recorder
+│   └── sweep/         - aiSweep grid runner
+└── test/kotlin/       - Dispatcher tests
+
+desktop-ui/src/
+├── main/kotlin/cz/vutbr/fit/interlockSim/
+│   ├── Main.kt        - Application entry point
+│   ├── AppMetadata.kt - Application name, version, window titles
+│   ├── ExampleRegistry.kt - Built-in console and GUI examples
+│   ├── di/            - Desktop Koin modules
+│   └── gui/           - Swing editor and animated simulation GUI
+├── test/kotlin/       - Desktop tests
+└── jmh/kotlin/        - JMH benchmarks
+
+fast-sim/src/{linuxX64Main,linuxX64Test}/kotlin/  - Native CLI binary
 ```
 
 ## Kotlin Migration History
@@ -438,10 +472,10 @@ Grid files live in `docs/measurement/`. The swept axes are `example`, `model`, `
 Koog 1.1.1 has no path to Ollama's `seed` option. Results and interpretation:
 `docs/GOAL_10_SP2C24_SWEEP_REPORT.md`.
 
-**Test coverage (February 2026):**
-- **1840 tests total** (1836 passing, 4 skipped, 0 failing)
-- **51% code coverage** (8,824/17,070 instructions)
-- **145 test classes**
+**Test coverage:** last counted **February 2026** — 1840 tests (1836 passing, 4 skipped),
+51% instruction coverage, 145 test classes. That count predates `:core-test`,
+`:dispatcher-agent` and `:fast-sim`, so it is a floor, not the current figure. For the current
+numbers, run `./gradlew test jacocoTestReport` or read the CI coverage artifact.
 
 **Test utilities:**
 - `TestFixtures` - Centralized XML fixture loading
@@ -476,13 +510,14 @@ For complete SonarQube configuration, quality gates setup, CI/CD integration, an
 **RULE: Disabling ktlint is forbidden.** Never set `enabled = false` on ktlint tasks or add workaround comments to bypass enforcement. Fix violations; don't silence the checker.
 
 **Dual-level approach:**
-- `detekt.yml` - Permissive rules for legacy Java→Kotlin converted code
-- `detekt-strict.yml` - Strict rules for new Kotlin code written from scratch
+- `detekt.yml` - Permissive rules for legacy Java→Kotlin converted code; the default for every subproject
+- `detekt-strict.yml` - Strict rules for Kotlin written from scratch. It is **not** a separate
+  Gradle task. A subproject opts in by pointing its own `detekt` task at the file; only
+  `:fast-sim` does so today (`fast-sim/build.gradle.kts`, `config.setFrom(... detekt-strict.yml)`).
 
 **Run checks:**
 ```bash
-./gradlew detekt              # Legacy/converted code
-./gradlew detektStrict        # New Kotlin code
+./gradlew detekt              # All subprojects (:fast-sim uses detekt-strict.yml)
 ./gradlew ktlintCheck         # Formatting check
 ./gradlew ktlintFormat        # Auto-format
 ```
@@ -541,6 +576,10 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 - `GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md` - Audits which `DispatchDecision` sealed subtypes are actually produced in production vs. only in tests (Issue #848, SP2c.25)
 - `INTERLOCKING_SCOPE_LIMITATIONS.md` - Documents intentional simplifications in the interlocking model (Issue #893, path-reservation review Phase 6)
 - `SP1_6_TOOL_EXPOSURE_IMPLEMENTATION.md` - Implementation summary for exposing sensors/actuators as Koog tools (Issue #551, SP1.6)
+- `GOAL_10_SP2C11_SWEEP_REPORT.md` - Earlier `aiSweep` grid results (Issue #834, SP2c.11)
+- `GOAL_10_I895_REBASELINE_REPORT.md` - A4 reliability re-baseline, both arms, 60 runs (Issue #895)
+- `GOAL_10_SP2C14_RELIABILITY_REPORT.md` - Goal 10 reliability report; the measured first-stage outcome (Issue #837, SP2c.14)
+- `GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md` - Frontier-model diagnostic grid, prepared but unrun (Issue #838, SP2c.15)
 
 ## Known Issues
 
@@ -557,14 +596,14 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
   the XML report — even though all tests passed. See `core/build.gradle.kts` (`linuxX64Test`
   configuration). Do not re-enable without confirming the upstream bug is fixed.
 
-**Test coverage:** 1840 tests (1836 passing, 4 skipped), 51% code coverage.
+**Test coverage:** see "Testing" above — the last recorded count is from February 2026 and is stale.
 
 ## Future Development Considerations
 
-The project currently uses **kDisco** (replaces jDisco, Phase 1 migration complete 2026-03-04). The long-term target is **Kalasim** (Phase 2, future). Research on modern alternatives is documented in `docs/jdisco-research.md`.
+The project currently uses **kDisco** (replaces jDisco, Phase 1 migration complete 2026-03-20). The long-term target is **Kalasim** (Phase 2, future). Research on modern alternatives is documented in `docs/jdisco-research.md`.
 
 **Migration status:**
-- ✅ **Phase 1 complete (2026-03-20):** Swapped jDisco for kDisco (`cz.hovorka.kdisco:kdisco-core-jvm:0.5.0`). See commit history on `feature/simulation-library-decision-round2`.
+- ✅ **Phase 1 complete (2026-03-20):** Swapped jDisco for kDisco. The dependency is now `cz.ksimulantenbande.kdisco:kdisco-core-jvm:0.6.1-SNAPSHOT` (the group ID was renamed from `cz.hovorka.kdisco`). See commit history on `feature/simulation-library-decision-round2`.
 - 🆕 **Phase 2 (future):** Migrate from kDisco to Kalasim (native Kotlin coroutines-based discrete event simulation).
 
 **Alternative frameworks researched (see `docs/jdisco-research.md`):**

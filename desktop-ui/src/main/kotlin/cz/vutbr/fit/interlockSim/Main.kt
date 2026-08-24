@@ -424,8 +424,10 @@ class Main {
 
 			context.addReportTypes(*ReportType.values())
 
-			// Reuse the same GUI launch path as loadSimWithGui (no sourceFile for examples)
-			showContextInGui(context)
+			// Reuse the same GUI launch path as loadSimWithGui (no sourceFile for examples).
+			// LLM-driven examples get their own window title (Issue #839).
+			val appTitle = if (exampleRegistry.usesLlmDispatcher(name)) PROGRAM_LLM_FULL_NAME else null
+			showContextInGui(context, appTitle = appTitle)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "GUI example context creation failed" }
 		} catch (e: EmptyContextException) {
@@ -448,12 +450,15 @@ class Main {
 	 *
 	 * @param context Simulation context to display; must already have report types added.
 	 * @param sourceFile Optional XML file to show in the window title (null for built-in examples).
+	 * @param appTitle Optional base window title; null keeps [Frame]'s default (Issue #839).
 	 */
 	private fun showContextInGui(
 		context: SimulationContext,
-		sourceFile: File? = null
+		sourceFile: File? = null,
+		appTitle: String? = null
 	) {
 		javax.swing.SwingUtilities.invokeLater {
+			appTitle?.let { frame.appTitle = it }
 			frame.setContext(context)
 			// Do not update modificationTracker/currentFile in simulation mode:
 			// File->Save uses that state to enter editing-only save flow.

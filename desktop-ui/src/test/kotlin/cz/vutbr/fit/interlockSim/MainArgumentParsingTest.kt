@@ -15,6 +15,7 @@ package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
@@ -526,7 +527,7 @@ class MainArgumentParsingTest {
 
 			// Assert
 			assertThat(programName).isEqualTo("InterlockSim")
-			assertThat(programVersion).isEqualTo("0.1-bachelor")
+			assertThat(programVersion).isEqualTo("0.2")
 		}
 	}
 
@@ -593,13 +594,25 @@ class MainArgumentParsingTest {
 
 		@Test
 		fun `PROGRAM_VERSION is defined`() {
-			assertThat(PROGRAM_VERSION).isEqualTo("0.1-bachelor")
+			assertThat(PROGRAM_VERSION).isEqualTo("0.2")
 		}
 
 		@Test
 		fun `PROGRAM_FULL_NAME combines name and version`() {
 			val expectedFullName = "${PROGRAM_NAME} ${PROGRAM_VERSION}"
 			assertThat(PROGRAM_FULL_NAME).isEqualTo(expectedFullName)
+		}
+
+		@Test
+		fun `PROGRAM_LLM_FULL_NAME names the LLM dispatcher`() {
+			assertThat(PROGRAM_LLM_FULL_NAME).isEqualTo("InterlockSim + LLM dispatcher 0.2")
+		}
+
+		@Test
+		fun `no title constant mentions the bachelor thesis`() {
+			// Issue #839: the owner asked for the thesis marker to leave the window title.
+			assertThat(PROGRAM_FULL_NAME).doesNotContain("bachelor")
+			assertThat(PROGRAM_LLM_FULL_NAME).doesNotContain("bachelor")
 		}
 	}
 }

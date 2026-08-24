@@ -35,7 +35,7 @@ every actuator tool is a thin RPC that the kernel independently re-validates. Pe
 staging, the LLM dispatcher sits **behind the same `Dispatcher` seam** as the deterministic
 `RuleBasedDispatcher` (refactored from `ShuntingLoop`, SP0.1 #540 / SP2b.2 #557) in the new
 **`:dispatcher-agent`** module — both first-class from the start, both gated on
-`vyhybna.xml` (Stage A).
+`vyhybna.xml` (Goal 10, first stage).
 
 | Role | SP | Style | Trigger | Latency budget | LLM? |
 |---|---|---|---|---|---|
@@ -232,7 +232,7 @@ The numeric acceptance evidence required by #534 must be produced once the SP3.4
 SP2b.9 (#566). For **each** Tier D candidate, run the four scripted scenarios from #534 against
 the real tool surface and record the metrics.
 
-**Run conditions (from the #532 body, Stage A):**
+**Run conditions (from the #532 body, first stage):**
 - **Network:** `vyhybna.xml` — the paramount example (2 InOuts, 2 switches, 6 semaphores,
   ~2 concurrent trains). Praha scale (#591) is downstream and out of scope here.
 - **Seed pinning (A4):** the local Ollama sampling **seed is pinned** per run. Acceptance is

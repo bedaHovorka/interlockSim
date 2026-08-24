@@ -114,6 +114,21 @@ import javax.swing.Timer
  * @see switchToSimulationMode
  */
 class Frame : JFrame(PROGRAM_FULL_NAME) {
+	/**
+	 * Base window title, without the file name and dirty marker (Issue #839).
+	 *
+	 * Defaults to [PROGRAM_FULL_NAME]. The GUI launch path replaces it with
+	 * [cz.vutbr.fit.interlockSim.PROGRAM_LLM_FULL_NAME] when the run is driven by the LLM
+	 * dispatcher, so the title bar alone says which dispatcher arm is deciding.
+	 *
+	 * Must be set on the EDT, like every other public member of this class.
+	 */
+	var appTitle: String = PROGRAM_FULL_NAME
+		set(value) {
+			field = value
+			updateTitle()
+		}
+
 	val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
 	internal val statusBar: StatusBar = StatusBar()
 	private val toolBar: ToolBar = ToolBar()
@@ -927,9 +942,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		title =
 			if (fileName != null) {
-				"$PROGRAM_FULL_NAME - $fileName$suffix"
+				"$appTitle - $fileName$suffix"
 			} else {
-				PROGRAM_FULL_NAME
+				appTitle
 			}
 	}
 

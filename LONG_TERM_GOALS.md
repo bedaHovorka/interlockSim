@@ -30,14 +30,15 @@ This document defines 20 prioritized functional goals for extending the Interloc
 
 ## Goal Stages
 
-A goal can be delivered in **stages**. A stage of one goal can depend on a stage of another goal.
+Goals can have stages, and a stage of one goal can depend on a stage of another goal.
 
-- The **first stage carries no letter**. It is the simplest solution that does the job.
-- **Later stages carry a letter, from B upwards.** Each one extends the stage before it.
-- Later stages are **defined ad hoc**, once the real difficulty of the previous stage is known.
-  This document therefore names a later stage only after somebody decided it is needed.
+The **first stage has no letter — there is no A** — and is mostly the simplest solution. The
+next stages have a letter, **from B onward**, and each one extends the stage before it.
 
-**Next planned after Goal 10 (stage A):**
+The next stages are **established ad hoc**. It depends on how tough the work actually turns out
+to be. This document therefore names a later stage only after somebody decided it is needed.
+
+**Next planned after Goal 10 (first stage):**
 
 | Order | Stage | Why now |
 |---|---|---|
@@ -48,7 +49,7 @@ A goal can be delivered in **stages**. A stage of one goal can depend on a stage
 
 ## Goals Summary Table
 
-**Re-scoped 2026-08-23:** Goal 10 stage A is **complete**, so the 2026-07-01 critical path is
+**Re-scoped 2026-08-23:** Goal 10's first stage is **complete**, so the 2026-07-01 critical path is
 closed. **Goal 1B is now the top-priority work**, followed by Goal 9B, the new Goal 12, and
 Goal 3B. Goal 11 is redefined (the old Goal 12, curved track, is folded into it) and dropped to
 **Very Low** priority. The number 12 is reused for a **new goal**: inter-station tracks and
@@ -82,7 +83,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | 19 | — | Czech Timetable Import | D: Data Integration | High | 🆕 Open (#670) | 4 months |
 | 20 | — | Comprehensive Accessibility | B: User Experience | Medium | 🆕 Open (#671) | 3 months |
 
-**Total Development Estimate: 71 months (23 months complete — Goals 1, 2, 3, 7, 8, 9, and Goal 10 stage A; 48 months remaining, including the newly named stages 1B, 9B, 3B and the new Goal 12)**
+**Total Development Estimate: 71 months (23 months complete — Goals 1, 2, 3, 7, 8, 9, and Goal 10's first stage; 48 months remaining, including the newly named stages 1B, 9B, 3B and the new Goal 12)**
 
 ---
 
@@ -338,7 +339,7 @@ Users receive automatic detection of routing conflicts when multiple trains requ
 **Category:** A: Intelligent Automation
 **Priority:** Critical *(re-scoped 2026-07-01 — was the project's top-priority goal)*
 **Development Estimate:** 6 months
-**Status:** ✅ **COMPLETE (stage A, 2026-08-23)** — tracked in #532
+**Status:** ✅ **COMPLETE (first stage, 2026-08-23)** — tracked in #532
 
 **User Value:**
 Users can enable an AI-powered dispatcher that automatically routes trains through complex junctions, managing switch positions and signal states without manual intervention. The dispatcher explains its decisions and allows human override at any time.
@@ -361,7 +362,7 @@ Users can enable an AI-powered dispatcher that automatically routes trains throu
 
 ---
 
-#### Goal 10 stage A — completion notes (2026-08-23)
+#### Goal 10, first stage — completion notes (2026-08-23)
 
 **What shipped:**
 - The `Dispatcher` seam plus the deterministic `RuleBasedDispatcher`
@@ -415,11 +416,11 @@ not a `:core` defect. Whether it is an **interface** problem or a **model-capaci
 still open: #838 prepared the larger-model diagnostic grid but no run has been made
 (`docs/GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md`).
 
-**Why stage A closes anyway.** The acceptance contract was deliberately rewritten so that an
+**Why the first stage closes anyway.** The acceptance contract was deliberately rewritten so that an
 honest LLM failure rate is publishable rather than hidden. It is now published. The rule-based
 arm carries the reproducibility guarantee, and the **interlocking — not the LLM — carries
 safety**, so an unreliable LLM arm cannot make the simulator unsafe. Raising the LLM success
-rate is continuing work; it is not a reason to hold stage A open.
+rate is continuing work; it is not a reason to hold the first stage open.
 
 **Moved out of Goal 10.** The old "Goal 10b" work — the agent-to-agent operating language for
 inter-dispatcher coordination (#821, GitHub milestone *AI2 Protocol*) — moves into the **new
@@ -523,14 +524,14 @@ Users can connect two stations with a real inter-station track and give each sta
   the trains outside the system at the InOuts of the leaf stations (see `../OpenCybele1`).
 - Non-linear terrain modelling on inter-station tracks (needs Goal 11).
 
-**Dependencies:** Goal 10 stage A (✅ complete — the dispatcher seam and agent stack), Goal 1B
+**Dependencies:** Goal 10, first stage (✅ complete — the dispatcher seam and agent stack), Goal 1B
 (scale and routing scenarios)
 
 ---
 
 ## Planned Next Stages
 
-These three sections describe the stages planned after Goal 10 stage A. They sit together, in the
+These three sections describe the stages planned after Goal 10's first stage. They sit together, in the
 order they will be worked, rather than beside their first stages. See "Goal Stages" above.
 
 ### Goal 1B: Scale and Routing Test Scenarios
@@ -576,7 +577,7 @@ parameters, and a low maximum of concurrent trains.
 - Does it depend on an existing open issue?
 - Is the multi-loop example only usable with an agent?
 
-**Dependencies:** Goal 1 (✅ complete), Goal 2 (✅ complete), Goal 10 stage A (✅ complete)
+**Dependencies:** Goal 1 (✅ complete), Goal 2 (✅ complete), Goal 10 first stage (✅ complete)
 
 ---
 
@@ -606,7 +607,7 @@ using Goal 10's dispatcher, the Czech railway rules, and the findings written do
 **Target scenario:** Praha hlavní nádraží at full traffic, with the maximum number of concurrent
 trains.
 
-**Dependencies:** Goal 9 (✅ complete), Goal 10 stage A (✅ complete), Goal 1B
+**Dependencies:** Goal 9 (✅ complete), Goal 10 first stage (✅ complete), Goal 1B
 
 ---
 
@@ -815,7 +816,7 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 
 ## Implementation Strategy
 
-**Re-planned 2026-08-23.** Phase 0 is **finished**: Goal 3, Goal 9, and Goal 10 stage A are all
+**Re-planned 2026-08-23.** Phase 0 is **finished**: Goal 3, Goal 9, and Goal 10's first stage are all
 complete. The new highest-priority block is **Phase 0B** below — Goal 1B, then Goal 9B, then
 Goal 12, then Goal 3B. Phases 1-2 hold the remaining High/Medium work and can proceed in parallel
 with, but never ahead of, Phase 0B if a second developer is available.
@@ -840,14 +841,14 @@ only critical path. That path is now closed.
 |------|-------|--------|--------|----------|
 | 3 | Collision Detection and Warning | 2 | ✅ Complete | #610 |
 | 9 | Automatic Conflict Detection and Resolution | 4 | ✅ Complete | #531 |
-| 10 | AI Dispatcher Routing (stage A) | 6 | ✅ Complete | #532 |
+| 10 | AI Dispatcher Routing (first stage) | 6 | ✅ Complete | #532 |
 
 **Phase 0 Total: 12 months, delivered.**
 
 **Delivered:**
 - Collision warnings + auto-pause/halt (Goal 3)
 - Ranked, learnable conflict resolution (Goal 9)
-- Autonomous, explainable AI dispatcher with human override (Goal 10 stage A). The LLM arm's
+- Autonomous, explainable AI dispatcher with human override (Goal 10, first stage). The LLM arm's
   measured success rate is published and is **below** the A4 bar — see Goal 10's completion
   notes.
 
@@ -937,9 +938,9 @@ Goal 11 is Very Low priority and carries no schedule risk.
   - Start with simple spatial-conflict detection (#580) before temporal (#583), enhance iteratively — sequencing already reflected in #531's sub-task order
   - Keep preference learning (#592) as the last sub-task, behind a working rule-based ranking engine (#588)
 
-**✅ Resolved (stage A) — Goal 10: AI Dispatcher Routing**
+**✅ Resolved (first stage) — Goal 10: AI Dispatcher Routing**
 - **Risk (historical):** planning algorithm complexity; integration with pathfinding; explainability requirements limiting algorithm choices.
-- **Outcome:** stage A complete 2026-08-23. The mitigations held: the rule-based dispatcher came
+- **Outcome:** first stage complete 2026-08-23. The mitigations held: the rule-based dispatcher came
   first and passes A4 at 10/10, the seam kept the LLM swappable, and SEMI_AUTO exists as a
   fallback. **One risk was realised:** the LLM arm's measured success rate is below the ≥ 8/10
   gate in every configuration, on a route-extension stall. That is now a Goal 12 and Goal 1B
@@ -976,7 +977,7 @@ Goal 11 is Very Low priority and carries no schedule risk.
 
 ```
 Critical Path 0 (CLOSED 2026-08-23): Foundation -> Safety -> AI
-  Goal 1 (done) -> Goal 2 (done) -> Goal 3 (done) -> Goal 9 (done) -> Goal 10 stage A (done)
+  Goal 1 (done) -> Goal 2 (done) -> Goal 3 (done) -> Goal 9 (done) -> Goal 10 first stage (done)
   Kept for historical record only.
 
 Critical Path 0B (the ONLY schedule-critical path as of 2026-08-23): Scale -> Realism -> Network
@@ -1102,7 +1103,7 @@ The following categories of goals were deferred for future consideration:
 
 **Document Version:** 1.2
 **Created:** 2026-01-09
-**Last Revised:** 2026-08-23 (#839, SP2c.16) — added the **Goal Stages** convention; marked **Goal 10 stage A complete** and recorded the amended acceptance contract (#822 §7) together with SP2c.14's measured A4 result, including the LLM arm's failure to reach the ≥ 8/10 gate; corrected the P8 determinism claim (a sampling seed cannot reach Ollama through Koog 1.1.1 — prompt determinism only); **redefined Goal 11** to cover gradients *and* curves at Very Low priority, folding in the old Goal 12; **created a new Goal 12** for inter-station tracks and multiple dispatcher agents, absorbing #821; added brief **Goal 1B, 9B, 3B** sections and the new Phase 0B (1B → 9B → 12 → 3B); restructured Implementation Strategy, Total Development Effort, and Risk Assessment accordingly
+**Last Revised:** 2026-08-24 (#839, SP2c.16) — restated the **Goal Stages** convention in the owner's own wording (the first stage carries no letter, so "Goal 10 stage A" is now "Goal 10, first stage" throughout); marked **Goal 10's first stage complete** and recorded the amended acceptance contract (#822 §7) together with SP2c.14's measured A4 result, including the LLM arm's failure to reach the ≥ 8/10 gate; corrected the P8 determinism claim (a sampling seed cannot reach Ollama through Koog 1.1.1 — prompt determinism only); **redefined Goal 11** to cover gradients *and* curves at Very Low priority, folding in the old Goal 12; **created a new Goal 12** for inter-station tracks and multiple dispatcher agents, absorbing #821; added brief **Goal 1B, 9B, 3B** sections and the new Phase 0B (1B → 9B → 12 → 3B); restructured Implementation Strategy, Total Development Effort, and Risk Assessment accordingly
 **Previously Revised:** 2026-07-01 — re-prioritized around Goal 10 as the top-priority goal; only its dependency chain (Goal 1 → 2 → 3 → 9 → 10) remained Critical; Goal 9/Goal 10 dependency lines reconciled with the GitHub issue tracker (#531, #532) to include Goal 3
 **Approved By:** traffic-simulation-expert, agent-architect, kotlin-tech-lead, railway-engineer
 **Next Review:** After Goal 1B completion
