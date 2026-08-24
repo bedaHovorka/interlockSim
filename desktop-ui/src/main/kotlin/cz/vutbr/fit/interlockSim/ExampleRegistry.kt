@@ -118,6 +118,21 @@ class ExampleRegistry {
 		)
 
 	/**
+	 * Names of the examples whose dispatching decisions come from the LLM arm.
+	 *
+	 * The registry owns this fact because it is the registry that wires the LLM planner.
+	 * Callers must not re-derive it from the name (Issue #839).
+	 */
+	private val llmExamples: Set<String> = setOf("shuntingLoopAI")
+
+	/**
+	 * Returns `true` if the example named [name] is driven by the LLM dispatcher.
+	 *
+	 * Used by the GUI launch path to pick the window title (Issue #839).
+	 */
+	fun usesLlmDispatcher(name: String): Boolean = name in llmExamples
+
+	/**
 	 * Returns a sorted list of available console example names.
 	 */
 	fun getAvailableExamples(): List<String> = examples.keys.sorted()
