@@ -660,13 +660,14 @@ Output: `desktop-ui/build/docs/javadoc/` directory
 
 ## Future Development
 
-The project currently uses **kDisco** (2004, no longer maintained). Research has identified modern alternatives for potential migration:
+The simulation engine is **kDisco**, a Kotlin discrete-event library maintained in its own
+repository at https://github.com/bedaHovorka/kdisco. It replaced the 2004 jDisco library on
+2026-03-20.
 
-- **DSOL** - Combined discrete-continuous simulation (Java 17+, actively maintained)
-- **Kalasim** - Discrete event simulation (Kotlin-native with coroutines)
-- **SSJ** - Stochastic simulation (Université de Montréal)
-
-See `docs/jdisco-research.md` for comprehensive analysis.
+**There is no planned migration to another simulation framework.** An earlier road map had a
+second phase that would swap kDisco for Kalasim; that plan is dropped (owner decision,
+2026-08-24). `docs/jdisco-research.md` and `docs/SIMULATION_LIBRARY_DECISION_ROUND2.md` record
+the framework research and the decision as it stood then. Read them as history.
 
 ---
 

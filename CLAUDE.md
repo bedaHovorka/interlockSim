@@ -191,7 +191,7 @@ For X11 forwarding troubleshooting, authentication setup, SELinux configuration 
   - Runtime immutability enforcement (freeze/isFrozen/checkNotFrozen)
   - **Timeline:** 8 days actual vs 18 estimated (70% faster), zero regressions across 927+ tests
   - **Status:** Phase 5.5 (#182) 🆕 PENDING, Phase 6 (#167) ✅ COMPLETE, (#166) ⏸️ IN PROGRESS, (#168) ⏸️ BLOCKED
-- **Issue #94 (2026-01-21) ✅ COMPLETE:** SimulationEnvironment facade interface for DSOL/Kalasim migration readiness
+- **Issue #94 (2026-01-21) ✅ COMPLETE:** SimulationEnvironment facade interface, decoupling `sim/` from the engine API
 
 **For detailed context refactoring documentation:**
 - `docs/CONTEXT_REFACTORING_DESIGN.md` - Architecture design and implementation history
@@ -600,15 +600,8 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 
 ## Future Development Considerations
 
-The project currently uses **kDisco** (replaces jDisco, Phase 1 migration complete 2026-03-20). The long-term target is **Kalasim** (Phase 2, future). Research on modern alternatives is documented in `docs/jdisco-research.md`.
+The project uses **kDisco** as its simulation engine. It replaced jDisco on 2026-03-20; the dependency is `cz.ksimulantenbande.kdisco:kdisco-core-jvm:0.6.1-SNAPSHOT` (the group ID was renamed from `cz.hovorka.kdisco`). See commit history on `feature/simulation-library-decision-round2`.
 
-**Migration status:**
-- ✅ **Phase 1 complete (2026-03-20):** Swapped jDisco for kDisco. The dependency is now `cz.ksimulantenbande.kdisco:kdisco-core-jvm:0.6.1-SNAPSHOT` (the group ID was renamed from `cz.hovorka.kdisco`). See commit history on `feature/simulation-library-decision-round2`.
-- 🆕 **Phase 2 (future):** Migrate from kDisco to Kalasim (native Kotlin coroutines-based discrete event simulation).
+**There is no planned migration to Kalasim.** The earlier road map had a "Phase 2" that would swap kDisco for Kalasim. That plan is dropped (owner decision, 2026-08-24). kDisco is the engine; work on the simulation goes into kDisco itself, at https://github.com/bedaHovorka/kdisco.
 
-**Alternative frameworks researched (see `docs/jdisco-research.md`):**
-1. **Kalasim** - Long-term target; native Kotlin with coroutines, discrete-only
-2. **DSOL** (Distributed Simulation Object Library) - Best for combined discrete-continuous simulation (actively maintained, Java 17+, TU Delft)
-3. **SSJ** (Stochastic Simulation in Java) - For stochastic/Monte Carlo simulation (Université de Montréal)
-
-**Note:** Any migration from kDisco to modern frameworks is a future development goal and should follow the conservative approach outlined above - thorough testing required before any changes to existing simulation code.
+`docs/SIMULATION_LIBRARY_DECISION.md` and `docs/SIMULATION_LIBRARY_DECISION_ROUND2.md` record the 2026 library evaluation, and `docs/jdisco-research.md` the framework research behind it. Read them as history — they describe the decision as it stood then, including the dropped Kalasim step, not the current plan.

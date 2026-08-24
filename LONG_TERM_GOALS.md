@@ -110,7 +110,7 @@ Users can simulate realistic railway scenarios with multiple trains operating si
 **Implementation Notes:**
 - Requires kDisco scheduler modifications for concurrent entity management
 - Consider prototype with 3-train scenario first
-- High risk - may require DSOL migration if kDisco proves limiting
+- *(Historical note from the 2026-01-09 plan: this was flagged as high risk, possibly needing a DSOL migration. It did not — see Risk Assessment below. There is no planned migration away from kDisco.)*
 - Foundation for Goals 3, 9, and 10
 
 ---
