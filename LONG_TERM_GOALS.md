@@ -817,9 +817,9 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 ## Implementation Strategy
 
 **Re-planned 2026-08-23.** Phase 0 is **finished**: Goal 3, Goal 9, and Goal 10's first stage are all
-complete. The new highest-priority block is **Phase 0B** below — Goal 1B, then Goal 9B, then
+complete. The new highest-priority block is **Next Stages** below — Goal 1B, then Goal 9B, then
 Goal 12, then Goal 3B. Phases 1-2 hold the remaining High/Medium work and can proceed in parallel
-with, but never ahead of, Phase 0B if a second developer is available.
+with, but never ahead of, Next Stages if a second developer is available.
 
 *Historical:* the 2026-07-01 plan put Goal 10 at the top and made Goal 3 → Goal 9 → Goal 10 the
 only critical path. That path is now closed.
@@ -852,7 +852,7 @@ only critical path. That path is now closed.
   measured success rate is published and is **below** the A4 bar — see Goal 10's completion
   notes.
 
-### Phase 0B: Next Stages (highest priority — strictly sequential)
+### Next Stages (highest priority — strictly sequential)
 
 **Objective:** close Goal 1's unverified scale bar, then rebuild conflict resolution on realistic
 demands, then connect stations to each other. Nothing in Phases 1-2 should take developer time
@@ -865,7 +865,7 @@ away from this phase.
 | 3 | 12 | Inter-station Tracks and Multiple Dispatcher Agents | 5 | Needs the Goal 10 dispatcher seam and Goal 1B's routing cleanup | #821 |
 | 4 | 3B | Snapshot Collision Detection on a Separate Thread | 2 | Feeds Goal 9B's resolution suggestions | — |
 
-**Phase 0B Total: 15 months sequential** (each step depends on the one before it).
+**Next Stages Total: 15 months sequential** (each step depends on the one before it).
 
 ### Phase 1: High-Priority Enhancement (parallel to Phase 0, non-blocking)
 
@@ -902,24 +902,24 @@ away from this phase.
 | Phase | Sequential | Parallel (2 devs) |
 |-------|------------|-------------------|
 | ✅ Complete (Goals 1, 2, 7, 8) | 11 months | — (done) |
-| ✅ Phase 0: Critical Path to Goal 10 (Goals 3, 9, 10A) | 12 months | — (done) |
-| Phase 0B: Next Stages (1B → 9B → 12 → 3B) | 15 months | 15 months *(no parallelization — strictly sequential)* |
+| ✅ Phase 0: Critical Path to Goal 10 (Goals 3, 9, and Goal 10's first stage) | 12 months | — (done) |
+| Next Stages (1B → 9B → 12 → 3B) | 15 months | 15 months *(no parallelization — strictly sequential)* |
 | Phase 1: High-Priority Enhancement | 30 months | ~16-18 months |
 | Phase 2: Medium-Priority Polish | 3 months | ~2 months (absorbed) |
 | **Total (all goals and named stages)** | **71 months** | **~46 months** |
 | **Remaining (excl. complete)** | **48 months** | **~33-35 months** |
 
 **Resource Options:**
-- 1 developer: Phase 0B alone is a ~1.3-year commitment; full remaining scope ~4 years.
-- 2 developers: 1 dedicated to Phase 0B (1B → 9B → 12 → 3B, cannot be parallelized further), 1 covering Phase 1/2 in the background.
-- Phased funding: fund Phase 0B to completion first (Goal 1B unblocks everything after it); revisit Phase 1/2 scope afterward.
+- 1 developer: Next Stages alone is a ~1.3-year commitment; full remaining scope ~4 years.
+- 2 developers: 1 dedicated to Next Stages (1B → 9B → 12 → 3B, cannot be parallelized further), 1 covering Phase 1/2 in the background.
+- Phased funding: fund Next Stages to completion first (Goal 1B unblocks everything after it); revisit Phase 1/2 scope afterward.
 
 ---
 
 ## Risk Assessment
 
 **Re-scoped 2026-08-23:** Goal 10's critical path is closed, so risk priority now follows
-**Phase 0B**: Goal 1B → Goal 9B → Goal 12 → Goal 3B. Goal 1B inherits the highest schedule risk,
+**Next Stages**: Goal 1B → Goal 9B → Goal 12 → Goal 3B. Goal 1B inherits the highest schedule risk,
 because it owns the kDisco deadlock and race-condition review that everything after it depends on.
 Goal 11 is Very Low priority and carries no schedule risk.
 
@@ -976,11 +976,11 @@ Goal 11 is Very Low priority and carries no schedule risk.
 ### Dependency Risks
 
 ```
-Critical Path 0 (CLOSED 2026-08-23): Foundation -> Safety -> AI
+Critical Path A (CLOSED 2026-08-23): Foundation -> Safety -> AI
   Goal 1 (done) -> Goal 2 (done) -> Goal 3 (done) -> Goal 9 (done) -> Goal 10 first stage (done)
   Kept for historical record only.
 
-Critical Path 0B (the ONLY schedule-critical path as of 2026-08-23): Scale -> Realism -> Network
+Critical Path B (the ONLY schedule-critical path as of 2026-08-23): Scale -> Realism -> Network
   Goal 1B (scale + routing cleanup + kDisco review)
     -> Goal 9B (realistic conflict resolution, specified during 1B)
     -> Goal 12 (inter-station tracks, several dispatcher agents)
@@ -990,7 +990,7 @@ Critical Path 0B (the ONLY schedule-critical path as of 2026-08-23): Scale -> Re
   review — whose findings become its own prerequisites.
 
 Critical Path 1: Safety Chain (re-scoped to High priority, no longer schedule-critical)
-  Goal 1 (multi-train, done) -> Goal 3 (collision, shared with Path 0) -> Goal 4 (interlocking)
+  Goal 1 (multi-train, done) -> Goal 3 (collision, shared with Path A) -> Goal 4 (interlocking)
   Risk: Goal 4 now only risks its own schedule, not Goal 10's - demoted from Critical to High.
 
 Critical Path 2: Analytics Chain (re-scoped to High priority, no longer schedule-critical)
@@ -1103,7 +1103,7 @@ The following categories of goals were deferred for future consideration:
 
 **Document Version:** 1.2
 **Created:** 2026-01-09
-**Last Revised:** 2026-08-24 (#839, SP2c.16) — restated the **Goal Stages** convention in the owner's own wording (the first stage carries no letter, so "Goal 10 stage A" is now "Goal 10, first stage" throughout); marked **Goal 10's first stage complete** and recorded the amended acceptance contract (#822 §7) together with SP2c.14's measured A4 result, including the LLM arm's failure to reach the ≥ 8/10 gate; corrected the P8 determinism claim (a sampling seed cannot reach Ollama through Koog 1.1.1 — prompt determinism only); **redefined Goal 11** to cover gradients *and* curves at Very Low priority, folding in the old Goal 12; **created a new Goal 12** for inter-station tracks and multiple dispatcher agents, absorbing #821; added brief **Goal 1B, 9B, 3B** sections and the new Phase 0B (1B → 9B → 12 → 3B); restructured Implementation Strategy, Total Development Effort, and Risk Assessment accordingly
+**Last Revised:** 2026-08-24 (#839, SP2c.16) — restated the **Goal Stages** convention in the owner's own wording (the first stage carries no letter, so "Goal 10 stage A" is now "Goal 10, first stage" throughout); marked **Goal 10's first stage complete** and recorded the amended acceptance contract (#822 §7) together with SP2c.14's measured A4 result, including the LLM arm's failure to reach the ≥ 8/10 gate; corrected the P8 determinism claim (a sampling seed cannot reach Ollama through Koog 1.1.1 — prompt determinism only); **redefined Goal 11** to cover gradients *and* curves at Very Low priority, folding in the old Goal 12; **created a new Goal 12** for inter-station tracks and multiple dispatcher agents, absorbing #821; added brief **Goal 1B, 9B, 3B** sections and the new **Next Stages** block (1B → 9B → 12 → 3B); restructured Implementation Strategy, Total Development Effort, and Risk Assessment accordingly; renamed the "Phase 0B" block to **Next Stages** and the two live dependency chains to **Critical Path A** (closed) and **Critical Path B** (the schedule-critical one), per review on PR #954
 **Previously Revised:** 2026-07-01 — re-prioritized around Goal 10 as the top-priority goal; only its dependency chain (Goal 1 → 2 → 3 → 9 → 10) remained Critical; Goal 9/Goal 10 dependency lines reconciled with the GitHub issue tracker (#531, #532) to include Goal 3
 **Approved By:** traffic-simulation-expert, agent-architect, kotlin-tech-lead, railway-engineer
 **Next Review:** After Goal 1B completion
