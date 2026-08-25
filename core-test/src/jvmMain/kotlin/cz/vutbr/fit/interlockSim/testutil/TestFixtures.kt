@@ -168,16 +168,16 @@ object TestFixtures {
 		xmlContextFactory: JvmEditingContextFactory = XMLContextFactory(),
 		processFactory: SimulationProcessFactory = DefaultSimulationProcessFactory(),
 		initializeDynamicMapping: Boolean = false
-	): DefaultSimulationContext {
-		val editingContext = loadShuntingEditingContext(xmlContextFactory)
-		return if (initializeDynamicMapping) {
-			Util.assertInstanceOf<DefaultSimulationContext>(
-				ContextTransformer.createSimulationContext(editingContext, processFactory)
-			)
-		} else {
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	): DefaultSimulationContext =
+		loadShuntingEditingContext(xmlContextFactory).use { editingContext ->
+			if (initializeDynamicMapping) {
+				Util.assertInstanceOf<DefaultSimulationContext>(
+					ContextTransformer.createSimulationContext(editingContext, processFactory)
+				)
+			} else {
+				DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+			}
 		}
-	}
 
 	private fun mainResource(name: String): InputStream =
 		Resources.read("cz/vutbr/fit/interlockSim/resource/$name").byteInputStream()
