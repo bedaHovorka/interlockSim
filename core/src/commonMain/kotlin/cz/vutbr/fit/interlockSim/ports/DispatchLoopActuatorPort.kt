@@ -24,8 +24,8 @@ package cz.vutbr.fit.interlockSim.ports
  * ## Threading contract
  *
  * Implementations **must** be safe to call from the agent driver thread (off the kDisco
- * simulation thread). The default implementation ([cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort])
- * posts a [cz.vutbr.fit.interlockSim.sim.DispatchDecision.ApproveTrain] to the
+ * simulation thread). The implementation posts a
+ * [cz.vutbr.fit.interlockSim.sim.DispatchDecision.ApproveTrain] to the
  * [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] (fire-and-forget), which the
  * sim-thread [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier] drains and
  * applies on the kDisco thread. Callers therefore never mutate simulation state directly.
@@ -33,8 +33,6 @@ package cz.vutbr.fit.interlockSim.ports
  * ## Usage
  *
  * ```kotlin
- * val actuatorPort: DispatchLoopActuatorPort = DefaultDispatchLoopActuatorPort(commandQueue)
- *
  * // In the agent driver loop (fire-and-forget):
  * actuatorPort.approveTrain("Train #1")   // admit a queued train to the active set
  * ```
