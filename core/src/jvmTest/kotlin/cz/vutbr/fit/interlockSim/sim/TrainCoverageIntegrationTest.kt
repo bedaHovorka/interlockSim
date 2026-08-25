@@ -22,7 +22,6 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
-import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
@@ -65,11 +64,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 	}
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val ctx =
-			TestFixtures.loadShuntingXml().use { xml ->
-				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(xml))
-			}
-		ctx.getInOuts() // Initialize dynamic wrapper map (required side-effect)
+		val ctx = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
 		context = ctx
 		return ctx
 	}

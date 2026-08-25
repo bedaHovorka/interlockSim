@@ -19,7 +19,6 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
-import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -44,15 +43,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class TrainReporterIntegrationTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val stream = TestFixtures.loadShuntingXml()
-		return stream
-			.use { s ->
-				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
-			}.also {
-				it.getInOuts() // Initialize dynamic wrapper map (required side-effect)
-			}
-	}
+	private fun loadVyhybnaContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
 
 	/**
 	 * Registers a listener that counts every TRAIN_CONTINUOUS PropertyChangeEvent fired by

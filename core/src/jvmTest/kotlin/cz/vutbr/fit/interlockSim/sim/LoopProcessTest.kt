@@ -17,7 +17,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -46,13 +45,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class LoopProcessTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val stream = TestFixtures.loadShuntingXml()
-		return stream
-			.use { s ->
-				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
-			}.also { it.getInOuts() }
-	}
+	private fun loadVyhybnaContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
 
 	// ---------------------------------------------------------------------------
 	// Helpers – concrete LoopProcess subclasses used only inside this test file

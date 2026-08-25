@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.util.Resources
+import cz.vutbr.fit.interlockSim.util.Util
 import java.io.InputStream
 
 /**
@@ -93,7 +94,9 @@ object TestFixtures {
 	 * repeated verbatim in dozens of test classes (Issue #955).
 	 */
 	fun loadShuntingEditingContext(editingContextFactory: JvmEditingContextFactory): EditingContext =
-		loadShuntingXml().use { xmlStream -> editingContextFactory.createContext(xmlStream) as EditingContext }
+		loadShuntingXml().use { xmlStream ->
+			Util.assertInstanceOf<EditingContext>(editingContextFactory.createContext(xmlStream))
+		}
 
 	/**
 	 * Loads `vyhybna.xml` into a fresh [DefaultSimulationContext].
@@ -120,12 +123,15 @@ object TestFixtures {
 	): DefaultSimulationContext {
 		val context =
 			loadShuntingXml().use { xmlStream ->
-				if (editingContextFactory == null) {
-					simulationContextFactory.createContext(xmlStream) as DefaultSimulationContext
-				} else {
-					val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-					simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-				}
+				val created =
+					if (editingContextFactory == null) {
+						simulationContextFactory.createContext(xmlStream)
+					} else {
+						val editingContext =
+							Util.assertInstanceOf<EditingContext>(editingContextFactory.createContext(xmlStream))
+						simulationContextFactory.createContext(editingContext)
+					}
+				Util.assertInstanceOf<DefaultSimulationContext>(created)
 			}
 		if (warmUpDynamicWrappers) {
 			context.getInOuts()
