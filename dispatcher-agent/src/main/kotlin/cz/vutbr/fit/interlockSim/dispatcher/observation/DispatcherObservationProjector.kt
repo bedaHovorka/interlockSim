@@ -261,12 +261,27 @@ class DispatcherObservationProjector(
 			else -> TrainPhase.HELD
 		}
 
-	private fun buildSwitchViews(): List<SwitchView> =
+	/**
+	 * The named switches in the grid, captured once (the grid is static for a context's lifetime —
+	 * cells are never added or removed after context construction). Only [DynamicRailSwitch.conf]
+	 * and the registry's switch-owner mapping are live, and those are read per tick in
+	 * [buildSwitchViews] from these cached references. Scanning the whole grid every tick
+	 * (the previous form) was O(cols×rows) per [projectTick] for a set that never changes.
+	 *
+	 * `lazy` so the single walk runs on the first [captureOnSimThread] (the sim thread) — the same
+	 * construction-time safety [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer.describe]
+	 * relies on, since the kernel has not started mutating live state before the first tick.
+	 */
+	private val switches: List<DynamicRailSwitch> by lazy {
 		environment
 			.getRailWayNetGrid()
 			.cellsOfType<DynamicRailSwitch>()
 			.filter { it.name.isNotBlank() }
 			.distinctBy { it.name }
+	}
+
+	private fun buildSwitchViews(): List<SwitchView> =
+		switches
 			.map { switch ->
 				SwitchView(
 					switchName = switch.name,

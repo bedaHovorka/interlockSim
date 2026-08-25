@@ -5,8 +5,8 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * Tests for the [ApproveTrainTool] actuator tool and [DefaultDispatchLoopActuatorPort]
- * (SP4.1, Issue #563; rewired to the [SinkHolder] seam in SP2c.6, Issue #829).
+ * Tests for the [ApproveTrainTool] actuator tool (SP4.1, Issue #563; rewired to the
+ * [SinkHolder] seam in SP2c.6, Issue #829).
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
@@ -17,16 +17,14 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
-import cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ApproveTrainTool
-import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
 /**
- * Unit tests for the [ApproveTrainTool] actuator tool (rewired to the [SinkHolder] seam in
- * SP2c.6, Issue #829) and the [DefaultDispatchLoopActuatorPort] it parallels.
+ * Unit tests for the [ApproveTrainTool] actuator tool, rewired to the [SinkHolder] seam in
+ * SP2c.6, Issue #829.
  *
  * SP2c.6 removed the dispatch-loop sensor tools (`queued_trains`, `block_inputs`) from the LLM
  * tool surface — perception now flows through the sim-thread-captured
@@ -88,28 +86,5 @@ class DispatchLoopToolsTest {
 		assertThat(tool.name).isEqualTo("approve_train")
 		assertThat(tool.parameters).hasSize(1)
 		assertThat(tool.parameters[0].name).isEqualTo("trainId")
-	}
-
-	// ── DefaultDispatchLoopActuatorPort direct tests ─────────────────────────
-
-	@Test
-	fun `DefaultDispatchLoopActuatorPort approveTrain posts ApproveTrain to queue`() {
-		val port = DefaultDispatchLoopActuatorPort(commandQueue)
-
-		val result = port.approveTrain("Train #2")
-
-		assertThat(result).isEqualTo(true)
-		val decisions = commandQueue.drain()
-		assertThat(decisions).hasSize(1)
-		assertThat((decisions.single() as DispatchDecision.ApproveTrain).trainId).isEqualTo("Train #2")
-	}
-
-	@Test
-	fun `DefaultDispatchLoopActuatorPort approveTrain rejects blank trainId`() {
-		val port = DefaultDispatchLoopActuatorPort(commandQueue)
-
-		org.junit.jupiter.api
-			.assertThrows<IllegalArgumentException> { port.approveTrain("") }
-		assertThat(commandQueue.drain()).hasSize(0)
 	}
 }
