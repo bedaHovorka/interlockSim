@@ -233,3 +233,23 @@ fun <T> Assert<Collection<T?>>.containsNull(): Assert<Collection<T?>> =
 			expected("to contain null but was:${show(actual)}")
 		}
 	}
+
+/**
+ * Asserts that an `env.errorStop` throwable carrying [fragment] in its message was captured, and
+ * returns it.
+ *
+ * The bounded-retry regression tests (mid-journey, #905, #943) all capture the throwables passed to
+ * `env.errorStop` into a `CopyOnWriteArrayList` and then repeat the same triplet: look the
+ * throwable up by message fragment, assert it is not null, assert its message contains the
+ * fragment. This helper is that triplet, with the failure message listing every message actually
+ * captured so a miss is diagnosable without re-running the simulation.
+ */
+fun assertCapturedErrorStop(
+	capturedErrors: Collection<Throwable>,
+	fragment: String
+): Throwable =
+	capturedErrors.firstOrNull { it.message?.contains(fragment) == true }
+		?: throw AssertionError(
+			"expected a captured errorStop whose message contains ${show(fragment)}, " +
+				"but captured messages were:${show(capturedErrors.map { it.message })}"
+		)

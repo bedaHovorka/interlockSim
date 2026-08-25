@@ -11,10 +11,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
-import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -26,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -177,11 +176,7 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		assertThat(loop.getTrainsEntered()).isGreaterThan(0)
 
 		// (2) The horizon fired rather than the train waiting silently to END_TIME.
-		val stallError =
-			capturedErrors.firstOrNull { it.message?.contains(ROUTE_EXTENSION_FRAGMENT) == true }
-		assertThat(stallError, name = "captured route-extension errorStop throwable").isNotNull()
-		assertThat(stallError!!.message ?: "", name = "errorStop message")
-			.contains(ROUTE_EXTENSION_FRAGMENT)
+		assertCapturedErrorStop(capturedErrors, ROUTE_EXTENSION_FRAGMENT)
 	}
 
 	/**
@@ -270,11 +265,7 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		assertThat(loop.getTrainsEntered()).isGreaterThan(0)
 
 		// (2) The origin horizon fired with the origin wording, not the mid-journey wording.
-		val originError =
-			capturedErrors.firstOrNull { it.message?.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT) == true }
-		assertThat(originError, name = "captured origin errorStop throwable").isNotNull()
-		assertThat(originError!!.message ?: "", name = "origin errorStop message")
-			.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT)
+		assertCapturedErrorStop(capturedErrors, ORIGIN_ROUTE_EXTENSION_FRAGMENT)
 	}
 
 	private companion object {

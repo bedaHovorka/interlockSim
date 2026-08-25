@@ -11,10 +11,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
-import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -27,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -160,11 +159,7 @@ class Issue905OriginNoPathErrorStopRegressionTest : KoinTestBase() {
 		assertThat(loop.getTrainsEntered()).isGreaterThan(0)
 
 		// (2) The origin bound fired with the origin wording, not the mid-journey wording.
-		val originError =
-			capturedErrors.firstOrNull { it.message?.contains(ORIGIN_NO_PATH_FRAGMENT) == true }
-		assertThat(originError, name = "captured origin errorStop throwable").isNotNull()
-		val message = originError!!.message ?: ""
-		assertThat(message, name = "origin errorStop message").contains(ORIGIN_NO_PATH_FRAGMENT)
+		val message = assertCapturedErrorStop(capturedErrors, ORIGIN_NO_PATH_FRAGMENT).message ?: ""
 
 		// (3) The misconfigured origin InOut is named (quoted) in the message — not elided.
 		val quotedNames = inOutNames.map { "'$it'" }

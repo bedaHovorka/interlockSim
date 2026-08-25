@@ -11,10 +11,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
-import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -26,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -163,11 +162,7 @@ class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
 
 		// (2) The bound fired rather than the train polling to END_TIME. The mid-journey wording
 		//     distinguishes this from the origin bound's "No topological path from origin InOut".
-		val midJourneyError =
-			capturedErrors.firstOrNull { it.message?.contains("navigation reports no usable path") == true }
-		assertThat(midJourneyError, name = "captured mid-journey errorStop throwable").isNotNull()
-		assertThat(midJourneyError!!.message ?: "", name = "errorStop message")
-			.contains("navigation reports no usable path")
+		assertCapturedErrorStop(capturedErrors, "navigation reports no usable path")
 	}
 
 	private companion object {
