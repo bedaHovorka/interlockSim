@@ -9,6 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.util.Resources
 import java.io.InputStream
 
@@ -81,6 +85,53 @@ object TestFixtures {
 
 	/** Load a named InOut-validation fixture (e.g. "zero-inouts.xml", "single-inout.xml"). */
 	fun loadInvalidInOutXml(fixtureName: String): InputStream = fixture(fixtureName)
+
+	/**
+	 * Loads `vyhybna.xml` into a fresh [EditingContext] through [editingContextFactory].
+	 *
+	 * The XML stream is closed for the caller — the `use { … }` + `as EditingContext` pair was
+	 * repeated verbatim in dozens of test classes (Issue #955).
+	 */
+	fun loadShuntingEditingContext(editingContextFactory: JvmEditingContextFactory): EditingContext =
+		loadShuntingXml().use { xmlStream -> editingContextFactory.createContext(xmlStream) as EditingContext }
+
+	/**
+	 * Loads `vyhybna.xml` into a fresh [DefaultSimulationContext].
+	 *
+	 * Replaces the two-step "load XML → [EditingContext] → [DefaultSimulationContext]" chain that
+	 * was repeated in ~67 test classes across `:core`, `:desktop-ui` and `:dispatcher-agent`
+	 * (Issue #955). Pass the Koin-injected factories so the loaded context is wired exactly as the
+	 * test's module configured it.
+	 *
+	 * The returned context owns a Koin scope and must be closed by the caller (directly, via
+	 * `use { … }`, or by assigning it to `KoinTestBase.testContext`).
+	 *
+	 * @param simulationContextFactory factory performing the editing → simulation transformation
+	 * @param editingContextFactory when non-null, parses the XML explicitly; when `null` the
+	 *   [simulationContextFactory]'s own stream overload is used (it delegates to the editing
+	 *   factory it was constructed with)
+	 * @param warmUpDynamicWrappers when `true`, calls [DefaultSimulationContext.getInOuts] before
+	 *   returning — the dynamic wrapper map must be initialised before a `ShuntingLoop` is built
+	 */
+	fun loadShuntingSimulationContext(
+		simulationContextFactory: SimulationContextFactory,
+		editingContextFactory: JvmEditingContextFactory? = null,
+		warmUpDynamicWrappers: Boolean = false
+	): DefaultSimulationContext {
+		val context =
+			loadShuntingXml().use { xmlStream ->
+				if (editingContextFactory == null) {
+					simulationContextFactory.createContext(xmlStream) as DefaultSimulationContext
+				} else {
+					val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+					simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				}
+			}
+		if (warmUpDynamicWrappers) {
+			context.getInOuts()
+		}
+		return context
+	}
 
 	private fun mainResource(name: String): InputStream =
 		Resources.read("cz/vutbr/fit/interlockSim/resource/$name").byteInputStream()
