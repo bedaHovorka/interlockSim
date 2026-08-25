@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.dispatcher.observation
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
-import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
@@ -21,6 +20,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 
