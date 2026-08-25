@@ -135,7 +135,7 @@ object TestFixtures {
 					} else {
 						val editingContext =
 							Util.assertInstanceOf<EditingContext>(editingContextFactory.createContext(xmlStream))
-						simulationContextFactory.createContext(editingContext)
+						editingContext.use { simulationContextFactory.createContext(it) }
 					}
 				Util.assertInstanceOf<DefaultSimulationContext>(created)
 			}
