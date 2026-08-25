@@ -112,7 +112,8 @@ object TestFixtures {
 	 * @param simulationContextFactory factory performing the editing → simulation transformation
 	 * @param editingContextFactory when non-null, parses the XML explicitly; when `null` the
 	 *   [simulationContextFactory]'s own stream overload is used (it delegates to the editing
-	 *   factory it was constructed with)
+	 *   factory it was constructed with). Both paths consume the stream synchronously before
+	 *   returning, so closing it once the `use { … }` block exits is safe.
 	 * @param warmUpDynamicWrappers when `true`, calls [DefaultSimulationContext.getInOuts] before
 	 *   returning — the dynamic wrapper map must be initialised before a `ShuntingLoop` is built
 	 */
