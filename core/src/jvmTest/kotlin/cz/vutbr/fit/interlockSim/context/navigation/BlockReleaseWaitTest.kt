@@ -18,7 +18,6 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -49,10 +48,7 @@ class BlockReleaseWaitTest : KoinTestBase() {
 	@Test
 	fun `train B waits for train A to release a block then reserves it in a later event`() =
 		runBlocking {
-			val xml =
-				TestFixtures.loadShuntingXml()
-					?: throw IllegalStateException("vyhybna.xml fixture not found")
-			val context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+			val context = TestFixtures.loadShuntingSimulationContext(simulationContextFactory)
 			testContext = context
 
 			val registry = context.scope.get<PathReservationRegistry>()

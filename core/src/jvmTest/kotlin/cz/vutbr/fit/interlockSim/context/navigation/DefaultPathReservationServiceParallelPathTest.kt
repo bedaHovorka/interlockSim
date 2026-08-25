@@ -54,10 +54,8 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load the shunting loop network from XML (with proper resource management)
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-		}
+		editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
+		context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		pathReservationService = context.getRoutingServices().getPathReservationService()
 		navigator = context.getRoutingServices().getTopologyNavigator()

@@ -87,9 +87,7 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml fixture
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			context = editingContextFactory.createContext(xmlStream) as EditingContext
-		}
+		context = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 
 		// Get TopologyNavigator from context's scope
 		navigator = context.scope.get()

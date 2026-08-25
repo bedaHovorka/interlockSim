@@ -15,7 +15,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -87,12 +86,7 @@ class Issue944ReversalDeadlockRegressionTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingContext =
-			TestFixtures.loadShuntingXml().use { stream ->
-				editingContextFactory.createContext(stream) as EditingContext
-			}
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 		testContext = simulationContext
 
 		registry = simulationContext.scope.get()

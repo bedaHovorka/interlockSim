@@ -14,7 +14,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -52,8 +51,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		fun `reservePath uses RouteFinder for InOut-to-InOut and succeeds`() {
-			val editingContext =
-				editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+			val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {
@@ -83,8 +81,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		fun `reservePath reserves lowest-cost route first`() {
-			val editingContext =
-				editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+			val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {
@@ -158,8 +155,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		fun `reservePathToAnyNextSemaphore still works after RouteFinder integration`() {
-			val editingContext =
-				editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+			val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {

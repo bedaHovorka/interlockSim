@@ -9,7 +9,6 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -69,7 +68,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingContext = TestFixtures.loadShuntingXml().use { editingContextFactory.createContext(it) } as EditingContext
+		val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get elements from grid by coordinates (same as ShuntingLoop)

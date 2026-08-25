@@ -18,8 +18,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -36,7 +34,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
 
 /**
  * Comprehensive test suite for PathReservationRegistry atomic operations.
@@ -64,13 +61,8 @@ class PathReservationRegistryTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml to get real DynamicTrackBlock instances
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 		val simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 		// Get registry from context's scope (Issue #296 Phase 8: now requires context)
 		registry = simulationContext.scope.get()

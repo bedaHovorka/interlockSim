@@ -14,8 +14,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -28,7 +26,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import java.io.InputStream
 
 /**
  * Smoke tests for [PathReservationService.ReservationResult] subtypes that are
@@ -49,11 +46,7 @@ class ReservationResultTest : KoinTestBase() {
 		try {
 			val editingContextFactory = koinApp.koin.get<JvmEditingContextFactory>()
 			val simulationContextFactory = koinApp.koin.get<SimulationContextFactory>()
-			val xmlStream: InputStream =
-				TestFixtures.loadShuntingXml()
-					?: throw IllegalStateException("vyhybna.xml not found in resources")
-			val editing = editingContextFactory.createContext(xmlStream) as EditingContext
-			val simCtx = simulationContextFactory.createContext(editing) as DefaultSimulationContext
+			val simCtx = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 			val inOuts = simCtx.getInOuts().toList()
 			check(inOuts.size >= 2) { "fixture expected ≥2 InOuts; got ${inOuts.size}" }
 			val navigator: TopologyNavigator = simCtx.scope.get()
