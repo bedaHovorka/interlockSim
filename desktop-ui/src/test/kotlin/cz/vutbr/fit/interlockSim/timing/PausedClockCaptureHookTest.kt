@@ -14,12 +14,10 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 
@@ -53,16 +51,11 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("F1 paused-clock spike — snapshot-capture hook under pause (#849)")
 @Timeout(60, unit = TimeUnit.SECONDS)
-class PausedClockCaptureHookTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class PausedClockCaptureHookTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC1: the capture hook is starved while the simulation is paused")
 	fun captureHookIsStarvedWhilePaused() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
-		try {
-			harness.start()
-			val tickBeforePause = harness.awaitTick(minTick = 2L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 2L) { harness, tickBeforePause ->
 			assertThat(tickBeforePause).isGreaterThanOrEqualTo(2L)
 
 			harness.runner.isPaused = true
@@ -71,18 +64,13 @@ class PausedClockCaptureHookTest : KoinTestBase() {
 			// No new tick across several ticks' worth of wall-clock: captureOnSimThread() cannot run,
 			// because the thread that would call it is parked in awaitIfPaused().
 			assertThat(harness.latest().tick).isEqualTo(tickBeforePause)
-		} finally {
-			harness.stop()
 		}
 	}
 
 	@Test
 	@DisplayName("AC1 control: publishing resumes once the pause is released")
 	fun captureHookResumesAfterUnpause() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
-		try {
-			harness.start()
-			val tickBeforePause = harness.awaitTick(minTick = 2L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 2L) { harness, tickBeforePause ->
 
 			harness.runner.isPaused = true
 			Thread.sleep(PAUSE_OBSERVATION_MILLIS)
@@ -92,8 +80,6 @@ class PausedClockCaptureHookTest : KoinTestBase() {
 
 			// The run was alive all along — starvation was caused by the pause, not by the sim ending.
 			assertThat(harness.awaitTick(minTick = tickWhilePaused + 1L)).isGreaterThan(tickBeforePause)
-		} finally {
-			harness.stop()
 		}
 	}
 

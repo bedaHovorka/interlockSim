@@ -15,7 +15,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActionValidator
@@ -42,20 +41,16 @@ import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 
@@ -89,9 +84,7 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("F1 paused-clock spike — headless pacing feasibility, risk R8 (#849)")
 @Timeout(180, unit = TimeUnit.SECONDS)
-class HeadlessPacingFeasibilityTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class HeadlessPacingFeasibilityTest : IntegrationKoinTestBase() {
 	/** Minimal async planner: only [PlannerCapabilities.isAsynchronous] matters to the guard. */
 	private class AsyncProbePlanner : DispatcherPlanner {
 		override val capabilities: PlannerCapabilities =
@@ -235,13 +228,7 @@ class HeadlessPacingFeasibilityTest : KoinTestBase() {
 		)
 	}
 
-	private fun loadShuntingContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xml ->
-			DefaultSimulationContext.fromEditingContext(
-				XMLContextFactory().createContext(xml) as EditingContext,
-				DefaultSimulationProcessFactory()
-			)
-		}
+	private fun loadShuntingContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	companion object {
 		private val logger = KotlinLogging.logger {}

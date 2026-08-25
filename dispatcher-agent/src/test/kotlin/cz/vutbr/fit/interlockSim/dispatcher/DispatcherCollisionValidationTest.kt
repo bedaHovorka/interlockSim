@@ -12,20 +12,17 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
@@ -75,18 +72,8 @@ private val logger = KotlinLogging.logger {}
  */
 @DisplayName("SP2b.7 — dispatcher routing: zero Goal 3 collision warnings (safety net validation)")
 @Tag("integration-test")
-class DispatcherCollisionValidationTest {
+class DispatcherCollisionValidationTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
 
 	/**
 	 * Runs `vyhybna.xml` with the full lifted dispatcher-agent stack under lock-step and

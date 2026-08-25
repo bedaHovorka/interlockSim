@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
@@ -215,33 +216,10 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 			.filter { it.signal.isAllowing() }
 			.mapNotNull { it.name }
 
-	private fun separators(): List<DynamicPathSeparator> {
-		val grid = context.getRailWayNetGrid()
-		val found = mutableListOf<DynamicPathSeparator>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid[Point(x, y)]
-				if (cell is DynamicRailSemaphore || cell is DynamicInOut) {
-					found.add(cell as DynamicPathSeparator)
-				}
-			}
-		}
-		return found
-	}
+	private fun separators(): List<DynamicPathSeparator> =
+		context.cellsOfType<DynamicPathSeparator>().filter { it is DynamicRailSemaphore || it is DynamicInOut }
 
-	private fun switches(): List<DynamicRailSwitch> {
-		val grid = context.getRailWayNetGrid()
-		val found = mutableListOf<DynamicRailSwitch>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid[Point(x, y)]
-				if (cell is DynamicRailSwitch) {
-					found.add(cell)
-				}
-			}
-		}
-		return found
-	}
+	private fun switches(): List<DynamicRailSwitch> = context.cellsOfType<DynamicRailSwitch>()
 
 	/** The block whose `staticRef` names both [a] and [b] as its ends. */
 	private fun blockBetween(

@@ -20,9 +20,8 @@ import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.Util
@@ -55,8 +54,8 @@ class BlockReleaseWaitTest : KoinTestBase() {
 			val block = Util.assertInstanceOf<DynamicTrackBlock>(context.getGraph().values().first())
 			val from = block.ends()[0] as DynamicPathSeparator
 
-			val occupantA = TestOccupant("Train A")
-			val occupantB = TestOccupant("Train B")
+			val occupantA = FakeTrackOccupant("Train A")
+			val occupantB = FakeTrackOccupant("Train B")
 
 			val events = mutableListOf<String>()
 			var releaseTime = -1.0
@@ -121,12 +120,4 @@ class BlockReleaseWaitTest : KoinTestBase() {
 			assertThat(registry.getOwner(block)).isEqualTo(occupantB.name)
 			assertThat(block.occupant).isSameInstanceAs(occupantB)
 		}
-
-	private class TestOccupant(
-		override val name: String
-	) : TrackOccupant {
-		override fun distanceToSemaphore(): Double = 0.0
-
-		override fun nextSemaphore(): OrientedPathSeparator? = null
-	}
 }

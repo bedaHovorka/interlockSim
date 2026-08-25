@@ -18,6 +18,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
@@ -90,10 +91,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 			.assertInstanceOf<DefaultSimulationContext>(
 				stream.use { factory.createContext(it) }
 			).use { context ->
-				context.getInOuts()
-				val loop = ShuntingLoop(context, END_TIME)
-				wireSynchronousDispatcher(context, loop)
-				context.setMainProcess(loop)
+				val loop = prepareShuntingLoop(context, END_TIME)
 				val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 				context.addPropertyChangeListener(reporter)
 				context.run()

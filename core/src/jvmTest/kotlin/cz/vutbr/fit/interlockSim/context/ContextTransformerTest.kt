@@ -661,17 +661,15 @@ class ContextTransformerTest : KoinTestBase() {
 		@Test
 		@DisplayName("complex network (vyhybna.xml) has all blocks wrapped")
 		fun vyhybnaXml_allBlocksAreWrapped() {
-			TestFixtures.loadShuntingXml().use { stream ->
-				(editingContextFactory.createContext(stream) as EditingContext).use { editingContext ->
-					// Arrange - Load vyhybna.xml which creates EditingContext
-					simulationContextFactory.createContext(editingContext).use { simulationContext ->
-						val graph = simulationContext.getGraph()
+			TestFixtures.loadShuntingEditingContext(editingContextFactory).use { editingContext ->
+				// Arrange - Load vyhybna.xml which creates EditingContext
+				simulationContextFactory.createContext(editingContext).use { simulationContext ->
+					val graph = simulationContext.getGraph()
 
-						// Assert - All graph entries are DynamicTrackBlock
-						assertThat(graph.size()).isGreaterThan(0)
-						for (entry in graph.entrySet()) {
-							assertThat(entry.value).isInstanceOf(DynamicTrackBlock::class.java)
-						}
+					// Assert - All graph entries are DynamicTrackBlock
+					assertThat(graph.size()).isGreaterThan(0)
+					for (entry in graph.entrySet()) {
+						assertThat(entry.value).isInstanceOf(DynamicTrackBlock::class.java)
 					}
 				}
 			}

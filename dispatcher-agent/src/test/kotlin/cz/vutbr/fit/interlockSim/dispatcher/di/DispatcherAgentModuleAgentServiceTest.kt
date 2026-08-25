@@ -15,12 +15,10 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
+import org.koin.core.module.Module
 import org.koin.java.KoinJavaComponent.inject
 
 /**
@@ -30,18 +28,8 @@ import org.koin.java.KoinJavaComponent.inject
  *
  * @since Issue #547 (SP1.2 — Goal 10)
  */
-class DispatcherAgentModuleAgentServiceTest {
-	@BeforeEach
-	fun setup() {
-		startKoin {
-			modules(dispatcherAgentModule)
-		}
-	}
-
-	@AfterEach
-	fun cleanup() {
-		stopKoin()
-	}
+class DispatcherAgentModuleAgentServiceTest : DispatcherKoinTestBase() {
+	override fun getTestModules(): List<Module> = listOf(dispatcherAgentModule)
 
 	@Test
 	fun `AgentService is provided as singleton by dispatcherAgentModule`() {

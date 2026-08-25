@@ -20,13 +20,12 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
@@ -513,13 +512,5 @@ class PathReservationRegistryTest : KoinTestBase() {
 		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
 			events.add(event)
 		}
-	}
-
-	private class FakeTrackOccupant(
-		override val name: String
-	) : TrackOccupant {
-		override fun distanceToSemaphore(): Double = 0.0
-
-		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
 }

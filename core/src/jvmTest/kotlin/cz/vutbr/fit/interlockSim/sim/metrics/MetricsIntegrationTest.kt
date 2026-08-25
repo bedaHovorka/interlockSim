@@ -16,9 +16,9 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -65,10 +65,7 @@ class MetricsIntegrationTest : KoinTestBase() {
 				)
 			}
 		// Initialize dynamic wrapper map (mirrors ShuntingLoopSmokeTest).
-		context.getInOuts()
-		val loop = ShuntingLoop(context, endTime)
-		wireSynchronousDispatcher(context, loop)
-		context.setMainProcess(loop)
+		val loop = prepareShuntingLoop(context, endTime)
 		return context
 	}
 

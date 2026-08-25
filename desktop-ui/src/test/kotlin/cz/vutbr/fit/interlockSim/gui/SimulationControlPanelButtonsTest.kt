@@ -17,6 +17,8 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.testutil.findAllComponents
+import cz.vutbr.fit.interlockSim.testutil.findComponent
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -58,42 +60,6 @@ class SimulationControlPanelButtonsTest {
 			?: error("JSpinner not found in SimulationControlPanel")
 
 	private fun spinnerModel(): SpinnerNumberModel = findSpinner().model as SpinnerNumberModel
-
-	/** Recursively find the first component of [type] in the container hierarchy. */
-	private fun <T> findComponent(
-		container: java.awt.Container,
-		type: Class<T>
-	): T? {
-		for (c in container.components) {
-			if (type.isInstance(c)) {
-				@Suppress("UNCHECKED_CAST")
-				return c as T
-			}
-			if (c is java.awt.Container) {
-				val found = findComponent(c, type)
-				if (found != null) return found
-			}
-		}
-		return null
-	}
-
-	/** Recursively collect all components of [type] in the container hierarchy. */
-	private fun <T> findAllComponents(
-		container: java.awt.Container,
-		type: Class<T>
-	): List<T> {
-		val result = mutableListOf<T>()
-		for (c in container.components) {
-			if (type.isInstance(c)) {
-				@Suppress("UNCHECKED_CAST")
-				result.add(c as T)
-			}
-			if (c is java.awt.Container) {
-				result.addAll(findAllComponents(c, type))
-			}
-		}
-		return result
-	}
 
 	private fun runnerWith(
 		delta: Double = 1.0,

@@ -11,6 +11,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -113,7 +114,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 		// Assert: Train1 succeeds
 		assertThat(train1Result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		val train1Blocks = (train1Result as PathReservationService.ReservationResult.Success).reservedBlocks
+		val train1Blocks = assertReservationSuccess(train1Result).reservedBlocks
 		assertThat(train1Blocks.size).isGreaterThanOrEqualTo(1)
 		println("Train1 reserved ${train1Blocks.size} blocks")
 
@@ -158,7 +159,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 			)
 		assertThat(train1Result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		val train1Blocks = (train1Result as PathReservationService.ReservationResult.Success).reservedBlocks
+		val train1Blocks = assertReservationSuccess(train1Result).reservedBlocks
 
 		// Verify Train2 is blocked (shared entry occupied)
 		val train2BlockedResult =
@@ -212,8 +213,8 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 		assertThat(train1Result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(train2Result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		val train1Blocks = (train1Result as PathReservationService.ReservationResult.Success).reservedBlocks
-		val train2Blocks = (train2Result as PathReservationService.ReservationResult.Success).reservedBlocks
+		val train1Blocks = assertReservationSuccess(train1Result).reservedBlocks
+		val train2Blocks = assertReservationSuccess(train2Result).reservedBlocks
 
 		assertThat(train1Blocks.size).isGreaterThanOrEqualTo(1)
 		assertThat(train2Blocks.size).isGreaterThanOrEqualTo(1)

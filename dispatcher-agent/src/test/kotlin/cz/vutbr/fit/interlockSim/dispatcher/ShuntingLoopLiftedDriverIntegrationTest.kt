@@ -11,18 +11,15 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
@@ -80,18 +77,8 @@ private val logger = KotlinLogging.logger {}
  */
 @DisplayName("ShuntingLoop end-to-end via lifted dispatcher-agent stack (SP0.12 integration gate)")
 @Tag("integration-test")
-class ShuntingLoopLiftedDriverIntegrationTest {
+class ShuntingLoopLiftedDriverIntegrationTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
 
 	/**
 	 * Runs vyhybna.xml with the lifted stack under a lock-step handshake and asserts:

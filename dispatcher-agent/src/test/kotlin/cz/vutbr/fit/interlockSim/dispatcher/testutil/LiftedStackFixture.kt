@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -67,7 +68,7 @@ class LiftedStackFixture(
 	 * [ShuntingLoop] — the dynamic wrapper map must be initialised first.
 	 */
 	fun loadShuntingLoopContext(): DefaultSimulationContext =
-		newShuntingLoopContext(xmlContextFactory, processFactory)
+		TestFixtures.newShuntingSimulationContext(xmlContextFactory, processFactory)
 
 	/**
 	 * Wires the full lifted dispatcher-agent stack onto [loop], runs [context] to

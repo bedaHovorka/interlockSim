@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.dispatcher.testutil
 
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
-import cz.vutbr.fit.interlockSim.dispatcher.ActionValidator
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
@@ -21,7 +20,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionCandidateEnumerator
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AffordanceAnnotator
 import cz.vutbr.fit.interlockSim.dispatcher.agents.NoTimeoutBudget
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ObservationRenderer
-import cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.TerminalFallbackGuard
 import cz.vutbr.fit.interlockSim.dispatcher.agents.TickRingBuffer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.WorkingMemory
@@ -33,6 +31,7 @@ import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicInteger
@@ -110,7 +109,7 @@ class RuleBasedDispatcherDeterminismRunner {
 	)
 
 	fun executeRun(endTime: Long = 300L): RunResult {
-		val context = newShuntingLoopContext(xmlContextFactory, processFactory)
+		val context = TestFixtures.newShuntingSimulationContext(xmlContextFactory, processFactory)
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
@@ -157,10 +156,7 @@ class RuleBasedDispatcherDeterminismRunner {
 				pathReservationRegistry = pathReservationRegistry,
 				environment = context
 			)
-		val topology = StationTopologySerializer.describe(context)
-		val validEndpointNames = (topology.inOuts + topology.signals.map { it.name }).toSet()
-		val blockIds = topology.blocks.map { it.name }.toSet()
-		val validator = ActionValidator(validEndpointNames = validEndpointNames, blockIds = blockIds)
+		val validator = actionValidatorFor(context)
 		val annotator = AffordanceAnnotator(validator, ActionCandidateEnumerator())
 		val dispatcher = RuleBasedDispatcher()
 		val emission = RuleBasedEmissionStrategy(dispatcher)

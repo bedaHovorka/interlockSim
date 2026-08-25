@@ -73,11 +73,8 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load valid vyhybna.xml for tests that need valid context
-		val xml =
-			TestFixtures.loadShuntingXml()
-		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
-		val editingContext = editingContextFactory.createContext(xml) as EditingContext
-		val loadedContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		val loadedContext =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 		validContext = MockSimulationContext(loadedContext)
 	}
 

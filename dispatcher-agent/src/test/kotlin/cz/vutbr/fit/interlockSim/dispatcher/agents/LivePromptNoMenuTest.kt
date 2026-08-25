@@ -19,11 +19,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
-import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
-import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -33,19 +32,16 @@ import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 /**
  * Extends the no-menu constraint (C9, #825) from the test-only renderers to the three **live**
@@ -84,18 +80,8 @@ import org.koin.core.context.stopKoin
  * @since Issue #825 (SP2c.2 — original constraint); extended Issue #893 (phase beta, task B3)
  */
 @DisplayName("Live prompt surfaces contain no menu artifacts (Issue #893, phase beta, task B3)")
-class LivePromptNoMenuTest {
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
-
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = newShuntingLoopContext()
+class LivePromptNoMenuTest : DispatcherKoinTestBase() {
+	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	/** Mirrors [KoogAgentFactoryTest.fakePerceptionPort]: reports [activeTrainIds] as active. */
 	private fun fakePerceptionPort(activeTrainIds: List<String> = listOf("T1")): NetworkPerceptionPort =

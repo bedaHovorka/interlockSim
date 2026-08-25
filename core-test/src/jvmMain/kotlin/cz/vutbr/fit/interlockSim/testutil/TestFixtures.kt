@@ -9,12 +9,17 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import java.io.InputStream
 
 /**
@@ -138,6 +143,40 @@ object TestFixtures {
 			context.getInOuts()
 		}
 		return context
+	}
+
+	/**
+	 * Loads `vyhybna.xml` into a fresh [DefaultSimulationContext] **without Koin**.
+	 *
+	 * This is the non-injected sibling of [loadShuntingSimulationContext]: it builds the context
+	 * through [XMLContextFactory] plus [DefaultSimulationContext.fromEditingContext] instead of a
+	 * Koin-provided [SimulationContextFactory]. Tests in `:dispatcher-agent` and the headless
+	 * `:desktop-ui` timing suites each carried a private copy of exactly this chain, together with
+	 * their own `XMLContextFactory` / [DefaultSimulationProcessFactory] pair (Issue #955). The
+	 * defaults reproduce that wiring verbatim, so migrated call sites keep their behaviour.
+	 *
+	 * Unless [initializeDynamicMapping] is set, call [DefaultSimulationContext.getInOuts] on the
+	 * result before constructing a `ShuntingLoop` — the dynamic wrapper map must be initialised first.
+	 *
+	 * The caller owns the returned context and must close it (`use { }` or an `@AfterEach` teardown).
+	 *
+	 * @param initializeDynamicMapping when `true`, routes through [ContextTransformer], which
+	 *   eagerly initialises the dynamic wrapper mapping — the path the animation tests take
+	 *   because they read wrappers before `run()`
+	 */
+	fun newShuntingSimulationContext(
+		xmlContextFactory: JvmEditingContextFactory = XMLContextFactory(),
+		processFactory: SimulationProcessFactory = DefaultSimulationProcessFactory(),
+		initializeDynamicMapping: Boolean = false
+	): DefaultSimulationContext {
+		val editingContext = loadShuntingEditingContext(xmlContextFactory)
+		return if (initializeDynamicMapping) {
+			Util.assertInstanceOf<DefaultSimulationContext>(
+				ContextTransformer.createSimulationContext(editingContext, processFactory)
+			)
+		} else {
+			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+		}
 	}
 
 	private fun mainResource(name: String): InputStream =

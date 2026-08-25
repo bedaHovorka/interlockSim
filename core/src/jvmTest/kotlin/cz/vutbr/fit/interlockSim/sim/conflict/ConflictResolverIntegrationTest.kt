@@ -15,7 +15,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -49,11 +48,8 @@ class ConflictResolverIntegrationTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun createShuntingLoopContext(): DefaultSimulationContext {
-		val editingContext =
-			editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
-		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-	}
+	private fun createShuntingLoopContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	/**
 	 * Invariant part 1: routes found by a sim-scoped RouteFinder carry [DynamicTrackBlock]

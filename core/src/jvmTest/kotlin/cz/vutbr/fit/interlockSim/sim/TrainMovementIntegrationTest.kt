@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -118,10 +119,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				logger.info { "Pre-reserved $preReservationBlockCount blocks for $preTestTrainId" }
 
 				// Act: Run ShuntingLoop (30 seconds simulation time)
-				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
-				wireSynchronousDispatcher(context, shuntingLoop)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 30L)
 
 				// Assert: Pre-test reservation should still be in registry (not released by ShuntingLoop)
 				val preTestBlocks = registry.getBlocks(preTestTrainId)
@@ -158,10 +156,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				assertThat(registry.blockCount()).isEqualTo(0)
 
 				// Act: Run ShuntingLoop (10 seconds - short run)
-				val shuntingLoop = ShuntingLoop(context, endTime = 10L)
-				wireSynchronousDispatcher(context, shuntingLoop)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 10L)
 
 				// Assert: Simulation completed (no hang/deadlock)
 				assertThat(context.getGraph()).isNotNull()
@@ -213,10 +208,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 				// Act: Run ShuntingLoop (30 seconds - enough for multiple trains)
-				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
-				wireSynchronousDispatcher(context, shuntingLoop)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 30L)
 
 				// Assert: Simulation completed without deadlock
 				val registry = context.scope.get<PathReservationRegistry>()
@@ -264,10 +256,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				assertThat(registry.trainCount()).isEqualTo(0)
 
 				// Act: Run ShuntingLoop for full lifecycle (60 time units)
-				val shuntingLoop = ShuntingLoop(context, endTime = 60L)
-				wireSynchronousDispatcher(context, shuntingLoop)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 60L)
 
 				// Assert: Simulation completed
 				assertThat(context.getGraph()).isNotNull()

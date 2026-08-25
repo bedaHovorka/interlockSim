@@ -57,7 +57,7 @@ class MultiTrainLoopTest : KoinTestBase() {
 	}
 
 	private fun loadYJunctionContext(): DefaultSimulationContext {
-		val ctx = TestTopologies.yJunctionWithSwitchSimulation() as DefaultSimulationContext
+		val ctx = TestTopologies.yJunctionWithSwitchSimulation()
 		ctx.getInOuts()
 		context = ctx
 		return ctx

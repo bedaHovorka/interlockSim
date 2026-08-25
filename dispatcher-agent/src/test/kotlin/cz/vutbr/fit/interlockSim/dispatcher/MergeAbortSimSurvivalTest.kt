@@ -24,7 +24,7 @@ import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -34,6 +34,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.AfterEach
@@ -42,8 +44,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -86,7 +86,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 @DisplayName("Aborted PathInfo merge — the simulation thread survives it (Issue #834)")
 @Tag("integration-test")
-class MergeAbortSimSurvivalTest {
+class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	private companion object {
 		/** Logger of the class whose WARNs are under inspection. */
 		const val REGISTRY_LOGGER = "cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry"
@@ -106,8 +106,7 @@ class MergeAbortSimSurvivalTest {
 
 	@BeforeEach
 	fun setUp() {
-		startKoin { modules(dispatcherAgentTestModule) }
-		context = newShuntingLoopContext()
+		context = TestFixtures.newShuntingSimulationContext()
 		registryLogger = LoggerFactory.getLogger(REGISTRY_LOGGER) as Logger
 		appender = ListAppender<ILoggingEvent>().apply { start() }
 		registryLogger.addAppender(appender)
@@ -118,7 +117,6 @@ class MergeAbortSimSurvivalTest {
 		registryLogger.detachAppender(appender)
 		appender.stop()
 		context.close()
-		stopKoin()
 	}
 
 	private fun registry(): PathReservationRegistry = context.scope.get<PathReservationRegistry>()
@@ -296,11 +294,7 @@ class MergeAbortSimSurvivalTest {
 	@Timeout(value = 180, unit = TimeUnit.SECONDS)
 	@DisplayName("inertness: a clean vyhybna baseline run trips neither merge-abort WARN")
 	fun cleanBaselineRunLogsNoMergeAbortWarning() {
-		context.getInOuts()
-		val loop = ShuntingLoop(context, SIM_END_TIME)
-		wireSynchronousDispatcher(context, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, SIM_END_TIME)
 
 		// Sanity: the run really did dispatch, so "no WARN" is not "no work".
 		assertThat(loop.getTrainsExited()).isGreaterThanOrEqualTo(1)

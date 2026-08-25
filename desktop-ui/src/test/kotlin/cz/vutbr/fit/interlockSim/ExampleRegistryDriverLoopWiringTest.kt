@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -63,18 +64,13 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 
 	private fun createShuntingLoopAIContext(): DefaultSimulationContext {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopAIExample",
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
-		return createMethod.invoke(
+		return createExampleContext(
 			registry,
 			get<SimulationContextFactory>(),
-			arrayOf("example", "shuntingLoopAI", "60")
-		) as DefaultSimulationContext
+			"createShuntingLoopAIExample",
+			"shuntingLoopAI",
+			"60"
+		)
 	}
 
 	@Test

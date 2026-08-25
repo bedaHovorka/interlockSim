@@ -24,8 +24,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
-import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
+import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -69,18 +70,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		exampleName: String
 	): DefaultSimulationContext {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				factoryMethod,
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
-		return createMethod.invoke(
-			registry,
-			get<SimulationContextFactory>(),
-			arrayOf("example", exampleName, "60")
-		) as DefaultSimulationContext
+		return createExampleContext(registry, get<SimulationContextFactory>(), factoryMethod, exampleName, "60")
 	}
 
 	@Test
@@ -157,19 +147,14 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		@TempDir root: Path
 	) {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopSyncExample",
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
 		val context =
-			createMethod.invoke(
+			createExampleContext(
 				registry,
 				get<SimulationContextFactory>(),
-				arrayOf("example", "shuntingLoopSync", "60")
-			) as DefaultSimulationContext
+				"createShuntingLoopSyncExample",
+				"shuntingLoopSync",
+				"60"
+			)
 		// Point the store at the temp root regardless, so a regression here can never write into the
 		// project's real build/reports/dispatcher-runs directory.
 		context.scope.declare<RunSnapshotStore>(DefaultRunSnapshotStore(root))
@@ -260,45 +245,12 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	@DisplayName("railwayOutcomeFrom invokes the leak gauge on the scoped metrics service (Issue #936)")
 	fun railwayOutcomeFromInvokesLeakGauge() {
 		val context = createAiContext()
-		val spy = LeakGaugeSpy()
+		val spy = FakeMetricsCollectionService()
 		context.scope.declare<MetricsCollectionService>(spy)
 
 		DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
 
 		assertThat(spy.reportUnreleasedReservationsInvoked, "leak gauge invoked").isTrue()
-	}
-
-	/**
-	 * Stand-in [MetricsCollectionService] that records whether [reportUnreleasedReservations] was
-	 * called, so the wiring test can prove the production run-end path consults the leak gauge
-	 * without a log-capture harness. [getSnapshot] returns a minimal valid snapshot so the rest of
-	 * `railwayOutcomeFrom` (which reads `completedTrains`/`conflictCount`) does not throw; the
-	 * listener methods are no-ops because `railwayOutcomeFrom` never subscribes.
-	 */
-	private class LeakGaugeSpy : MetricsCollectionService {
-		var reportUnreleasedReservationsInvoked = false
-
-		override fun getSnapshot(): MetricsSnapshot =
-			MetricsSnapshot(
-				time = 0.0,
-				conflictCount = 0,
-				completedTrains = 0,
-				throughput = 0.0,
-				totalWaitSeconds = 0.0,
-				averageWaitSeconds = 0.0,
-				occupiedBlocks = 0,
-				totalBlocks = 0,
-				utilization = 0.0
-			)
-
-		override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) = Unit
-
-		override fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit) = Unit
-
-		override fun reportUnreleasedReservations(): Set<String> {
-			reportUnreleasedReservationsInvoked = true
-			return emptySet()
-		}
 	}
 
 	// ── Starvation adjustment (Issue #930) ───────────────────────────────────

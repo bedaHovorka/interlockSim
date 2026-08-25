@@ -17,11 +17,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
-import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaPrewarmExtension
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
-import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -30,18 +29,15 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 /**
  * Live proof that round 2's prompt fixes hold against a real model on the real network
@@ -152,7 +148,7 @@ import org.koin.core.context.stopKoin
  */
 @ExtendWith(OllamaPrewarmExtension::class)
 @DisplayName("The production prompt keeps a real model inside the real network's vocabulary")
-class KoogRealPromptOllamaTest {
+class KoogRealPromptOllamaTest : DispatcherKoinTestBase() {
 	/** Trains on the network. Matches `Train`'s real `"Train #<n>"` naming. */
 	private val queuedTrainId = "Train #1"
 	private val secondTrainId = "Train #2"
@@ -166,16 +162,6 @@ class KoogRealPromptOllamaTest {
 
 		/** Enough blocks for two trains plus a reservation ahead of one of them, without overlap. */
 		const val MIN_BLOCKS_FOR_MID_RUN = 4
-	}
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
 	}
 
 	/**
@@ -287,7 +273,7 @@ class KoogRealPromptOllamaTest {
 			)
 	}
 
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = newShuntingLoopContext()
+	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	/**
 	 * One cycle's worth of live state: what the ports report and what the observation carries.

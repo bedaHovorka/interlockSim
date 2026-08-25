@@ -54,7 +54,7 @@ class RouteFinderTest : KoinTestBase() {
 	private fun yJunctionContext(): EditingContext = TestTopologies.yJunctionWithSwitch().also { context = it }
 
 	private fun shuntingLoopContext(): EditingContext {
-		val ctx = editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+		val ctx = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 		context = ctx
 		return ctx
 	}

@@ -8,6 +8,8 @@ import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -75,10 +77,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 
 		// When: Run shunting loop simulation for 60 time units (enough for 1-2 trains)
 		logger.info { "Starting ShuntingLoop regression test (60 time units)" }
-		val shuntingLoop = ShuntingLoop(context, 60L)
-		wireSynchronousDispatcher(context, shuntingLoop)
-		context.setMainProcess(shuntingLoop)
-		context.run()
+		val shuntingLoop = runShuntingLoop(context, 60L)
 
 		// Then: Simulation should complete (not hang)
 		logger.info { "ShuntingLoop completed successfully" }
@@ -125,9 +124,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 
 		// When: Run simulation for 30 time units (short test for performance verification)
 		logger.info { "TEST: Creating ShuntingLoop..." }
-		val loop = ShuntingLoop(context, 30L)
-		wireSynchronousDispatcher(context, loop)
-		context.setMainProcess(loop)
+		val loop = prepareShuntingLoop(context, 30L)
 		logger.info { "TEST: ShuntingLoop created, starting simulation..." }
 		val startWallTime = System.currentTimeMillis()
 		context.run()
@@ -157,10 +154,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		context.getInOuts()
 
 		// When: Run simulation for 100 time units (enough for 2-3 trains)
-		val shuntingLoop = ShuntingLoop(context, 100L)
-		wireSynchronousDispatcher(context, shuntingLoop)
-		context.setMainProcess(shuntingLoop)
-		context.run()
+		val shuntingLoop = runShuntingLoop(context, 100L)
 
 		// Then: Simulation completes (verifies queue system doesn't deadlock)
 		logger.info { "ShuntingLoop with max 2 trains completed successfully" }

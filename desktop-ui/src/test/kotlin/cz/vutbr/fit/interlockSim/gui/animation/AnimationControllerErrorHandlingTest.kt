@@ -17,8 +17,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
@@ -229,7 +228,7 @@ class AnimationControllerErrorHandlingTest : KoinTestBase() {
 
 	private fun createController(): Pair<AnimationController, SimulationContext> {
 		// Use vyhybna.xml for realistic simulation context
-		context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		context = createMockShuntingContext()
 
 		// Create dummy canvas (JPanel is concrete Component subclass)
 		val canvas = JPanel()

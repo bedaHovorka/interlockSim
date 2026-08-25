@@ -21,12 +21,10 @@ import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.core.module.Module
 
 /**
  * Integration tests for navigationModule Koin DI configuration with scope-per-context pattern.
@@ -51,9 +49,7 @@ import org.koin.core.module.Module
  * @since Issue #296 (Phase 4 Scope-per-Context Pattern)
  */
 @Tag("integration-test")
-class NavigationModuleKoinTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class NavigationModuleKoinTest : IntegrationKoinTestBase() {
 	@Test
 	fun `services within one context share the same registry`() {
 		buildTestContext().use { context ->

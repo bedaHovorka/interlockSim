@@ -88,16 +88,7 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 	@Test
 	@DisplayName("setUpSemaphores uses ABSOLUTE_MAX_SPEED when no preceding switch exists")
 	fun setUpSemaphoresUsesAbsoluteMaxSpeedWhenNoPrecedingSwitch() {
-		val xmlStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val simulationCtx =
-			xmlStream.use { stream ->
-				editingContextFactory.createContext(stream).use { ec ->
-					simulationContextFactory.createContext(ec as EditingContext) as DefaultSimulationContext
-				}
-			}
+		val simulationCtx = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 		simulationCtx.use { simulationContext ->
 			// Step 1: Get topology navigator
 			val navigator: TopologyNavigator = simulationContext.scope.get()

@@ -129,7 +129,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 	@DisplayName("stationary train — dwell runs for the requested duration and clears the flag")
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun dwellRunsForRequestedDurationAndClearsFlag() {
-		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { ctx ->
+		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()
 			val train = ctx.newStationaryTrain()
 			var dwellingObservedDuringHold = false
@@ -176,7 +176,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 	@DisplayName("moving train — holdAtStation is rejected (it is a dwell timer, not a brake)")
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun movingTrainIsRejected() {
-		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { ctx ->
+		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()
 			val train = ctx.newStationaryTrain()
 			var rejection: SimulationException? = null
@@ -221,7 +221,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 	@DisplayName("second holdAtStation while already dwelling is rejected")
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun doubleDwellIsRejected() {
-		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { ctx ->
+		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()
 			val train = ctx.newStationaryTrain()
 			var rejection: SimulationException? = null
@@ -256,7 +256,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 	@DisplayName("non-positive dwell duration is rejected before any dwell is scheduled")
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun nonPositiveDurationIsRejected() {
-		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { ctx ->
+		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()
 			val train = ctx.newStationaryTrain()
 			var zeroRejection: Throwable? = null

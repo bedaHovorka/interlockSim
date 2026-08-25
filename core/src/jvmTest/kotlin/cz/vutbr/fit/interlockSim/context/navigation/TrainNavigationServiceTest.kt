@@ -32,6 +32,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -97,7 +98,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B (1 block)
-			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+			context = TestTopologies.simpleLinearPathSimulation()
 
 			// Get real services from context scope
 			service = context.getRoutingServices().getTrainNavigationService()
@@ -637,7 +638,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B
-			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+			context = TestTopologies.simpleLinearPathSimulation()
 
 			service = context.getRoutingServices().getTrainNavigationService()
 		}
@@ -901,7 +902,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val reserveResult1 = pathService.reservePath("train1", inOutA, inOutB)
 			assertThat(reserveResult1).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 			val train1ReservedBlocks =
-				(reserveResult1 as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+				assertReservationSuccess(reserveResult1).reservedBlocks.toSet()
 
 			val reserveResult2 = pathService.reservePath("train2", inOutB, inOutA)
 
@@ -1194,7 +1195,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			// Reserve path (full path via 7 blocks in vyhybna.xml)
 			val reserveResult = pathService.reservePath("train1", inOutA, inOutB)
 			assertThat(reserveResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
-			val reservedBlocks = (reserveResult as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+			val reservedBlocks = assertReservationSuccess(reserveResult).reservedBlocks.toSet()
 
 			// Navigate (returns path to next semaphore)
 			val navPath = navService.findReservedPathForTrain("train1", inOutA)
@@ -1249,7 +1250,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				// Reserve (full path from A to B)
 				val reserveResult = pathService.reservePath(trainId, inOutA, inOutB)
 				assertThat(reserveResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
-				val reservedBlocks = (reserveResult as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+				val reservedBlocks = assertReservationSuccess(reserveResult).reservedBlocks.toSet()
 
 				// Navigate (returns path to next semaphore)
 				val navPath = navService.findReservedPathForTrain(trainId, inOutA)

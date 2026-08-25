@@ -32,3 +32,12 @@ fun createMockSimulationContext(xml: InputStream): MockSimulationContext {
 	val defaultContext = CommonTestFixtures.parseSimulationContext(xmlString, processFactory)
 	return MockSimulationContext(defaultContext)
 }
+
+/**
+ * A [MockSimulationContext] loaded from `vyhybna.xml`.
+ *
+ * `createMockSimulationContext(TestFixtures.loadShuntingXml())` appeared verbatim in fifteen
+ * desktop-ui frame tests (Issue #955, cluster U3). The stream is closed for the caller.
+ */
+fun createMockShuntingContext(): MockSimulationContext =
+	TestFixtures.loadShuntingXml().use { createMockSimulationContext(it) }

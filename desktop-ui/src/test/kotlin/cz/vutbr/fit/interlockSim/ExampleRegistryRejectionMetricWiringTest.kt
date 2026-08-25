@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -59,18 +60,13 @@ class ExampleRegistryRejectionMetricWiringTest : KoinTestBase() {
 
 	private fun createAiContext(): DefaultSimulationContext {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopAIExample",
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
-		return createMethod.invoke(
+		return createExampleContext(
 			registry,
 			get<SimulationContextFactory>(),
-			arrayOf("example", "shuntingLoopAI", "60")
-		) as DefaultSimulationContext
+			"createShuntingLoopAIExample",
+			"shuntingLoopAI",
+			"60"
+		)
 	}
 
 	@Test

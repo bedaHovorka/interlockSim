@@ -18,11 +18,11 @@ import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -89,19 +89,11 @@ class SwitchBlindTargetSelectionTest : KoinTestBase() {
 		service = simulationContext.getRoutingServices().getPathReservationService()
 
 		val grid = simulationContext.getRailWayNetGrid()
-		semaphoreZA = separatorAt(grid.getCellAt(14, 8), "zA")
-		semaphoreDoA1 = separatorAt(grid.getCellAt(16, 8), "doA1")
-		semaphoreDoB1 = separatorAt(grid.getCellAt(25, 8), "doB1")
-		semaphoreDoB2 = separatorAt(grid.getCellAt(24, 9), "doB2")
+		semaphoreZA = simulationContext.separatorAt(14, 8)
+		semaphoreDoA1 = simulationContext.separatorAt(16, 8)
+		semaphoreDoB1 = simulationContext.separatorAt(25, 8)
+		semaphoreDoB2 = simulationContext.separatorAt(24, 9)
 	}
-
-	private fun separatorAt(
-		cell: Any?,
-		name: String
-	): DynamicPathSeparator =
-		(cell as? PathSeparator)
-			?.let { simulationContext.toDynamic(it) }
-			?: throw IllegalStateException("Separator '$name' not found in vyhybna.xml")
 
 	/** The single block whose two ends are exactly [a] and [b]. */
 	private fun blockBetween(

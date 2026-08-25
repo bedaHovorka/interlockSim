@@ -17,14 +17,13 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
+import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -119,27 +118,12 @@ class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
 		// Delegate at the entry InOut (so the train is admitted and leaves the origin), then report
 		// NoTopologicalPath from every non-DynamicInOut separator — mid-journey, holding track.
 		val hidingNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult =
-					if (separator is DynamicInOut) {
-						realNav.findReservedPathForTrain(trainId, separator)
-					} else {
-						PathResult.NoTopologicalPath
-					}
-
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
-
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+				if (separator is DynamicInOut) {
+					realNav.findReservedPathForTrain(trainId, separator)
+				} else {
+					PathResult.NoTopologicalPath
+				}
 			}
 
 		// The wrapper both serves the hiding navigation service and captures every errorStop while
@@ -147,10 +131,7 @@ class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
 		val hidingContext = NavigationDecoratingContext(context, hidingNav) { capturedErrors.add(it) }
 
-		val loop = ShuntingLoop(hidingContext, END_TIME)
-		wireSynchronousDispatcher(hidingContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, END_TIME, env = hidingContext)
 
 		logger.info {
 			"mid-journey bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +

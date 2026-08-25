@@ -225,3 +225,19 @@ class MockNodeCell(
 
 	override fun withName(newName: String): MockNodeCell = MockNodeCell(newName, speed, getSpatialType())
 }
+
+/**
+ * A minimal [TrackOccupant] that only carries a [name].
+ *
+ * `distanceToSemaphore()` returns `0.0` and `nextSemaphore()` returns `null`: reservation and
+ * block-release tests care only about *who* holds a block, never about how the occupant would
+ * drive. Six test classes each declared their own private copy of exactly this class, under three
+ * different names (Issue #955, cluster N5).
+ */
+class FakeTrackOccupant(
+	override val name: String
+) : TrackOccupant {
+	override fun distanceToSemaphore(): Double = 0.0
+
+	override fun nextSemaphore(): OrientedPathSeparator? = null
+}

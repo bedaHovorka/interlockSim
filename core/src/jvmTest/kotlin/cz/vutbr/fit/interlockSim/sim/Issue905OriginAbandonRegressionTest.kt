@@ -18,13 +18,12 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -132,34 +131,19 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 		val conflictCount = AtomicInteger(0)
 		val firstOriginQuerySeen = ConcurrentHashMap<String, Boolean>()
 		val decoratedNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult {
-					if (separator is DynamicInOut) {
-						val key = "$trainId@${separator.name}"
-						if (firstOriginQuerySeen.putIfAbsent(key, true) == null) {
-							conflictCount.incrementAndGet()
-							logger.debug {
-								"Issue905 decorator: injecting OwnershipConflict for $trainId at ${separator.name}"
-							}
-							return PathResult.OwnershipConflict
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+
+				if (separator is DynamicInOut) {
+					val key = "$trainId@${separator.name}"
+					if (firstOriginQuerySeen.putIfAbsent(key, true) == null) {
+						conflictCount.incrementAndGet()
+						logger.debug {
+							"Issue905 decorator: injecting OwnershipConflict for $trainId at ${separator.name}"
 						}
+						return@decoratingTrainNavigationService PathResult.OwnershipConflict
 					}
-					return realNav.findReservedPathForTrain(trainId, separator)
 				}
-
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
-
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+				return@decoratingTrainNavigationService realNav.findReservedPathForTrain(trainId, separator)
 			}
 
 		// Inject the decorator through a delegating wrapper: only the navigation service is
@@ -167,10 +151,7 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 		// DefaultSimulationContext, which still owns the run.
 		val decoratedContext = NavigationDecoratingContext(context, decoratedNav)
 
-		val loop = ShuntingLoop(decoratedContext, 120L)
-		wireSynchronousDispatcher(decoratedContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, 120L, env = decoratedContext)
 
 		logger.info {
 			"Issue905 test complete: conflictCount=${conflictCount.get()}, " +

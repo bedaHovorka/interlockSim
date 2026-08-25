@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -56,18 +57,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 		exampleName: String
 	): DefaultSimulationContext {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				factoryMethod,
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
-		return createMethod.invoke(
-			registry,
-			get<SimulationContextFactory>(),
-			arrayOf("example", exampleName, "60")
-		) as DefaultSimulationContext
+		return createExampleContext(registry, get<SimulationContextFactory>(), factoryMethod, exampleName, "60")
 	}
 
 	/**

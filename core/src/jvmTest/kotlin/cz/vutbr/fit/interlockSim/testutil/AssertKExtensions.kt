@@ -14,8 +14,14 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import assertk.Assert
+import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.support.expected
 import assertk.assertions.support.show
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import java.io.File
 import kotlin.reflect.KProperty0
 
@@ -253,3 +259,37 @@ fun assertCapturedErrorStop(
 			"expected a captured errorStop whose message contains ${show(fragment)}, " +
 				"but captured messages were:${show(capturedErrors.map { it.message })}"
 		)
+
+/**
+ * Asserts that [result] is a successful reservation and returns it already narrowed.
+ *
+ * Every reservation test needs the concrete `Success` to read `reservedBlocks`, so each site
+ * carried the same two lines — an `isInstanceOf<…Success>()` assertion followed by an
+ * `as …Success` cast of the very same value (Issue #955, cluster N4). One call replaces both, and
+ * a failure now names the actual result instead of raising a `ClassCastException`.
+ */
+fun assertReservationSuccess(
+	result: PathReservationService.ReservationResult
+): PathReservationService.ReservationResult.Success =
+	result as? PathReservationService.ReservationResult.Success
+		?: throw AssertionError("expected a successful reservation but was:${show(result)}")
+
+/**
+ * Asserts that every block in [blocks] is RESERVED, held by [trainName], and reserved from
+ * [reservedFrom].
+ *
+ * These three per-block assertions always travel together — a block that is RESERVED but owned by
+ * the wrong train, or reserved from the wrong end, is exactly the bug this trio catches (Issue
+ * #955, cluster N4). The failure message names the offending block.
+ */
+fun assertReservedBlocks(
+	blocks: Collection<DynamicTrackBlock>,
+	trainName: String,
+	reservedFrom: PathSeparator
+) {
+	blocks.forEach { block ->
+		assertThat(block.getState(), "state of ${block.name}").isEqualTo(TrackFacility.State.RESERVED)
+		assertThat(block.reservedFrom, "reservedFrom of ${block.name}").isEqualTo(reservedFrom)
+		assertThat(block.trainName, "trainName of ${block.name}").isEqualTo(trainName)
+	}
+}

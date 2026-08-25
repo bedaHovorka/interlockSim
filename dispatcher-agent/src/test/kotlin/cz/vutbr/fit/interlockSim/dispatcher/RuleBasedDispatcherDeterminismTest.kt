@@ -14,18 +14,15 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.RuleBasedDispatcherDeterminismRunner
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.RepetitionInfo
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
@@ -86,18 +83,8 @@ private val logger = KotlinLogging.logger {}
  */
 @DisplayName("RuleBasedDispatcher determinism — 10 consecutive vyhybna.xml runs (Goal 10 A3)")
 @Tag("integration-test")
-class RuleBasedDispatcherDeterminismTest {
+class RuleBasedDispatcherDeterminismTest : DispatcherKoinTestBase() {
 	private val runner = RuleBasedDispatcherDeterminismRunner()
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
 
 	// ── Goal 10 Stage A3: 10 consecutive identical-outcome runs ──────────────
 

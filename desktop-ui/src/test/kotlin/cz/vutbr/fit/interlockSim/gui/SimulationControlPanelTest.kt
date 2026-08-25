@@ -15,6 +15,8 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.testutil.findAllComponents
+import cz.vutbr.fit.interlockSim.testutil.findComponent
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -68,42 +70,6 @@ class SimulationControlPanelTest {
 
 	private fun findPresetButtons(): List<JButton> =
 		findAllComponents(panel, JButton::class.java).filter { it.text.endsWith("x") }
-
-	/** Recursively find the first component of [type] in the container hierarchy. */
-	private fun <T> findComponent(
-		container: java.awt.Container,
-		type: Class<T>
-	): T? {
-		for (c in container.components) {
-			if (type.isInstance(c)) {
-				@Suppress("UNCHECKED_CAST")
-				return c as T
-			}
-			if (c is java.awt.Container) {
-				val found = findComponent(c, type)
-				if (found != null) return found
-			}
-		}
-		return null
-	}
-
-	/** Recursively collect all components of [type] in the container hierarchy. */
-	private fun <T> findAllComponents(
-		container: java.awt.Container,
-		type: Class<T>
-	): List<T> {
-		val result = mutableListOf<T>()
-		for (c in container.components) {
-			if (type.isInstance(c)) {
-				@Suppress("UNCHECKED_CAST")
-				result.add(c as T)
-			}
-			if (c is java.awt.Container) {
-				result.addAll(findAllComponents(c, type))
-			}
-		}
-		return result
-	}
 
 	// ── Initial state ─────────────────────────────────────────────────────────
 

@@ -12,14 +12,12 @@ package cz.vutbr.fit.interlockSim.timing
 import assertk.assertThat
 import assertk.assertions.isLessThan
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
@@ -27,16 +25,11 @@ import kotlin.math.roundToInt
 @Tag("integration-test")
 @DisplayName("F1 paused-clock spike — pause/resume overhead per tick (#849)")
 @Timeout(120, unit = TimeUnit.SECONDS)
-class PauseResumeOverheadTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class PauseResumeOverheadTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC3: the pause/resume control-primitive round trip costs under 1 ms at p99")
 	fun pauseResumePrimitiveOverhead() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
-		try {
-			harness.start()
-			harness.awaitTick(minTick = 3L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 3L) { harness, _ ->
 
 			val primitiveMicros = mutableListOf<Long>()
 			repeat(CYCLES) {
@@ -53,8 +46,6 @@ class PauseResumeOverheadTest : KoinTestBase() {
 			}
 
 			assertThat(p99).isLessThan(MICROS_PER_MILLI)
-		} finally {
-			harness.stop()
 		}
 	}
 

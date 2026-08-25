@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -279,7 +280,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 		// Simulate train1's tail leaving each reserved block, transitioning blocks
 		// from RESERVED to FREE. In production this is done by Train.Tail.
-		val reservedBlocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks
+		val reservedBlocks = assertReservationSuccess(result1).reservedBlocks
 		reservedBlocks.forEach { block ->
 			block.cancelPathSetup(zA)
 		}

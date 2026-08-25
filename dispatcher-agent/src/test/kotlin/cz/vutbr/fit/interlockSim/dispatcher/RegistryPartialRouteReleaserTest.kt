@@ -18,24 +18,22 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
-import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.mockk.every
 import io.mockk.mockk
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 /**
  * Safety tests for [RegistryPartialRouteReleaser] against a **real** reserved path on
@@ -53,7 +51,7 @@ import org.koin.core.context.stopKoin
  * unowned, and nothing is left reachable behind a permissive signal.
  */
 @DisplayName("RegistryPartialRouteReleaser — releasing a tail must leave a safe interlocking state")
-class RegistryPartialRouteReleaserTest {
+class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	private lateinit var context: DefaultSimulationContext
 	private lateinit var zA: DynamicRailSemaphore
 	private lateinit var doA1: DynamicRailSemaphore
@@ -62,15 +60,9 @@ class RegistryPartialRouteReleaserTest {
 
 	@BeforeEach
 	fun setUp() {
-		startKoin { modules(dispatcherAgentTestModule) }
-		context = newShuntingLoopContext()
+		context = TestFixtures.newShuntingSimulationContext()
 		zA = elementAt(14, 8)
 		doA1 = elementAt(16, 8)
-	}
-
-	@AfterEach
-	fun tearDown() {
-		stopKoin()
 	}
 
 	private fun registry(): PathReservationRegistry = context.scope.get<PathReservationRegistry>()

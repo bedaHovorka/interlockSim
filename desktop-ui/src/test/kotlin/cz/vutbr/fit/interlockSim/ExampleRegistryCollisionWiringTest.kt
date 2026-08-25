@@ -12,8 +12,6 @@ package cz.vutbr.fit.interlockSim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.Time
 import cz.vutbr.fit.interlockSim.sim.Timetable
@@ -21,6 +19,7 @@ import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.TrainSnapshot
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -51,17 +50,7 @@ class ExampleRegistryCollisionWiringTest : KoinTestBase() {
 	@DisplayName("createMultiTrainLoopExample wires the predictive TTC snapshot provider into the collision service")
 	fun multiTrainLoopExampleWiresSnapshotProvider() {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				"createMultiTrainLoopExample",
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
-		val factory = get<SimulationContextFactory>()
-		val args = arrayOf("example", "multiTrainLoop", "60")
-
-		val context = createMethod.invoke(registry, factory, args) as DefaultSimulationContext
+		val context = createExampleContext(registry, get(), "createMultiTrainLoopExample", "multiTrainLoop", "60")
 		val mainProcess = context.getMainProcess() as MultiTrainLoop
 
 		// Predict the next train name the same way MultiTrainLoopTest does: Train's counter is a
