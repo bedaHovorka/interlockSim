@@ -12,10 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.observation
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
@@ -296,8 +293,8 @@ class DispatcherObservationProjector(
 				val pathInfo: PathInfo = pathReservationRegistry.getPathInfo(position.trainId) ?: return@mapNotNull null
 				ReservationView(
 					trainId = position.trainId,
-					fromEndpointName = separatorDisplayName(pathInfo.start),
-					targetName = separatorDisplayName(pathInfo.target) ?: "",
+					fromEndpointName = separatorName(pathInfo.start),
+					targetName = separatorName(pathInfo.target) ?: "",
 					blockIds = pathReservationRegistry.getBlocks(position.trainId).map { BlockIdentity.stableBlockId(it) }
 				)
 			}.sortedBy { it.trainId }
@@ -314,21 +311,6 @@ class DispatcherObservationProjector(
 					queuedSinceSimTime = waitStartSimTime[queuedTrain.trainId] ?: simTime
 				)
 			}.sortedBy { it.trainId }
-
-	/**
-	 * Names a [DynamicPathSeparator] the same way every other perception mapping in this codebase
-	 * does (see [cz.vutbr.fit.interlockSim.sim.PerceptionMapping.separatorName], which cannot be
-	 * reused directly here — it is `internal` to `:core`, invisible across the module boundary).
-	 * Covers every concrete [DynamicPathSeparator] implementer that exists in `:core` today;
-	 * `else -> null` future-proofs against a hypothetical new one rather than throwing.
-	 */
-	private fun separatorDisplayName(separator: DynamicPathSeparator): String? =
-		when (separator) {
-			is DynamicRailSemaphore -> separator.name.takeIf { it.isNotBlank() }
-			is DynamicInOut -> separator.name.takeIf { it.isNotBlank() }
-			is DynamicRailSwitch -> separator.name.takeIf { it.isNotBlank() }
-			else -> null
-		}
 
 	/**
 	 * Debug-only guard (a plain Kotlin `assert`, no-op unless `-ea` is passed — active in this

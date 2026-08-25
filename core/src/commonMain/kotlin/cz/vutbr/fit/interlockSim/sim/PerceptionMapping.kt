@@ -2,26 +2,39 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
 /**
- * Shared SP2a.1 perception mapping from an [OrientedPathSeparator] ahead of a train to the
- * signal name/aspect a reactive train agent perceives (Issue #552).
+ * Shared SP2a.1 perception mapping from a [PathSeparator] ahead of a train to the
+ * signal name a reactive train agent perceives (Issue #552).
  *
- * Centralises the `when (sep) { is DynamicRailSemaphore -> …; is DynamicInOut -> … }` branching so
- * the live perception port ([cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]) and the
- * [Train] read-only perception properties share a single implementation, and so the port can read
- * the next semaphore **once** per perception capture (M1) instead of once per facet.
+ * Centralises the `when (sep) { is DynamicRailSemaphore -> …; is DynamicInOut -> …;
+ * is DynamicRailSwitch -> … }` branching so the live perception port
+ * ([cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]) and the [Train] read-only
+ * perception properties share a single implementation, and so the port can read the next
+ * semaphore **once** per perception capture (M1) instead of once per facet.
  *
- * A `null` [sep] (no reserved path) maps to `null` on both facets.
+ * Also consumed by the dispatcher observation layer
+ * ([cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector]) to name
+ * path-reservation endpoints ([cz.vutbr.fit.interlockSim.objects.paths.PathInfo.start] /
+ * [cz.vutbr.fit.interlockSim.objects.paths.PathInfo.target]) — those are typed as
+ * [cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator] and may be
+ * [DynamicRailSwitch] instances.
+ *
+ * A `null` [sep] (no reserved path) maps to `null`.
  *
  * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+ * @since Issue #958 (promoted to `public`, parameter widened to [PathSeparator],
+ *   [DynamicRailSwitch] branch added so the dispatcher can reuse it)
  */
-internal fun separatorName(sep: OrientedPathSeparator?): String? =
+fun separatorName(sep: PathSeparator?): String? =
 	when (sep) {
 		is DynamicRailSemaphore -> sep.name.takeIf { it.isNotBlank() }
 		is DynamicInOut -> sep.name.takeIf { it.isNotBlank() }
+		is DynamicRailSwitch -> sep.name.takeIf { it.isNotBlank() }
 		else -> null
 	}
 

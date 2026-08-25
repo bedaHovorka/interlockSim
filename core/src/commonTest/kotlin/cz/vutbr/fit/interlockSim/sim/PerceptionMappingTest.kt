@@ -16,8 +16,10 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
@@ -25,8 +27,9 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import kotlin.test.Test
 
 /**
- * Direct coverage of the `internal` [separatorAspect] / [separatorName] perception mapping
- * (Issue #552 / SP2a.1), with emphasis on the Issue #812 direction-aware display fix.
+ * Direct coverage of the [separatorAspect] / [separatorName] perception mapping
+ * (Issue #552 / SP2a.1, Issue #958 — [separatorName] promoted to public), with emphasis on the
+ * Issue #812 direction-aware display fix.
  *
  * [separatorAspect] is the **train's own next-separator** perception: [sep] is always a
  * separator on the train's own reserved path (the train is the reservation holder), so the
@@ -111,6 +114,18 @@ class PerceptionMappingTest {
 		val dynamicInOut = DynamicInOut(static, inSemaphore, outSemaphore)
 
 		assertThat(separatorName(dynamicInOut)).isEqualTo("X")
+	}
+
+	@Test
+	fun `separatorName returns the name for a DynamicRailSwitch`() {
+		val sw = DynamicRailSwitch(RailSwitch("vA", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE))
+		assertThat(separatorName(sw)).isEqualTo("vA")
+	}
+
+	@Test
+	fun `separatorName returns null for an unnamed DynamicRailSwitch`() {
+		val sw = DynamicRailSwitch(RailSwitch("", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE))
+		assertThat(separatorName(sw)).isNull()
 	}
 
 	@Test
