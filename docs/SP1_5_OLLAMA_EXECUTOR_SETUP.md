@@ -360,22 +360,13 @@ For parallel simulations, consider:
 - Multiple Ollama instances on different ports (future enhancement)
 - Reduced `maxTokens` to speed up inference
 
-## Future Enhancements (SP1.6+)
-
-- [x] Environment variable override for `OllamaExecutorConfig` (`OLLAMA_BASE_URL`, Issue #770/PR #771)
-- [ ] LLM call caching (avoid re-inferencing identical observations)
-- [ ] Ollama health checks and auto-restart
-- [ ] Support for remote Ollama instances (not just localhost)
-- [ ] Metrics collection (inference time, token count, cache hits)
-- [ ] Graceful fallback to rule-based dispatcher if Ollama unavailable
-
 ## References
 
 - **Ollama GitHub:** https://github.com/jmorganca/ollama
 - **Ollama API Docs:** https://github.com/jmorganca/ollama/blob/main/docs/api.md
 - **Koog Framework:** Internal dependency for Koog agents
-- **Goal 10 Context:** docs/GOAL_10_EXPECTATIONS_CRITIQUE.md
 - **Model Evaluation:** docs/GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md
+- **Measured outcome:** docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md
 
 ## Related Issues
 

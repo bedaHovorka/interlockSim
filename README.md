@@ -318,7 +318,8 @@ java -jar desktop-ui/build/libs/interlockSim.jar (sim|simgui|edit|example|exampl
 - `example [name] [endTime]` - Run built-in example (console output)
 - `exampleGui [name] [endTime]` - Run built-in example with animated GUI
 - `aiSweep --grid <grid.json> [--out <dir>] [--dry-run]` - Run the dispatcher reliability sweep.
-  Manual only, never in CI; the LLM arm needs a live Ollama. Grids live in `docs/measurement/`.
+  Manual only, never in CI; the LLM arm needs a live Ollama. No grid files are committed —
+  write the grid for the campaign you run. See CLAUDE.md for an example grid.
 
 **Note:** For memory-constrained environments, add `-Xmx300m`.
 
@@ -368,7 +369,7 @@ interlockSim/
 │       └── build/libs/interlockSim.jar   # Packaged application
 │
 ├── fast-sim/              # Native :fast-sim - linuxX64 CLI binary
-├── docs/                  # Architecture docs; docs/measurement/ holds sweep grids
+├── docs/                  # Architecture docs
 ├── text/                  # LaTeX thesis source
 └── .github/workflows/     # CI/CD workflows
 ```

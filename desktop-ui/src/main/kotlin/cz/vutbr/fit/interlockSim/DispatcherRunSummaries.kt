@@ -249,7 +249,7 @@ object DispatcherRunSummaries {
 	 *
 	 * A source that is not there yields `null`, not `0`. Substituting a zero would put a run that
 	 * nothing measured into the sweep as a run in which no train moved — the misreading
-	 * `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` records under "Structurally empty columns". See
+	 * #847's sweep recorded under "Structurally empty columns". See
 	 * [RailwayOutcome].
 	 *
 	 * ## Threading

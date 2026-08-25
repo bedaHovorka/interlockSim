@@ -24,7 +24,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  * it, so two cells differing only in variant never merge into one measured number.
  *
  * Nothing in this codebase claims [REVISED] is an improvement on its own — the sweep does. The
- * sweep has now run (docs/GOAL_10_SP2C11_SWEEP_REPORT.md), REVISED ships as the committed default
+ * sweep has now run (#834; evidence restated in docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md §12.1),
+ * REVISED ships as the committed default
  * through `dispatcher-defaults.properties` (`interlocksim.dispatcher.promptVariant=REVISED`), and
  * [DEFAULT] stays [BASELINE] only as the parse-failure safety net, not the shipped default.
  *

@@ -123,7 +123,7 @@ Gradle subprojects (see `settings.gradle.kts`):
 
 Other directories:
 
-- `docs/` - Project documentation, including `docs/measurement/` sweep grids
+- `docs/` - Project documentation
 - `text/` - LaTeX thesis sources
 - `desktop-ui/docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
 - `desktop-ui/build/libs/interlockSim.jar` - Packaged application (produced by `shadowJar`)
@@ -445,32 +445,53 @@ It exists because Goal 10's amended A4 acceptance criterion (#822 §7) is a *mea
 over N ≥ 10 runs — a claim that cannot be made without actually performing those runs and recording
 each one.
 
+**No grid files are committed.** Write the grid for the campaign you are running, keep it out of
+`docs/`, and record its content in that campaign's report. The swept axes are `example`, `model`,
+`temperature`, `tickPeriodMs`, `historyN` and `maxActionsPerTick`; there is deliberately no `seed`
+axis, because Koog 1.1.1 has no path to Ollama's `seed` option.
+
+```jsonc
+// grid.json — the LLM arm. Drop the "model" axis and use "example": ["shuntingLoop"] for the
+// rule-based control arm.
+{
+  "endTimeSeconds": 600,
+  "repeat": 10,
+  "perRunTimeoutSeconds": 900,
+  "axes": {
+    "example": ["shuntingLoopAI"],
+    "model": ["qwen2.5:7b-instruct"],
+    "temperature": [0.28],
+    "tickPeriodMs": [0],
+    "historyN": [0],
+    "maxActionsPerTick": [3]
+  }
+}
+```
+
 ```bash
 ./gradlew :desktop-ui:shadowJar
 
 # Check the grid without launching anything
-java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
-  --grid docs/measurement/sp2c24-sweep-grid.json --dry-run
+java -jar desktop-ui/build/libs/interlockSim.jar aiSweep --grid grid.json --dry-run
 
 # The real thing (hours; resumable — re-invoke after an interrupt and it continues)
 java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
-  --grid docs/measurement/sp2c24-sweep-grid.json \
-  --out build/reports/dispatcher-sweep
+  --grid grid.json --out build/reports/dispatcher-sweep
 
 # The rule-based baseline, into the same directory so one report compares both arms (~30 s)
 java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
-  --grid docs/measurement/sp2c24-baseline-grid.json \
-  --out build/reports/dispatcher-sweep
+  --grid baseline-grid.json --out build/reports/dispatcher-sweep
 ```
 
 Each run writes one JSON under `<out>/<arm>/`, and the sweep renders `<out>/report.md` when it
 finishes. A run that exceeds `perRunTimeoutSeconds` is killed and recorded as `TIMEOUT_ABORT` rather
 than left absent — an absent failed run would silently improve the arm's measured rate.
 
-Grid files live in `docs/measurement/`. The swept axes are `example`, `model`, `temperature`,
-`tickPeriodMs`, `historyN` and `maxActionsPerTick`; there is deliberately no `seed` axis, because
-Koog 1.1.1 has no path to Ollama's `seed` option. Results and interpretation:
-`docs/GOAL_10_SP2C24_SWEEP_REPORT.md`.
+Results and interpretation live in two reports, and only these two:
+`docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` (Issue #837 — the measured A4 outcome, and the
+surviving record of every campaign run so far) and
+`docs/GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md` (Issue #838 — the larger-model diagnostic,
+prepared but never run, which is the next open step).
 
 **Test coverage:** last counted **February 2026** — 1840 tests (1836 passing, 4 skipped),
 51% instruction coverage, 145 test classes. That count predates `:core-test`,
@@ -572,14 +593,10 @@ View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/
 - `GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` - LLM model comparison for the Goal 10 DISPATCHER agent (Issue #534, SP3.1; TRAIN agents are algorithmic-only, never LLM)
 - `GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` - Ollama/Koog capability audit: seed reachability, format+tools coexistence, num_ctx right-sizing, maxIterations tripwire (Issue #850, SP2c.27)
 - `GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` - Recorded traffic-simulation-expert ruling on the F1 paused-clock timing regime and the R8 headless-pacing question (Issue #849, SP2c.26)
-- `GOAL_10_SP2C24_SWEEP_REPORT.md` - Measured A4 reliability sweep: `aiSweep` results, the gate verdict, and which grid axes are live (Issue #847, SP2c.24)
 - `GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md` - Audits which `DispatchDecision` sealed subtypes are actually produced in production vs. only in tests (Issue #848, SP2c.25)
 - `INTERLOCKING_SCOPE_LIMITATIONS.md` - Documents intentional simplifications in the interlocking model (Issue #893, path-reservation review Phase 6)
-- `SP1_6_TOOL_EXPOSURE_IMPLEMENTATION.md` - Implementation summary for exposing sensors/actuators as Koog tools (Issue #551, SP1.6)
-- `GOAL_10_SP2C11_SWEEP_REPORT.md` - Earlier `aiSweep` grid results (Issue #834, SP2c.11)
-- `GOAL_10_I895_REBASELINE_REPORT.md` - A4 reliability re-baseline, both arms, 60 runs (Issue #895)
-- `GOAL_10_SP2C14_RELIABILITY_REPORT.md` - Goal 10 reliability report; the measured first-stage outcome (Issue #837, SP2c.14)
-- `GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md` - Frontier-model diagnostic grid, prepared but unrun (Issue #838, SP2c.15)
+- `GOAL_10_SP2C14_RELIABILITY_REPORT.md` - **Goal 10's measured A4 outcome** (Issue #837, SP2c.14). The single surviving record of every dispatcher measurement campaign: the per-arm reliability tables, why each shipped default was chosen, where the gate constants came from, and the pre-fix baseline. The raw run records and the #834/#847/#895 campaign reports were deleted on 2026-08-24; this report replaces them.
+- `GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md` - **Goal 10's next open step** (Issue #838, SP2c.15). The larger-model diagnostic that would decide whether the LLM shortfall is an interface problem or a model-capacity problem. Prepared, never run.
 
 ## Known Issues
 

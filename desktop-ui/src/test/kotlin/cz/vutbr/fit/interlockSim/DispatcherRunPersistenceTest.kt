@@ -216,7 +216,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * `multiTrainLoop` runs a `MultiTrainLoop`, which keeps none of `ShuntingLoop`'s counters. Its
 	 * loop-sourced figures must therefore come out **absent**, not `0`: a zeroed column would say
 	 * "this configuration moved no train", which is the misreading
-	 * `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` names under "Structurally empty columns".
+	 * #847's sweep named under "Structurally empty columns".
 	 *
 	 * The metrics-sourced figures stay present, because `MetricsCollectionService` is bound for
 	 * every simulation context regardless of which process drives it.

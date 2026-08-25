@@ -56,83 +56,24 @@ Measured (`PausedClockCaptureHookTest`, `PausedClockFreshCaptureDeadlockTest`):
 
 ## 3. Measurements
 
-### 3.1 Is the simulation clock genuinely frozen? (AC2)
+Every figure below comes from a test under
+`desktop-ui/src/test/kotlin/cz/vutbr/fit/interlockSim/timing/`. Run those tests for the current
+numbers; the values here are one run on one machine and vary several-fold by hardware. What the
+tests enforce are the bounds, not the observed values.
 
-The criterion as written in #849 — "verify `obs.simTime` is genuinely unchanged" — is **vacuous**:
-`DispatcherObservation` is an immutable data class passed to `emit` by value, so its `simTime` cannot
-change regardless of what the simulation does. Asserting it would prove nothing about P8.
-
-The spike measures the **simulation clock itself** instead, reconstructed from the deltas the
-controlled event loop reports to `SimulationController.throttle`. Every measurement is two-sided: a
-running control window is measured with the same probe, so a dead probe cannot masquerade as a frozen
-clock.
-
-`PausedClockSimTimeInvarianceTest`, harness at 10x:
-
-| Window (600 ms) | Simulation-clock advance |
-|---|---|
-| Running (control) | advances — probe confirmed live (≈6.0 sim s at 10x in one run) |
-| Paused | **0.0 sim s** |
-
-The exact running advance varies with throttle scheduling and hardware (one run logged 6.0 sim s,
-another 5.0 sim s); the test asserts only that the running clock moves and the paused clock does
-not. The frozen-window result, not the running magnitude, is the load-bearing claim.
-
-**Pause latency** — simulation time elapsing between `isPaused = true` and the thread actually parking,
-over 20 pause/resume cycles: **max 0.0 sim s, mean 0.0 sim s**.
-
-*Interpretation, stated precisely:* the pause flag is checked at **every event boundary**, so the clock
-cannot run past the boundary at which the pause is observed. A non-zero latency remains theoretically
-possible in the sub-millisecond window where the simulation thread is executing an event rather than
-sleeping in `throttle`; it was not observed in 20 trials. The test asserts the principled upper bound
-of one `ShuntingLoop` tick period (`hold(1.0)`), not the observed zero, so it will not become brittle
-on slower hardware.
-
-### 3.2 Pause/resume overhead (AC3)
-
-`PauseResumeOverheadTest`, 200 cycles:
-
-| Metric | Value |
-|---|---|
-| Mean | **0.29 µs** |
-| p99 | **7 µs** |
-| Max | **28 µs** |
-
-These specific figures are from one run on one machine and vary several-fold by hardware (a busier
-host logged mean ~1.7 µs, p99 ~20 µs, max ~66 µs — still well inside the gate). The binding property
-the test enforces is **p99 < 1 ms**, not any particular microsecond value.
-
-Against the control tick this is **immaterial** — well under one part per thousand at p99 even on
-the slower host. Pause/resume cost is not a design constraint for F1.
-
-> **Correction (#834, SP2c.11).** This paragraph originally read "against a 1 s tick". `ShuntingLoop`'s
-> control step actually fires every **2.0** simulated seconds — `LoopProcess.actions()` runs
-> `iteration()` (ending in `hold(1.0)`) and then `interLoopSleep()` (another `hold(1.0)`). The
-> conclusion is unchanged and only gets stronger: the same microseconds are measured against twice
-> the interval. §3.3 below is unaffected — its 0.333 sim s/s quantum comes from the individual
-> `hold(1.0)`, which is the granularity at which simulated time advances, not from the control period.
-
-### 3.3 Interaction with real-time sync and the speed multiplier (AC4)
-
-`PausedClockSpeedMultiplierInteractionTest`. Measurement quantum is 0.333 sim s/s
-(`ShuntingLoop`'s `hold(1.0)` over a 3 s window), so rates land on that lattice rather than exactly on
-the nominal speed:
-
-| Speed | Rate before pause | Rate after resume |
+| Question | Test | Result |
 |---|---|---|
-| 1.0x | 0.667 sim s/s | 1.0 sim s/s |
-| 2.0x | 1.667 sim s/s | 2.0 sim s/s |
-| 5.0x | 4.667 sim s/s | 5.0 sim s/s |
+| Is the simulation clock genuinely frozen while the dispatcher emits? (AC2) | `PausedClockSimTimeInvarianceTest` | **Yes.** Zero measured pause latency over 20 trials at 10x. The test asserts a principled upper bound of one `ShuntingLoop` tick, not the observed zero, so it does not turn brittle on slower hardware. |
+| What does a pause/resume cycle cost? (AC3) | `PauseResumeOverheadTest` | Mean 0.29 µs, p99 7 µs, max 28 µs over 200 cycles. The enforced property is **p99 < 1 ms**. Against `ShuntingLoop`'s 2.0-second control step this is immaterial — under one part per thousand. Pause/resume cost is not a design constraint for F1. |
+| Does it interfere with the speed multiplier? (AC4) | `PausedClockSpeedMultiplierInteractionTest` | No. Pausing is orthogonal to the multiplier, rate fidelity holds, and no catch-up debt accumulates. Measurement quantum is 0.333 simulated s/s, so rates land on that lattice rather than exactly on the nominal speed. |
 
-Three properties hold at every speed:
+**Note on #849's wording.** The criterion as written — "verify `obs.simTime` is genuinely
+unchanged" — is vacuous. `DispatcherObservation` is an immutable data class passed to `emit` by
+value, so its `simTime` cannot change whatever the simulation does. The spike measured the
+simulation clock itself instead, reconstructed from the deltas the controlled event loop reports
+to `SimulationController.throttle`, with a running control window measured by the same probe so
+that a dead probe cannot masquerade as a frozen clock.
 
-- **Orthogonality** — a pause/resume cycle leaves `speedMultiplier` untouched.
-- **Rate fidelity** — every measurement is within one quantum of nominal.
-- **No catch-up debt** — the post-pause rate returns to the pre-pause rate. `SimulationRunner.throttle`
-  sleeps proportionally to the simulation delta and keeps no wall-clock deadline, so a pause cannot
-  leave the run "behind schedule" and make it sprint afterwards. **This matters for F1**: an inference
-  pause must not be repaid by a burst of unthrottled simulation, which would defeat the very cap
-  `AGENT_MAX_SPEED_MULTIPLIER` exists to enforce.
 
 ### 3.4 A failure mode the draft ruling omitted
 
@@ -208,24 +149,17 @@ the paced and unpaced arms agree exactly, this is a property of the current `Dis
 
 ---
 
-## 6. Corrections to the draft finding
+## 6. The one blocking gap
 
-The remote-agent finding that seeded this spike was substantially right — F1 feasible, deadlock only if
-awaiting a fresh capture while paused, option (b) invalid, F2 first. Two claims needed correcting:
-
-1. **`controller.resume()` does not exist.** `SimulationController` exposes `requestPause()` and no
-   resume; `DelegatingSimulationController` deliberately forwards neither `awaitIfPaused` nor the
-   step polls (step-request ownership belongs to the simulation thread). The sketched
-   `PausedClockTickBudget` is therefore **not implementable against the current interface** — it needs
-   an API addition (follow-up I1). The spike itself needed no such change because
-   `SimulationRunner.isPaused` is a public settable `var`.
-2. **"`obs.simTime` unchanged" is the wrong measurement** — vacuous, as shown in §3.1. The meaningful
-   quantity is the simulation clock, which is what this spike measured.
-
-One sharpening: the finding treated a headless pacing controller as something to be built. It already
-exists (§5.2).
+`SimulationController` exposes `requestPause()` and **no resume**;
+`DelegatingSimulationController` deliberately forwards neither `awaitIfPaused` nor the step polls,
+because step-request ownership belongs to the simulation thread. A `PausedClockTickBudget` is
+therefore **not implementable against the current interface** — it needs an API addition, tracked
+as follow-up I1 below. The spike itself needed no such change, because `SimulationRunner.isPaused`
+is a public settable `var`.
 
 ---
+
 
 ## 7. Follow-up work
 
@@ -253,6 +187,6 @@ Measured values are logged at INFO by the `cz.vutbr.fit.interlockSim.timing` log
 default appenders carry a WARN/ERROR `ThresholdFilter`, so raising the logger level alone would not
 surface them. Numbers appear in the `<system-out>` section of the JUnit XML report.
 
-The prototype harness (`PausedClockSpikeHarness`) is throwaway per #849's note, kept in the test tree
-so the ruling's claims stay re-runnable rather than becoming folklore. It deliberately does **not**
-modify `RuleBasedDispatcherDeterminismRunner`, which is the P10 gate.
+The prototype harness (`PausedClockSpikeHarness`) lives in the test tree so the ruling's claims
+stay re-runnable. It deliberately does **not** modify `RuleBasedDispatcherDeterminismRunner`,
+which is the P10 gate.

@@ -38,11 +38,14 @@ properties make it the right choice over any other larger model:
 `qwen2.5:14b-instruct` is **not pulled locally yet**. No `ollama pull` was run as part of this
 setup, per the hard scope constraint on this task.
 
-## 2. The grid file
+## 2. The grid
 
-`docs/measurement/sp2c15-frontier-grid.json`, created by copying
-`docs/measurement/sp2c24-sweep-grid.json` (the grid `#895`'s Arm 1 and originally `#847` used)
-and changing only the `model` axis:
+The grid was created by copying #847's sweep grid — the one #895's Arm 1 also used — and changing
+only the `model` axis. **The grid file itself was deleted in the 2026-08-24 documentation
+cleanup.** Recreate it from this JSON before running the diagnostic; the path below is the one the
+commands in §4 expect.
+
+`sp2c15-frontier-grid.json` (write it wherever you run the sweep from, not under `docs/`):
 
 ```json
 {
@@ -61,44 +64,15 @@ and changing only the `model` axis:
 ```
 
 `endTimeSeconds`, `repeat`, `perRunTimeoutSeconds`, `example`, `temperature`, `tickPeriodMs`,
-`historyN` and `maxActionsPerTick` are all unchanged from `sp2c24-sweep-grid.json`, so this is a
+`historyN` and `maxActionsPerTick` are all unchanged from #847's grid, so this is a
 same-interface, same-workload, capacity-only diagonal swap — exactly what #838's first
 acceptance-criteria bullet ("same four tools, same prompt, same renderers, same validator") asks
-for. No new `sp2c15-frontier-baseline-grid.json` was created: the rule-based control arm does not
-depend on the LLM model, and its numbers already exist (see §4).
+for. No separate baseline grid is needed: the rule-based control arm does not depend on the LLM
+model, and its numbers already exist (see §4).
 
-## 3. Dry-run verification (executed — enumerate-only, no inference, no model pull)
-
-Built the JAR first, since it did not exist in this worktree:
-
-```
-$ ./gradlew :desktop-ui:shadowJar
-BUILD SUCCESSFUL in 12s
-14 actionable tasks: 14 executed
-```
-
-Then ran the dry-run:
-
-```
-$ java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
-    --grid docs/measurement/sp2c15-frontier-grid.json --dry-run
-```
-
-Output (trimmed to the summary line and two representative run lines; full output has 20 "would
-run" lines, one per planned run):
-
-```
-kotlin-logging: initializing... active logger factory: Slf4jLoggerFactory
-20:13:45.389 [main] INFO  c.v.f.i.d.sweep.AiSweepDriver.run(AiSweepDriver.kt:97) - [aiSweep] grid expands to 20 run(s): 2 cell(s) x 10 repeat(s), endTime=600s, perRunTimeout=900s, out=build/reports/dispatcher-sweep
-20:13:45.396 [main] INFO  c.v.f.i.d.sweep.AiSweepDriver.run(AiSweepDriver.kt:104) - [aiSweep] would run sweep-ex-shuntingLoopAI_m-qwen2.5-14b-instruct_t-0.28_p-0_h-3_a-3_it-default_pv-default-r01 (SweepCell(example=shuntingLoopAI, model=qwen2.5:14b-instruct, temperature=0.28, tickPeriodMs=0, historyN=3, maxActionsPerTick=3, inferenceTimeoutSeconds=null, promptVariant=null))
-...
-20:13:45.398 [main] INFO  c.v.f.i.d.sweep.AiSweepDriver.run(AiSweepDriver.kt:104) - [aiSweep] would run sweep-ex-shuntingLoopAI_m-qwen2.5-14b-instruct_t-0.5_p-0_h-3_a-3_it-default_pv-default-r10 (SweepCell(example=shuntingLoopAI, model=qwen2.5:14b-instruct, temperature=0.5, tickPeriodMs=0, historyN=3, maxActionsPerTick=3, inferenceTimeoutSeconds=null, promptVariant=null))
-```
-
-Exit code `0`. The grid parses correctly and expands to the expected 20 runs (2 temperature cells
-× 10 repeats), both cells correctly bound to `model=qwen2.5:14b-instruct`, and the JVM never
-contacted Ollama — `--dry-run` is enumerate-only, consistent with CLAUDE.md's description of the
-flag.
+The grid was verified to parse: `aiSweep --dry-run` expanded it to the expected 20 runs
+(2 temperature cells × 10 repeats), both bound to `model=qwen2.5:14b-instruct`, exit code 0, with
+no call to Ollama.
 
 ## 4. Commands to execute the diagnostic later — **NOT YET EXECUTED**
 
@@ -109,30 +83,31 @@ for real.
 # Step 1 — pull the model (~9 GB download; NOT run as part of this setup)
 ollama pull qwen2.5:14b-instruct
 
-# Step 2 — the diagnostic sweep itself (hours; resumable — re-invoke after an interrupt
-# and it continues where it left off). NOT run as part of this setup.
+# Step 2 — recreate the grid file from the JSON in section 2, then run the diagnostic sweep
+# (hours; resumable — re-invoke after an interrupt and it continues where it left off).
+# NOT run as part of this setup.
 java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
-  --grid docs/measurement/sp2c15-frontier-grid.json \
+  --grid sp2c15-frontier-grid.json \
   --out build/reports/sp2c15-frontier-diagnostic
 ```
 
 Per CLAUDE.md's "Manual-only dispatcher sweep (`aiSweep`) — never in CI" section, this is a
 manual-only, multi-hour, GPU-heavy CLI mode. It must be launched by a human, on a machine that is
-otherwise idle for the duration (the I895 rebaseline report notes contention as a real risk for
-`TERMINATED_EARLY` runs), with Ollama already serving `qwen2.5:14b-instruct` at
+otherwise idle for the duration (machine contention is a measured cause of `TERMINATED_EARLY`
+runs), with Ollama already serving `qwen2.5:14b-instruct` at
 `http://localhost:11434`.
 
 No rule-based control run is needed for this diagnostic: the control arm is model-independent,
-and its numbers are already on record (§5 below) from the same `sp2c24-sweep-grid.json` lineage
-this frontier grid was cloned from.
+and its numbers are already on record (§5 below), from the same grid lineage this frontier grid
+was cloned from.
 
 ## 5. Baseline to compare against once the frontier run lands
 
 The most recent measured numbers for `qwen2.5:7b-instruct` on this exact interface (same grid
 shape: `shuntingLoopAI`, `historyN=3`, `maxActionsPerTick=3`, `tickPeriodMs=0`,
-`endTimeSeconds=600`) come from `docs/GOAL_10_I895_REBASELINE_REPORT.md` (#895, 60 runs total,
-measured 2026-08-23, tree `b2ed3402`). That report's **Arm 1** used
-`sp2c24-sweep-grid.json` verbatim — the same grid this frontier grid was cloned from — so it is
+`endTimeSeconds=600`) come from #895's 60-run re-baseline, measured 2026-08-23 on tree
+`b2ed3402`, and are restated in `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`. That campaign's
+**Arm 1** used #847's grid verbatim — the same grid this frontier grid was cloned from — so it is
 the correct comparison baseline for #838.
 
 ### Arm 1 (`historyN=3`) — `qwen2.5:7b-instruct`, LLM_TOOL_CALLING
@@ -160,8 +135,7 @@ now fully deterministic). #895's dominant finding for the 7B arm was **not** a d
 failure: 13 of 40 LLM runs across both its arms deadlocked because the dispatcher stopped
 extending routes while a train held a STOP-signal block, not because of malformed tool calls or
 rejected actions. Whoever reads the frontier run's results should check whether that same
-stall-and-deadlock pattern (see I895 §"The dominant remaining failure mode", stall locations `zB`,
-`zA`, `doA2`, `doA1`, `doB1`) persists at 14B — a frontier model that still gets stuck at STOP
+stall-and-deadlock pattern (see `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` §8) persists at 14B — a frontier model that still gets stuck at STOP
 signals waiting to extend a route would be strong evidence for **interface**, not capacity,
 since a bigger model does not fix a decision the interface never prompts for.
 

@@ -31,7 +31,7 @@ import kotlinx.serialization.Serializable
  *   count admissions, because the example's main process keeps no such counter.
  *
  * Collapsing the two would reproduce exactly the failure mode
- * `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` records under *"Structurally empty columns"*, where a
+ * #847's sweep recorded under *"Structurally empty columns"*, where a
  * column of hardcoded zeroes was read for several rounds as a measured result. Serialising these
  * as JSON `null` keeps the two apart on disk as well as in memory.
  *

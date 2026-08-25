@@ -38,7 +38,7 @@ import java.time.format.DateTimeFormatter
  * `llmSuccessRate=0.846` on a railway that moved nothing (journeys 0/7). Issue #895 measured that
  * both of its terms were decision-hygiene terms and that neither read the railway, so the outcome
  * half is now [MIN_TRAINS_EXITED]. Both constants are measured — see their own KDoc, and
- * `docs/GOAL_10_I895_REBASELINE_REPORT.md` for the campaign that set them.
+ * `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` §12.2 for how each was derived.
  *
  * ## Sections rendered
  *

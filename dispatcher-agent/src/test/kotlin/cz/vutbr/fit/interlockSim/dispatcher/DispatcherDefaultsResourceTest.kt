@@ -80,7 +80,8 @@ class DispatcherDefaultsResourceTest {
 	fun shippedResourceMatchesChosenDefaults() {
 		// The lock's PURPOSE is unchanged: no value in the shipped file may drift without a
 		// deliberate edit here. Only its expectations moved, once, when #834's sweep decided two
-		// of them (docs/GOAL_10_SP2C11_SWEEP_REPORT.md; records under docs/measurement/sp2c11-runs/).
+		// of them (#834; the evidence for every value is restated in
+		// docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md §12.1).
 		//
 		// historyN 3 -> 0 and promptVariant BASELINE -> REVISED are therefore asserted against the
 		// SWEEP's values, not against the compiled constants they no longer equal. The other four

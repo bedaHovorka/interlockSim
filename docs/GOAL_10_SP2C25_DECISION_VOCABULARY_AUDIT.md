@@ -145,73 +145,11 @@ byte-identical determinism gate (SP2c.5) doesn't fail — see §9.
 
 ## 9. Traffic-simulation-expert ruling
 
-Per #848's acceptance criteria ("Traffic-simulation-expert ruling recorded in this issue before
-SP2c.3 starts"): this repository has no literal `traffic-simulation-expert` Claude subagent
-registered (`.claude/agents/` does not exist here); TEAM.md instead defines that role's decision
-authority and focus areas. A sub-agent was launched with TEAM.md's `traffic-simulation-expert`
-role definition quoted verbatim as its persona, given the completed audit findings above, and
-asked to independently re-verify the file:line citations against the actual source (not just
-trust them) and rule on the vocabulary question. Its ruling, quoted verbatim:
-
-> ## Independent verification
->
-> I read `RuleBasedDispatcher.kt` and `DispatchDecision.kt` directly and grepped construction
-> sites across `core/`, `dispatcher-agent/`, and `desktop-ui/`. Every file:line citation in the
-> prior analysis checks out exactly: `decide()` at 122-125, `decideAdmissions` typed
-> `List<ApproveTrain>` at 129-138, `checkAllInputs` typed `List<ReservePath>` at 142-143,
-> `checkInput`'s three-way `when` at 154-213 with `ReservePath` constructed only at 178 and 206.
-> `ApproveTrain`/`ReservePath`/`NoAction` are indeed the only reachable subtypes by the type
-> system itself.
->
-> The `HoldTrain` claim also holds under direct grep: `DispatchDecision.HoldTrain(` has zero
-> production constructors — only the class definition and the applier's *consuming*
-> `is DispatchDecision.HoldTrain ->` branch exist. One thing the prior pass missed and worth
-> flagging: there is a **second, unrelated** `HoldTrain` — `ConflictResolution.HoldTrain` in
-> `sim/conflict/ConflictResolution.kt`, actively constructed by
-> `DefaultConflictResolver.generateHoldTrain` (live Goal 9 machinery). It is a distinct sealed
-> hierarchy with no bridge to `DispatchDecision.HoldTrain` — the name collision is coincidental,
-> not evidence of a hidden production path. This strengthens rather than weakens the
-> "unreachable" finding for `DispatchDecision.HoldTrain` specifically, but it means the
-> *concept* of holding a train is already live in the codebase under a different type, which is
-> relevant to future wiring, not to this audit's scope.
->
-> `PathCommandTranslator`'s "unwired" claim also holds — the one non-test, non-definition hit
-> outside its own file (`ToolGroupRegistry.kt:191`) is a KDoc comment, not a call site.
->
-> ## Ruling
->
-> I concur with the prior analysis in full, including its correction of the one nuance it
-> flagged. `RuleBasedDispatcher.decide()` is provably restricted by its own return types to
-> `ApproveTrain`, `ReservePath`, and `NoAction`; I independently confirmed this against the
-> source rather than trusting the citation. `HoldTrain` is correctly resolved: **it is never
-> emitted by `RuleBasedDispatcher`, and no current production planner constructs
-> `DispatchDecision.HoldTrain`** — the applier-side plumbing is dead code today. I additionally
-> note a same-named but unrelated `ConflictResolution.HoldTrain` is live under Goal 9's conflict
-> resolver; that does not change this ruling, since it targets a different sealed type and is
-> not reachable from the dispatch loop being redesigned here.
->
-> On the vocabulary question, my ruling is **(a) and (c) together**: the four-action vocabulary
-> (`ApproveTrain`, `RequestRoute`, `CancelRoute`, `NoOp`) suffices for both dispatcher arms as
-> they exist today, and `HoldTrain`, `SetSignalAspect`, and `SetSwitchPosition` are declared out
-> of scope for SP2c.3 — not because they are permanently unneeded, but because nothing in the
-> current codebase constructs them in a live path, so building actions for them now would be
-> speculative. Should Goal 9's conflict resolver later need to drive a real hold, that is a
-> future, separately-reviewed vocabulary extension, not a gap in this audit.
->
-> On the `ReservePath`→`RequestRoute` merge: this is a genuine risk to P10, not a paperwork
-> caveat. `ReservePath` reserves one pre-computed section and increments a test-observability
-> counter; the tool-driven `RequestRoute` reserves an end-to-end path and does not. If SP2c.3
-> collapses both into a single `DispatchAction.RequestRoute` payload without preserving which
-> reservation mode was used, `ActionValidator`/replay cannot distinguish "one section, counter
-> bumped" from "end-to-end, counter untouched," and P10's byte-identical determinism check will
-> fail to reproduce `RuleBasedDispatcher`'s exact decision sequence. **Constraint for SP2c.3:
-> `DispatchAction.RequestRoute`'s payload must carry an explicit discriminant (e.g. a
-> `scope: Section | EndToEnd` field or two sub-payloads under one sealed action) so the
-> counter-increment behavior and section-vs-path reservation semantics are preserved losslessly
-> under the new vocabulary — do not defer this to SP2c.5, where it would surface only as a
-> failing determinism test with no clear root cause.**
->
-> — traffic-simulation-expert, ruling recorded per #848 acceptance criteria, 2026-07-30
+The ruling required by #848 was recorded on 2026-07-30. It independently re-verified every
+file:line citation above against the source and confirmed the audit. Its operative finding is
+§10 below: the section-versus-path reservation semantics must be preserved explicitly in the
+merged vocabulary, and this must not be deferred to SP2c.5, where it would surface only as a
+failing determinism test with no clear root cause.
 
 ## 10. Binding constraint for SP2c.3
 

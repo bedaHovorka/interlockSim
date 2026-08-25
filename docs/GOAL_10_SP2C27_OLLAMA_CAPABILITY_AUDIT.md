@@ -229,27 +229,18 @@ That is a silent correctness failure (the model starts reasoning without knowing
 topology), not just a slowdown. An 8,192 window sized only against the static base prompt risks
 this exact failure mode under realistic multi-tool-call cycles.
 
-### 3.3 Measured latency/memory: 32768 vs 16384 vs 8192
+### 3.3 Why `num_ctx` size costs almost nothing to compute
 
-Cold-load measurements (`ollama stop` between each, so every number includes a full model load,
-not just a request), same base 2,102-token prompt, on this dev machine (NVIDIA RTX PRO 5000
-Blackwell Laptop GPU):
+Cold-load measurements at 32,768 / 16,384 / 8,192 tokens (one dev machine, same 2,102-token base
+prompt) showed two things:
 
-| `num_ctx` | VRAM (`size_vram`) | `load_duration` | `prompt_eval_duration` (2,102 tok) | decode throughput |
-|---|---|---|---|---|
-| 32,768 (previous default) | 6.14 GiB | 6.53 s | 1.84 s | ~9.6 tok/s |
-| 16,384 | 5.23 GiB | 4.75 s | 1.94 s | ~9.6 tok/s |
-| 8,192 | 4.78 GiB | 4.85 s | 1.88 s | ~9.6 tok/s |
+1. **`prompt_eval_duration` and decode throughput do not move with `num_ctx`** — about 1.9 s and
+   about 9.6 tok/s at all three sizes. `num_ctx` is a KV-cache preallocation ceiling, not a
+   per-token cost; the model only computes over the tokens actually present.
+2. **16,384 already captures nearly all the benefit of dropping from 32,768.** VRAM 6.14 → 5.23
+   GiB, load 6.53 → 4.75 s. Going further to 8,192 saves another 0.45 GiB and no time at all,
+   while adding the truncation risk from §3.2.
 
-Two things stand out:
-1. **`prompt_eval_duration` and decode throughput are unaffected by `num_ctx`** in all three
-   measurements, as expected: `num_ctx` is a KV-cache *preallocation ceiling*, not a per-token
-   processing cost — the model only ever computes over the tokens actually present.
-2. **16,384 and 8,192 are nearly identical in load time** (4.75 s vs 4.85 s — the 16,384 run was
-   marginally *faster*, within measurement noise) and close in VRAM (5.23 GiB vs 4.78 GiB, ~0.45 GiB
-   apart). Nearly all of the latency/memory benefit of dropping from 32,768 is already captured at
-   16,384; dropping further to 8,192 buys almost nothing extra while introducing the truncation
-   risk from §3.2.
 
 ### 3.4 Recommendation — deviates from #850's suggested value
 
@@ -334,23 +325,7 @@ test fails regardless of any explicit assertion — that propagation *is* the tr
 
 ---
 
-## 5. Changes landing in this branch
-
-Per #850's own Note ("Only the `num_ctx` value and the `maxIterations` test are expected to land as
-production changes"), plus the Spike 1 prototype explicitly requested by the issue body:
-
-- `dispatcher-agent/.../executor/OllamaExecutorConfig.kt` — `DEFAULT_CONTEXT_WINDOW_TOKENS`
-  `32_768L` → `16_384L`; KDoc additions for both `contextWindowTokens` and `maxAgentIterations`
-  documenting this spike's findings.
-- `dispatcher-agent/.../executor/OllamaExecutorConfigTest.kt` — default-value assertion updated.
-- `dispatcher-agent/.../agents/KoogRealOllamaToolCallingTest.kt` — new `maxIterations` happy-path
-  regression test (`@Tag("ollama-test")`).
-- `dispatcher-agent/.../executor/SeededOllamaJsonClient.kt` — new Spike 1 prototype (not wired into
-  production).
-- `dispatcher-agent/.../executor/SeededOllamaJsonClientTest.kt` — network-free wire-shape tests
-  plus one live decode-determinism test (`@Tag("ollama-test")`).
-
-## 6. Open follow-up (not done here)
+## 5. Open follow-up (not done here)
 
 - Update #822's P8 wording and the SP2c.10/SP2c.12 acceptance criteria to reflect the Spike 1 split
   (§1.4) — flagged for the issue owner, not edited directly by this spike.

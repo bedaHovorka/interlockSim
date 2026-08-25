@@ -177,27 +177,20 @@ there is no "revisit later" clause. It is implemented as a deterministic reactiv
 behind `TrainDecisionPolicy` (SP2a.4 #555); no Ollama model is bound to it and no model
 evaluation applies. The DISPATCHER is the project's only LLM-driven role.
 
-### 5.3 Proposed Koog / Koin binding (for SP1 in `:dispatcher-agent` — *not implemented here*)
+### 5.3 Koog / Koin binding — since implemented
 
-This is a **proposal** for the future **`:dispatcher-agent`** Koin module (SP1.3 #548, executor
-SP1.5 #550); SP3.1 does not edit code. The `:dispatcher-agent` module is a sibling of `:core` /
-`:desktop-ui` / `:fast-sim`, depends on `:core`, owns all Koog/Ollama dependencies, and is never
-depended on by `:fast-sim` (#532 body, Critical files; SP0.6 #545).
+This section proposed a binding for the then-future `:dispatcher-agent` module. It exists now.
+The durable requirement it set, and which the shipped code honours, is that the model id is a
+**single injectable config value** (`dispatcher-defaults.properties`, overridable per run), so a
+benchmark can sweep candidates without a code edit and the 8 GB budget is enforced by
+configuration rather than recompilation. See `OllamaExecutorConfig` and `DispatcherAgentModule`.
 
-```kotlin
-// PROPOSED — to be wired in SP1 (#546–#551) in :dispatcher-agent, not in this SP3.1 doc task.
-// Default DISPATCHER model; overridable via config/env for benchmarking.
-val dispatcherLlmModel = OllamaModels.Alibaba.QWEN_2_5   // verify constant name in Koog 1.0
-// Fallback: OllamaModels.Meta.LLAMA_3_1 (llama3.1:8b)
-// Fast/degraded: OllamaModels.Google.GEMMA_3 (gemma3:4b)
-```
-
-Make the model id a **single injectable config value** (e.g. Koin `named("dispatcher.model")`) so
-the §7 benchmark can sweep all candidates without code edits, and so the 8 GB gate can be enforced
-by configuration rather than recompilation. The same config surface must expose the **Ollama
-sampling seed**, because A4 acceptance runs are seed-pinned (§7).
+The same section also required the config surface to expose an Ollama sampling seed. **That
+requirement is void** — no seed can reach Ollama through Koog 1.1.1 (§7, and
+`docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` §1).
 
 ---
+
 
 ## 6. Fallback strategy (deterministic "deny + hold" → `RuleBasedDispatcher`)
 
@@ -225,54 +218,29 @@ degrades to a safe, if less efficient, dispatcher** — never to an unsafe one.
 
 ---
 
-## 7. Benchmark protocol (to execute in SP3.5 / SP2b.9)
+## 7. Benchmark protocol — since executed, and two of its premises were wrong
 
-The numeric acceptance evidence required by #534 must be produced once the SP3.4 `InterlockingFacade`
-(#572) and SP3.5 ToolSets (#573) exist; the full-run gate lands with the LLM dispatcher in
-SP2b.9 (#566). For **each** Tier D candidate, run the four scripted scenarios from #534 against
-the real tool surface and record the metrics.
+This section originally specified a benchmark to run later. **That benchmark has been run.** The
+result is `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`: 60 runs on `vyhybna.xml` at a 600-second
+horizon with `qwen2.5:7b-instruct`, the D-1 primary named in §5.1. Read that report for the
+measured outcome; do not re-derive it from the plan that used to sit here.
 
-**Run conditions (from the #532 body, first stage):**
-- **Network:** `vyhybna.xml` — the paramount example (2 InOuts, 2 switches, 6 semaphores,
-  ~2 concurrent trains). Praha scale (#591) is downstream and out of scope here.
-- **Seed pinning (A4):** the local Ollama sampling **seed is pinned** per run. Acceptance is
-  **outcome-gated**, not decision-for-decision: across N consecutive runs, all trains exit, no
-  conflict events, no operator action, rationale recorded per run. The `RuleBasedDispatcher`
-  (A3) carries the reproducibility guarantee; the LLM is compared, not the anchor.
-- **Speed:** agent runs use only slow Goal 7 speed multipliers (#187, owner decision 2026-07-06);
-  the run must still keep real-time ratio ≥ 1× (A6).
-- **Comparison metrics (A5):** sourced from Goal 6 SP1 (#672) `MetricsCollectionService` (delay,
-  conflicts, throughput, utilization) + `DispatcherPreferenceStore.getChoices()` (decision count,
-  rationale entries) + the existing `realTimeRatio` scaffolding. **Reported, not gated.**
+Two premises of the original plan turned out to be false, and both matter to anyone planning the
+next benchmark:
 
-**Scenarios (from #534):**
-1. **Single-junction routing** — one `RouteRequest`, two blocks `VOLNO` → expect one `requestRoute`,
-   `RouteGrant`.
-2. **Conflict resolution** (example *c*, #533 §6) — two simultaneous `RouteRequest` for the same
-   block → `requestRoute` for winner, `RouteDenial` + `HoldOrder` for loser.
-3. **Degraded-mode refusal** — `requestRoute` returns `DENIED:úsek obsazen` → `HoldOrder`, **no
-   retry loop**.
-4. **Explanation query** — after routing prompt *"Proč jsi zvolil tuto cestu?"* → Czech rationale
-   referencing the chosen route.
+1. **The sampling seed cannot be pinned.** The plan assumed a per-run seed. Koog 1.1.1 has no path
+   to Ollama's `seed` option on the tool-calling path — see
+   `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` §1. What is delivered instead is **prompt**
+   determinism, not decode determinism.
+2. **Only one model was ever measured.** The plan called for running every Tier D candidate. Only
+   `qwen2.5:7b-instruct` was. The larger-model comparison is still open and is prepared, unrun, in
+   `docs/GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md`.
 
-**Metrics to record per model (fills the §4 matrix with real numbers):**
-
-| Metric | How |
-|---|---|
-| Tool-call success rate | valid calls / total calls (Koog validation outcome) |
-| Decision latency p50 / p95 | wall-clock per dispatcher decision on Arrow Lake + NVIDIA GPU |
-| Context tokens used | prompt + tool transcript token count at decision time |
-| Czech vocabulary quality | qualitative 1–5 score on task 4 rationale |
-| Peak VRAM | `nvidia-smi` during run — must stay ≤ 8 GB |
-| Fallback events | count of iteration-cap / loop-guard / deny-hold / `RuleBasedDispatcher` handover activations |
-| Outcome contract (A4) | per seed-pinned run: all trains exit, 0 conflict events, 0 operator actions, rationale recorded |
-| Real-time ratio (A6) | ≥ 1× on vyhybna under slow-speed agent constraint |
-
-Promote whichever candidate maximises tool-call success and Czech quality **within** the 2 s and
-8 GB gates while holding the A4 outcome contract and A6 real-time ratio; update §5 and the SP1
-Koin binding in `:dispatcher-agent` accordingly.
+The rankings in §3 and §4 therefore remain what they always were: **priors**, telling a future
+benchmark which models to try first. They are not measurements.
 
 ---
+
 
 ## 8. Decisions, open questions & traceability
 

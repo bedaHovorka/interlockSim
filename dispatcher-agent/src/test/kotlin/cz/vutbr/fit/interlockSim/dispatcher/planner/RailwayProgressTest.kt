@@ -164,7 +164,7 @@ class RailwayProgressTest {
 	inner class Unmeasured {
 		/**
 		 * Absent is not zero. Inventing `STARVED` for a run nobody measured would reproduce the
-		 * "structurally empty columns" misreading `docs/GOAL_10_SP2C24_SWEEP_REPORT.md` records.
+		 * "structurally empty columns" misreading #847's sweep recorded.
 		 */
 		@Test
 		@DisplayName("an absent journey count yields no verdict")

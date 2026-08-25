@@ -5,11 +5,16 @@
 on: SP2c.12, SP2c.13, SP2c.23 · Stream: report
 **Status:** Report authored from already-recorded data. **No new simulation runs were performed to
 produce this document.**
-**Primary source:** `docs/GOAL_10_I895_REBASELINE_REPORT.md` (Issue #895, the most recent and most
-authoritative A4 measurement) and the `dispatcherReliabilityReport` tool output it produced —
-`docs/measurement/i895-runs/arm1/report.md` and `docs/measurement/i895-runs/arm2/report.md`.
-**Measured tree:** `b2ed3402` (`goal-10` tip) plus `0655ba2e` (grid files) · **Model:**
+**Primary source:** the #895 A4 re-baseline campaign (60 runs, both arms) and the
+`dispatcherReliabilityReport` tool output it produced.
+**Measured tree:** `b2ed3402` (`goal-10` tip) · **Model:**
 `qwen2.5:7b-instruct` · **Network:** `vyhybna.xml` · **Horizon:** 600 simulated seconds
+
+> **This document is now the surviving record of that campaign.** The raw per-run JSON records,
+> the rendered per-arm aggregates, and the #895/#847/#834 campaign reports were deleted on
+> 2026-08-24 in a deliberate documentation cleanup. Every result worth keeping was folded into
+> this report first — see §2 and §12. Nothing here can be re-derived from the repository any
+> more; it must be taken as the record, or re-measured from scratch.
 
 ---
 
@@ -20,20 +25,18 @@ success rate over N ≥ 10 runs, per arm, with the per-outcome breakdown, produc
 `RunReportAggregator`/`./gradlew dispatcherReliabilityReport` from stored run JSONs. It replaces
 #532's original A5 optimality comparison at ShuntingLoop (`vyhybna.xml`) scale — see §1 for why.
 
-It is **not** a new measurement campaign. Every number below is read from `docs/GOAL_10_I895_REBASELINE_REPORT.md`
-and the two `report.md` files it references, both already committed to the repository. No
-`aiSweep`, no Gradle task that runs the simulator, and no LLM call was executed while writing this
-document. Section 2 states the provenance chain explicitly so a reviewer can verify this claim.
+It is **not** a new measurement campaign. Every number below was read from #895's stored run
+records at the time this report was written. No `aiSweep`, no Gradle task that runs the simulator,
+and no LLM call was executed while writing this document. Section 2 states the provenance chain.
 
 Two independent measurement campaigns exist in the source data and are kept separate throughout
 this report, because collapsing them loses information the gate itself needs:
 
-- **Campaign A** — `sp2c24-sweep-grid.json` / `sp2c24-baseline-grid.json`, `historyN = 3`. The
-  bridge back to #847's original published table. 20 LLM runs (10 at `t = 0.28`, 10 at `t = 0.5`)
+- **Campaign A** — `historyN = 3`, #847's original grid. The bridge back to #847's published
+  table. 20 LLM runs (10 at `t = 0.28`, 10 at `t = 0.5`) + 10 rule-based control runs.
+- **Campaign B** — `historyN = 0`, the parameters #834 shipped as configuration (§12). 20 LLM
+  runs (10 at `t = 0.28`, the shipped default; 10 at `t = 0.5`, an owner-mandated shape match)
   + 10 rule-based control runs.
-- **Campaign B** — `i895-shipped-defaults-grid.json`, `historyN = 0`, the parameters #834 shipped
-  as configuration. 20 LLM runs (10 at `t = 0.28`, the shipped default; 10 at `t = 0.5`, an
-  owner-mandated shape match) + 10 rule-based control runs.
 
 Both campaigns pooled their own rule-based control runs, and both controls are **byte-identical
 and fully deterministic** across all 20 combined control runs (#907 barriered the control step):
@@ -70,21 +73,25 @@ cross-reference this issue's acceptance criteria requires.
 |---|---|
 | Measurement issue | #895 (A4 re-baseline, both arms) |
 | Report-writing issue | #837 / SP2c.14 (this document) |
-| Tree measured | `b2ed3402` (`goal-10` tip) + `0655ba2e` (grid files, documentation-only) |
-| JAR | `sha256 3b56a291461ea8e04d495edcbb17573203aaacf54255b240a8c3e33ecff2ec78` produced every one of the 60 runs |
-| Report-rendering JAR | `sha256 31682d457f8044901f51717f479cbc76ee75197f949099b0b06eb4177080d936` — carries #895's gate changes; this invocation skipped all 60 runs (already on disk) and rendered only |
+| Tree measured | `b2ed3402` (`goal-10` tip) |
 | Model | `qwen2.5:7b-instruct` |
 | Network | `vyhybna.xml` (ShuntingLoop) |
 | Horizon | 600 simulated seconds |
-| Evidence | `docs/measurement/i895-runs/arm1/` (Campaign A), `docs/measurement/i895-runs/arm2/` (Campaign B) |
+| Runs | 60: 40 LLM + 20 rule-based control, one binary across all of them |
+| Evidence | **deleted 2026-08-24.** The tables in §5 are what survives. |
 
 `./gradlew dispatcherReliabilityReport` reads stored `DispatcherRunSnapshot` JSON files from a run
 directory and renders exactly the seven sections referenced as T1–T7 below (see
-`RunReportAggregator`'s own "Sections rendered" KDoc table). It performs no simulation of its own;
-running it against the already-populated `docs/measurement/i895-runs/arm{1,2}/` directories is a
-read-only sanity check, not a new data source, and this document was **not** produced by pasting
-that tool's raw output over hand-written prose — the tables below are synthesized from it, with
-context and honesty caveats folded in per §822/§837's requirements.
+`RunReportAggregator`'s own "Sections rendered" KDoc table). It performs no simulation of its own.
+This document was **not** produced by pasting that tool's raw output over hand-written prose — the
+tables below are synthesized from it, with context and honesty caveats folded in.
+
+**On the deleted evidence.** The 60 per-run JSON records were committed because `build/reports/`
+is gitignored. They were removed in the 2026-08-24 cleanup, together with the #895, #847 and #834
+campaign reports, because they are measurement detail rather than results. The consequence is
+stated plainly rather than hidden: **the figures in §5 can no longer be re-derived inside this
+repository.** A reader who does not accept them must re-run the campaign. Section 12 carries the
+facts from those three reports that future work needs.
 
 ---
 
@@ -142,8 +149,8 @@ gatePassed = runCount >= 10 && passingRuns >= 8 && snapshots.all { it.c7Clean }
 ```
 
 `MIN_ACTIONABLE_RATE = 0.8` and `MIN_TRAINS_EXITED = 6` are both measured constants, not
-placeholders — see their KDoc and #895's Findings A–D for how each was derived and why both are
-tripwires rather than discriminators on this dataset (they change no verdict here; `completedNaturally`
+placeholders — §12.2 carries the derivation of each. Both are tripwires rather than
+discriminators on this dataset (they change no verdict here; `completedNaturally`
 and `c7Clean` are what actually separate passing from failing runs). The actionable-rate clause is
 **not** applied to `RULE_BASED` — that arm records no LLM ticks, so `actionableTickRate = 0.0` by
 construction, and #895 found and fixed the defect where an earlier version of this gate had scored
@@ -157,9 +164,8 @@ deterministic-component correctness gate, not a majority vote.
 ## 5. Tables T1–T7
 
 The seven sections below are named and ordered exactly as `RunReportAggregator.renderMarkdown`
-produces them, so a reader can cross-check any figure against `docs/measurement/i895-runs/arm1/report.md`
-or `arm2/report.md` directly. **T5 (Author Attribution) is the A4 gate's autonomy input and is
-called out first among the per-arm detail tables**, per this issue's acceptance criteria.
+produces them. **T5 (Author Attribution) is the A4 gate's autonomy input and is called out first
+among the per-arm detail tables**, per this issue's acceptance criteria.
 
 ### T1 — Arm Comparison (reliability)
 
@@ -189,7 +195,7 @@ gate is defined over, which is where the pass/fail split in Campaign B (5/10 at 
 `t=0.5`) becomes visible — T1's 8/20 headline hides that Campaign B's better cell alone is close
 to, but still under, the 8/10 bar.
 
-### T2 — Per-Run Detail (condensed; full 40-row tables live in the source `report.md` files)
+### T2 — Per-Run Detail, condensed to cells
 
 | Campaign | Arm / cell | Runs | `NATURAL_COMPLETION` | `TERMINATED_EARLY` | Ticks/run (median) | Actionable rate (range) | `c7Clean` runs |
 |---|---|---|---|---|---|---|---|
@@ -397,11 +403,10 @@ becomes starvation, rather than thrashing against a blocked station.
 ## 7. `LLM_CONSTRAINED_JSON` — no data, and this report says so rather than omitting the arm
 
 Every table in §5 carries a `LLM_CONSTRAINED_JSON` column, and every cell in it reads `0 runs`.
-This is not an oversight: **there is no sweep grid file anywhere in the repository for this arm**,
-and no run JSON exists for it in `docs/measurement/i895-runs/arm1/` or `arm2/`. This gap is
-tracked as Issue #890 and has been carried forward, stated the same way, across at least two prior
-reports (`docs/GOAL_10_SP2C24_SWEEP_REPORT.md`, `docs/GOAL_10_SP2C11_SWEEP_REPORT.md`) rather than
-silently omitted or filled with an invented number. This report follows the same pattern: the arm
+This is not an oversight: **no sweep grid was ever written for this arm**, and no run of it was
+ever recorded. This gap is tracked as Issue #890 and was carried forward, stated the same way,
+across the #847 and #834 reports rather than silently omitted or filled with an invented number.
+This report follows the same pattern: the arm
 is present in every table with an honest zero, and the gate correctly renders it `❌ FAIL` on
 `0 runs` rather than `✅ PASS` on vacuous truth — `gatePassed` requires `runCount >= 10`, so an
 empty arm cannot pass by default. `c7Clean = yes` for this arm in T1 is vacuous for the same
@@ -516,29 +521,79 @@ ShuntingLoop scale.
 
 ---
 
-## 12. Acceptance-criteria checklist
+## 12. Facts carried over from the deleted campaign reports
 
-- [x] **Report generated for all three arms from stored run JSONs via `./gradlew dispatcherReliabilityReport`.**
-  All three arms (`RULE_BASED`, `LLM_TOOL_CALLING`, `LLM_CONSTRAINED_JSON`) appear in every table
-  in §5, synthesized from the already-rendered `docs/measurement/i895-runs/arm1/report.md` and
-  `arm2/report.md`, themselves produced by that Gradle task against #895's stored snapshots. No new
-  simulation was run to write this document (§0, §2).
-- [x] **Tables T1–T7 populated; T5 (author attribution) prominent, since it is the A4 gate input.**
-  See §5. T5 is presented first among the per-arm detail tables and its numbers are the direct
-  explanation for every `c7Clean = no` elsewhere in the report (§5, T5 discussion).
-- [x] **No-op rate and `ALL_PATHS_BLOCKED` presented adjacently, with the interpretation stated.**
-  §6, with the explicit high-no-op/low-blocked = restraint, low-no-op/high-blocked = thrashing
-  rule applied to both campaigns' actual numbers.
-- [x] **`correctAt1`'s limits stated in the report text, not only in code KDoc.** §3.1, quoted and
-  paraphrased in prose, plus applied concretely to why every `correctAt1` cell in this campaign's
-  data reads `n/a`.
-- [x] **A written conclusion on whether A4's ≥ 8/10 bar is met, per arm.** §10, table plus prose,
-  unhedged.
-- [x] **A note that the optimality comparison is a Praha-stage question requiring an OR/MILP
-  yardstick, cross-referenced to #591.** §11.
-- [x] **Report committed under `docs/`; English only (CLAUDE.md hard rule).** This file, at
-  `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`, committed on this branch. No non-English text
-  appears anywhere in this document.
+The 2026-08-24 cleanup deleted three campaign reports — #834 (SP2c.11), #847 (SP2c.24) and #895
+(the A4 re-baseline) — together with all raw run records. Three groups of facts in them are
+load-bearing for future work and are restated here so nothing that the code depends on is
+stranded. Everything else in those reports was measurement detail.
+
+### 12.1 Why each shipped default is what it is (from #834)
+
+`dispatcher-agent/src/main/resources/.../dispatcher-defaults.properties` ships these values, and
+`DispatcherDefaultsResourceTest.shippedResourceMatchesChosenDefaults` locks them. The evidence
+for each, from #834's 90-run LLM sweep plus a 10-run rule-based control:
+
+| Property | Shipped value | Evidence |
+|---|---|---|
+| `promptVariant` | `REVISED` | Prompt A/B: `journeysCompleted` median 8.0 vs 6.0 for `BASELINE`, one-sided exact permutation p = 0.0215. On the authoritative metric `trainsExited` the medians are 8.0 vs 5.5 at p = 0.0598 — **not** significant at 0.05. The prompt change bundled three edits and a 20 % length cut, so no part of the effect may be attributed to token count alone. |
+| `historyN` | `0` | The dominant axis. Pooled 40-vs-40: `c7Clean` 32/40 at `h=0` versus 0/40 at `h=3`; `RULE_FALLBACK`-attributed actions median 0 versus 12. `trainsExited` means are almost equal (6.83 vs 6.90) but the spread is four times tighter (σ 0.54 vs 2.07). The per-cycle history block does not earn its cost. |
+| `temperature` | `0.28` | No measured difference against 0.5 in #834 (16/40 `c7Clean` each, `trainsExited` median 7.0 each). #895 later separated them: 5/10 versus 3/10 passing at the shipped `historyN = 0`. |
+| `inferenceTimeoutSeconds` | `30` | 30 s versus 90 s changed nothing measurable: 16/40 `c7Clean` each, p95 latency median 2698 ms versus 2716 ms, deadline-miss rate 2/40 versus 3/50. The worst single cycle at 90 s took 90 004 ms, so the longer deadline only buys stalls. |
+| `maxActionsPerTick` | `3` | Not swept. Carried from #847's grid. |
+| `tickPeriodMs` | `0` | Not swept; a wall-clock floor only, with no effect on simulated time. |
+
+**Interpretation rule that must survive (from #834).** Every occurrence of
+`SimulationException[FATAL]: Path separator must be an end of this track` seen in these runs is
+thrown at `DefaultPathReservationService` inside a catching `try`. The measured escape rate is
+zero: 137 events across 53 of 89 measured runs, none of which reached the caller. A run log
+carrying these lines **must never be reported as "FATAL exceptions occurred."** `FatalExceptionScanner`
+matches only one of the three throw sites, so its counts undercount rather than overcount.
+
+### 12.2 Where the gate constants came from (from #895)
+
+Both constants live in `RunReportAggregator` and are cited by §4 as measured, not chosen:
+
+- **`MIN_ACTIONABLE_RATE = 0.8`.** Across the 40 LLM runs the actionable rate ranged 0.647–1.000.
+  Among the 23 runs that both completed naturally and cleared the outcome floor, the lowest rate
+  was 0.810. The threshold sits just under that, so it excludes no run that otherwise passed.
+  Sensitivity: a 0.3–0.6 threshold clears 40/40, 0.7 and 0.8 clear 39/40, 0.9 clears 33/40, 0.95
+  clears 25/40.
+- **`MIN_TRAINS_EXITED = 6`.** Half of the deterministic control arm's 11 exits, rounded up. It is
+  specific to `vyhybna.xml` at a 600-second horizon and must be re-derived for any other network
+  or horizon.
+
+Both are **tripwires**: on this dataset they change no verdict. They exist to stop a future run
+from passing while the railway stands still — the case #895 found, where a run was `c7Clean` with
+a perfect actionable rate and zero trains exited.
+
+**Two reading rules that must survive (from #895).**
+1. Campaign A is **not** a replication of #847 and cannot be. #847's grid set no `promptVariant`,
+   so #847 ran a third prompt that no current `PromptVariant` value can select. Any comparison
+   drawn between #847's published numbers and Campaign A's must state this.
+2. Read a run's parameters from its recorded `params`, never from its file-name slug. The slugs
+   in #895's Campaign A read `it-default_pv-default` while the recorded parameters were
+   `inferenceTimeoutSeconds = 30, promptVariant = REVISED`.
+
+### 12.3 The pre-fix baseline the improvement figures are measured against (from #847)
+
+#847 measured the LLM arm deliberately **before** the known defects were fixed. Every
+"improvement" percentage elsewhere in this report is measured against these numbers:
+
+| Quantity | #847 baseline |
+|---|---|
+| Runs passing the gate | 5/10 at `t = 0.28`, 6/10 at `t = 0.5` |
+| C7 clean | 0/20 — every run, including all 11 that then counted as passing, carried 3–6 `RULE_FALLBACK` ticks; the rule dispatcher ran on 15–30 % of ticks in every run |
+| Trains admitted | 2 (LLM) versus 13 (rule-based control) |
+| Movement events | 2 (LLM) versus 173 (rule-based control) |
+| `ALL_PATHS_BLOCKED` | 173 across the 20 LLM runs |
+| Action-cap rejections | 146 total, split 92 at `t = 0.28` and 54 at `t = 0.5` |
+| Direction-guard rejections | 68 `ORIGIN_NOT_AT_TRAIN_POSITION`, 43 `TARGET_NOT_TRAIN_DESTINATION` |
+| Wall clock | about 301 s per LLM run, about 2.6 s per rule-based run |
+
+`c7Clean` counts **attributions, not ticks**: a run can show a small `RULE_FALLBACK` count and
+still have had the deterministic dispatcher act on a large share of its ticks. T5 relies on this
+distinction.
 ---
 
 ## Related
@@ -546,11 +601,11 @@ ShuntingLoop scale.
 - [#822](https://github.com/bedaHovorka/interlockSim/issues/822) — Goal 10 SP2c parent
 - [#837](https://github.com/bedaHovorka/interlockSim/issues/837) — this report (SP2c.14)
 - [#895](https://github.com/bedaHovorka/interlockSim/issues/895) — the A4 re-baseline this report
-  synthesizes; `docs/GOAL_10_I895_REBASELINE_REPORT.md`
+  synthesizes. Its report file was deleted on 2026-08-24; see §12.2.
 - [#847](https://github.com/bedaHovorka/interlockSim/issues/847) — SP2c.24, the earlier sweep
-  campaign #895 re-baselined; `docs/GOAL_10_SP2C24_SWEEP_REPORT.md`
+  campaign #895 re-baselined. Report file deleted on 2026-08-24; see §12.3.
 - [#834](https://github.com/bedaHovorka/interlockSim/issues/834) — SP2c.11, the prompt/history
-  work whose `historyN = 0` cell is Campaign B here; `docs/GOAL_10_SP2C11_SWEEP_REPORT.md`
+  work whose `historyN = 0` cell is Campaign B here. Report file deleted on 2026-08-24; see §12.1.
 - [#890](https://github.com/bedaHovorka/interlockSim/issues/890) — the `LLM_CONSTRAINED_JSON`
   data gap (§7)
 - [#838](https://github.com/bedaHovorka/interlockSim/issues/838) — SP2c.15, the
