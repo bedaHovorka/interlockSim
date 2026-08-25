@@ -20,19 +20,16 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -82,8 +79,6 @@ import java.util.concurrent.atomic.AtomicReference
 @DisplayName("Issue #943: a never-extended train is named in a WARN before the run stops")
 @Tag("integration-test")
 class OwnershipConflictStallWarningTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
 	private val fixture = LiftedStackFixture()
 
 	private lateinit var context: DefaultSimulationContext
@@ -93,11 +88,7 @@ class OwnershipConflictStallWarningTest {
 	@BeforeEach
 	fun setUp() {
 		startKoin { modules(dispatcherAgentTestModule) }
-		context =
-			TestFixtures.loadShuntingXml().use { stream ->
-				val editingContext = xmlContextFactory.createContext(stream) as EditingContext
-				DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-			}
+		context = newShuntingLoopContext()
 		// Attached to the ROOT logger rather than a named one: `Train`'s logger is declared in a
 		// companion object, so its name depends on how kotlin-logging derives it, and this
 		// assertion must not.

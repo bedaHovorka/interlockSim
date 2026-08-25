@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.dispatcher.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
@@ -24,7 +23,6 @@ import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -69,10 +67,7 @@ class LiftedStackFixture(
 	 * [ShuntingLoop] — the dynamic wrapper map must be initialised first.
 	 */
 	fun loadShuntingLoopContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
+		newShuntingLoopContext(xmlContextFactory, processFactory)
 
 	/**
 	 * Wires the full lifted dispatcher-agent stack onto [loop], runs [context] to

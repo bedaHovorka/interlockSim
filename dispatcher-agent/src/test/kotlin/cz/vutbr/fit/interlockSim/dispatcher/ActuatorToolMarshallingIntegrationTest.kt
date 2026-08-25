@@ -14,16 +14,13 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.agents.EmittedActionSink
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -65,9 +62,6 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @Timeout(30, unit = TimeUnit.SECONDS)
 class ActuatorToolMarshallingIntegrationTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
-
 	@BeforeEach
 	fun startKoinForContext() {
 		startKoin { modules(dispatcherAgentTestModule) }
@@ -78,11 +72,7 @@ class ActuatorToolMarshallingIntegrationTest {
 		stopKoin()
 	}
 
-	private fun loadShuntingLoopContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
+	private fun loadShuntingLoopContext(): DefaultSimulationContext = newShuntingLoopContext()
 
 	@Test
 	@DisplayName("actuator tool execute() off-thread queues a decision; onControlStep() applies it on the sim thread")

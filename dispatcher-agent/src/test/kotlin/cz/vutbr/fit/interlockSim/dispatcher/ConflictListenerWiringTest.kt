@@ -13,12 +13,9 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
 import cz.vutbr.fit.interlockSim.sim.Interlocking
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -76,17 +73,7 @@ class ConflictListenerWiringTest {
 	@Test
 	@DisplayName("Listener registered after run() is not added to pendingConflictEventListeners")
 	fun listenerRegisteredAfterRunIsDropped() {
-		val factory = XMLContextFactory()
-		val processFactory = DefaultSimulationProcessFactory()
-
-		val ctx =
-			TestFixtures
-				.loadShuntingXml()
-				.use { stream ->
-					factory.createContext(stream) as EditingContext
-				}.let { editCtx ->
-					DefaultSimulationContext.fromEditingContext(editCtx, processFactory)
-				}
+		val ctx = newShuntingLoopContext()
 		context = ctx
 
 		// Step 1: Register a listener BEFORE run()

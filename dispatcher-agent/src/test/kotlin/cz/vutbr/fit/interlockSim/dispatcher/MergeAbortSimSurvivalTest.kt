@@ -22,9 +22,9 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.newShuntingLoopContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -32,13 +32,10 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -103,9 +100,6 @@ class MergeAbortSimSurvivalTest {
 		const val SIM_END_TIME = 180L
 	}
 
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
-
 	private lateinit var context: DefaultSimulationContext
 	private lateinit var appender: ListAppender<ILoggingEvent>
 	private lateinit var registryLogger: Logger
@@ -113,11 +107,7 @@ class MergeAbortSimSurvivalTest {
 	@BeforeEach
 	fun setUp() {
 		startKoin { modules(dispatcherAgentTestModule) }
-		context =
-			TestFixtures.loadShuntingXml().use { stream ->
-				val editingContext = xmlContextFactory.createContext(stream) as EditingContext
-				DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-			}
+		context = newShuntingLoopContext()
 		registryLogger = LoggerFactory.getLogger(REGISTRY_LOGGER) as Logger
 		appender = ListAppender<ILoggingEvent>().apply { start() }
 		registryLogger.addAppender(appender)
