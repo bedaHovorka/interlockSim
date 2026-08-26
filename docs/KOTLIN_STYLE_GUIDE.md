@@ -1392,61 +1392,6 @@ cat -A src/main/kotlin/cz/vutbr/fit/interlockSim/util/Doubleton.kt | head -20
 cat -A <file>.kt | grep '^	'  # Should show leading tabs
 ```
 
-### SP2c :core Immutability Guard
-
-**Issue:** #823 (SP2c.0), part of the Goal 10 SP2c dispatcher redesign (#822, constraint C10 /
-principle P9)
-
-The root `checkCoreUntouchedBySp2c` task (wired into `check`) fails the build if any file under
-`core/` differs from a frozen baseline commit — the `goal-10` tip at SP2c start — unless the
-path is explicitly allowlisted. The redesign replaces the dispatcher agent's perception, action
-interface, and control loop; every one of those is tempted to reach into `:core` for "just one
-more" query or hook. This guard makes every such change *visible* instead of forbidding them
-outright, so the zero-`:core`-changes rule cannot erode through many small unnoticed edits over
-a multi-week effort.
-
-**Configuration files:**
-- `gradle/sp2c-core-baseline.properties` — `baselineRef=<sha>`, the fixed SP2c-start commit.
-  Compared against a fixed SHA (not `develop` or a moving branch tip) so the check stays stable
-  under rebases. Changing this value moves the enforcement boundary for the whole redesign and
-  should get the same review scrutiny as an allowlist addition.
-- `gradle/sp2c-core-allowlist.txt` — one repo-relative path per line (e.g.
-  `core/src/commonMain/kotlin/.../Foo.kt`), exempting it from the check. **Empty at creation.**
-  Adding a line here is not a mechanical step: it requires an explicit owner decision recorded
-  in the body of the PR that adds it. The guard's purpose is to force that conversation, not to
-  make `:core` changes impossible — genuinely necessary changes (e.g. the pre-existing
-  idempotency guard in `DefaultPathReservationService.reservePath`, which predates SP2c and is
-  a domain invariant rather than SP2c policy) are expected to land as reviewed exceptions.
-
-**Behavior:**
-- **Pass:** no `core/` files changed relative to `baselineRef` (after allowlist filtering).
-- **Fail:** one or more `core/` files changed without an allowlist entry — the task prints the
-  offending paths and throws a `GradleException` listing them.
-- **Skip (not fail):** `baselineRef` is not an ancestor of `HEAD` on the current branch (e.g. an
-  unrelated branch, or a checkout that predates the baseline). Logged at `lifecycle` level;
-  never breaks builds outside the SP2c line of work.
-- **Skip (not fail):** `rootDir` is not inside a git repository at all — e.g. the Docker
-  `test-runner` build context, which `.dockerignore` deliberately keeps free of `.git`. Detected
-  up front via `git rev-parse --is-inside-work-tree` before any baseline comparison, so it stays
-  distinct from a genuinely malformed `baselineRef` (a real repo with a bad ref still fails
-  loudly — see `Sp2cCoreGuardTest`).
-- Requires no network access; the check only shells out to local `git`.
-
-**Implementation:** the git-diffing logic lives in `buildSrc/src/main/kotlin/Sp2cCoreGuard.kt`
-as a plain, side-effect-testable Kotlin object (`Sp2cCoreGuard.evaluate(...)`), extracted out of
-the root build script specifically so it can be unit tested against throwaway git repositories
-without spinning up a nested Gradle build. Tests live in
-`buildSrc/src/test/kotlin/Sp2cCoreGuardTest.kt`, run explicitly with:
-
-```bash
-./gradlew :buildSrc:test
-```
-
-`buildSrc`'s own `test` task does **not** run automatically as part of routine
-`./gradlew build`/`check` invocations (only its main sources are compiled, to put
-`Sp2cCoreGuard` on the root build script's classpath) — verified empirically before adding this
-module, so it never slows down normal builds.
-
 ## Test Fixtures and Utilities
 
 ### Overview
