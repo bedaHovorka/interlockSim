@@ -65,7 +65,6 @@ RUN chmod +x gradlew
 COPY --chown=builder:builder settings.gradle.kts /build/interlockSim/
 COPY --chown=builder:builder gradle.properties /build/interlockSim/
 COPY --chown=builder:builder build.gradle.kts /build/interlockSim/
-COPY --chown=builder:builder buildSrc/ /build/interlockSim/buildSrc/
 COPY --chown=builder:builder detekt.yml /build/interlockSim/
 COPY --chown=builder:builder detekt-strict.yml /build/interlockSim/
 COPY --chown=builder:builder .editorconfig /build/interlockSim/
