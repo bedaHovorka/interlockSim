@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.RepeatedTest
@@ -86,11 +87,7 @@ class ShuntingLoopHeavyTest : KoinTestBase() {
 				Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
 			}
 		context.use { ctx ->
-			ctx.getInOuts()
-			val loop = ShuntingLoop(ctx, endTime = END_TIME)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
-			ctx.run()
+			val loop = runShuntingLoop(ctx, END_TIME)
 
 			assertThat(loop.getTrainsEntered(), name = "trains entered")
 				.isEqualTo(EXPECTED_TRAINS_ENTERED)

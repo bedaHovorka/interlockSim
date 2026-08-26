@@ -9,7 +9,6 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -20,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -69,7 +69,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingContext = TestFixtures.loadShuntingXml().use { editingContextFactory.createContext(it) } as EditingContext
+		val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get elements from grid by coordinates (same as ShuntingLoop)
@@ -280,7 +280,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 		// Simulate train1's tail leaving each reserved block, transitioning blocks
 		// from RESERVED to FREE. In production this is done by Train.Tail.
-		val reservedBlocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks
+		val reservedBlocks = assertReservationSuccess(result1).reservedBlocks
 		reservedBlocks.forEach { block ->
 			block.cancelPathSetup(zA)
 		}

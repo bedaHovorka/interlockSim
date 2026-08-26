@@ -205,6 +205,32 @@ class PausedClockSpikeHarness private constructor(
 		const val DEFAULT_SPEED_MULTIPLIER: Double = 10.0
 
 		/**
+		 * Creates a harness, starts it, waits for tick [minTick], runs [body], and always stops it.
+		 *
+		 * Thirteen paused-clock tests opened with the same four lines — create, `try`, `start()`,
+		 * `awaitTick(minTick = 2L)` — and closed with `finally { stop() }` (Issue #955, cluster U4).
+		 * A harness left running holds a live simulation thread, so the `finally` is not optional;
+		 * folding it in here means a test cannot forget it.
+		 *
+		 * [body] receives the harness and the tick reached before it ran.
+		 */
+		fun <T> withStarted(
+			factory: SimulationContextFactory,
+			minTick: Long = 2L,
+			endTime: Long = 600L,
+			speedMultiplier: Double = DEFAULT_SPEED_MULTIPLIER,
+			body: (PausedClockSpikeHarness, Long) -> T
+		): T {
+			val harness = create(factory, endTime, speedMultiplier)
+			try {
+				harness.start()
+				return body(harness, harness.awaitTick(minTick = minTick))
+			} finally {
+				harness.stop()
+			}
+		}
+
+		/**
 		 * Builds the harness. The caller must supply a Koin-resolved [SimulationContextFactory]
 		 * so the context's scope carries the same navigation-service bindings production uses.
 		 *

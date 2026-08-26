@@ -18,9 +18,7 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.navigation.PathCandidate
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import io.mockk.mockk
+import cz.vutbr.fit.interlockSim.testutil.testCandidate
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -45,19 +43,6 @@ import java.util.concurrent.TimeUnit
 class DispatchDecisionSp2b5Test {
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
-	private fun sections(count: Int): List<TrackSection> = List(count) { mockk<TrackSection>(relaxed = true) }
-
-	private fun candidate(
-		sectionCount: Int = 1,
-		switchMovementCount: Int = 0,
-		conflictRiskWeight: Double = 0.0
-	): PathCandidate =
-		PathCandidate(
-			sections = sections(sectionCount),
-			switchMovementCount = switchMovementCount,
-			conflictRiskWeight = conflictRiskWeight
-		)
-
 	// ── CandidatePathRuleEngine.selectWithRationale ───────────────────────────
 
 	@Nested
@@ -78,8 +63,8 @@ class DispatchDecisionSp2b5Test {
 		@Test
 		@DisplayName("returns the best candidate and a non-empty rationale list")
 		fun nonEmptyList_returnsBestCandidateAndRationale() {
-			val safer = candidate(conflictRiskWeight = 0.1)
-			val riskier = candidate(conflictRiskWeight = 0.9)
+			val safer = testCandidate(conflictRiskWeight = 0.1)
+			val riskier = testCandidate(conflictRiskWeight = 0.9)
 
 			val (selected, rationale) = engine.selectWithRationale(listOf(riskier, safer))
 
@@ -90,7 +75,7 @@ class DispatchDecisionSp2b5Test {
 		@Test
 		@DisplayName("rationale includes the active priority rules in order")
 		fun rationaleListsActiveRules() {
-			val only = candidate()
+			val only = testCandidate()
 
 			val (_, rationale) = engine.selectWithRationale(listOf(only))
 
@@ -103,7 +88,7 @@ class DispatchDecisionSp2b5Test {
 		@Test
 		@DisplayName("rationale includes selected candidate's key metrics (sections, switches, risk)")
 		fun rationaleContainsSelectedMetrics() {
-			val c = candidate(sectionCount = 3, switchMovementCount = 1, conflictRiskWeight = 0.5)
+			val c = testCandidate(sectionCount = 3, switchMovementCount = 1, conflictRiskWeight = 0.5)
 
 			val (_, rationale) = engine.selectWithRationale(listOf(c))
 
@@ -116,9 +101,9 @@ class DispatchDecisionSp2b5Test {
 		@Test
 		@DisplayName("rationale mentions candidate count when multiple candidates present")
 		fun rationaleIncludesCandidateCount() {
-			val a = candidate(sectionCount = 1)
-			val b = candidate(sectionCount = 2)
-			val c = candidate(sectionCount = 3)
+			val a = testCandidate(sectionCount = 1)
+			val b = testCandidate(sectionCount = 2)
+			val c = testCandidate(sectionCount = 3)
 
 			val (_, rationale) = engine.selectWithRationale(listOf(a, b, c))
 
@@ -129,8 +114,8 @@ class DispatchDecisionSp2b5Test {
 		@Test
 		@DisplayName("select() still delegates to selectWithRationale and returns the same candidate")
 		fun selectDelegatesToSelectWithRationale() {
-			val safer = candidate(conflictRiskWeight = 0.1)
-			val riskier = candidate(conflictRiskWeight = 0.9)
+			val safer = testCandidate(conflictRiskWeight = 0.1)
+			val riskier = testCandidate(conflictRiskWeight = 0.9)
 
 			val fromSelect = engine.select(listOf(riskier, safer))
 			val (fromWithRationale, _) = engine.selectWithRationale(listOf(riskier, safer))
@@ -141,13 +126,13 @@ class DispatchDecisionSp2b5Test {
 		@Test
 		@DisplayName("single candidate: rationale still lists rules and metrics")
 		fun singleCandidate_rationaleComplete() {
-			val only = candidate(sectionCount = 2, switchMovementCount = 0, conflictRiskWeight = 0.0)
+			val only = testCandidate(sectionCount = 2, switchMovementCount = 0, conflictRiskWeight = 0.0)
 
 			val (selected, rationale) = engine.selectWithRationale(listOf(only))
 
 			assertThat(selected).isSameInstanceAs(only)
 			assertThat(rationale).isNotEmpty()
-			// "Ranked N candidate(s)" entry is only added when more than one candidate
+			// "Ranked N testCandidate(s)" entry is only added when more than one candidate
 			val countEntry = rationale.firstOrNull { it.startsWith("Ranked") }
 			assertThat(countEntry).isNull()
 		}
@@ -163,7 +148,7 @@ class DispatchDecisionSp2b5Test {
 							CandidatePathRuleEngine.Rule.FEWEST_SWITCH_MOVEMENTS
 						)
 				)
-			val only = candidate()
+			val only = testCandidate()
 
 			val (_, rationale) = customEngine.selectWithRationale(listOf(only))
 
@@ -201,7 +186,7 @@ class DispatchDecisionSp2b5Test {
 		@DisplayName("rationale from CandidatePathRuleEngine is assignable to DispatchDecision.rationale")
 		fun ruleEngineRationaleAssignableToDecision() {
 			val engine = CandidatePathRuleEngine()
-			val (_, rationale) = engine.selectWithRationale(listOf(candidate()))
+			val (_, rationale) = engine.selectWithRationale(listOf(testCandidate()))
 
 			// Simulate what a future dispatcher would do: assign rule-engine rationale to a decision
 			val decision = DispatchDecision.ApproveTrain("T1", rationale = rationale)

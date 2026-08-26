@@ -68,6 +68,21 @@ import java.util.concurrent.TimeUnit
 @DisplayName("InterlockingFacade — ESA-11 four-condition kernel")
 @Timeout(30, unit = TimeUnit.SECONDS)
 class InterlockingFacadeTest : KoinTestBase() {
+	/**
+	 * The route this suite tests against: `S1 → S2` over block `U1`, no switches.
+	 *
+	 * 25 of the 25 [TrainRoute] constructions in this file were that same route with at most one
+	 * field changed, spelled out in full each time (Issue #955, cluster C7). Override only the
+	 * field the test under way actually varies.
+	 */
+	private fun routeS1S2(
+		from: SignalId = SignalId("S1"),
+		to: SignalId = SignalId("S2"),
+		blocks: List<BlockId> = listOf(BlockId("U1")),
+		running: List<SwitchSetting> = emptyList(),
+		flank: List<SwitchSetting> = emptyList()
+	): TrainRoute = TrainRoute(from = from, to = to, blocks = blocks, running = running, flank = flank)
+
 	override fun getTestModule(): Module =
 		module {
 			// Import core module with InterlockingFacade binding
@@ -96,13 +111,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 		val trainId = "T1"
 		val entrySignal = SignalId("S1")
 		val route =
-			TrainRoute(
-				from = SignalId("S1"),
-				to = SignalId("S2"),
-				blocks = listOf(BlockId("U1")),
-				running = emptyList(),
-				flank = emptyList()
-			)
+			routeS1S2()
 		val clearedAspect = Aspect.Volno
 
 		val response = facade.requestRoute(trainId, entrySignal, route, clearedAspect)
@@ -123,13 +132,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 		val trainId = "T1"
 		val entrySignal = SignalId("S1")
 		val route =
-			TrainRoute(
-				from = SignalId("S1"),
-				to = SignalId("S2"),
-				blocks = emptyList(),
-				running = emptyList(),
-				flank = emptyList()
-			)
+			routeS1S2(blocks = emptyList())
 		val clearedAspect = Aspect.Volno
 
 		val response = facade.requestRoute(trainId, entrySignal, route, clearedAspect)
@@ -156,13 +159,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 		val trainId = "T1"
 		val entrySignal = SignalId("S1")
 		val route =
-			TrainRoute(
-				from = SignalId("S1"),
-				to = SignalId("S2"),
-				blocks = listOf(BlockId("U1")),
-				running = emptyList(),
-				flank = emptyList()
-			)
+			routeS1S2()
 		val clearedAspect = Aspect.Volno
 
 		val response = facade.requestRoute(trainId, entrySignal, route, clearedAspect)
@@ -199,21 +196,9 @@ class InterlockingFacadeTest : KoinTestBase() {
 	@Test
 	fun `multiple sequential route requests are independent`() {
 		val route1 =
-			TrainRoute(
-				from = SignalId("S1"),
-				to = SignalId("S2"),
-				blocks = listOf(BlockId("U1")),
-				running = emptyList(),
-				flank = emptyList()
-			)
+			routeS1S2()
 		val route2 =
-			TrainRoute(
-				from = SignalId("S2"),
-				to = SignalId("S3"),
-				blocks = listOf(BlockId("U2")),
-				running = emptyList(),
-				flank = emptyList()
-			)
+			routeS1S2(from = SignalId("S2"), to = SignalId("S3"), blocks = listOf(BlockId("U2")))
 
 		val response1 = facade.requestRoute("T1", SignalId("S1"), route1, Aspect.Volno)
 		val response2 = facade.requestRoute("T2", SignalId("S2"), route2, Aspect.Volno)
@@ -363,12 +348,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -385,7 +365,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), semaphores = listOf(semaphore("S1")))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(from = SignalId("S1"), to = SignalId("S2"), blocks = listOf(BlockId("U1")), running = emptyList())
+				routeS1S2(running = emptyList())
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -410,12 +390,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -438,7 +413,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), semaphores = listOf(s1))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(from = SignalId("S1"), to = SignalId("S2"), blocks = listOf(BlockId("U1")), running = emptyList())
+				routeS1S2(running = emptyList())
 			val firstGrant = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 			assertThat(firstGrant).isInstanceOf(InterlockingFacade.RouteResponse.Granted::class)
 
@@ -457,12 +432,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
 			facade.releaseRoute("T1", SignalId("S1"))
@@ -482,7 +452,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(semaphores = listOf(semaphore("S1")))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(from = SignalId("S1"), to = SignalId("S2"), blocks = listOf(BlockId("NOPE")), running = emptyList())
+				routeS1S2(blocks = listOf(BlockId("NOPE")), running = emptyList())
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -499,12 +469,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -523,12 +488,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 
 			// Vystraha.toSignal() == null → signal cannot be cleared → Granted must not be returned.
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Vystraha)
@@ -549,12 +509,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -573,13 +528,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = emptyList(),
-					flank = listOf(plusSetting)
-				)
+				routeS1S2(flank = listOf(plusSetting))
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -597,12 +546,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1, s2))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 			assertThat(s1.signal).isEqualTo(Signal.FREE) // entry cleared
 
@@ -629,12 +573,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 				)
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 			// Grant succeeds — releasePath is not called on a successful grant.
 			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -651,12 +590,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1)) // no semaphores → "S1" unknown
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = emptyList()
-				)
+				routeS1S2()
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
@@ -674,12 +608,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = listOf(plusSetting)
-				)
+				routeS1S2(running = listOf(plusSetting))
 			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 			assertThat(s1.signal).isEqualTo(Signal.FREE)
 
@@ -697,12 +626,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1), semaphores = listOf(semaphore("S1"), semaphore("S2")))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
-					blocks = listOf(BlockId("U1")),
-					running = emptyList()
-				)
+				routeS1S2()
 
 			val response = facade.requestRoute("T1", SignalId("S2"), route, Aspect.Volno) // entry != from
 
@@ -723,9 +647,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val (e, registry) = env(blocks = listOf(u1, u2), switches = listOf(v1, v2), semaphores = listOf(s1))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
-				TrainRoute(
-					from = SignalId("S1"),
-					to = SignalId("S2"),
+				routeS1S2(
 					blocks = listOf(BlockId("U1"), BlockId("U2")),
 					running = listOf(plusSetting, SwitchSetting(SwitchId("V2"), SwitchPosition.MINUS))
 				)
@@ -873,12 +795,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 				val facade = DefaultInterlockingFacade(e, registry)
 				val route =
-					TrainRoute(
-						from = SignalId("S1"),
-						to = SignalId("S2"),
-						blocks = listOf(BlockId("U1")),
-						running = listOf(plusSetting)
-					)
+					routeS1S2(running = listOf(plusSetting))
 
 				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 				assertThat(s1.signal).isEqualTo(Signal.FREE)
@@ -898,12 +815,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 				val facade = DefaultInterlockingFacade(e, registry)
 				val route =
-					TrainRoute(
-						from = SignalId("S1"),
-						to = SignalId("S2"),
-						blocks = listOf(BlockId("U1")),
-						running = listOf(plusSetting)
-					)
+					routeS1S2(running = listOf(plusSetting))
 				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 				val service = e.getRoutingServices().getPathReservationService()
 				service.releasePath("T1")
@@ -924,12 +836,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 				val facade = DefaultInterlockingFacade(e, registry)
 				val route =
-					TrainRoute(
-						from = SignalId("S1"),
-						to = SignalId("S2"),
-						blocks = listOf(BlockId("U1")),
-						running = listOf(plusSetting)
-					)
+					routeS1S2(running = listOf(plusSetting))
 				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 				facade.releaseRoute("T1", SignalId("S1"))
 				assertThat(s1.signal).isEqualTo(Signal.STOP)
@@ -949,12 +856,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 				val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
 				val facade = DefaultInterlockingFacade(e, registry)
 				val route =
-					TrainRoute(
-						from = SignalId("S1"),
-						to = SignalId("S2"),
-						blocks = listOf(BlockId("U1")),
-						running = listOf(plusSetting)
-					)
+					routeS1S2(running = listOf(plusSetting))
 				facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 				assertThat(s1.signal).isEqualTo(Signal.FREE)
 

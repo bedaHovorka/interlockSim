@@ -35,18 +35,19 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
+import cz.vutbr.fit.interlockSim.testutil.assertReservedBlocks
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
@@ -59,7 +60,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.koin.test.inject
-import java.io.InputStream
 
 /**
  * Comprehensive test suite for PathReservationService.
@@ -101,13 +101,7 @@ class PathReservationServiceTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml from resources
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 		environment = simulationContext
 
@@ -150,10 +144,8 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Verify all blocks are DynamicTrackBlock instances (not separators) with correct ownership
 			success.reservedBlocks.forEach { block ->
 				assertThat(block).isInstanceOf(DynamicTrackBlock::class)
-				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
-				assertThat(block.reservedFrom).isEqualTo(inOut1)
-				assertThat(block.trainName).isEqualTo("train1")
 			}
+			assertReservedBlocks(success.reservedBlocks, "train1", inOut1)
 		}
 
 		@Test
@@ -364,7 +356,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePath("train1", inOut1, inOut2)
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val blocks = assertReservationSuccess(result).reservedBlocks
 
 			// Act
 			val released = service.releasePath("train1")
@@ -462,7 +454,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Assert
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val blocks = assertReservationSuccess(result).reservedBlocks
 			blocks.forEach { block -> assertThat(block.trainName).isEqualTo("train123") }
 		}
 
@@ -472,17 +464,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePath("train1", inOut1, inOut2)
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val blocks = assertReservationSuccess(result).reservedBlocks
 			val firstBlock = blocks.first()
 
 			val occupant =
-				object : TrackOccupant {
-					override val name: String = "test-occupant"
-
-					override fun distanceToSemaphore(): Double = 0.0
-
-					override fun nextSemaphore(): cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator? = null
-				}
+				FakeTrackOccupant("test-occupant")
 
 			firstBlock.enter(occupant)
 
@@ -507,18 +493,13 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePathToAnyNextSemaphore("train1", inOut1, next!!)
 
 			// Assert
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 			assertThat(success.reservedBlocks).isNotNull()
 			// vyhybna.xml: inOut1 (11,8) -> first semaphore at (14,8) = 1 block
 			assertThat(success.reservedBlocks.size).isEqualTo(1)
 
 			// Verify all blocks are RESERVED
-			success.reservedBlocks.forEach { block ->
-				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
-				assertThat(block.reservedFrom).isEqualTo(inOut1)
-				assertThat(block.trainName).isEqualTo("train1")
-			}
+			assertReservedBlocks(success.reservedBlocks, "train1", inOut1)
 		}
 
 		@Test
@@ -1087,7 +1068,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Assert Train1 succeeded
 			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val train1Blocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks
+			val train1Blocks = assertReservationSuccess(result1).reservedBlocks
 
 			// Act - Train2 reserves from zB (opposite direction)
 			val result2 = service.reservePathToAny("train2", zB)
@@ -1154,7 +1135,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Step 1: Train1 reserves explicit path
 			val result1 = service.reservePath("train1", inOut1, target)
 			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val train1Blocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks
+			val train1Blocks = assertReservationSuccess(result1).reservedBlocks
 
 			// Step 2: Train2 attempts same explicit path (TOCTOU window)
 			val result2 = service.reservePath("train2", inOut1, target)
@@ -1200,7 +1181,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Step 1: Train1 reserves explicit path
 			val result1 = service.reservePath("train1", inOut1, inOut2)
 			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val train1Blocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks
+			val train1Blocks = assertReservationSuccess(result1).reservedBlocks
 			assertThat(train1Blocks).isNotEmpty()
 			// Verify all blocks are owned by train1
 			train1Blocks.forEach { block ->
@@ -1253,7 +1234,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - Train1 reserves from zA
 			val result1 = service.reservePathToAny("train1", zA)
 			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val train1Blocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+			val train1Blocks = assertReservationSuccess(result1).reservedBlocks.toSet()
 
 			// Act - Train2 attempts from zB (opposite direction)
 			val result2 = service.reservePathToAny("train2", zB)
@@ -1376,7 +1357,7 @@ class PathReservationServiceTest : KoinTestBase() {
 				// Reserve
 				val result = service.reservePathToAny(trainId, zA)
 				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-				val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+				val blocks = assertReservationSuccess(result).reservedBlocks
 
 				// Verify ownership
 				blocks.forEach { block ->
@@ -1461,8 +1442,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// START/target boundary semaphores.
 			val result = service.reservePath("train1", inOut1, inOut2)
 
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 
 			// Every semaphore that GOVERNS this movement must be configured to allow it -- one
 			// left at STOP means a train halts there forever (Issue #296 Phase 4 / Step 2h
@@ -1638,8 +1618,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		@Test
 		fun `releasePath returns every semaphore it cleared to STOP`() {
 			val result = service.reservePath("train1", inOut1, inOut2)
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 
 			val semaphoresOnPath = semaphoresBounding(success.reservedBlocks)
 			// Guard: if nothing was cleared the assertion below would pass vacuously.
@@ -1654,8 +1633,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		fun `unregister returns every semaphore it cleared to STOP`() {
 			// unregister() is the production train-completion path (Train -> releaseTrainReservations).
 			val result = service.reservePath("train1", inOut1, inOut2)
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 
 			val semaphoresOnPath = semaphoresBounding(success.reservedBlocks)
 			assertThat(semaphoresOnPath.filter { it.signal.isAllowing() }).isNotEmpty()
@@ -1761,7 +1739,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		fun `unregisterBlock returns the semaphores guarding the released block to STOP`() {
 			val result = service.reservePath("t1", inOutNamed("A"), inOutNamed("B"))
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val blocks = assertReservationSuccess(result).reservedBlocks
 			val firstBlock = blocks.first()
 
 			val releasedBoundary = firstBlock.ends().filterIsInstance<DynamicRailSemaphore>()
@@ -1836,7 +1814,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val doB1 = findSemaphoreByName("doB1")
 			val result = service.reservePath("t1", zA, findSemaphoreByName("zB"))
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+			val blocks = assertReservationSuccess(result).reservedBlocks
 			val firstBlock = blocks.first()
 			assertThat(firstBlock.ends().toList()).contains(zA)
 
@@ -1892,8 +1870,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// then never returns to danger, because the reset at the end of semaphoreAction is on
 			// exactly the path that was skipped.
 			val result = service.reservePath("train1", inOut1, inOut2)
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 
 			val lit = semaphoresBounding(success.reservedBlocks).filter { it.signal.isAllowing() }
 
@@ -1925,13 +1902,13 @@ class PathReservationServiceTest : KoinTestBase() {
 			// is precisely the defect: an A→B route lighting the signals that authorise B→A.
 			val aToB = service.reservePath("eastbound", inOutNamed("A"), inOutNamed("B"))
 			assertThat(aToB).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val litEastbound = litSemaphoreNames((aToB as PathReservationService.ReservationResult.Success))
+			val litEastbound = litSemaphoreNames(assertReservationSuccess(aToB))
 
 			service.releasePath("eastbound")
 
 			val bToA = service.reservePath("westbound", inOutNamed("B"), inOutNamed("A"))
 			assertThat(bToA).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val litWestbound = litSemaphoreNames((bToA as PathReservationService.ReservationResult.Success))
+			val litWestbound = litSemaphoreNames(assertReservationSuccess(bToA))
 
 			assertThat(litEastbound).isNotEmpty()
 			assertThat(litWestbound).isNotEmpty()
@@ -1953,8 +1930,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val zA = findSemaphoreByName("zA")
 			val doB1 = findSemaphoreByName("doB1")
 			val partial = service.reservePath("t1", zA, findSemaphoreByName("zB"))
-			assertThat(partial).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val partialSuccess = partial as PathReservationService.ReservationResult.Success
+			val partialSuccess = assertReservationSuccess(partial)
 
 			val clearedByPartial =
 				semaphoresBounding(partialSuccess.reservedBlocks).filter { it.signal.isAllowing() }
@@ -2166,18 +2142,13 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePathToAnyNextSemaphore("train1", inOut1 as DynamicInOut)
 
 			// Assert
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 			assertThat(success.reservedBlocks).isNotNull()
 			// vyhybna.xml: inOut1 (11,8) -> first semaphore at (14,8) = 1 block
 			assertThat(success.reservedBlocks.size).isEqualTo(1)
 
 			// Verify all blocks are RESERVED
-			success.reservedBlocks.forEach { block ->
-				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
-				assertThat(block.reservedFrom).isEqualTo(inOut1)
-				assertThat(block.trainName).isEqualTo("train1")
-			}
+			assertReservedBlocks(success.reservedBlocks, "train1", inOut1)
 		}
 
 		@Test
@@ -2240,8 +2211,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePathToAnyNextSemaphore("train1", staticInOut)
 
 			// Assert
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 			assertThat(success.reservedBlocks).isNotEmpty()
 			// Verify all blocks are dynamic wrappers
 			success.reservedBlocks.forEach { block ->
@@ -2474,8 +2444,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - first train
 			val result1 = service.reservePathToAnyNextSemaphore(firstTrainId, firstSemaphore)
 			// Assert
-			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success1 = result1 as PathReservationService.ReservationResult.Success
+			val success1 = assertReservationSuccess(result1)
 			val blocks1 = success1.reservedBlocks
 
 			blocks1.forEach { block ->
@@ -2491,8 +2460,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - second train
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success2 = result2 as PathReservationService.ReservationResult.Success
+			val success2 = assertReservationSuccess(result2)
 			val blocks2 = success2.reservedBlocks
 
 			blocks2.forEach { block ->
@@ -2611,8 +2579,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - first train
 			val result1 = service.reservePathToAnyNextSemaphore(firstTrainId, firstSemaphore)
 			// Assert
-			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success1 = result1 as PathReservationService.ReservationResult.Success
+			val success1 = assertReservationSuccess(result1)
 			val blocks1 = success1.reservedBlocks
 
 			blocks1.forEach { block ->
@@ -2628,8 +2595,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - second train
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success2 = result2 as PathReservationService.ReservationResult.Success
+			val success2 = assertReservationSuccess(result2)
 			val blocks2 = success2.reservedBlocks
 
 			blocks2.forEach { block ->
@@ -2663,8 +2629,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Act - first train
 			val result1 = service.reservePathToAnyNextSemaphore(firstTrainId, firstSemaphore)
 			// Assert
-			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success1 = result1 as PathReservationService.ReservationResult.Success
+			val success1 = assertReservationSuccess(result1)
 			val blocks1 = success1.reservedBlocks
 			blocks1.forEach { block ->
 				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
@@ -2804,8 +2769,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			environment.addBlockOccupancyListener(listener)
 
 			val result = service.reservePath("train1", inOut1, inOut2)
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 
 			assertThat(listener.events).hasSize(success.reservedBlocks.size)
 			listener.events.forEach { event ->
@@ -2835,8 +2799,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			environment.addBlockOccupancyListener(listener)
 
 			val result = service.reservePath("train1", inOut1, inOut2)
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 			val reservedCount = success.reservedBlocks.size
 
 			// Clear reserve events so we can count releases in isolation
@@ -2860,8 +2823,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			environment.addBlockOccupancyListener(listener)
 
 			val result = service.reservePath("train1", inOut1, inOut2)
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			val success = result as PathReservationService.ReservationResult.Success
+			val success = assertReservationSuccess(result)
 			val firstBlock = success.reservedBlocks.first()
 
 			// unregisterBlock only releases FREE blocks (production path is after block.leave()).
@@ -3184,13 +3146,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		) {
 			block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
 			block.enter(
-				object : TrackOccupant {
-					override val name: String = trainId
-
-					override fun distanceToSemaphore(): Double = 0.0
-
-					override fun nextSemaphore(): OrientedPathSeparator? = null
-				}
+				FakeTrackOccupant(trainId)
 			)
 		}
 	}
@@ -3369,13 +3325,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		) {
 			block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
 			block.enter(
-				object : TrackOccupant {
-					override val name: String = trainId
-
-					override fun distanceToSemaphore(): Double = 0.0
-
-					override fun nextSemaphore(): OrientedPathSeparator? = null
-				}
+				FakeTrackOccupant(trainId)
 			)
 		}
 	}
@@ -3389,7 +3339,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePath("train1", inOut1, inOut2)
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val reservedBlocks =
-				(result as PathReservationService.ReservationResult.Success).reservedBlocks
+				assertReservationSuccess(result).reservedBlocks
 			assertThat(reservedBlocks).isNotEmpty()
 			reservedBlocks.forEach {
 				assertThat(it.getState()).isEqualTo(TrackFacility.State.RESERVED)
@@ -3429,7 +3379,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePath("train1", inOut1, inOut2)
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val firstBlock =
-				(result as PathReservationService.ReservationResult.Success).reservedBlocks.first()
+				assertReservationSuccess(result).reservedBlocks.first()
 
 			// The governing semaphores bounding the first block that reservePath cleared to proceed.
 			val governedSemaphores =
@@ -3439,13 +3389,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Drive the first block to FREE the production way (enter then leave). enter/leave do
 			// not reset signal aspects, so the governing semaphore is still proceed afterwards.
 			val occupant =
-				object : TrackOccupant {
-					override val name: String = "test-occupant"
-
-					override fun distanceToSemaphore(): Double = 0.0
-
-					override fun nextSemaphore(): OrientedPathSeparator? = null
-				}
+				FakeTrackOccupant("test-occupant")
 			firstBlock.enter(occupant)
 			firstBlock.leave(occupant)
 			assertThat(firstBlock.getState()).isEqualTo(TrackFacility.State.FREE)

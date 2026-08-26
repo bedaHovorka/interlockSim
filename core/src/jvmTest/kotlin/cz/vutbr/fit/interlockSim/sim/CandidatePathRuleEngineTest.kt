@@ -20,6 +20,8 @@ import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.navigation.PathCandidate
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.testutil.testCandidate
+import cz.vutbr.fit.interlockSim.testutil.testSections
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -42,19 +44,6 @@ import java.util.concurrent.TimeUnit
 class CandidatePathRuleEngineTest {
 	// ── Test data builders ────────────────────────────────────────────────────
 
-	private fun sections(count: Int): List<TrackSection> = List(count) { mockk<TrackSection>(relaxed = true) }
-
-	private fun candidate(
-		sectionCount: Int = 1,
-		switchMovementCount: Int = 0,
-		conflictRiskWeight: Double = 0.0
-	): PathCandidate =
-		PathCandidate(
-			sections = sections(sectionCount),
-			switchMovementCount = switchMovementCount,
-			conflictRiskWeight = conflictRiskWeight
-		)
-
 	// ── Default priority: conflict risk → shortest path → switch movements ────
 
 	@Nested
@@ -65,8 +54,8 @@ class CandidatePathRuleEngineTest {
 		@Test
 		@DisplayName("ranks lowest conflict risk first, ahead of a shorter but riskier route")
 		fun conflictRiskDominates() {
-			val short = candidate(sectionCount = 1, conflictRiskWeight = 0.9)
-			val safe = candidate(sectionCount = 5, conflictRiskWeight = 0.1)
+			val short = testCandidate(sectionCount = 1, conflictRiskWeight = 0.9)
+			val safe = testCandidate(sectionCount = 5, conflictRiskWeight = 0.1)
 
 			val ranked = engine.rank(listOf(short, safe))
 
@@ -76,8 +65,8 @@ class CandidatePathRuleEngineTest {
 		@Test
 		@DisplayName("breaks equal conflict risk by shortest path")
 		fun shortestPathBreaksTie() {
-			val long = candidate(sectionCount = 4, conflictRiskWeight = 0.3)
-			val shortRoute = candidate(sectionCount = 2, conflictRiskWeight = 0.3)
+			val long = testCandidate(sectionCount = 4, conflictRiskWeight = 0.3)
+			val shortRoute = testCandidate(sectionCount = 2, conflictRiskWeight = 0.3)
 
 			val ranked = engine.rank(listOf(long, shortRoute))
 
@@ -87,8 +76,8 @@ class CandidatePathRuleEngineTest {
 		@Test
 		@DisplayName("breaks equal conflict risk and length by fewest switch movements")
 		fun switchMovementsBreakTie() {
-			val manySwitches = candidate(sectionCount = 3, switchMovementCount = 2, conflictRiskWeight = 0.0)
-			val fewSwitches = candidate(sectionCount = 3, switchMovementCount = 1, conflictRiskWeight = 0.0)
+			val manySwitches = testCandidate(sectionCount = 3, switchMovementCount = 2, conflictRiskWeight = 0.0)
+			val fewSwitches = testCandidate(sectionCount = 3, switchMovementCount = 1, conflictRiskWeight = 0.0)
 
 			val ranked = engine.rank(listOf(manySwitches, fewSwitches))
 
@@ -119,8 +108,8 @@ class CandidatePathRuleEngineTest {
 						CandidatePathRuleEngine.Rule.LOWEST_CONFLICT_RISK
 					)
 			)
-		val shortRiskier = candidate(sectionCount = 1, conflictRiskWeight = 0.9)
-		val longerSafer = candidate(sectionCount = 5, conflictRiskWeight = 0.1)
+		val shortRiskier = testCandidate(sectionCount = 1, conflictRiskWeight = 0.9)
+		val longerSafer = testCandidate(sectionCount = 5, conflictRiskWeight = 0.1)
 
 		val ranked = engine.rank(listOf(longerSafer, shortRiskier))
 
@@ -131,9 +120,9 @@ class CandidatePathRuleEngineTest {
 	@DisplayName("single-rule engine ranks purely by that rule")
 	fun singleRuleEngine() {
 		val engine = CandidatePathRuleEngine(priority = listOf(CandidatePathRuleEngine.Rule.FEWEST_SWITCH_MOVEMENTS))
-		val a = candidate(switchMovementCount = 3)
-		val b = candidate(switchMovementCount = 0)
-		val c = candidate(switchMovementCount = 1)
+		val a = testCandidate(switchMovementCount = 3)
+		val b = testCandidate(switchMovementCount = 0)
+		val c = testCandidate(switchMovementCount = 1)
 
 		val ranked = engine.rank(listOf(a, b, c))
 
@@ -146,8 +135,8 @@ class CandidatePathRuleEngineTest {
 	@DisplayName("candidates equal under every rule keep their input order (stable)")
 	fun stableForEqualCandidates() {
 		val engine = CandidatePathRuleEngine()
-		val first = candidate(sectionCount = 2, switchMovementCount = 1, conflictRiskWeight = 0.5)
-		val second = candidate(sectionCount = 2, switchMovementCount = 1, conflictRiskWeight = 0.5)
+		val first = testCandidate(sectionCount = 2, switchMovementCount = 1, conflictRiskWeight = 0.5)
+		val second = testCandidate(sectionCount = 2, switchMovementCount = 1, conflictRiskWeight = 0.5)
 
 		val ranked = engine.rank(listOf(first, second))
 
@@ -160,9 +149,9 @@ class CandidatePathRuleEngineTest {
 		val engine = CandidatePathRuleEngine()
 		val candidates =
 			listOf(
-				candidate(sectionCount = 3, switchMovementCount = 1, conflictRiskWeight = 0.4),
-				candidate(sectionCount = 1, switchMovementCount = 2, conflictRiskWeight = 0.1),
-				candidate(sectionCount = 2, switchMovementCount = 0, conflictRiskWeight = 0.4)
+				testCandidate(sectionCount = 3, switchMovementCount = 1, conflictRiskWeight = 0.4),
+				testCandidate(sectionCount = 1, switchMovementCount = 2, conflictRiskWeight = 0.1),
+				testCandidate(sectionCount = 2, switchMovementCount = 0, conflictRiskWeight = 0.4)
 			)
 
 		val first = engine.rank(candidates)
@@ -175,8 +164,8 @@ class CandidatePathRuleEngineTest {
 	@DisplayName("rank does not mutate the input list")
 	fun rankDoesNotMutateInput() {
 		val engine = CandidatePathRuleEngine()
-		val riskier = candidate(conflictRiskWeight = 0.9)
-		val safer = candidate(conflictRiskWeight = 0.1)
+		val riskier = testCandidate(conflictRiskWeight = 0.9)
+		val safer = testCandidate(conflictRiskWeight = 0.1)
 		val input = listOf(riskier, safer)
 
 		engine.rank(input)
@@ -195,7 +184,7 @@ class CandidatePathRuleEngineTest {
 	@Test
 	@DisplayName("rank of a single candidate returns it")
 	fun rankSingle() {
-		val only = candidate()
+		val only = testCandidate()
 		assertThat(CandidatePathRuleEngine().rank(listOf(only))).containsExactly(only)
 	}
 
@@ -203,8 +192,8 @@ class CandidatePathRuleEngineTest {
 	@DisplayName("select returns the best candidate")
 	fun selectReturnsBest() {
 		val engine = CandidatePathRuleEngine()
-		val riskier = candidate(conflictRiskWeight = 0.9)
-		val safer = candidate(conflictRiskWeight = 0.1)
+		val riskier = testCandidate(conflictRiskWeight = 0.9)
+		val safer = testCandidate(conflictRiskWeight = 0.1)
 
 		assertThat(engine.select(listOf(riskier, safer))).isSameInstanceAs(safer)
 	}
@@ -239,7 +228,7 @@ class CandidatePathRuleEngineTest {
 		@Test
 		@DisplayName("assigns 0.0 when no section is busy")
 		fun allFree() {
-			val candidate = PathCandidate(sections = sections(3), switchMovementCount = 0, conflictRiskWeight = 0.5)
+			val candidate = PathCandidate(sections = testSections(3), switchMovementCount = 0, conflictRiskWeight = 0.5)
 
 			val enriched = engine.assignConflictRisk(listOf(candidate)) { false }
 
@@ -249,7 +238,7 @@ class CandidatePathRuleEngineTest {
 		@Test
 		@DisplayName("assigns 1.0 when every section is busy")
 		fun allBusy() {
-			val candidate = PathCandidate(sections = sections(2), switchMovementCount = 0)
+			val candidate = PathCandidate(sections = testSections(2), switchMovementCount = 0)
 
 			val enriched = engine.assignConflictRisk(listOf(candidate)) { true }
 
@@ -269,7 +258,7 @@ class CandidatePathRuleEngineTest {
 		@Test
 		@DisplayName("does not mutate the original candidate")
 		fun doesNotMutateOriginal() {
-			val candidate = PathCandidate(sections = sections(2), switchMovementCount = 0, conflictRiskWeight = 0.0)
+			val candidate = PathCandidate(sections = testSections(2), switchMovementCount = 0, conflictRiskWeight = 0.0)
 
 			engine.assignConflictRisk(listOf(candidate)) { true }
 

@@ -17,6 +17,7 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -24,15 +25,11 @@ import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -96,21 +93,11 @@ private val logger = KotlinLogging.logger {}
 @DisplayName("Issue #814 — admission keeps firing and stale route replays never stall a train")
 @Tag("integration-test")
 @Timeout(3, unit = TimeUnit.MINUTES)
-class Issue814AdmissionRegressionTest {
+class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
 
 	/** Long enough for several trains to be generated, admitted and to exit. */
 	private val endTimeSeconds = 300L
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
 
 	// ── Scripted planners reproducing #814's observed LLM behaviours ───────────────────────
 

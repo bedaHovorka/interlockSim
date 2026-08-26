@@ -19,15 +19,13 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.core.module.Module
 import org.koin.test.get
 
 /**
@@ -46,9 +44,7 @@ import org.koin.test.get
  * @see <a href="https://github.com/bedaHovorka/interlockSim">docs/KOTLIN_STYLE_GUIDE.md - Dependency Injection with Koin</a>
  */
 @Tag("integration-test")
-class KoinGoldenOutputTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class KoinGoldenOutputTest : IntegrationKoinTestBase() {
 	/**
 	 * Basic Koin initialization and simulation execution test
 	 *
@@ -126,9 +122,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			ctx.getInOuts()
 
 			// Set ShuntingLoop as main process (60s simulation time)
-			val loop = ShuntingLoop(ctx, 60L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
+			val loop = prepareShuntingLoop(ctx, 60L)
 
 			// Act: Run simulation
 			ctx.run()
@@ -224,9 +218,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			ctx.getInOuts()
 
 			// Set ShuntingLoop as main process (60s simulation time)
-			val loop = ShuntingLoop(ctx, 60L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
+			val loop = prepareShuntingLoop(ctx, 60L)
 
 			// Act: Run simulation
 			ctx.run()

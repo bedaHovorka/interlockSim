@@ -14,7 +14,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -22,6 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
@@ -52,8 +52,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		fun `reservePath uses RouteFinder for InOut-to-InOut and succeeds`() {
-			val editingContext =
-				editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+			val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {
@@ -64,8 +63,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 
 				val result = service.reservePath("train1", start, target)
 
-				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-				val success = result as PathReservationService.ReservationResult.Success
+				val success = assertReservationSuccess(result)
 				assertThat(success.reservedBlocks.size).isGreaterThan(0)
 				success.reservedBlocks.forEach { block ->
 					assertThat(block.getState()).isInstanceOf(TrackFacility.State::class)
@@ -83,8 +81,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		fun `reservePath reserves lowest-cost route first`() {
-			val editingContext =
-				editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+			val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {
@@ -101,8 +98,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 
 				// Reserve via service — must select the cheapest route
 				val result = service.reservePath("train1", inOut0, inOut1)
-				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-				val success = result as PathReservationService.ReservationResult.Success
+				val success = assertReservationSuccess(result)
 
 				// The reserved block count must equal the cheapest route's segment count exactly.
 				// (Both routes in vyhybna.xml have 7 segments, so this also bounds the costlier route.)
@@ -158,8 +154,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		fun `reservePathToAnyNextSemaphore still works after RouteFinder integration`() {
-			val editingContext =
-				editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+			val editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {

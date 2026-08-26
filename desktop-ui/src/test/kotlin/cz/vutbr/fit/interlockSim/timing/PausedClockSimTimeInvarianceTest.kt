@@ -14,13 +14,11 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 
@@ -60,16 +58,11 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("F1 paused-clock spike — simulation-clock freeze and pause latency (#849)")
 @Timeout(120, unit = TimeUnit.SECONDS)
-class PausedClockSimTimeInvarianceTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class PausedClockSimTimeInvarianceTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC2: the simulation clock is frozen while paused, and demonstrably advances when not")
 	fun simulationClockIsFrozenWhilePaused() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
-		try {
-			harness.start()
-			harness.awaitTick(minTick = 3L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 3L) { harness, _ ->
 			val controller = harness.controller
 
 			// Control: over a running window of WINDOW_MILLIS the clock must move. This is what makes
@@ -92,18 +85,13 @@ class PausedClockSimTimeInvarianceTest : KoinTestBase() {
 
 			assertThat(runningAdvance).isGreaterThan(0.0)
 			assertThat(pausedAdvance).isEqualTo(0.0)
-		} finally {
-			harness.stop()
 		}
 	}
 
 	@Test
 	@DisplayName("AC2: pause latency never exceeds one ShuntingLoop tick period")
 	fun pauseLatencyStaysWithinOneTickPeriod() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
-		try {
-			harness.start()
-			harness.awaitTick(minTick = 3L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 3L) { harness, _ ->
 			val controller = harness.controller
 			val latencies = mutableListOf<Double>()
 
@@ -123,8 +111,6 @@ class PausedClockSimTimeInvarianceTest : KoinTestBase() {
 			}
 
 			assertThat(max).isLessThanOrEqualTo(TICK_PERIOD_SIM_SECONDS)
-		} finally {
-			harness.stop()
 		}
 	}
 

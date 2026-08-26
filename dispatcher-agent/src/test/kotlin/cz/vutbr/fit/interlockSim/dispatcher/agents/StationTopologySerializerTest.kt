@@ -17,20 +17,13 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchId
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 /**
  * Unit tests for [StationTopologySerializer] (SP2b.8, Issue #695).
@@ -41,25 +34,8 @@ import org.koin.core.context.stopKoin
  * @since Issue #695 (SP2b.8 — Goal 10)
  */
 @DisplayName("StationTopologySerializer — static topology into LLM context (SP2b.8, #695)")
-class StationTopologySerializerTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
-
-	private fun loadShuntingLoopContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
+class StationTopologySerializerTest : DispatcherKoinTestBase() {
+	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	@Test
 	@DisplayName("describe() extracts vyhybna InOuts, signals and switches with SP3.2 IDs")

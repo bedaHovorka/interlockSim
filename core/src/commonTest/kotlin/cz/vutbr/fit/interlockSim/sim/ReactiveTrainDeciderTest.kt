@@ -17,6 +17,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
+import cz.vutbr.fit.interlockSim.testutil.trainPerceptionReading
 import kotlin.test.Test
 
 /**
@@ -33,14 +34,14 @@ class ReactiveTrainDeciderTest {
 
 	@Test
 	fun `no reserved path while moving brakes to a stand`() {
-		val decision = ReactiveTrainDecider.decide(reading(signalAhead = null, velocity = 12.0))
+		val decision = ReactiveTrainDecider.decide(trainPerceptionReading(signalAhead = null, velocity = 12.0))
 		assertThat(decision.target).isEqualTo(AccelerationTarget.BRAKE)
 		assertThat(decision.targetSpeedMps).isEqualTo(0.0)
 	}
 
 	@Test
 	fun `no reserved path while stopped coasts holding the stop`() {
-		val decision = ReactiveTrainDecider.decide(reading(signalAhead = null, velocity = 0.0))
+		val decision = ReactiveTrainDecider.decide(trainPerceptionReading(signalAhead = null, velocity = 0.0))
 		assertThat(decision.target).isEqualTo(AccelerationTarget.COAST)
 		assertThat(decision.targetSpeedMps).isEqualTo(0.0)
 	}
@@ -49,7 +50,7 @@ class ReactiveTrainDeciderTest {
 	fun `STOP signal ahead while moving brakes to a stand`() {
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(signalAhead = Signal.STOP, velocity = 15.0, distanceToSignal = 200.0)
+				trainPerceptionReading(signalAhead = Signal.STOP, velocity = 15.0, distanceToSignal = 200.0)
 			)
 		assertThat(decision.target).isEqualTo(AccelerationTarget.BRAKE)
 		assertThat(decision.targetSpeedMps).isEqualTo(0.0)
@@ -58,7 +59,7 @@ class ReactiveTrainDeciderTest {
 	@Test
 	fun `STOP signal ahead while stopped coasts`() {
 		val decision =
-			ReactiveTrainDecider.decide(reading(signalAhead = Signal.STOP, velocity = 0.0))
+			ReactiveTrainDecider.decide(trainPerceptionReading(signalAhead = Signal.STOP, velocity = 0.0))
 		assertThat(decision.target).isEqualTo(AccelerationTarget.COAST)
 		assertThat(decision.targetSpeedMps).isEqualTo(0.0)
 	}
@@ -69,7 +70,7 @@ class ReactiveTrainDeciderTest {
 	fun `Volno ahead below permitted speed accelerates to track limit`() {
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.FREE,
 					speedLimit = 30.0,
@@ -85,7 +86,7 @@ class ReactiveTrainDeciderTest {
 	fun `Volno ahead at permitted speed coasts`() {
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.FREE,
 					speedLimit = 30.0,
@@ -100,7 +101,7 @@ class ReactiveTrainDeciderTest {
 	fun `second signal speed restriction caps the target below track limit`() {
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.S30,
 					speedLimit = 30.0,
@@ -119,7 +120,7 @@ class ReactiveTrainDeciderTest {
 		// distance 6 m, braking 3 m/s²: v = sqrt(2*3*6) = 6.0 m/s.
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.STOP,
 					distanceToSignal = 6.0,
@@ -136,7 +137,7 @@ class ReactiveTrainDeciderTest {
 		// distance 1000 m: braking limit sqrt(6000) ~= 77.5 m/s > track limit 30 → base governs.
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.STOP,
 					distanceToSignal = 1000.0,
@@ -153,7 +154,7 @@ class ReactiveTrainDeciderTest {
 		// brakingSpeedLimit(0.0) hits the `distanceMetres <= 0.0` guard → 0.0; min(base, 0.0) = 0.0.
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.STOP,
 					distanceToSignal = 0.0,
@@ -170,7 +171,7 @@ class ReactiveTrainDeciderTest {
 		// Defensive: perception spec says distance >= 0, but the guard must still hold.
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.STOP,
 					distanceToSignal = -5.0,
@@ -188,7 +189,7 @@ class ReactiveTrainDeciderTest {
 		// (brakeToStop sqrt(2·3·1000)=77.5 > base), so the immediate S30 aspect caps the target.
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.S30,
 					nextSignalAhead = Signal.STOP,
 					distanceToSignal = 1000.0,
@@ -206,7 +207,7 @@ class ReactiveTrainDeciderTest {
 		// velocity 3.0 < 6.0 - ε → ACCELERATE back up, not stuck in BRAKE.
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.FREE,
 					nextSignalAhead = Signal.STOP,
 					distanceToSignal = 6.0,
@@ -224,7 +225,7 @@ class ReactiveTrainDeciderTest {
 	fun `no second signal runs to the permitted speed`() {
 		val decision =
 			ReactiveTrainDecider.decide(
-				reading(
+				trainPerceptionReading(
 					signalAhead = Signal.S60,
 					nextSignalAhead = null,
 					speedLimit = 30.0,
@@ -245,41 +246,11 @@ class ReactiveTrainDeciderTest {
 			for (next in aspects) {
 				val decision =
 					ReactiveTrainDecider.decide(
-						reading(signalAhead = immediate, nextSignalAhead = next, velocity = 13.0)
+						trainPerceptionReading(signalAhead = immediate, nextSignalAhead = next, velocity = 13.0)
 					)
 				assertThat(decision.targetSpeedMps).isGreaterThanOrEqualTo(0.0)
 				assertThat(decision.rationale).isNotEmpty()
 			}
 		}
-	}
-
-	private companion object {
-		/**
-		 * Build a [TrainPerceptionReading] with sensible defaults, overriding only the
-		 * fields relevant to the decision under test.
-		 */
-		fun reading(
-			signalAhead: Signal?,
-			nextSignalAhead: Signal? = null,
-			distanceToSignal: Double = 100.0,
-			speedLimit: Double = 30.0,
-			velocity: Double = 0.0
-		): TrainPerceptionReading =
-			TrainPerceptionReading(
-				trainId = "Train #1",
-				signalAheadName = signalAhead?.let { "sA" },
-				signalAheadAspect = signalAhead,
-				distanceToSignalAheadMetres = distanceToSignal,
-				currentSpeedLimitMps = speedLimit,
-				velocity = velocity,
-				acceleration = 0.0,
-				totalDistance = 0.0,
-				frontSectionName = "block-1",
-				destinationInOutName = "B",
-				scheduledArrivalTime = 0.0,
-				isDwelling = velocity == 0.0,
-				nextSignalAheadName = nextSignalAhead?.let { "sB" },
-				nextSignalAheadAspect = nextSignalAhead
-			)
 	}
 }

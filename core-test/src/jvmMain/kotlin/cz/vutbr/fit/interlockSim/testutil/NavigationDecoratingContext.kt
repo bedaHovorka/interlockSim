@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
 /**
@@ -98,3 +99,45 @@ class NavigationDecoratingContext(
 			routing.getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
 		}
 }
+
+/**
+ * A [TrainNavigationService] that delegates everything to [realNav] except
+ * `findReservedPathForTrain`, which [findReservedPath] answers.
+ *
+ * Every navigation-injection regression test needs exactly one hook — it hides a route, injects an
+ * `OwnershipConflict`, or counts origin queries — yet each one spelled out the full three-method
+ * anonymous object to get there, with the other two methods delegating verbatim (Issue #955,
+ * cluster C3). This function holds that skeleton once:
+ *
+ * ```kotlin
+ * val hidingNav =
+ *     decoratingTrainNavigationService(realNav) { trainId, separator ->
+ *         if (separator is DynamicInOut) realNav.findReservedPathForTrain(trainId, separator)
+ *         else PathResult.NoTopologicalPath
+ *     }
+ * ```
+ *
+ * [findReservedPath] runs on the simulation thread and is called very often, so keep it cheap and
+ * make any state it touches thread-safe.
+ */
+fun decoratingTrainNavigationService(
+	realNav: TrainNavigationService,
+	findReservedPath: (trainId: String, separator: PathSeparator) -> PathResult
+): TrainNavigationService =
+	object : TrainNavigationService {
+		override fun findReservedPathForTrain(
+			trainId: String,
+			separator: PathSeparator
+		): PathResult = findReservedPath(trainId, separator)
+
+		override fun isPathReservedForTrain(
+			trainId: String,
+			separator: PathSeparator
+		): Boolean = realNav.isPathReservedForTrain(trainId, separator)
+
+		override fun reservedSeparatorsAhead(
+			trainId: String,
+			separator: PathSeparator,
+			limit: Int
+		): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+	}

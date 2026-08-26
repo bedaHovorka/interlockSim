@@ -15,15 +15,13 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -110,33 +108,19 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingContext =
-			TestFixtures.loadShuntingXml().use { stream ->
-				editingContextFactory.createContext(stream) as EditingContext
-			}
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 		testContext = simulationContext
 
 		registry = simulationContext.scope.get()
 		service = simulationContext.getRoutingServices().getPathReservationService()
 
-		zA = separatorAt(14, 8)
-		doA1 = separatorAt(16, 8)
-		doB1 = separatorAt(25, 8)
-		inOutA = separatorAt(11, 8)
+		zA = simulationContext.separatorAt(14, 8)
+		doA1 = simulationContext.separatorAt(16, 8)
+		doB1 = simulationContext.separatorAt(25, 8)
+		inOutA = simulationContext.separatorAt(11, 8)
 	}
 
 	/** Canonical dynamic wrapper for the grid cell at ([x], [y]) — the identity the registry keys on. */
-	private fun separatorAt(
-		x: Int,
-		y: Int
-	): DynamicPathSeparator {
-		val cell = simulationContext.getRailWayNetGrid()[Point(x, y)]
-		val separator = cell as? PathSeparator ?: throw IllegalStateException("No separator at ($x, $y): $cell")
-		return simulationContext.toDynamic(separator)
-	}
-
 	private fun reserve(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator

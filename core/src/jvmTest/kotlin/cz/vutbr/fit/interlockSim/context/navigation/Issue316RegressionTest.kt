@@ -17,7 +17,6 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -28,12 +27,12 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
 
 /**
  * Regression tests for Issue #316: 8+ trains on circular route cause deadlock.
@@ -84,13 +83,7 @@ class Issue316RegressionTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 		registry = simulationContext.scope.get()
 		navigator = simulationContext.scope.get()
@@ -310,14 +303,6 @@ class Issue316RegressionTest : KoinTestBase() {
 
 		val grid = simulationContext.getRailWayNetGrid()
 
-		fun separatorAt(
-			x: Int,
-			y: Int
-		): DynamicPathSeparator =
-			(grid.getCellAt(x, y) as? PathSeparator)
-				?.let { simulationContext.toDynamic(it) }
-				?: throw IllegalStateException("Separator not found at ($x,$y)")
-
 		fun trackBetween(
 			from: DynamicPathSeparator,
 			to: DynamicPathSeparator
@@ -330,9 +315,9 @@ class Issue316RegressionTest : KoinTestBase() {
 				?.firstOrNull()
 				?: throw IllegalStateException("No track block $from -> $to")
 
-		val semaphoreDoA1 = separatorAt(16, 8)
-		val semaphoreDoA2 = separatorAt(17, 9)
-		val semaphoreDoB2 = separatorAt(24, 9)
+		val semaphoreDoA1 = simulationContext.separatorAt(16, 8)
+		val semaphoreDoA2 = simulationContext.separatorAt(17, 9)
+		val semaphoreDoB2 = simulationContext.separatorAt(24, 9)
 
 		val trackVAtoDoA1 = trackBetween(switchVA, semaphoreDoA1)
 		val trackDoA1toDoB1 = trackBetween(semaphoreDoA1, semaphoreDoB1)

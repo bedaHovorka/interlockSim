@@ -14,25 +14,19 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.agents.EmittedActionSink
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -64,25 +58,8 @@ import java.util.concurrent.TimeUnit
 @DisplayName("SP1.7 threading contract: actuator tools marshal via the SinkHolder queue off-thread")
 @Tag("integration-test")
 @Timeout(30, unit = TimeUnit.SECONDS)
-class ActuatorToolMarshallingIntegrationTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
-
-	private fun loadShuntingLoopContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
+class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
+	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	@Test
 	@DisplayName("actuator tool execute() off-thread queues a decision; onControlStep() applies it on the sim thread")

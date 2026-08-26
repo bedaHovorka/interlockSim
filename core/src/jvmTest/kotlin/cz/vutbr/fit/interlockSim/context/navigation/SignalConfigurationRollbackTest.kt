@@ -14,7 +14,6 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
@@ -23,10 +22,10 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
 
 /**
  * Regression test for signal-configuration failure rollback bug.
@@ -54,13 +53,7 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml from resources
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 		environment = simulationContext
 
@@ -74,59 +67,13 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 		inOut1 = semaphores[0]
 	}
 
-	private fun collectSemaphores(): List<DynamicRailSemaphore> {
-		val grid = simulationContext.getRailWayNetGrid()
-		val semaphores = mutableListOf<DynamicRailSemaphore>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell =
-					grid[
-						cz.vutbr.fit.interlockSim.util
-							.Point(x, y)
-					]
-				if (cell is DynamicRailSemaphore) {
-					semaphores.add(cell)
-				}
-			}
-		}
-		return semaphores
-	}
+	private fun collectSemaphores(): List<DynamicRailSemaphore> = simulationContext.cellsOfType<DynamicRailSemaphore>()
 
-	private fun collectFreeBlocks(): List<DynamicTrackBlock> {
-		val grid = simulationContext.getRailWayNetGrid()
-		val blocks = mutableListOf<DynamicTrackBlock>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell =
-					grid[
-						cz.vutbr.fit.interlockSim.util
-							.Point(x, y)
-					]
-				if (cell is DynamicTrackBlock && cell.getState() == TrackFacility.State.FREE) {
-					blocks.add(cell)
-				}
-			}
-		}
-		return blocks
-	}
+	private fun collectFreeBlocks(): List<DynamicTrackBlock> =
+		simulationContext.cellsOfType<DynamicTrackBlock>().filter { it.getState() == TrackFacility.State.FREE }
 
-	private fun collectSwitches(): List<cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch> {
-		val grid = simulationContext.getRailWayNetGrid()
-		val switches = mutableListOf<cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell =
-					grid[
-						cz.vutbr.fit.interlockSim.util
-							.Point(x, y)
-					]
-				if (cell is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch) {
-					switches.add(cell)
-				}
-			}
-		}
-		return switches
-	}
+	private fun collectSwitches(): List<cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch> =
+		simulationContext.cellsOfType<cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch>()
 
 	@Test
 	fun `reservePath rolls back completely when semaphore signal configuration fails`() {

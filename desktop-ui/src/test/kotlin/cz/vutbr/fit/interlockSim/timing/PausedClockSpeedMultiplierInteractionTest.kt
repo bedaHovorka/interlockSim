@@ -14,14 +14,12 @@ import assertk.assertions.isBetween
 import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -55,17 +53,16 @@ import kotlin.math.abs
  */
 @DisplayName("F1 paused-clock spike — speed-multiplier and real-time-sync interaction (#849)")
 @Timeout(120, unit = TimeUnit.SECONDS)
-class PausedClockSpeedMultiplierInteractionTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class PausedClockSpeedMultiplierInteractionTest : IntegrationKoinTestBase() {
 	@ParameterizedTest(name = "speed {0}x")
 	@ValueSource(doubles = [1.0, 2.0, 5.0])
 	@DisplayName("AC4: pausing is orthogonal to the speed multiplier and leaves no catch-up debt")
 	fun pauseIsOrthogonalToSpeed(speed: Double) {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>(), speedMultiplier = speed)
-		try {
-			harness.start()
-			harness.awaitTick(minTick = 2L)
+		PausedClockSpikeHarness.withStarted(
+			get<SimulationContextFactory>(),
+			minTick = 2L,
+			speedMultiplier = speed
+		) { harness, _ ->
 			val controller = harness.controller
 
 			val beforeRate = measureRate(controller)
@@ -91,8 +88,6 @@ class PausedClockSpeedMultiplierInteractionTest : KoinTestBase() {
 			// measurement quantum. A run repaying the paused wall-clock time would show a markedly
 			// HIGHER after-rate, which this bound would reject.
 			assertThat(abs(afterRate - beforeRate)).isLessThanOrEqualTo(QUANTUM_RATE * QUANTUM_ALLOWANCE)
-		} finally {
-			harness.stop()
 		}
 	}
 

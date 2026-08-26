@@ -18,33 +18,26 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
-import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 /**
  * Unit tests for [KoogAgentFactory] (Goal 10 dispatcher-cannot-approve-trains fix; tool surface
@@ -61,20 +54,7 @@ import org.koin.core.context.stopKoin
  * @since Goal 10 dispatcher tool-registration fix (2026-07-26); SP2c.6 (#829) narrows to 4 tools
  */
 @DisplayName("KoogAgentFactory assembles the SP2c.6 four-tool actuator surface")
-class KoogAgentFactoryTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
-
+class KoogAgentFactoryTest : DispatcherKoinTestBase() {
 	/**
 	 * Issue #847 cleanup pass: [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.CancelRouteTool]
 	 * now calls `perceptionPort.snapshot()` for its in-turn trainId pre-check, so a bare
@@ -112,11 +92,7 @@ class KoogAgentFactoryTest {
 				queuedTrainIds.map { QueuedTrainObservation(trainId = it, destinationInOutName = "B") }
 		}
 
-	private fun loadShuntingLoopContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
+	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	/**
 	 * Captures the tool list handed to [AgentService.createDispatchAgent] without touching Ollama.

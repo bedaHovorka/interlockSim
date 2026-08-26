@@ -90,8 +90,7 @@ class RouteSegmentVerificationTest : KoinTestBase() {
 	// -------------------------------------------------------------------------
 
 	private fun shuntingLoopCtx(): EditingContext =
-		(editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext)
-			.also { ctx = it }
+		TestFixtures.loadShuntingEditingContext(editingContextFactory).also { ctx = it }
 
 	private fun parallelRoutesCtx(): EditingContext =
 		(editingContextFactory.createContext(TestFixtures.loadParallelRoutesXml()) as EditingContext)

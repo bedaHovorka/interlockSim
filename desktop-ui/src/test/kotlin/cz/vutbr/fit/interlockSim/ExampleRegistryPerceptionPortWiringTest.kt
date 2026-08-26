@@ -11,10 +11,9 @@ package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
 import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -55,17 +54,7 @@ class ExampleRegistryPerceptionPortWiringTest : KoinTestBase() {
 	)
 	fun shuntingLoopExampleWiresSharedPerceptionPort() {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopExample",
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
-		val factory = get<SimulationContextFactory>()
-		val args = arrayOf("example", "shuntingLoop", "300")
-
-		val context = createMethod.invoke(registry, factory, args) as DefaultSimulationContext
+		val context = createExampleContext(registry, get(), "createShuntingLoopExample", "shuntingLoop", "300")
 		// Resolve the SAME NetworkPerceptionPort instance the dispatcher agent's tools read
 		// from, via Koin — not the port ExampleRegistry passes to AgentLoopDriver. Before the
 		// fix these were two different instances; only this call proves they're unified now.

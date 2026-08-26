@@ -15,13 +15,11 @@ import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 
@@ -42,16 +40,11 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("F1 paused-clock spike — resume must survive emission failure (#849)")
 @Timeout(60, unit = TimeUnit.SECONDS)
-class PausedClockResumeOnFailureTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class PausedClockResumeOnFailureTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("a throwing emission that resumes in finally leaves the simulation running")
 	fun throwingEmissionWithFinallyResumesSimulation() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
-		try {
-			harness.start()
-			val tickBefore = harness.awaitTick(minTick = 2L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 2L) { harness, tickBefore ->
 
 			val tickLoop =
 				harness.buildTickLoop { _, _ ->
@@ -70,18 +63,13 @@ class PausedClockResumeOnFailureTest : KoinTestBase() {
 			// ...and the clock is running again, so the run is diagnosable rather than silently frozen.
 			assertThat(harness.runner.isPaused).isFalse()
 			assertThat(harness.awaitTick(minTick = tickBefore + 1L)).isGreaterThan(tickBefore)
-		} finally {
-			harness.stop()
 		}
 	}
 
 	@Test
 	@DisplayName("a throwing emission without finally leaves the simulation parked indefinitely")
 	fun throwingEmissionWithoutFinallyLeavesSimulationParked() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
-		try {
-			harness.start()
-			harness.awaitTick(minTick = 2L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 2L) { harness, _ ->
 
 			val tickLoop =
 				harness.buildTickLoop { _, _ ->
@@ -97,8 +85,6 @@ class PausedClockResumeOnFailureTest : KoinTestBase() {
 			// Still parked: nothing in the stack unwinds the pause on its own. This is the hazard.
 			assertThat(harness.runner.isPaused).isTrue()
 			assertThat(harness.latest().tick).isEqualTo(tickAfterFailure)
-		} finally {
-			harness.stop()
 		}
 	}
 

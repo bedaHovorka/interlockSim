@@ -22,9 +22,9 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -32,21 +32,18 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -89,7 +86,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 @DisplayName("Aborted PathInfo merge — the simulation thread survives it (Issue #834)")
 @Tag("integration-test")
-class MergeAbortSimSurvivalTest {
+class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	private companion object {
 		/** Logger of the class whose WARNs are under inspection. */
 		const val REGISTRY_LOGGER = "cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry"
@@ -103,21 +100,13 @@ class MergeAbortSimSurvivalTest {
 		const val SIM_END_TIME = 180L
 	}
 
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
-
 	private lateinit var context: DefaultSimulationContext
 	private lateinit var appender: ListAppender<ILoggingEvent>
 	private lateinit var registryLogger: Logger
 
 	@BeforeEach
 	fun setUp() {
-		startKoin { modules(dispatcherAgentTestModule) }
-		context =
-			TestFixtures.loadShuntingXml().use { stream ->
-				val editingContext = xmlContextFactory.createContext(stream) as EditingContext
-				DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-			}
+		context = TestFixtures.newShuntingSimulationContext()
 		registryLogger = LoggerFactory.getLogger(REGISTRY_LOGGER) as Logger
 		appender = ListAppender<ILoggingEvent>().apply { start() }
 		registryLogger.addAppender(appender)
@@ -128,7 +117,6 @@ class MergeAbortSimSurvivalTest {
 		registryLogger.detachAppender(appender)
 		appender.stop()
 		context.close()
-		stopKoin()
 	}
 
 	private fun registry(): PathReservationRegistry = context.scope.get<PathReservationRegistry>()
@@ -306,11 +294,7 @@ class MergeAbortSimSurvivalTest {
 	@Timeout(value = 180, unit = TimeUnit.SECONDS)
 	@DisplayName("inertness: a clean vyhybna baseline run trips neither merge-abort WARN")
 	fun cleanBaselineRunLogsNoMergeAbortWarning() {
-		context.getInOuts()
-		val loop = ShuntingLoop(context, SIM_END_TIME)
-		wireSynchronousDispatcher(context, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, SIM_END_TIME)
 
 		// Sanity: the run really did dispatch, so "no WARN" is not "no work".
 		assertThat(loop.getTrainsExited()).isGreaterThanOrEqualTo(1)

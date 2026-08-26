@@ -18,7 +18,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -35,7 +34,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
 
 /**
  * Comprehensive tests for PathReservationRegistry PathInfo merging logic.
@@ -111,13 +109,7 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml from resources
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 		// Get registry and navigator from context scope
 		registry = simulationContext.scope.get()

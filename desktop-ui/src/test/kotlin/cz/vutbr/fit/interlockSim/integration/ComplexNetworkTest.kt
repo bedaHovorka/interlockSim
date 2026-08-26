@@ -16,7 +16,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -265,10 +264,7 @@ class ComplexNetworkTest : KoinTestBase() {
 	@DisplayName("network handles train priorities correctly")
 	fun complexNetwork_trainPriorities_topologyValid() {
 		// Load complex vyhybna.xml network
-		val edContext =
-			editingContextFactory.createContext(
-				TestFixtures.loadShuntingXml()
-			) as EditingContext
+		val edContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 
 		// Verify complex network topology
 		assertThat(edContext).isNotNull()

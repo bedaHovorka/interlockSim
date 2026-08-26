@@ -25,8 +25,7 @@ import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolution
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
@@ -92,7 +91,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setContext(SimulationContext) switches to simulation mode, Stop button disabled")
 	fun setContextSwitchesToSimulationMode() {
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		val context = createMockShuntingContext()
 
 		runOnEDT {
 			frame.setContext(context)
@@ -110,7 +109,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	@DisplayName("startSimulation starts the simulation runner")
 	fun startSimulationStartsRunner() {
 		val runStarted = CountDownLatch(1)
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		val context = createMockShuntingContext()
 		context.addPropertyChangeListener { _ -> runStarted.countDown() }
 
 		runOnEDT {
@@ -135,7 +134,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("startSimulation wires onResolutionApplied to record operator choices in the scoped preference stores")
 	fun startSimulationWiresOnResolutionAppliedToScopedStores() {
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		val context = createMockShuntingContext()
 
 		runOnEDT {
 			frame.setContext(context)
@@ -186,7 +185,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	@DisplayName("stopSimulation stops a running simulation and marks as not running")
 	fun stopSimulationStopsRunner() {
 		val started = CountDownLatch(1)
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		val context = createMockShuntingContext()
 
 		// Hook into context to know when simulation is running
 		context.addPropertyChangeListener { _ -> started.countDown() }
@@ -213,8 +212,8 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("setContext while simulation is running stops the previous simulation")
 	fun setContextWhileRunningStopsPreviousSimulation() {
-		val context1 = createMockSimulationContext(TestFixtures.loadShuntingXml())
-		val context2 = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		val context1 = createMockShuntingContext()
+		val context2 = createMockShuntingContext()
 
 		val run1Started = CountDownLatch(1)
 		context1.addPropertyChangeListener { _ -> run1Started.countDown() }

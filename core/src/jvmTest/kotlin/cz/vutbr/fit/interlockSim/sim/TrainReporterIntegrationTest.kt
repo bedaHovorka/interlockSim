@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
-import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -44,15 +44,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class TrainReporterIntegrationTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val stream = TestFixtures.loadShuntingXml()
-		return stream
-			.use { s ->
-				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
-			}.also {
-				it.getInOuts() // Initialize dynamic wrapper map (required side-effect)
-			}
-	}
+	private fun loadVyhybnaContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
 
 	/**
 	 * Registers a listener that counts every TRAIN_CONTINUOUS PropertyChangeEvent fired by
@@ -77,9 +70,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	fun trainReporterEnabledPathCoverage() {
 		// ShuntingLoop.ENABLED_REPORT_TYPES includes TRAIN_CONTINUOUS — no extra setup needed
 		loadVyhybnaContext().use { ctx ->
-			val loop = ShuntingLoop(ctx, 30L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
+			val loop = prepareShuntingLoop(ctx, 30L)
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
@@ -104,9 +95,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// `ShuntingLoop(ctx, 10L)` runs until simulation time 10 (`endTime`),
 		// with at most 2 concurrent trains active at once.
 		loadVyhybnaContext().use { ctx ->
-			val loop = ShuntingLoop(ctx, 10L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
+			val loop = prepareShuntingLoop(ctx, 10L)
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
@@ -134,7 +123,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// allowedReportTypes stays empty throughout the simulation.
 		// TrainReporter.iteration() checks isReporting(TRAIN_CONTINUOUS) — which returns
 		// false — so env.report() is never called and no TRAIN_CONTINUOUS events fire.
-		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { ctx ->
+		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val reportCount = AtomicInteger(0)
 			ctx.addPropertyChangeListener(
 				ContextPropertyChangeListener { event ->
@@ -186,9 +175,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// count (16, deterministic under kDisco's fixed seed) still comfortably clears a
 		// once-per-second-per-train cadence for a non-trivial fraction of the window.
 		loadVyhybnaContext().use { ctx ->
-			val loop = ShuntingLoop(ctx, 30L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
+			val loop = prepareShuntingLoop(ctx, 30L)
 
 			val reportCount = countTrainContinuousEvents(ctx)
 

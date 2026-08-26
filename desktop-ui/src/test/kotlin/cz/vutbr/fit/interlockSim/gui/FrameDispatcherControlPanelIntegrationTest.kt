@@ -40,7 +40,9 @@ import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.findAllComponents
+import cz.vutbr.fit.interlockSim.testutil.findComponent
+import cz.vutbr.fit.interlockSim.testutil.longRunningShuntingLoop
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -95,17 +97,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	 * test exercises the GUI wiring seam, not the applier; the loop just needs to keep the
 	 * simulation thread alive until [Frame.stopSimulation] is called.
 	 */
-	private fun buildContext(): DefaultSimulationContext {
-		val factory = get<SimulationContextFactory>()
-		val ctx =
-			TestFixtures.loadShuntingXml().use {
-				factory.createContext(it) as DefaultSimulationContext
-			}
-		ctx.getInOuts()
-		val loop = ShuntingLoop(ctx, endTime = 600L, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
-		ctx.setMainProcess(loop)
-		return ctx
-	}
+	private fun buildContext(): DefaultSimulationContext = longRunningShuntingLoop(get<SimulationContextFactory>())
 
 	private fun findComboBox(panel: DispatcherControlPanel): JComboBox<DispatcherMode> {
 		@Suppress("UNCHECKED_CAST")
@@ -118,39 +110,6 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 		findAllComponents(panel, JButton::class.java)
 			.firstOrNull { it.text == "Why this route?" }
 			?: error("'Why this route?' button not found in DispatcherControlPanel")
-
-	private fun <T> findComponent(
-		container: java.awt.Container,
-		type: Class<T>
-	): T? {
-		for (c in container.components) {
-			if (type.isInstance(c)) {
-				@Suppress("UNCHECKED_CAST")
-				return c as T
-			}
-			if (c is java.awt.Container) {
-				findComponent(c, type)?.let { return it }
-			}
-		}
-		return null
-	}
-
-	private fun <T> findAllComponents(
-		container: java.awt.Container,
-		type: Class<T>
-	): List<T> {
-		val result = mutableListOf<T>()
-		for (c in container.components) {
-			if (type.isInstance(c)) {
-				@Suppress("UNCHECKED_CAST")
-				result.add(c as T)
-			}
-			if (c is java.awt.Container) {
-				result.addAll(findAllComponents(c, type))
-			}
-		}
-		return result
-	}
 
 	// ── Tests ─────────────────────────────────────────────────────────────────
 

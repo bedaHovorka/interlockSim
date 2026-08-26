@@ -15,7 +15,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -44,11 +43,8 @@ class AutoConflictResolutionWiringTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun createShuntingLoopContext(): DefaultSimulationContext {
-		val editingContext =
-			editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
-		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-	}
+	private fun createShuntingLoopContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	@Test
 	@DisplayName("scope resolves ConflictResolver, DispatcherPreferenceStore and AutoConflictResolutionService")

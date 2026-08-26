@@ -13,21 +13,15 @@ import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultDispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -43,10 +37,7 @@ import org.koin.dsl.module
  * @since Issue #845 (SP2c.22 — run identity and per-run JSON persistence)
  */
 @DisplayName("SP2c.22 DispatcherRunRecorder is scoped, not singleton (#845)")
-class DispatcherRunRecorderScopeTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
-
+class DispatcherRunRecorderScopeTest : DispatcherKoinTestBase() {
 	private val collisionDetectionOnlyTestModule: Module =
 		module {
 			scope<DefaultSimulationContext> {
@@ -59,21 +50,10 @@ class DispatcherRunRecorderScopeTest {
 			}
 		}
 
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentModule, commonCoreTestModule, collisionDetectionOnlyTestModule) }
-	}
+	override fun getTestModules(): List<Module> =
+		listOf(dispatcherAgentModule, commonCoreTestModule, collisionDetectionOnlyTestModule)
 
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
-
-	private fun loadContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
-			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-		}
+	private fun loadContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	@Test
 	@DisplayName("DispatcherRunRecorder resolves from context scope and is DefaultDispatcherRunRecorder")

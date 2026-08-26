@@ -22,22 +22,18 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.SpeedControllable
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 
 @Tag("integration-test")
 @DisplayName("SimulationController -> ShuntingLoop bridge (real types)")
-class SimulationControllerBridgeIntegrationTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("Real ShuntingLoop is recognised as SpeedControllable via getMainProcess()")
 	fun realShuntingLoopIsRecognizedAsSpeedControllable() {

@@ -15,13 +15,11 @@ import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -53,17 +51,12 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @DisplayName("F1 paused-clock spike — pause → emit → resume through DispatchTickLoop (#849)")
 @Timeout(60, unit = TimeUnit.SECONDS)
-class PausedClockFreshCaptureDeadlockTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class PausedClockFreshCaptureDeadlockTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC1: a paused emit window can never obtain a fresh sim-thread capture")
 	fun pausedEmitCannotObtainFreshCapture() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
 		val sawFreshCapture = AtomicBoolean(false)
-		try {
-			harness.start()
-			harness.awaitTick(minTick = 2L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 2L) { harness, _ ->
 
 			val tickLoop =
 				harness.buildTickLoop { _, observation ->
@@ -92,20 +85,15 @@ class PausedClockFreshCaptureDeadlockTest : KoinTestBase() {
 			// The tick itself still completed: the deadlock is in waiting for the capture, not in
 			// pausing as such.
 			assertThat(record).isNotNull()
-		} finally {
-			harness.stop()
 		}
 	}
 
 	@Test
 	@DisplayName("AC1/AC2: a paused emit that uses only obs0 completes, and its tick keeps the pre-pause simTime")
 	fun pausedEmitOnObservationSnapshotCompletes() {
-		val harness = PausedClockSpikeHarness.create(get<SimulationContextFactory>())
 		val observedSimTime = AtomicReference(0.0)
 		val emitWallClockMillis = AtomicLong(0L)
-		try {
-			harness.start()
-			harness.awaitTick(minTick = 2L)
+		PausedClockSpikeHarness.withStarted(get<SimulationContextFactory>(), minTick = 2L) { harness, _ ->
 
 			val tickLoop =
 				harness.buildTickLoop { _, observation ->
@@ -129,8 +117,6 @@ class PausedClockFreshCaptureDeadlockTest : KoinTestBase() {
 			// The recorded tick carries the simulation time of the snapshot the decision was made
 			// from — not whatever the clock reached afterwards.
 			assertThat(record?.simTime).isEqualTo(observedSimTime.get())
-		} finally {
-			harness.stop()
 		}
 	}
 

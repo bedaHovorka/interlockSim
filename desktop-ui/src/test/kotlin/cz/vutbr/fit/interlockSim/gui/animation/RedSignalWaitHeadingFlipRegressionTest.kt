@@ -32,9 +32,6 @@ package cz.vutbr.fit.interlockSim.gui.animation
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -43,11 +40,12 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.deg
+import cz.vutbr.fit.interlockSim.testutil.normalizeAngleDiff
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 import kotlin.math.abs
 
 class RedSignalWaitHeadingFlipRegressionTest : KoinTestBase() {
@@ -103,23 +101,11 @@ class RedSignalWaitHeadingFlipRegressionTest : KoinTestBase() {
 		return name ?: "?"
 	}
 
-	private fun deg(rad: Double): String = "${Math.toDegrees(rad).toInt()}°"
-
-	private fun normalizeAngleDiff(d: Double): Double {
-		var x = d
-		while (x > Math.PI) x -= 2.0 * Math.PI
-		while (x < -Math.PI) x += 2.0 * Math.PI
-		return x
-	}
-
 	@Test
 	fun `resolved heading never flips during RED signal waits and arrivals`() {
-		val xmlFactory = XMLContextFactory()
-		val resourcePath = javaClass.getResource("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		checkNotNull(resourcePath) { "vyhybna.xml not on classpath" }
-		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
-		val context = ContextTransformer.createSimulationContext(editingContext, processFactory)
-		val simContext = context as DefaultSimulationContext
+		val context =
+			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+		val simContext = context
 		calculator = TrainPositionCalculator(context, simContext.getSeparatorPositionCache())
 
 		// Same spec as the `shuntingLoop` example (runExampleGui): the opposing B→A train

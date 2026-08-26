@@ -20,27 +20,23 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import org.slf4j.LoggerFactory
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -81,9 +77,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @DisplayName("Issue #943: a never-extended train is named in a WARN before the run stops")
 @Tag("integration-test")
-class OwnershipConflictStallWarningTest {
-	private val xmlContextFactory = XMLContextFactory()
-	private val processFactory = DefaultSimulationProcessFactory()
+class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
 
 	private lateinit var context: DefaultSimulationContext
@@ -92,12 +86,7 @@ class OwnershipConflictStallWarningTest {
 
 	@BeforeEach
 	fun setUp() {
-		startKoin { modules(dispatcherAgentTestModule) }
-		context =
-			TestFixtures.loadShuntingXml().use { stream ->
-				val editingContext = xmlContextFactory.createContext(stream) as EditingContext
-				DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-			}
+		context = TestFixtures.newShuntingSimulationContext()
 		// Attached to the ROOT logger rather than a named one: `Train`'s logger is declared in a
 		// companion object, so its name depends on how kotlin-logging derives it, and this
 		// assertion must not.
@@ -111,7 +100,6 @@ class OwnershipConflictStallWarningTest {
 		rootLogger.detachAppender(appender)
 		appender.stop()
 		context.close()
-		stopKoin()
 	}
 
 	/** Stall WARNs that name [trainId]. */
@@ -144,31 +132,16 @@ class OwnershipConflictStallWarningTest {
 		val realNav = context.getRoutingServices().getTrainNavigationService()
 		val stalledTrainId = AtomicReference<String?>(null)
 		val stallingNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult {
-					if (separator !is DynamicInOut) {
-						stalledTrainId.compareAndSet(null, trainId)
-					}
-					return if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
-						PathResult.OwnershipConflict
-					} else {
-						realNav.findReservedPathForTrain(trainId, separator)
-					}
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+
+				if (separator !is DynamicInOut) {
+					stalledTrainId.compareAndSet(null, trainId)
 				}
-
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
-
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+				return@decoratingTrainNavigationService if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
+					PathResult.OwnershipConflict
+				} else {
+					realNav.findReservedPathForTrain(trainId, separator)
+				}
 			}
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
@@ -185,10 +158,7 @@ class OwnershipConflictStallWarningTest {
 				capturedErrors.add(error)
 			}
 
-		val loop = ShuntingLoop(stallingContext, SIM_END_TIME)
-		wireSynchronousDispatcher(stallingContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, SIM_END_TIME, env = stallingContext)
 
 		// The scenario engaged: a train really was stalled mid-journey.
 		assertThat(stalledTrainId.get(), name = "stalled train id").isNotNull()
@@ -216,10 +186,7 @@ class OwnershipConflictStallWarningTest {
 	@Test
 	@Timeout(value = 180, unit = TimeUnit.SECONDS)
 	fun cleanBaselineRunLogsNoStallWarning() {
-		val loop = ShuntingLoop(context, SIM_END_TIME)
-		wireSynchronousDispatcher(context, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, SIM_END_TIME)
 
 		// Sanity: the run really did dispatch, so "no WARN" is not "no work".
 		assertThat(loop.getTrainsExited()).isGreaterThanOrEqualTo(1)
@@ -244,31 +211,16 @@ class OwnershipConflictStallWarningTest {
 		// Stall the first train that queries from its entry InOut — `separator is DynamicInOut` —
 		// forever, so it never enters a block and `current` stays null (the `atOrigin` branch).
 		val stallingNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult {
-					if (separator is DynamicInOut) {
-						stalledTrainId.compareAndSet(null, trainId)
-					}
-					return if (trainId == stalledTrainId.get() && separator is DynamicInOut) {
-						PathResult.OwnershipConflict
-					} else {
-						realNav.findReservedPathForTrain(trainId, separator)
-					}
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+
+				if (separator is DynamicInOut) {
+					stalledTrainId.compareAndSet(null, trainId)
 				}
-
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
-
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+				return@decoratingTrainNavigationService if (trainId == stalledTrainId.get() && separator is DynamicInOut) {
+					PathResult.OwnershipConflict
+				} else {
+					realNav.findReservedPathForTrain(trainId, separator)
+				}
 			}
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
@@ -283,10 +235,7 @@ class OwnershipConflictStallWarningTest {
 				capturedErrors.add(error)
 			}
 
-		val loop = ShuntingLoop(stallingContext, SIM_END_TIME)
-		wireSynchronousDispatcher(stallingContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, SIM_END_TIME, env = stallingContext)
 
 		// The scenario engaged: a train really was stalled at its entry InOut.
 		val trainId = stalledTrainId.get()
@@ -349,43 +298,28 @@ class OwnershipConflictStallWarningTest {
 		}
 
 		val stallingNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult {
-					if (separator !is DynamicInOut && stalledTrainId.compareAndSet(null, trainId)) {
-						stalledSeparator.compareAndSet(null, separator)
-					}
-					val stalled = trainId == stalledTrainId.get() && separator !is DynamicInOut
-					if (!stalled) return realNav.findReservedPathForTrain(trainId, separator)
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
 
-					// Phase 1: force OwnershipConflict until the first WARN lands.
-					if (!firstWarnSeen(trainId)) return PathResult.OwnershipConflict
-
-					// Phase 2: still at the stall separator — stop forcing, so the dispatcher can
-					// reserve the next section and the wait wakes on its own path-available condition
-					// (Train.kt:281/517 resets the clock and the train moves on).
-					// Phase 3: the train has reached a different separator — force a fresh stall that
-					// must WARN anew from its own new clock.
-					val stallSep = stalledSeparator.get()
-					return if (stallSep != null && separator === stallSep) {
-						realNav.findReservedPathForTrain(trainId, separator)
-					} else {
-						PathResult.OwnershipConflict
-					}
+				if (separator !is DynamicInOut && stalledTrainId.compareAndSet(null, trainId)) {
+					stalledSeparator.compareAndSet(null, separator)
 				}
+				val stalled = trainId == stalledTrainId.get() && separator !is DynamicInOut
+				if (!stalled) return@decoratingTrainNavigationService realNav.findReservedPathForTrain(trainId, separator)
 
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
+				// Phase 1: force OwnershipConflict until the first WARN lands.
+				if (!firstWarnSeen(trainId)) return@decoratingTrainNavigationService PathResult.OwnershipConflict
 
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+				// Phase 2: still at the stall separator — stop forcing, so the dispatcher can
+				// reserve the next section and the wait wakes on its own path-available condition
+				// (Train.kt:281/517 resets the clock and the train moves on).
+				// Phase 3: the train has reached a different separator — force a fresh stall that
+				// must WARN anew from its own new clock.
+				val stallSep = stalledSeparator.get()
+				return@decoratingTrainNavigationService if (stallSep != null && separator === stallSep) {
+					realNav.findReservedPathForTrain(trainId, separator)
+				} else {
+					PathResult.OwnershipConflict
+				}
 			}
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
@@ -400,10 +334,7 @@ class OwnershipConflictStallWarningTest {
 				capturedErrors.add(error)
 			}
 
-		val loop = ShuntingLoop(stallingContext, SIM_END_TIME)
-		wireSynchronousDispatcher(stallingContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, SIM_END_TIME, env = stallingContext)
 
 		val trainId = stalledTrainId.get()
 		assertThat(trainId, name = "stalled train id").isNotNull()

@@ -20,7 +20,6 @@ import assertk.assertions.isLessThan
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
@@ -96,8 +95,7 @@ class PathCommandTranslatorTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingCtx =
-			TestFixtures.loadShuntingXml().use { editingContextFactory.createContext(it) } as EditingContext
+		val editingCtx = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 		context = ContextTransformer.createSimulationContext(editingCtx, processFactory)
 
 		navigator = context.getRoutingServices().getTopologyNavigator()

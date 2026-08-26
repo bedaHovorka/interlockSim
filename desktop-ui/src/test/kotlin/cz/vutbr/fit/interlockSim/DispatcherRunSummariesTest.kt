@@ -15,6 +15,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -57,18 +58,7 @@ class DispatcherRunSummariesTest : KoinTestBase() {
 		exampleName: String
 	): DefaultSimulationContext {
 		val registry = get<ExampleRegistry>()
-		val createMethod =
-			ExampleRegistry::class.java.getDeclaredMethod(
-				factoryMethod,
-				SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
-		createMethod.isAccessible = true
-		return createMethod.invoke(
-			registry,
-			get<SimulationContextFactory>(),
-			arrayOf("example", exampleName, "60")
-		) as DefaultSimulationContext
+		return createExampleContext(registry, get<SimulationContextFactory>(), factoryMethod, exampleName, "60")
 	}
 
 	@Test

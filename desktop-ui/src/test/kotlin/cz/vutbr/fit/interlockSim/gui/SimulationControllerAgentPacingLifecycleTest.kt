@@ -23,14 +23,12 @@ import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.longRunningShuntingLoop
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
@@ -38,31 +36,13 @@ import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationC
 @Tag("integration-test")
 @DisplayName("SimulationController — agent-pacing delegate lifecycle (SP4.2, #564)")
 @Timeout(30, unit = TimeUnit.SECONDS)
-class SimulationControllerAgentPacingLifecycleTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 	/**
 	 * Builds a real [DefaultSimulationContext] with a long-running [ShuntingLoop] main process,
 	 * mirroring [SimulationControllerBridgeIntegrationTest]. The long end time + real-time sync
 	 * keep the simulation thread alive until the test explicitly stops it.
 	 */
-	private fun buildContext(): DefaultSimulationContext {
-		val factory = get<SimulationContextFactory>()
-		val ctx =
-			TestFixtures.loadShuntingXml().use {
-				factory.createContext(it) as DefaultSimulationContext
-			}
-		ctx.getInOuts()
-		val loop =
-			ShuntingLoop(
-				ctx,
-				endTime = 600L,
-				enableRealTimeSync = true,
-				initialSpeedMultiplier = 1.0
-			)
-		ctx.setMainProcess(loop)
-		return ctx
-	}
+	private fun buildContext(): DefaultSimulationContext = longRunningShuntingLoop(get<SimulationContextFactory>())
 
 	/** The scoped [DelegatingSimulationController] bound in this context's Koin scope. */
 	private fun pacingDelegateOf(context: DefaultSimulationContext): CoreSimulationController =

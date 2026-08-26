@@ -16,8 +16,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -216,7 +215,7 @@ class AnimationControllerResourceCleanupTest : KoinTestBase() {
 
 	private fun createController(): Pair<AnimationController, SimulationContext> {
 		// Use vyhybna.xml for realistic simulation context
-		context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		context = createMockShuntingContext()
 
 		// Create dummy canvas (JPanel is concrete Component subclass)
 		val canvas = JPanel()

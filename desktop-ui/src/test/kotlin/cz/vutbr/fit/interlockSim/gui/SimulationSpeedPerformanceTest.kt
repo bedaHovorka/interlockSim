@@ -19,9 +19,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.mockk.every
 import io.mockk.mockk
@@ -29,7 +28,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -60,9 +58,7 @@ import javax.swing.SwingUtilities
  */
 @DisplayName("SimulationRunner Speed Performance (Phase 4.2)")
 @Tag("integration-test")
-class SimulationSpeedPerformanceTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class SimulationSpeedPerformanceTest : IntegrationKoinTestBase() {
 	private val logger = KotlinLogging.logger {}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────

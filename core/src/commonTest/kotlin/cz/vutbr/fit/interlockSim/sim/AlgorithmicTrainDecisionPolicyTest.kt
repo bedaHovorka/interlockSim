@@ -17,6 +17,7 @@ import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
+import cz.vutbr.fit.interlockSim.testutil.trainPerceptionReading
 import kotlin.test.Test
 
 /**
@@ -218,19 +219,6 @@ class AlgorithmicTrainDecisionPolicyTest {
 			velocity: Double = 0.0,
 			speedLimit: Double = 30.0
 		): TrainPerceptionReading =
-			TrainPerceptionReading(
-				trainId = "Train #1",
-				signalAheadName = signalAhead?.let { "sA" },
-				signalAheadAspect = signalAhead,
-				distanceToSignalAheadMetres = 100.0,
-				currentSpeedLimitMps = speedLimit,
-				velocity = velocity,
-				acceleration = 0.0,
-				totalDistance = 0.0,
-				frontSectionName = "block-1",
-				destinationInOutName = "B",
-				scheduledArrivalTime = 0.0,
-				isDwelling = velocity == 0.0
-			)
+			trainPerceptionReading(signalAhead = signalAhead, velocity = velocity, speedLimit = speedLimit)
 	}
 }

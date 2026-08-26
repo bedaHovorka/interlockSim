@@ -13,20 +13,15 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.sim.Interlocking
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import java.util.concurrent.TimeUnit
 
 /**
@@ -58,35 +53,19 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("ConflictListenerWiring: late registration after run() is silently dropped (#827)")
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
-class ConflictListenerWiringTest {
+class ConflictListenerWiringTest : DispatcherKoinTestBase() {
 	private var context: DefaultSimulationContext? = null
 
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
 	@AfterEach
-	fun tearDown() {
+	fun closeContext() {
 		context?.close()
 		context = null
-		stopKoin()
 	}
 
 	@Test
 	@DisplayName("Listener registered after run() is not added to pendingConflictEventListeners")
 	fun listenerRegisteredAfterRunIsDropped() {
-		val factory = XMLContextFactory()
-		val processFactory = DefaultSimulationProcessFactory()
-
-		val ctx =
-			TestFixtures
-				.loadShuntingXml()
-				.use { stream ->
-					factory.createContext(stream) as EditingContext
-				}.let { editCtx ->
-					DefaultSimulationContext.fromEditingContext(editCtx, processFactory)
-				}
+		val ctx = TestFixtures.newShuntingSimulationContext()
 		context = ctx
 
 		// Step 1: Register a listener BEFORE run()

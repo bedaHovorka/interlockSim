@@ -19,11 +19,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
+import org.koin.core.module.Module
 import org.koin.java.KoinJavaComponent.inject
 
 /**
@@ -43,18 +41,8 @@ import org.koin.java.KoinJavaComponent.inject
  *
  * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port bindings; SP3.6 (#574) adds the planner binding
  */
-class DispatcherAgentModuleTest {
-	@BeforeEach
-	fun setup() {
-		startKoin {
-			modules(dispatcherAgentModule)
-		}
-	}
-
-	@AfterEach
-	fun cleanup() {
-		stopKoin()
-	}
+class DispatcherAgentModuleTest : DispatcherKoinTestBase() {
+	override fun getTestModules(): List<Module> = listOf(dispatcherAgentModule)
 
 	@Test
 	fun `OllamaExecutorConfig is provided as singleton`() {

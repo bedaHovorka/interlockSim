@@ -15,14 +15,12 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -87,29 +85,15 @@ class Issue944ReversalDeadlockRegressionTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingContext =
-			TestFixtures.loadShuntingXml().use { stream ->
-				editingContextFactory.createContext(stream) as EditingContext
-			}
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 		testContext = simulationContext
 
 		registry = simulationContext.scope.get()
 		service = simulationContext.getRoutingServices().getPathReservationService()
 		navigation = simulationContext.getRoutingServices().getTrainNavigationService()
 
-		zB = separatorAt(27, 8)
-		doA2 = separatorAt(17, 9)
-	}
-
-	private fun separatorAt(
-		x: Int,
-		y: Int
-	): DynamicPathSeparator {
-		val cell = simulationContext.getRailWayNetGrid()[Point(x, y)]
-		val separator = cell as? PathSeparator ?: throw IllegalStateException("No separator at ($x, $y): $cell")
-		return simulationContext.toDynamic(separator)
+		zB = simulationContext.separatorAt(27, 8)
+		doA2 = simulationContext.separatorAt(17, 9)
 	}
 
 	@Test

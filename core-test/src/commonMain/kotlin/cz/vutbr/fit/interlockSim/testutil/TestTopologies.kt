@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -264,14 +263,14 @@ object TestTopologies {
 			.withInOut("A", 1, 1, true)
 			.buildEditingContext()
 
-	fun simpleLinearPathSimulation(): SimulationContext =
+	fun simpleLinearPathSimulation(): DefaultSimulationContext =
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)
 			.withInOut("B", 5, 5, false)
 			.withConnection(1, 1, 5, 5, 100.0, 80.0)
 			.buildSimulationContext()
 
-	fun linearPathWithSemaphoreSimulation(semaphoreAllowing: Boolean = false): SimulationContext =
+	fun linearPathWithSemaphoreSimulation(semaphoreAllowing: Boolean = false): DefaultSimulationContext =
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)
 			.withSemaphore(3, 3, semaphoreAllowing)
@@ -280,7 +279,7 @@ object TestTopologies {
 			.withConnection(3, 3, 5, 5, 100.0, 80.0)
 			.buildSimulationContext()
 
-	fun yJunctionWithSwitchSimulation(): SimulationContext {
+	fun yJunctionWithSwitchSimulation(): DefaultSimulationContext {
 		val editingContext = yJunctionWithSwitch()
 		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
@@ -289,13 +288,13 @@ object TestTopologies {
 	fun linearPathWithSemaphoreSequenceSimulation(
 		semaphoreCount: Int = 3,
 		semaphoresAllowing: Boolean = false
-	): SimulationContext {
+	): DefaultSimulationContext {
 		val editingContext = linearPathWithSemaphoreSequence(semaphoreCount, semaphoresAllowing)
 		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
-	fun deadEndSingleInOutSimulation(): SimulationContext =
+	fun deadEndSingleInOutSimulation(): DefaultSimulationContext =
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)
 			.buildSimulationContext()

@@ -19,22 +19,21 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
-import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -86,13 +85,7 @@ class Issue742RegressionTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 		registry = simulationContext.scope.get()
 		service = simulationContext.getRoutingServices().getPathReservationService()
@@ -103,38 +96,18 @@ class Issue742RegressionTest : KoinTestBase() {
 		inOutB = inOuts.find { it.name == "B" } as? DynamicPathSeparator
 			?: throw IllegalStateException("InOut 'B' not found in vyhybna.xml")
 
-		semaphoreZA = separatorAt(grid.getCellAt(14, 8), "zA")
-		semaphoreZB = separatorAt(grid.getCellAt(27, 8), "zB")
-		semaphoreDoA1 = separatorAt(grid.getCellAt(16, 8), "doA1")
-		semaphoreDoA2 = separatorAt(grid.getCellAt(17, 9), "doA2")
-		semaphoreDoB1 = separatorAt(grid.getCellAt(25, 8), "doB1")
-		semaphoreDoB2 = separatorAt(grid.getCellAt(24, 9), "doB2")
-		switchVB = separatorAt(grid.getCellAt(26, 8), "vB") as? DynamicRailSwitch
+		semaphoreZA = simulationContext.separatorAt(14, 8)
+		semaphoreZB = simulationContext.separatorAt(27, 8)
+		semaphoreDoA1 = simulationContext.separatorAt(16, 8)
+		semaphoreDoA2 = simulationContext.separatorAt(17, 9)
+		semaphoreDoB1 = simulationContext.separatorAt(25, 8)
+		semaphoreDoB2 = simulationContext.separatorAt(24, 9)
+		switchVB = simulationContext.separatorAt(26, 8) as? DynamicRailSwitch
 			?: throw IllegalStateException("Switch 'vB' is not a DynamicRailSwitch")
 	}
 
-	private fun separatorAt(
-		cell: Any?,
-		name: String
-	): DynamicPathSeparator =
-		(cell as? PathSeparator)
-			?.let { simulationContext.toDynamic(it) }
-			?: throw IllegalStateException("Separator '$name' not found in vyhybna.xml")
-
 	/** Collect every [DynamicRailSwitch] present in the loaded vyhybna grid. */
-	private fun collectSwitches(): List<DynamicRailSwitch> {
-		val grid = simulationContext.getRailWayNetGrid()
-		val switches = mutableListOf<DynamicRailSwitch>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid.getCellAt(x, y)
-				if (cell is DynamicRailSwitch) {
-					switches.add(cell)
-				}
-			}
-		}
-		return switches
-	}
+	private fun collectSwitches(): List<DynamicRailSwitch> = simulationContext.cellsOfType<DynamicRailSwitch>()
 
 	@AfterEach
 	fun tearDown() {

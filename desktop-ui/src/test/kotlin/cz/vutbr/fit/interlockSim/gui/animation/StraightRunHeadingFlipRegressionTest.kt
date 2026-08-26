@@ -39,9 +39,6 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
-import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -52,11 +49,12 @@ import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.deg
+import cz.vutbr.fit.interlockSim.testutil.normalizeAngleDiff
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 import kotlin.math.abs
 
 class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
@@ -152,23 +150,11 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		b: PathSeparator?
 	): Boolean = a != null && b != null && DynamicWrapperUtils.unwrapToStatic(a) === DynamicWrapperUtils.unwrapToStatic(b)
 
-	private fun deg(rad: Double): String = "${Math.toDegrees(rad).toInt()}°"
-
-	private fun normalizeAngleDiff(d: Double): Double {
-		var x = d
-		while (x > Math.PI) x -= 2.0 * Math.PI
-		while (x < -Math.PI) x += 2.0 * Math.PI
-		return x
-	}
-
 	@Test
 	fun `straight A to B run has no spurious mid-journey heading flips`() {
-		val xmlFactory = XMLContextFactory()
-		val resourcePath = javaClass.getResource("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		checkNotNull(resourcePath) { "vyhybna.xml not on classpath" }
-		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
-		val context = ContextTransformer.createSimulationContext(editingContext, processFactory)
-		val simContext = context as DefaultSimulationContext
+		val context =
+			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+		val simContext = context
 		calculator = TrainPositionCalculator(context, simContext.getSeparatorPositionCache())
 
 		val destinationName = "B"

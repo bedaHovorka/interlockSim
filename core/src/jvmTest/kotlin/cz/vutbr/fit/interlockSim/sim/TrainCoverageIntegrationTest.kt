@@ -22,7 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
-import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
@@ -65,11 +65,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 	}
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val ctx =
-			TestFixtures.loadShuntingXml().use { xml ->
-				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(xml))
-			}
-		ctx.getInOuts() // Initialize dynamic wrapper map (required side-effect)
+		val ctx = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
 		context = ctx
 		return ctx
 	}
@@ -111,10 +107,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 				}
 			)
 
-			val loop = ShuntingLoop(ctx, 200L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
-			ctx.run()
+			val loop = runShuntingLoop(ctx, 200L)
 
 			assertThat(endEvents.get(), name = "train end events in extended sim")
 				.isGreaterThan(2)
@@ -140,10 +133,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 				}
 			)
 
-			val loop = ShuntingLoop(ctx, 60L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
-			ctx.run()
+			val loop = runShuntingLoop(ctx, 60L)
 
 			assertThat(trainApproved.get(), name = "trains approved (exercising Front paths)")
 				.isGreaterThan(0)
@@ -157,7 +147,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		@DisplayName("SimpleTestProcess exercises Front InOut entry path")
 		@Timeout(value = 60, unit = SECONDS)
 		fun simpleLinearTopologyExercisesInOutEntryPath() {
-			val ctx = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+			val ctx = TestTopologies.simpleLinearPathSimulation()
 			context = ctx
 
 			val inOuts = ctx.getInOuts().toList()
@@ -239,7 +229,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		@DisplayName("LengthChecker.report() formats distances from active simulation")
 		@Timeout(value = 60, unit = SECONDS)
 		fun lengthCheckerReportAfterSimulationRun() {
-			val ctx = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+			val ctx = TestTopologies.simpleLinearPathSimulation()
 			context = ctx
 
 			val inOuts = ctx.getInOuts().toList()
@@ -276,10 +266,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		fun lengthCheckerCheckExercisedThroughSimulation() {
 			val ctx = loadVyhybnaContext()
 
-			val loop = ShuntingLoop(ctx, 30L)
-			wireSynchronousDispatcher(ctx, loop)
-			ctx.setMainProcess(loop)
-			ctx.run()
+			val loop = runShuntingLoop(ctx, 30L)
 
 			assertThat(ctx.getGraph()).isNotNull()
 		}

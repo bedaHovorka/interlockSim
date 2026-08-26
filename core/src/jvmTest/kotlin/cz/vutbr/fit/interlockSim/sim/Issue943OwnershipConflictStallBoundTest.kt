@@ -11,22 +11,19 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
-import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
+import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -88,10 +85,7 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-		}
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	/**
 	 * Pins the escalation invariant the two-stage design rests on:
@@ -137,40 +131,22 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		// rear-facing and never extended, while the dispatcher serves everyone else normally.
 		val stalledTrainId = AtomicReference<String?>(null)
 		val stallingNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult {
-					if (separator !is DynamicInOut) {
-						stalledTrainId.compareAndSet(null, trainId)
-					}
-					return if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
-						PathResult.OwnershipConflict
-					} else {
-						realNav.findReservedPathForTrain(trainId, separator)
-					}
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+
+				if (separator !is DynamicInOut) {
+					stalledTrainId.compareAndSet(null, trainId)
 				}
-
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
-
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+				return@decoratingTrainNavigationService if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
+					PathResult.OwnershipConflict
+				} else {
+					realNav.findReservedPathForTrain(trainId, separator)
+				}
 			}
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
 		val stallingContext = NavigationDecoratingContext(context, stallingNav) { capturedErrors.add(it) }
 
-		val loop = ShuntingLoop(stallingContext, END_TIME)
-		wireSynchronousDispatcher(stallingContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, END_TIME, env = stallingContext)
 
 		logger.info {
 			"Issue943 bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +
@@ -181,11 +157,7 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		assertThat(loop.getTrainsEntered()).isGreaterThan(0)
 
 		// (2) The horizon fired rather than the train waiting silently to END_TIME.
-		val stallError =
-			capturedErrors.firstOrNull { it.message?.contains(ROUTE_EXTENSION_FRAGMENT) == true }
-		assertThat(stallError, name = "captured route-extension errorStop throwable").isNotNull()
-		assertThat(stallError!!.message ?: "", name = "errorStop message")
-			.contains(ROUTE_EXTENSION_FRAGMENT)
+		assertCapturedErrorStop(capturedErrors, ROUTE_EXTENSION_FRAGMENT)
 	}
 
 	/**
@@ -229,40 +201,22 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		// Front then sees OwnershipConflict at the entry InOut and parks in waitForPathOrReportStall.
 		val stalledTrainId = AtomicReference<String?>(null)
 		val stallingNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult {
-					if (separator is DynamicInOut) {
-						stalledTrainId.compareAndSet(null, trainId)
-					}
-					return if (trainId == stalledTrainId.get() && separator is DynamicInOut) {
-						PathResult.OwnershipConflict
-					} else {
-						realNav.findReservedPathForTrain(trainId, separator)
-					}
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+
+				if (separator is DynamicInOut) {
+					stalledTrainId.compareAndSet(null, trainId)
 				}
-
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
-
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+				return@decoratingTrainNavigationService if (trainId == stalledTrainId.get() && separator is DynamicInOut) {
+					PathResult.OwnershipConflict
+				} else {
+					realNav.findReservedPathForTrain(trainId, separator)
+				}
 			}
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
 		val stallingContext = NavigationDecoratingContext(context, stallingNav) { capturedErrors.add(it) }
 
-		val loop = ShuntingLoop(stallingContext, END_TIME)
-		wireSynchronousDispatcher(stallingContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, END_TIME, env = stallingContext)
 
 		logger.info {
 			"Issue943 origin bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +
@@ -274,11 +228,7 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		assertThat(loop.getTrainsEntered()).isGreaterThan(0)
 
 		// (2) The origin horizon fired with the origin wording, not the mid-journey wording.
-		val originError =
-			capturedErrors.firstOrNull { it.message?.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT) == true }
-		assertThat(originError, name = "captured origin errorStop throwable").isNotNull()
-		assertThat(originError!!.message ?: "", name = "origin errorStop message")
-			.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT)
+		assertCapturedErrorStop(capturedErrors, ORIGIN_ROUTE_EXTENSION_FRAGMENT)
 	}
 
 	private companion object {

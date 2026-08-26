@@ -19,9 +19,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
-import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
+import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
+import cz.vutbr.fit.interlockSim.testutil.withStartedSimulation
 import io.mockk.confirmVerified
 import io.mockk.mockk
 import io.mockk.verify
@@ -88,44 +88,28 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("logFinalSummary is called when a MeasuringPlanAdapter is in scope and the simulation stops")
 	fun logsFinalSummaryWhenAdapterPresent() {
-		val started = CountDownLatch(1)
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
-		context.addPropertyChangeListener { _ -> started.countDown() }
+		val context = createMockShuntingContext()
 
 		val measuringAdapter = mockk<MeasuringPlanAdapter>(relaxed = true)
 		context.scope.declare(measuringAdapter)
 
-		SwingUtilities.invokeAndWait {
-			frame.setContext(context)
-			frame.startSimulation()
+		frame.withStartedSimulation(context) {
+			SwingUtilities.invokeAndWait { frame.stopSimulation() }
+
+			verify(exactly = 1) { measuringAdapter.logFinalSummary() }
+			confirmVerified(measuringAdapter)
 		}
-		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
-
-		SwingUtilities.invokeAndWait { frame.stopSimulation() }
-
-		verify(exactly = 1) { measuringAdapter.logFinalSummary() }
-		confirmVerified(measuringAdapter)
-		context.close()
 	}
 
 	@Test
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("stopping a simulation without a MeasuringPlanAdapter in scope does not throw")
 	fun noThrowWhenAdapterAbsent() {
-		val started = CountDownLatch(1)
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
-		context.addPropertyChangeListener { _ -> started.countDown() }
+		val context = createMockShuntingContext()
 
-		SwingUtilities.invokeAndWait {
-			frame.setContext(context)
-			frame.startSimulation()
+		frame.withStartedSimulation(context) {
+			// Must not throw even though context.scope has no MeasuringPlanAdapter registered.
 		}
-		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
-
-		// Must not throw even though context.scope has no MeasuringPlanAdapter registered.
-		SwingUtilities.invokeAndWait { frame.stopSimulation() }
-
-		context.close()
 	}
 
 	// ── SP2c.22 (#845) — DispatcherRunRecorder integration ───────────────────
@@ -136,28 +120,21 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		"SP2c.22: finish and logFinalSummary called on DispatcherRunRecorder when simulation stops (MANUAL_STOP path)"
 	)
 	fun runRecorderFinishAndLogCalledOnStop() {
-		val started = CountDownLatch(1)
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
-		context.addPropertyChangeListener { _ -> started.countDown() }
+		val context = createMockShuntingContext()
 
 		val runRecorder = mockk<DispatcherRunRecorder>(relaxed = true)
 		context.scope.declare(runRecorder)
 
-		SwingUtilities.invokeAndWait {
-			frame.setContext(context)
-			frame.startSimulation()
+		frame.withStartedSimulation(context) {
+			SwingUtilities.invokeAndWait { frame.stopSimulation() }
+
+			// Issue #834 (SP2c.11): DispatcherRunSummaries.finishAndPersist also records the run's
+			// RailwayOutcome before finish()/logFinalSummary() — see that method's kdoc.
+			verify(exactly = 1) { runRecorder.recordRailwayOutcome(any()) }
+			verify(exactly = 1) { runRecorder.finish(any()) }
+			verify(exactly = 1) { runRecorder.logFinalSummary() }
+			confirmVerified(runRecorder)
 		}
-		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
-
-		SwingUtilities.invokeAndWait { frame.stopSimulation() }
-
-		// Issue #834 (SP2c.11): DispatcherRunSummaries.finishAndPersist also records the run's
-		// RailwayOutcome before finish()/logFinalSummary() — see that method's kdoc.
-		verify(exactly = 1) { runRecorder.recordRailwayOutcome(any()) }
-		verify(exactly = 1) { runRecorder.finish(any()) }
-		verify(exactly = 1) { runRecorder.logFinalSummary() }
-		confirmVerified(runRecorder)
-		context.close()
 	}
 
 	/**
@@ -183,25 +160,20 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		// loop), so SimulationController's monitor thread observes the runner has already
 		// finished within one poll interval and drives the natural-completion STOPPED path
 		// on its own — frame.stopSimulation() is deliberately never called here.
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
+		val context = createMockShuntingContext()
 		context.addPropertyChangeListener { _ -> started.countDown() }
 
 		val runRecorder = mockk<DispatcherRunRecorder>(relaxed = true)
 		context.scope.declare(runRecorder)
 
-		SwingUtilities.invokeAndWait {
-			frame.setContext(context)
-			frame.startSimulation()
+		frame.withStartedSimulation(context) {
+			verify(timeout = 5000) { runRecorder.finish(RunEndCause.STARVED) }
+			verify(timeout = 5000) { runRecorder.logFinalSummary() }
+			SwingUtilities.invokeAndWait {
+				assertThat(frame.statusBar.isStarvedIndicatorVisible()).isTrue()
+				assertThat(frame.statusBar.starvedIndicatorText()).isEqualTo(StatusBar.STARVED_BADGE_TEXT)
+			}
 		}
-		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
-
-		verify(timeout = 5000) { runRecorder.finish(RunEndCause.STARVED) }
-		verify(timeout = 5000) { runRecorder.logFinalSummary() }
-		SwingUtilities.invokeAndWait {
-			assertThat(frame.statusBar.isStarvedIndicatorVisible()).isTrue()
-			assertThat(frame.statusBar.starvedIndicatorText()).isEqualTo(StatusBar.STARVED_BADGE_TEXT)
-		}
-		context.close()
 	}
 
 	/**
@@ -216,71 +188,28 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("#930: finish called with RunEndCause.NATURAL_COMPLETION when the railway made progress")
 	fun runRecorderFinishCalledWithNaturalCompletionCauseOnHealthyRailway() {
-		val started = CountDownLatch(1)
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
-		context.addPropertyChangeListener { _ -> started.countDown() }
+		val context = createMockShuntingContext()
 
 		val runRecorder = mockk<DispatcherRunRecorder>(relaxed = true)
 		context.scope.declare(runRecorder)
-		context.scope.declare<MetricsCollectionService>(CompletedJourneyMetrics())
+		context.scope.declare<MetricsCollectionService>(FakeMetricsCollectionService(completedTrains = 1))
 
-		SwingUtilities.invokeAndWait {
-			frame.setContext(context)
-			frame.startSimulation()
+		frame.withStartedSimulation(context) {
+			verify(timeout = 5000) { runRecorder.finish(RunEndCause.NATURAL_COMPLETION) }
+			SwingUtilities.invokeAndWait {
+				assertThat(frame.statusBar.isStarvedIndicatorVisible()).isFalse()
+			}
 		}
-		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
-
-		verify(timeout = 5000) { runRecorder.finish(RunEndCause.NATURAL_COMPLETION) }
-		SwingUtilities.invokeAndWait {
-			assertThat(frame.statusBar.isStarvedIndicatorVisible()).isFalse()
-		}
-		context.close()
-	}
-
-	/**
-	 * Stand-in [MetricsCollectionService] reporting one completed journey, so
-	 * `DispatcherRunSummaries.railwayOutcomeFrom` sees a railway that achieved something. Mirrors
-	 * `DispatcherRunPersistenceTest.LeakGaugeSpy`, which exists for the same reason: the real
-	 * service needs a real run behind it.
-	 */
-	private class CompletedJourneyMetrics : MetricsCollectionService {
-		override fun getSnapshot(): MetricsSnapshot =
-			MetricsSnapshot(
-				time = 0.0,
-				conflictCount = 0,
-				completedTrains = 1,
-				throughput = 0.0,
-				totalWaitSeconds = 0.0,
-				averageWaitSeconds = 0.0,
-				occupiedBlocks = 0,
-				totalBlocks = 0,
-				utilization = 0.0
-			)
-
-		override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) = Unit
-
-		override fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit) = Unit
-
-		override fun reportUnreleasedReservations(): Set<String> = emptySet()
 	}
 
 	@Test
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("SP2c.22: stopping without a DispatcherRunRecorder in scope does not throw")
 	fun noThrowWhenRunRecorderAbsent() {
-		val started = CountDownLatch(1)
-		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
-		context.addPropertyChangeListener { _ -> started.countDown() }
+		val context = createMockShuntingContext()
 
-		SwingUtilities.invokeAndWait {
-			frame.setContext(context)
-			frame.startSimulation()
+		frame.withStartedSimulation(context) {
+			// Must not throw even though context.scope has no DispatcherRunRecorder registered.
 		}
-		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
-
-		// Must not throw even though context.scope has no DispatcherRunRecorder registered.
-		SwingUtilities.invokeAndWait { frame.stopSimulation() }
-
-		context.close()
 	}
 }

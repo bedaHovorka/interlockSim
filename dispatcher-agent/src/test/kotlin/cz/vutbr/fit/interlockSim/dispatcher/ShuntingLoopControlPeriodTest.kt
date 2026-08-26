@@ -11,17 +11,14 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import java.util.concurrent.TimeUnit
 
 /**
@@ -57,18 +54,8 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("ShuntingLoop control period is 2.0 simulated seconds (#834)")
 @Tag("integration-test")
-class ShuntingLoopControlPeriodTest {
+class ShuntingLoopControlPeriodTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
-
-	@BeforeEach
-	fun startKoinForContext() {
-		startKoin { modules(dispatcherAgentTestModule) }
-	}
-
-	@AfterEach
-	fun stopKoinAfterContext() {
-		stopKoin()
-	}
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)

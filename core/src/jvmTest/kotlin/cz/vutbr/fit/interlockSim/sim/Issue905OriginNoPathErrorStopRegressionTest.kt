@@ -11,23 +11,20 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
-import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
+import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -86,10 +83,7 @@ class Issue905OriginNoPathErrorStopRegressionTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-		}
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	/**
 	 * Verifies that [Train.MAX_ORIGIN_NO_PATH_RETRIES] is defined and positive — the bounded-retry
@@ -124,36 +118,18 @@ class Issue905OriginNoPathErrorStopRegressionTest : KoinTestBase() {
 		// permanent dead-end at the entry InOut. holdOrStopAtOriginWithoutPath retries 5× (5 s hold
 		// each) then calls env.errorStop.
 		val hidingNav =
-			object : TrainNavigationService {
-				override fun findReservedPathForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): PathResult =
-					if (separator is DynamicInOut) {
-						PathResult.NoTopologicalPath
-					} else {
-						realNav.findReservedPathForTrain(trainId, separator)
-					}
-
-				override fun isPathReservedForTrain(
-					trainId: String,
-					separator: PathSeparator
-				): Boolean = realNav.isPathReservedForTrain(trainId, separator)
-
-				override fun reservedSeparatorsAhead(
-					trainId: String,
-					separator: PathSeparator,
-					limit: Int
-				): List<OrientedPathSeparator> = realNav.reservedSeparatorsAhead(trainId, separator, limit)
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+				if (separator is DynamicInOut) {
+					PathResult.NoTopologicalPath
+				} else {
+					realNav.findReservedPathForTrain(trainId, separator)
+				}
 			}
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
 		val hidingContext = NavigationDecoratingContext(context, hidingNav) { capturedErrors.add(it) }
 
-		val loop = ShuntingLoop(hidingContext, END_TIME)
-		wireSynchronousDispatcher(hidingContext, loop)
-		context.setMainProcess(loop)
-		context.run()
+		val loop = runShuntingLoop(context, END_TIME, env = hidingContext)
 
 		logger.info {
 			"origin bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +
@@ -164,11 +140,7 @@ class Issue905OriginNoPathErrorStopRegressionTest : KoinTestBase() {
 		assertThat(loop.getTrainsEntered()).isGreaterThan(0)
 
 		// (2) The origin bound fired with the origin wording, not the mid-journey wording.
-		val originError =
-			capturedErrors.firstOrNull { it.message?.contains(ORIGIN_NO_PATH_FRAGMENT) == true }
-		assertThat(originError, name = "captured origin errorStop throwable").isNotNull()
-		val message = originError!!.message ?: ""
-		assertThat(message, name = "origin errorStop message").contains(ORIGIN_NO_PATH_FRAGMENT)
+		val message = assertCapturedErrorStop(capturedErrors, ORIGIN_NO_PATH_FRAGMENT).message ?: ""
 
 		// (3) The misconfigured origin InOut is named (quoted) in the message — not elided.
 		val quotedNames = inOutNames.map { "'$it'" }

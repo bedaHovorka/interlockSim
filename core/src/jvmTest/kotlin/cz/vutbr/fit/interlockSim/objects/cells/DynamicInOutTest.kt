@@ -66,7 +66,7 @@ class DynamicInOutTest {
 			modules(coreTestModule)
 		}
 		// Use simple linear path with 2 InOuts (Entry, Exit)
-		context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+		context = TestTopologies.simpleLinearPathSimulation()
 	}
 
 	@AfterEach
