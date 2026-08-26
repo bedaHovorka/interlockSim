@@ -127,7 +127,7 @@ object OllamaModelPrewarmer {
 	}
 
 	/**
-	 * Issues the HTTP request on [Dispatchers.IO] and returns the HTTP response status code.
+	 * Issues the HTTP request on [ioDispatcher] (default [Dispatchers.IO]) and returns the HTTP response status code.
 	 */
 	private suspend fun doWarmUp(
 		config: OllamaExecutorConfig,
