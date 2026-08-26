@@ -137,8 +137,9 @@ private fun JSONElement.toKotlinValue(): Any? =
 			} else {
 				// Integer-shaped content becomes Int, decimal-shaped becomes Double, matching
 				// DomainToolParameterType.Integer/Float's Kotlin-side expectations; falls back to
-				// Boolean, then the raw content string, for anything else (e.g. "true").
-				content.toIntOrNull() ?: content.toDoubleOrNull() ?: content.toBooleanStrictOrNull() ?: content
+				// Boolean, then the raw content string, for anything else.
+				(content.toIntOrNull() ?: content.toDoubleOrNull() ?: content.toBooleanStrictOrNull())
+					?: content
 			}
 	}
 

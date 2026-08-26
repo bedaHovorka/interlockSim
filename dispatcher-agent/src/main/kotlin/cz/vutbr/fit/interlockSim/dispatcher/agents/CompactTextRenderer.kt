@@ -286,54 +286,59 @@ class CompactTextRenderer : ObservationRenderer {
 		sb: StringBuilder,
 		t: TrainView
 	) {
-		val phase = t.phase.name
 		sb.append(t.trainId)
 		sb.append(' ')
-		sb.append(phase)
+		sb.append(t.phase.name)
 		when (t.phase) {
-			TrainPhase.RUNNING, TrainPhase.HELD, TrainPhase.DWELLING -> {
-				if (t.frontSectionName != null) {
-					sb.append(" at ")
-					sb.append(t.frontSectionName)
-				}
-				sb.append(" -> ")
-				sb.append(t.destinationInOutName)
-				sb.append(" | v=")
-				sb.append(t.velocityMps.f1())
-				sb.append(" a=")
-				sb.append(t.accelerationMps2.f1())
-				if (t.signalAheadName != null) {
-					sb.append(" | ahead ")
-					sb.append(t.signalAheadName)
-					sb.append('=')
-					sb.append(signalDisplayName(t.signalAheadAspect))
-					sb.append(' ')
-					sb.append(t.distanceToSignalAheadMetres.f0())
-					sb.append('m')
-				}
-				// RUNNING/HELD/DWELLING wait is rendered as integer seconds (whole-second
-				// waits); QUEUED wait below uses %.1f because queued waits are sub-second precise.
-				sb.append(" | wait ")
-				sb.append(t.waitSeconds.f0())
-				sb.append('s')
-			}
-			TrainPhase.QUEUED -> {
-				sb.append(" -> ")
-				sb.append(t.destinationInOutName)
-				if (t.waitingSinceSimTime != null) {
-					sb.append(" | queued since ")
-					sb.append(t.waitingSinceSimTime.f1())
-				}
-				sb.append(" | wait ")
-				sb.append(t.waitSeconds.f1())
-				sb.append('s')
-			}
-			TrainPhase.EXITED -> {
-				// Just show the destination — minimal info for an exited train
-				sb.append(" -> ")
-				sb.append(t.destinationInOutName)
-			}
+			TrainPhase.RUNNING, TrainPhase.HELD, TrainPhase.DWELLING -> renderMovingTrain(sb, t)
+			TrainPhase.QUEUED -> renderQueuedTrain(sb, t)
+			TrainPhase.EXITED -> renderExitedTrain(sb, t)
 		}
+	}
+
+	private fun renderMovingTrain(sb: StringBuilder, t: TrainView) {
+		if (t.frontSectionName != null) {
+			sb.append(" at ")
+			sb.append(t.frontSectionName)
+		}
+		sb.append(" -> ")
+		sb.append(t.destinationInOutName)
+		sb.append(" | v=")
+		sb.append(t.velocityMps.f1())
+		sb.append(" a=")
+		sb.append(t.accelerationMps2.f1())
+		if (t.signalAheadName != null) {
+			sb.append(" | ahead ")
+			sb.append(t.signalAheadName)
+			sb.append('=')
+			sb.append(signalDisplayName(t.signalAheadAspect))
+			sb.append(' ')
+			sb.append(t.distanceToSignalAheadMetres.f0())
+			sb.append('m')
+		}
+		// RUNNING/HELD/DWELLING wait is rendered as integer seconds (whole-second
+		// waits); QUEUED wait uses %.1f because queued waits are sub-second precise.
+		sb.append(" | wait ")
+		sb.append(t.waitSeconds.f0())
+		sb.append('s')
+	}
+
+	private fun renderQueuedTrain(sb: StringBuilder, t: TrainView) {
+		sb.append(" -> ")
+		sb.append(t.destinationInOutName)
+		if (t.waitingSinceSimTime != null) {
+			sb.append(" | queued since ")
+			sb.append(t.waitingSinceSimTime.f1())
+		}
+		sb.append(" | wait ")
+		sb.append(t.waitSeconds.f1())
+		sb.append('s')
+	}
+
+	private fun renderExitedTrain(sb: StringBuilder, t: TrainView) {
+		// Just show the destination — minimal info for an exited train
+		sb.append(" -> ")
+		sb.append(t.destinationInOutName)
 	}
 
 	private fun signalDisplayName(signal: Signal?): String =
@@ -444,12 +449,10 @@ class CompactTextRenderer : ObservationRenderer {
 		}
 
 		// Group by trainId, preserve insertion order; no_op is always last
-		val grouped = linkedMapOf<String, MutableList<Affordance>>()
-		for (aff in affordances) {
-			if (aff.trainId != Affordance.NO_OP_TRAIN_ID) {
-				grouped.getOrPut(aff.trainId) { mutableListOf() }.add(aff)
-			}
-		}
+		val grouped: Map<String, List<Affordance>> =
+			affordances
+				.filter { it.trainId != Affordance.NO_OP_TRAIN_ID }
+				.groupBy { it.trainId }
 
 		// Per-train blocks
 		for ((trainId, entries) in grouped) {

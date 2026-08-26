@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.executor
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URI
@@ -128,8 +129,11 @@ object OllamaModelPrewarmer {
 	/**
 	 * Issues the HTTP request on [Dispatchers.IO] and returns the HTTP response status code.
 	 */
-	private suspend fun doWarmUp(config: OllamaExecutorConfig): Int =
-		withContext(Dispatchers.IO) {
+	private suspend fun doWarmUp(
+		config: OllamaExecutorConfig,
+		ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+	): Int =
+		withContext(ioDispatcher) {
 			val client =
 				HttpClient
 					.newBuilder()

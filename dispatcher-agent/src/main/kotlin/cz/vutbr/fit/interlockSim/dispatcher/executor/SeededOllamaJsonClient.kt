@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -140,11 +141,12 @@ object SeededOllamaJsonClient {
 		systemPrompt: String?,
 		userPrompt: String,
 		jsonSchema: JsonObject?,
-		seed: Long
+		seed: Long,
+		ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 	): String {
 		val body = buildRequestBody(config, systemPrompt, userPrompt, jsonSchema, seed)
 		val responseBody =
-			withContext(Dispatchers.IO) {
+			withContext(ioDispatcher) {
 				val httpClient =
 					HttpClient
 						.newBuilder()
@@ -160,10 +162,8 @@ object SeededOllamaJsonClient {
 						.build()
 				httpClient.use { it.send(httpRequest, HttpResponse.BodyHandlers.ofString()) }
 			}
-		if (responseBody.statusCode() != HTTP_OK) {
-			throw IllegalStateException(
-				"Seeded Ollama request failed: HTTP ${responseBody.statusCode()} — ${responseBody.body()}"
-			)
+		check(responseBody.statusCode() == HTTP_OK) {
+			"Seeded Ollama request failed: HTTP ${responseBody.statusCode()} — ${responseBody.body()}"
 		}
 		return json
 			.decodeFromString<ChatResponse>(responseBody.body())

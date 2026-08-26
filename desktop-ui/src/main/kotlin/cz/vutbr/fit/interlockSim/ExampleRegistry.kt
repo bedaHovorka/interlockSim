@@ -83,6 +83,9 @@ import java.util.concurrent.Semaphore
  * @since January 2026 (refactored from reflection-based system)
  */
 class ExampleRegistry {
+	companion object {
+		private const val END_TIME_NOT_SPECIFIED = "End time of simulation not specified"
+	}
 	/**
 	 * Registry of console-based examples. Maps example name to factory function.
 	 *
@@ -157,7 +160,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
+			throw ContextCreationException(END_TIME_NOT_SPECIFIED)
 		}
 		val xml =
 			try {
@@ -201,7 +204,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
+			throw ContextCreationException(END_TIME_NOT_SPECIFIED)
 		}
 		val xml =
 			try {
@@ -321,7 +324,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
+			throw ContextCreationException(END_TIME_NOT_SPECIFIED)
 		}
 		val xml =
 			try {
@@ -416,7 +419,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
+			throw ContextCreationException(END_TIME_NOT_SPECIFIED)
 		}
 		val xml =
 			try {
@@ -473,7 +476,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
+			throw ContextCreationException(END_TIME_NOT_SPECIFIED)
 		}
 		val xml =
 			try {

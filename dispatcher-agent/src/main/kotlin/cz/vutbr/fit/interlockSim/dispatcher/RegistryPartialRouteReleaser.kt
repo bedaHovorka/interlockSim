@@ -107,26 +107,37 @@ class RegistryPartialRouteReleaser(
 
 		val released = mutableListOf<String>()
 		for (block in eligible) {
-			val id = BlockIdentity.stableBlockId(block)
-			val reservedFrom = block.reservedFrom ?: continue
-			try {
-				block.cancelPathSetup(reservedFrom)
-				if (pathReservationService.unregisterBlock(trainId, block)) {
-					released += id
-				} else {
-					logger.warn {
-						"RegistryPartialRouteReleaser: freed block '$id' but the registry refused to " +
-							"unregister it for '$trainId'; leaving ownership in place"
-					}
-				}
-			} catch (e: Exception) {
-				logger.warn(e) {
-					"RegistryPartialRouteReleaser: could not release block '$id' of '$trainId'; " +
-						"skipping it and continuing with the rest of the tail"
-				}
-			}
+			releaseBlock(trainId, block)?.let { released += it }
 		}
 		return released
+	}
+
+	/**
+	 * Attempts to release a single [block] from [trainId]'s route.
+	 *
+	 * @return the block's stable id if it was successfully released, or `null` if it was skipped.
+	 */
+	private fun releaseBlock(trainId: String, block: DynamicTrackBlock): String? {
+		val id = BlockIdentity.stableBlockId(block)
+		val reservedFrom = block.reservedFrom ?: return null
+		return try {
+			block.cancelPathSetup(reservedFrom)
+			if (pathReservationService.unregisterBlock(trainId, block)) {
+				id
+			} else {
+				logger.warn {
+					"RegistryPartialRouteReleaser: freed block '$id' but the registry refused to " +
+						"unregister it for '$trainId'; leaving ownership in place"
+				}
+				null
+			}
+		} catch (e: Exception) {
+			logger.warn(e) {
+				"RegistryPartialRouteReleaser: could not release block '$id' of '$trainId'; " +
+					"skipping it and continuing with the rest of the tail"
+			}
+			null
+		}
 	}
 
 	private fun DynamicTrackBlock.isOccupied(): Boolean = occupant != null || getState() == TrackFacility.State.OCCUPIED
