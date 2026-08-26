@@ -89,3 +89,6 @@ desktop-ui/*.xml
 
 # Claude Code superpowers workspace files (local-only)
 /.superpowers/
+
+# JVM heap dumps (written by -XX:+HeapDumpOnOutOfMemoryError)
+*.hprof
