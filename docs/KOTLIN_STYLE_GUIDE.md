@@ -1792,7 +1792,7 @@ Which parameterized annotation to use?
 ### Dependency Management
 
 Dependencies are managed via Gradle with fallback strategy:
-- **kDisco 0.6.1-SNAPSHOT** - Discrete event simulation library (Kotlin Multiplatform, replaces jDisco)
+- **kDisco 0.6.1** (version from `kdiscoVersion` in `gradle.properties`) - Discrete event simulation library (Kotlin Multiplatform, replaces jDisco)
   - Repository: https://github.com/bedaHovorka/kdisco
   - Published to GitHub Packages: `https://maven.pkg.github.com/bedaHovorka/kdisco`
   - Fallback order: `mavenLocal()` (local cache) → GitHub Packages → build fails
@@ -2169,7 +2169,7 @@ Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true
 
 **Simulation Core (`sim/` package):**
 - **Minimal changes only** - Be extremely conservative with simulation logic
-- **No refactoring** - Do not restructure working simulation code
+- **Refactoring needs approval** - Do not restructure working simulation code on your own; only small refactorings are possible, and only after traffic-simulation-expert approval (owner decision 2026-08-27)
 - **Tests required** - Any changes MUST have comprehensive test coverage first
 - **No unsolicited improvements** - Only make explicitly requested changes
 - **No hallucinated solutions** - Bugfixes must reference working tag behavior with minimal diffs; no speculative spaghetti code
