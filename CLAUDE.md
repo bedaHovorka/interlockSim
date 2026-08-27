@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Last Updated:** 2026-08-27
+**Last Updated:** 2026-08-28
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this
 repository. It holds repo-wide rules only; module-specific guidance lives in the per-subproject
@@ -48,7 +48,8 @@ hierarchy, collaboration patterns, and the railway-inspired A2A communication pr
 
 Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of
 Technology that simulates railway interlocking systems with a graphical editor and discrete
-event simulation engine.
+event simulation engine. In 2026 the project was rewritten to Kotlin and gained an LLM
+dispatcher (Goal 10), building on ideas from the original thesis work 20 years earlier.
 
 [![Gradle Build with Java 21](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml)
 [![SonarQube Analysis](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml)
@@ -61,7 +62,7 @@ and rules. Claude Code loads them automatically when working with files in that 
 - [core/CLAUDE.md](core/CLAUDE.md) — KMP domain model, simulation engine, XML;
   **sim/ package rules**; purity gate; known issues
 - [core-test/CLAUDE.md](core-test/CLAUDE.md) — shared test-fixture library
-  (fixtures in `commonMain`; 25 XML fixture networks)
+  (fixtures in `commonMain`/`jvmMain`; 25 XML fixture networks)
 - [dispatcher-agent/CLAUDE.md](dispatcher-agent/CLAUDE.md) — Goal 10 LLM dispatcher,
   Ollama setup, **manual-only `aiSweep`**
 - [desktop-ui/CLAUDE.md](desktop-ui/CLAUDE.md) — Swing GUI, entry point and its six
@@ -82,12 +83,10 @@ Java 11→21, Java→Kotlin, kDisco extraction) are history; see
 ./gradlew clean build             # Build and test
 ./gradlew test                    # Unit tests only
 ./gradlew integrationTest         # Integration tests only
-
-# Run tasks (defined in :desktop-ui — see desktop-ui/CLAUDE.md for the full list)
-./gradlew runSim                  # Pre-configured shunting loop
-./gradlew runEditor               # Editor GUI
-./gradlew runExampleGui           # Animated GUI simulation with speed control
 ```
+
+Run tasks (`runSim`, `runEditor`, `runExampleGui`, and others) are `:desktop-ui`-specific —
+see [desktop-ui/CLAUDE.md](desktop-ui/CLAUDE.md) for the full list.
 
 Full build-system documentation (dependency management, GitHub Packages authentication,
 manual JAR execution): [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under
@@ -201,7 +200,8 @@ artifact. Test utilities (`TestFixtures`, `TestTopologies`, `TestContextBuilder`
 
 ## Dependency Injection with Koin
 
-Koin 3.5.6. Critical rules:
+Koin (version comes from `koinVersion` in [gradle.properties](gradle.properties)).
+Critical rules:
 
 1. **sim/ package injection is allowed** — the restriction was lifted 2026-03-20
    (kDisco Phase 1 complete)
@@ -260,7 +260,6 @@ CI never runs `heavyTest`, `aiSweep`, or detekt. Build status:
 
 **Thesis:** LaTeX sources in `text/`, build with `docker compose up text`
 (outputs to `artifacts/text/bakalarka.pdf`).
-**JavaDoc:** `./gradlew javadoc` (outputs to `build/docs/javadoc/`).
 
 Key documents in `docs/` (the directory holds ~75 files; start with these):
 
@@ -276,12 +275,13 @@ Key documents in `docs/` (the directory holds ~75 files; start with these):
 
 ## Simulation Engine
 
-The engine is **kDisco** (`cz.ksimulantenbande.kdisco:kdisco-core`, version **0.6.1** from
-`gradle.properties`), maintained as a separate project at
-https://github.com/bedaHovorka/kdisco. It replaced jDisco entirely on 2026-03-20.
+The engine is **kDisco** (`cz.ksimulantenbande.kdisco:kdisco-core`; version comes from
+`kdiscoVersion` in [gradle.properties](gradle.properties)), maintained as a separate project
+at https://github.com/bedaHovorka/kdisco. It replaced jDisco entirely on 2026-03-20.
 
-**There is no planned migration to Kalasim** (owner decision, 2026-08-24). Engine work goes
-into kDisco itself. [docs/SIMULATION_LIBRARY_DECISION.md](docs/SIMULATION_LIBRARY_DECISION.md),
+**There is no planned migration to another simulation library** — the Kalasim plan was
+dropped by owner decision on 2026-08-24. kDisco is our own engine, based on jDisco, and
+engine work goes into kDisco itself. [docs/SIMULATION_LIBRARY_DECISION.md](docs/SIMULATION_LIBRARY_DECISION.md),
 [docs/SIMULATION_LIBRARY_DECISION_ROUND2.md](docs/SIMULATION_LIBRARY_DECISION_ROUND2.md) and
 [docs/jdisco-research.md](docs/jdisco-research.md) record the 2026 library evaluation —
 read them as history, not as the current plan.

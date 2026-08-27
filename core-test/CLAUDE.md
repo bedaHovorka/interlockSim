@@ -1,6 +1,6 @@
 # CLAUDE.md — :core-test
 
-**Last Updated:** 2026-08-27
+**Last Updated:** 2026-08-28
 
 Guidance for Claude Code when working in `:core-test`. Repo-wide rules live in
 the [root CLAUDE.md](../CLAUDE.md).
@@ -11,9 +11,10 @@ fixtures from their test scopes.
 
 ## Design Rules
 
-- **Fixtures live in `commonMain`, not in test source sets**, so consuming
-  modules can depend on them: `core/commonTest`, `desktop-ui/test`,
-  `dispatcher-agent/test`, `fast-sim/linuxX64Test`.
+- **Fixtures live in the main source sets (`commonMain`, plus `jvmMain` for
+  JVM-only helpers), never in this library's test source sets**, so consuming
+  modules can use them from their test scopes: `core/commonTest`,
+  `desktop-ui/test`, `dispatcher-agent/test`, `fast-sim/linuxX64Test`.
 - AssertK is exposed as `api(...)` on purpose — consumers get it transitively.
 - The ktlint plugin is deliberately NOT applied here; detekt runs with the
   permissive root `detekt.yml`.

@@ -1,6 +1,6 @@
 # CLAUDE.md — :dispatcher-agent
 
-**Last Updated:** 2026-08-27
+**Last Updated:** 2026-08-28
 
 Guidance for Claude Code when working in `:dispatcher-agent`. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the
@@ -57,8 +57,10 @@ shipped values are locked by `DispatcherDefaultsResourceTest`; change both
 together, and only with a measured justification (see the reliability report
 below for how the current defaults were chosen).
 
-**Koog 1.1.1 limitation:** no sampling seed can reach Ollama on the tool-calling
-path, and `format` must never be combined with `tools`. Details and evidence:
+**Koog limitation** (version comes from `koogVersion` in
+[../gradle.properties](../gradle.properties)): no sampling seed can reach Ollama
+on the tool-calling path, and `format` must never be combined with `tools`.
+Details and evidence:
 [../docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md](../docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md).
 
 **Timing regime:** the standing F1 paused-clock ruling (#849) — the simulation
@@ -80,9 +82,12 @@ actually performing those runs and recording each one.
 
 **No grid files are committed.** Write the grid for the campaign you are running,
 keep it out of `docs/`, and record its content in that campaign's report. The
-swept axes are `example`, `model`, `temperature`, `tickPeriodMs`, `historyN` and
-`maxActionsPerTick`; there is deliberately no `seed` axis, because Koog 1.1.1 has
-no path to Ollama's `seed` option.
+swept axes are `example`, `model`, `temperature`, `tickPeriodMs`, `historyN`,
+`maxActionsPerTick`, `inferenceTimeoutSeconds` (per-cycle LLM inference deadline)
+and `promptVariant` (DISPATCHER system-prompt revision); there is deliberately no
+`seed` axis, because the pinned Koog version has no path to Ollama's `seed`
+option. An axis omitted from a grid keeps its default — the example below omits
+`inferenceTimeoutSeconds` and `promptVariant` on purpose.
 
 ```jsonc
 // grid.json — the LLM arm. Drop the "model" axis and use "example": ["shuntingLoop"] for the

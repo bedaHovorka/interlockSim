@@ -36,8 +36,8 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
 
 ## Architecture
 
-**Simulation engine:** kDisco (`cz.ksimulantenbande.kdisco:kdisco-core`; version
-comes from `kdiscoVersion` in `gradle.properties`). See the root CLAUDE.md
+**Simulation engine:** kDisco (`cz.ksimulantenbande.kdisco:kdisco-core`;
+version comes from `kdiscoVersion` in `gradle.properties`). See the root CLAUDE.md
 "Simulation Engine" section for the engine policy and the kDisco repository link.
 
 **Context system:**
