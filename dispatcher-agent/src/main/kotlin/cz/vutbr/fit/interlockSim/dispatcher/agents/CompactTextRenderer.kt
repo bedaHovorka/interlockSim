@@ -296,7 +296,10 @@ class CompactTextRenderer : ObservationRenderer {
 		}
 	}
 
-	private fun renderMovingTrain(sb: StringBuilder, t: TrainView) {
+	private fun renderMovingTrain(
+		sb: StringBuilder,
+		t: TrainView
+	) {
 		if (t.frontSectionName != null) {
 			sb.append(" at ")
 			sb.append(t.frontSectionName)
@@ -323,7 +326,10 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append('s')
 	}
 
-	private fun renderQueuedTrain(sb: StringBuilder, t: TrainView) {
+	private fun renderQueuedTrain(
+		sb: StringBuilder,
+		t: TrainView
+	) {
 		sb.append(" -> ")
 		sb.append(t.destinationInOutName)
 		if (t.waitingSinceSimTime != null) {
@@ -335,7 +341,10 @@ class CompactTextRenderer : ObservationRenderer {
 		sb.append('s')
 	}
 
-	private fun renderExitedTrain(sb: StringBuilder, t: TrainView) {
+	private fun renderExitedTrain(
+		sb: StringBuilder,
+		t: TrainView
+	) {
 		// Just show the destination — minimal info for an exited train
 		sb.append(" -> ")
 		sb.append(t.destinationInOutName)

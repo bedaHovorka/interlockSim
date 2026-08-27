@@ -117,7 +117,10 @@ class RegistryPartialRouteReleaser(
 	 *
 	 * @return the block's stable id if it was successfully released, or `null` if it was skipped.
 	 */
-	private fun releaseBlock(trainId: String, block: DynamicTrackBlock): String? {
+	private fun releaseBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): String? {
 		val id = BlockIdentity.stableBlockId(block)
 		val reservedFrom = block.reservedFrom ?: return null
 		return try {

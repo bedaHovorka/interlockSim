@@ -86,6 +86,7 @@ class ExampleRegistry {
 	companion object {
 		private const val END_TIME_NOT_SPECIFIED = "End time of simulation not specified"
 	}
+
 	/**
 	 * Registry of console-based examples. Maps example name to factory function.
 	 *
