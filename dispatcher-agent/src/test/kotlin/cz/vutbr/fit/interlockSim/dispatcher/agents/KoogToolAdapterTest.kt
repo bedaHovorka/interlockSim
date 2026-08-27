@@ -16,6 +16,7 @@ import ai.koog.serialization.JSONNull
 import ai.koog.serialization.JSONObject
 import ai.koog.serialization.JSONPrimitive
 import ai.koog.serialization.JSONSerializer
+import ai.koog.serialization.JSONUnquotedPrimitive
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
@@ -105,6 +106,22 @@ class KoogToolAdapterTest {
 		@Suppress("UNCHECKED_CAST")
 		val nested = decoded["nested"] as Map<String, Any?>
 		assertThat(nested["inner"] as Boolean).isEqualTo(true)
+	}
+
+	/**
+	 * A non-string primitive whose content parses as neither Int, Double, nor Boolean falls
+	 * through to the raw content string. [JSONUnquotedPrimitive] is the only way to build such
+	 * a value (an unquoted literal like `abc123` in lenient model output); the fallback must
+	 * stay reachable, so this pins it.
+	 */
+	@Test
+	fun `decodeArgs falls back to the raw content string for an unparseable non-string primitive`() {
+		val adapter = KoogToolAdapter(FakeDomainTool())
+		val rawArgs = JSONObject(mapOf("token" to JSONUnquotedPrimitive("abc123")))
+
+		val decoded = adapter.decodeArgs(rawArgs, serializer)
+
+		assertThat(decoded["token"]).isEqualTo("abc123")
 	}
 
 	@Test

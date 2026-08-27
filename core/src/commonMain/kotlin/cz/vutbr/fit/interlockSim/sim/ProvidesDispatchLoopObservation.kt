@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
  * on kDisco's `Process` type to name [ShuntingLoop] directly — mirrors [ApprovesTrains]'s
  * rationale for the same cross-module constraint.
  */
-interface ProvidesDispatchLoopObservation {
+fun interface ProvidesDispatchLoopObservation {
 	/** Most recently published dispatch-loop observation bundle, atomic for a single tick. */
 	fun latestDispatchLoopSnapshot(): DispatchLoopSnapshot
 }

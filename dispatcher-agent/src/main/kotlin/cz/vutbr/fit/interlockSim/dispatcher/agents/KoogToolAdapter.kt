@@ -137,8 +137,15 @@ private fun JSONElement.toKotlinValue(): Any? =
 			} else {
 				// Integer-shaped content becomes Int, decimal-shaped becomes Double, matching
 				// DomainToolParameterType.Integer/Float's Kotlin-side expectations; falls back to
-				// Boolean, then the raw content string, for anything else (e.g. "true").
-				content.toIntOrNull() ?: content.toDoubleOrNull() ?: content.toBooleanStrictOrNull() ?: content
+				// Boolean, then the raw content string, for anything else. The else branch is
+				// reachable for unquoted literals that parse as none of the above (e.g. "abc123"
+				// from lenient-parsed tool output), which is why the raw-string fallback must stay.
+				when {
+					content.toIntOrNull() != null -> content.toInt()
+					content.toDoubleOrNull() != null -> content.toDouble()
+					content.toBooleanStrictOrNull() != null -> content.toBooleanStrict()
+					else -> content
+				}
 			}
 	}
 

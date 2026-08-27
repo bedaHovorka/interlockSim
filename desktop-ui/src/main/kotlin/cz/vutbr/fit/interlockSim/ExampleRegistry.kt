@@ -83,6 +83,23 @@ import java.util.concurrent.Semaphore
  * @since January 2026 (refactored from reflection-based system)
  */
 class ExampleRegistry {
+	companion object {
+		private const val END_TIME_NOT_SPECIFIED = "End time of simulation not specified"
+	}
+
+	/**
+	 * Reads and parses the mandatory end-time argument (`args[2]`) shared by the
+	 * shunting-loop example factories.
+	 *
+	 * @throws ContextCreationException if the argument is missing (fewer than 3 CLI arguments)
+	 */
+	private fun requireEndTimeArg(args: Array<String>): Long {
+		if (args.size < 3) {
+			throw ContextCreationException(END_TIME_NOT_SPECIFIED)
+		}
+		return args[2].toLong()
+	}
+
 	/**
 	 * Registry of console-based examples. Maps example name to factory function.
 	 *
@@ -156,9 +173,7 @@ class ExampleRegistry {
 		factory: SimulationContextFactory,
 		args: Array<String>
 	): SimulationContext {
-		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
-		}
+		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
 				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -169,7 +184,7 @@ class ExampleRegistry {
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = args[2].toLong()
+				val time = endTime
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				val loop = ShuntingLoop(context, time)
@@ -200,9 +215,7 @@ class ExampleRegistry {
 		factory: SimulationContextFactory,
 		args: Array<String>
 	): SimulationContext {
-		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
-		}
+		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
 				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -213,7 +226,7 @@ class ExampleRegistry {
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = args[2].toLong()
+				val time = endTime
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				val loop = ShuntingLoop(context, time)
@@ -320,9 +333,7 @@ class ExampleRegistry {
 		factory: SimulationContextFactory,
 		args: Array<String>
 	): SimulationContext {
-		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
-		}
+		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
 				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -333,7 +344,7 @@ class ExampleRegistry {
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = args[2].toLong()
+				val time = endTime
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				// Headless: no real-time sync for the ShuntingLoop itself — the simulation
@@ -415,9 +426,7 @@ class ExampleRegistry {
 		factory: SimulationContextFactory,
 		args: Array<String>
 	): SimulationContext {
-		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
-		}
+		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
 				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -428,7 +437,7 @@ class ExampleRegistry {
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = args[2].toLong()
+				val time = endTime
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				// Enable real-time synchronization for GUI mode with 1x speed multiplier
@@ -472,9 +481,7 @@ class ExampleRegistry {
 		factory: SimulationContextFactory,
 		args: Array<String>
 	): SimulationContext {
-		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not specified")
-		}
+		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
 				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -485,7 +492,7 @@ class ExampleRegistry {
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = args[2].toLong()
+				val time = endTime
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				// Enable real-time synchronization for GUI mode with 1x speed multiplier

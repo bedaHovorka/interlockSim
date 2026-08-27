@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isSameAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.ProvidesDispatchLoopObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import kotlin.test.Test
@@ -155,6 +156,23 @@ class DispatchLoopPortsTest {
 		assertThat(empty.queuedTrains).isEmpty()
 		assertThat(empty.innerBlockInputs).isEmpty()
 		assertThat(empty.outerBlockInputs).isEmpty()
+	}
+
+	// ── ProvidesDispatchLoopObservation SAM conversion ────────────────────────
+
+	@Test
+	fun `ProvidesDispatchLoopObservation can be created from a lambda`() {
+		// The S6517 fix (PR #983) converted this single-abstract-method interface to a
+		// `fun interface`, so callers may supply a lambda instead of an object expression.
+		val snapshot =
+			DispatchLoopSnapshot(
+				queuedTrains = listOf(QueuedTrainObservation("T1", "A")),
+				innerBlockInputs = emptyList(),
+				outerBlockInputs = emptyList()
+			)
+		val provider = ProvidesDispatchLoopObservation { snapshot }
+
+		assertThat(provider.latestDispatchLoopSnapshot()).isSameAs(snapshot)
 	}
 
 	// ── DispatchLoopActuatorPort contract ─────────────────────────────────────

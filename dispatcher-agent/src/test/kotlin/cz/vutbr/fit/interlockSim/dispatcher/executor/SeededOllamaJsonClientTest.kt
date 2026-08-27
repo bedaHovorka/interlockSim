@@ -9,12 +9,16 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.OllamaTestSeeds
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -23,8 +27,34 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import kotlin.coroutines.CoroutineContext
+
+/**
+ * Runs each dispatched block inline on the calling thread and records that it ran.
+ * A request succeeding through this dispatcher proves [SeededOllamaJsonClient.requestJson]'s
+ * `ioDispatcher` parameter is what [kotlinx.coroutines.withContext] actually uses (not the
+ * default [kotlinx.coroutines.Dispatchers.IO]).
+ */
+private class RecordingDispatcher : CoroutineDispatcher() {
+	val dispatchedThreads = mutableListOf<Thread>()
+
+	override fun isDispatchNeeded(context: CoroutineContext): Boolean = true
+
+	override fun dispatch(
+		context: CoroutineContext,
+		block: Runnable
+	) {
+		dispatchedThreads.add(Thread.currentThread())
+		block.run()
+	}
+}
 
 /**
  * Tests for [SeededOllamaJsonClient] (SP2c.27 spike prototype, Issue #850).
@@ -287,5 +317,68 @@ class SeededOllamaJsonClientTest {
 			}
 
 		assertThat(content.isNotBlank()).isTrue()
+	}
+
+	/**
+	 * Network-free coverage of the full [SeededOllamaJsonClient.requestJson] path (PR #983
+	 * follow-up). The `@Tag("ollama-test")` tests above need a live Ollama; these drive
+	 * [requestJson] against a localhost-only [MockWebServer] (the [OllamaModelPrewarmerHttpTest]
+	 * harness) and also prove the injected [CoroutineDispatcher] seam actually reaches
+	 * [kotlinx.coroutines.withContext].
+	 */
+	@Nested
+	inner class RequestJsonHttpTest {
+		private val server = MockWebServer()
+
+		@BeforeEach
+		fun setUp() {
+			server.start()
+		}
+
+		@AfterEach
+		fun tearDown() {
+			server.shutdown()
+		}
+
+		/** No trailing slash: [SeededOllamaJsonClient.CHAT_PATH] is appended verbatim. */
+		private fun endpoint(): String = server.url("/").toString().trimEnd('/')
+
+		@Test
+		fun `requestJson throws IllegalStateException with status and body on a non-200 response`() {
+			server.enqueue(MockResponse().setResponseCode(500).setBody("model is loading"))
+			val config = OllamaExecutorConfig(ollamaEndpoint = endpoint())
+
+			val failure =
+				assertFailure {
+					runBlocking {
+						SeededOllamaJsonClient.requestJson(config, null, "hello", null, OllamaTestSeeds.PRIMARY)
+					}
+				}
+
+			failure
+				.isInstanceOf<IllegalStateException>()
+				.hasMessage("Seeded Ollama request failed: HTTP 500 — model is loading")
+		}
+
+		@Test
+		fun `requestJson returns the message content and runs on the injected dispatcher`() {
+			server.enqueue(
+				MockResponse().setResponseCode(200).setBody("""{"message":{"role":"assistant","content":"ok"}}""")
+			)
+			val config = OllamaExecutorConfig(ollamaEndpoint = endpoint())
+			val dispatcher = RecordingDispatcher()
+
+			val content =
+				runBlocking {
+					SeededOllamaJsonClient.requestJson(config, null, "hello", null, OllamaTestSeeds.PRIMARY, dispatcher)
+				}
+
+			assertThat(content).isEqualTo("ok")
+			// The HTTP exchange must have run inside the injected dispatcher, and `dispatch` ran
+			// the block inline on the calling (test) thread.
+			assertThat(dispatcher.dispatchedThreads.size).isEqualTo(1)
+			assertThat(dispatcher.dispatchedThreads.single() === Thread.currentThread()).isTrue()
+			assertThat(server.takeRequest().path).isEqualTo(SeededOllamaJsonClient.CHAT_PATH)
+		}
 	}
 }
