@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -85,5 +86,32 @@ class OllamaModelPrewarmerHttpTest {
 		runBlocking { OllamaModelPrewarmer.warmUp(config) }
 
 		assertThat(server.takeRequest().path).isEqualTo(OllamaModelPrewarmer.GENERATE_PATH)
+	}
+
+	/**
+	 * Direct coverage of the [OllamaModelPrewarmer.doWarmUp] injection seam (PR #983 follow-up):
+	 * [doWarmUp] is `internal` precisely so tests can drive it with a dispatcher other than the
+	 * production default. `Dispatchers.Unconfined` runs the HTTP exchange on the calling thread.
+	 */
+	@Test
+	fun `doWarmUp returns the HTTP status and honors the injected dispatcher`() {
+		server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+		val config = OllamaExecutorConfig(ollamaEndpoint = endpoint())
+
+		val status = runBlocking { OllamaModelPrewarmer.doWarmUp(config, Dispatchers.Unconfined) }
+
+		assertThat(status).isEqualTo(200)
+		assertThat(server.takeRequest().path).isEqualTo(OllamaModelPrewarmer.GENERATE_PATH)
+	}
+
+	/** A non-200 status propagates as a return value, not an exception — non-fatality is [OllamaModelPrewarmer.warmUp]'s job. */
+	@Test
+	fun `doWarmUp propagates a non-200 status without throwing`() {
+		server.enqueue(MockResponse().setResponseCode(503).setBody("unavailable"))
+		val config = OllamaExecutorConfig(ollamaEndpoint = endpoint())
+
+		val status = runBlocking { OllamaModelPrewarmer.doWarmUp(config, Dispatchers.Unconfined) }
+
+		assertThat(status).isEqualTo(503)
 	}
 }

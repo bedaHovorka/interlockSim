@@ -162,11 +162,12 @@ object SeededOllamaJsonClient {
 						.build()
 				httpClient.use { it.send(httpRequest, HttpResponse.BodyHandlers.ofString()) }
 			}
+		val responseText = responseBody.body()
 		check(responseBody.statusCode() == HTTP_OK) {
-			"Seeded Ollama request failed: HTTP ${responseBody.statusCode()} — ${responseBody.body()}"
+			"Seeded Ollama request failed: HTTP ${responseBody.statusCode()} — $responseText"
 		}
 		return json
-			.decodeFromString<ChatResponse>(responseBody.body())
+			.decodeFromString<ChatResponse>(responseText)
 			.message
 			?.content
 			.orEmpty()

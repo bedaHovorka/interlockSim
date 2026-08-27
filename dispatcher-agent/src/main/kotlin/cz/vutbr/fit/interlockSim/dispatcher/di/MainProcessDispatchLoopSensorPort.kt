@@ -25,7 +25,7 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
  * dispatcher-cannot-approve-trains fix).
  *
  * Uses the same interface-based lookup as [mainProcessActiveTrains] (PR #769 rationale): casting
- * to [ProvidesDispatchLoopObservation] — a plain interface — instead of naming
+ * to [ProvidesDispatchLoopObservation] — a `fun interface` — instead of naming
  * [cz.vutbr.fit.interlockSim.sim.ShuntingLoop] directly keeps kDisco's `Process` type off
  * `:dispatcher-agent`'s main compile classpath (`kdisco-core-jvm` is `testImplementation`-only
  * here; see `dispatcher-agent/build.gradle.kts`).

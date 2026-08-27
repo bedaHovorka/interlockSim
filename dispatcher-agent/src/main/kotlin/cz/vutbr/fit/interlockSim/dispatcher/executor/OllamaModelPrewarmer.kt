@@ -128,8 +128,11 @@ object OllamaModelPrewarmer {
 
 	/**
 	 * Issues the HTTP request on [ioDispatcher] (default [Dispatchers.IO]) and returns the HTTP response status code.
+	 *
+	 * Visible to the module's tests (`internal`, not `private`) so the [ioDispatcher] injection
+	 * seam can actually be exercised without a live Ollama.
 	 */
-	private suspend fun doWarmUp(
+	internal suspend fun doWarmUp(
 		config: OllamaExecutorConfig,
 		ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 	): Int =
