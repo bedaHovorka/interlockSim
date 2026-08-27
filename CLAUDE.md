@@ -1,8 +1,10 @@
 # CLAUDE.md
 
-**Last Updated:** 2026-08-24
+**Last Updated:** 2026-08-28
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this
+repository. It holds repo-wide rules only; module-specific guidance lives in the per-subproject
+files listed under [Module Guides](#module-guides).
 
 ## Status Marker Convention
 
@@ -17,99 +19,78 @@ Throughout this documentation, the following status markers are used:
 
 **English is mandatory for ALL project output.** This is a hard rule, not a preference.
 
-**Must be English:**
-- Runtime log messages (`logger.debug/info/warn/error { … }`) — including interpolated values that form a sentence
-- User-facing output, denial/error reason strings, exception messages
-- Code comments and KDoc
-- Commit messages, PR titles/bodies, code review comments, issue text
-- Agent-to-agent and agent-to-human communication
+**Must be English:** runtime log messages (including interpolated values that form a
+sentence), user-facing output, denial/error reason strings, exception messages, code
+comments and KDoc, commit messages, PR titles/bodies, code review comments, issue text,
+and all agent-to-agent and agent-to-human communication.
 
 **Czech is permitted ONLY** as inline, genuinely untranslatable railway technical terms —
 e.g. the canonical ESA-11 interlocking condition names (`Volnost jízdní cesty`, `Závěr`,
-`postaveno a volno`) or a proper noun that has no English equivalent. A full Czech sentence
-in a log message or denial reason is never "an untranslatable term" — translate it.
+`postaveno a volno`) or a proper noun with no English equivalent. A full Czech sentence in
+a log message or denial reason is never "an untranslatable term" — translate it
+(`"Neznámý bod trasy: X"` must be `"Unknown route endpoint: X"`).
 
 **Rationale:** Mixed-language logs make runtime diagnostics, grep-based debugging, and
-external review unreadable. A denial reason like `"Neznámý bod trasy: X"` is an English
-sentence with Czech words substituted in; it must be `"Unknown route endpoint: X"`.
+external review unreadable.
 
 **Enforcement:** Code review (kotlin-tech-lead) rejects any new/changed code that introduces
 non-English log or reason strings. When fixing existing Czech strings, also update the tests
-that assert on those strings to the English equivalents. Do not add `@Suppress` or comment
-workarounds to bypass this rule.
+that assert on those strings. Do not add `@Suppress` or comment workarounds to bypass this rule.
 
 ## Agent Team Structure
 
 @TEAM.md
 
-For multi-agent development workflows, see **[TEAM.md](TEAM.md)** which defines 7 specialized agent roles:
-- **traffic-simulation-expert** - Main leader, arbiter, simulation & physics expert
-- **kotlin-tech-lead** - Technical architect, code reviewer, mentor
-- **java-senior-dev** - Historical analysis expert, null safety advisor
-- **kotlin-junior-dev** - Implementation developers, learners (unlimited)
-- **agent-architect** - AI agent system designer, ML specialist, A2A protocol designer
-- **railway-civil-engineer** - Railway domain expert, visioner, requirements definer
-- **qa-engineer** - Quality assurance specialists, UX/UI experts (2-3 allowed)
-
-TEAM.md includes decision authority hierarchy, collaboration patterns, and railway-inspired Agent-to-Agent (A2A) communication protocols.
+**[TEAM.md](TEAM.md)** defines the 7 specialized agent roles, their decision authority
+hierarchy, collaboration patterns, and the railway-inspired A2A communication protocols.
 
 ## Project Overview
 
-Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of Technology that simulates railway interlocking systems with a graphical editor and discrete event simulation engine.
+Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of
+Technology that simulates railway interlocking systems with a graphical editor and discrete
+event simulation engine. In 2026 the project was rewritten to Kotlin and gained an LLM
+dispatcher (Goal 10), building on ideas from the original thesis work 20 years earlier.
 
 [![Gradle Build with Java 21](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml)
 [![SonarQube Analysis](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml)
 
+## Module Guides
+
+Each Gradle subproject has its own `CLAUDE.md` with module-specific commands, architecture,
+and rules. Claude Code loads them automatically when working with files in that module:
+
+- [core/CLAUDE.md](core/CLAUDE.md) — KMP domain model, simulation engine, XML;
+  **sim/ package rules**; purity gate; known issues
+- [core-test/CLAUDE.md](core-test/CLAUDE.md) — shared test-fixture library
+  (fixtures in `commonMain`/`jvmMain`; 25 XML fixture networks)
+- [dispatcher-agent/CLAUDE.md](dispatcher-agent/CLAUDE.md) — Goal 10 LLM dispatcher,
+  Ollama setup, **manual-only `aiSweep`**
+- [desktop-ui/CLAUDE.md](desktop-ui/CLAUDE.md) — Swing GUI, entry point and its six
+  modes, Goal 7 speed control, `shadowJar`
+- [fast-sim/CLAUDE.md](fast-sim/CLAUDE.md) — native linuxX64 CLI binary;
+  glibc-only runtime; the one `detekt-strict.yml` module
+
 ## Build System
 
-This project uses Gradle with Kotlin DSL. Java 21 LTS is required.
-
-**Recent migrations (January 2026):** Ant→Gradle, Java 11→21 LTS, Java→Kotlin, Observable→PropertyChangeSupport, SLF4J→kotlin-logging, kDisco extracted to separate repo.
+Gradle with Kotlin DSL. Java 21 LTS is required — on this machine use
+`JAVA_HOME=/usr/lib/jvm/java-21-openjdk`. The January 2026 migrations (Ant→Gradle,
+Java 11→21, Java→Kotlin, kDisco extraction) are history; see
+[docs/JAVA21-MIGRATION-SUMMARY.md](docs/JAVA21-MIGRATION-SUMMARY.md).
 
 ### Common Build Commands
 
 ```bash
-# Build and test
-./gradlew clean build
+./gradlew clean build             # Build and test
 ./gradlew test                    # Unit tests only
 ./gradlew integrationTest         # Integration tests only
-
-# Run application
-./gradlew runSim                  # Pre-configured shunting loop
-./gradlew runEditor               # Launch editor GUI
-./gradlew runExampleGui           # Animated GUI simulation (Issue #268, milestone complete 2026-02-04)
-
-# Goal 7 speed-control shortcuts (simulation mode only)
-# 1-5    -> 0.5x, 1x, 2x, 5x, 10x
-# +/-    -> multiply or divide speed by 1.5
-# Space  -> pause/resume toggle (Goal 8 integration point)
-
-# Other tasks
-./gradlew javadoc                 # Generate documentation
-./gradlew dependencies            # Show dependency tree
 ```
 
-For complete build system documentation including dependency management, GitHub Packages authentication, manual JAR execution, and Gradle configuration files, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Build & Development Environment".
+Run tasks (`runSim`, `runEditor`, `runExampleGui`, and others) are `:desktop-ui`-specific —
+see [desktop-ui/CLAUDE.md](desktop-ui/CLAUDE.md) for the full list.
 
-### Running Simulation with Speed Control
-
-Use the animated GUI when you need live speed changes:
-
-```bash
-# Built-in animated example with speed controls
-./gradlew runExampleGui
-
-# Equivalent manual JAR launch
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 1024
-```
-
-For XML files loaded from the desktop UI, use **Simulation → Start...** and then adjust speed with:
-
-- the speed slider (`0.1x` to `10.0x`)
-- preset buttons/menu items (`0.1x`, `0.5x`, `1x`, `2x`, `5x`, `10x`, `50x`)
-- global keyboard shortcuts (`1`-`5`, `+`, `-`, `Space`)
-
-The status bar shows `Speed: X.Xx` whenever the speed differs from `1.0x`.
+Full build-system documentation (dependency management, GitHub Packages authentication,
+manual JAR execution): [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under
+"Build & Development Environment".
 
 ### Directory Structure
 
@@ -117,270 +98,53 @@ Gradle subprojects (see `settings.gradle.kts`):
 
 - `core/` - KMP `:core` (domain model, simulation engine, XML); targets `jvm` + `linuxX64`
 - `core-test/` - KMP `:core-test` (shared test fixtures; `commonMain`/`jvmMain` only)
-- `dispatcher-agent/` - JVM `:dispatcher-agent` (Goal 10 dispatcher: Koog agents, Ollama executor, sweep)
+- `dispatcher-agent/` - JVM `:dispatcher-agent` (Goal 10 dispatcher: Koog agents, Ollama, sweep)
 - `desktop-ui/` - JVM `:desktop-ui` (GUI, DI bootstrap, `Main` entry point)
-- `fast-sim/` - native `:fast-sim` (linuxX64 CLI binary, **requires Linux host**; included only when present)
+- `fast-sim/` - native `:fast-sim` (linuxX64 CLI binary, requires Linux host; included only when present)
 
-Other directories:
+Other locations:
 
 - `docs/` - Project documentation
 - `text/` - LaTeX thesis sources
-- `desktop-ui/docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
 - `desktop-ui/build/libs/interlockSim.jar` - Packaged application (produced by `shadowJar`)
 
-## Docker Setup (Recommended)
-
-**Dockerization: 2025** - Complete containerized build and runtime environment.
-
-### Quick Start
+## Docker Quick Start
 
 ```bash
-# Build services
 export GITHUB_ACTOR=your-github-username
 export GITHUB_TOKEN=your-personal-access-token
-docker compose build app          # App image only -- runs NO tests
-
-# Run full test suite + quality gates (tests execute DURING the image build;
-# there is no runtime test entry point)
-docker compose --profile test build test
-
-# Run editor GUI
-docker compose up app
-
-# Run simulation example
-docker compose run app java -jar interlockSim.jar example shuntingLoop 60
-
-# Build thesis PDF
-docker compose up text
+docker compose build app                    # App image only — runs NO tests
+docker compose --profile test build test    # Full test suite + quality gates (tests run DURING the image build)
+docker compose up app                       # Editor GUI
+docker compose up text                      # Thesis PDF
 ```
 
-**Security note:** `GITHUB_TOKEN` is passed to the Docker build as a BuildKit secret (`--mount=type=secret`), not as a build `ARG`. The token is never interpolated into Dockerfile `RUN` command strings, so it cannot leak into build logs or image history when a build step fails.
+Key facts (full detail: [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under
+"Build & Development Environment"):
 
-**Tests are decoupled from the app image:** `docker compose build app` compiles and packages only (`shadowJar`) — it never runs tests, so a broken test suite cannot block image production. The full suite plus quality gates (`check` = test/detekt/ktlintCheck/purity, plus `integrationTest` and `:core:allTests`) runs in the separate `test-runner` Docker stage, invoked with `docker compose --profile test build test`. Tests execute *during* that image build (BuildKit cache mounts and secrets only exist at build time — `docker compose run test` would not run tests). The `test` profile keeps the service invisible to plain `docker compose up --build`.
-
-**Non-root builds:** The Gradle build and tests run as an unprivileged `builder` user (UID/GID 1001). Cache mounts and the project directory are owned by this user, so generated files are not owned by `root`. The builder/test stages *must* stay non-root: the test suite includes filesystem-permission tests that are auto-skipped under root (e.g. `@DisabledIfSystemProperty(matches = "root")`), so running tests as root would silently drop coverage. The final **runtime** image runs as a non-root `app` user whose UID/GID is set at build time via `RUNTIME_UID`/`RUNTIME_GID` build ARGs (default 1000/1000). When the ARGs match the host user's UID/GID, the container user can read the 0600 X11 auth cookie bind-mounted from the host without needing root — this is the standard matching-UID pattern for X11-forwarding dev containers. Set `RUNTIME_UID=$(id -u)` and `RUNTIME_GID=$(id -g)` in your `.env` file or export them before building.
-
-**fast-sim runtime must stay glibc-based:** The `fast-sim` runtime image uses `debian:12-slim`, not Alpine. Kotlin/Native linuxX64 binaries are linked against glibc; running them on Alpine's musl via the `gcompat` shim causes an intermittent all-threads futex deadlock in the Kotlin/Native runtime that hung ~20-30% of fast-sim runs (Issue #685, fixed 2026-07-03). Do not switch the runtime stage back to Alpine/musl.
-
-**Offline builds:** If GitHub Packages is unreachable, build kDisco locally first (`./gradlew :kdisco-core:publishToMavenLocal` in the kDisco repo), then run `docker compose build` without `GITHUB_TOKEN`. `mavenLocal()` satisfies the kDisco dependency before GitHub Packages is consulted. See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Dependency Management" for full instructions.
-
-For X11 forwarding troubleshooting, authentication setup, SELinux configuration (Fedora), and Docker architecture details, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Build & Development Environment".
-
-## Architecture
-
-### Core Components
-
-**Main entry point:** `cz.vutbr.fit.interlockSim.Main` - handles six modes: `sim`, `simgui`, `edit`, `example`, `exampleGui`, `aiSweep` (see `VALID_MODES` in `Main.kt`)
-
-**Context system:**
-- `Context<out C : Cell>` - Base abstraction for railway network configuration
-- `EditingContext : Context<NodeCell>` - Interface for editing operations
-- `SimulationContext : Context<Cell>, SimulationEnvironment` - Interface for simulation execution
-- `BaseContext` - Abstract base class with shared infrastructure (257 lines)
-- `DefaultEditingContext` / `DefaultSimulationContext` - Implementations extending BaseContext independently
-- `ContextTransformer` - Factory for editing→simulation transformation
-- `XMLContextFactory` - Creates contexts from XML files (schema: `data.xsd`)
-
-**Context Refactoring History:**
-- **Issue #98 (2026-01-14):** DefaultContext split into DefaultEditingContext and DefaultSimulationContext
-- **Issue #153 (2026-01-20):** Composition over inheritance refactoring - ✅ **Phases 1-5 COMPLETE**
-  - BaseContext abstraction (257 lines shared code)
-  - Interface Segregation Principle enforced (SimulationContext no longer extends EditingContext)
-  - Context transformation (ContextTransformer factory for editing→simulation conversion)
-  - Grid parameterization (static cells vs dynamic wrappers)
-  - Runtime immutability enforcement (freeze/isFrozen/checkNotFrozen)
-  - **Timeline:** 8 days actual vs 18 estimated (70% faster), zero regressions across 927+ tests
-  - **Status:** Phase 5.5 (#182) 🆕 PENDING, Phase 6 (#167) ✅ COMPLETE, (#166) ⏸️ IN PROGRESS, (#168) ⏸️ BLOCKED
-- **Issue #94 (2026-01-21) ✅ COMPLETE:** SimulationEnvironment facade interface, decoupling `sim/` from the engine API
-
-**For detailed context refactoring documentation:**
-- `docs/CONTEXT_REFACTORING_DESIGN.md` - Architecture design and implementation history
-- `docs/ISSUE_153_RETROSPECTIVE.md` - Phases 1-5 detailed retrospective (2026-01-20)
-- `docs/CONTEXT_REFACTORING_PHASE6_SUMMARY.md` - Phase 6 status and completion plan (2026-02-05)
-- `docs/CONTEXT_INHERITANCE_INCOMPATIBILITY.md` - Problem analysis and solution design
-
-**Navigation Services (Issue #292 Phases 1-5, 2026-01-11 to 2026-02-04) - COMPLETED:**
-
-Three specialized services replaced the removed `pathToNextSemaphore()` API:
-
-1. **TopologyNavigator** - Static topology navigation (pure graph traversal)
-   - Access: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getRoutingServices().getTopologyNavigator()`
-   - Use case: Editor validation, network analysis
-
-2. **PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
-   - Access: `SimulationEnvironment.getRoutingServices().getPathReservationService()`
-   - Use case: Interlocking path setup, atomic reservation
-
-3. **TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
-   - Access: `SimulationEnvironment.getRoutingServices().getTrainNavigationService()`
-   - Use case: Train requesting next track section
-
-4. **PathReservationRegistry** - Bidirectional train↔block ownership tracking
-   - O(1) queries, scoped lifetime (one per context), shared by all services
-
-For complete navigation services architecture, Koin DI integration patterns, and usage examples, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Project Architecture Context".
-
-**Additional architecture documentation:**
-- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases (808 lines)
-- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration examples with before/after code (547 lines)
-- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Atomic reservation algorithm and graph theory (1213 lines)
-- `docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Static/dynamic wrapper pattern
-
-**Object model:**
-- `objects/tracks/` - Track facilities, blocks, occupants
-- `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`)
-- `objects/paths/` - Route management
-
-**Simulation engine:**
-- Built on kDisco library (`cz.ksimulantenbande.kdisco:kdisco-core-jvm:0.6.1-SNAPSHOT`) — replaces jDisco entirely (Phase 1 migration complete 2026-03-20)
-- kDisco repo: https://github.com/bedaHovorka/kdisco
-- `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
-
-**GUI:**
-- Swing-based editor in `gui/` package
-- AnimatedSim: Real-time animated GUI simulation (Issue #268, milestone complete 2026-02-04)
-  - Physics-accurate rendering with velocity/acceleration visualization
-  - Visual train movement with smooth interpolation
-  - Goal 7 speed control is built around `SimulationRunner`, which applies wall-clock throttling without changing event semantics
-  - `SimulationController` owns lifecycle, persists the selected speed, and reapplies it on the next simulation start
-  - `SimulationControlPanel` provides a `0.1x`-`10.0x` slider plus preset buttons up to `50x`
-  - `StatusBar.updateSpeedIndicator()` shows the live multiplier whenever speed is not `1.0x`
-  - `SimulationKeyBindings` installs global shortcuts (`1`-`5`, `+`, `-`, `Space`) while the frame is in simulation mode
-  - `Space` currently toggles `SimulationRunner.isPaused` directly as Goal 8 pause-feature groundwork
-  - See `docs/ANIMATION_ARCHITECTURE.md` for technical details
-
-**XML Configuration:**
-- Railway networks defined in XML format (schema: `core/src/commonMain/resources/cz/vutbr/fit/interlockSim/resource/data.xsd`)
-- Example: `vyhybna.xml` (shunting loop), `praha.xml`
-- Elements: RailSwitch, RailSemaphore, InOut (entry/exit points)
-
-### InOut Elements
-
-**Minimum Requirement:** Every railway network must have at least 1 InOut element (entry/exit point).
-
-**Rationale:**
-- With bidirectional train operation (PR #356), a single InOut can serve as both entry and exit
-- Train can enter, travel through the network, reverse direction, and exit through the same InOut
-- XML validation enforces this constraint via XMLContextFactory
-
-**Validation:**
-- Editor: GUI prevents saving contexts with < 1 InOuts (Issue #80)
-- XML loading: XMLContextFactory validates during parse
-- Test coverage: See InOutValidationTest (Issue #79)
-
-### Package Structure
-
-All production code is Kotlin. There is no `src/main/java` any more; each subproject has its
-own source sets.
-
-```
-core/src/
-├── commonMain/kotlin/cz/vutbr/fit/interlockSim/
-│   ├── context/       - Context management and factories
-│   ├── di/            - Koin modules
-│   ├── domain/        - Domain value types
-│   ├── exceptions/    - Domain exceptions
-│   ├── objects/       - Domain model (tracks, cells, paths)
-│   ├── pathfinding/   - Route search
-│   ├── ports/         - Ports for the dispatcher seam
-│   ├── sim/           - Simulation engine and scenarios
-│   ├── util/          - Utilities
-│   └── xml/           - XML model (expect declarations)
-├── commonTest/kotlin/ - Multiplatform tests
-├── jvmMain/kotlin/    - JVM actuals: context/, util/, xml/ (parsing, factories)
-├── jvmTest/kotlin/    - JVM-only tests, incl. testutil/ (TestTopologies)
-└── nativeMain/, nativeInterop/ - linuxX64 actuals and libxml2 interop
-
-core-test/src/{commonMain,jvmMain}/kotlin/  - Shared test fixtures (TestFixtures)
-
-dispatcher-agent/src/
-├── main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/
-│   ├── agents/        - Koog agent definitions and prompts
-│   ├── di/            - Dispatcher Koin modules
-│   ├── executor/      - Ollama executor
-│   ├── observation/   - Run observation and metrics
-│   ├── planner/       - Plan adapters, run recorder
-│   └── sweep/         - aiSweep grid runner
-└── test/kotlin/       - Dispatcher tests
-
-desktop-ui/src/
-├── main/kotlin/cz/vutbr/fit/interlockSim/
-│   ├── Main.kt        - Application entry point
-│   ├── AppMetadata.kt - Application name, version, window titles
-│   ├── ExampleRegistry.kt - Built-in console and GUI examples
-│   ├── di/            - Desktop Koin modules
-│   └── gui/           - Swing editor and animated simulation GUI
-├── test/kotlin/       - Desktop tests
-└── jmh/kotlin/        - JMH benchmarks
-
-fast-sim/src/{linuxX64Main,linuxX64Test}/kotlin/  - Native CLI binary
-```
-
-## Kotlin Migration History
-
-**Completed:** January 2026 (100% of 94 files migrated)
-- Conservative structure-preserving approach with full test parity
-- Physics calculations validated against Java baseline
-- Full kDisco interoperability maintained
-
-## Dependency Injection with Koin
-
-**Status:** Migration complete (2026-01-12)
-**Framework:** Koin 3.5.6 (Kotlin-native, lightweight ~1MB)
-
-### Quick Start
-
-```kotlin
-// Inject dependencies
-class MyClass {
-    private val dependency: MyDependency by inject()
-}
-
-// Or constructor injection
-class MyClass(private val dependency: MyDependency)
-```
-
-### Critical DI Rules
-
-1. **sim/ package**: Koin injection is now allowed. The restriction was tied to the jDisco→kDisco migration (Phase 1, complete 2026-03-20). kDisco is now the stable engine with native support.
-2. **Contexts are NOT singletons** - Use `factory` or `scope`, never `single`
-3. **Preserve factory patterns** - Inject factories, not products
-
-For complete Koin documentation including module organization, scope-per-context pattern, navigation services integration, testing patterns, and common issues, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Dependency Injection with Koin".
+- Tests are decoupled from the app image; the suite runs in the separate `test-runner`
+  stage, during that image's build (BuildKit cache mounts and secrets exist only at build time).
+- `GITHUB_TOKEN` is passed as a BuildKit secret, never a build `ARG` — it cannot leak
+  into build logs or image history.
+- **Builder and test stages must stay non-root** (they run as `builder`, UID/GID 1001):
+  the suite contains filesystem-permission tests that silently auto-skip under root,
+  so running tests as root drops coverage without any failure.
+- The runtime user's UID/GID comes from the `RUNTIME_UID`/`RUNTIME_GID` build args so
+  the container can read the host's 0600 X11 cookie. Set
+  `export RUNTIME_UID=$(id -u) RUNTIME_GID=$(id -g)` (or put them in `.env`) before
+  building; details in the comments in `docker-compose.yml` and `Dockerfile`.
+- The fast-sim runtime image must stay glibc-based — see
+  [fast-sim/CLAUDE.md](fast-sim/CLAUDE.md).
+- Offline builds: publish kDisco to `mavenLocal()` first — see the style guide's
+  "Dependency Management".
 
 ## Code Style
 
-Follows `.editorconfig` configuration:
-- Java/Kotlin files: tabs (width 4), max line length 120
-- XML files: 2 spaces
-- UTF-8 encoding, LF line endings
-
-See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** for complete coding conventions.
+Follows `.editorconfig`: Kotlin/Java files use tabs (width 4) with max line length 120,
+XML files use 2 spaces, UTF-8 encoding, LF line endings. Full conventions:
+[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md).
 
 ## Code Modification Guidelines
-
-**Conservative approach differentiated by component type:**
-
-### Restrictions for sim/ Package (Logic Only — Koin Now Allowed)
-
-**Simulation Core (`sim/` package):**
-- **Minimal changes only** - Be extremely conservative with simulation logic
-- **No refactoring** - Do not restructure working simulation code
-- **Tests required** - Any changes MUST have comprehensive test coverage first
-- **No unsolicited improvements** - Only make explicitly requested changes
-- **Koin injection allowed** - The Koin restriction was lifted 2026-03-20 (kDisco Phase 1 complete)
-
-**kDisco Library:**
-- **Do not modify** - Maintained as separate project at https://github.com/bedaHovorka/kdisco
-
-### Flexible Development (Other Components)
-
-**GUI (`gui/`), Editor, Utilities, Context System:**
-- **Modernization allowed** - Can refactor, improve, and apply Kotlin idioms
-- **Tests required** - Must have test coverage before and after changes
-- **Alignment required** - Changes must align with LONG_TERM_GOALS.md
-
-### General Rules for All Changes
 
 1. **Tests are mandatory** - Modified code MUST be covered by tests
 2. **Align with goals** - Support LONG_TERM_GOALS.md objectives
@@ -388,237 +152,136 @@ See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** for complete co
 4. **Document decisions** - Update relevant documentation
 5. **Quality gates** - Must pass: `./gradlew build detekt ktlintCheck test`
 
-For detailed examples of allowed/restricted/prohibited changes, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Code Modification Guidelines".
+The `sim/` package has stricter, conservative rules — see
+[core/CLAUDE.md](core/CLAUDE.md) ("sim/ Package Rules"). Detailed
+allowed/restricted/prohibited examples: [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)
+under "Code Modification Guidelines".
 
 ## Testing
 
-Comprehensive JUnit 5.11.4 test suite with AssertK assertions.
+JUnit 5 with AssertK assertions. Tag vocabulary:
 
-**Test organization:**
-- **Unit tests** - Run with `./gradlew test` (excludes integration and heavy tests)
-- **Integration tests** - Tagged with `@Tag("integration-test")`, run with `./gradlew integrationTest`
-- **Heavy tests** - Tagged with `@Tag("heavy-test")`, run with `./gradlew heavyTest` (see below)
+- *(untagged)* - unit tests; run with `./gradlew test`
+- `integration-test` - run with `./gradlew integrationTest`
+- `heavy-test` - manual-only stress tests; run with `heavyTest` (policy below)
+- `ollama-test` - needs a live Ollama; `:dispatcher-agent` only (see
+  [its guide](dispatcher-agent/CLAUDE.md))
 
-**Heavy tests (`@Tag("heavy-test")`):**
+The default pre-push gate is `test` + `integrationTest`.
 
-Heavy tests are high-repetition stress tests that verify simulation stability under many repeated runs. They are **excluded from regular `test` and `integrationTest` builds** and are **never run by CI** — `./gradlew test`, `./gradlew integrationTest`, and `./gradlew build` do not invoke `heavyTest`. The `heavyTest` target is **manual-only** and must be launched explicitly in the special situations below. Running 1000-repetition stress tests on every change would slow CI to a crawl and is unnecessary when only a small region of code changed.
+**Heavy tests are manual-only and never run in CI.** `test`, `integrationTest`, and
+`build` all exclude them. Launch `heavyTest` only in these situations:
 
-**When to run heavy tests (special situations only — run manually, never in CI):**
-- **After changes to simulation logic** — path reservation, train physics, kDisco event scheduling, or anything in `sim/`
-- **After changes to concurrency primitives** — `waitUntil`/`hold` patterns, `Process`/`Continuous` lifecycle, kDisco scheduling internals
-- **When investigating intermittent failures** — deadlocks, race conditions, resource leaks, or flaky test reports
-- **Before merging branches that touch** `sim/`, `context/navigation/`, or kDisco integration
-- **Not as part of routine pre-push checks** — `./gradlew test` + `integrationTest` is the default gate (see [Workflow Rules](#workflow-rules)); add `heavyTest` only when one of the situations above applies
-
-```bash
-# Run all heavy tests
-JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :core:heavyTest
-
-# Run heavy tests in desktop-ui
-JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :desktop-ui:heavyTest
-```
-
-**Repetition limits:**
-- `test` and `integrationTest` tasks: max **50** repetitions per test method
-- `heavyTest` task: up to **1000** repetitions (e.g., `ThreeTrainLoopRaceHeavyTest`)
-
-These limits are Gradle-enforced via the `junit.jupiter.params.repeat.maxCount` system property on each task, and `test`/`integrationTest` both call `excludeTags("heavy-test")` so a mistagged heavy test cannot regress into CI.
-
-**Tagging convention:**
-```kotlin
-// Integration test (max 50 @RepeatedTest repetitions in integrationTest)
-@Tag("integration-test")
-@RepeatedTest(50)
-
-// Heavy test (1000 repetitions, only in heavyTest target)
-@Tag("heavy-test")
-@RepeatedTest(1000)
-```
-
-### Manual-only dispatcher sweep (`aiSweep`) — never in CI
-
-`aiSweep` is a CLI mode, not a Gradle task, and it belongs in the same **manual-only** category as
-`heavyTest`: it needs a live Ollama, forks one JVM per run, and a full grid takes hours. Nothing in
-`test`, `integrationTest`, `build` or CI invokes it, and nothing should.
-
-It exists because Goal 10's amended A4 acceptance criterion (#822 §7) is a *measured* success rate
-over N ≥ 10 runs — a claim that cannot be made without actually performing those runs and recording
-each one.
-
-**No grid files are committed.** Write the grid for the campaign you are running, keep it out of
-`docs/`, and record its content in that campaign's report. The swept axes are `example`, `model`,
-`temperature`, `tickPeriodMs`, `historyN` and `maxActionsPerTick`; there is deliberately no `seed`
-axis, because Koog 1.1.1 has no path to Ollama's `seed` option.
-
-```jsonc
-// grid.json — the LLM arm. Drop the "model" axis and use "example": ["shuntingLoop"] for the
-// rule-based control arm.
-{
-  "endTimeSeconds": 600,
-  "repeat": 10,
-  "perRunTimeoutSeconds": 900,
-  "axes": {
-    "example": ["shuntingLoopAI"],
-    "model": ["qwen2.5:7b-instruct"],
-    "temperature": [0.28],
-    "tickPeriodMs": [0],
-    "historyN": [0],
-    "maxActionsPerTick": [3]
-  }
-}
-```
+- After changes to simulation logic — path reservation, train physics, kDisco event
+  scheduling, or anything in `sim/`
+- After changes to concurrency primitives — `waitUntil`/`hold` patterns,
+  `Process`/`Continuous` lifecycle, kDisco scheduling internals
+- When investigating intermittent failures — deadlocks, races, leaks, flaky reports
+- Before merging branches that touch `sim/`, `context/navigation/`, or kDisco integration
 
 ```bash
-./gradlew :desktop-ui:shadowJar
-
-# Check the grid without launching anything
-java -jar desktop-ui/build/libs/interlockSim.jar aiSweep --grid grid.json --dry-run
-
-# The real thing (hours; resumable — re-invoke after an interrupt and it continues)
-java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
-  --grid grid.json --out build/reports/dispatcher-sweep
-
-# The rule-based baseline, into the same directory so one report compares both arms (~30 s)
-java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
-  --grid baseline-grid.json --out build/reports/dispatcher-sweep
+./gradlew :core:heavyTest
+./gradlew :desktop-ui:heavyTest
+./gradlew :dispatcher-agent:heavyTest
 ```
 
-Each run writes one JSON under `<out>/<arm>/`, and the sweep renders `<out>/report.md` when it
-finishes. A run that exceeds `perRunTimeoutSeconds` is killed and recorded as `TIMEOUT_ABORT` rather
-than left absent — an absent failed run would silently improve the arm's measured rate.
+Repetition caps (Gradle-enforced via `junit.jupiter.params.repeat.maxCount`):
+`test`/`integrationTest` max **50** repetitions per test method; `heavyTest` up to **1000**.
+Both `test` and `integrationTest` call `excludeTags("heavy-test")`, so a mistagged heavy
+test cannot regress into CI.
 
-Results and interpretation live in two reports, and only these two:
-`docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` (Issue #837 — the measured A4 outcome, and the
-surviving record of every campaign run so far) and
-`docs/GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md` (Issue #838 — the larger-model diagnostic,
-prepared but never run, which is the next open step).
+The manual-only `aiSweep` dispatcher sweep belongs to the same category — see
+[dispatcher-agent/CLAUDE.md](dispatcher-agent/CLAUDE.md).
 
-**Test coverage:** last counted **February 2026** — 1840 tests (1836 passing, 4 skipped),
-51% instruction coverage, 145 test classes. That count predates `:core-test`,
-`:dispatcher-agent` and `:fast-sim`, so it is a floor, not the current figure. For the current
-numbers, run `./gradlew test jacocoTestReport` or read the CI coverage artifact.
+For current coverage numbers run `./gradlew test jacocoTestReport` or read the CI coverage
+artifact. Test utilities (`TestFixtures`, `TestTopologies`, `TestContextBuilder`,
+`AssertKExtensions`): [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under
+"Test Fixtures and Utilities".
 
-**Test utilities:**
-- `TestFixtures` - Centralized XML fixture loading
-- `TestTopologies` - Reusable network topologies
-- `TestContextBuilder` - Fluent API for building test contexts
-- `AssertKExtensions` - Custom assertions
+## Dependency Injection with Koin
 
-For complete testing documentation including tagging patterns, test utilities usage, and fixture management, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Test Fixtures and Utilities".
+Koin (version comes from `koinVersion` in [gradle.properties](gradle.properties)).
+Critical rules:
 
-## Code Quality Analysis
+1. **sim/ package injection is allowed** — the restriction was lifted 2026-03-20
+   (kDisco Phase 1 complete)
+2. **Contexts are NOT singletons** - use `factory` or `scope`, never `single`
+3. **Preserve factory patterns** - inject factories, not products
 
-### SonarQube Integration
+Full documentation (module organization, scope-per-context, testing patterns):
+[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under
+"Dependency Injection with Koin".
 
-Provides code smells detection, security vulnerabilities, coverage analysis (JaCoCo), and complexity metrics.
+## Code Quality
 
-**Quick Start:**
+**RULE: Disabling ktlint is forbidden.** Never set `enabled = false` on ktlint tasks or add
+workaround comments to bypass enforcement. Fix violations; don't silence the checker. The
+only sanctioned exception is the JMH source set — see
+[desktop-ui/CLAUDE.md](desktop-ui/CLAUDE.md).
+
+Dual-level detekt:
+
+- `detekt.yml` - permissive rules for legacy Java→Kotlin converted code; the default
+- `detekt-strict.yml` — strict rules for new Kotlin code written from scratch. It is
+  **not** a separate Gradle task: a subproject opts in by pointing its own `detekt` task
+  at the file; only `:fast-sim` does so today (see [fast-sim/CLAUDE.md](fast-sim/CLAUDE.md)).
+
 ```bash
-# SonarCloud (recommended)
-./gradlew clean test jacocoTestReport sonar \
-  -Dsonar.host.url=https://sonarcloud.io \
-  -Dsonar.organization=<your-org> \
-  -Dsonar.token=<your-token>
-
-# Code coverage
-./gradlew test jacocoTestReport  # View at build/reports/jacoco/test/html/index.html
-```
-
-For complete SonarQube configuration, quality gates setup, CI/CD integration, and JaCoCo configuration, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Code Quality Enforcement".
-
-### Kotlin Code Quality (Detekt and Ktlint)
-
-**RULE: Disabling ktlint is forbidden.** Never set `enabled = false` on ktlint tasks or add workaround comments to bypass enforcement. Fix violations; don't silence the checker.
-
-**Dual-level approach:**
-- `detekt.yml` - Permissive rules for legacy Java→Kotlin converted code; the default for every subproject
-- `detekt-strict.yml` - Strict rules for Kotlin written from scratch. It is **not** a separate
-  Gradle task. A subproject opts in by pointing its own `detekt` task at the file; only
-  `:fast-sim` does so today (`fast-sim/build.gradle.kts`, `config.setFrom(... detekt-strict.yml)`).
-
-**Run checks:**
-```bash
-./gradlew detekt              # All subprojects (:fast-sim uses detekt-strict.yml)
+./gradlew detekt              # All subprojects
 ./gradlew ktlintCheck         # Formatting check
 ./gradlew ktlintFormat        # Auto-format
 ```
 
-For complete Detekt/Ktlint configuration, rule details, and quality enforcement levels, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Code Quality Enforcement Levels".
+SonarQube/SonarCloud analysis and JaCoCo configuration:
+[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under "Code Quality Enforcement".
 
 ## Logging
 
-Uses **kotlin-logging** (SLF4J wrapper) with Logback backend.
+kotlin-logging (SLF4J wrapper) with Logback backend:
 
-**In Kotlin code:**
 ```kotlin
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
-
 logger.debug { "Message with $variable" }  // Lambda-based lazy evaluation
 ```
 
-For complete logging configuration, runtime log level override, and output configuration, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Logging Configuration".
+Configuration and runtime log-level override: [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)
+under "Logging Configuration".
 
 ## Continuous Integration
 
-GitHub Actions workflow (`.github/workflows/gradle-java21.yml`) runs on push/PR to main/develop branches. Compiles with Java 21, runs tests, packages JAR (90-day artifact retention), caches dependencies.
-
-View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/actions)
+GitHub Actions (`.github/workflows/gradle-java21.yml`) runs on push/PR to main/develop:
+Java 21 compile, tests, JAR packaging (90-day artifact retention), dependency caching.
+CI never runs `heavyTest`, `aiSweep`, or detekt. Build status:
+[GitHub Actions](https://github.com/bedaHovorka/interlockSim/actions)
 
 ## Documentation
 
-**Thesis:** LaTeX sources in `text/`, build with `docker compose up text` (outputs to `artifacts/text/bakalarka.pdf`)
-**JavaDoc:** Generate with `./gradlew javadoc` (outputs to `build/docs/javadoc/`)
+**Thesis:** LaTeX sources in `text/`, build with `docker compose up text`
+(outputs to `artifacts/text/bakalarka.pdf`).
 
-**Architecture Documentation (docs/):**
-- `KOTLIN_STYLE_GUIDE.md` - Kotlin coding conventions, DI patterns, build environment (2253 lines)
-- `PATH_DISCOVERY_ARCHITECTURE.md` - Navigation services design (808 lines)
-- `PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with examples (547 lines)
-- `PATH_RESERVATION_ARCHITECTURE.md` - Reservation service design (1213 lines)
-- `CONTEXT_REFACTORING_DESIGN.md` - Context system design (Issue #98, #153)
-- `CONTEXT_REFACTORING_PHASE6_SUMMARY.md` - Phase 6 status and completion plan (2026-02-05)
-- `ISSUE_153_RETROSPECTIVE.md` - Phases 1-5 detailed retrospective (927 lines)
-- `CONTEXT_INHERITANCE_INCOMPATIBILITY.md` - Problem analysis and solution design
-- `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Static/dynamic wrapper pattern (Issue #100)
-- `GRID_PARAMETERIZATION_INDEX.md` - Overview and document roadmap
-- `GRID_PARAMETERIZATION_DESIGN.md` - Complete design specification (1591 lines)
-- `GRID_PARAMETERIZATION_IMPLEMENTATION.md` - Implementation notes
-- `GRID_PARAMETERIZATION_SUMMARY.md` - Implementation status
-- `ANIMATION_ARCHITECTURE.md` - AnimatedSim real-time GUI architecture
-- `ANIMATED_SIM_MILESTONE_COMPLETE.md` - AnimatedSim milestone summary
-- `CZECH_RAILWAY_TERMINOLOGY.md` - Czech terminology verification and translation guide (373 lines)
-- `TRAIN_PASSIVATION_FIX.md` - Train physics passivation fix (Issue #291)
-- `KOIN_SCOPE_LIFECYCLE_TESTS.md` - Koin scope lifecycle test documentation (Issue #220)
-- `GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` - LLM model comparison for the Goal 10 DISPATCHER agent (Issue #534, SP3.1; TRAIN agents are algorithmic-only, never LLM)
-- `GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` - Ollama/Koog capability audit: seed reachability, format+tools coexistence, num_ctx right-sizing, maxIterations tripwire (Issue #850, SP2c.27)
-- `GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md` - Recorded traffic-simulation-expert ruling on the F1 paused-clock timing regime and the R8 headless-pacing question (Issue #849, SP2c.26)
-- `GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md` - Audits which `DispatchDecision` sealed subtypes are actually produced in production vs. only in tests (Issue #848, SP2c.25)
-- `INTERLOCKING_SCOPE_LIMITATIONS.md` - Documents intentional simplifications in the interlocking model (Issue #893, path-reservation review Phase 6)
-- `GOAL_10_SP2C14_RELIABILITY_REPORT.md` - **Goal 10's measured A4 outcome** (Issue #837, SP2c.14). The single surviving record of every dispatcher measurement campaign: the per-arm reliability tables, why each shipped default was chosen, where the gate constants came from, and the pre-fix baseline. The raw run records and the #834/#847/#895 campaign reports were deleted on 2026-08-24; this report replaces them.
-- `GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md` - **Goal 10's next open step** (Issue #838, SP2c.15). The larger-model diagnostic that would decide whether the LLM shortfall is an interface problem or a model-capacity problem. Prepared, never run.
+Key documents in `docs/` (the directory holds ~75 files; start with these):
 
-## Known Issues
+- [KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) - coding conventions, DI patterns, build environment
+- [PATH_RESERVATION_ARCHITECTURE.md](docs/PATH_RESERVATION_ARCHITECTURE.md) and
+  [PATH_DISCOVERY_ARCHITECTURE.md](docs/PATH_DISCOVERY_ARCHITECTURE.md) - navigation and reservation design
+- [CONTEXT_REFACTORING_DESIGN.md](docs/CONTEXT_REFACTORING_DESIGN.md) - context system design and history
+- [ANIMATION_ARCHITECTURE.md](docs/ANIMATION_ARCHITECTURE.md) - animated GUI architecture
+- [INTERLOCKING_SCOPE_LIMITATIONS.md](docs/INTERLOCKING_SCOPE_LIMITATIONS.md) - deliberate interlocking simplifications
+- [GOAL_10_SP2C14_RELIABILITY_REPORT.md](docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md) - Goal 10's measured A4 outcome
+- [GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md](docs/GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md) - Goal 10's next open step
+- [CZECH_RAILWAY_TERMINOLOGY.md](docs/CZECH_RAILWAY_TERMINOLOGY.md) - terminology verification and translation guide
 
-**Critical:** None. All critical SonarQube bugs fixed.
+## Simulation Engine
 
-**Notable issues:**
-- **SIM-004:** ShuntingLoop hardcoded for `vyhybna.xml` configuration only
-- **DEFERRED-001:** XMLContextFactoryTest missing exception type predicates (9 occurrences)
-- Minor simulation issues (SIM-001 to SIM-006) documented in code comments
-- **`:core:linuxX64Test` JUnit XML disabled:** works around an unresolved Gradle × Kotlin/Native
-  race ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990), KT-69896) where
-  concurrent stdout/stderr forwarding from a native test process corrupts Gradle's binary test
-  result index, causing `IllegalArgumentException: Multiple entries with same key` when writing
-  the XML report — even though all tests passed. See `core/build.gradle.kts` (`linuxX64Test`
-  configuration). Do not re-enable without confirming the upstream bug is fixed.
+The engine is **kDisco** (`cz.ksimulantenbande.kdisco:kdisco-core`; version comes from
+`kdiscoVersion` in [gradle.properties](gradle.properties)), maintained as a separate project
+at https://github.com/bedaHovorka/kdisco. It replaced jDisco entirely on 2026-03-20.
 
-**Test coverage:** see "Testing" above — the last recorded count is from February 2026 and is stale.
-
-## Future Development Considerations
-
-The project uses **kDisco** as its simulation engine. It replaced jDisco on 2026-03-20; the dependency is `cz.ksimulantenbande.kdisco:kdisco-core-jvm:0.6.1-SNAPSHOT` (the group ID was renamed from `cz.hovorka.kdisco`). See commit history on `feature/simulation-library-decision-round2`.
-
-**There is no planned migration to Kalasim.** The earlier road map had a "Phase 2" that would swap kDisco for Kalasim. That plan is dropped (owner decision, 2026-08-24). kDisco is the engine; work on the simulation goes into kDisco itself, at https://github.com/bedaHovorka/kdisco.
-
-`docs/SIMULATION_LIBRARY_DECISION.md` and `docs/SIMULATION_LIBRARY_DECISION_ROUND2.md` record the 2026 library evaluation, and `docs/jdisco-research.md` the framework research behind it. Read them as history — they describe the decision as it stood then, including the dropped Kalasim step, not the current plan.
+**There is no planned migration to another simulation library** — the Kalasim plan was
+dropped by owner decision on 2026-08-24. kDisco is our own engine, based on jDisco, and
+engine work goes into kDisco itself. [docs/SIMULATION_LIBRARY_DECISION.md](docs/SIMULATION_LIBRARY_DECISION.md),
+[docs/SIMULATION_LIBRARY_DECISION_ROUND2.md](docs/SIMULATION_LIBRARY_DECISION_ROUND2.md) and
+[docs/jdisco-research.md](docs/jdisco-research.md) record the 2026 library evaluation —
+read them as history, not as the current plan.
