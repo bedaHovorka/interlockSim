@@ -513,6 +513,82 @@ class ObservationRendererTest {
 		}
 
 		@Test
+		@DisplayName("affordance blocks follow first-seen train order (PR #983 grouping contract)")
+		fun affordanceGroupsFollowFirstSeenOrder() {
+			// T-4's entries come before T-3's in the input; the grouped output must keep that
+			// first-seen order — renderAffordances relies on groupBy's LinkedHashMap semantics,
+			// and no test previously pinned it (the tick-41 fixture is already sorted T-3, T-4).
+			val interleaved =
+				listOf(
+					Affordance("T-4", "approve_train", true, "1 of 2 slots free"),
+					Affordance("T-3", "cancel_route", true, "would release kA,kG,kJ,kB"),
+					Affordance("T-4", "request_route", false, "no free path A->B"),
+					Affordance("T-3", "approve_train", false, "train already active"),
+					Affordance.NO_OP
+				)
+			val output = CompactTextRenderer().render(ctx.copy(affordances = interleaved))
+
+			val t4Index = output.indexOf("T-4: approve_train")
+			val t3Index = output.indexOf("T-3: cancel_route")
+			assertThat(t4Index >= 0).isTrue()
+			assertThat(t3Index > t4Index).isTrue()
+			// Each train gets exactly one block: continuation lines carry no second "T-4:" label.
+			assertThat(output.split("T-4:").size - 1).isEqualTo(1)
+			assertThat(output.split("T-3:").size - 1).isEqualTo(1)
+		}
+
+		@Test
+		@DisplayName("multi-affordance continuation lines are indented under the first action")
+		fun multiAffordanceContinuationIndent() {
+			// Tick-41 fixture: T-3 has three affordances; continuation lines are indented by
+			// "T-3".length + 2 = 5 spaces so the actions align under the first entry.
+			val output = CompactTextRenderer().render(ctx)
+
+			assertThat(output).contains("T-3: approve_train  not applicable - train already active")
+			assertThat(output).contains("\n     request_route  not applicable")
+			assertThat(output).contains("\n     cancel_route  applicable")
+		}
+
+		@Test
+		@DisplayName("DWELLING train renders as a moving-train line with position and wait")
+		fun dwellingTrainLine() {
+			val dwelling =
+				RendererFixtures.observationTick41.trains[0].copy(
+					phase = TrainPhase.DWELLING,
+					velocityMps = 0.0,
+					accelerationMps2 = 0.0,
+					waitSeconds = 12.0
+				)
+			val output =
+				CompactTextRenderer().render(
+					ctx.copy(observation = RendererFixtures.observationTick41.copy(trains = listOf(dwelling)))
+				)
+
+			assertThat(output).contains("T-3 DWELLING at kA -> B")
+			assertThat(output).contains("v=0.0")
+			assertThat(output).contains("wait 12s")
+		}
+
+		@Test
+		@DisplayName("EXITED train renders only id, phase and destination")
+		fun exitedTrainLine() {
+			val exited =
+				RendererFixtures.observationTick41.trains[0].copy(
+					phase = TrainPhase.EXITED,
+					frontSectionName = null,
+					signalAheadName = null
+				)
+			val output =
+				CompactTextRenderer().render(
+					ctx.copy(observation = RendererFixtures.observationTick41.copy(trains = listOf(exited), queued = emptyList()))
+				)
+
+			// Minimal info: the whole train line is exactly id, phase and destination.
+			val line = output.lines().first { it.trim().startsWith("T-3 EXITED") }
+			assertThat(line.trim()).isEqualTo("T-3 EXITED -> B")
+		}
+
+		@Test
 		@DisplayName("applied outcomes section shows '(none)' when empty")
 		fun appliedOutcomesNone() {
 			val output = CompactTextRenderer().render(ctx)
