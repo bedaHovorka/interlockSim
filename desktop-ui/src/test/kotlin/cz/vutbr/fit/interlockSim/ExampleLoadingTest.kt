@@ -31,6 +31,8 @@ import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.koin.core.module.Module
 import org.koin.test.get
 
@@ -209,6 +211,47 @@ class ExampleLoadingTest : KoinTestBase() {
 				.message()
 				.isNotNull()
 				.contains("End time")
+		}
+
+		/**
+		 * All five shunting-loop factories share [ExampleRegistry.requireEndTimeArg]; each must
+		 * throw [ContextCreationException] with the exact shared message when `endTime` is missing
+		 * (PR #983 follow-up: the S1192 literal fix made the message a single constant, so every
+		 * throw site must agree on it byte-for-byte).
+		 */
+		@ParameterizedTest(name = "{0} rejects a missing endTime with the exact shared message")
+		@ValueSource(
+			strings = [
+				"createShuntingLoopExample",
+				"createShuntingLoopSyncExample",
+				"createShuntingLoopAIExample",
+				"createShuntingLoopGuiExample",
+				"createShuntingLoopAIGuiExample"
+			]
+		)
+		fun `all shunting-loop factories require endTime with the exact shared message`(methodName: String) {
+			// Arrange
+			val registry = get<ExampleRegistry>()
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					methodName,
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("example", "shuntingLoop") // Missing endTime
+
+			// Act & Assert
+			assertFailure {
+				createMethod.invoke(registry, factory, args)
+			}.isInstanceOf<java.lang.reflect.InvocationTargetException>()
+				.transform { it.cause }
+				.isNotNull()
+				.isInstanceOf<ContextCreationException>()
+				.message()
+				.isNotNull()
+				.isEqualTo("End time of simulation not specified")
 		}
 
 		/**
