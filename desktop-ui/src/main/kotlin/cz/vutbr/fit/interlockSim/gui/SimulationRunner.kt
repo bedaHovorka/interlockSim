@@ -15,6 +15,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationPacing
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * Wall-clock throttling wrapper and [SimulationController] implementation.
@@ -43,7 +45,10 @@ class SimulationRunner(
 	val simulationContext: SimulationContext get() = context
 
 	/** Single lock guarding pausedBacking, stepEventRequested, and stepTimeRequested. */
-	private val lock = Object()
+	private val lock = ReentrantLock()
+
+	/** Signalled when the runner is unpaused or a step is requested. */
+	private val unpaused = lock.newCondition()
 
 	private var stepEventRequested: Boolean = false
 
@@ -107,14 +112,14 @@ class SimulationRunner(
 	 */
 	@get:JvmName("isPausedProp")
 	var isPaused: Boolean
-		get() = synchronized(lock) { pausedBacking }
+		get() = lock.withLock { pausedBacking }
 		set(value) {
 			val old: Boolean
-			synchronized(lock) {
+			lock.withLock {
 				old = pausedBacking
 				if (old == value) return
 				pausedBacking = value
-				if (!value) lock.notifyAll()
+				if (!value) unpaused.signalAll()
 			}
 			pcs.firePropertyChange(PROP_IS_PAUSED, old, value)
 		}
@@ -122,12 +127,12 @@ class SimulationRunner(
 	fun requestStepEvent() {
 		val oldEvent: Boolean
 		val oldTime: Double?
-		synchronized(lock) {
+		lock.withLock {
 			oldEvent = stepEventRequested
 			oldTime = stepTimeRequested
 			stepEventRequested = true
 			stepTimeRequested = null
-			lock.notifyAll()
+			unpaused.signalAll()
 		}
 		if (!oldEvent) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, false, true)
 		if (oldTime != null) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, null)
@@ -139,12 +144,12 @@ class SimulationRunner(
 		}
 		val oldEvent: Boolean
 		val oldTime: Double?
-		synchronized(lock) {
+		lock.withLock {
 			oldEvent = stepEventRequested
 			oldTime = stepTimeRequested
 			stepTimeRequested = simSeconds
 			stepEventRequested = false
-			lock.notifyAll()
+			unpaused.signalAll()
 		}
 		if (oldEvent) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
 		if (oldTime != simSeconds) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, simSeconds)
@@ -152,7 +157,7 @@ class SimulationRunner(
 
 	override fun pollStepEvent(): Boolean {
 		val r: Boolean
-		synchronized(lock) {
+		lock.withLock {
 			r = stepEventRequested
 			if (r) stepEventRequested = false
 		}
@@ -162,7 +167,7 @@ class SimulationRunner(
 
 	override fun pollStepTime(): Double? {
 		val r: Double?
-		synchronized(lock) {
+		lock.withLock {
 			r = stepTimeRequested
 			if (r != null) stepTimeRequested = null
 		}
@@ -185,7 +190,7 @@ class SimulationRunner(
 	/**
 	 * Release a previously requested pause, allowing the simulation to continue.
 	 *
-	 * Thread-safe: delegates to the [isPaused] setter, which notifies all waiters under [lock].
+	 * Thread-safe: delegates to the [isPaused] setter, which signals all waiters under [lock].
 	 * Calling this when not paused is a harmless no-op (the setter short-circuits when the value
 	 * is already `false`).
 	 *
@@ -195,7 +200,7 @@ class SimulationRunner(
 		isPaused = false
 	}
 
-	override fun isPaused(): Boolean = synchronized(lock) { pausedBacking }
+	override fun isPaused(): Boolean = lock.withLock { pausedBacking }
 
 	/** Register a listener for all property change events. */
 	fun addPropertyChangeListener(listener: PropertyChangeListener) {
@@ -271,7 +276,7 @@ class SimulationRunner(
 			}
 		}
 		// Wake any paused wait OUTSIDE lifecycleLock so we never hold both locks.
-		synchronized(lock) { lock.notifyAll() }
+		lock.withLock { unpaused.signalAll() }
 		// simThread is cleared by the simulation thread's own finally block
 		// once it truly terminates.
 	}
@@ -289,20 +294,20 @@ class SimulationRunner(
 	 *
 	 * Safe to block here: this is always invoked on the dedicated
 	 * `SimulationRunner-sim` thread via a `runBlocking` dispatcher, so
-	 * [Object.wait] never pins a shared coroutine thread pool.
+	 * awaiting [unpaused] never pins a shared coroutine thread pool.
 	 *
 	 * All three mutable fields ([pausedBacking], [stepEventRequested],
 	 * [stepTimeRequested]) are guarded by [lock]. Evaluating the wait condition
-	 * and calling [Object.wait] happen under the same lock, so notifications from
+	 * and awaiting [unpaused] happen under the same lock, so signals from
 	 * [requestStepEvent], [requestStepTime], or the [isPaused] setter can never
-	 * be lost between the condition check and the [Object.wait] call.
+	 * be lost between the condition check and the await call.
 	 */
 	override suspend fun awaitIfPaused() {
 		var consumedStep = false
-		synchronized(lock) {
+		lock.withLock {
 			while (pausedBacking && !stepEventRequested && stepTimeRequested == null) {
 				try {
-					lock.wait()
+					unpaused.await()
 				} catch (e: InterruptedException) {
 					Thread.currentThread().interrupt()
 					return
