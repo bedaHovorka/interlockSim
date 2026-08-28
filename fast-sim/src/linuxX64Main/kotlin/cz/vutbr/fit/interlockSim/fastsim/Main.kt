@@ -88,7 +88,7 @@ private const val VERSION_STRING = "fast-sim 1.0"
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 internal object StderrAppender : FormattingAppender() {
 	override fun logFormattedMessage(
-		_loggingEvent: KLoggingEvent,
+		loggingEvent: KLoggingEvent,
 		formattedMessage: Any?
 	) {
 		fprintf(stderr, "%s\n", formattedMessage?.toString() ?: "null")

@@ -496,7 +496,7 @@ open class DefaultEditingContext(
 	 */
 	override fun putCell(
 		key: Point,
-		nodeCell: NodeCell
+		cell: NodeCell
 	) {
 		checkNotFrozen("add cell")
 		// Validate coordinates are within grid bounds
@@ -507,10 +507,10 @@ open class DefaultEditingContext(
 					"(${grid.cols}x${grid.rows})"
 			)
 		}
-		if (grid.put(key, nodeCell) === nodeCell) return
+		if (grid.put(key, cell) === cell) return
 
 		// vedlejsi Nody (sousedni bunky)
-		for (s1: Segment in nodeCell.joins()) {
+		for (s1: Segment in cell.joins()) {
 			val p = s1.transform(key)
 			// Skip neighbor if it's outside grid bounds (boundary cells)
 			if (p.x < 0 || p.y < 0 || p.x >= grid.cols || p.y >= grid.rows) {
@@ -531,15 +531,15 @@ open class DefaultEditingContext(
 					s1,
 					p,
 					s2,
-					SimpleTrackBlock(nodeCell, nodeCell2, MIN_TRACK_LENGTH, currentMaxSpeed)
+					SimpleTrackBlock(cell, nodeCell2, MIN_TRACK_LENGTH, currentMaxSpeed)
 				)
 			}
 		}
-		if (nodeCell is InOut && !inouts.contains(nodeCell)) {
-			inouts.add(nodeCell)
+		if (cell is InOut && !inouts.contains(cell)) {
+			inouts.add(cell)
 		}
 		firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
-		logger.trace { "Added ${nodeCell::class.simpleName} at (${key.x},${key.y})" }
+		logger.trace { "Added ${cell::class.simpleName} at (${key.x},${key.y})" }
 	}
 
 	/**
@@ -567,15 +567,15 @@ open class DefaultEditingContext(
 	/**
 	 * Remove a track line from the railway network
 	 */
-	override fun removeLine(line: TrackBlock) {
+	override fun removeLine(block: TrackBlock) {
 		checkNotFrozen("remove track block")
 		val grid = getGrid()
-		getGraph().remove(line)
-		grid.keySet().removeAll(getLinesKeys().remove(line) ?: emptySet())
+		getGraph().remove(block)
+		grid.keySet().removeAll(getLinesKeys().remove(block) ?: emptySet())
 		firePropertyChange(
 			ContextChangeListener.TRACK_BLOCK_REMOVED,
 			null,
-			"TrackBlock $line removed"
+			"TrackBlock $block removed"
 		)
 	}
 

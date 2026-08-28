@@ -113,24 +113,24 @@ class Doubleton<T, V>(
 	 * equals() when hashCode() is overridden, and documents the intended behavior.
 	 * </p>
 	 *
-	 * @param obj the object to compare with
-	 * @return true if {@code obj} is a {@link Set} containing exactly the same two elements
+	 * @param other the object to compare with
+	 * @return true if {@code other} is a {@link Set} containing exactly the same two elements
 	 * (regardless of order); associated values (firstValue, secondValue) are ignored
 	 */
 	@Suppress("kotlin:S2097") // Intentional: Doubleton equals any Set with same elements (AbstractMutableSet contract)
-	override fun equals(obj: Any?): Boolean {
+	override fun equals(other: Any?): Boolean {
 		// Early reference check
-		if (this === obj) return true
-		if (obj == null) return false
+		if (this === other) return true
+		if (other == null) return false
 
 		// Type check: Set can only equal another Set
-		if (obj !is Set<*>) return false
+		if (other !is Set<*>) return false
 
 		// Delegate to AbstractSet's content-based equality implementation
 		// which correctly handles order-independent comparison.
 		// This allows equality with any Set (not just Doubleton) that has
 		// the same elements, which is the correct Set semantics.
-		return super.equals(obj)
+		return super.equals(other)
 	}
 
 	override fun add(element: T): Boolean = throw UnsupportedOperationException()

@@ -13,7 +13,8 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
-import assertk.assertions.isTrue
+import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.testutil.FakeSimulationController
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
@@ -40,17 +41,16 @@ import java.util.concurrent.TimeUnit
  *  1. **Type guard (deterministic):** the `workers` field must be a `LinkedHashMap` on JVM.
  *     Reverting the field initializer back to `HashMap()` fails this assertion
  *     deterministically — no insertion-order coincidence can mask it.
- *  2. **Order guard (behavioral):** populating the real `workers` map instance with the 11
- *     real `DynamicInOut` keys of the Praha fixture (in `getInOuts()` iteration order) and
- *     then iterating `keys` must yield exactly that order. With 11 identity-hash keys, a
- *     `HashMap` would reorder them by hash bucket (probability of an accidental
- *     insertion-order match is roughly 1/11! ≈ 2.5e-8), so this assertion reliably fails
- *     under `HashMap()` while passing under `mutableMapOf()`.
+ *  2. **Order guard (behavioral):** driving a short real [DefaultSimulationContext.run] so
+ *     production code populates `workers` with the 11 real `DynamicInOut` keys of the Praha
+ *     fixture (in `getInOuts()` iteration order), then asserting `keys` iterates back in
+ *     exactly that order. With 11 identity-hash keys, a `HashMap` would reorder them by hash
+ *     bucket (probability of an accidental insertion-order match is roughly 1/11! ≈ 2.5e-8),
+ *     so this assertion reliably fails under `HashMap()` while passing under `mutableMapOf()`.
  *
- * No simulation is run: `workers` is initialized inline at field declaration, so it is
- * already a non-null map right after context construction. The workers are populated by
- * `run()` in production, but the insertion-order contract is a property of the map type
- * itself, which is what this test pins.
+ * The order guard exercises the real population code path in `run()` rather than
+ * re-inserting keys by hand, so it tests our code's insertion order instead of merely
+ * `LinkedHashMap`'s own (JDK-guaranteed) order-preservation behavior.
  *
  * @see DefaultSimulationContext.stop
  * @since Issue #910 (PR #917)
@@ -66,6 +66,14 @@ class DefaultSimulationContextWorkerOrderTest : KoinTestBase() {
 	 * Catching the regression: if `mutableMapOf()` is reverted to `HashMap()`, the type
 	 * guard fails immediately (HashMap is not LinkedHashMap), and the order guard fails
 	 * because the 11 identity-hashed Praha InOut keys are reordered by hash bucket.
+	 *
+	 * The order guard drives a short real [DefaultSimulationContext.run] — `workers` is
+	 * populated inside `run()` itself (in `getInOuts()` iteration order), so a read-only
+	 * assertion before `run()` would assert on an empty map and prove nothing.
+	 * [FakeSimulationController] with `stopAfterThrottleCalls = 1` throws
+	 * [FakeSimulationController.StopSimulation] from the first `throttle()` call, which
+	 * happens only after `workers` is fully populated but before any simulated train
+	 * activity — keeping this test fast and deterministic.
 	 */
 	@Test
 	@Timeout(30, unit = TimeUnit.SECONDS)
@@ -88,20 +96,21 @@ class DefaultSimulationContextWorkerOrderTest : KoinTestBase() {
 					isAccessible = true
 				}
 
-			@SuppressWarnings("UNCHECKED_CAST")
-			val workers = workersField.get(ctx) as MutableMap<Any, Any?>
-
 			// ── Type guard ───────────────────────────────────────────────────────
 			// mutableMapOf() materializes as LinkedHashMap on JVM; HashMap() does not.
-			assertThat(workers is LinkedHashMap<*, *>).isTrue()
+			assertThat(workersField.get(ctx)).isInstanceOf(LinkedHashMap::class)
 
 			// ── Order guard (behavioral) ──────────────────────────────────────────
-			// Insert the real DynamicInOut keys in getInOuts() order and assert the map
-			// iterates them back in that same order.
-			workers.clear()
-			for (inOut in inOuts) {
-				workers[inOut] = null // value is irrelevant for an insertion-order test
+			// Drive a short real run so the production `run(controller)` populates
+			// `workers`, then read it back through a checked star projection (no cast
+			// warning) and assert the real insertion order matches getInOuts() order.
+			try {
+				ctx.run(FakeSimulationController(stopAfterThrottleCalls = 1))
+			} catch (_: FakeSimulationController.StopSimulation) {
+				// Expected: stops the simulation right after `workers` is populated.
 			}
+
+			val workers = workersField.get(ctx) as Map<*, *>
 			assertThat(workers.keys.toList()).isEqualTo(inOuts)
 		} finally {
 			ctx.close()

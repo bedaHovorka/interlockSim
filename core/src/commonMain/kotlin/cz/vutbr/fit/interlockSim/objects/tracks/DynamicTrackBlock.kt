@@ -215,40 +215,40 @@ class DynamicTrackBlock(
 	 *
 	 * Transitions state from RESERVED to OCCUPIED.
 	 *
-	 * @param newOccupant The train entering
+	 * @param occupant The train entering
 	 * @throws IllegalStateException if track is already occupied (collision detection)
 	 */
-	override fun enter(newOccupant: TrackOccupant) {
+	override fun enter(occupant: TrackOccupant) {
 		logger.info {
 			"${Process.time()} TrackBlock ${staticRef.hashCode()} ENTRY: " +
-				"occupant=$newOccupant, state=${getState()}->OCCUPIED, trainId=$trainName"
+				"occupant=$occupant, state=${getState()}->OCCUPIED, trainId=$trainName"
 		}
-		if (occupant != null) {
+		if (this.occupant != null) {
 			logger.error {
 				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} collision! " +
-					"Existing occupant=$occupant, newOccupant=$newOccupant"
+					"Existing occupant=${this.occupant}, newOccupant=$occupant"
 			}
 			emitCustom(
 				CollisionWarning.BlockEntryViolation(
-					trainId = newOccupant.name,
+					trainId = occupant.name,
 					block = this,
 					time = currentSimulationTime(),
 					reservedForAtDetection = trainName
 				)
 			)
 		}
-		requireSimulation(occupant == null) {
+		requireSimulation(this.occupant == null) {
 			"TrackBlock occupant collision - must be null on entry (shunting not implemented)"
 		}
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
-		occupant = newOccupant
+		this.occupant = occupant
 		reservedFrom = null
-		emitCustom(BlockEvent.OccupancySet(this, newOccupant, currentSimulationTime()))
+		emitCustom(BlockEvent.OccupancySet(this, occupant, currentSimulationTime()))
 		emitBlockOccupancyEvent(
 			type = BlockOccupancyEventType.BLOCK_OCCUPIED,
 			previousState = TrackFacility.State.RESERVED,
 			newState = TrackFacility.State.OCCUPIED,
-			occupant = newOccupant
+			occupant = occupant
 		)
 
 		// IMPORTANT: trainId remains set from reservation phase (setUpPathWithTrainId).
@@ -263,26 +263,26 @@ class DynamicTrackBlock(
 	 *
 	 * Transitions state from OCCUPIED to FREE.
 	 *
-	 * @param leavingOccupant The train leaving (must match current occupant)
+	 * @param occupant The train leaving (must match current occupant)
 	 * @throws IllegalStateException if occupant doesn't match
 	 */
-	override fun leave(leavingOccupant: TrackOccupant) {
+	override fun leave(occupant: TrackOccupant) {
 		logger.info {
 			"${Process.time()} TrackBlock ${staticRef.hashCode()} EXIT: " +
-				"occupant=$leavingOccupant, state=OCCUPIED->FREE, trainId=$trainName"
+				"occupant=$occupant, state=OCCUPIED->FREE, trainId=$trainName"
 		}
-		requireSimulation(occupant === leavingOccupant) {
+		requireSimulation(this.occupant === occupant) {
 			"TrackBlock occupant mismatch on leave"
 		}
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
-		val previousOccupant = occupant
+		val previousOccupant = this.occupant
 		emitBlockOccupancyEvent(
 			type = BlockOccupancyEventType.BLOCK_RELEASED,
 			previousState = TrackFacility.State.OCCUPIED,
 			newState = TrackFacility.State.FREE,
 			occupant = previousOccupant
 		)
-		occupant = null
+		this.occupant = null
 		trainName = null
 		emitCustom(BlockEvent.OccupancyCleared(this, currentSimulationTime()))
 	}

@@ -40,7 +40,7 @@ interface Path :
 	 * Returns the minimal speed limit across all tracks in this path sequence.
 	 * Considers the speed limits of all tracks when approached from the given separator.
 	 */
-	override fun maxSpeed(sep: PathSeparator?): Double
+	override fun maxSpeed(from: PathSeparator?): Double
 
 	/**
 	 * Creates a reversed copy of this path with elements in opposite order.

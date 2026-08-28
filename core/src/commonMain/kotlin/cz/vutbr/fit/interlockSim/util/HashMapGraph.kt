@@ -113,12 +113,12 @@ class HashMapGraph<N, E, X> :
 
 	override fun put(
 		first: N,
-		firstAddInf: X,
+		firstExt: X,
 		second: N,
-		secondAddInf: X,
+		secondExt: X,
 		value: E
 	) {
-		map[Doubleton(first, second, firstAddInf, secondAddInf)] = value
+		map[Doubleton(first, second, firstExt, secondExt)] = value
 		// Invalidate cached node set when graph structure changes
 		cachedNodeSet = null
 	}
@@ -177,14 +177,14 @@ class HashMapGraph<N, E, X> :
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#remove(I)
 	 */
-	override fun remove(h: E): Collection<N> {
-		requireValidState(h != null) { "Edge cannot be null" }
+	override fun remove(edge: E): Collection<N> {
+		requireValidState(edge != null) { "Edge cannot be null" }
 		val collection = mutableSetOf<N>()
 		val iterator = map.entries.iterator()
 		var hasRemoved = false
 		while (iterator.hasNext()) {
 			val next = iterator.next()
-			if (h == next.value) {
+			if (edge == next.value) {
 				collection.addAll(next.key)
 				iterator.remove()
 				hasRemoved = true
@@ -235,12 +235,12 @@ class HashMapGraph<N, E, X> :
 
 	override fun putIfNotExists(
 		first: N,
-		addInfFirst: X,
+		firstExt: X,
 		second: N,
-		addInfSecond: X,
+		secondExt: X,
 		edge: E
 	) {
-		val pair = Doubleton<N, X>(first, second, addInfFirst, addInfSecond)
+		val pair = Doubleton<N, X>(first, second, firstExt, secondExt)
 		if (!map.containsKey(pair)) {
 			map[pair] = edge
 			// Invalidate cached node set when graph structure changes
@@ -262,16 +262,20 @@ class HashMapGraph<N, E, X> :
 
 	override fun assignedEdges(node: N): Map<X, E> {
 		val lmap = mutableMapOf<X, E>()
+		// Captured under a distinct name: the anonymous processor's own `node` parameter
+		// (renamed to match DoubletonEntrySetProcessor's supertype name) would otherwise
+		// shadow this outer node.
+		val targetNode = node
 		(
 			object : DoubletonEntrySetProcessor<X>(map) {
 				override fun processEntryNode(
 					key: Doubleton<N, X>,
 					edge: E,
-					node2: N
+					node: N
 				) {
-					if (node == node2) {
-						val aInf = key.getValue(node)
-						requireValidState(!lmap.containsKey(aInf)) { "Duplicate additional info key $aInf for node $node" }
+					if (targetNode == node) {
+						val aInf = key.getValue(targetNode)
+						requireValidState(!lmap.containsKey(aInf)) { "Duplicate additional info key $aInf for node $targetNode" }
 						lmap[aInf!!] = edge
 					}
 				}
@@ -284,16 +288,23 @@ class HashMapGraph<N, E, X> :
 		node: N,
 		edge: E
 	): X {
+		// Captured under distinct names: the anonymous processor's own `node`/`edge`
+		// parameters (renamed to match DoubletonEntrySetProcessor's supertype names) would
+		// otherwise shadow these outer values.
+		val targetNode = node
+		val targetEdge = edge
 		val p =
 			object : DoubletonEntrySetProcessor<X>(map) {
 				override fun processEntryNode(
 					key: Doubleton<N, X>,
-					edge2: E,
-					node2: N
+					edge: E,
+					node: N
 				) {
-					if (node == node2 && edge == edge2) {
-						requireValidState(getResult() == null) { "Multiple extensional objects found for node $node and edge $edge" }
-						setResult(key.getValue(node)!!)
+					if (targetNode == node && targetEdge == edge) {
+						requireValidState(getResult() == null) {
+							"Multiple extensional objects found for node $targetNode and edge $targetEdge"
+						}
+						setResult(key.getValue(targetNode)!!)
 					}
 				}
 			}

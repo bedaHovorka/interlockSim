@@ -250,9 +250,9 @@ class SimulationSnapshotTest {
 			object : NetworkActuatorPort {
 				override fun requestRoute(
 					trainName: String,
-					fromInOutName: String,
-					toInOutName: String
-				): RouteRequestResult = RouteRequestResult.NoRouteExists(fromInOutName, toInOutName)
+					fromEndpointName: String,
+					toEndpointName: String
+				): RouteRequestResult = RouteRequestResult.NoRouteExists(fromEndpointName, toEndpointName)
 
 				override fun releaseRoute(trainName: String): Boolean = false
 

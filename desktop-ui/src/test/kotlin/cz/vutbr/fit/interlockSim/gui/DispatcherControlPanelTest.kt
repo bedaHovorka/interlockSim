@@ -198,7 +198,7 @@ class DispatcherControlPanelTest {
 	}
 
 	@Test
-	fun `clicking 'Why this route?' calls onRationale callback`() {
+	fun `clicking 'Why this route' calls onRationale callback`() {
 		val capturedRationales = mutableListOf<List<String>>()
 		val rationale = listOf("Path available", "Shortest route")
 
