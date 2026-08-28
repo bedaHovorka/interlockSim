@@ -103,11 +103,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
 
-			// Act: Train exists and can theoretically request path reservation
-			val trainExists = train != null
-
 			// Assert: Train instance is valid for path operations
-			assertThat(trainExists).isEqualTo(true)
+			assertThat(train.getLength()).isEqualTo(50.0)
 		}
 
 		@Test

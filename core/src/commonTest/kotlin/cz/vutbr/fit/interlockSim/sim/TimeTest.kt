@@ -108,7 +108,8 @@ class TimeEqualsTest {
 	@Test
 	fun `time is not equal to null`() {
 		val time = Time(30.0)
-		assertThat(time == null).isFalse()
+		val other: Any? = null
+		assertThat(time == other).isFalse()
 	}
 }
 

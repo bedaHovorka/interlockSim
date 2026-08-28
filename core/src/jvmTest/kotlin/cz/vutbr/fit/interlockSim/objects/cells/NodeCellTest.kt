@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.anti
@@ -219,12 +220,12 @@ class NodeCellTest : KoinTestBase() {
 			val allSegments = Cell.Segment.values()
 
 			// Assert
-			// For a node with no connections, getFollowingSegment should return null for most directions
+			// An isolated node has no connections, so every direction resolves to null
 			for (segment in allSegments) {
 				val followingSegment = node.getFollowingSegment(segment)
-				// A minimal mock node returns null for most queries
-				assertThat(followingSegment == null || followingSegment != null)
-					.withMessage("getFollowingSegment should return null or valid segment (not throw)")
+				assertThat(followingSegment)
+					.withMessage("Isolated node should have no following segment in direction $segment")
+					.isNull()
 			}
 		}
 

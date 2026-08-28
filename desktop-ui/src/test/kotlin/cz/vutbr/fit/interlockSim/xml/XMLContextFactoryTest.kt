@@ -866,13 +866,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			assertThat(grid.rows).isEqualTo(25)
 
 			// Verify grid is not empty
-			var hasElements = false
-			for (entry in grid) {
-				if (entry.value != null) {
-					hasElements = true
-					break
-				}
-			}
+			val hasElements = grid.iterator().hasNext()
 			assertThat(hasElements).withMessage("Praha grid should contain elements").isTrue()
 		}
 

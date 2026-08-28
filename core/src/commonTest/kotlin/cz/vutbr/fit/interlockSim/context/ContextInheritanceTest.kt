@@ -13,7 +13,6 @@ import assertk.assertThat
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotInstanceOf
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import org.koin.core.component.inject
 import kotlin.test.Test
@@ -116,9 +115,6 @@ class ContextInheritanceTest : CommonKoinTestBase() {
 			// Assert - Cannot treat as EditingContext
 			val isEditingContext = context is EditingContext
 			assertThat(isEditingContext).isFalse()
-
-			// The instance is a SimulationContext, not an EditingContext
-			assertThat(context is SimulationContext).isTrue()
 		}
 	}
 

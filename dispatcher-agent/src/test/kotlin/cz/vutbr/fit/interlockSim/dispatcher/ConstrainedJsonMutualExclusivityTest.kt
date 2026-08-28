@@ -120,7 +120,12 @@ class ConstrainedJsonMutualExclusivityTest {
 		// enforcement of mutual exclusivity: you cannot accidentally install a KoogDispatchAgent
 		// in a DispatchTickLoop slot (which takes an EmissionStrategy), so format + tools can
 		// never co-exist in the same request by construction.
-		val isEmissionStrategy = agent is cz.vutbr.fit.interlockSim.dispatcher.agents.EmissionStrategy
+		// Checked via reflection (rather than a Kotlin `is` check) so this stays a genuine
+		// regression guard: the Kotlin compiler already proves the `is` form statically false
+		// from the declared types, which would make it a no-op assertion.
+		val isEmissionStrategy =
+			cz.vutbr.fit.interlockSim.dispatcher.agents.EmissionStrategy::class.java
+				.isAssignableFrom(agent.javaClass)
 		assertThat(isEmissionStrategy).isFalse()
 	}
 

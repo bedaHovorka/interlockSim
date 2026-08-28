@@ -282,8 +282,9 @@ class TracksPolishTest {
 		fun `equals with null returns false`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic = DynamicTrack(track)
+			val other: Any? = null
 
-			assertThat(dynamic == null).isFalse()
+			assertThat(dynamic == other).isFalse()
 		}
 
 		@Test

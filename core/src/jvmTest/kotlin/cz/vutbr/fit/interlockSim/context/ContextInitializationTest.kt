@@ -149,10 +149,7 @@ class ContextInitializationTest : KoinTestBase() {
 		fun xmlFile_valid_loadsContext() {
 			// Arrange & Act
 			val context =
-				(
-					TestFixtures.loadMinimalNetworkXml()
-						?: error("Test fixture not found: minimal-network.xml")
-				).use { editingContextFactory.createContext(it) }
+				TestFixtures.loadMinimalNetworkXml().use { editingContextFactory.createContext(it) }
 
 			// Assert
 			assertThat(context)
@@ -174,10 +171,7 @@ class ContextInitializationTest : KoinTestBase() {
 		fun linearTrackFile_loadsWithEndpoints() {
 			// Arrange & Act
 			val context =
-				(
-					TestFixtures.loadLinearTrackXml()
-						?: error("Test fixture not found: linear-track.xml")
-				).use { editingContextFactory.createContext(it) }
+				TestFixtures.loadLinearTrackXml().use { editingContextFactory.createContext(it) }
 
 			// Assert
 			assertThat(context)
@@ -233,10 +227,7 @@ class ContextInitializationTest : KoinTestBase() {
 			// Arrange & Act & Assert
 			assertk
 				.assertFailure {
-					(
-						TestFixtures.loadInvalidMalformedXml()
-							?: error("Test fixture not found: invalid-malformed-xml.xml")
-					).use { editingContextFactory.createContext(it) }
+					TestFixtures.loadInvalidMalformedXml().use { editingContextFactory.createContext(it) }
 				}.isInstanceOf(Exception::class)
 		}
 	}
@@ -250,10 +241,7 @@ class ContextInitializationTest : KoinTestBase() {
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
 			val editingContext =
-				(
-					TestFixtures.loadLinearTrackXml()
-						?: error("Test fixture not found: linear-track.xml")
-				).use { editingContextFactory.createContext(it) } as EditingContext
+				TestFixtures.loadLinearTrackXml().use { editingContextFactory.createContext(it) } as EditingContext
 			linearTrackContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
 

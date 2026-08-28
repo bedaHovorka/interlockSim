@@ -205,16 +205,8 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	 * Get the first track section from the railway network graph.
 	 */
 	private fun getFirstTrackSection(): cz.vutbr.fit.interlockSim.objects.tracks.TrackSection? {
-		val graph = context.getGraph()
-		val edges = graph.values()
-
-		for (edge in edges) {
-			if (edge is cz.vutbr.fit.interlockSim.objects.tracks.TrackSection) {
-				return edge
-			}
-		}
-
-		return null
+		// All graph edges are DynamicTrackBlock, which implements TrackSection.
+		return context.getGraph().values().firstOrNull()
 	}
 
 	// ========== Identity-Based Separator Matching Tests (Issue #324) ==========

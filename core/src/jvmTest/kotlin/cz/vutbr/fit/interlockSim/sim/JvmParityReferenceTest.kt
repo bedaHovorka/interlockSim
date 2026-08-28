@@ -81,9 +81,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 	 */
 	private fun runSimulation(): SimRun {
 		val factory = getKoin().get<SimulationContextFactory>()
-		val stream =
-			Resources.read(VYHYBNA_RESOURCE.trimStart('/')).byteInputStream()
-				?: throw IllegalStateException("Classpath resource not found: $VYHYBNA_RESOURCE")
+		val stream = Resources.read(VYHYBNA_RESOURCE.trimStart('/')).byteInputStream()
 		val output = mutableListOf<String>()
 		var trainsEntered = -1
 		var trainsExited = -1

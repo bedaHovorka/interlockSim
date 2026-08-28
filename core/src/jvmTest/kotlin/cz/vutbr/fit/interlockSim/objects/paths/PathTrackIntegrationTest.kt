@@ -16,8 +16,8 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -68,15 +68,13 @@ class PathTrackIntegrationTest : KoinTestBase() {
 	fun setUp() {
 		// Load XML fixtures for testing via classpath resources
 		linearContext =
-			(
-				TestFixtures.loadLinearTrackXml()
-					?: error("Test fixture not found: linear-track.xml")
-			).use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
+			TestFixtures
+				.loadLinearTrackXml()
+				.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
 		switchContext =
-			(
-				TestFixtures.loadSwitchBasicXml()
-					?: error("Test fixture not found: switch-basic.xml")
-			).use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
+			TestFixtures
+				.loadSwitchBasicXml()
+				.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
 
 		// Initialize dynamic mappings for both contexts
 		// This is required because tests use toDynamic() without calling run()
@@ -110,13 +108,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val graph = context.getGraph()
 
 			// Get all track blocks from the graph (they are edges connecting nodes)
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			assertThat(tracks.size)
 				.withMessage("Linear track fixture should have at least 1 track block")
@@ -158,13 +151,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val graph = context.getGraph()
 
 			// Get all tracks from switch fixture
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			assertThat(tracks.size >= 2)
 				.withMessage("Switch fixture should have multiple track blocks")
@@ -211,13 +199,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			assertThat(tracks.size).isEqualTo(1)
 			val track = tracks[0]
@@ -266,13 +249,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			assertThat(tracks.size).isEqualTo(1)
 			val track = tracks[0]
@@ -314,13 +292,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			val track = tracks[0]
 			val endpoint = track.ends()[0]
@@ -360,13 +333,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(switchContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			assertThat(tracks.size > 1)
 				.withMessage("Switch fixture should have multiple tracks")
@@ -428,13 +396,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			val track = tracks[0]
 			val endpoint = track.ends()[0]
@@ -473,13 +436,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			val track = tracks[0]
 			val endpoint1 = track.ends()[0]
@@ -523,31 +481,24 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(switchContext)
 			val graph = context.getGraph()
 
-			// Find the switch cell in the graph
-			var switchCell: RailSwitch? = null
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is RailSwitch) {
-					switchCell = edge
-					break
-				}
-			}
+			// Find the switch cell in the grid. RailSwitch is a node in the network, not a
+			// graph edge (edges are always DynamicTrackBlock), so it must be located via the
+			// grid rather than graph.entrySet(). The simulation grid holds DynamicRailSwitch
+			// wrappers, not raw RailSwitch cells (GridTransformer overwrites NodeCell
+			// positions with dynamic wrappers), so the static switch is recovered via staticRef.
+			val switchCell =
+				context
+					.getRailWayNetGrid()
+					.firstNotNullOfOrNull { it.value as? DynamicRailSwitch }
+					?.staticRef
 
-			// If switch exists, verify it's in a neutral state initially
-			if (switchCell != null) {
-				assertThat(switchCell)
-					.withMessage("Switch should be present in switch fixture")
-					.isNotNull()
-			}
+			assertThat(switchCell)
+				.withMessage("Switch should be present in switch fixture")
+				.isNotNull()
 
 			// Act: Reserve a path through the switch
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			if (tracks.isNotEmpty()) {
 				val track = tracks[0]
@@ -580,24 +531,21 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			// Try to find a semaphore in the graph
-			var semaphore: RailSemaphore? = null
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is RailSemaphore) {
-					semaphore = edge
-					break
-				}
-			}
+			// Find the semaphore cell in the grid. RailSemaphore is a node in the network, not
+			// a graph edge (edges are always DynamicTrackBlock), so it must be located via the
+			// grid rather than graph.entrySet(). The simulation grid holds DynamicRailSemaphore
+			// wrappers, not raw RailSemaphore cells (GridTransformer overwrites NodeCell
+			// positions with dynamic wrappers), so the static semaphore is recovered via
+			// staticRef. linear-track.xml has no semaphore, so this is expected to be null here.
+			val semaphore =
+				context
+					.getRailWayNetGrid()
+					.firstNotNullOfOrNull { it.value as? DynamicRailSemaphore }
+					?.staticRef
 
 			// Get tracks and verify path release behavior
-			val tracks = mutableListOf<TrackFacility>()
-			for (entry in graph.entrySet()) {
-				val edge = entry.value
-				if (edge is TrackFacility) {
-					tracks.add(edge)
-				}
-			}
+			// All graph edges are DynamicTrackBlock, which implements TrackFacility.
+			val tracks: List<TrackFacility> = graph.values().toList()
 
 			if (tracks.isNotEmpty()) {
 				val track = tracks[0]
