@@ -109,6 +109,16 @@ tasks.compileTestKotlin {
     }
 }
 
+// Issue #713: compileJmhKotlin is a third Kotlin compile task the me.champeau.jmh plugin
+// registers for src/jmh/kotlin/. It is not wired into build/test/check and so never runs
+// in the gate or in CI, but it is guarded anyway so a new warning in the JMH benchmark
+// sources cannot go unnoticed.
+tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileJmhKotlin") {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+
 tasks.processResources {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
