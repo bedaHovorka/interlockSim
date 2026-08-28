@@ -133,15 +133,7 @@ class KoinGoldenOutputTest : IntegrationKoinTestBase() {
 			val graph = ctx.getGraph()
 			assertThat(graph.size()).isEqualTo(EXPECTED_GRAPH_SIZE)
 
-			val occupiedBlocks =
-				graph.values().count { block ->
-					when (block) {
-						is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock ->
-							block.occupant != null
-						is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
-							ctx.toDynamic(block).occupant != null
-					}
-				}
+			val occupiedBlocks = graph.values().count { block -> block.occupant != null }
 			assertThat(occupiedBlocks).isEqualTo(EXPECTED_OCCUPIED_BLOCKS)
 
 			val registry = ctx.scope.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry>()
@@ -226,15 +218,7 @@ class KoinGoldenOutputTest : IntegrationKoinTestBase() {
 			val graph = ctx.getGraph()
 			val graphSize = graph.size()
 
-			val occupiedBlocks =
-				graph.values().count { block ->
-					when (block) {
-						is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock ->
-							block.occupant != null
-						is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
-							ctx.toDynamic(block).occupant != null
-					}
-				}
+			val occupiedBlocks = graph.values().count { block -> block.occupant != null }
 
 			val registry = ctx.scope.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry>()
 			SimulationMetrics(graphSize, occupiedBlocks, registry.blockCount(), registry.trainCount())

@@ -84,11 +84,8 @@ abstract class CellRenderer(
 		g: Graphics2D,
 		type: Cell.SpatialType
 	) {
-		val segs = type.segments
-		if (segs != null) {
-			val segsArray: Array<Segment> = segs.toMutableList().toTypedArray()
-			drawSegments(g, *segsArray)
-		}
+		val segsArray: Array<Segment> = type.segments.toMutableList().toTypedArray()
+		drawSegments(g, *segsArray)
 	}
 
 	// Draw triangle indicator for switches and semaphores
