@@ -84,6 +84,11 @@ kotlin {
     // still Beta in Kotlin; this flag opts into the behaviour the warning asks for.
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
+
+        // Issue #713: the build is warning-free as of this commit. A new warning is a
+        // regression, so fail on it. If a Kotlin version bump introduces a brand-new
+        // warning kind, fix the warning — do not turn this flag back off.
+        allWarningsAsErrors.set(true)
     }
 
     jvm {

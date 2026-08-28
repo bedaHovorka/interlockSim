@@ -91,8 +91,10 @@ tasks.compileTestJava {
 tasks.compileKotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-        allWarningsAsErrors.set(false)
-        suppressWarnings.set(false)
+        // Issue #713: the build is warning-free as of this commit. A new warning is a
+        // regression, so fail on it. If a Kotlin version bump introduces a brand-new
+        // warning kind, fix the warning — do not turn this flag back off.
+        allWarningsAsErrors.set(true)
     }
     dependsOn(rootProject.tasks.named("checkKdisco"))
 }
@@ -100,6 +102,10 @@ tasks.compileKotlin {
 tasks.compileTestKotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        // Issue #713: the build is warning-free as of this commit. A new warning is a
+        // regression, so fail on it. If a Kotlin version bump introduces a brand-new
+        // warning kind, fix the warning — do not turn this flag back off.
+        allWarningsAsErrors.set(true)
     }
 }
 

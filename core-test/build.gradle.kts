@@ -27,6 +27,14 @@ version = "1.0"
 val isLinuxHost: Boolean by gradle.extra
 
 kotlin {
+	// Applies to every compilation (metadata, jvm, linuxX64).
+	compilerOptions {
+		// Issue #713: the build is warning-free as of this commit. A new warning is a
+		// regression, so fail on it. If a Kotlin version bump introduces a brand-new
+		// warning kind, fix the warning — do not turn this flag back off.
+		allWarningsAsErrors.set(true)
+	}
+
 	jvm {
 		compilerOptions {
 			jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
