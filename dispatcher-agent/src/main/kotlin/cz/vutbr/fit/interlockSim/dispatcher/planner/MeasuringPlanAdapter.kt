@@ -116,6 +116,15 @@ class MeasuringPlanAdapter(
 	 * @param record What happened this tick and when.
 	 */
 	override fun onTick(record: TickRecord) {
+		// MUST NOT THROW. [CompositeTickListener] deliberately does not swallow delegate
+		// exceptions, and this adapter is registered first (ExampleRegistry builds it before
+		// AgentLoopDriver's init registers its own listener), so a throw here would abort the
+		// fan-out and silently starve the driver's attribution listener and the run recorder —
+		// re-opening the Issue #843 class of defect where every per-run JSON reported
+		// totalTicks = 0. Every statement below is total: the counter map is pre-populated for
+		// all TickOutcome entries so getValue cannot miss, the snapshot's require() is satisfied
+		// by construction (see getMetricsSnapshot), and the logging lambdas are lazy. Pinned by
+		// MeasuringPlanAdapterTest."onTick never throws ...".
 		outcomeCounters.getValue(record.outcome).incrementAndGet()
 		val cycles = cycleCount.incrementAndGet()
 		val isFallback = !record.outcome.countsAsLlmSuccess
@@ -207,17 +216,24 @@ class MeasuringPlanAdapter(
 		// comparable to a pre-#834 run's — #834 reclassified idle ticks (former RULE_FALLBACK) to
 		// LLM_NO_OP, and REVISED's cap-full no_op converts former fallback ticks into LLM
 		// successes. #713 re-keyed the counters from FallbackReason onto TickOutcome; that
-		// migration deliberately kept LLM_SILENT_NONACTIONABLE on the fallback side so the figure
-		// stays comparable across it. Read it as a within-#834 figure.
+		// migration reclassified no outcome — LLM_SILENT_NONACTIONABLE deliberately stayed on the
+		// fallback side. It can still move the rate very slightly, in one unreachable case: the
+		// old PlannerCycleListener path counted TWO fallbacks for a silent cycle whose
+		// fallbackDispatcher.decide() threw (EMPTY_NO_TOOLS from onFallback, then EXCEPTION from
+		// plan()'s catch), where reportTick — and now this adapter — counts one. Removing that
+		// double count can only raise the rate. Read it as a within-#834 figure.
 		logger.info {
 			"[MeasuringPlanAdapter] note: successRate is reclassified in #834 and not comparable " +
-				"to pre-#834 runs (re-keyed onto TickOutcome in #713 without changing the rate)"
+				"to pre-#834 runs (re-keyed onto TickOutcome in #713 without reclassifying any outcome)"
 		}
 	}
 
 	// ── Internal helpers ──────────────────────────────────────────────────────
 
-	/** Builds the shared `[MeasuringPlanAdapter] <label> — totalCycles=... successRate=...` log line. */
+	/**
+	 * Builds the shared `[MeasuringPlanAdapter] <label> — totalCycles=... byOutcome=[...]
+	 * successRate=...` log line.
+	 */
 	private fun formatSummaryLine(
 		label: String,
 		snapshot: PlannerMetricsSnapshot
@@ -226,10 +242,15 @@ class MeasuringPlanAdapter(
 			TickOutcome.entries.joinToString(", ") { outcome ->
 				"${outcome.name}=${snapshot.outcomeCounts[outcome] ?: 0}"
 			}
+		// byOutcome is its own field, not a parenthetical on fallback=: it covers ALL outcomes
+		// and so sums to totalCycles, not to fallbackCount. Attached to fallback= (as the
+		// pre-#713 FallbackReason breakdown legitimately was) it would read as a breakdown of a
+		// number it does not add up to.
 		return "[MeasuringPlanAdapter] $label — " +
 			"totalCycles=${snapshot.totalCycles} " +
 			"ollamaSuccess=${snapshot.ollamaSuccessCount} " +
-			"fallback=${snapshot.fallbackCount} ($byOutcomeStr) " +
+			"fallback=${snapshot.fallbackCount} " +
+			"byOutcome=[$byOutcomeStr] " +
 			"successRate=${formatRate(snapshot.ollamaSuccessRate)}"
 	}
 

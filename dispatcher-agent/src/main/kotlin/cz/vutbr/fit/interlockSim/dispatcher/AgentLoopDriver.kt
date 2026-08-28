@@ -188,7 +188,7 @@ class AgentLoopDriver(
 
 	init {
 		// The listener fires synchronously inside plannerTickSource.plan()'s suspend body — all
-		// four call sites (LLM success, EMPTY_NO_TOOLS/TIMEOUT/EXCEPTION fallback) are inline in
+		// four call sites (LLM actions, idle no-op, and both runFallback branches) are inline in
 		// KoogAgentPlanAdapter.plan's try/catch, not in a spawned coroutine — so lastTickOutcome
 		// is always fresh by the time plan() returns below in runCycle().
 		plannerTickSource?.addTickListener(

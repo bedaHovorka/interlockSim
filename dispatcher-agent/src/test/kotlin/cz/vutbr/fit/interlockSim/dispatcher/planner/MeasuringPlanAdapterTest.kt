@@ -640,5 +640,38 @@ class MeasuringPlanAdapterTest {
 			assertThat(snapshot.fallbackCount).isEqualTo(2L)
 			assertThat(snapshot.ollamaSuccessRate).isEqualTo(0.5)
 		}
+
+		/**
+		 * Pins the "[MeasuringPlanAdapter.onTick] must not throw" invariant its own comment states.
+		 *
+		 * [CompositeTickListener] deliberately does not swallow delegate exceptions, and
+		 * `ExampleRegistry` builds this adapter before [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
+		 * registers its own listener — so a throw here would abort the fan-out and starve the
+		 * driver's attribution listener and the run recorder, which is exactly the Issue #843
+		 * defect (`totalTicks = 0` in every per-run JSON). Drives all eight outcomes past
+		 * [MeasuringPlanAdapter.REPORT_EVERY_N_CYCLES] so the checkpoint branch — the one that
+		 * builds a snapshot and so evaluates [PlannerMetricsSnapshot]'s `require` — is exercised
+		 * too, not just the early-return hot path.
+		 */
+		@Test
+		fun `onTick never throws for any TickOutcome, including at a periodic checkpoint`() {
+			val adapter = measuring(mockk<KoogDispatchAgent>(), mockk<Dispatcher>())
+
+			val oneOfEach =
+				TickOutcome.entries.mapIndexed { index, outcome ->
+					TickRecord(
+						outcome = outcome,
+						simTime = index.toDouble(),
+						timeoutNoOpCause =
+							if (outcome == TickOutcome.TIMEOUT_NOOP) TimeoutNoOpCause.DEADLINE_MISS else null
+					)
+				}
+
+			// 3 rounds x 8 outcomes = 24 ticks, so cycles 10 and 20 take the checkpoint branch.
+			repeat(3) { oneOfEach.forEach { record -> adapter.onTick(record) } }
+
+			// Reaching this line at all is the assertion: no onTick call threw.
+			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(24L)
+		}
 	}
 }

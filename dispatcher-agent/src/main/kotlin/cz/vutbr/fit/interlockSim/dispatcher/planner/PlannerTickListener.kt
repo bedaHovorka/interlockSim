@@ -21,10 +21,12 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * simultaneously.
  *
  * **Wiring note:** [KoogAgentPlanAdapter.addTickListener] registers this to fire at every
- * `plan()` completion (SP2c.20 follow-up, Issue #843), independent of the deprecated
- * [PlannerCycleListener] slot `MeasuringPlanAdapter` claims — the two listeners coexist without
- * interfering. Multiple [PlannerTickListener]s registered via [KoogAgentPlanAdapter.addTickListener]
- * also coexist without interfering (Issue #713 Task 9), fanned out through [CompositeTickListener].
+ * `plan()` completion (SP2c.20 follow-up, Issue #843). This is the adapter's only reporting
+ * seam: since Issue #713 Task 10 retired the deprecated [PlannerCycleListener] slot, every
+ * observer — [MeasuringPlanAdapter] and
+ * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]'s attribution listener included —
+ * registers here. Any number of [PlannerTickListener]s coexist without displacing each other
+ * (Issue #713 Task 9), fanned out in registration order through [CompositeTickListener].
  *
  * @see TickRecord
  * @see TickOutcome

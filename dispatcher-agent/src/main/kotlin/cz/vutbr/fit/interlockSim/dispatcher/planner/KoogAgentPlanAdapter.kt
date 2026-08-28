@@ -331,7 +331,7 @@ class KoogAgentPlanAdapter(
 				// finds nothing legal to do means this tick was never actionable in the first
 				// place, not a genuine dispatch miss. runFallback classifies the reported
 				// TickOutcome from the returned decision list — see its KDoc.
-				runFallback(observation = observation, latencyMs = latencyMs, silentCycle = true) {
+				runFallback(observation = observation, latencyMs = latencyMs, outcomeFromFallbackOracle = true) {
 					logger.warn {
 						"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
 							"consulting rule-based fallback (simTime=${observation.snapshot.simTime})"
@@ -345,7 +345,7 @@ class KoogAgentPlanAdapter(
 			runFallback(
 				observation = observation,
 				latencyMs = cycleStart?.elapsedNow()?.inWholeMilliseconds,
-				silentCycle = false
+				outcomeFromFallbackOracle = false
 			) {
 				logger.warn {
 					"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +
@@ -361,7 +361,7 @@ class KoogAgentPlanAdapter(
 			runFallback(
 				observation = observation,
 				latencyMs = cycleStart?.elapsedNow()?.inWholeMilliseconds,
-				silentCycle = false
+				outcomeFromFallbackOracle = false
 			) {
 				logger.warn(e) {
 					"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
@@ -380,8 +380,8 @@ class KoogAgentPlanAdapter(
 	 *
 	 * ## Outcome classification (Issue #927)
 	 *
-	 * For [silentCycle] == `true` (the LLM answered silently on a non-idle station), the reported
-	 * outcome depends on what [fallbackDispatcher] actually found:
+	 * For [outcomeFromFallbackOracle] == `true` (the LLM answered silently on a non-idle
+	 * station), the reported outcome depends on what [fallbackDispatcher] actually found:
 	 * - `decide()` returns at least one **actionable** decision (not just
 	 *   [DispatchDecision.NoAction]) → [TickOutcome.RULE_FALLBACK] — a genuine miss, the fallback
 	 *   actually dispatches something the LLM should have caught.
@@ -395,41 +395,43 @@ class KoogAgentPlanAdapter(
 	 * check would be dead code against any contract-compliant dispatcher and would let the
 	 * non-actionable classification never fire in production.
 	 *
-	 * For [silentCycle] == `false` (inference timeout, LLM exception) the LLM path itself failed —
-	 * whatever [fallbackDispatcher] returns is always reported as [TickOutcome.RULE_FALLBACK],
+	 * For [outcomeFromFallbackOracle] == `false` (inference timeout, LLM exception) the LLM path
+	 * itself failed — whatever [fallbackDispatcher] returns is always reported as [TickOutcome.RULE_FALLBACK],
 	 * unchanged from before #927: a timed-out or exception-throwing cycle is a genuine LLM-side
 	 * failure regardless of how many decisions the fallback happens to find.
 	 *
 	 * ## Tick-accounting ordering
 	 *
-	 * For a non-silent cycle the tick is reported BEFORE [fallbackDispatcher.decide] is
-	 * called, so a throwing fallback cannot drop the cycle from tick accounting (the pre-#927
-	 * ordering). For a silent cycle the tick is reported AFTER `decide()` returns, because the
-	 * outcome depends on the oracle's result; if `decide()` throws there, the exception escapes
-	 * to [plan]'s exception handler, which reports `RULE_FALLBACK` via this method — so the
-	 * cycle is still accounted for, never silently dropped.
+	 * When [outcomeFromFallbackOracle] is `false` the tick is reported BEFORE
+	 * [fallbackDispatcher.decide] is called, so a throwing fallback cannot drop the cycle from
+	 * tick accounting (the pre-#927 ordering). When it is `true` the tick is reported AFTER
+	 * `decide()` returns, because the outcome depends on the oracle's result; if `decide()` throws
+	 * there, the exception escapes to [plan]'s exception handler, which reports `RULE_FALLBACK`
+	 * via this method — so the cycle is still accounted for exactly once, never silently dropped
+	 * and (unlike the pre-#713 `PlannerCycleListener` path) never double-counted.
 	 *
 	 * @param latencyMs Cycle latency to report alongside the tick, or `null` if no meaningful
 	 *   inference attempt was measured for this cycle — see [plan]'s "Latency measurement" KDoc.
-	 * @param silentCycle `true` when the LLM completed the cycle without decisions or tool
-	 *   emissions on a non-idle station (so the fallback dispatcher is consulted as an oracle and
-	 *   decides the outcome), `false` when the LLM path itself failed and the outcome is
-	 *   [TickOutcome.RULE_FALLBACK] regardless of what the fallback finds.
+	 * @param outcomeFromFallbackOracle `true` to let [fallbackDispatcher]'s result select the
+	 *   reported outcome — the silent-cycle case, where the dispatcher is consulted as an oracle
+	 *   and finding nothing actionable means [TickOutcome.LLM_SILENT_NONACTIONABLE]. `false` to
+	 *   report [TickOutcome.RULE_FALLBACK] unconditionally, because the LLM path itself failed.
 	 */
 	private fun runFallback(
 		observation: DispatchObservation,
 		latencyMs: Long?,
-		silentCycle: Boolean,
+		outcomeFromFallbackOracle: Boolean,
 		logAction: () -> Unit
 	): List<DispatchDecision> {
 		logAction()
-		// Non-silent cycle (timeout/exception): always RULE_FALLBACK. Report the tick BEFORE
-		// consulting the fallback so a throwing fallback dispatcher cannot drop it from accounting.
-		if (!silentCycle) {
+		// The oracle does not select the outcome (timeout/exception): always RULE_FALLBACK. Report
+		// the tick BEFORE consulting the fallback so a throwing fallback cannot drop it from
+		// accounting.
+		if (!outcomeFromFallbackOracle) {
 			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
 			return fallbackDispatcher.decide(observation)
 		}
-		// Silent cycle: the outcome depends on what the fallback oracle finds, so decide()
+		// Oracle-selected: the outcome depends on what the fallback oracle finds, so decide()
 		// must run before the tick is reported. If decide() throws, the exception escapes to
 		// plan()'s exception handler, which reports RULE_FALLBACK above — the cycle is still
 		// accounted for (as a degraded RULE_FALLBACK), never silently dropped.
