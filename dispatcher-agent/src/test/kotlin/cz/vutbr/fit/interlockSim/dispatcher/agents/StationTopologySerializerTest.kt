@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.containsAll
+import assertk.assertions.containsAtLeast
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -45,7 +45,7 @@ class StationTopologySerializerTest : DispatcherKoinTestBase() {
 
 			assertThat(topology.inOuts).isEqualTo(listOf("A", "B"))
 
-			assertThat(topology.signals).containsAll(
+			assertThat(topology.signals).containsAtLeast(
 				SignalId("doA1"),
 				SignalId("doA2"),
 				SignalId("doB1"),
@@ -54,7 +54,7 @@ class StationTopologySerializerTest : DispatcherKoinTestBase() {
 				SignalId("zB")
 			)
 
-			assertThat(topology.switches.map { it.id }).containsAll(SwitchId("vA"), SwitchId("vB"))
+			assertThat(topology.switches.map { it.id }).containsAtLeast(SwitchId("vA"), SwitchId("vB"))
 			assertThat(topology.switches.first { it.id == SwitchId("vA") }.type).isEqualTo("SIMPLE_RIGHT_FALSE")
 			assertThat(topology.switches.first { it.id == SwitchId("vB") }.type).isEqualTo("SIMPLE_LEFT_TRUE")
 

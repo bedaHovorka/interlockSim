@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.containsAll
+import assertk.assertions.containsAtLeast
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -21,7 +21,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
@@ -254,8 +254,8 @@ class DynamicRailSwitchTest {
 
 	@Test
 	fun `static object is accessible`() {
-		assertThat(dynamicSwitch1.staticRef).isSameAs(staticSwitch1)
-		assertThat(dynamicSwitch2.staticRef).isSameAs(staticSwitch2)
+		assertThat(dynamicSwitch1.staticRef).isSameInstanceAs(staticSwitch1)
+		assertThat(dynamicSwitch2.staticRef).isSameInstanceAs(staticSwitch2)
 	}
 
 	@Test
@@ -305,17 +305,17 @@ class DynamicRailSwitchTest {
 
 		// Initially MAIN (A-F)
 		val mainSegments = switch.getActiveSegments()
-		assertThat(mainSegments).containsAll(Cell.Segment.A, Cell.Segment.F)
+		assertThat(mainSegments).containsAtLeast(Cell.Segment.A, Cell.Segment.F)
 
 		// Change to BRANCH (A-E)
 		switch.changeConf()
 		val branchSegments = switch.getActiveSegments()
-		assertThat(branchSegments).containsAll(Cell.Segment.A, Cell.Segment.E)
+		assertThat(branchSegments).containsAtLeast(Cell.Segment.A, Cell.Segment.E)
 
 		// Change back to MAIN (A-F)
 		switch.changeConf()
 		val mainSegmentsAgain = switch.getActiveSegments()
-		assertThat(mainSegmentsAgain).containsAll(Cell.Segment.A, Cell.Segment.F)
+		assertThat(mainSegmentsAgain).containsAtLeast(Cell.Segment.A, Cell.Segment.F)
 	}
 
 	@ParameterizedTest(name = "{0}/{1}: MAIN({2},{3}), BRANCH({4},{5})")
@@ -336,13 +336,13 @@ class DynamicRailSwitchTest {
 		// MAIN configuration
 		val mainSegments = switch.getActiveSegments()
 		assertThat(mainSegments).hasSize(2)
-		assertThat(mainSegments).containsAll(mainSeg1, mainSeg2)
+		assertThat(mainSegments).containsAtLeast(mainSeg1, mainSeg2)
 
 		// BRANCH configuration
 		switch.changeConf()
 		val branchSegments = switch.getActiveSegments()
 		assertThat(branchSegments).hasSize(2)
-		assertThat(branchSegments).containsAll(branchSeg1, branchSeg2)
+		assertThat(branchSegments).containsAtLeast(branchSeg1, branchSeg2)
 	}
 
 	@ParameterizedTest(name = "{0}: both MAIN and BRANCH return exactly 2 segments")

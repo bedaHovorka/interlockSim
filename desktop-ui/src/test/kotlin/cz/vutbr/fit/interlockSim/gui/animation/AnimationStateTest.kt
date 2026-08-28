@@ -14,9 +14,9 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isNotSameAs
+import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isNull
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -56,7 +56,7 @@ class AnimationStateTest {
 
 		// Act & Assert - data class copy creates new instance
 		val copy = state.copy(simulationTime = 200.0)
-		assertThat(copy).isNotSameAs(state)
+		assertThat(copy).isNotSameInstanceAs(state)
 		assertThat(copy.simulationTime).isEqualTo(200.0)
 		assertThat(state.simulationTime).isEqualTo(123.45) // Original unchanged
 	}
@@ -149,7 +149,7 @@ class AnimationStateTest {
 			)
 
 		// Assert
-		assertThat(trackState.trackBlock).isSameAs(trackBlock)
+		assertThat(trackState.trackBlock).isSameInstanceAs(trackBlock)
 		assertThat(trackState.state).isEqualTo(TrackFacility.State.OCCUPIED)
 	}
 
@@ -182,7 +182,7 @@ class AnimationStateTest {
 			)
 
 		// Assert
-		assertThat(signalState.semaphore).isSameAs(semaphore)
+		assertThat(signalState.semaphore).isSameInstanceAs(semaphore)
 		assertThat(signalState.signal).isEqualTo(Signal.S40)
 	}
 

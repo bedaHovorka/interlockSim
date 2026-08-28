@@ -18,7 +18,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEqualTo
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
@@ -92,7 +92,7 @@ class DynamicInOutTest {
 		assertThat(dynamicInOut.name).isEqualTo(staticInOut.getName())
 
 		// Dynamic references static object
-		assertThat(dynamicInOut.staticRef).isSameAs(staticInOut)
+		assertThat(dynamicInOut.staticRef).isSameInstanceAs(staticInOut)
 	}
 
 	/**
@@ -109,7 +109,7 @@ class DynamicInOutTest {
 		val dynamic2 = context.toDynamic(staticInOut) as DynamicInOut
 
 		// Same static → same dynamic wrapper (IdentityHashMap)
-		assertThat(dynamic1).isSameAs(dynamic2)
+		assertThat(dynamic1).isSameInstanceAs(dynamic2)
 
 		// Equality based on wrapped static
 		assertThat(dynamic1 == dynamic2).isTrue()
@@ -198,8 +198,8 @@ class DynamicInOutTest {
 		val dynamic3 = context.toDynamic(staticInOut) as DynamicInOut
 
 		// All three references point to same object
-		assertThat(dynamic1).isSameAs(dynamic2)
-		assertThat(dynamic2).isSameAs(dynamic3)
+		assertThat(dynamic1).isSameInstanceAs(dynamic2)
+		assertThat(dynamic2).isSameInstanceAs(dynamic3)
 	}
 
 	/**

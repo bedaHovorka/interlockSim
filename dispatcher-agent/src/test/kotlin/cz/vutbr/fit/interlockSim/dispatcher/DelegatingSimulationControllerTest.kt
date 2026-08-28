@@ -15,7 +15,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationController
@@ -106,7 +106,7 @@ class DelegatingSimulationControllerTest {
 		fun defaultsToNoOp() {
 			val controller = DelegatingSimulationController()
 
-			assertThat(controller.delegate).isSameAs(NoOpSimulationController)
+			assertThat(controller.delegate).isSameInstanceAs(NoOpSimulationController)
 			assertThat(controller.isPaused()).isFalse()
 		}
 

@@ -18,7 +18,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
@@ -443,9 +443,9 @@ class AgentLoopDriverTest {
 
 			runBlocking { driver.runCycle() }
 
-			assertThat(capturedObs.captured.unapprovedTrains).isSameAs(tickA.queuedTrains)
-			assertThat(capturedObs.captured.innerBlockInputs).isSameAs(tickA.innerBlockInputs)
-			assertThat(capturedObs.captured.outerBlockInputs).isSameAs(tickA.outerBlockInputs)
+			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(tickA.queuedTrains)
+			assertThat(capturedObs.captured.innerBlockInputs).isSameInstanceAs(tickA.innerBlockInputs)
+			assertThat(capturedObs.captured.outerBlockInputs).isSameInstanceAs(tickA.outerBlockInputs)
 		}
 	}
 

@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.containsAll
+import assertk.assertions.containsAtLeast
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
@@ -161,7 +161,7 @@ class CellsPolishTest {
 		fun `arr2set with multiple elements`() {
 			val segments = arrayOf(Segment.A, Segment.B, Segment.C)
 			val result = arr2set(segments)
-			assertThat(result).containsAll(Segment.A, Segment.B, Segment.C)
+			assertThat(result).containsAtLeast(Segment.A, Segment.B, Segment.C)
 			assertThat(result).hasSize(3)
 		}
 
@@ -250,7 +250,7 @@ class CellsPolishTest {
 			val part = TrackBlockPart(trackBlock, arrayOf(Segment.A, Segment.F, Segment.C))
 			val joins = part.joins()
 			assertThat(joins).hasSize(3)
-			assertThat(joins).containsAll(Segment.A, Segment.F, Segment.C)
+			assertThat(joins).containsAtLeast(Segment.A, Segment.F, Segment.C)
 		}
 	}
 

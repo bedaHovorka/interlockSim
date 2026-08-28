@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.containsAll
+import assertk.assertions.containsAtLeast
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
@@ -165,7 +165,7 @@ class ContextTransformerTest : KoinTestBase() {
 
 					// Extract static refs from dynamic wrappers for comparison
 					val staticRefs = inOuts.map { it.staticRef }
-					assertThat(staticRefs).containsAll(inA, inB)
+					assertThat(staticRefs).containsAtLeast(inA, inB)
 				}
 			}
 		}
@@ -309,7 +309,7 @@ class ContextTransformerTest : KoinTestBase() {
 
 					// Extract static refs from dynamic wrappers for comparison
 					val staticRefs = inOuts.map { it.staticRef }
-					assertThat(staticRefs).containsAll(inA, inB)
+					assertThat(staticRefs).containsAtLeast(inA, inB)
 				}
 			}
 		}
@@ -416,7 +416,7 @@ class ContextTransformerTest : KoinTestBase() {
 					val inOuts = simulationContext.getInOuts()
 					assertThat(inOuts).hasSize(2)
 					val staticRefs = inOuts.map { it.staticRef }
-					assertThat(staticRefs).containsAll(inA, inB)
+					assertThat(staticRefs).containsAtLeast(inA, inB)
 
 					// Verify graph was copied
 					assertThat(simulationContext.getGraph().size()).isGreaterThan(0)

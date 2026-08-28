@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
-import assertk.assertions.containsAll
+import assertk.assertions.containsAtLeast
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
@@ -93,7 +93,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val inOuts = simulationContext.getInOuts()
 			assertThat(inOuts).hasSize(3)
 			val staticRefs = inOuts.map { it.staticRef }
-			assertThat(staticRefs).containsAll(inA, inB, outC)
+			assertThat(staticRefs).containsAtLeast(inA, inB, outC)
 
 			// Assert - Switch preserved in grid
 			val switchCell = simulationContext.getRailWayNetGrid().getCellAt(5, 5)
@@ -124,7 +124,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			assertThat(inOuts).hasSize(4)
 
 			val staticRefs = inOuts.map { it.staticRef }
-			assertThat(staticRefs).containsAll(inEntry1, inEntry2, outExit1, outExit2)
+			assertThat(staticRefs).containsAtLeast(inEntry1, inEntry2, outExit1, outExit2)
 
 			// Verify entry/exit configuration preserved
 			val dynamicInOuts = inOuts.toList()

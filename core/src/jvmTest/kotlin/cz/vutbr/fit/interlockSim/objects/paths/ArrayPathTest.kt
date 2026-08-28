@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.containsAll
+import assertk.assertions.containsAtLeast
 import assertk.assertions.containsExactly
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEmpty
@@ -296,7 +296,7 @@ class ArrayPathTest : KoinTestBase() {
 				.isEqualTo(2)
 			assertThat(path)
 				.withMessage("path should contain only remaining elements")
-				.containsAll(end1, semaphore1)
+				.containsAtLeast(end1, semaphore1)
 		}
 
 		@Test
@@ -319,7 +319,7 @@ class ArrayPathTest : KoinTestBase() {
 				.isEqualTo(2)
 			assertThat(path)
 				.withMessage("path should contain only retained elements")
-				.containsAll(end1, end2)
+				.containsAtLeast(end1, end2)
 			assertThat(path)
 				.withMessage("path should not contain track1")
 				.doesNotContain(track1)
