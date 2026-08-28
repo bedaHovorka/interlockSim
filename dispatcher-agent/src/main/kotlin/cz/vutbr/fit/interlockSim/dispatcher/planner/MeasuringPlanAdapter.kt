@@ -26,11 +26,12 @@ import java.util.concurrent.atomic.AtomicLong
  * - how often the rule-based fallback is actually used in practice, and
  * - what the Ollama decision success rate is over a full simulation run.
  *
- * [MeasuringPlanAdapter] plugs into [KoogAgentPlanAdapter.cycleListener] and:
- * 1. **Counts** every LLM-success cycle and every fallback cycle (by [FallbackReason]).
- * 2. **Logs** a structured INFO-level entry on every fallback with reason code, simulation
- *    time, and running success rate — so failures are immediately visible in the log without
- *    a GUI.
+ * [MeasuringPlanAdapter] registers itself as a [PlannerTickListener] on the wrapped adapter and:
+ * 1. **Counts** every completed cycle by [TickOutcome], crediting the LLM for the outcomes the
+ *    partition on [PlannerMetricsSnapshot] marks as successes.
+ * 2. **Logs** a structured INFO-level entry on every non-success tick with the outcome,
+ *    simulation time, and running success rate — so failures are immediately visible in the log
+ *    without a GUI.
  * 3. **Exposes** a [getMetricsSnapshot] query that returns an immutable
  *    [PlannerMetricsSnapshot] mirroring the Goal 6
  *    [cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService] pattern.
@@ -50,18 +51,24 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * ## Thread safety
  *
- * All counters use [AtomicLong]; [getMetricsSnapshot] produces an immutable copy.
- * The listener callbacks are invoked from the coroutine running [KoogAgentPlanAdapter.plan]
+ * All counters use [AtomicLong]; [getMetricsSnapshot] produces an immutable copy derived from a
+ * single pass over the counter map, so its stored success count can never disagree with its
+ * stored breakdown (see [PlannerMetricsSnapshot]'s `init` invariant).
+ * [onTick] is invoked from the coroutine running [KoogAgentPlanAdapter.plan]
  * (the `dispatcher-agent-driver` daemon thread in production).
  *
- * @param inner [KoogAgentPlanAdapter] to wrap.  This constructor sets [inner.cycleListener]
- *   to `this` — the listener must not be reset externally after construction.
+ * @param inner [KoogAgentPlanAdapter] to wrap.  This constructor registers `this` through
+ *   [KoogAgentPlanAdapter.addTickListener], which fans out to every registered listener — so
+ *   other observers (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]'s attribution
+ *   listener) keep working alongside it, in either registration order.
  *
- * @since Issue #817 (Goal 10 dispatcher metrics)
+ * @since Issue #817 (Goal 10 dispatcher metrics); moved onto [PlannerTickListener] and
+ *   [TickOutcome] in Issue #713 Task 10
  */
 class MeasuringPlanAdapter(
 	private val inner: KoogAgentPlanAdapter
-) : DispatcherPlanner by inner {
+) : DispatcherPlanner by inner,
+	PlannerTickListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
@@ -76,40 +83,59 @@ class MeasuringPlanAdapter(
 
 	// ── Live atomic counters ──────────────────────────────────────────────────
 
-	private val ollamaSuccessCount = AtomicLong(0L)
-	private val fallbackCountByReason: ConcurrentHashMap<FallbackReason, AtomicLong> =
-		ConcurrentHashMap<FallbackReason, AtomicLong>().also { map ->
-			FallbackReason.entries.forEach { reason -> map[reason] = AtomicLong(0L) }
-		}
+	private val outcomeCounters: ConcurrentHashMap<TickOutcome, AtomicLong> =
+		concurrentEnumCounters(TickOutcome.entries)
+
+	/**
+	 * Plain cycle counter, kept only to gate the periodic-summary modulo check without building
+	 * a [PlannerMetricsSnapshot] first.
+	 *
+	 * Deliberately redundant with `outcomeCounters.values.sum()`: reading that sum on every tick
+	 * to answer "is this the tenth cycle?" allocated a whole snapshot nine times out of ten
+	 * (Issue #713 Task 10). It is never published: [getMetricsSnapshot] derives every figure —
+	 * total cycles included — from the counter map alone, so a tick landing between the two
+	 * increments cannot produce an inconsistent snapshot.
+	 */
+	private val cycleCount = AtomicLong(0L)
 
 	// ── Wire listener into inner adapter ─────────────────────────────────────
 
 	init {
-		inner.cycleListener =
-			object : PlannerCycleListener {
-				override fun onLlmSuccess(simTime: Double) {
-					ollamaSuccessCount.incrementAndGet()
-					logPeriodicSummary(simTime)
-				}
-
-				override fun onFallback(
-					reason: FallbackReason,
-					simTime: Double
-				) {
-					fallbackCountByReason.getValue(reason).incrementAndGet()
-					val snapshot = getMetricsSnapshot()
-					logger.info {
-						"[MeasuringPlanAdapter] fallback: reason=${reason.name} " +
-							"simTime=${simTime}s " +
-							"fallbackTotal=${snapshot.fallbackCount} " +
-							"ollamaSuccessRate=${formatRate(snapshot.ollamaSuccessRate)}"
-					}
-					logPeriodicSummary(simTime)
-				}
-			}
+		inner.addTickListener(this)
 	}
 
 	// ── Public API ────────────────────────────────────────────────────────────
+
+	/**
+	 * Records one completed dispatch cycle, and logs it when it is a non-success outcome or a
+	 * periodic checkpoint.
+	 *
+	 * At most one [PlannerMetricsSnapshot] is built per tick, and none at all on a plain success
+	 * tick that is not a checkpoint.
+	 *
+	 * @param record What happened this tick and when.
+	 */
+	override fun onTick(record: TickRecord) {
+		outcomeCounters.getValue(record.outcome).incrementAndGet()
+		val cycles = cycleCount.incrementAndGet()
+		val isFallback = !record.outcome.countsAsLlmSuccess
+		val isCheckpoint = cycles % REPORT_EVERY_N_CYCLES == 0L
+		if (!isFallback && !isCheckpoint) {
+			return
+		}
+		val snapshot = getMetricsSnapshot()
+		if (isFallback) {
+			logger.info {
+				"[MeasuringPlanAdapter] fallback: outcome=${record.outcome.name} " +
+					"simTime=${record.simTime}s " +
+					"fallbackTotal=${snapshot.fallbackCount} " +
+					"ollamaSuccessRate=${formatRate(snapshot.ollamaSuccessRate)}"
+			}
+		}
+		if (isCheckpoint) {
+			logger.info { formatSummaryLine("summary at simTime=${record.simTime}s", snapshot) }
+		}
+	}
 
 	/**
 	 * Returns an immutable [PlannerMetricsSnapshot] reflecting the current accumulated counters.
@@ -120,25 +146,20 @@ class MeasuringPlanAdapter(
 	 * @return Current planner reliability KPI snapshot.
 	 */
 	fun getMetricsSnapshot(): PlannerMetricsSnapshot {
-		val successCount = ollamaSuccessCount.get()
-		val byReason: Map<FallbackReason, Long> = fallbackCountByReason.mapValues { it.value.get() }
-		val fallbackTotal = byReason.values.sum()
-		val total = successCount + fallbackTotal
-		val successRate = if (total > 0L) successCount.toDouble() / total.toDouble() else 0.0
-		return PlannerMetricsSnapshot(
-			ollamaSuccessCount = successCount,
-			fallbackCount = fallbackTotal,
-			fallbacksByReason = byReason,
-			totalCycles = total,
-			ollamaSuccessRate = successRate
-		)
+		val counts: Map<TickOutcome, Long> = outcomeCounters.mapValues { it.value.get() }
+		// Derived from the same point-in-time copy the snapshot stores, never from a separate
+		// counter: a tick landing mid-read would otherwise make the two disagree and trip
+		// PlannerMetricsSnapshot's init invariant (the hazard DefaultDispatcherRunRecorder
+		// documents for its own totalTicks).
+		val successCount = counts.entries.sumOf { (outcome, count) -> if (outcome.countsAsLlmSuccess) count else 0L }
+		return PlannerMetricsSnapshot(ollamaSuccessCount = successCount, outcomeCounts = counts)
 	}
 
 	/**
 	 * Logs an unconditional final summary of the current [PlannerMetricsSnapshot].
 	 *
-	 * Unlike [logPeriodicSummary] (which only fires every [REPORT_EVERY_N_CYCLES] cycles),
-	 * this always logs exactly once per call — intended for callers that detect the
+	 * Unlike the periodic summary in [onTick] (which only fires every [REPORT_EVERY_N_CYCLES]
+	 * cycles), this always logs exactly once per call — intended for callers that detect the
 	 * simulation has stopped (for any reason: natural completion or manual stop) and want
 	 * a guaranteed final data point, even if the run ended between periodic checkpoints.
 	 *
@@ -182,37 +203,33 @@ class MeasuringPlanAdapter(
 			}
 		}
 		logger.info { formatSummaryLine("final summary", getMetricsSnapshot()) }
-		// Issue #834 review finding #6: successRate here is not comparable to a pre-#834 run's —
-		// #834 reclassified idle ticks (former RULE_FALLBACK) to LLM_NO_OP, and REVISED's cap-full
-		// no_op converts former fallback ticks into LLM successes. Read it as a within-#834 figure.
+		// Issue #834 review finding #6, extended by Issue #713 Task 10: successRate here is not
+		// comparable to a pre-#834 run's — #834 reclassified idle ticks (former RULE_FALLBACK) to
+		// LLM_NO_OP, and REVISED's cap-full no_op converts former fallback ticks into LLM
+		// successes. #713 re-keyed the counters from FallbackReason onto TickOutcome; that
+		// migration deliberately kept LLM_SILENT_NONACTIONABLE on the fallback side so the figure
+		// stays comparable across it. Read it as a within-#834 figure.
 		logger.info {
 			"[MeasuringPlanAdapter] note: successRate is reclassified in #834 and not comparable " +
-				"to pre-#834 runs"
+				"to pre-#834 runs (re-keyed onto TickOutcome in #713 without changing the rate)"
 		}
 	}
 
 	// ── Internal helpers ──────────────────────────────────────────────────────
-
-	private fun logPeriodicSummary(simTime: Double) {
-		val snapshot = getMetricsSnapshot()
-		if (snapshot.totalCycles > 0L && snapshot.totalCycles % REPORT_EVERY_N_CYCLES == 0L) {
-			logger.info { formatSummaryLine("summary at simTime=${simTime}s", snapshot) }
-		}
-	}
 
 	/** Builds the shared `[MeasuringPlanAdapter] <label> — totalCycles=... successRate=...` log line. */
 	private fun formatSummaryLine(
 		label: String,
 		snapshot: PlannerMetricsSnapshot
 	): String {
-		val byReasonStr =
-			FallbackReason.entries.joinToString(", ") { reason ->
-				"${reason.name}=${snapshot.fallbacksByReason[reason] ?: 0}"
+		val byOutcomeStr =
+			TickOutcome.entries.joinToString(", ") { outcome ->
+				"${outcome.name}=${snapshot.outcomeCounts[outcome] ?: 0}"
 			}
 		return "[MeasuringPlanAdapter] $label — " +
 			"totalCycles=${snapshot.totalCycles} " +
 			"ollamaSuccess=${snapshot.ollamaSuccessCount} " +
-			"fallback=${snapshot.fallbackCount} ($byReasonStr) " +
+			"fallback=${snapshot.fallbackCount} ($byOutcomeStr) " +
 			"successRate=${formatRate(snapshot.ollamaSuccessRate)}"
 	}
 

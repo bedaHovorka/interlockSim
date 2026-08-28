@@ -49,7 +49,7 @@ import ch.qos.logback.classic.Logger as LogbackLogger
  *
  * Verifies that:
  * - LLM success cycles increment the success counter.
- * - Fallback cycles increment the fallback counter with the correct [FallbackReason].
+ * - Non-success cycles increment the fallback counter under the correct [TickOutcome].
  * - [PlannerMetricsSnapshot] calculations are correct (totalCycles, successRate).
  * - [DispatcherPlanner] capabilities are forwarded from the inner [KoogAgentPlanAdapter].
  * - Decisions from both the LLM path and the fallback path are forwarded correctly.
@@ -180,10 +180,16 @@ class MeasuringPlanAdapterTest {
 	// ── Fallback reason: EMPTY_NO_TOOLS ───────────────────────────────────────
 
 	@Nested
-	@DisplayName("fallback EMPTY_NO_TOOLS: LLM returns empty with no tool side effects")
+	@DisplayName("silent LLM cycle: LLM returns empty with no tool side effects")
 	inner class FallbackEmptyNoTools {
+		/**
+		 * The fallback oracle finds nothing actionable either, so the cycle is reported as
+		 * [TickOutcome.LLM_SILENT_NONACTIONABLE] — which the partition on [PlannerMetricsSnapshot]
+		 * scores as a fallback, exactly as the pre-Issue-#713 `FallbackReason.EMPTY_NO_TOOLS`
+		 * counter did.
+		 */
 		@Test
-		fun `increments fallbackCount with EMPTY_NO_TOOLS reason`() {
+		fun `increments fallbackCount under LLM_SILENT_NONACTIONABLE`() {
 			val agent = mockk<KoogDispatchAgent>()
 			coEvery { agent.decideAsync(any()) } returns emptyList()
 			val fallback = mockk<Dispatcher>()
@@ -194,9 +200,9 @@ class MeasuringPlanAdapterTest {
 
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.fallbackCount).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(0L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_SILENT_NONACTIONABLE]).isEqualTo(1L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.RULE_FALLBACK]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.TIMEOUT_NOOP]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isZero()
 		}
 	}
@@ -207,8 +213,8 @@ class MeasuringPlanAdapterTest {
 	 * Issue #834: the project owner reported the exact log line this guards against —
 	 * `fallback: reason=EMPTY_NO_TOOLS simTime=314.0s fallbackTotal=27 ollamaSuccessRate=27%` —
 	 * produced by an idle-station "nothing to do" cycle. An idle station (no active or queued
-	 * trains) with no LLM emissions must count toward [PlannerMetricsSnapshot.ollamaSuccessCount],
-	 * not [PlannerMetricsSnapshot.fallbacksByReason]`[FallbackReason.EMPTY_NO_TOOLS]`.
+	 * trains) with no LLM emissions must count toward [PlannerMetricsSnapshot.ollamaSuccessCount]
+	 * as a [TickOutcome.LLM_NO_OP], not toward [PlannerMetricsSnapshot.fallbackCount].
 	 */
 	@Nested
 	@DisplayName("idle station: LLM completes with no decisions and no tool emissions")
@@ -220,7 +226,7 @@ class MeasuringPlanAdapterTest {
 			observation.copy(snapshot = SimulationSnapshot.EMPTY.copy(simTime = 314.0))
 
 		@Test
-		fun `counts toward ollamaSuccessCount, not fallbacksByReason EMPTY_NO_TOOLS`() {
+		fun `counts toward ollamaSuccessCount as LLM_NO_OP, not toward fallbackCount`() {
 			val agent = mockk<KoogDispatchAgent>()
 			coEvery { agent.decideAsync(any()) } returns emptyList()
 			val fallback = mockk<Dispatcher>()
@@ -231,7 +237,8 @@ class MeasuringPlanAdapterTest {
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.ollamaSuccessCount).isEqualTo(1L)
 			assertThat(snapshot.fallbackCount).isZero()
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_NO_OP]).isEqualTo(1L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_SILENT_NONACTIONABLE]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessRate).isEqualTo(1.0)
 		}
 	}
@@ -242,7 +249,7 @@ class MeasuringPlanAdapterTest {
 	@DisplayName("fallback TIMEOUT: LLM exceeds inference timeout")
 	inner class FallbackTimeout {
 		@Test
-		fun `increments fallbackCount with TIMEOUT reason`() {
+		fun `increments fallbackCount under RULE_FALLBACK`() {
 			val agent = mockk<KoogDispatchAgent>()
 			coEvery { agent.decideAsync(any()) } coAnswers {
 				delay(500)
@@ -256,9 +263,9 @@ class MeasuringPlanAdapterTest {
 
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.fallbackCount).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(0L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.RULE_FALLBACK]).isEqualTo(1L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_SILENT_NONACTIONABLE]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_ACTIONS]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isZero()
 		}
 	}
@@ -269,7 +276,7 @@ class MeasuringPlanAdapterTest {
 	@DisplayName("fallback EXCEPTION: LLM throws an unexpected exception")
 	inner class FallbackException {
 		@Test
-		fun `increments fallbackCount with EXCEPTION reason`() {
+		fun `increments fallbackCount under RULE_FALLBACK on an LLM exception`() {
 			val agent = mockk<KoogDispatchAgent>()
 			coEvery { agent.decideAsync(any()) } throws RuntimeException("Ollama unavailable")
 			val fallback = mockk<Dispatcher>()
@@ -280,9 +287,9 @@ class MeasuringPlanAdapterTest {
 
 			val snapshot = adapter.getMetricsSnapshot()
 			assertThat(snapshot.fallbackCount).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(0L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.RULE_FALLBACK]).isEqualTo(1L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_EXCEPTION]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_SILENT_NONACTIONABLE]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isZero()
 		}
 	}
@@ -294,7 +301,7 @@ class MeasuringPlanAdapterTest {
 	inner class MixedCycles {
 		@Test
 		fun `success rate reflects mix of LLM success and fallback cycles`() {
-			// 2 success + 2 EMPTY_NO_TOOLS fallbacks = 50% success rate
+			// 2 success + 2 silent non-actionable cycles = 50% success rate
 			val commandQueue = ActuatorCommandQueue()
 			var callCount = 0
 			val agent = mockk<KoogDispatchAgent>()
@@ -316,14 +323,14 @@ class MeasuringPlanAdapterTest {
 		}
 
 		@Test
-		fun `fallbacksByReason tracks multiple different fallback reasons`() {
+		fun `outcomeCounts tracks multiple different outcomes`() {
 			var callCount = 0
 			val agent = mockk<KoogDispatchAgent>()
 			coEvery { agent.decideAsync(any()) } coAnswers {
 				callCount++
 				when (callCount) {
-					1 -> emptyList() // EMPTY_NO_TOOLS
-					2 -> throw RuntimeException("boom") // EXCEPTION
+					1 -> emptyList() // silent cycle -> LLM_SILENT_NONACTIONABLE
+					2 -> throw RuntimeException("boom") // LLM exception -> RULE_FALLBACK
 					else -> listOf(DispatchDecision.NoAction)
 				}
 			}
@@ -334,9 +341,10 @@ class MeasuringPlanAdapterTest {
 			repeat(3) { runBlocking { adapter.plan(observation) } }
 
 			val snapshot = adapter.getMetricsSnapshot()
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EMPTY_NO_TOOLS]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.EXCEPTION]).isEqualTo(1L)
-			assertThat(snapshot.fallbacksByReason[FallbackReason.TIMEOUT]).isEqualTo(0L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_SILENT_NONACTIONABLE]).isEqualTo(1L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.RULE_FALLBACK]).isEqualTo(1L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.LLM_ACTIONS]).isEqualTo(1L)
+			assertThat(snapshot.outcomeCounts[TickOutcome.TIMEOUT_NOOP]).isEqualTo(0L)
 			assertThat(snapshot.ollamaSuccessCount).isEqualTo(1L)
 		}
 	}
@@ -577,6 +585,60 @@ class MeasuringPlanAdapterTest {
 			adapter.logFinalSummary(runOutcome = RunOutcome.Running)
 
 			assertThat(failureBannerEvents()).isEqualTo(emptyList<ILoggingEvent>())
+		}
+	}
+
+	// ── TickOutcome partition (Issue #713 Task 10) ────────────────────────────
+
+	/**
+	 * Pins the success/fallback partition documented on [PlannerMetricsSnapshot].
+	 *
+	 * [MeasuringPlanAdapter] reports through [PlannerTickListener.onTick] since Issue #713
+	 * Task 10, so the tests below drive it directly with [TickRecord]s instead of going through
+	 * a mocked LLM cycle — the classification is what is under test, not the path that produced
+	 * the outcome.
+	 */
+	@Nested
+	@DisplayName("TickOutcome accounting and the success/fallback partition")
+	inner class TickOutcomePartition {
+		@Test
+		fun `getMetricsSnapshot counts ticks by TickOutcome`() {
+			val adapter = measuring(mockk<KoogDispatchAgent>(), mockk<Dispatcher>())
+
+			adapter.onTick(TickRecord(outcome = TickOutcome.LLM_ACTIONS, simTime = 1.0))
+			adapter.onTick(TickRecord(outcome = TickOutcome.LLM_NO_OP, simTime = 2.0))
+			adapter.onTick(
+				TickRecord(
+					outcome = TickOutcome.TIMEOUT_NOOP,
+					simTime = 3.0,
+					timeoutNoOpCause = TimeoutNoOpCause.DEADLINE_MISS
+				)
+			)
+
+			val counts = adapter.getMetricsSnapshot().outcomeCounts
+
+			assertThat(counts[TickOutcome.LLM_ACTIONS]).isEqualTo(1L)
+			assertThat(counts[TickOutcome.LLM_NO_OP]).isEqualTo(1L)
+			assertThat(counts[TickOutcome.TIMEOUT_NOOP]).isEqualTo(1L)
+			assertThat(counts[TickOutcome.RULE_FALLBACK]).isEqualTo(0L)
+		}
+
+		@Test
+		fun `ollamaSuccessRate follows the documented outcome partition`() {
+			val adapter = measuring(mockk<KoogDispatchAgent>(), mockk<Dispatcher>())
+
+			// 2 successes, 2 fallbacks — LLM_SILENT_NONACTIONABLE is a fallback, not a success.
+			adapter.onTick(TickRecord(outcome = TickOutcome.LLM_ACTIONS, simTime = 1.0))
+			adapter.onTick(TickRecord(outcome = TickOutcome.LLM_NO_OP, simTime = 2.0))
+			adapter.onTick(TickRecord(outcome = TickOutcome.LLM_SILENT_NONACTIONABLE, simTime = 3.0))
+			adapter.onTick(TickRecord(outcome = TickOutcome.RULE_FALLBACK, simTime = 4.0))
+
+			val snapshot = adapter.getMetricsSnapshot()
+
+			assertThat(snapshot.totalCycles).isEqualTo(4L)
+			assertThat(snapshot.ollamaSuccessCount).isEqualTo(2L)
+			assertThat(snapshot.fallbackCount).isEqualTo(2L)
+			assertThat(snapshot.ollamaSuccessRate).isEqualTo(0.5)
 		}
 	}
 }

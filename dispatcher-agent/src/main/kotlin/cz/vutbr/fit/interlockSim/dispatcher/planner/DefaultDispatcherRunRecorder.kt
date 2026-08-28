@@ -84,14 +84,10 @@ class DefaultDispatcherRunRecorder(
 	// snapshot's total is derived from the outcome-bucket sum in buildSnapshot instead.
 
 	private val ticksByOutcome: ConcurrentHashMap<String, AtomicLong> =
-		ConcurrentHashMap<String, AtomicLong>().also { map ->
-			TickOutcome.entries.forEach { outcome -> map[outcome.name] = AtomicLong(0L) }
-		}
+		concurrentEnumCounters(TickOutcome.entries) { it.name }
 
 	private val timeoutNoOpByCause: ConcurrentHashMap<String, AtomicLong> =
-		ConcurrentHashMap<String, AtomicLong>().also { map ->
-			TimeoutNoOpCause.entries.forEach { cause -> map[cause.name] = AtomicLong(0L) }
-		}
+		concurrentEnumCounters(TimeoutNoOpCause.entries) { it.name }
 
 	// ── Latency tracking ─────────────────────────────────────────────────────
 
@@ -109,19 +105,13 @@ class DefaultDispatcherRunRecorder(
 	private val emittedByActionType: ConcurrentHashMap<String, AtomicLong> = ConcurrentHashMap()
 
 	private val rejectionsByCode: ConcurrentHashMap<String, AtomicLong> =
-		ConcurrentHashMap<String, AtomicLong>().also { map ->
-			RejectionCode.entries.forEach { code -> map[code.name] = AtomicLong(0L) }
-		}
+		concurrentEnumCounters(RejectionCode.entries) { it.name }
 
 	private val applyFailuresByCode: ConcurrentHashMap<String, AtomicLong> =
-		ConcurrentHashMap<String, AtomicLong>().also { map ->
-			ApplyFailureCode.entries.forEach { code -> map[code.name] = AtomicLong(0L) }
-		}
+		concurrentEnumCounters(ApplyFailureCode.entries) { it.name }
 
 	private val actionsByAuthor: ConcurrentHashMap<String, AtomicLong> =
-		ConcurrentHashMap<String, AtomicLong>().also { map ->
-			ActionAuthor.entries.forEach { author -> map[author.name] = AtomicLong(0L) }
-		}
+		concurrentEnumCounters(ActionAuthor.entries) { it.name }
 
 	private val unattributedApplies = AtomicLong(0L)
 

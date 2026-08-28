@@ -30,10 +30,12 @@ import java.util.concurrent.CopyOnWriteArrayList
  * ## Thread-safety
  *
  * [PlannerTickListener.onTick]'s KDoc requires implementations to be thread-safe — it may be
- * called from multiple coroutines simultaneously. Delegate registration
- * ([addListener]) and delivery ([onTick]) are backed by a [CopyOnWriteArrayList], the same
- * structure [CompositeActionOutcomeSink] uses for its own thread-safety, so a listener can be
- * added concurrently with in-flight delivery without external synchronization.
+ * called from multiple coroutines simultaneously. Delegate registration ([addListener]) and
+ * delivery ([onTick]) are backed by a [CopyOnWriteArrayList]. That is a stronger structure than
+ * [CompositeActionOutcomeSink]'s, not the same one: the sink's delegate list is fixed and
+ * immutable at construction, whereas this one grows after construction ([addListener]) while
+ * ticks may already be in flight, so it needs a concurrent structure to let a listener be added
+ * without external synchronization.
  *
  * Exceptions are **not** swallowed, mirroring [CompositeActionOutcomeSink]: a delegate that
  * throws aborts the fan-out and propagates to the caller, which is the caller entitled to decide
