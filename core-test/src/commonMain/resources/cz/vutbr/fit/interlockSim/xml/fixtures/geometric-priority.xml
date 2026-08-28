@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<!--
+  Fixture: geometric-priority.xml
+  Purpose: Issue #903 regression test for reservePathToAnyNextSemaphore: a candidate
+           ordering where the GEOMETRIC candidate (unconfigurable switch) is enumerated
+           FIRST and a CONTENTION candidate is enumerated SECOND. Under the old
+           unconditional lastResult overwrite, the contention result (AllPathsBlocked)
+           silently replaced the earlier GeometricallyImpossible; the fix routes every
+           lastResult write through recordAttemptResult, which preserves the permanent
+           geometric result.
+
+  Topology (extracted from vyhybna.xml's doB1/vB/doB2/zB/B sub-network, with doB2
+  replaced by InOutC so the geometric candidate is an InOut and prioritizeInOuts
+  enumerates it FIRST):
+
+    doB1(25,8) -F-> vB(26,8) -D-> InOutC(24,9)   [geometric: vB A-to-D unconfigurable]
+                       |
+                       +-F-> zB(27,8) -F-> B(30,8)   [configurable: vB A-to-F MAIN]
+
+  vB is SIMPLE_LEFT_TRUE HORIZONTAL: merging=F(east), main=A(west, toward doB1),
+  branch=D(SE, toward InOutC). The switch can join F-to-A (MAIN) and F-to-D (BRANCH)
+  but NOT A-to-D (main-to-branch). doB1 enters vB via A (main), so:
+    route doB1 to vB to InOutC needs A-to-D, unconfigurable, GeometricallyImpossible
+    route doB1 to vB to zB to B needs A-to-F, MAIN, configurable (Success when free)
+
+  Candidate enumeration from doB1 (travelDirection = F):
+    BFS reaches vB, then explores F (to zB) and D (to InOutC).
+    zB is backward-facing (direction()=A, not F), exploration CONTINUES past zB to B.
+    InOutC is an InOut, always a valid target, exploration STOPS.
+    B is an InOut, always a valid target, exploration STOPS.
+    validTargets = [InOutC, B]; prioritizeInOuts keeps InOuts first, [InOutC, B].
+    InOutC (geometric) is FIRST, B (contention when blocked) is SECOND.
+
+  Blocker: a seed reservation from B to zB owns the zB-B block, so the B candidate's
+  path (doB1 to vB to zB to B) hits an owned block, AllPathsBlocked (contention),
+  while InOutC's path (doB1 to vB to InOutC) stays free up to the unconfigurable vB.
+-->
+<net X="100" Y="100">
+	<!-- START: west-facing semaphore; forward (F) toward vB -->
+	<RailSemaphore X="25" Y="8" SpatialType="HORIZONTAL" orientation="false" name="doB1"/>
+
+	<!-- Unconfigurable switch for the doB1-to-InOutC route (A-to-D impossible) -->
+	<RailSwitch X="26" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="vB"/>
+
+	<!-- Geometric candidate (InOut, prioritized FIRST): route needs vB A-to-D -->
+	<InOut X="24" Y="9" SpatialType="HORIZONTAL" orientation="false" name="InOutC"/>
+
+	<!-- Backward-facing passthrough (direction()=A, not travel F): BFS continues to B -->
+	<RailSemaphore X="27" Y="8" SpatialType="HORIZONTAL" orientation="true" name="zB"/>
+
+	<!-- Contention candidate (InOut, SECOND): route needs vB A-to-F (MAIN, configurable) -->
+	<InOut X="30" Y="8" SpatialType="HORIZONTAL" orientation="true" name="B"/>
+
+	<!-- doB1 to vB (doB1 F to vB A) -->
+	<SimpleTrackBlock fromX="25" fromY="8" toX="26" toY="8"
+	                  fromSegment="F" toSegment="A"
+	                  length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+
+	<!-- InOutC to vB (InOutC F to vB D, the unconfigurable A-to-D branch) -->
+	<SimpleTrackBlock fromX="24" fromY="9" toX="26" toY="8"
+	                  fromSegment="F" toSegment="D"
+	                  length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+
+	<!-- zB to vB (zB A to vB F, the configurable A-to-F main) -->
+	<SimpleTrackBlock fromX="27" fromY="8" toX="26" toY="8"
+	                  fromSegment="A" toSegment="F"
+	                  length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+
+	<!-- B to zB (B A to zB F); blocker owns this block to make B a contention candidate -->
+	<SimpleTrackBlock fromX="30" fromY="8" toX="27" toY="8"
+	                  fromSegment="A" toSegment="F"
+	                  length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+</net>

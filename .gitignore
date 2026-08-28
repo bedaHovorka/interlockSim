@@ -69,7 +69,10 @@ lib/
 Thumbs.db
 *~
 /out/
-/logs/interlockSim.log
+# Runtime log directory. The whole directory, not just *.log: logback's appender is
+# append-mode with no rotation, so rotated copies (interlockSim.log.2026-08-06) sit here too
+# and match neither /logs/interlockSim.log nor *.log.
+/logs/
 *.log
 
 # Phase 0: Baseline outputs (regenerate with ./capture-golden-outputs.sh)
@@ -86,3 +89,6 @@ desktop-ui/*.xml
 
 # Claude Code superpowers workspace files (local-only)
 /.superpowers/
+
+# JVM heap dumps (written by -XX:+HeapDumpOnOutOfMemoryError)
+*.hprof

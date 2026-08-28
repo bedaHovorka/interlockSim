@@ -21,7 +21,7 @@
  *     which benefits from commonMain staying free of JVM-only APIs.
  *  3. kDisco 0.4.0 ships multiplatform artifacts (jvm + linuxX64
  *     klibs) and this module consumes the multiplatform coordinate
- *     (`cz.hovorka.kdisco:kdisco-core`; see commonMain dependencies
+ *     (`cz.ksimulantenbande.kdisco:kdisco-core`; see commonMain dependencies
  *     below). Remaining blockers for fully portable common code are
  *     test infrastructure (MockK/JUnit5 are JVM-only; commonTest is
  *     restricted to kotlin.test) and a Koin/xmlutil native audit on
@@ -33,8 +33,11 @@
  * target is enabled, nothing in commonMain has to move.
  */
 
+import java.time.Duration
+
 plugins {
     kotlin("multiplatform")
+    kotlin("plugin.serialization")
     id("io.gitlab.arturbosch.detekt")
     id("org.jlleitschuh.gradle.ktlint")
     id("app.cash.burst")
@@ -55,6 +58,7 @@ val mockkVersion: String by project
 val koinVersion: String by project
 val coroutinesVersion: String by project
 val xmlutilVersion: String by project
+val serializationVersion: String by project
 val kotlinxIoVersion: String by project
 val ktlintVersion: String by project
 val atomicfuVersion: String by project
@@ -129,13 +133,20 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 // KMP multiplatform artifacts (jvm + linuxX64 klibsavailable in mavenLocal)
-                implementation("cz.hovorka.kdisco:kdisco-core:$kdiscoVersion")
+                implementation("cz.ksimulantenbande.kdisco:kdisco-core:$kdiscoVersion")
                 implementation("io.insert-koin:koin-core:$koinVersion")
                 implementation("io.github.oshai:kotlin-logging:$kotlinLoggingVersion")
                 implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
                 // runBlocking needed for DefaultSimulationContext (bridging suspend Simulation.run())
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
                 implementation("io.github.pdvrieze.xmlutil:core:$xmlutilVersion")
+                // kotlinx.serialization: SP3.2 operating-vocabulary types (Aspect, identifiers,
+                // TrainRoute, MovementAuthority, …) live in :core commonMain so they are reachable
+                // from :fast-sim linuxX64 and shareable by the dispatcher agent runtime. KMP-clean
+                // (jvm + linuxX64 klibs), satisfies the commonMain purity gate. Version aligned with
+                // the transitive dep brought in by koog-agents (see :dispatcher-agent).
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:$serializationVersion")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
                 // kotlinx-io: multiplatform file I/O — used by native Resources actual to read
                 // resource files from disk (JVM uses classpath instead).
                 implementation("org.jetbrains.kotlinx:kotlinx-io-core:$kotlinxIoVersion")
@@ -271,6 +282,7 @@ if (isLinuxHost) {
         // it sidesteps the crash without losing anything — console output (via testLogging
         // below) still reports full pass/fail detail.
         reports.junitXml.required.set(false)
+        reports.html.required.set(false)
 
         testLogging {
             events("passed", "skipped", "failed")
@@ -357,6 +369,11 @@ val heavyTest by tasks.registering(Test::class) {
     group = "verification"
     description = "Run :core heavy tests (tagged with @Tag(\"heavy-test\")). " +
         "Run after changes to simulation logic to detect deadlocks, race conditions, or resource leaks."
+
+    // Whole-task ceiling: a healthy 1000-rep run takes ~13 min; a wedged run (deadlocked
+    // rep, hung Gradle test worker) must self-terminate instead of blocking forever.
+    // Per-repetition deadlock detection is the @Timeout(30 s) on the test method itself.
+    timeout.set(Duration.ofMinutes(20))
 
     useJUnitPlatform {
         includeTags("heavy-test")

@@ -84,6 +84,13 @@ class SimulationRunnerTest {
 	}
 
 	@Test
+	@DisplayName("currentSpeedMultiplier reflects speedMultiplier (Issue #926)")
+	fun currentSpeedMultiplierReflectsSpeedMultiplier() {
+		runner.speedMultiplier = 2.5
+		assertThat(runner.currentSpeedMultiplier()).isEqualTo(2.5)
+	}
+
+	@Test
 	@DisplayName("stepTimeDelta below 0.001 throws")
 	fun stepTimeDeltaBelowLowerBoundThrows() {
 		assertThrows(IllegalArgumentException::class.java) { runner.stepTimeDelta = 0.0009 }
@@ -157,6 +164,26 @@ class SimulationRunnerTest {
 		runner.isPaused = false // same as default
 
 		assertThat(events.size).isEqualTo(0)
+	}
+
+	@Test
+	@DisplayName("requestResume clears an active pause")
+	fun requestResumeClearsPause() {
+		runner.requestPause()
+
+		assertThat(runner.isPaused).isTrue()
+
+		runner.requestResume()
+
+		assertThat(runner.isPaused).isFalse()
+	}
+
+	@Test
+	@DisplayName("requestResume while not paused is a harmless no-op")
+	fun requestResumeWhileNotPausedIsNoOp() {
+		runner.requestResume() // fresh runner, never paused
+
+		assertThat(runner.isPaused).isFalse()
 	}
 
 	@Test

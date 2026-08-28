@@ -80,23 +80,19 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	inner class CreateContextFromEditingContextTests {
 		@Test
 		fun createContext_editingContext_returnsSimulationContext() {
-			TestFixtures.loadShuntingXml().use { stream ->
-				(editingFactory.createContext(stream) as EditingContext).use { editingContext ->
-					factory.createContext(editingContext).use { result ->
-						assertThat(result).isNotNull()
-						assertThat(result).isInstanceOf<SimulationContext>()
-					}
+			TestFixtures.loadShuntingEditingContext(editingFactory).use { editingContext ->
+				factory.createContext(editingContext).use { result ->
+					assertThat(result).isNotNull()
+					assertThat(result).isInstanceOf<SimulationContext>()
 				}
 			}
 		}
 
 		@Test
 		fun createContext_editingContext_resultIsFrozen() {
-			TestFixtures.loadShuntingXml().use { stream ->
-				(editingFactory.createContext(stream) as EditingContext).use { editingContext ->
-					factory.createContext(editingContext).use { result ->
-						assertThat((result as BaseContext<*>).isFrozen()).isTrue()
-					}
+			TestFixtures.loadShuntingEditingContext(editingFactory).use { editingContext ->
+				factory.createContext(editingContext).use { result ->
+					assertThat((result as BaseContext<*>).isFrozen()).isTrue()
 				}
 			}
 		}
@@ -107,28 +103,24 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	inner class SaveContextTests {
 		@Test
 		fun saveContext_toFile_returnsTrueAndWritesFile() {
-			TestFixtures.loadShuntingXml().use { stream ->
-				(editingFactory.createContext(stream) as EditingContext).use { editingCtx ->
-					val outFile = tmpDir.resolve("saved.xml").toFile()
-					val result = factory.saveContext(editingCtx, outFile)
-					assertThat(result).isTrue()
-					assertThat(outFile.exists()).isTrue()
-				}
+			TestFixtures.loadShuntingEditingContext(editingFactory).use { editingContext ->
+				val outFile = tmpDir.resolve("saved.xml").toFile()
+				val result = factory.saveContext(editingContext, outFile)
+				assertThat(result).isTrue()
+				assertThat(outFile.exists()).isTrue()
 			}
 		}
 
 		@Test
 		fun saveContext_toStream_returnsTrue() {
-			TestFixtures.loadShuntingXml().use { stream ->
-				(editingFactory.createContext(stream) as EditingContext).use { editingCtx ->
-					val result =
-						tmpDir
-							.resolve("saved-stream.xml")
-							.toFile()
-							.outputStream()
-							.use { factory.saveContext(editingCtx, it) }
-					assertThat(result).isTrue()
-				}
+			TestFixtures.loadShuntingEditingContext(editingFactory).use { editingContext ->
+				val result =
+					tmpDir
+						.resolve("saved-stream.xml")
+						.toFile()
+						.outputStream()
+						.use { factory.saveContext(editingContext, it) }
+				assertThat(result).isTrue()
 			}
 		}
 	}

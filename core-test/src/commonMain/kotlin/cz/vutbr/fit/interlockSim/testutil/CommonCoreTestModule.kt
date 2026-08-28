@@ -22,7 +22,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
+import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
@@ -107,6 +109,14 @@ val commonCoreTestModule: Module =
 						?: throw IllegalStateException("DefaultEditingContext source not found in scope")
 				DefaultTopologyNavigator(context)
 			}
+
+			scoped<AutomaticPathFindingService> {
+				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
+			}
+
+			scoped<RouteFinder> {
+				DefaultRouteFinder(get<AutomaticPathFindingService>())
+			}
 		}
 
 		// Define simulationScope for per-context lifecycle management
@@ -189,6 +199,17 @@ val commonCoreTestModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultMetricsCollectionService(context)
+			}
+
+			// SP3.5 (Issue #573): InterlockingFacade — same binding as production CoreModule.
+			// Required so DispatcherAgentTestModule can wire InterlockingFacade into
+			// DefaultNetworkActuatorPort as the single chokepoint in integration tests.
+			scoped<InterlockingFacade> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val registry: PathReservationRegistry = get()
+				DefaultInterlockingFacade(context, registry)
 			}
 		}
 	}

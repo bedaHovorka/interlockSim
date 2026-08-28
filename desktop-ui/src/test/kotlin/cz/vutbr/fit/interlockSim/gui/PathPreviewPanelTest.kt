@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.paths.Route
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.findAllComponents
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -78,24 +79,6 @@ class PathPreviewPanelTest : KoinTestBase() {
 
 	/** Combo boxes in insertion order: index 0 = From, index 1 = To. */
 	private fun combos(): List<JComboBox<*>> = findAllComponents(panel, JComboBox::class.java)
-
-	/** Recursively collect all components of [type] in the container hierarchy. */
-	private fun <T> findAllComponents(
-		container: Container,
-		type: Class<T>
-	): List<T> {
-		val result = mutableListOf<T>()
-		for (c in container.components) {
-			if (type.isInstance(c)) {
-				@Suppress("UNCHECKED_CAST")
-				result.add(c as T)
-			}
-			if (c is Container) {
-				result.addAll(findAllComponents(c, type))
-			}
-		}
-		return result
-	}
 
 	private fun onEdt(block: () -> Unit) = SwingUtilities.invokeAndWait(block)
 

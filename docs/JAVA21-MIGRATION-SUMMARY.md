@@ -126,7 +126,7 @@ Replaced deprecated `java.util.Observable/Observer` pattern (deprecated Java 9, 
 ✅ ./gradlew clean compileJava compileTestJava - Success
 ✅ ./gradlew clean build shadowJar - Success (236 tests pass)
 ✅ JAR creation verified: build/libs/interlockSim.jar (7.1 MB)
-✅ Smoke test: java -ea -jar build/libs/interlockSim.jar example shuntingLoop 300
+✅ Smoke test: java -ea -jar build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
 **Build Performance:**
@@ -403,7 +403,7 @@ If critical issues are discovered:
 4. **Verify:**
    ```bash
    ./gradlew test
-   java -ea -jar build/libs/interlockSim.jar example shuntingLoop 300
+   java -ea -jar build/libs/interlockSim.jar example shuntingLoop 1024
    ```
 
 **Rollback Time:** Estimated 15-30 minutes

@@ -126,6 +126,126 @@ services:
     container_name: interlocksim-fast-sim
     command: ["example", "shuntingLoop", "60"]
 
+  # Local Ollama LLM server for dispatcher-agent's SP1.5 executor (Issue #550) and proof-of-connection
+  # testing (@Tag("ollama-test")). This is an ALTERNATIVE to a native Ollama install, not a
+  # companion to one -- both would bind port 11434.
+  #
+  # profiles: ["ollama"] keeps both this and ollama-port-check out of a bare `docker compose up`
+  # / `up --build` (same reason `test` above is profile-gated): explicitly naming the service, as
+  # in `docker compose up -d ollama` below, still starts it regardless of the active profile --
+  # only an unqualified `up`/`up --build` skips it. Before this was added, a plain `docker compose
+  # up --build -d --remove-orphans` on a machine with a native `ollama serve` already running
+  # would fail outright: ollama-port-check's intentional exit 1 (see below) made Compose report
+  # `service "ollama-port-check" didn't complete successfully` and abort the whole `up`, rather
+  # than the silent no-op the paragraph below promises. Gating it behind a profile means the
+  # bare/default command never reaches that dependency check at all.
+  #
+  # ollama-port-check is a one-shot container that probes localhost:11434 via
+  # `nc -z` using network_mode: host (direct access to the real host's network stack on
+  # Linux). If something is already listening there, it exits 1, which -- via ollama's
+  # depends_on condition: service_completed_successfully below -- prevents the ollama
+  # container from starting at all. This means `docker compose up -d ollama` is safe to
+  # run unconditionally: it no-ops if a local Ollama (native or another container) is
+  # already up, and starts the container otherwise.
+  #
+  # KNOWN LIMITATION (Windows/macOS Docker Desktop): network_mode: host runs inside the
+  # Docker Desktop VM (WSL2 on Windows), not the real host OS, so it cannot see a native
+  # `ollama serve` process running directly on Windows/macOS outside of Docker. On those
+  # platforms this check effectively only detects other Docker containers already
+  # holding the port, not a native install -- no worse than the pre-existing manual
+  # coordination, just not improved for that specific case.
+  #
+  # VERIFIED 2026-07-19 (Windows 11 + Docker Desktop 29.5.3, WSL2 backend, Issue #770):
+  # a `network_mode: host` container genuinely cannot reach `localhost:11434` when Ollama
+  # is a native Windows install (confirmed with `docker run --rm --network host busybox
+  # nc -zv localhost 11434` against a running native `ollama serve` -- connection failed).
+  # `host.docker.internal:11434` IS reachable from a `network_mode: host` container on the
+  # same setup, which is why dispatcher-agent's OLLAMA_BASE_URL (see OllamaExecutorConfig
+  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) should be set to
+  # `http://host.docker.internal:11434` once Stage B wires it into the `app` service below --
+  # `app` already runs with `network_mode: host` and that works without changing it.
+  #
+  # GPU support: Ollama auto-detects the GPU at runtime -- there are NO `OLLAMA_CUDA` /
+  # `OLLAMA_ROCM` environment variables (those are not real Ollama knobs). To give the
+  # container GPU access, uncomment the `deploy.resources.reservations.devices` block below
+  # (NVIDIA) and have `nvidia-container-toolkit` installed + the Docker runtime configured:
+  #     sudo dnf install nvidia-container-toolkit
+  #     sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+  # Ollama then uses CUDA automatically. To FORCE a specific backend (optional), set
+  # `OLLAMA_LLM_LIBRARY=cuda_v11` (NVIDIA) or `rocm_v6` (AMD) in the environment section below;
+  # for AMD ROCm use the `ollama/ollama:rocm` image instead of `ollama/ollama:latest`.
+  # CPU-only (default, no device block uncommented) runs on any machine.
+  #
+  # VRAM limit: Set `OLLAMA_MAX_VRAM` (in BYTES, not "8GB") to cap VRAM (max 8GB per @bedaHovorka):
+  #   export OLLAMA_MAX_VRAM=8589934592   # 8 GiB exactly (8 * 1024^3)
+  # OLLAMA_MAX_VRAM is a real Ollama env var; 0 means unlimited.
+  #
+  # On startup, pulls qwen2.5:7b-instruct only if it isn't already present in the
+  # ollama-data volume (so restarts after the first run don't re-pull ~4.7GB).
+  #
+  # Usage:
+  #   # CPU-only (default, slowest but works everywhere)
+  #   docker compose up -d ollama
+  #
+  #   # GPU with CUDA (fast, requires NVIDIA GPU + nvidia-container-toolkit)
+  #   #   1. Uncomment the deploy.resources.reservations.devices block below.
+  #   #   2. export OLLAMA_MAX_VRAM=8589934592   # optional 8GB VRAM cap
+  #   docker compose up -d ollama
+  #
+  #   # Then run integrationTest which auto-detects localhost:11434, no config needed
+  #   ./gradlew :dispatcher-agent:integrationTest
+  ollama-port-check:
+    profiles: ["ollama"]
+    image: busybox:latest
+    container_name: interlocksim-ollama-port-check
+    network_mode: host
+    command:
+      - sh
+      - -c
+      - |
+        if nc -z localhost 11434 2>/dev/null; then
+          echo "Port 11434 already in use -- assuming a local Ollama is already running. Skipping container start."
+          exit 1
+        fi
+        echo "Port 11434 is free -- proceeding to start the Ollama container."
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    container_name: interlocksim-ollama
+    depends_on:
+      ollama-port-check:
+        condition: service_completed_successfully
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      # OLLAMA_MAX_VRAM (real Ollama env var, in BYTES): 0 = unlimited; set to
+      # 8589934592 for an 8GB VRAM cap. Note: OLLAMA_CUDA / OLLAMA_ROCM are NOT real Ollama
+      # variables -- Ollama auto-detects the GPU; use the device block below for GPU access.
+      OLLAMA_MAX_VRAM: ${OLLAMA_MAX_VRAM:-0}
+      # OLLAMA_NUM_PARALLEL=1     # Serialize model loading on low-VRAM systems
+      # OLLAMA_LLM_LIBRARY=cuda_v11   # Force CUDA backend (NVIDIA); rocm_v6 for AMD. Optional.
+    # GPU support (NVIDIA): uncomment to give the container GPU access. Requires
+    # nvidia-container-toolkit installed and the Docker runtime configured (see comment
+    # block above). Ollama then auto-detects CUDA -- no env var needed. For AMD, switch the
+    # image to ollama/ollama:rocm and use driver: amd / OLLAMA_LLM_LIBRARY=rocm_v6.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        ollama list | grep -q "qwen2.5:7b-instruct" || ollama pull qwen2.5:7b-instruct
+        wait
+
   # Build LaTeX thesis with Czech language tools
   text:
     build:
@@ -154,5 +274,6 @@ secrets:
     environment: GITHUB_TOKEN
 
 # Note: BuildKit cache mounts are managed in Dockerfiles, not here
-# Runtime volumes can be added here if needed in the future
-volumes: {}
+# ollama-data persists pulled models across `docker compose down`/`up` cycles.
+volumes:
+  ollama-data:

@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 
 /**
  * Registry of built-in simulation examples for the native CLI binary.
@@ -43,7 +44,9 @@ internal object NativeExampleRegistry {
 	): DefaultSimulationContext {
 		val ctx = factory.createFromXml(EmbeddedResources.VYHYBNA_XML)
 		try {
-			ctx.setMainProcess(ShuntingLoop(ctx, endTime))
+			val loop = ShuntingLoop(ctx, endTime)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 		} catch (e: Exception) {
 			ctx.close()
 			throw e

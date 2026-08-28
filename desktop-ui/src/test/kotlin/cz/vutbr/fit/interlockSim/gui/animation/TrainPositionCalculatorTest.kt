@@ -13,20 +13,17 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
-import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Unit tests for [TrainPositionCalculator].
@@ -45,12 +42,8 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	 */
 	@BeforeEach
 	fun setUp() {
-		val xmlFactory = XMLContextFactory()
-		val resourcePath = javaClass.getResource("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		assertThat(resourcePath).isNotNull()
-
-		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
-		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
+		context =
+			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
 
 		// Get separator position cache from context (performance optimization)
 		val cache =

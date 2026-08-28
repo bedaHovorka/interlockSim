@@ -308,6 +308,42 @@ class SimulationControllerTest {
 		assertThat(controller.runner).isNull()
 	}
 
+	// ── lastStopWasNatural (SP2c.22 follow-up, Issue #845) ────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("lastStopWasNatural is false after an explicit stop()")
+	fun lastStopWasNaturalFalseAfterExplicitStop() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run(ofType<CoreSimulationController>()) } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = createController()
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+		controller.stop()
+		blockSim.countDown()
+
+		assertThat(controller.lastStopWasNatural).isFalse()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("lastStopWasNatural is true after the simulation finishes on its own")
+	fun lastStopWasNaturalTrueAfterNaturalFinish() {
+		val completedLatch = CountDownLatch(1)
+		every { context.run(ofType<CoreSimulationController>()) } answers { /* returns immediately */ }
+
+		val controller = createController(onCompleted = { completedLatch.countDown() })
+		controller.start(context)
+
+		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
+		assertThat(controller.lastStopWasNatural).isTrue()
+	}
+
 	// ── onCompleted callback ──────────────────────────────────────────────────
 
 	@Test

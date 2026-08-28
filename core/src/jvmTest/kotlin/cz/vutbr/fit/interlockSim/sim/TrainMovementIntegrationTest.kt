@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -23,6 +24,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -117,9 +119,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				logger.info { "Pre-reserved $preReservationBlockCount blocks for $preTestTrainId" }
 
 				// Act: Run ShuntingLoop (30 seconds simulation time)
-				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 30L)
 
 				// Assert: Pre-test reservation should still be in registry (not released by ShuntingLoop)
 				val preTestBlocks = registry.getBlocks(preTestTrainId)
@@ -127,6 +127,12 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				logger.info {
 					"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
 				}
+
+				// Assert: ShuntingLoop's own trains were still admitted despite the
+				// pre-reservation occupying one of the two parallel paths (k1/k2), and
+				// concurrent admission never exceeded this station's fixed topology capacity.
+				assertThat(shuntingLoop.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
+				assertThat(shuntingLoop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 			}
 		}
 	}
@@ -150,9 +156,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				assertThat(registry.blockCount()).isEqualTo(0)
 
 				// Act: Run ShuntingLoop (10 seconds - short run)
-				val shuntingLoop = ShuntingLoop(context, endTime = 10L)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 10L)
 
 				// Assert: Simulation completed (no hang/deadlock)
 				assertThat(context.getGraph()).isNotNull()
@@ -167,6 +171,14 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				logger.info {
 					"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
 				}
+
+				// Assert: ShuntingLoop actually managed the reservation lifecycle end-to-end —
+				// at least one train was admitted and reserved a path (not just generated into
+				// the queue), and concurrent admission never exceeded the station's fixed
+				// topology capacity.
+				assertThat(shuntingLoop.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
+				assertThat(shuntingLoop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
+				assertThat(registry.trainCount()).isGreaterThan(0)
 			}
 		}
 	}
@@ -196,9 +208,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 				// Act: Run ShuntingLoop (30 seconds - enough for multiple trains)
-				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 30L)
 
 				// Assert: Simulation completed without deadlock
 				val registry = context.scope.get<PathReservationRegistry>()
@@ -212,6 +222,13 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 					assertThat(worker).isNotNull()
 					assertThat(worker.getQueqe()).isNotNull()
 				}
+
+				// Assert: ShuntingLoop's own trains still got admitted under contention (the
+				// pre-reservation occupies only one of the two parallel paths), and concurrent
+				// admission never exceeded the station's fixed topology capacity — a 3rd
+				// concurrently-admitted train would have no track left to occupy.
+				assertThat(shuntingLoop.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
+				assertThat(shuntingLoop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 
 				logger.info {
 					"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
@@ -239,9 +256,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				assertThat(registry.trainCount()).isEqualTo(0)
 
 				// Act: Run ShuntingLoop for full lifecycle (60 time units)
-				val shuntingLoop = ShuntingLoop(context, endTime = 60L)
-				context.setMainProcess(shuntingLoop)
-				context.run()
+				val shuntingLoop = runShuntingLoop(context, 60L)
 
 				// Assert: Simulation completed
 				assertThat(context.getGraph()).isNotNull()
@@ -263,6 +278,14 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				}
 				// At minimum, verify the registry is in a consistent state (blocks >= trains)
 				assertThat(registry.blockCount()).isGreaterThanOrEqualTo(registry.trainCount())
+
+				// Assert: ShuntingLoop actually admitted and ran trains through their full
+				// lifecycle (60s comfortably exceeds the ~49.5s baseline for the first train
+				// to complete), and concurrent admission never exceeded the station's fixed
+				// topology capacity.
+				assertThat(shuntingLoop.getTrainsEntered()).isGreaterThanOrEqualTo(1)
+				assertThat(shuntingLoop.getTrainsExited()).isGreaterThanOrEqualTo(1)
+				assertThat(shuntingLoop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 			}
 		}
 	}

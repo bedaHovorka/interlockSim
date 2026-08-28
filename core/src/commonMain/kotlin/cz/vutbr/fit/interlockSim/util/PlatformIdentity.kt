@@ -8,5 +8,9 @@ package cz.vutbr.fit.interlockSim.util
  *
  * - **JVM:** delegates to [System.identityHashCode]
  * - **Native:** delegates to [kotlin.native.identityHashCode]
+ *
+ * **Do not use this as a unique identifier** (e.g. as a map/scope key). Identity hash codes live
+ * in a 31-bit space, so collisions become likely at moderate object counts (birthday bound) -
+ * this is for human-readable debug logging only. See Issue #757.
  */
 expect fun platformIdentityCode(obj: Any): String

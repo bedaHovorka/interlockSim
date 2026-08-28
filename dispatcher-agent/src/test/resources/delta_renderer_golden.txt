@@ -1,0 +1,3 @@
+=== CHANGED SINCE LAST TICK ===
+trains: T-3 RUNNING(was HELD)
+blocks: kG FREE->RESERVED(T-3) kJ FREE->RESERVED(T-3)

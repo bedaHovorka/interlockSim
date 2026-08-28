@@ -19,11 +19,20 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
+import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
+import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
+import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.koin.core.module.Module
 import org.koin.test.get
 
@@ -86,8 +95,10 @@ class ExampleLoadingTest : KoinTestBase() {
 			val exampleNames = registry.getAvailableExamples()
 
 			// Assert
-			assertThat(exampleNames).hasSize(3)
+			assertThat(exampleNames).hasSize(5)
 			assertThat(exampleNames.contains("shuntingLoop")).isTrue()
+			assertThat(exampleNames.contains("shuntingLoopAI")).isTrue()
+			assertThat(exampleNames.contains("shuntingLoopSync")).isTrue()
 			assertThat(exampleNames.contains("multiTrainLoop")).isTrue()
 			assertThat(exampleNames.contains("threeTrainLoop")).isTrue()
 		}
@@ -203,6 +214,47 @@ class ExampleLoadingTest : KoinTestBase() {
 		}
 
 		/**
+		 * All five shunting-loop factories share [ExampleRegistry.requireEndTimeArg]; each must
+		 * throw [ContextCreationException] with the exact shared message when `endTime` is missing
+		 * (PR #983 follow-up: the S1192 literal fix made the message a single constant, so every
+		 * throw site must agree on it byte-for-byte).
+		 */
+		@ParameterizedTest(name = "{0} rejects a missing endTime with the exact shared message")
+		@ValueSource(
+			strings = [
+				"createShuntingLoopExample",
+				"createShuntingLoopSyncExample",
+				"createShuntingLoopAIExample",
+				"createShuntingLoopGuiExample",
+				"createShuntingLoopAIGuiExample"
+			]
+		)
+		fun `all shunting-loop factories require endTime with the exact shared message`(methodName: String) {
+			// Arrange
+			val registry = get<ExampleRegistry>()
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					methodName,
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("example", "shuntingLoop") // Missing endTime
+
+			// Act & Assert
+			assertFailure {
+				createMethod.invoke(registry, factory, args)
+			}.isInstanceOf<java.lang.reflect.InvocationTargetException>()
+				.transform { it.cause }
+				.isNotNull()
+				.isInstanceOf<ContextCreationException>()
+				.message()
+				.isNotNull()
+				.isEqualTo("End time of simulation not specified")
+		}
+
+		/**
 		 * Test that createShuntingLoopExample with non-numeric endTime throws
 		 */
 		@Test
@@ -262,6 +314,136 @@ class ExampleLoadingTest : KoinTestBase() {
 	}
 
 	@Nested
+	@DisplayName("ShuntingLoopAI Example Factory")
+	inner class ShuntingLoopAIFactoryTests {
+		/**
+		 * Test that createShuntingLoopAIGuiExample registers its MeasuringPlanAdapter into
+		 * the context's Koin scope, so callers outside ExampleRegistry (e.g. Frame's
+		 * SimulationController.STOPPED handler) can retrieve it after the run ends.
+		 */
+		@Test
+		fun `createShuntingLoopAIGuiExample registers MeasuringPlanAdapter in context scope`() {
+			val registry = get<ExampleRegistry>()
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopAIGuiExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("exampleGui", "shuntingLoopAI", "100")
+
+			try {
+				val result = createMethod.invoke(registry, factory, args)
+				val context = result as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+				assertThat(
+					context.scope.getOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
+				).isNotNull()
+			} catch (e: java.lang.reflect.InvocationTargetException) {
+				val cause = e.cause
+				// ContextCreationException is acceptable if vyhybna.xml isn't found in the
+				// test environment — mirrors the tolerance in ShuntingLoopFactoryTests above.
+				if (cause is ContextCreationException) {
+					assertThat((cause.message ?: "").contains("vyhybna.xml")).isTrue()
+				} else {
+					throw e
+				}
+			}
+		}
+
+		/**
+		 * Test that createShuntingLoopAIExample (headless) registers its MeasuringPlanAdapter
+		 * into the context's Koin scope (Issue #873 — headless AI console example).
+		 *
+		 * Mirrors the pattern of [createShuntingLoopAIGuiExample] but uses a
+		 * [cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController] instead of
+		 * [cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController] so the
+		 * headless run satisfies [assertPlannerPacingCompatible].
+		 */
+		@Test
+		fun `createShuntingLoopAIExample registers MeasuringPlanAdapter in context scope`() {
+			val registry = get<ExampleRegistry>()
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopAIExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("example", "shuntingLoopAI", "100")
+
+			try {
+				val result = createMethod.invoke(registry, factory, args)
+				val context = result as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+				assertThat(
+					context.scope.getOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
+				).isNotNull()
+			} catch (e: java.lang.reflect.InvocationTargetException) {
+				val cause = e.cause
+				if (cause is ContextCreationException) {
+					assertThat((cause.message ?: "").contains("vyhybna.xml")).isTrue()
+				} else {
+					throw e
+				}
+			}
+		}
+	}
+
+	@Nested
+	@DisplayName("Headless Pacing Guard Reachability (Issue #873, R8)")
+	inner class HeadlessPacingGuardTests {
+		/**
+		 * Belt-and-suspenders proof that the A4 headless sweep is reachable: an async
+		 * (LLM-style) planner bound to a [ThrottlingSimulationController] passes
+		 * [assertPlannerPacingCompatible] — the guard that previously blocked all headless
+		 * AI runs (R8 in Issue #822). The factory test above exercises this indirectly via
+		 * [ExampleRegistry.createShuntingLoopAIExample]; this test asserts the guard
+		 * directly with a lightweight async planner stand-in so a future regression in the
+		 * guard or the controller is caught here too.
+		 */
+		@Test
+		fun `async planner with ThrottlingSimulationController passes the pacing guard`() {
+			val asyncPlanner =
+				object : DispatcherPlanner {
+					override val capabilities =
+						PlannerCapabilities(
+							name = "test-async",
+							isAsynchronous = true,
+							maxSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+						)
+
+					override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> = emptyList()
+				}
+			// Must not throw — ThrottlingSimulationController is a real pacing controller, not NoOp
+			assertPlannerPacingCompatible(asyncPlanner, ThrottlingSimulationController())
+		}
+
+		/**
+		 * Confirms the guard is **unchanged** and still rejects an async planner bound to a
+		 * [NoOpSimulationController] — i.e. the R8 fix did not weaken the safety check.
+		 */
+		@Test
+		fun `async planner with NoOpSimulationController is still rejected by the pacing guard`() {
+			val asyncPlanner =
+				object : DispatcherPlanner {
+					override val capabilities =
+						PlannerCapabilities(
+							name = "test-async",
+							isAsynchronous = true,
+							maxSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+						)
+
+					override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> = emptyList()
+				}
+			assertFailure {
+				assertPlannerPacingCompatible(asyncPlanner, NoOpSimulationController)
+			}.isInstanceOf<IllegalStateException>()
+		}
+	}
+
+	@Nested
 	@DisplayName("Example List Sorting")
 	inner class ExampleListSortingTests {
 		/**
@@ -277,7 +459,58 @@ class ExampleLoadingTest : KoinTestBase() {
 
 			// Assert
 			assertThat(sortedNames.size > 0).isTrue()
-			assertThat(sortedNames).isEqualTo(listOf("multiTrainLoop", "shuntingLoop", "threeTrainLoop"))
+			assertThat(sortedNames).isEqualTo(
+				listOf("multiTrainLoop", "shuntingLoop", "shuntingLoopAI", "shuntingLoopSync", "threeTrainLoop")
+			)
+		}
+
+		/**
+		 * Test that shuntingLoopAI GUI example is registered (SP2b.9, Issue #566)
+		 */
+		@Test
+		fun `shuntingLoopAI GUI example is registered`() {
+			// Arrange
+			val registry = get<ExampleRegistry>()
+
+			// Act
+			val hasShuntingLoopAI = registry.guiExamples.containsKey("shuntingLoopAI")
+
+			// Assert
+			assertThat(hasShuntingLoopAI).isTrue()
+		}
+
+		/**
+		 * Test that shuntingLoopAI is in BOTH console examples and GUI examples (Issue #873).
+		 *
+		 * Before Issue #873 (SP2c.26 follow-up I2), shuntingLoopAI was GUI-only because
+		 * [assertPlannerPacingCompatible] rejected async planners bound to [NoOpSimulationController],
+		 * which was the only controller available for console runs (R8 in Issue #822).
+		 *
+		 * Issue #873 resolves R8: [createShuntingLoopAIExample] wires the async LLM planner to a
+		 * [cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController] at
+		 * [cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER],
+		 * which is a real pacing controller constructible without `:desktop-ui` on the classpath.
+		 * The guard ([assertPlannerPacingCompatible]) is **unchanged** — it still rejects async +
+		 * [cz.vutbr.fit.interlockSim.context.NoOpSimulationController]; the fix is to give headless
+		 * runs a controller that legitimately satisfies it.
+		 */
+		@Test
+		fun `shuntingLoopAI is in both console and GUI examples`() {
+			val registry = get<ExampleRegistry>()
+			// shuntingLoopAI is now also registered as a console example (Issue #873, R8 resolution)
+			assertThat(registry.examples.containsKey("shuntingLoopAI")).isTrue()
+			// shuntingLoopAI remains in GUI examples as before
+			assertThat(registry.guiExamples.containsKey("shuntingLoopAI")).isTrue()
+		}
+
+		/**
+		 * Test that GUI example names include shuntingLoopAI (SP2b.9, Issue #566)
+		 */
+		@Test
+		fun `GUI example names include shuntingLoopAI`() {
+			val registry = get<ExampleRegistry>()
+			val guiNames = registry.getAvailableGuiExamples()
+			assertThat(guiNames).contains("shuntingLoopAI")
 		}
 	}
 }

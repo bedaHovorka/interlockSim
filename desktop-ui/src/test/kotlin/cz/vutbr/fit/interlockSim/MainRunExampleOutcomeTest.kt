@@ -1,0 +1,150 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim
+
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.testModuleFull
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import org.koin.core.module.Module
+import org.koin.test.get
+import java.util.concurrent.TimeUnit
+
+/**
+ * Proves the headless `example` mode reports how a run ended (Issue #847 round 3, PR #891 defect C).
+ *
+ * `Main.runExample` used to return `Unit` and swallow every failure into a `logger.error`, and
+ * `main` never called `exitProcess`, so the JVM exited 0 for a completed run, a deadlocked run, a
+ * CRITICAL collision and a swallowed exception alike. Round 2's third verification run ended at
+ * simTime 72.0 s of a requested 600 s and still exited 0 — and #847's unattended sweep would have
+ * recorded it as a valid data point.
+ *
+ * The non-AI `shuntingLoop` example is used deliberately: it is rule-based, needs no Ollama, and
+ * runs to completion in about a second of wall clock, so it is a legitimate unit test of the
+ * outcome plumbing rather than of the LLM.
+ *
+ * @since Issue #847 (round 3)
+ */
+@DisplayName("Main.runExample reports whether the run reached its requested end time")
+class MainRunExampleOutcomeTest : KoinTestBase() {
+	override fun getTestModule(): Module = testModuleFull
+
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@DisplayName("a run that reaches its end time reports COMPLETED")
+	fun completedRunReportsCompleted() {
+		val outcome = get<Main>().runExample(arrayOf("example", "shuntingLoop", "30"))
+
+		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("an unknown example name reports NOT_STARTED, which is not a deadlock")
+	fun unknownExampleReportsNotStarted() {
+		// Nothing ran, so this must not be reported as success — but it must not be reported as a
+		// deadlock either, or #847's sweep would score a typo as a failed dispatch run. It is also
+		// why `main` does not exit on NOT_STARTED: this is the usage-error path.
+		val outcome = get<Main>().runExample(arrayOf("example", "no-such-example", "30"))
+
+		assertThat(outcome).isEqualTo(RunOutcome.NOT_STARTED)
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("a missing end-time argument reports NOT_STARTED")
+	fun missingEndTimeReportsNotStarted() {
+		val outcome = get<Main>().runExample(arrayOf("example", "shuntingLoop"))
+
+		assertThat(outcome).isEqualTo(RunOutcome.NOT_STARTED)
+	}
+
+	@Test
+	@DisplayName("a dispatcher that gave up reports TERMINATED_EARLY even at the full horizon")
+	fun dispatcherStoppedByFailuresOutranksSimTime() {
+		// The silent-death case: AgentDriverLoop abandons the run, the kDisco kernel ticks on to the
+		// requested horizon with nothing dispatching, and sim-time alone would say COMPLETED — so
+		// the sweep aggregator would count a dead dispatcher as a passing data point.
+		val outcome = get<Main>().classifyRun(600.0, 600.0, dispatcherStoppedByFailures = true)
+
+		assertThat(outcome).isEqualTo(RunOutcome.TERMINATED_EARLY)
+		// TERMINATED_EARLY is what makes the run count against its arm: it maps to
+		// RunEndCause.TERMINATED_EARLY, so RunReport's `completedNaturally` pass criterion is false.
+		assertThat(outcome.exitCode).isEqualTo(1)
+	}
+
+	@Test
+	@DisplayName("the same horizon with a healthy dispatcher still reports COMPLETED")
+	fun healthyDispatcherAtHorizonReportsCompleted() {
+		// Guards the assertion above against passing for the wrong reason: only the flag differs.
+		val outcome = get<Main>().classifyRun(600.0, 600.0, dispatcherStoppedByFailures = false)
+
+		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
+	}
+
+	@Test
+	@DisplayName(
+		"a frozen report-event time signal combined with the kernel's own end time reports COMPLETED (#929)"
+	)
+	fun frozenEventStreamWithKernelEndTimeReportsCompleted() {
+		// Reproduces #929: at short horizons, queued-but-never-admitted trains are event-less by
+		// design, so SimulationTimeTracker.lastSimTime (the only signal derived from the
+		// report-event stream) freezes below the requested end time once the last moving train
+		// finishes -- even though the kDisco kernel's own clock (SimulationContext.lastRunEndTime)
+		// silently kept advancing to the real end time. Without combining the two signals, this
+		// scenario would misclassify a completed run as TERMINATED_EARLY.
+		val requestedEndTime = 30.0
+		val frozenTrackerSimTime = 5.0 // last TRAIN/NODE event fired long before the horizon
+		val kernelEndTime = 30.0 // the kernel itself reached the requested horizon
+
+		val reachedSimTime = get<Main>().resolveReachedSimTime(frozenTrackerSimTime, kernelEndTime)
+		val outcome = get<Main>().classifyRun(reachedSimTime, requestedEndTime)
+
+		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
+	}
+
+	@Test
+	@DisplayName("resolveReachedSimTime falls back to the tracker's value when the context never ran (#929)")
+	fun resolveReachedSimTimeFallsBackWhenContextNeverRan() {
+		val reachedSimTime = get<Main>().resolveReachedSimTime(12.5, null)
+
+		assertThat(reachedSimTime).isEqualTo(12.5)
+	}
+
+	@Test
+	@DisplayName(
+		"resolveReachedSimTime returns the tracker value exactly when the context never ran, even below 0 (#929)"
+	)
+	fun resolveReachedSimTimeFallsBackToTrackerValueBelowZero() {
+		// Contract guard, not a live-scenario regression: trackerSimTime is a monotonic max from
+		// Process.time() starting at 0.0, so it is never negative in production. This pins the
+		// documented "fall back to the tracker's value" contract -- the previous `?: 0.0` fallback
+		// would have returned 0.0 here, not -3.0, so the existing positive-value test above could
+		// not distinguish the two implementations.
+		val reachedSimTime = get<Main>().resolveReachedSimTime(-3.0, null)
+
+		assertThat(reachedSimTime).isEqualTo(-3.0)
+	}
+
+	@Test
+	@DisplayName(
+		"resolveReachedSimTime keeps the tracker value when the kernel ended earlier than the last report event"
+	)
+	fun resolveReachedSimTimeKeepsTrackerWhenKernelEndedEarlier() {
+		// Guards the maxOf combiner against a future refactor that always prefers contextEndTime:
+		// when the kernel's own end time is below the tracker's, the tracker must win.
+		val reachedSimTime = get<Main>().resolveReachedSimTime(5.0, 2.0)
+
+		assertThat(reachedSimTime).isEqualTo(5.0)
+	}
+}

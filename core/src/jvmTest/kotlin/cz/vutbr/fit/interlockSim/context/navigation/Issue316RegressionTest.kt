@@ -15,8 +15,8 @@ import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -27,12 +27,12 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
 
 /**
  * Regression tests for Issue #316: 8+ trains on circular route cause deadlock.
@@ -83,13 +83,7 @@ class Issue316RegressionTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 		registry = simulationContext.scope.get()
 		navigator = simulationContext.scope.get()
@@ -288,51 +282,101 @@ class Issue316RegressionTest : KoinTestBase() {
 	fun cycleGuardFires_returnsUnchangedPathInfo() {
 		// This test directly exercises the `return old` code path in mergePathInfo().
 		//
-		// Setup: register 2 normal merges so inOutB appears twice in the merged path.
-		// Then attempt a 3rd merge that would cause inOutB to appear a 3rd time.
-		// Expected: registry retains the PathInfo from after the 2nd merge (unchanged).
+		// The fixture MUST be contiguous — new.start == old.target for every single merge — or
+		// Step 0a (Issue #834's non-contiguous-merge abort, added after this test was first
+		// written) fires on the very first merge and the test never reaches the cycle guard it
+		// exists to exercise. That is exactly what happened to the version of this test that
+		// repeated `B -> zB` three times: after the first merge, old.target was zB but every
+		// following segment restarted at B, so Step 0a aborted every merge and "size unchanged"
+		// held for the wrong reason — the cycle guard itself was never reached.
+		//
+		// vyhybna.xml's shunting loop is a genuine physical cycle: switches vA (15,8) and vB
+		// (26,8) are joined by two parallel tracks — the "main line" through doA1/doB1 and the
+		// "loop line" through doA2/doB2. Walking that cycle twice and reconnecting to vA a third
+		// time is a real, contiguous route that exercises the guard on an actual separator's 3rd
+		// occurrence:
+		//
+		//   Lap 1: vA -> doA1 -> doB1 -> vB -> doB2 -> doA2 -> vA   (vA's 2nd occurrence — the
+		//          "legitimate circular route" branch, allowed)
+		//   Lap 2: vA -> doA1 -> doB1 -> vB -> doB2 -> doA2 -> vA   (vA's 3rd occurrence — the
+		//          cycle guard MUST fire on this final hop)
+
+		val grid = simulationContext.getRailWayNetGrid()
+
+		fun trackBetween(
+			from: DynamicPathSeparator,
+			to: DynamicPathSeparator
+		): DynamicTrackBlock =
+			navigator
+				.findAllTopologicalPaths(from, to)
+				.firstOrNull()
+				?.map { it.getTrackBlock() }
+				?.filterIsInstance<DynamicTrackBlock>()
+				?.firstOrNull()
+				?: throw IllegalStateException("No track block $from -> $to")
+
+		val semaphoreDoA1 = simulationContext.separatorAt(16, 8)
+		val semaphoreDoA2 = simulationContext.separatorAt(17, 9)
+		val semaphoreDoB2 = simulationContext.separatorAt(24, 9)
+
+		val trackVAtoDoA1 = trackBetween(switchVA, semaphoreDoA1)
+		val trackDoA1toDoB1 = trackBetween(semaphoreDoA1, semaphoreDoB1)
+		val trackDoB1toVB = trackBetween(semaphoreDoB1, switchVB)
+		val trackVBtoDoB2 = trackBetween(switchVB, semaphoreDoB2)
+		val trackDoB2toDoA2 = trackBetween(semaphoreDoB2, semaphoreDoA2)
+		val trackDoA2toVA = trackBetween(semaphoreDoA2, switchVA)
 
 		val trainId = "train_cycle_guard"
 
-		// Step 1: register first segment B → zB
-		val seg1 =
-			createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
+		// Hop 1 (initial registration, no merge yet): vA -> doA1
+		registry.registerPathInfo(
+			trainId,
+			createPathInfo(start = switchVA, target = semaphoreDoA1, path = listOf(switchVA, trackVAtoDoA1, semaphoreDoA1))
+		)
+
+		// Hops 2-6 (rest of lap 1) and hops 7-11 (lap 2 up to, but not including, the closing
+		// hop): every one of these is a legitimate continuation — each separator's 2nd
+		// occurrence at worst — so every merge here must be ACCEPTED and grow the path.
+		val acceptedHops =
+			listOf(
+				Triple(semaphoreDoA1, trackDoA1toDoB1, semaphoreDoB1),
+				Triple(semaphoreDoB1, trackDoB1toVB, switchVB),
+				Triple(switchVB, trackVBtoDoB2, semaphoreDoB2),
+				Triple(semaphoreDoB2, trackDoB2toDoA2, semaphoreDoA2),
+				Triple(semaphoreDoA2, trackDoA2toVA, switchVA), // vA's 2nd occurrence — allowed
+				Triple(switchVA, trackVAtoDoA1, semaphoreDoA1),
+				Triple(semaphoreDoA1, trackDoA1toDoB1, semaphoreDoB1),
+				Triple(semaphoreDoB1, trackDoB1toVB, switchVB),
+				Triple(switchVB, trackVBtoDoB2, semaphoreDoB2),
+				Triple(semaphoreDoB2, trackDoB2toDoA2, semaphoreDoA2)
 			)
-		registry.registerPathInfo(trainId, seg1)
+		for ((start, track, target) in acceptedHops) {
+			val previousSize = registry.getPathInfo(trainId)!!.reservedPath.size
+			val hop = createPathInfo(start = start, target = target, path = listOf(start, track, target))
+			registry.registerPathInfo(trainId, hop)
+			// Sanity: this hop was genuinely accepted — the path really grew.
+			assertThat(registry.getPathInfo(trainId)!!.reservedPath.size).isGreaterThan(previousSize)
+		}
 
-		// Step 2: register segment that brings inOutB back (2nd occurrence — allowed)
-		// We re-use the same track to simulate "circular route" without reverse paths
-		val seg2 =
-			createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
-		registry.registerPathInfo(trainId, seg2)
+		// Capture PathInfo right before the closing hop — this must be what survives the guard.
+		val pathInfoBeforeThirdOccurrence = registry.getPathInfo(trainId)
+		assertThat(pathInfoBeforeThirdOccurrence).isNotNull()
+		val sizeBeforeThirdOccurrence = pathInfoBeforeThirdOccurrence!!.reservedPath.size
 
-		// Capture PathInfo after the 2nd merge — this should be preserved after the guard fires
-		val pathInfoAfterTwoMerges = registry.getPathInfo(trainId)
-		assertThat(pathInfoAfterTwoMerges).isNotNull()
-		val sizeAfterTwoMerges = pathInfoAfterTwoMerges!!.reservedPath.size
+		// Closing hop: doA2 -> vA. Contiguous with the stored path (Step 0a passes), but it
+		// would put vA into the path for a 3rd time — the cycle guard MUST fire here.
+		registry.registerPathInfo(
+			trainId,
+			createPathInfo(start = semaphoreDoA2, target = switchVA, path = listOf(semaphoreDoA2, trackDoA2toVA, switchVA))
+		)
 
-		// Step 3: attempt a 3rd merge with inOutB — this would make inOutB appear 3+ times
-		// The cycle guard MUST fire and return the old PathInfo unchanged
-		val seg3 =
-			createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
-		registry.registerPathInfo(trainId, seg3)
-
-		// Verify: PathInfo is still non-null and has the SAME size as after the 2nd merge
-		// (i.e. the 3rd merge was rejected — `return old` fired)
+		// Verify: the stored PathInfo is the EXACT pre-guard instance, not merely one of equal
+		// size. Reference identity is invariant I2 (#316): an aborted merge writes nothing back
+		// at all, never a copy that happens to look the same.
 		val pathInfoAfterGuard = registry.getPathInfo(trainId)
 		assertThat(pathInfoAfterGuard).isNotNull()
-		assertThat(pathInfoAfterGuard!!.reservedPath.size).isEqualTo(sizeAfterTwoMerges)
+		assertThat(pathInfoAfterGuard).isSameInstanceAs(pathInfoBeforeThirdOccurrence)
+		assertThat(pathInfoAfterGuard!!.reservedPath.size).isEqualTo(sizeBeforeThirdOccurrence)
 
 		// Verify the path is still structurally valid (no consecutive separators)
 		val pathElements = pathInfoAfterGuard.reservedPath.toList()

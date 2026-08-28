@@ -45,7 +45,7 @@ java {
 }
 
 dependencies {
-    implementation("cz.hovorka.kdisco:kdisco-core-jvm:$kdiscoVersion")
+    implementation("cz.ksimulantenbande.kdisco:kdisco-core-jvm:$kdiscoVersion")
     implementation("org.slf4j:slf4j-api:$slf4jVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
     implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
@@ -53,6 +53,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
     implementation("io.insert-koin:koin-core:$koinVersion")
     implementation(project(":core"))
+    implementation(project(":dispatcher-agent"))
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
     testImplementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion")
@@ -383,6 +384,22 @@ val runExampleGui by tasks.registering(JavaExec::class) {
             val endTime = endTimeProp.getOrElse("60")
             args = listOf("exampleGui", exampleName, endTime)
         }
+    }
+}
+
+val runExampleAIGui by tasks.registering(JavaExec::class) {
+    group = "application"
+    description =
+        "Run shuntingLoopAI GUI example — Ollama LLM dispatcher with rule-based fallback (SP2b.9). " +
+        "Use -PendTime=seconds to set end time (default 300). " +
+        "Requires local Ollama at http://localhost:11434 (or set OLLAMA_BASE_URL). " +
+        "Falls back to rule-based dispatcher if Ollama is unavailable."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set(application.mainClass.get())
+    val endTimeProp = providers.gradleProperty("endTime")
+    doFirst {
+        val endTime = endTimeProp.getOrElse("300")
+        args = listOf("exampleGui", "shuntingLoopAI", endTime)
     }
 }
 

@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
+import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import io.github.oshai.kotlinlogging.FormattingAppender
 import io.github.oshai.kotlinlogging.KLoggingEvent
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
@@ -287,7 +288,9 @@ private fun runSim(
 	val reporter = TextReporter(verbosity)
 	ctx.addPropertyChangeListener(reporter)
 	try {
-		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
+		val loop = ShuntingLoop(ctx, endTime)
+		wireSynchronousDispatcher(ctx, loop)
+		ctx.setMainProcess(loop)
 		ctx.run()
 		reporter.printSummary()
 		return 0

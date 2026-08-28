@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Resource
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Resource
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
@@ -52,7 +52,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * ## Determinism
  *
  * Train injection times come from caller-supplied specs, so runs are repeatable
- * when paired with a fixed kDisco seed. No standalone [cz.hovorka.kdisco.Random]
+ * when paired with a fixed kDisco seed. No standalone [cz.ksimulantenbande.kdisco.Random]
  * generator is required.
  *
  * ## Scope limitations (documented)
@@ -77,7 +77,8 @@ open class MultiTrainLoop(
 	private val maxConcurrentTrains: Int = DEFAULT_MAX_CONCURRENT_TRAINS,
 	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService()
 ) : Interlocking(context),
-	SpeedControllable {
+	SpeedControllable,
+	ApprovesTrains {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
@@ -341,6 +342,23 @@ open class MultiTrainLoop(
 								"${result.conflictingBlock.name ?: "unnamed"} owned by ${result.existingOwner}"
 						}
 					}
+					is PathReservationService.ReservationResult.NonContiguousStart -> {
+						// Issue #893: not expected here -- this call reserves from the train's own
+						// entry InOut while it still has no footprint, so the check passes
+						// vacuously. Logged at WARN rather than retried silently: retrying an
+						// origin the train can never use would spin for the rest of the run.
+						logger.warn {
+							"MultiTrainLoop: non-contiguous origin for ${train.name}: ${result.reason}"
+						}
+					}
+					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
+						// Issue #903: a permanent impossibility (rear-facing START or
+						// unconfigurable switch) for this candidate, not ordinary contention.
+						// Logged at WARN and the outer loop moves on to the next candidate path.
+						logger.warn {
+							"MultiTrainLoop: geometrically impossible route for ${train.name}: ${result.reason}"
+						}
+					}
 				}
 			} finally {
 				for (resource in acquired) {
@@ -395,7 +413,7 @@ open class MultiTrainLoop(
 	 *
 	 * @since PR #633 — animation entrySeparator race regression test
 	 */
-	fun getApprovedTrains(): List<Train> = approvedTrains.toList()
+	override fun getApprovedTrains(): List<Train> = approvedTrains.toList()
 
 	/**
 	 * Return a [TrainSnapshot] for the approved train with the given [trainId], or `null`

@@ -11,7 +11,9 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.sim.SpeedControllable
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
@@ -61,6 +63,26 @@ internal class SimulationController(
 	var runner: SimulationRunner? = null
 		private set
 
+	/**
+	 * `true` when the most recent [SimulationStatus.STOPPED] emission was caused by the
+	 * simulation finishing naturally (monitor thread detected completion); `false` when it
+	 * was caused by an explicit [stop] call.
+	 *
+	 * Set synchronously, on the same thread that is about to invoke [onStateChanged] with
+	 * [SimulationStatus.STOPPED], immediately before that call. Callers that read this from
+	 * inside their [onStateChanged] callback — before doing any further thread-hopping (e.g.
+	 * `SwingUtilities.invokeLater`) — observe the value for the transition they are handling,
+	 * with no race: on the natural-completion path the field write and the [onStateChanged]
+	 * call happen sequentially on the monitor thread; any subsequent hand-off to another
+	 * thread (e.g. the EDT) is safe because it happens after the write completed.
+	 *
+	 * @since Issue #845 (SP2c.22 follow-up — distinguishing [RunEndCause] equivalents at the
+	 *   Frame level; see `Frame.kt`'s `onStateChanged` wiring)
+	 */
+	@Volatile
+	var lastStopWasNatural: Boolean = false
+		private set
+
 	/** Listener registered on the active runner for speed changes; removed on stop. */
 	private var speedListener: PropertyChangeListener? = null
 
@@ -73,6 +95,16 @@ internal class SimulationController(
 	 */
 	@Volatile
 	private var speedControllable: SpeedControllable? = null
+
+	/**
+	 * SP4.2 (Issue #564): the context-scoped [DelegatingSimulationController] that paces
+	 * the dispatcher-agent loop. While a simulation is running, its delegate is the live
+	 * [SimulationRunner] so the agent loop follows the existing real-time sync (speed
+	 * multiplier, pause); on stop/completion the delegate is reset to
+	 * [NoOpSimulationController]. `null` when the context has no dispatcher agent wired.
+	 */
+	@Volatile
+	private var agentPacing: DelegatingSimulationController? = null
 
 	/**
 	 * Desired speed multiplier applied to new and currently running simulations.
@@ -124,6 +156,24 @@ internal class SimulationController(
 		speedControllable = controllable
 		controllable?.speedMultiplier = desiredSpeed
 
+		// SP4.2 (Issue #564): pace the dispatcher-agent loop with this run's runner.
+		// getOrNull: the binding is absent in Koin setups without :dispatcher-agent's module.
+		// The ClassCastException guard covers both (a) test doubles whose scope isn't a real
+		// Koin registry (e.g. a relaxed mock) and (b) a genuine Koin misbinding in production.
+		// Both surface as ClassCastException from Koin's typed getOrNull cast (getOrNull is an
+		// inline extension, so the cast cannot be avoided at the call site). Pacing is an
+		// optional seam either way; log so a real misbinding (case b) is observable rather than
+		// silently leaving the agent loop unpaced.
+		val pacing =
+			try {
+				(context as? DefaultSimulationContext)?.scope?.getOrNull<DelegatingSimulationController>()
+			} catch (e: ClassCastException) {
+				logger.warn(e) { "DelegatingSimulationController lookup failed; agent loop will run unpaced" }
+				null
+			}
+		agentPacing = pacing
+		pacing?.delegate = newRunner
+
 		// Start synchronously BEFORE enabling the Stop button or launching the monitor
 		// thread. This ensures stopSimulation() always has a live thread to interrupt.
 		newRunner.start()
@@ -173,7 +223,9 @@ internal class SimulationController(
 							cleanupSpeedListener(newRunner)
 							runner = null
 							speedControllable = null
+							detachAgentPacing()
 							onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
+							lastStopWasNatural = true
 							onStateChanged(SimulationStatus.STOPPED)
 							onCompleted()
 						}
@@ -196,8 +248,21 @@ internal class SimulationController(
 		r.stop()
 		runner = null
 		speedControllable = null
+		detachAgentPacing()
 		onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
+		lastStopWasNatural = false
 		onStateChanged(SimulationStatus.STOPPED)
+	}
+
+	/**
+	 * Detach the live runner from the agent-pacing seam (SP4.2, Issue #564).
+	 *
+	 * Resets the delegate to [NoOpSimulationController] so a still-draining agent-driver
+	 * thread never throttles against a stopped runner, and clears the local reference.
+	 */
+	private fun detachAgentPacing() {
+		agentPacing?.delegate = NoOpSimulationController
+		agentPacing = null
 	}
 
 	/** Removes the speed [PropertyChangeListener] from [r] and clears the reference. */

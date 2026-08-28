@@ -80,14 +80,14 @@ class DefaultTrainNavigationService(
 		trainId: String,
 		separator: PathSeparator
 	): PathResult {
-		logger.info {
+		logger.debug {
 			"findReservedPathForTrain: train '$trainId' requesting path from $separator"
 		}
 
 		// Step 1: Get PathInfo for this train (Issue #295/#296 Phase 5)
 		val pathInfo = registry.getPathInfo(trainId)
 		if (pathInfo == null) {
-			logger.info {
+			logger.debug {
 				"findReservedPathForTrain: no PathInfo registered for train '$trainId'"
 			}
 			return if (hasTopologicalContinuation(separator)) {
@@ -104,7 +104,7 @@ class DefaultTrainNavigationService(
 		// If separator not in PathInfo, return OwnershipConflict (train should wait for proper reservation)
 		// Issue #296 Phase 8: Removed fallback mechanism - it returned wrong-direction blocks
 		if (nextTrackSection == null) {
-			logger.info {
+			logger.debug {
 				"findReservedPathForTrain: separator $separator not in PathInfo, " +
 					"returning OwnershipConflict (train should wait for new path reservation)"
 			}
@@ -119,10 +119,24 @@ class DefaultTrainNavigationService(
 		val candidatePath = buildPathWithDirection(dynamicSeparator, nextTrackSection, pathInfo)
 		if (candidatePath == null) {
 			logger.debug {
-				"findReservedPathForTrain: no path found from $separator with direction $nextTrackSection"
+				"findReservedPathForTrain: no path found from $separator with direction $nextTrackSection" +
+					" — the reserved path does not reach a forward-facing separator yet, so the train waits"
 			}
-			// No topological path = permanent condition
-			return PathResult.NoTopologicalPath
+			// Reaching here means the train HAS a PathInfo and a next section, so topology is not in
+			// question -- the only genuine topology verdict is the hasTopologicalContinuation check
+			// above. What failed is building a movement path out of the CURRENT RESERVATION STATE,
+			// which the dispatcher can change at any moment. That is ordinary "wait for my route to
+			// be extended", not a permanent fault.
+			//
+			// The measured case: a train running A -> B is granted `A -> doA1`. `doA1` faces west, so
+			// for an eastbound train it is a rear-facing terminus that buildPathWithDirection can
+			// never accept; on reaching `zA` the walk exhausts and returns null. Reported as
+			// NoTopologicalPath, Train.actions() took its unbounded `hold(5.0)` poll and logged
+			// "No topological path exists ... train reached dead-end" every 5 s -- on a network that
+			// has no dead end at all, for a train whose route was simply not extended yet. Reported
+			// as OwnershipConflict it waits on createPathAvailableCondition and resumes the moment
+			// the dispatcher extends the route.
+			return PathResult.OwnershipConflict
 		}
 
 		// Step 3.5: Handle path transitions (Issue #296 Phase 9)
@@ -190,6 +204,40 @@ class DefaultTrainNavigationService(
 		}
 
 		return isAvailable
+	}
+
+	override fun reservedSeparatorsAhead(
+		trainId: String,
+		separator: PathSeparator,
+		limit: Int
+	): List<OrientedPathSeparator> {
+		require(limit >= 0) { "limit must be >= 0: $limit" }
+		if (limit == 0) return emptyList()
+
+		val reservedPath = registry.getPathInfo(trainId)?.reservedPath ?: return emptyList()
+
+		// Find the anchor separator on the reserved route (same element == separator matching
+		// as determineNextFromPathInfo), then collect subsequent OrientedPathSeparators in order.
+		val anchorIndex = reservedPath.indexOfFirst { it == separator }
+		if (anchorIndex < 0) {
+			logger.trace {
+				"reservedSeparatorsAhead: anchor $separator not on reserved path of train '$trainId'"
+			}
+			return emptyList()
+		}
+
+		val result = mutableListOf<OrientedPathSeparator>()
+		for (i in (anchorIndex + 1) until reservedPath.size) {
+			val element = reservedPath.elementAt(i)
+			if (element is OrientedPathSeparator) {
+				result.add(element)
+				if (result.size == limit) break
+			}
+		}
+		logger.trace {
+			"reservedSeparatorsAhead: ${result.size} separator(s) ahead of $separator for train '$trainId'"
+		}
+		return result
 	}
 
 	/**

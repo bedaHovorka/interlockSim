@@ -30,7 +30,7 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 ## Features
 
 - **Interactive track editor** with grid-based layout
-- **Animated GUI simulation** ⭐ NEW - Real-time train movement visualization with event logging (30 FPS)
+- **Animated GUI simulation** - Real-time train movement visualization with event logging (30 FPS)
 - **XML schema-validated** railway network definitions
 - **Discrete event simulation engine** (kDisco-based)
 - **Built-in examples** including shunting loop scenarios
@@ -54,12 +54,14 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 
 - **Java**: JDK 21 or later (Java 21 LTS minimum)
 - **Build Tool**: Gradle (wrapper included)
-- **Dependencies**: Automatically managed via Gradle
-  - kdisco-core (from GitHub Packages)
+- **Dependencies**: Automatically managed via Gradle (versions in `gradle.properties`)
+  - `cz.ksimulantenbande.kdisco:kdisco-core` 0.6.1-SNAPSHOT (from GitHub Packages, or `mavenLocal()`)
+  - Koin 3.5.6 - dependency injection
+  - Koog 1.1.1 - LLM agent framework, used by `:dispatcher-agent`
   - JUnit 5.11.4 (from Maven Central)
-  - AssertJ 3.27.6 (from Maven Central)
-  - MockK 1.13.14 (from Maven Central) - Kotlin-native mocking for sealed classes
-  - Mockito 5.21.0 (from Maven Central) - being phased out
+  - assertk 0.28.1 - assertions
+  - MockK 1.13.14 - Kotlin-native mocking for sealed classes
+  - Burst 2.12.2 and Mokkery 3.3.0 - multiplatform test parameterization and mocking
 
 ### Optional (for thesis documentation):
 - LaTeX, gnuplot, make, wmf2eps, sed
@@ -179,12 +181,19 @@ Linux does not exist on Windows.
 | `./gradlew build` | Compile all sources, run tests, create JAR (build fails if tests fail) |
 | `./gradlew test` | Run unit tests only |
 | `./gradlew integrationTest` | Run integration tests |
-| `./gradlew jmh` | Run JMH performance benchmarks (see `src/jmh/kotlin/README.md`) |
+| `./gradlew heavyTest` | Run high-repetition stress tests. Manual only, never in CI |
+| `./gradlew jmh` | Run JMH performance benchmarks (see `desktop-ui/src/jmh/kotlin/README.md`) |
+| `./gradlew detekt` | Static analysis |
+| `./gradlew ktlintCheck` / `ktlintFormat` | Check or apply Kotlin formatting |
+| `./gradlew jacocoTestReport` | Coverage report |
 | `./gradlew clean` | Remove build artifacts |
 | `./gradlew shadowJar` | Create uber JAR file with all dependencies |
 | `./gradlew runSim` | Run pre-configured shunting loop simulation |
 | `./gradlew runEditor` | Launch graphical editor |
 | `./gradlew runExample` | Run custom example with parameters |
+| `./gradlew runExampleGui` | Run an example in the animated GUI |
+| `./gradlew runExampleAIGui` | Run the LLM-dispatcher example in the animated GUI (needs Ollama) |
+| `./gradlew runSimFromXml` | Run a simulation from an XML file |
 | `./gradlew javadoc` | Generate JavaDoc documentation |
 
 **Note:** Dependencies are automatically downloaded during build via Gradle. On Windows, use `gradlew.bat` instead of `./gradlew`.
@@ -203,7 +212,7 @@ Open the track editor to design railway layouts:
 
 Or manually (after building):
 ```bash
-java -jar build/libs/interlockSim.jar edit [xmlFile]
+java -jar desktop-ui/build/libs/interlockSim.jar edit [xmlFile]
 ```
 
 ![InterlockSim Editor](text/img/Screenshot%20at%202026-01-03%2009-09-58.png)
@@ -215,7 +224,7 @@ java -jar build/libs/interlockSim.jar edit [xmlFile]
 Run a simulation from an XML configuration file:
 
 ```bash
-java -jar build/libs/interlockSim.jar sim [xmlFile]
+java -jar desktop-ui/build/libs/interlockSim.jar sim [xmlFile]
 ```
 
 ### 3. Built-in Examples
@@ -224,20 +233,20 @@ Run pre-configured simulation scenarios:
 
 ```bash
 # List all available examples
-java -jar build/libs/interlockSim.jar example
+java -jar desktop-ui/build/libs/interlockSim.jar example
 
-# Run shunting loop example for 300 time units
-java -jar build/libs/interlockSim.jar example shuntingLoop 300
+# Run shunting loop example for 1024 time units
+java -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
 **Quick example:**
 ```bash
-# Build and run shunting yard simulation (5 minutes model time)
+# Build and run shunting yard simulation (1024 seconds model time)
 ./gradlew clean build
-java -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
-### 4. Animated GUI Simulation (NEW in 2026)
+### 4. Animated GUI Simulation
 
 **AnimatedSim Milestone** - Real-time visual simulation with animated trains and event logging.
 
@@ -248,7 +257,7 @@ Run simulation examples with animated GUI:
 ./gradlew runExampleGui
 
 # Or manually after building
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
+java -jar desktop-ui/build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 ![AnimatedSim GUI](text/img/Screenshot%20at%202026-02-04%2013-47-30.png)
@@ -273,14 +282,14 @@ java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
 **Example Usage:**
 
 ```bash
-# Run with default settings (shunting loop, 300 time units)
+# Run with default settings (shunting loop, 1024 time units)
 ./gradlew runExampleGui
 
 # Run specific example with custom duration
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 600
+java -jar desktop-ui/build/libs/interlockSim.jar exampleGui shuntingLoop 600
 
 # Docker users
-docker compose run app java -jar interlockSim.jar exampleGui shuntingLoop 300
+docker compose run app java -jar interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 **Performance:**
@@ -299,55 +308,68 @@ See `docs/IMPLEMENTATION_SUMMARY_ISSUE_205.md` for detailed architecture documen
 ### Command-Line Synopsis
 
 ```
-java -jar build/libs/interlockSim.jar (sim|edit|example|exampleGui) [arguments]
+java -jar desktop-ui/build/libs/interlockSim.jar (sim|simgui|edit|example|exampleGui|aiSweep) [arguments]
 ```
 
 **Modes:**
-- `sim [file.xml]` - Run simulation from XML file
+- `sim [file.xml]` - Run simulation from XML file (console output)
+- `simgui [file.xml]` - Run simulation from XML file with the animated GUI
 - `edit [file.xml]` - Open editor (optionally load file)
 - `example [name] [endTime]` - Run built-in example (console output)
-- `exampleGui [name] [endTime]` - Run built-in example with animated GUI ⭐ NEW
+- `exampleGui [name] [endTime]` - Run built-in example with animated GUI
+- `aiSweep --grid <grid.json> [--out <dir>] [--dry-run]` - Run the dispatcher reliability sweep.
+  Manual only, never in CI; the LLM arm needs a live Ollama. No grid files are committed —
+  write the grid for the campaign you run. See CLAUDE.md for an example grid.
 
-**Note:** For memory-constrained environments, add `-Xmx300`.
+**Note:** For memory-constrained environments, add `-Xmx300m`.
 
 ---
 
 ## Project Structure
 
+The project is a multi-module Gradle build. All production code is Kotlin.
+
 ```
 interlockSim/
-├── build.gradle.kts       # Gradle build configuration (Kotlin DSL)
-├── settings.gradle.kts    # Gradle settings
-├── gradle.properties      # Version management
+├── build.gradle.kts       # Root build script (thin aggregator)
+├── settings.gradle.kts    # Subprojects: :core, :core-test, :dispatcher-agent,
+│                          #              :desktop-ui, and :fast-sim on Linux hosts
+├── gradle.properties      # Dependency versions
 ├── gradle/                # Gradle wrapper files
-├── src/
-│   ├── main/
-│   │   ├── java/cz/vutbr/fit/interlockSim/
-│   │   │   ├── Main.java      # Application entry point
-│   │   │   ├── context/       # Simulation context management
-│   │   │   ├── gui/           # Swing-based editor
-│   │   │   ├── objects/       # Domain model (tracks, cells, paths)
-│   │   │   ├── sim/           # Simulation scenarios
-│   │   │   ├── xml/           # XML parsing/serialization
-│   │   │   └── util/          # Utilities
-│   │   └── resources/cz/vutbr/fit/interlockSim/resource/
-│   │       ├── data.xsd       # XML schema
-│   │       ├── vyhybna.xml    # Example configuration
-│   │       └── logback.xml    # Logging configuration
-│   └── test/
-│       └── java/cz/vutbr/fit/interlockSim/
-│           ├── context/       # Context and serialization tests
-│           ├── sim/           # Simulation scenario tests
-│           ├── util/          # Utility class tests
-│           ├── testutil/      # Test utilities and builders
-│           └── xml/           # XML parsing tests
-├── kdisco/                # kDisco library (separate Maven module, Java 6)
-├── build/                 # Build output
-│   ├── classes/java/main/ # Compiled main classes
-│   ├── classes/java/test/ # Compiled test classes
-│   ├── libs/              # JAR artifacts
-│   ├── reports/           # Test and coverage reports
-│   └── test-results/      # Test results
+│
+├── core/                  # KMP :core - domain model, simulation engine, XML
+│   └── src/
+│       ├── commonMain/kotlin/cz/vutbr/fit/interlockSim/
+│       │   ├── context/   # Simulation and editing contexts
+│       │   ├── objects/   # Domain model (tracks, cells, paths)
+│       │   ├── sim/       # Simulation scenarios and engine
+│       │   ├── pathfinding/, ports/, domain/, di/, util/, xml/
+│       ├── commonMain/resources/cz/vutbr/fit/interlockSim/resource/
+│       │   ├── data.xsd       # XML schema
+│       │   └── vyhybna.xml    # Example configuration
+│       ├── commonTest/, jvmTest/   # Tests
+│       ├── jvmMain/       # JVM actuals (XML parsing, factories)
+│       │   └── resources/logback.xml   # Logging configuration
+│       └── nativeMain/, nativeInterop/ # linuxX64 actuals, libxml2 interop
+│
+├── core-test/             # KMP :core-test - shared test fixtures (TestFixtures)
+├── dispatcher-agent/      # JVM :dispatcher-agent - Goal 10 dispatcher
+│   └── src/main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/
+│       ├── agents/, executor/, planner/, observation/, sweep/, di/
+│
+├── desktop-ui/            # JVM :desktop-ui - GUI and application entry point
+│   └── src/
+│       ├── main/kotlin/cz/vutbr/fit/interlockSim/
+│       │   ├── Main.kt            # Application entry point
+│       │   ├── AppMetadata.kt     # Name, version, window titles
+│       │   ├── ExampleRegistry.kt # Built-in examples
+│       │   └── gui/, di/
+│       ├── test/kotlin/   # Desktop tests
+│       ├── jmh/kotlin/    # JMH benchmarks
+│       └── build/libs/interlockSim.jar   # Packaged application
+│
+├── fast-sim/              # Native :fast-sim - linuxX64 CLI binary
+├── docs/                  # Architecture docs
 ├── text/                  # LaTeX thesis source
 └── .github/workflows/     # CI/CD workflows
 ```
@@ -363,8 +385,8 @@ Railway networks are defined using XML with the following elements:
 - `<InOut>` - Entry and exit points
 - Track connections with spatial coordinates
 
-**Example configuration:** `src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml`
-**XML Schema:** `src/main/resources/cz/vutbr/fit/interlockSim/resource/data.xsd`
+**Example configuration:** `core/src/commonMain/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml`
+**XML Schema:** `core/src/commonMain/resources/cz/vutbr/fit/interlockSim/resource/data.xsd`
 
 ---
 
@@ -491,8 +513,8 @@ The application uses SLF4J with Logback for comprehensive logging of simulation 
 
 ### Log Configuration
 
-**Main application:** `src/main/resources/logback.xml`
-**kDisco tests:** `kdisco/src/test/resources/simplelogger.properties`
+**Main application:** `core/src/jvmMain/resources/logback.xml`
+**Sweep runs:** `desktop-ui/src/main/resources/logback-sweep.xml`
 
 ### Log Levels
 
@@ -507,7 +529,7 @@ Available log levels (from most to least verbose):
 
 **Method 1: Edit logback.xml (recommended for development)**
 
-Edit `src/main/resources/logback.xml`:
+Edit `core/src/jvmMain/resources/logback.xml`:
 
 ```xml
 <!-- Change root logger level (affects all loggers) -->
@@ -523,7 +545,7 @@ Edit `src/main/resources/logback.xml`:
 **Method 2: System property (runtime override)**
 
 ```bash
-java -Dlogback.level=DEBUG -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+java -Dlogback.level=DEBUG -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 1024
 ```
 
 **Method 3: Environment variable (Docker)**
@@ -553,13 +575,18 @@ The following loggers are pre-configured in `logback.xml`:
 
 ## Testing
 
-Comprehensive JUnit 5.11.4 test suite with AssertK 0.28.1 assertions located in `src/test/kotlin/cz/vutbr/fit/interlockSim/`.
+Comprehensive JUnit 5.11.4 test suite with assertk 0.28.1 assertions. Tests live in each
+subproject: `core/src/{commonTest,jvmTest}/kotlin/`, `desktop-ui/src/test/kotlin/`,
+`dispatcher-agent/src/test/kotlin/` and `fast-sim/src/linuxX64Test/kotlin/`.
 
-**Test coverage statistics (February 2026):**
+**Test coverage statistics, last counted February 2026:**
 - **1840 tests total** (1836 passing, 4 skipped, 0 failing)
 - **51% code coverage** (8,824/17,070 instructions covered)
 - **145 test classes** across 6 expansion phases
-- **+1598 tests added** in test coverage expansion initiative (baseline: 242 tests → 1840 tests)
+
+That count predates the `:core-test`, `:dispatcher-agent` and `:fast-sim` subprojects, so it is
+a floor, not the current figure. For the current numbers run `./gradlew test jacocoTestReport`,
+or read the CI coverage artifact (see "Test Coverage" below).
 
 **Coverage by package:**
 - objects.tracks/ - 85% (excellent), xml/ - 85% (excellent)
@@ -594,7 +621,7 @@ Run tests:
 
 Tests are automatically executed during the build process. The build will fail if any test fails.
 
-**Performance Benchmarks**: JMH benchmarks are available in `src/jmh/` for accurate performance measurements. See `src/jmh/kotlin/README.md` for details.
+**Performance Benchmarks**: JMH benchmarks are available in `desktop-ui/src/jmh/` for accurate performance measurements. See `desktop-ui/src/jmh/kotlin/README.md` for details.
 
 ---
 
@@ -603,7 +630,7 @@ Tests are automatically executed during the build process. The build will fail i
 ### Project Documentation
 
 - **`CLAUDE.md`** - Comprehensive development guide (build, test, architecture)
-- **`STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md`** - Complete static/dynamic separation architecture with diagrams
+- **`docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md`** - Complete static/dynamic separation architecture with diagrams
 - **`docs/CONTEXT_REFACTORING_DESIGN.md`** - Context refactoring and factory pattern design
 - **`docs/FACTORY_PATTERN_IMPLEMENTATION.md`** - Factory pattern implementation summary
 - **`docs/KOTLIN_STYLE_GUIDE.md`** - Kotlin coding standards and detekt configuration
@@ -628,19 +655,20 @@ Generate JavaDoc:
 ./gradlew javadoc
 ```
 
-Output: `build/docs/javadoc/` directory
+Output: `desktop-ui/build/docs/javadoc/` directory
 
 ---
 
 ## Future Development
 
-The project currently uses **kDisco** (2004, no longer maintained). Research has identified modern alternatives for potential migration:
+The simulation engine is **kDisco**, a Kotlin discrete-event library maintained in its own
+repository at https://github.com/bedaHovorka/kdisco. It replaced the 2004 jDisco library on
+2026-03-20.
 
-- **DSOL** - Combined discrete-continuous simulation (Java 17+, actively maintained)
-- **Kalasim** - Discrete event simulation (Kotlin-native with coroutines)
-- **SSJ** - Stochastic simulation (Université de Montréal)
-
-See `jdisco-research.md` for comprehensive analysis.
+**There is no planned migration to another simulation framework.** An earlier road map had a
+second phase that would swap kDisco for Kalasim; that plan is dropped (owner decision,
+2026-08-24). `docs/jdisco-research.md` and `docs/SIMULATION_LIBRARY_DECISION_ROUND2.md` record
+the framework research and the decision as it stood then. Read them as history.
 
 ---
 
@@ -660,9 +688,9 @@ Research use only
 
 This repository includes:
 
-- Complete Java source code (interlockSim + kDisco library)
+- Complete Kotlin source code (multi-module; kDisco is an external dependency)
 - Gradle build system with Kotlin DSL
-- Comprehensive JUnit 5 test suite (237 tests)
+- Comprehensive JUnit 5 test suite
 - XML schemas and example configurations
 - Docker support for containerized builds
 - GitHub Actions CI/CD workflows
@@ -684,10 +712,8 @@ View workflow status: [GitHub Actions](https://github.com/bedaHovorka/interlockS
 
 ### Test Coverage
 
-**Current Status:**
-- **662 tests** (628 passing, 34 skipped, 0 failing)
-- **51% code coverage** (8,824/17,070 instructions covered)
-- **36 test classes** with comprehensive unit and integration tests
+The authoritative figure is the CI coverage artifact, not this file. See "Testing" above for
+the last recorded count and how to measure the current one.
 
 **Coverage Reports:**
 - JaCoCo reports generated with every build
@@ -711,7 +737,13 @@ See:
 
 ## Contact & References
 
-**Project:** Railway Interlocking Simulator (InterlockSim v0.1-bachelor)
+**Project:** Railway Interlocking Simulator (InterlockSim 0.2)
+
+*Version note:* `0.2` is the application version, defined by `PROGRAM_VERSION` in
+`desktop-ui/src/main/kotlin/cz/vutbr/fit/interlockSim/AppMetadata.kt`, and it is what the
+window title shows. The `version=1.0` in `gradle.properties` is the artifact version of the
+Gradle modules; the two are separate on purpose.
+
 **Institution:** Brno University of Technology, Faculty of Information Technology
 **Year:** 2006/2007
 

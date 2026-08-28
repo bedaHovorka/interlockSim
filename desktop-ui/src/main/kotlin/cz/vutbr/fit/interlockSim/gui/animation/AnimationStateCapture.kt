@@ -9,13 +9,15 @@
  */
 package cz.vutbr.fit.interlockSim.gui.animation
 
-import cz.hovorka.kdisco.DiscoException
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.DiscoException
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -348,17 +350,30 @@ object AnimationStateCapture {
 	/**
 	 * Capture state of a single semaphore.
 	 *
-	 * Extracts current signal indication from dynamic wrapper.
+	 * Extracts the direction-aware signal indication from the dynamic wrapper. The canvas shows a
+	 * semaphore from its static forward-facing side, so the guard keeps only aspects authorized
+	 * for the semaphore's facing (forward) direction — `isAllowingFor(anti(direction()),
+	 * direction())` — and reports [Signal.STOP] for an aspect that was cleared for the opposite
+	 * (reverse) reservation direction (or not cleared at all).
+	 *
+	 * The guard is meaningful only because [DynamicRailSemaphore.isAllowingFor] compares against
+	 * the **stored reservation direction** (recorded by `setUpSpeed`), not the static orientation:
+	 * a forward query against a reverse-reserved proceed aspect correctly returns false, so the
+	 * forward-facing canvas paints it RED instead of the false GREEN. (Under the PR's original
+	 * static-orientation guard this query was a no-op.)
 	 *
 	 * @param dynamicSemaphore Dynamic semaphore wrapper with current state
 	 * @return Immutable signal state snapshot
+	 * @since Issue #812 (direction-aware signal display)
 	 */
 	private fun captureSignalState(dynamicSemaphore: DynamicRailSemaphore): SignalState {
-		val signal = dynamicSemaphore.signal
+		val d = dynamicSemaphore.direction()
+		val effectiveSignal =
+			if (dynamicSemaphore.isAllowingFor(anti(d), d)) dynamicSemaphore.signal else Signal.STOP
 
 		return SignalState(
 			semaphore = dynamicSemaphore.staticRef,
-			signal = signal
+			signal = effectiveSignal
 		)
 	}
 

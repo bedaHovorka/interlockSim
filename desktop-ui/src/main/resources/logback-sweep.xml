@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logging configuration for a child run of the `aiSweep` driver (SP2c.24, Issue #847).
+
+  Applied only to forked sweep runs, via `-Dlogback.configurationFile=logback-sweep.xml`. Nothing
+  else in the project uses it, and the normal `logback.xml` is untouched.
+
+  Two things about the default configuration make it unusable for an unattended multi-hour sweep,
+  and both are fixed here rather than worked around in the driver:
+
+  1. `DefaultTrainNavigationService` and its neighbours log per train per tick at INFO. A single
+     600 s `shuntingLoopAI` run emits several hundred megabytes; twenty of them would have been
+     ~11 GB, which on this project's default `/tmp` is RAM. Root is therefore WARN, and only the
+     loggers whose output the sweep actually reads are lifted back to INFO.
+  2. `logback.xml`'s FILE appender writes `logs/interlockSim.log` in append mode with no rotation,
+     so every run in a sweep would pile into one ever-growing shared file — the exact hazard #893's
+     reproduction section warns about. There is no file appender here; the driver redirects each
+     child's output to its own per-run file next to the run's JSON.
+
+  What stays at INFO is exactly what makes a run legible after the fact: the dispatcher and its
+  measurement layer. Everything else is available by re-running the case with the default config.
+-->
+<configuration>
+	<appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+		<encoder>
+			<pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+		</encoder>
+	</appender>
+
+	<!-- The dispatcher agent, its tools, its planner and the run recorder. -->
+	<logger name="cz.vutbr.fit.interlockSim.dispatcher" level="INFO"/>
+
+	<!-- End-of-run summaries: planner totals, orphan reclamations, decision rate, run JSON path. -->
+	<logger name="cz.vutbr.fit.interlockSim.DispatcherRunSummaries" level="INFO"/>
+	<logger name="cz.vutbr.fit.interlockSim.Main" level="INFO"/>
+
+	<!-- Trains entering, exiting and being approved — the outcome the sweep is measuring. -->
+	<logger name="cz.vutbr.fit.interlockSim.sim.ShuntingLoop" level="INFO"/>
+	<logger name="cz.vutbr.fit.interlockSim.sim.TextReporter" level="INFO"/>
+
+	<root level="WARN">
+		<appender-ref ref="CONSOLE"/>
+	</root>
+</configuration>

@@ -80,6 +80,23 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 	}
 
 	/**
+	 * Two distinct real blocks, for scenarios where a train holds more than one reservation.
+	 *
+	 * Uses the shunting fixture rather than [NetworkResources.LINEAR_TRACK_XML], whose single block
+	 * cannot express "released one reservation, still holds another".
+	 */
+	private fun realBlockPair(): Pair<DynamicTrackBlock, DynamicTrackBlock> {
+		val ctx =
+			CommonTestFixtures.parseSimulationContext(
+				NetworkResources.VYHYBNA_XML,
+				DefaultSimulationProcessFactory()
+			)
+		context = ctx
+		val blocks = ctx.getGraph().values().toList()
+		return blocks[0] to blocks[1]
+	}
+
+	/**
 	 * Get a real [DefaultSimulationContext] built from [NetworkResources.LINEAR_TRACK_XML].
 	 *
 	 * The linear-track fixture has exactly one track block, so `getGraph().size() == 1`.
@@ -131,17 +148,154 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		assertThat(service.getSnapshot().conflictCount).isEqualTo(2)
 	}
 
+	// ── Leaked reservations (Issue #936) ──────────────────────────────────────
+
+	@Test
+	fun `a clean journey leaves no train holding reservations`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.OccupancyCleared(block, time = 19.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 20.0))
+
+		assertThat(service.getSnapshot().trainsHoldingReservations).isZero()
+		assertThat(service.getSnapshot().completedTrains).isEqualTo(1)
+	}
+
+	/**
+	 * Issue #936: the failure this gauge exists to catch. A full-span route grant reserves blocks
+	 * the train never traverses, so its reservation count never drains to zero — the journey is
+	 * never credited and the blocks stay held for the rest of the run. The train is invisible in
+	 * every other metric: `completedTrains` simply fails to increment.
+	 */
+	@Test
+	fun `a train whose reservations are never released is reported as holding them`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockOne, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockTwo, "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockOne, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.OccupancyCleared(blockOne, time = 19.0))
+		// blockTwo is never released — the reservation leaks.
+		service.handleBlockEvent(BlockEvent.BlockReleased(blockOne, "T1", time = 20.0))
+
+		assertThat(service.getSnapshot().trainsHoldingReservations).isEqualTo(1)
+		assertThat(service.getSnapshot().completedTrains).isZero()
+	}
+
+	/**
+	 * A train is briefly between blocks whenever its tail clears one before its front occupies the
+	 * next, so physical occupancy is not a usable "train has left" signal. The gauge counts trains
+	 * with outstanding *reservations*, which is unaffected by that transient — one train mid-journey
+	 * must read as one, never two.
+	 */
+	@Test
+	fun `a train between blocks is counted once and not twice`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockOne, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockTwo, "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockOne, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.OccupancyCleared(blockOne, time = 19.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockTwo, NamedOccupant("T1"), time = 20.0))
+
+		assertThat(service.getSnapshot().trainsHoldingReservations).isEqualTo(1)
+	}
+
+	@Test
+	fun `reportUnreleasedReservations names the trains still holding blocks`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockOne, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockTwo, "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockOne, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(blockOne, "T1", time = 20.0))
+
+		assertThat(service.reportUnreleasedReservations()).isEqualTo(setOf("T1"))
+	}
+
+	@Test
+	fun `reportUnreleasedReservations is empty after a clean journey`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 20.0))
+
+		assertThat(service.reportUnreleasedReservations()).isEqualTo(emptySet())
+	}
+
 	// ── Train completion (throughput) ─────────────────────────────────────────
 
 	@Test
-	fun `BlockReleased after BlockReserved increments completedTrains when reservation count reaches zero`() {
+	fun `BlockReleased after BlockReserved increments completedTrains only when train has physically moved`() {
 		val service = DefaultMetricsCollectionService()
 		val block = realBlock()
 
 		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
 		assertThat(service.getSnapshot().completedTrains).isZero()
 
+		// Train physically enters the block — now it qualifies as having moved.
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
 		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 20.0))
+		assertThat(service.getSnapshot().completedTrains).isEqualTo(1)
+	}
+
+	@Test
+	fun `BlockReleased without OccupancySet does not increment completedTrains - orphan-release scenario`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		// Train reserves a route but never physically enters any block
+		// (simulates OrphanReservationSweeper reclaiming a stale route).
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 50.0))
+
+		assertThat(service.getSnapshot().completedTrains).isZero()
+	}
+
+	@Test
+	fun `mid-journey train that reserved and moved but was not released does not increment completedTrains`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		// Train reserves a block and physically enters it, but no BlockReleased
+		// has arrived yet — it is still mid-journey. movedTrains membership alone
+		// is insufficient to credit a completed journey; the reservation count
+		// must also drop to zero.
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
+
+		assertThat(service.getSnapshot().completedTrains).isZero()
+	}
+
+	@Test
+	fun `completedTrains counts each train at most once per journey - no double-counting on re-release`() {
+		val service = DefaultMetricsCollectionService()
+		val blockA = realBlock()
+		val blockB = realBlock()
+
+		// Train T1 reserves two blocks, physically enters one, then releases both.
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockA, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.BlockReserved(blockB, "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockA, NamedOccupant("T1"), time = 3.0))
+		service.handleBlockEvent(BlockEvent.BlockReleased(blockA, "T1", time = 10.0))
+		// count is now 1 (one block still reserved) — must not increment yet
+		assertThat(service.getSnapshot().completedTrains).isZero()
+		service.handleBlockEvent(BlockEvent.BlockReleased(blockB, "T1", time = 11.0))
+		// count drops to 0 — train is completed once
+		assertThat(service.getSnapshot().completedTrains).isEqualTo(1)
+
+		// Simulate an extra stale-route release arriving for the same train ID after
+		// it already completed (e.g. a race between sweeper and normal teardown).
+		service.handleBlockEvent(BlockEvent.BlockReleased(blockA, "T1", time = 99.0))
+		// Must not increment again — each journey is counted at most once.
 		assertThat(service.getSnapshot().completedTrains).isEqualTo(1)
 	}
 
@@ -153,6 +307,8 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 
 		service.handleBlockEvent(BlockEvent.BlockReserved(blockA, "T1", time = 1.0))
 		service.handleBlockEvent(BlockEvent.BlockReserved(blockB, "T1", time = 2.0))
+		// Train physically enters block A
+		service.handleBlockEvent(BlockEvent.OccupancySet(blockA, NamedOccupant("T1"), time = 3.0))
 		service.handleBlockEvent(BlockEvent.BlockReleased(blockA, "T1", time = 10.0))
 
 		// Only one of two blocks released — should not be counted as complete yet
@@ -168,6 +324,7 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		val block = realBlock()
 
 		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 5.0))
 		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 100.0))
 
 		val snap = service.getSnapshot()
@@ -273,10 +430,11 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		service.onSnapshot { received.add(it) }
 
 		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 3.0))
 		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 5.0))
 
-		assertThat(received.size).isEqualTo(2)
-		// After release, train is complete
+		assertThat(received.size).isEqualTo(3)
+		// After release (and after physically moving), train is complete.
 		assertThat(received.last().completedTrains).isEqualTo(1)
 	}
 

@@ -24,15 +24,15 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.SimulationEvent
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
+import cz.vutbr.fit.interlockSim.testutil.IntegrationKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -70,9 +70,7 @@ private val logger = KotlinLogging.logger {}
  */
 @Tag("integration-test")
 @DisplayName("Phase 4.1 — Golden Output: Speed Control Semantics")
-class SimulationSpeedGoldenTest : KoinTestBase() {
-	override fun getTestModule(): Module = integrationTestModule
-
+class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	// ---- Data types --------------------------------------------------------
 
 	/**
@@ -145,6 +143,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 					enableRealTimeSync = enableRealTimeSync,
 					initialSpeedMultiplier = speedMultiplier
 				)
+			wireSynchronousDispatcher(context, loop)
 			context.setMainProcess(loop)
 			context.run()
 
@@ -204,8 +203,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 			context.getInOuts()
 			context.addPropertyChangeListener(listener)
 
-			val loop = ShuntingLoop(context, END_TIME_SECONDS)
-			context.setMainProcess(loop)
+			val loop = prepareShuntingLoop(context, END_TIME_SECONDS)
 
 			val runner = SimulationRunner(context)
 			runner.speedMultiplier = runnerSpeed
@@ -450,7 +448,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 	/**
 	 * **The [Generator] produces identical train-generation sequences across independent runs.**
 	 *
-	 * [Generator] uses a [cz.hovorka.kdisco.Random] seeded with `0L` and inter-arrival
+	 * [Generator] uses a [cz.ksimulantenbande.kdisco.Random] seeded with `0L` and inter-arrival
 	 * distribution `exp(43.0)`. Two independent runs from the same seed must produce
 	 * identical event timestamps, event types, and all train-lifecycle metrics.
 	 *

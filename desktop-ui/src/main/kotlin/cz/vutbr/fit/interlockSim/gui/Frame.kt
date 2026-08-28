@@ -9,18 +9,27 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
+import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
+import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.koin.core.scope.Scope
 import java.awt.BorderLayout
 import java.awt.Toolkit
 import java.awt.event.ComponentAdapter
@@ -105,6 +114,21 @@ import javax.swing.Timer
  * @see switchToSimulationMode
  */
 class Frame : JFrame(PROGRAM_FULL_NAME) {
+	/**
+	 * Base window title, without the file name and dirty marker (Issue #839).
+	 *
+	 * Defaults to [PROGRAM_FULL_NAME]. The GUI launch path replaces it with
+	 * [cz.vutbr.fit.interlockSim.PROGRAM_LLM_FULL_NAME] when the run is driven by the LLM
+	 * dispatcher, so the title bar alone says which dispatcher arm is deciding.
+	 *
+	 * Must be set on the EDT, like every other public member of this class.
+	 */
+	var appTitle: String = PROGRAM_FULL_NAME
+		set(value) {
+			field = value
+			updateTitle()
+		}
+
 	val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
 	internal val statusBar: StatusBar = StatusBar()
 	private val toolBar: ToolBar = ToolBar()
@@ -114,6 +138,42 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	internal val simulationControlPanel: SimulationControlPanel = SimulationControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
+
+	// Dispatcher control panel (Issue #561, Goal 10 SP2b.6)
+	internal val dispatcherControlPanel: DispatcherControlPanel = DispatcherControlPanel()
+
+	// Decision-listener hub wired to the active context's Koin scope (Issue #561, SP2b.6).
+	// Held so the STOPPED transition can detach the sink and stop the sim thread from
+	// pushing applied decisions into a stale panel.
+	private var wiredDecisionHub: DispatchDecisionListenerHub? = null
+
+	// SEMI_AUTO approval gateway wired to the active context's Koin scope (Issue #806, SP2b.6 follow-up).
+	// Held so the STOPPED transition can detach the approver and prevent the sim thread from
+	// calling a stale dialog after the GUI is torn down.
+	private var wiredSemiAutoGateway: SemiAutoApprovalGateway? = null
+
+	// MeasuringPlanAdapter wired to the active context's Koin scope, captured at RUNNING time
+	// (Issue tracking: none — internal polish from final review) so the STOPPED transition
+	// logs metrics for the run that just ended, not whatever context happens to be current
+	// when STOPPED is (asynchronously) delivered on the EDT. Only the shuntingLoopAI example
+	// registers one; every other example leaves this null.
+	private var wiredMeasuringAdapter: MeasuringPlanAdapter? = null
+
+	// DispatcherRunRecorder wired to the active context's Koin scope, captured at RUNNING time
+	// (SP2c.22, Issue #845) so the STOPPED transition calls finish() and logFinalSummary() for
+	// the run that just ended. Present for any context that has one scoped (all contexts with
+	// the dispatcherAgentModule wired). Null for contexts without the dispatcher module.
+	private var wiredRunRecorder: DispatcherRunRecorder? = null
+
+	/**
+	 * Koin scope of the run captured at RUNNING, used at STOPPED to persist the run snapshot.
+	 *
+	 * Captured alongside [wiredRunRecorder] and for the same reason: the current context may have
+	 * changed by the time STOPPED fires, and the snapshot must belong to the run that just ended.
+	 *
+	 * @since Issue #847 round 4 (PR #891 — R4-5)
+	 */
+	private var wiredRunScope: Scope? = null
 
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
@@ -172,19 +232,85 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	internal val simulationController: SimulationController =
 		SimulationController(
 			onStateChanged = { state ->
+				// Read synchronously, on the calling thread, before any hand-off to the EDT
+				// (see SimulationController.lastStopWasNatural kdoc for why this ordering is
+				// race-free): captures which RunEndCause produced this STOPPED transition.
+				val runEndCause =
+					if (simulationController.lastStopWasNatural) {
+						RunEndCause.NATURAL_COMPLETION
+					} else {
+						RunEndCause.MANUAL_STOP
+					}
 				runOnEdt {
 					when (state) {
 						SimulationController.SimulationStatus.RUNNING -> {
 							toolBar.showSimulationControls()
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 							controlPanel.setStopEnabled(true)
+							// Capture now so the STOPPED transition logs metrics for the run that just
+							// ended, not whatever context happens to be current when STOPPED fires.
+							wiredMeasuringAdapter = currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()
+							// SP2c.22 (#845): capture DispatcherRunRecorder at RUNNING so the STOPPED
+							// transition can call finish() and logFinalSummary() for this specific run.
+							wiredRunRecorder = currentSimulationContext?.scope?.getOrNull<DispatcherRunRecorder>()
+							// Issue #847 round 4 (R4-5): capture the scope alongside the recorder so
+							// STOPPED can also persist the run snapshot. Until round 4 the GUI called
+							// finish() but nothing ever wrote the result, and nothing fed onTick or
+							// onActionOutcome — so what it froze and discarded was an all-zero snapshot.
+							wiredRunScope = currentSimulationContext?.scope
+							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
+							wireDispatcherControlPanel()
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
 							toolBar.hideSimulationControls()
 							simulationControlPanel.runner = null
+							// Detach the decision sink first so the sim thread can no longer push
+							// applied decisions into the panel, then clear panel state (Issue #561).
+							wiredDecisionHub?.setSink(null)
+							wiredDecisionHub = null
+							// Detach the SEMI_AUTO approver so the sim thread cannot call a stale
+							// dialog after the GUI is torn down (Issue #806, SP2b.6 follow-up).
+							wiredSemiAutoGateway?.setApprover(null)
+							wiredSemiAutoGateway = null
+							dispatcherControlPanel.modeState = null
+							dispatcherControlPanel.clearRationale()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
+							// ended (captured at RUNNING time above). Null for every example except
+							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
+							// Placed last so a failure here can never skip the safety-motivated
+							// detach calls above.
+							wiredMeasuringAdapter?.logFinalSummary()
+							wiredMeasuringAdapter = null
+							// SP2c.22 (#845): finish the run recorder and log its final summary.
+							// runEndCause was captured above, before this runOnEdt block, from
+							// SimulationController.lastStopWasNatural — see that property's kdoc for
+							// why the read is race-free with respect to which thread produced this
+							// STOPPED transition (manual stop() vs. the monitor thread's natural
+							// completion path both reach the identical STOPPED emission here).
+							// Round 4 (R4-5): finishAndPersist performs finish() + logFinalSummary() and
+							// then writes the snapshot under build/reports/dispatcher-runs/<arm>/, giving
+							// SP2c.23's aggregator (#846) a producer. Until round 4 the GUI called finish()
+							// but nothing wrote the result, and nothing fed onTick/onActionOutcome, so the
+							// frozen snapshot was all zeroes and was then discarded. It is a no-op for a
+							// context that wired no dispatcher, and idempotent per run.
+							// Issue #930: finishAndPersist decides the cause actually recorded — a natural
+							// completion over a railway that achieved nothing becomes STARVED — and hands
+							// it back so the verdict reaches the user instead of only the log file.
+							val runScope = wiredRunScope
+							if (runScope != null) {
+								val persisted = DispatcherRunSummaries.finishAndPersist(runScope, runEndCause)
+								statusBar.setStarvedIndicator(persisted.endCause == RunEndCause.STARVED)
+							} else {
+								// No scope captured (a context set outside the RUNNING transition): fall back to
+								// the recorder alone so the run is still finished and summarised.
+								wiredRunRecorder?.finish(runEndCause)
+								wiredRunRecorder?.logFinalSummary()
+							}
+							wiredRunRecorder = null
+							wiredRunScope = null
 						}
 					}
 				}
@@ -210,7 +336,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 
 	init {
-		setSize(1024, 768)
+		// Height reserves room for the simulation-mode north panels (ToolBar + ControlPanel +
+		// SimulationControlPanel + DispatcherControlPanel, Issue #561). Without the extra
+		// height the DispatcherControlPanel line steals vertical space from the scrollable
+		// RailwayNetGridCanvas, hiding station tracks (PR #801 review comment).
+		setSize(1024, 818)
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE) // Handle close event manually
 		setLayout(BorderLayout())
 		jMenuBar = MenuBar()
@@ -224,6 +354,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		northContainer.add(controlPanel)
 		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(simulationControlPanel)
+		dispatcherControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
+		northContainer.add(dispatcherControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
 		// Route speed changes from SimulationControlPanel through SimulationController so
@@ -320,6 +452,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
 		simulationControlPanel.isVisible = true
+		dispatcherControlPanel.isVisible = true
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
@@ -366,6 +499,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Hide ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = false
 		simulationControlPanel.isVisible = false
+		dispatcherControlPanel.isVisible = false
+		dispatcherControlPanel.modeState = null
+		dispatcherControlPanel.clearRationale()
+		// Detach the SEMI_AUTO approver in case switchToEditingMode is called without a prior
+		// STOPPED transition (e.g. a context swap while the simulation is not running).
+		wiredSemiAutoGateway?.setApprover(null)
+		wiredSemiAutoGateway = null
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
@@ -378,6 +518,116 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
+
+	/**
+	 * Wire the [DispatcherControlPanel] to the active simulation context (Issue #561, SP2b.6).
+	 *
+	 * Resolves four things from the context's Koin scope (when the dispatcher-agent
+	 * module is loaded):
+	 * 1. [cz.vutbr.fit.interlockSim.sim.DispatcherModeState] → drives the panel's mode
+	 *    combo box and indicator.
+	 * 2. [cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub] → the panel's
+	 *    `onModeChanged` callback propagates the operator's selection to
+	 *    [cz.vutbr.fit.interlockSim.sim.DispatcherModeState.setOverride]; the hub's
+	 *    sink feeds every applied [cz.vutbr.fit.interlockSim.sim.DispatchDecision]'s rationale into the panel so
+	 *    the "Why this route?" button can display it.
+	 * 3. The panel's `onRationale` callback → shows the rationale in a dialog.
+	 * 4. [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] → installs a
+	 *    [SemiAutoApprovalDialog]-based blocking approver on the gateway so that
+	 *    decisions in [cz.vutbr.fit.interlockSim.sim.DispatcherMode.SEMI_AUTO] mode
+	 *    wait for the operator to click Approve or Dismiss (Issue #806, SP2b.6 follow-up).
+	 *
+	 * If any lookup fails (e.g. the context is not a [DefaultSimulationContext], or the
+	 * dispatcher-agent module is not loaded) the panel remains disabled but the GUI is
+	 * still functional (backward compatibility).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun wireDispatcherControlPanel() {
+		val runner = simulationController.runner ?: return
+		val simContext = runner.simulationContext
+		// Cast to DefaultSimulationContext is necessary to access the Koin scope.
+		// SimulationContext interface does not expose the scope (by design);
+		// only DefaultSimulationContext provides Koin DI bindings like DispatcherModeState.
+		// This is acceptable because the dispatcher-agent module is only used with
+		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
+		val context = simContext as? DefaultSimulationContext
+		if (context == null) {
+			logger.debug {
+				"Context type ${simContext::class.simpleName} is not DefaultSimulationContext; " +
+					"dispatcher control panel remains disabled (backward compatible)"
+			}
+			return
+		}
+		try {
+			val modeState = context.scope.getOrNull<DispatcherModeState>()
+			if (modeState != null) {
+				dispatcherControlPanel.modeState = modeState
+				// The operator's combo-box selection propagates to the shared DispatcherModeState override.
+				// In SEMI_AUTO mode, the SemiAutoApprovalGateway (wired below) will prompt the
+				// operator to approve or dismiss each decision (Issue #806, SP2b.6 follow-up).
+				dispatcherControlPanel.onModeChanged = { mode -> modeState.setOverride(mode) }
+				// The "Why this route?" button shows the last decision's rationale in a modal dialog.
+				dispatcherControlPanel.onRationale = { rationale ->
+					JOptionPane.showMessageDialog(
+						this@Frame,
+						formatRationale(rationale),
+						"Dispatcher decision rationale",
+						JOptionPane.INFORMATION_MESSAGE
+					)
+				}
+				// The sim-thread applier pushes every applied decision through the hub;
+				// marshal the update onto the EDT before touching the panel.
+				val hub = context.scope.getOrNull<DispatchDecisionListenerHub>()
+				if (hub != null) {
+					hub.setSink { decision ->
+						SwingUtilities.invokeLater {
+							dispatcherControlPanel.updateDecisionRationale(decision)
+						}
+					}
+					wiredDecisionHub = hub
+				} else {
+					logger.debug { "DispatchDecisionListenerHub not available in context scope; rationale button will have no feed" }
+				}
+				// SP2b.6 follow-up (Issue #806): install a blocking SemiAutoApprovalDialog
+				// as the SEMI_AUTO approver. The gateway bridges the sim-thread call to this
+				// EDT-side dialog via SwingUtilities.invokeAndWait inside SemiAutoApprovalDialog.promptOnEdt.
+				// On stop, the STOPPED transition calls setApprover(null) to detach.
+				val semiAutoGateway = context.scope.getOrNull<SemiAutoApprovalGateway>()
+				if (semiAutoGateway != null) {
+					semiAutoGateway.setApprover { decision ->
+						// Called on the sim thread; invokeAndWait hands off to EDT to show modal dialog.
+						SemiAutoApprovalDialog.promptOnEdt(this@Frame, decision)
+					}
+					wiredSemiAutoGateway = semiAutoGateway
+				} else {
+					logger.debug {
+						"SemiAutoApprovalGateway not available in context scope; SEMI_AUTO mode will drop decisions with warning"
+					}
+				}
+			} else {
+				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }
+			}
+		} catch (e: Exception) {
+			logger.debug(e) {
+				"Failed to wire DispatcherModeState to control panel; dispatcher control panel remains disabled " +
+					"(backward compatible)"
+			}
+		}
+	}
+
+	/**
+	 * Format the decision rationale list for the "Why this route?" dialog (Issue #561, SP2b.6).
+	 *
+	 * An empty list (no rationale recorded) yields a single explanatory line; a non-empty
+	 * list is rendered as one bullet line per entry.
+	 */
+	private fun formatRationale(rationale: List<String>): String =
+		if (rationale.isEmpty()) {
+			"No rationale recorded for the last decision."
+		} else {
+			rationale.joinToString("\n") { "• $it" }
+		}
 
 	/**
 	 * Set the railway network context and switch UI mode accordingly.
@@ -582,6 +832,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Clear any stale warnings from a previous run.
 		warningPanel.clearWarnings()
 		statusBar.setWarningIndicator(false)
+		// Same for the previous run's starvation verdict (Issue #930). Cleared here, at start,
+		// and deliberately NOT in stopSimulation(): the verdict is set by the STOPPED transition
+		// and has to stay on screen until the user starts the next run.
+		statusBar.setStarvedIndicator(false)
 		conflictResolutionPanel.clearResolutions()
 
 		try {
@@ -688,9 +942,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		title =
 			if (fileName != null) {
-				"$PROGRAM_FULL_NAME - $fileName$suffix"
+				"$appTitle - $fileName$suffix"
 			} else {
-				PROGRAM_FULL_NAME
+				appTitle
 			}
 	}
 

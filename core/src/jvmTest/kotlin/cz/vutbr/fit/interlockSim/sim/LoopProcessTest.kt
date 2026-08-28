@@ -11,13 +11,12 @@ import assertk.assertThat
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -46,13 +45,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class LoopProcessTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val stream = TestFixtures.loadShuntingXml()
-		return stream
-			.use { s ->
-				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
-			}.also { it.getInOuts() }
-	}
+	private fun loadVyhybnaContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
 
 	// ---------------------------------------------------------------------------
 	// Helpers – concrete LoopProcess subclasses used only inside this test file
@@ -88,7 +82,9 @@ class LoopProcessTest : KoinTestBase() {
 	 * Wraps a target [LoopProcess] as an [Interlocking]-style main process:
 	 * - [startAction] activates the target
 	 * - [iteration] polls time and terminates target + stops simulation when [endTime] is reached
-	 * - [interLoopSleep] holds 1 simulated second (same cadence as [ShuntingLoop])
+	 * - [interLoopSleep] holds 1 simulated second (same as [ShuntingLoop]'s `interLoopSleep`; note
+	 *   that ShuntingLoop's `iteration()` holds another 1.0, making its control step 2.0 s, while
+	 *   this driver's `iteration()` does not hold at all)
 	 */
 	private inner class DriverProcess(
 		env: cz.vutbr.fit.interlockSim.context.SimulationEnvironment,

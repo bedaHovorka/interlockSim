@@ -691,10 +691,10 @@ context.close() // Registry cleaned up automatically
 **Golden Output Validation**:
 ```bash
 # Baseline (before migration)
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=300 > baseline.log
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=1024 > baseline.log
 
 # After migration
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=300 > migrated.log
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=1024 > migrated.log
 
 # Compare (ignore timing variations)
 diff -u baseline.log migrated.log | grep -v "Time:"

@@ -14,11 +14,18 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.sweep.AiSweepDriver
+import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGrid
+import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGridException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.TextReporter
@@ -28,6 +35,7 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.mp.KoinPlatform.getKoin
 import java.io.File
+import kotlin.system.exitProcess
 
 private val logger = KotlinLogging.logger {}
 
@@ -108,10 +116,33 @@ class Main {
 		}
 	}
 
-	fun runExample(args: Array<String>) {
+	/**
+	 * Runs a console example and reports whether it actually finished.
+	 *
+	 * ## Why this returns an outcome (Issue #847 round 3, PR #891 defect C)
+	 *
+	 * Every failure below is caught and logged, and kDisco's `Simulation.run()` returns `true`
+	 * whether it reached the end time or its event queue simply drained. Nothing else on this path
+	 * distinguishes a healthy run from a deadlocked one:
+	 * `ThrottlingSimulationController.requestPause()` is a no-op, so a CRITICAL `CollisionWarning`
+	 * has no observable effect either. Round 2's third verification run ended at simTime 72.0 s of a
+	 * requested 600 s and still exited 0 — and #847's unattended sweep would have counted it as a
+	 * valid data point.
+	 *
+	 * [RunCompletionCheck] compares reached against requested simulated time, and `main` turns the
+	 * result into a process exit code. Reached time is tracked with a listener of this module's own
+	 * rather than read from [TextReporter], whose `lastSimTime` is private and lives in `core/`.
+	 *
+	 * @return [RunOutcome.COMPLETED] if simulated time reached the requested end time;
+	 *   [RunOutcome.TERMINATED_EARLY] if a run started and stopped short of it;
+	 *   [RunOutcome.NOT_STARTED] if no simulation ran at all (bad arguments, unknown example, or an
+	 *   exception). The last is kept distinct because it is not a deadlock and must not be counted
+	 *   as one, and because only [RunOutcome.TERMINATED_EARLY] forces a non-zero process exit.
+	 */
+	fun runExample(args: Array<String>): RunOutcome {
 		if (args.size == 1) {
 			logger.warn { "Available examples: ${exampleRegistry.getAvailableExamples()}\nUsage: example <name> <endTime>" }
-			return
+			return RunOutcome.NOT_STARTED
 		}
 
 		val name = args[1]
@@ -120,27 +151,186 @@ class Main {
 		if (exampleFactory == null) {
 			logger.error { "Unknown example: $name" }
 			logger.warn { "Available examples: ${exampleRegistry.getAvailableExamples()}" }
-			return
+			return RunOutcome.NOT_STARTED
 		}
 
-		try {
+		// Same argument the example factories read for their end time. A missing or unparseable
+		// value leaves the factory to reject it; there is then no run to classify.
+		val requestedEndTime = args.getOrNull(2)?.toDoubleOrNull()
+
+		return try {
 			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
 			val context = exampleFactory(simulationContextFactory, args)
 			val reporter = TextReporter(Verbosity.DEFAULT)
 			context.addPropertyChangeListener(reporter)
+			val simTimeTracker = SimulationTimeTracker()
+			context.addPropertyChangeListener(simTimeTracker)
+			// Issue #847 cleanup pass: an example may declare its own SimulationController in
+			// scope (e.g. createShuntingLoopAIExample's ThrottlingSimulationController, needed
+			// to pace the async LLM planner). Without retrieving it here, run() would silently
+			// default to NoOpSimulationController and the declared controller would never reach
+			// the kDisco kernel loop it was built to pace.
+			val controller = context.scope.getOrNull<SimulationController>() ?: NoOpSimulationController
+			var outcome = RunOutcome.NOT_STARTED
 			context.use {
-				it.run()
+				it.run(controller)
 				reporter.printSummary()
+				// A dispatcher that gave up (AgentDriverLoop.stoppedByFailures) leaves the kDisco
+				// kernel ticking on to the horizon with nobody dispatching, so sim-time alone
+				// would report COMPLETED and the aggregator would count a dead run as a passing
+				// data point. Read inside `use` -- the scope is gone once the context closes.
+				val dispatcherGaveUp = it.scope.getOrNull<AgentDriverLoop>()?.stoppedByFailures == true
+				val reachedSimTime = resolveReachedSimTime(simTimeTracker.lastSimTime, it.lastRunEndTime)
+				outcome = classifyRun(reachedSimTime, requestedEndTime, dispatcherGaveUp)
+				// Issue #847 rounds 3 and 4: report what the dispatcher actually did — routes the
+				// orphan sweeper reclaimed, the planner's final cycle counts, and the
+				// control-tick-to-decision chain. Read inside `use`: the scope is gone once the
+				// context closes. Examples that wire no dispatcher agent report nothing.
+				//
+				// Round 4 (R4-2): logFinalSummary() previously had exactly one caller, the GUI
+				// Frame, so a headless run emitted only the modulo-10 periodic lines — two per run
+				// at the observed cycle counts, and none at the end. #847's sweep is headless by
+				// definition, so every per-run number it needs has to be produced here.
+				DispatcherRunSummaries.log(it.scope)
+				// Round 4 (R4-5): persist the run as JSON so SP2c.23's aggregator (#846) has a
+				// producer. SP2c.22 (#845) deferred the headless finish() to "the sweep driver",
+				// but that driver is #847 — the task blocked on this pipeline producing anything —
+				// so build/reports/dispatcher-runs/ was never created by any run at all.
+				//
+				// TERMINATED_EARLY maps to RunEndCause.TERMINATED_EARLY: a run that stopped short
+				// of its requested horizon is not a natural completion, and #846's pass criterion is
+				// `completedNaturally && !terminalFallbackEngaged && c7Clean`.
+				//
+				// Issue #930: finishAndPersist may downgrade a NATURAL_COMPLETION to STARVED when the
+				// railway achieved nothing. The process exit code is deliberately left alone — it is
+				// already decided above from reached-versus-requested sim time, and a starved run did
+				// reach its horizon. The sweep reads the verdict from the run JSON, not from `$?`.
+				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause())
 			} // context closed after simulation
+			outcome
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Example context creation failed" }
+			RunOutcome.NOT_STARTED
 		} catch (e: SimulationException) {
 			logger.error(e) { "Example simulation failed" }
+			RunOutcome.NOT_STARTED
 		} catch (e: EmptyContextException) {
 			logger.error(e) { "Example simulation could not be started - empty context" }
+			RunOutcome.NOT_STARTED
 		} catch (e: Exception) {
 			logger.error(e) { "Example initialization failed" }
+			RunOutcome.NOT_STARTED
 		}
+	}
+
+	/**
+	 * Runs an unattended parameter sweep over the headless examples (SP2c.24, Issue #847).
+	 *
+	 * The mode itself is thin on purpose: it parses flags, loads the grid and hands both to
+	 * [AiSweepDriver], which lives in `:dispatcher-agent` next to the run recorder and the
+	 * aggregator it drives. The child process's main class is passed in from here rather than
+	 * hardcoded there, so `:dispatcher-agent` keeps knowing nothing about `:desktop-ui`.
+	 *
+	 * ## Exit status
+	 *
+	 * A sweep whose runs *fail* is a successful measurement of a failing arm — that is precisely
+	 * what A4's amended "measured success rate" asks for — so failing runs do not fail the
+	 * process. Only a sweep that could not be *performed* (unreadable or invalid grid, bad flags)
+	 * exits non-zero. The verdict lives in `report.md`, not in `$?`.
+	 *
+	 * @return `true` if the sweep ran, `false` if the command line or grid file was rejected.
+	 */
+	fun runAiSweep(args: Array<String>): Boolean {
+		val command =
+			try {
+				AiSweepCommand.parse(args)
+			} catch (e: AiSweepUsageException) {
+				logger.error { "${e.message}\n${AiSweepCommand.USAGE}" }
+				return false
+			}
+
+		val grid =
+			try {
+				SweepGrid.load(command.gridFile).let { loaded ->
+					loaded.copy(
+						repeat = command.repeatOverride ?: loaded.repeat,
+						perRunTimeoutSeconds = command.timeoutOverride ?: loaded.perRunTimeoutSeconds
+					)
+				}
+			} catch (e: SweepGridException) {
+				logger.error(e) { "Cannot start sweep: ${e.message}" }
+				return false
+			} catch (e: IllegalArgumentException) {
+				logger.error(e) { "Cannot start sweep: ${e.message}" }
+				return false
+			}
+
+		AiSweepDriver(store = DefaultRunSnapshotStore(command.outputRoot)).run(
+			grid = grid,
+			outputRoot = command.outputRoot,
+			mainClass = CHILD_MAIN_CLASS,
+			dryRun = command.dryRun
+		)
+		return true
+	}
+
+	/**
+	 * Resolves the simulated time to feed into [classifyRun], combining the two independent time
+	 * signals available once a headless run finishes (Issue #929).
+	 *
+	 * [SimulationTimeTracker.lastSimTime] is derived purely from the report-event stream
+	 * (TRAIN/NODE events). Queued-but-never-admitted trains are event-less by design, so once the
+	 * last moving train finishes, the tracker's value freezes below the requested end time even
+	 * though the kDisco kernel's own clock ([SimulationContext.lastRunEndTime]) kept advancing
+	 * silently to the real end time. Taking the maximum of the two prevents a short-horizon run
+	 * that actually completed from being misclassified as [RunOutcome.TERMINATED_EARLY].
+	 *
+	 * @param trackerSimTime [SimulationTimeTracker.lastSimTime] after the run finished.
+	 * @param contextEndTime [SimulationContext.lastRunEndTime] after the run finished, or `null`
+	 *   if the run never actually invoked the kDisco kernel.
+	 */
+	internal fun resolveReachedSimTime(
+		trackerSimTime: Double,
+		contextEndTime: Double?
+	): Double = maxOf(trackerSimTime, contextEndTime ?: trackerSimTime)
+
+	/**
+	 * Classifies a finished headless run into the [RunOutcome] that becomes the process exit code.
+	 *
+	 * @param reachedSimTime Simulated time the kDisco kernel actually reached.
+	 * @param requestedEndTime Horizon asked for on the command line, or `null` when none was given.
+	 * @param dispatcherStoppedByFailures `true` when the agent driver abandoned the run after
+	 *   persistent cycle failures. This outranks sim-time: the kernel keeps ticking to the horizon
+	 *   with nothing dispatching, so the run reaches its end time while having measured nothing.
+	 *   Reporting that as [RunOutcome.COMPLETED] would feed the sweep aggregator a passing data
+	 *   point for a dispatcher that died -- exactly the silent death #847 exists to surface.
+	 */
+	internal fun classifyRun(
+		reachedSimTime: Double,
+		requestedEndTime: Double?,
+		dispatcherStoppedByFailures: Boolean = false
+	): RunOutcome {
+		if (dispatcherStoppedByFailures) {
+			logger.error {
+				"Dispatcher driver stopped after persistent cycle failures; simulated time reached " +
+					"${reachedSimTime}s of a requested ${requestedEndTime}s, but nothing was " +
+					"dispatching. Exiting ${RunOutcome.TERMINATED_EARLY.exitCode}."
+			}
+			return RunOutcome.TERMINATED_EARLY
+		}
+		if (requestedEndTime == null || requestedEndTime <= 0.0) {
+			// Nothing to compare against; the factory would already have rejected a bad argument.
+			return RunOutcome.COMPLETED
+		}
+		val outcome = RunCompletionCheck.evaluate(reachedSimTime, requestedEndTime)
+		if (outcome == RunOutcome.TERMINATED_EARLY) {
+			logger.error {
+				"Simulation terminated early: reached ${reachedSimTime}s of a requested " +
+					"${requestedEndTime}s. The kDisco event queue drained before the end time, " +
+					"which normally means the network deadlocked. Exiting ${outcome.exitCode}."
+			}
+		}
+		return outcome
 	}
 
 	/**
@@ -234,8 +424,10 @@ class Main {
 
 			context.addReportTypes(*ReportType.values())
 
-			// Reuse the same GUI launch path as loadSimWithGui (no sourceFile for examples)
-			showContextInGui(context)
+			// Reuse the same GUI launch path as loadSimWithGui (no sourceFile for examples).
+			// LLM-driven examples get their own window title (Issue #839).
+			val appTitle = if (exampleRegistry.usesLlmDispatcher(name)) PROGRAM_LLM_FULL_NAME else null
+			showContextInGui(context, appTitle = appTitle)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "GUI example context creation failed" }
 		} catch (e: EmptyContextException) {
@@ -258,12 +450,15 @@ class Main {
 	 *
 	 * @param context Simulation context to display; must already have report types added.
 	 * @param sourceFile Optional XML file to show in the window title (null for built-in examples).
+	 * @param appTitle Optional base window title; null keeps [Frame]'s default (Issue #839).
 	 */
 	private fun showContextInGui(
 		context: SimulationContext,
-		sourceFile: File? = null
+		sourceFile: File? = null,
+		appTitle: String? = null
 	) {
 		javax.swing.SwingUtilities.invokeLater {
+			appTitle?.let { frame.appTitle = it }
 			frame.setContext(context)
 			// Do not update modificationTracker/currentFile in simulation mode:
 			// File->Save uses that state to enter editing-only save flow.
@@ -280,6 +475,17 @@ class Main {
 private const val MSG_CONTEXT_CREATION_FAILED = "Context creation failed"
 
 /**
+ * Main class the sweep driver launches each child run with (Issue #847).
+ *
+ * A string rather than a class reference because it is handed to `:dispatcher-agent`, which must
+ * not depend on `:desktop-ui`; Kotlin compiles top-level `main` in `Main.kt` into `MainKt`.
+ */
+private const val CHILD_MAIN_CLASS = "cz.vutbr.fit.interlockSim.MainKt"
+
+/** Exit status when `aiSweep` was invoked incorrectly or its grid file could not be used. */
+private const val SWEEP_USAGE_EXIT_CODE = 2
+
+/**
  * Parses the command mode from the argument list.
  *
  * Returns the first argument if it is a recognized mode string, or `null` if the
@@ -294,7 +500,7 @@ internal fun parseMode(args: Array<String>): String? {
 	return args[0].takeIf { it in VALID_MODES }
 }
 
-private val VALID_MODES = setOf("sim", "simgui", "edit", "example", "exampleGui")
+private val VALID_MODES = setOf("sim", "simgui", "edit", "example", "exampleGui", "aiSweep")
 
 /**
  * @param args
@@ -325,8 +531,36 @@ fun main(args: Array<String>) {
 	when (parseMode(args)) {
 		"sim" -> main.loadSim(args)
 		"simgui" -> main.loadSimWithGui(args)
-		"example" -> main.runExample(args)
+		// Issue #847 round 3 (PR #891 defect C): a headless example that stopped short of its
+		// requested end time — the signature of a deadlock — must not exit 0. #847's unattended
+		// sweep decides from the exit status alone whether a run is a valid data point.
+		//
+		// TERMINATED_EARLY *only*, deliberately narrow. A completed run returns normally exactly as
+		// it did before; so does every usage-error path (NOT_STARTED), which already prints its own
+		// diagnosis and whose exit status nothing depends on. Exiting on those too would change the
+		// behaviour of `main(arrayOf("example"))` — which MainArgumentParsingTest calls in-process —
+		// from "print usage" to "kill the JVM", and would tear down still-live non-daemon threads
+		// that currently keep a healthy process up.
+		//
+		// On a deadlocked run that teardown is exactly what is wanted: the agent-driver thread would
+		// otherwise hang the process indefinitely. exitProcess still runs the Koin shutdown hook
+		// registered above — it delegates to System.exit and is not a Runtime.halt.
+		//
+		// Headless `example` mode only: exampleGui, simgui, sim and edit are untouched.
+		// Note this makes `./gradlew :desktop-ui:runExample` (a JavaExec task) fail on such a run.
+		"example" -> {
+			val outcome = main.runExample(args)
+			if (outcome == RunOutcome.TERMINATED_EARLY) {
+				exitProcess(outcome.exitCode)
+			}
+		}
 		"exampleGui" -> main.runExampleGui(args)
+		// Issue #847 (SP2c.24): unattended parameter sweep. Non-zero exit means the sweep could
+		// not be performed at all — never that its runs failed, which is a measurement result.
+		"aiSweep" ->
+			if (!main.runAiSweep(args)) {
+				exitProcess(SWEEP_USAGE_EXIT_CODE)
+			}
 		"edit" -> main.loadGui(args)
 		else ->
 			logger.error {

@@ -14,8 +14,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -28,7 +26,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import java.io.InputStream
 
 /**
  * Smoke tests for [PathReservationService.ReservationResult] subtypes that are
@@ -49,11 +46,7 @@ class ReservationResultTest : KoinTestBase() {
 		try {
 			val editingContextFactory = koinApp.koin.get<JvmEditingContextFactory>()
 			val simulationContextFactory = koinApp.koin.get<SimulationContextFactory>()
-			val xmlStream: InputStream =
-				TestFixtures.loadShuntingXml()
-					?: throw IllegalStateException("vyhybna.xml not found in resources")
-			val editing = editingContextFactory.createContext(xmlStream) as EditingContext
-			val simCtx = simulationContextFactory.createContext(editing) as DefaultSimulationContext
+			val simCtx = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 			val inOuts = simCtx.getInOuts().toList()
 			check(inOuts.size >= 2) { "fixture expected ≥2 InOuts; got ${inOuts.size}" }
 			val navigator: TopologyNavigator = simCtx.scope.get()
@@ -125,5 +118,46 @@ class ReservationResultTest : KoinTestBase() {
 
 		assertThat(s1).isEqualTo(s2)
 		assertThat(s1.reservedBlocks).isEqualTo(sample)
+	}
+
+	@Test
+	fun `NonContiguousStart carries startName and reason`() {
+		val result =
+			PathReservationService.ReservationResult.NonContiguousStart(
+				"S1",
+				"start S1 is not contiguous with the train footprint"
+			)
+
+		assertThat(result.startName).isEqualTo("S1")
+		assertThat(result.reason).isEqualTo("start S1 is not contiguous with the train footprint")
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+	}
+
+	@Test
+	fun `NonContiguousStart data class equality and hashCode`() {
+		val a = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason A")
+		val b = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason A")
+		val c = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason B")
+		val d = PathReservationService.ReservationResult.NonContiguousStart("S2", "reason A")
+
+		assertThat(a).isEqualTo(b)
+		assertThat(a.hashCode()).isEqualTo(b.hashCode())
+		assertThat(a).isNotEqualTo(c) // different reason
+		assertThat(a).isNotEqualTo(d) // different startName
+		// Exercise copy() + componentN of data class
+		val copied = a.copy(reason = "reason C")
+		assertThat(copied.reason).isEqualTo("reason C")
+		assertThat(copied.startName).isEqualTo("S1")
+	}
+
+	@Test
+	fun `NonContiguousStart is distinct from AllPathsBlocked`() {
+		val ncs = PathReservationService.ReservationResult.NonContiguousStart("S1", "reason")
+		val apb = PathReservationService.ReservationResult.AllPathsBlocked(3)
+
+		// Distinct subtypes are never equal — guards against a future merge of the result types.
+		assertThat(ncs).isNotEqualTo(apb)
+		assertThat(ncs).isInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
+		assertThat(apb).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 	}
 }

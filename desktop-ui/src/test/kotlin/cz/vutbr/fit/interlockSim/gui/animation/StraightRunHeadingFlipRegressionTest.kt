@@ -21,9 +21,15 @@
  * The fix advances `frontSection` to the upcoming section atomically with
  * `entrySeparator`, so position AND heading stay consistent.
  *
- * NOTE: a single remaining flip when the front reaches the destination InOut (the
- * last section can't be advanced past the InOut) is a known separate edge case
- * tracked in #719; this test excludes the arrival sample.
+ * NOTE: at two boundaries the simulation state is *inherently* stale (there is no
+ * upcoming TrackSection to advance `frontSection` to): when the front reaches the
+ * destination InOut, and when the front waits before a RED signal. There the raw
+ * calculator heading still reverses; the animated canvas corrects it via
+ * [TrainHeadingResolver] (#719). This test therefore asserts two things:
+ * 1. the RAW calculator heading has no mid-journey flips (guards the PR #718 sim fix;
+ *    the arrival sample is excluded because the raw flip there is expected), and
+ * 2. the RESOLVED heading (what the renderer draws) has no flips at all, including
+ *    the arrival samples (guards the #719 canvas fix).
  *
  * Drives `MultiTrainLoop` (one A→B spec) on `vyhybna.xml`, samples the authoritative
  * heading at every block/section transition, and asserts no >90° flip occurs
@@ -33,32 +39,34 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
-import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.deg
+import cz.vutbr.fit.interlockSim.testutil.normalizeAngleDiff
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 import kotlin.math.abs
 
 class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 	private val processFactory: SimulationProcessFactory by inject()
 
 	private lateinit var calculator: TrainPositionCalculator
+	private val resolver = TrainHeadingResolver()
 	private val prevHeading = mutableMapOf<Int, Double>()
+	private val prevResolvedHeading = mutableMapOf<Int, Double>()
 	private val arrived = mutableSetOf<Int>()
 	private val flips = mutableListOf<String>()
+	private val resolvedFlips = mutableListOf<String>()
 
 	private fun sample(
 		loop: MultiTrainLoop,
@@ -66,13 +74,19 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 	) {
 		for (train in loop.getApprovedTrains()) {
 			val trainNumber = train.getNumber()
-			if (trainNumber in arrived) return
 			val section = train.frontSection ?: return
 			val heading = calculator.calculateTrainHeadingRadians(train, section) ?: return
 			val entry = train.trainEntrySeparator
 			val entryName = (DynamicWrapperUtils.unwrapToStatic(entry) as? NodeCell)?.getName()
+
+			// The RESOLVED heading (what the renderer draws) must never flip — including
+			// the arrival sample at the destination InOut (#719 canvas-side fix).
+			sampleResolved(train, section, heading)
+
+			if (trainNumber in arrived) return
 			// The front has reached the destination InOut: the last section can't be
-			// advanced past the InOut, so the arrival sample is excluded (separate issue).
+			// advanced past the InOut, so the RAW arrival sample is excluded — the raw
+			// flip there is expected and corrected canvas-side by TrainHeadingResolver.
 			if (entryName == destinationName) {
 				arrived.add(trainNumber)
 				return
@@ -101,6 +115,29 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		}
 	}
 
+	private fun sampleResolved(
+		train: Train,
+		section: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection,
+		rawHeading: Double
+	) {
+		val trainNumber = train.getNumber()
+		val location =
+			calculator.calculateTrainGridLocation(train, section, train.frontPosition)
+				?: return
+		val resolved = resolver.resolveHeading(trainNumber, rawHeading, location)
+		val prev = prevResolvedHeading[trainNumber]
+		if (prev != null) {
+			val delta = normalizeAngleDiff(resolved - prev)
+			if (abs(delta) > Math.PI / 2.0) {
+				resolvedFlips.add(
+					"RESOLVED_FLIP train#$trainNumber ${deg(prev)} -> ${deg(resolved)} (delta ${deg(delta)}); " +
+						"raw=${deg(rawHeading)}; entrySep=${endLabel(train.trainEntrySeparator)}"
+				)
+			}
+		}
+		prevResolvedHeading[trainNumber] = resolved
+	}
+
 	private fun endLabel(end: PathSeparator?): String {
 		if (end == null) return "null"
 		val name = (DynamicWrapperUtils.unwrapToStatic(end) as? NodeCell)?.getName()
@@ -113,23 +150,11 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		b: PathSeparator?
 	): Boolean = a != null && b != null && DynamicWrapperUtils.unwrapToStatic(a) === DynamicWrapperUtils.unwrapToStatic(b)
 
-	private fun deg(rad: Double): String = "${Math.toDegrees(rad).toInt()}°"
-
-	private fun normalizeAngleDiff(d: Double): Double {
-		var x = d
-		while (x > Math.PI) x -= 2.0 * Math.PI
-		while (x < -Math.PI) x += 2.0 * Math.PI
-		return x
-	}
-
 	@Test
 	fun `straight A to B run has no spurious mid-journey heading flips`() {
-		val xmlFactory = XMLContextFactory()
-		val resourcePath = javaClass.getResource("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		checkNotNull(resourcePath) { "vyhybna.xml not on classpath" }
-		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
-		val context = ContextTransformer.createSimulationContext(editingContext, processFactory)
-		val simContext = context as DefaultSimulationContext
+		val context =
+			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+		val simContext = context
 		calculator = TrainPositionCalculator(context, simContext.getSeparatorPositionCache())
 
 		val destinationName = "B"
@@ -165,6 +190,10 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		if (flips.isNotEmpty()) {
 			flips.forEach { println("HEADING_FLIP: $it") }
 		}
+		if (resolvedFlips.isNotEmpty()) {
+			resolvedFlips.forEach { println("HEADING_FLIP: $it") }
+		}
 		assertThat(flips).isEmpty()
+		assertThat(resolvedFlips).isEmpty()
 	}
 }

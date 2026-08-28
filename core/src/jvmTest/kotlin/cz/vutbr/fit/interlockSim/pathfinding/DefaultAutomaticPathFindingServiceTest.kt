@@ -32,6 +32,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.koin.test.inject
 import kotlin.time.measureTime
 
@@ -55,7 +57,7 @@ class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
 	private fun yJunctionContext(): EditingContext = TestTopologies.yJunctionWithSwitch().also { context = it }
 
 	private fun shuntingLoopContext(): EditingContext {
-		val ctx = editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
+		val ctx = TestFixtures.loadShuntingEditingContext(editingContextFactory)
 		context = ctx
 		return ctx
 	}
@@ -434,6 +436,77 @@ class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
 				}
 
 			assertThat(duration.inWholeMilliseconds).isLessThan(1000L)
+		}
+
+		/**
+		 * Verifies the headline invariant of [TestTopologies.branchySwitchChain]: a network
+		 * with [stageCount] binary-switch bypass stages yields exactly 2^[stageCount]
+		 * switch-constrained paths from "A" to "B".
+		 *
+		 * This also guards the topology builder against regressions (e.g. an accidental
+		 * third branch or a dropped stage) that the 15-stage performance test below cannot
+		 * catch — it only asserts cap saturation, not the exact path count.
+		 *
+		 * Small [stageCount] values keep this fast and timing-flake-free so it can run in
+		 * the regular `test` target.
+		 */
+		@ParameterizedTest(name = "stageCount={0} yields exactly 2^{0} paths")
+		@ValueSource(ints = [1, 2, 3, 4, 5])
+		fun `branchySwitchChain enumerates exactly 2^n paths`(stageCount: Int) {
+			val ctx = TestTopologies.branchySwitchChain(stageCount = stageCount).also { context = it }
+			val svc = ctx.getAutomaticPathFindingService()
+			val inOuts = ctx.getInOuts()
+			val a = inOuts.single { it.getName() == "A" }
+			val b = inOuts.single { it.getName() == "B" }
+
+			// maxPaths must exceed 2^stageCount so the cap does not truncate the full enumeration.
+			val expectedPathCount = 1 shl stageCount
+			val result = svc.findAllPaths(a, b, maxPaths = expectedPathCount)
+
+			assertThat(result).hasSize(expectedPathCount)
+		}
+
+		/**
+		 * Verifies that [findAllPaths] on a switch-rich branchy network
+		 * (a) respects the [maxPaths] cap after full BFS enumeration, and
+		 * (b) completes within an acceptable wall-clock budget.
+		 *
+		 * **Network composition:** [TestTopologies.branchySwitchChain] with 15 binary-switch
+		 * bypass stages creates exactly 2^15 = 32 768 switch-constrained paths from "A" to
+		 * "B".  The implementation enumerates all 32 768 paths in BFS *before* applying the
+		 * [maxPaths] cap, so this test exercises the combinatorial enumeration cost directly
+		 * and will catch regressions that make [findAllSwitchConstrainedPaths] unexpectedly
+		 * slower on branchy networks.
+		 *
+		 * **Time budget (5 000 ms):** Generous to survive CI variance; typical JVM execution
+		 * for 32 768 enumerated paths is well under 1 s.
+		 */
+		@Test
+		fun `findAllPaths on 15-stage branchy network respects maxPaths cap and completes within time budget`() {
+			// 15 binary-switch bypass stages → 2^15 = 32 768 switch-constrained paths.
+			val ctx = TestTopologies.branchySwitchChain(stageCount = 15).also { context = it }
+			val svc = ctx.getAutomaticPathFindingService()
+			val inOuts = ctx.getInOuts()
+			val a = inOuts.single { it.getName() == "A" }
+			val b = inOuts.single { it.getName() == "B" }
+
+			val maxPaths = 10
+
+			// Warm-up to reduce JVM JIT noise before the timed measurement.
+			repeat(5) { svc.findAllPaths(a, b, maxPaths = maxPaths) }
+
+			val duration =
+				measureTime {
+					svc.findAllPaths(a, b, maxPaths = maxPaths)
+				}
+
+			// Time budget: full BFS enumeration of 32 768 paths must finish in under 5 s.
+			assertThat(duration.inWholeMilliseconds).isLessThan(5000L)
+
+			// Correctness: the maxPaths cap is applied after enumeration and must be respected.
+			// 32 768 available paths >> maxPaths=10, so the cap is saturated.
+			val result = svc.findAllPaths(a, b, maxPaths = maxPaths)
+			assertThat(result).hasSize(maxPaths)
 		}
 	}
 }

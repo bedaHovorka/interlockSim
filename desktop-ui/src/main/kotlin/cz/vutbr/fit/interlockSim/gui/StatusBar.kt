@@ -30,13 +30,16 @@ import kotlin.math.abs
 /**
  * Status bar for displaying context information and mouse motion status.
  *
- * Implemented as a [JPanel] containing three labels:
+ * Implemented as a [JPanel] containing these labels:
  * - [statusLabel] (CENTER): shows context property-change messages and mouse-position info.
  * - [pausedLabel] (EAST, leftmost): shows "[PAUSED]" when the simulation is paused; hidden
  *   otherwise. Written only from EDT via [setPaused].
  * - [warningLabel] (EAST, second): shows "⚠ WARNING" in red when at least one CRITICAL
  *   collision warning is unacknowledged; hidden otherwise. Written only from EDT via
  *   [setWarningIndicator].
+ * - [starvedLabel] (EAST, third): shows "⚠ RAILWAY STARVED" in red when the run that just ended
+ *   achieved nothing on the railway; hidden otherwise. Written only from EDT via
+ *   [setStarvedIndicator].
  * - [speedLabel] (EAST, rightmost): shows the current simulation speed multiplier when it
  *   differs from 1.0x; hidden at default speed. Written only from EDT via [updateSpeedIndicator].
  *
@@ -49,6 +52,7 @@ class StatusBar :
 	private val statusLabel = JLabel()
 	private val pausedLabel = JLabel().apply { isVisible = false }
 	private val warningLabel = JLabel().apply { isVisible = false }
+	private val starvedLabel = JLabel().apply { isVisible = false }
 	private val speedLabel = JLabel().apply { isVisible = false }
 
 	private val mouseListener =
@@ -75,11 +79,12 @@ class StatusBar :
 	init {
 		layout = BorderLayout()
 		add(statusLabel, BorderLayout.CENTER)
-		// East panel: pausedLabel (left) + warningLabel + speedLabel (right) as a horizontal pair.
+		// East panel: pausedLabel (left) + warningLabel + starvedLabel + speedLabel (right).
 		val eastPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0))
 		eastPanel.isOpaque = false
 		eastPanel.add(pausedLabel)
 		eastPanel.add(warningLabel)
+		eastPanel.add(starvedLabel)
 		eastPanel.add(speedLabel)
 		add(eastPanel, BorderLayout.EAST)
 		preferredSize = Dimension(100, 25)
@@ -238,7 +243,47 @@ class StatusBar :
 	/** Returns the current warning indicator text, or an empty string when hidden. */
 	internal fun warningIndicatorText(): String = warningLabel.text ?: ""
 
+	/**
+	 * Shows or hides the "⚠ RAILWAY STARVED" indicator in [starvedLabel].
+	 *
+	 * ## Why this exists (Issue #930)
+	 *
+	 * The GUI had no run-quality signal of any kind. Everything the headless arm computes about a
+	 * run — the actionable-tick rate, the railway outcome, the stall diagnostics — reached the GUI
+	 * user only through the log file. A run in which no train completed a journey looked exactly
+	 * like a healthy one, and was recorded as one.
+	 *
+	 * This is deliberately a persistent label rather than [showTemporaryMessage]: a verdict about
+	 * the run that just ended must still be on screen when the user looks up.
+	 *
+	 * @param starved Whether the run that just ended was recorded as
+	 *   [cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause.STARVED].
+	 * @since Issue #930 (Wave 3 — GUI starvation flag)
+	 */
+	fun setStarvedIndicator(starved: Boolean) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			applyStarvedIndicator(starved)
+		} else {
+			SwingUtilities.invokeLater { applyStarvedIndicator(starved) }
+		}
+	}
+
+	private fun applyStarvedIndicator(starved: Boolean) {
+		starvedLabel.text = if (starved) STARVED_BADGE_TEXT else ""
+		starvedLabel.isVisible = starved
+		starvedLabel.foreground = WARNING_BADGE_COLOR
+	}
+
+	/** Returns `true` when the starved indicator label is currently visible. */
+	internal fun isStarvedIndicatorVisible(): Boolean = starvedLabel.isVisible
+
+	/** Returns the current starved indicator text, or an empty string when hidden. */
+	internal fun starvedIndicatorText(): String = starvedLabel.text ?: ""
+
 	companion object {
+		/** Text of the starved-run badge (Issue #930). */
+		internal const val STARVED_BADGE_TEXT = "⚠ RAILWAY STARVED"
+
 		private const val DEFAULT_SPEED = 1.0
 		private const val SPEED_EPSILON = 0.001
 	}

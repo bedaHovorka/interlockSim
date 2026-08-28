@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.collision
 
 import assertk.assertThat
 import assertk.assertions.isTrue
-import cz.hovorka.kdisco.emitCustom
+import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -70,6 +70,12 @@ class CollisionDetectionActivationTest : KoinTestBase() {
 		override fun requestPause() {
 			requestPauseCalled = true
 		}
+
+		override fun requestResume() {
+			// No-op: not needed for this test
+		}
+
+		override fun currentSpeedMultiplier(): Double = 1.0
 	}
 
 	@Test

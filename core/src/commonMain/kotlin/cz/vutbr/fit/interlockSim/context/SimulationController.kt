@@ -18,18 +18,23 @@ package cz.vutbr.fit.interlockSim.context
  *
  * ## Threading Contract
  *
- * - [awaitIfPaused] is called from the simulation coroutine (kDisco dispatcher thread).
- *   It suspends (not blocks) so the coroutine yields while paused.
- * - [throttle] is called from the simulation coroutine to apply wall-clock pacing.
- * - [isPaused] is called from the simulation coroutine to check pause state.
- * - [pollStepEvent] is called from the simulation coroutine; returns `true` once if
- *   a step-event was requested, then resets.
- * - [pollStepTime] is called from the simulation coroutine; returns the pending
- *   time-delta once, then resets.
+ * The kDisco simulation kernel runs on its own single thread. The methods below
+ * are invoked from one of several outside callers, which may run concurrently
+ * with each other and with the kernel:
+ * - the **simulation coroutine** — the controlled event loop in
+ *   `DefaultSimulationContext` (GUI/animated runs) — calls [awaitIfPaused],
+ *   [throttle], [isPaused], [pollStepEvent], [pollStepTime];
+ * - the **external driver coroutine** — the SP0.10 drive-loop driver (#732), which
+ *   paces its own sense→decide→act cycle independently of the kernel — calls
+ *   [awaitIfPaused] and [throttle];
+ * - [requestPause] is called by external agents (e.g. the collision detection
+ *   service) from arbitrary threads.
  *
- * The GUI/control thread sets pause state and enqueues step requests via its own
- * implementation (e.g., `SimulationRunner`). The simulation coroutine polls these
- * values through this interface.
+ * Implementations must be thread-safe across all of these callers: the
+ * GUI/control thread sets pause state and enqueues step requests, while the
+ * simulation coroutine and the external driver coroutine poll. The interface
+ * itself stays KMP-pure (see below); platform-specific synchronisation lives in
+ * implementations such as `SimulationRunner` / `NoOpSimulationController`.
  *
  * ## KMP Purity
  *
@@ -44,18 +49,19 @@ interface SimulationController {
 	/**
 	 * Suspends the simulation coroutine while the controller is in paused state.
 	 *
-	 * Called from the simulation coroutine at each iteration of the controlled loop.
-	 * When paused, this function suspends until the controller resumes or a step
-	 * is requested. Uses `suspend` (not blocking) so it cooperates with kDisco's
-	 * coroutine-based dispatcher.
+	 * Called from the simulation coroutine or the external driver coroutine at each
+	 * iteration of the controlled loop. When paused, this function suspends until
+	 * the controller resumes or a step is requested. Uses `suspend` (not blocking)
+	 * so it cooperates with kDisco's coroutine-based dispatcher.
 	 */
 	suspend fun awaitIfPaused()
 
 	/**
 	 * Applies wall-clock throttling to pace the simulation relative to real time.
 	 *
-	 * Called from the simulation coroutine after advancing the simulation clock.
-	 * The implementation may delay execution to match the desired speed multiplier.
+	 * Called from the simulation coroutine or the external driver coroutine after
+	 * advancing the simulation clock. The implementation may delay execution to
+	 * match the desired speed multiplier.
 	 *
 	 * @param simDeltaSeconds the simulation time that has just elapsed (in seconds)
 	 */
@@ -64,8 +70,8 @@ interface SimulationController {
 	/**
 	 * Returns the current pause state.
 	 *
-	 * Called from the simulation coroutine to determine whether to enter the
-	 * pause-wait loop.
+	 * Called from the simulation coroutine or the external driver coroutine to
+	 * determine whether to enter the pause-wait loop.
 	 *
 	 * @return `true` if the simulation is currently paused
 	 */
@@ -113,6 +119,55 @@ interface SimulationController {
 	 * @since Issue #611 (Goal 3 SP1)
 	 */
 	fun requestPause()
+
+	/**
+	 * Release a previously requested pause, allowing the simulation to continue.
+	 *
+	 * Counterpart to [requestPause]: once the caller that paused the simulation has
+	 * finished its work (e.g. an LLM inference step bracketed by pause/resume), it
+	 * calls this method to unpark the simulation thread.
+	 *
+	 * **Thread safety:** implementations must be thread-safe; this method may be called
+	 * from any thread, including a thread different from the one that called [requestPause].
+	 *
+	 * **Contract C4:** the resume must be placed in a `finally` block so that a throwing
+	 * emission does not leave the simulation parked indefinitely:
+	 * ```kotlin
+	 * controller.requestPause()
+	 * try { emission.emit(prompt, obs) } finally { controller.requestResume() }
+	 * ```
+	 * Calling [requestResume] when not paused is a harmless no-op.
+	 *
+	 * **Not refcounted (Important):** [requestPause]/[requestResume] are a **boolean flip, not a
+	 * refcounted pair** — a single resume clears the pause regardless of how many pausers requested
+	 * it. A caller using the `try { ... } finally { requestResume() }` pattern (e.g.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.PausedClockTickBudget]) therefore assumes
+	 * **exclusive ownership** of the pause for the duration of the bracketed work: a concurrent
+	 * external pauser (collision detection, operator hold) that paused in the same window would
+	 * have its pause **released prematurely** by the budget's resume. SP2c.10 scope assumes no
+	 * concurrent external pausers during an emission window; lifting that requires a refcounted
+	 * pause/resume on this interface (a separate change).
+	 *
+	 * @since Issue #872 (SP2c.26 follow-up I1)
+	 */
+	fun requestResume()
+
+	/**
+	 * Returns the controller's currently active wall-clock speed multiplier (1.0 = real-time,
+	 * 2.0 = twice as fast, 0.5 = half speed).
+	 *
+	 * Added so external callers that only hold a [SimulationController] reference — notably
+	 * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] — can convert wall-clock durations
+	 * they measure themselves (e.g. time spent inside an async planner call) into sim-time units
+	 * before calling [throttle], without [throttle]'s own signature changing.
+	 *
+	 * Implementations with no real notion of a multiplier (headless/no-op controllers) must
+	 * return `1.0`.
+	 *
+	 * @return the active speed multiplier; always `1.0` for controllers that do not vary pacing
+	 * @since Issue #926 (Goal 10 Wave 2 — throttle double-count fix)
+	 */
+	fun currentSpeedMultiplier(): Double
 }
 
 /**
@@ -127,6 +182,9 @@ interface SimulationController {
  * - [isPaused] always returns `false`
  * - [pollStepEvent] always returns `false`
  * - [pollStepTime] always returns `null`
+ * - [requestPause] does nothing
+ * - [requestResume] does nothing
+ * - [currentSpeedMultiplier] always returns `1.0`
  */
 object NoOpSimulationController : SimulationController {
 	override suspend fun awaitIfPaused() {
@@ -146,4 +204,10 @@ object NoOpSimulationController : SimulationController {
 	override fun requestPause() {
 		// No-op: headless / no-GUI runs do not support pause requests
 	}
+
+	override fun requestResume() {
+		// No-op: headless / no-GUI runs are never paused
+	}
+
+	override fun currentSpeedMultiplier(): Double = 1.0
 }

@@ -1,0 +1,101 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.dispatcher
+
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isNull
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
+
+/**
+ * Unit tests for [DispatcherDefaultsResource] (Issue #834, SP2c.11).
+ *
+ * These tests construct in-memory streams rather than touching the real classpath resource, so
+ * they can exercise "absent" and "malformed" failure modes that the shipped file (by construction)
+ * never exhibits. The one exception is the last test, which is the regression lock for #834's
+ * "no default's value changes" requirement: it reads the real shipped resource.
+ */
+@DisplayName("SP2c.11 — DispatcherDefaultsResource: committed-file tier loader (#834)")
+class DispatcherDefaultsResourceTest {
+	private fun streamOf(text: String) = ByteArrayInputStream(text.toByteArray(StandardCharsets.UTF_8))
+
+	@Test
+	@DisplayName("absent resource (null stream) falls back to no values, no exception")
+	fun absentStreamYieldsNoValues() {
+		val resource = DispatcherDefaultsResource.fromStream(null)
+
+		for (key in DispatcherDefaultsResource.RECOGNIZED_KEYS) {
+			assertThat(resource.lookup(key)).isNull()
+		}
+	}
+
+	@Test
+	@DisplayName("malformed properties syntax falls back to no values, no exception")
+	fun malformedStreamYieldsNoValues() {
+		// An invalid \u escape makes java.util.Properties#load throw IllegalArgumentException
+		// (not IOException, despite the method's checked-exception signature only mentioning the
+		// latter) — see DispatcherDefaultsResource.fromStream's matching catch clause.
+		val resource = DispatcherDefaultsResource.fromStream(streamOf("interlocksim.dispatcher.historyN=\\uZZZZ"))
+
+		assertThat(resource.lookup(DispatcherRunConfig.PROP_HISTORY_N)).isNull()
+	}
+
+	@Test
+	@DisplayName("a recognized key is exposed via lookup")
+	fun recognizedKeyIsExposed() {
+		val resource = DispatcherDefaultsResource.fromStream(streamOf("interlocksim.dispatcher.historyN=7"))
+
+		assertThat(resource.lookup(DispatcherRunConfig.PROP_HISTORY_N)).isEqualTo("7")
+	}
+
+	@Test
+	@DisplayName("an unknown key is ignored, not exposed, and does not break parsing of known keys")
+	fun unknownKeyIsIgnored() {
+		val resource =
+			DispatcherDefaultsResource.fromStream(
+				streamOf(
+					"""
+					interlocksim.dispatcher.historyN=7
+					interlocksim.dispatcher.historyNTypo=99
+					""".trimIndent()
+				)
+			)
+
+		assertThat(resource.lookup(DispatcherRunConfig.PROP_HISTORY_N)).isEqualTo("7")
+		assertThat(resource.lookup("interlocksim.dispatcher.historyNTypo")).isNull()
+	}
+
+	@Test
+	@DisplayName("the shipped resource yields exactly the values #834's sweep chose (#834 regression lock)")
+	fun shippedResourceMatchesChosenDefaults() {
+		// The lock's PURPOSE is unchanged: no value in the shipped file may drift without a
+		// deliberate edit here. Only its expectations moved, once, when #834's sweep decided two
+		// of them (#834; the evidence for every value is restated in
+		// docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md §12.1).
+		//
+		// historyN 3 -> 0 and promptVariant BASELINE -> REVISED are therefore asserted against the
+		// SWEEP's values, not against the compiled constants they no longer equal. The other four
+		// still coincide with their constants, and are still pinned.
+		val shipped = DispatcherDefaultsResource.shipped
+
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_TICK_PERIOD_MS)).isEqualTo("0")
+		// Sweep: c7Clean 8/10 at historyN=0 in all four cells, 0/10 at historyN=3 in all four.
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_HISTORY_N)).isEqualTo("0")
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK)).isEqualTo("3")
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS)).isEqualTo("30")
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_MODEL)).isEqualTo("qwen2.5:7b-instruct")
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_TEMPERATURE)).isEqualTo("0.28")
+		// Sweep A/B: journeys median 8.0 vs 6.0, one-sided permutation p = 0.0215.
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_PROMPT_VARIANT)).isEqualTo("REVISED")
+	}
+}

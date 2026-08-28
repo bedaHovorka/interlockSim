@@ -29,8 +29,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 
 **Focus Areas:**
 1. **Simulation Engine**
-   - kDisco 0.6.0 (Phase 1 migration complete 2026-03-20; Koin injection now allowed in sim/)
-   - Kalasim migration planning (Goal 10, Phase 2, future)
+   - kDisco 0.6.1-SNAPSHOT (Phase 1 migration complete 2026-03-20; Koin injection now allowed in sim/)
    - `:fast-sim` native CLI subproject (linuxX64, PR #421)
    - Discrete-event simulation patterns
    - Event scheduling and timing correctness
@@ -66,7 +65,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 
 **Examples:**
 - "Review the train acceleration formula for correctness"
-- "Design migration strategy from kDisco to DSOL"
+- "Design the kDisco change needed for a new scheduling requirement"
 - "Debug why trains are not stopping at signals"
 - "Evaluate performance impact of adding continuous terrain simulation"
 - "Resolve disagreement about event scheduling approach"

@@ -1,0 +1,382 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.dispatcher.planner
+
+import assertk.assertFailure
+import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.containsOnly
+import assertk.assertions.hasMessage
+import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import kotlinx.serialization.json.Json
+import org.junit.jupiter.api.Test
+
+/**
+ * Unit tests for [DispatcherRunSnapshot], covering the typed convenience view extension
+ * functions, the `ticksByOutcome.values.sum() == totalTicks` constructor invariant, and the
+ * SP2c.11 schema-version-2 railway-outcome fields and their JSON round-trip.
+ *
+ * @since Issue #845 (SP2c.22 — run identity and per-run JSON persistence)
+ */
+class DispatcherRunSnapshotTest {
+	private fun snapshotWith(
+		ticksByOutcome: Map<String, Long> = mapOf(TickOutcome.LLM_ACTIONS.name to 1L),
+		totalTicks: Long = 1L,
+		timeoutNoOpByCause: Map<String, Long> = mapOf(TimeoutNoOpCause.DEADLINE_MISS.name to 0L),
+		rejectionsByCode: Map<String, Long> = mapOf(RejectionCode.UNKNOWN_TRAIN.name to 2L),
+		applyFailuresByCode: Map<String, Long> = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED.name to 3L),
+		actionsByAuthor: Map<String, Long> = mapOf(ActionAuthor.LLM.name to 4L),
+		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
+		loggedFatalSimExceptionCount: Long? = null,
+		loggedFatalSimExceptionFirstMessage: String? = null
+	): DispatcherRunSnapshot =
+		DispatcherRunSnapshot(
+			runId = "typed-view-001",
+			arm = DispatcherArm.RULE_BASED,
+			params =
+				RunParameters(
+					tickPeriodMs = 500L,
+					historyN = 10,
+					temperature = 0.0,
+					maxActionsPerTick = 3,
+					model = "",
+					seed = null
+				),
+			totalTicks = totalTicks,
+			ticksByOutcome = ticksByOutcome,
+			timeoutNoOpByCause = timeoutNoOpByCause,
+			llmSuccessRate = 1.0,
+			actionableTickRate = 1.0,
+			noOpRate = 0.0,
+			invalidOutputRate = 0.0,
+			repairSuccessRate = 0.0,
+			emittedByActionType = emptyMap(),
+			rejectionsByCode = rejectionsByCode,
+			applyFailuresByCode = applyFailuresByCode,
+			validAt1 = 0.0,
+			correctAt1 = null,
+			oracleAgreementAt1 = null,
+			latencyP50Ms = 0L,
+			latencyP95Ms = 0L,
+			latencyMaxMs = 0L,
+			actionsByAuthor = actionsByAuthor,
+			unattributedApplies = 0L,
+			terminalFallbackEngaged = false,
+			terminalFallbackTickIndex = null,
+			c7Clean = true,
+			completedNaturally = true,
+			endCause = RunEndCause.NATURAL_COMPLETION,
+			railwayOutcome = railwayOutcome,
+			loggedFatalSimExceptionCount = loggedFatalSimExceptionCount,
+			loggedFatalSimExceptionFirstMessage = loggedFatalSimExceptionFirstMessage
+		)
+
+	@Test
+	fun `ticksByOutcomeTyped restores TickOutcome enum keys`() {
+		val snap = snapshotWith(ticksByOutcome = mapOf(TickOutcome.LLM_ACTIONS.name to 1L))
+		val typed = snap.ticksByOutcomeTyped()
+		assertThat(typed.keys).containsOnly(TickOutcome.LLM_ACTIONS)
+		assertThat(typed[TickOutcome.LLM_ACTIONS]).isEqualTo(1L)
+	}
+
+	@Test
+	fun `timeoutNoOpByCauseTyped restores TimeoutNoOpCause enum keys`() {
+		val snap = snapshotWith(timeoutNoOpByCause = mapOf(TimeoutNoOpCause.DEADLINE_MISS.name to 5L))
+		val typed = snap.timeoutNoOpByCauseTyped()
+		assertThat(typed.keys).containsOnly(TimeoutNoOpCause.DEADLINE_MISS)
+		assertThat(typed[TimeoutNoOpCause.DEADLINE_MISS]).isEqualTo(5L)
+	}
+
+	@Test
+	fun `rejectionsByCodeTyped restores RejectionCode enum keys`() {
+		val snap = snapshotWith(rejectionsByCode = mapOf(RejectionCode.UNKNOWN_TRAIN.name to 2L))
+		val typed = snap.rejectionsByCodeTyped()
+		assertThat(typed.keys).containsOnly(RejectionCode.UNKNOWN_TRAIN)
+		assertThat(typed[RejectionCode.UNKNOWN_TRAIN]).isEqualTo(2L)
+	}
+
+	@Test
+	fun `applyFailuresByCodeTyped restores ApplyFailureCode enum keys`() {
+		val snap = snapshotWith(applyFailuresByCode = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED.name to 3L))
+		val typed = snap.applyFailuresByCodeTyped()
+		assertThat(typed.keys).containsOnly(ApplyFailureCode.ALL_PATHS_BLOCKED)
+		assertThat(typed[ApplyFailureCode.ALL_PATHS_BLOCKED]).isEqualTo(3L)
+	}
+
+	@Test
+	fun `actionsByAuthorTyped restores ActionAuthor enum keys`() {
+		val snap = snapshotWith(actionsByAuthor = mapOf(ActionAuthor.LLM.name to 4L))
+		val typed = snap.actionsByAuthorTyped()
+		assertThat(typed.keys).containsOnly(ActionAuthor.LLM)
+		assertThat(typed[ActionAuthor.LLM]).isEqualTo(4L)
+	}
+
+	@Test
+	fun `constructor rejects ticksByOutcome that does not sum to totalTicks`() {
+		assertFailure {
+			snapshotWith(ticksByOutcome = mapOf(TickOutcome.LLM_ACTIONS.name to 2L), totalTicks = 1L)
+		}.isInstanceOf(IllegalArgumentException::class)
+			.hasMessage("ticksByOutcome.values.sum()=2 must equal totalTicks=1")
+	}
+
+	// ── endCause vocabulary (Issue #909, SP2c — TERMINATED_EARLY vs TIMEOUT_ABORT) ────────────
+
+	/**
+	 * The new [RunEndCause.TERMINATED_EARLY] value (Issue #909) must survive encode→decode so a run
+	 * whose event queue drained early is not silently re-filed under a different cause on reload.
+	 * `snapshotWith` defaults to [RunEndCause.NATURAL_COMPLETION], so this pins the new value
+	 * specifically rather than re-testing the default.
+	 */
+	@Test
+	fun `serialization round-trips a snapshot whose endCause is TERMINATED_EARLY`() {
+		val snap = snapshotWith().copy(endCause = RunEndCause.TERMINATED_EARLY, completedNaturally = false)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"endCause\": \"TERMINATED_EARLY\"")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.endCause).isEqualTo(RunEndCause.TERMINATED_EARLY)
+		assertThat(decoded.completedNaturally).isEqualTo(false)
+	}
+
+	/**
+	 * Issue #930 (schema version 7). A starved run reached its horizon, so the only thing telling
+	 * the aggregator not to count it is this enum value. If it did not survive encode→decode, the
+	 * run would reload as some other cause and the fix would be silently undone on disk.
+	 */
+	@Test
+	fun `serialization round-trips a snapshot whose endCause is STARVED`() {
+		val snap =
+			snapshotWith(railwayOutcome = RailwayOutcome(journeysCompleted = 0L, trainsExited = 0L))
+				.copy(endCause = RunEndCause.STARVED, completedNaturally = false)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"endCause\": \"STARVED\"")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.endCause).isEqualTo(RunEndCause.STARVED)
+		assertThat(decoded.completedNaturally).isEqualTo(false)
+	}
+
+	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
+
+	@Test
+	fun `current schema version is 7`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STARVED_CAUSE)
+	}
+
+	/**
+	 * [DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE] is deliberately
+	 * pinned to 6 rather than tracking [DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION], so that an
+	 * unrelated bump does not re-flag version-6 files as carrying a defaulted rate. Issue #930's
+	 * bump to 7 is exactly such an unrelated bump, so this pins the two apart.
+	 */
+	@Test
+	fun `the actionable-rate introduction version does not follow the current schema version`() {
+		assertThat(DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE)
+			.isEqualTo(SCHEMA_VERSION_WITH_ACTIONABLE_RATE)
+	}
+
+	@Test
+	fun `a snapshot defaults to the current schema version, an unmeasured railway outcome, and no fatal-exception scan`() {
+		val snap = snapshotWith()
+		assertThat(snap.schemaVersion).isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
+		assertThat(snap.railwayOutcome).isEqualTo(RailwayOutcome.UNMEASURED)
+		assertThat(snap.railwayOutcome.journeysCompleted).isNull()
+		assertThat(snap.loggedFatalSimExceptionCount).isNull()
+		assertThat(snap.loggedFatalSimExceptionFirstMessage).isNull()
+	}
+
+	// ── Fatal-exception fields (measurement-integrity fix for #834's C2 condition, renamed #913) ──
+
+	@Test
+	fun `serialization round-trips a snapshot carrying a measured logged-fatal-sim-exception count of zero`() {
+		val snap = snapshotWith(loggedFatalSimExceptionCount = 0L, loggedFatalSimExceptionFirstMessage = null)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"loggedFatalSimExceptionCount\": 0")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.loggedFatalSimExceptionCount).isEqualTo(0L)
+		assertThat(decoded.loggedFatalSimExceptionFirstMessage).isNull()
+	}
+
+	@Test
+	fun `serialization round-trips a snapshot carrying a nonzero logged-fatal-sim-exception finding`() {
+		val snap =
+			snapshotWith(
+				loggedFatalSimExceptionCount = 3L,
+				loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: pathToSemaphore null at time 12.5"
+			)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+
+		assertThat(decoded).isEqualTo(snap)
+		assertThat(decoded.loggedFatalSimExceptionCount).isEqualTo(3L)
+		assertThat(decoded.loggedFatalSimExceptionFirstMessage)
+			.isEqualTo("SimulationException[FATAL]: pathToSemaphore null at time 12.5")
+	}
+
+	/**
+	 * Absent must survive the JSON round-trip as absent, exactly like [RailwayOutcome]'s own
+	 * absent-vs-zero guarantee. Were `loggedFatalSimExceptionCount` encoded as `0` for a run
+	 * whose log was never scanned, a sweep would rank that run as measured-clean rather than
+	 * not-measured.
+	 */
+	@Test
+	fun `serialization round-trips an absent logged-fatal-sim-exception scan as JSON null, never as zero`() {
+		val snap = snapshotWith(loggedFatalSimExceptionCount = null, loggedFatalSimExceptionFirstMessage = null)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"loggedFatalSimExceptionCount\": null")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.loggedFatalSimExceptionCount).isNull()
+	}
+
+	@Test
+	fun `serialization round-trips a snapshot carrying measured railway outcomes`() {
+		val snap =
+			snapshotWith(
+				railwayOutcome =
+					RailwayOutcome(
+						journeysCompleted = 5L,
+						trainsEntered = 13L,
+						trainsExited = 12L,
+						maxConcurrentTrains = 2L,
+						blockTransitions = 173L,
+						conflicts = 1L,
+						failedReservations = 8L
+					)
+			)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+
+		assertThat(decoded).isEqualTo(snap)
+		assertThat(decoded.schemaVersion).isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
+		assertThat(decoded.railwayOutcome.blockTransitions).isEqualTo(173L)
+	}
+
+	/**
+	 * Absent must survive the JSON round-trip as absent. Were `railwayOutcome` encoded with `0`
+	 * placeholders, a sweep would rank a rule-based arm and an unmeasured arm identically.
+	 */
+	@Test
+	fun `serialization round-trips absent railway outcomes as JSON null, never as zero`() {
+		val snap = snapshotWith(railwayOutcome = RailwayOutcome.UNMEASURED)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"journeysCompleted\": null")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.railwayOutcome.journeysCompleted).isNull()
+		assertThat(decoded.railwayOutcome.trainsEntered).isNull()
+	}
+
+	// ── actionableTickRate / schema version 6 (Issue #927) ────────────────────
+
+	@Test
+	fun `schema version 6 round-trips actionableTickRate`() {
+		val snap = snapshotWith().copy(actionableTickRate = 0.6)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"actionableTickRate\": 0.6")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.actionableTickRate).isEqualTo(0.6)
+		assertThat(decoded.schemaVersion).isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
+	}
+
+	/**
+	 * A literal schema-version-5 document — exactly as written before Issue #927 added
+	 * [DispatcherRunSnapshot.actionableTickRate] — must still decode. Written out in full rather
+	 * than derived from the current serializer, for the same reason as the version-1/version-3
+	 * fixtures pinned in `DefaultRunSnapshotStoreTest`: a derived fixture would silently track
+	 * every future schema change and stop testing backward compatibility at all.
+	 *
+	 * Per [DispatcherRunSnapshot.actionableTickRate]'s own KDoc, the field defaults to
+	 * [DispatcherRunSnapshot.llmSuccessRate] when absent from the JSON — the correct value for
+	 * this data, since a pre-#927 run's `ticksByOutcome` cannot contain
+	 * [TickOutcome.LLM_SILENT_NONACTIONABLE].
+	 */
+	@Test
+	fun `a version-5 fixture still loads with actionableTickRate defaulted to llmSuccessRate`() {
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V5_JSON)
+
+		assertThat(decoded.schemaVersion).isEqualTo(5)
+		assertThat(decoded.llmSuccessRate).isEqualTo(0.75)
+		assertThat(decoded.actionableTickRate).isEqualTo(0.75)
+	}
+
+	private companion object {
+		/** Pinned literally so a future bump has to touch this test deliberately. */
+		private const val SCHEMA_VERSION_WITH_ACTIONABLE_RATE: Int = 6
+
+		/** Issue #930 added [RunEndCause.STARVED]; no field changed shape. */
+		private const val SCHEMA_VERSION_WITH_STARVED_CAUSE: Int = 7
+
+		private val json =
+			Json {
+				prettyPrint = true
+				encodeDefaults = true
+			}
+
+		/**
+		 * A literal schema-version-5 run document, exactly as `DefaultRunSnapshotStore` wrote it
+		 * before Issue #927 added `actionableTickRate`. No `actionableTickRate` key is present.
+		 */
+		private val SCHEMA_V5_JSON =
+			"""
+			{
+				"schemaVersion": 5,
+				"runId": "legacy-v5-001",
+				"arm": "RULE_BASED",
+				"params": {
+					"tickPeriodMs": 500,
+					"historyN": 10,
+					"temperature": 0.0,
+					"maxActionsPerTick": 3,
+					"model": "",
+					"seed": null
+				},
+				"totalTicks": 4,
+				"ticksByOutcome": { "LLM_ACTIONS": 3, "RULE_FALLBACK": 1 },
+				"timeoutNoOpByCause": { "DEADLINE_MISS": 0 },
+				"llmSuccessRate": 0.75,
+				"noOpRate": 0.0,
+				"invalidOutputRate": 0.0,
+				"repairSuccessRate": 0.0,
+				"emittedByActionType": {},
+				"rejectionsByCode": {},
+				"applyFailuresByCode": {},
+				"validAt1": 0.0,
+				"correctAt1": null,
+				"oracleAgreementAt1": null,
+				"latencyP50Ms": 100,
+				"latencyP95Ms": 200,
+				"latencyMaxMs": 300,
+				"actionsByAuthor": {},
+				"unattributedApplies": 0,
+				"terminalFallbackEngaged": false,
+				"terminalFallbackTickIndex": null,
+				"c7Clean": true,
+				"completedNaturally": true,
+				"endCause": "NATURAL_COMPLETION"
+			}
+			""".trimIndent()
+	}
+}

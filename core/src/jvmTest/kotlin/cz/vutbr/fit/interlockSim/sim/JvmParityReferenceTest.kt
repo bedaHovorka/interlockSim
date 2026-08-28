@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
@@ -17,6 +18,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
@@ -30,9 +32,6 @@ import java.util.concurrent.TimeUnit
  * (in `:fast-sim`). Together, they confirm that native and JVM simulations produce
  * semantically equivalent output.
  *
- * Exact event times are **not** compared because kDisco.Random may produce different
- * sequences on JVM vs native. Instead, only structural invariants are checked.
- *
  * Structural invariants (shuntingLoop, endTime=60):
  * 1. At least 1 train generated
  * 2. Simulation completes without exceptions
@@ -40,6 +39,12 @@ import java.util.concurrent.TimeUnit
  * 4. All events have non-negative timestamps
  * 5. Events are in chronological order (timestamps non-decreasing)
  * 6. Summary statistics are present and reasonable
+ * 7. Exact entered/exited train counts (cross-platform determinism)
+ *
+ * Invariant 7 asserts **exact** counts, which must equal the native test's constants:
+ * kDisco's `Random.exp()`/`.normal()` are bit-identical across JVM and native since
+ * bedaHovorka/kdisco#69 was fixed (pure-Kotlin fdlibm `PortableMath` replacing
+ * platform-delegating `kotlin.math.ln`/`exp`).
  *
  * @since Issue #417 (native vs JVM semantic parity)
  * @see TextReporter
@@ -51,33 +56,57 @@ class JvmParityReferenceTest : KoinTestBase() {
 		private const val END_TIME = 60L
 		private const val VYHYBNA_RESOURCE = "/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 		private val timestampRegex = Regex("""t=([\d.]+)\s+""")
+
+		/**
+		 * Exact expected counts for `ShuntingLoop(endTime=60)` with the fixed-seed
+		 * generator. Cross-platform identical (bedaHovorka/kdisco#69 fixed); must match
+		 * `NativeJvmParityTest` in `:fast-sim`.
+		 */
+		private const val EXPECTED_TRAINS_ENTERED = 2
+		private const val EXPECTED_TRAINS_EXITED = 1
 	}
+
+	/** Collected output plus final train counters of one simulation run. */
+	private data class SimRun(
+		val events: List<String>,
+		val summary: String,
+		val trainsEntered: Int,
+		val trainsExited: Int
+	)
 
 	/**
 	 * Creates a ShuntingLoop simulation context from vyhybna.xml, attaches a
 	 * [TextReporter] with an output collector, runs the simulation, and returns
-	 * the collected event lines and summary line.
+	 * the collected event lines, summary line, and final train counters.
 	 */
-	private fun runSimulationAndCollect(): Pair<List<String>, String> {
+	private fun runSimulation(): SimRun {
 		val factory = getKoin().get<SimulationContextFactory>()
 		val stream =
 			Resources.read(VYHYBNA_RESOURCE.trimStart('/')).byteInputStream()
 				?: throw IllegalStateException("Classpath resource not found: $VYHYBNA_RESOURCE")
 		val output = mutableListOf<String>()
+		var trainsEntered = -1
+		var trainsExited = -1
 		Util
 			.assertInstanceOf<DefaultSimulationContext>(
 				stream.use { factory.createContext(it) }
 			).use { context ->
-				context.getInOuts()
-				context.setMainProcess(ShuntingLoop(context, END_TIME))
+				val loop = prepareShuntingLoop(context, END_TIME)
 				val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 				context.addPropertyChangeListener(reporter)
 				context.run()
 				reporter.printSummary()
+				trainsEntered = loop.getTrainsEntered()
+				trainsExited = loop.getTrainsExited()
 			}
 		val eventLines = output.filter { !it.startsWith("---") }
 		val summary = output.last { it.startsWith("---") }
-		return eventLines to summary
+		return SimRun(eventLines, summary, trainsEntered, trainsExited)
+	}
+
+	private fun runSimulationAndCollect(): Pair<List<String>, String> {
+		val run = runSimulation()
+		return run.events to run.summary
 	}
 
 	@Test
@@ -135,6 +164,14 @@ class JvmParityReferenceTest : KoinTestBase() {
 				name = "Chronological: t[${i - 1}]=${timestamps[i - 1]} <= t[$i]=${timestamps[i]}"
 			).isTrue()
 		}
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	fun `invariant 7 - exact train counts match cross-platform constants`() {
+		val run = runSimulation()
+		assertThat(run.trainsEntered, name = "trains entered").isEqualTo(EXPECTED_TRAINS_ENTERED)
+		assertThat(run.trainsExited, name = "trains exited").isEqualTo(EXPECTED_TRAINS_EXITED)
 	}
 
 	@Test

@@ -258,10 +258,7 @@ class XMLRoundTripTest : KoinTestBase() {
 		@TempDir tempDir: File
 	) {
 		// Load the complex vyhybna.xml network
-		val originalContext =
-			xmlFactory.createContext(
-				TestFixtures.loadShuntingXml()
-			) as EditingContext
+		val originalContext = TestFixtures.loadShuntingEditingContext(xmlFactory)
 
 		// Save to file
 		val xmlFile = File(tempDir, "vyhybna-roundtrip.xml")

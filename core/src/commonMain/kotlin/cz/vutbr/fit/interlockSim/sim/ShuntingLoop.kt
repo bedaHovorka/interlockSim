@@ -9,25 +9,27 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
+import cz.vutbr.fit.interlockSim.util.platformStartDaemonThread
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
 
@@ -35,32 +37,40 @@ import org.koin.core.component.KoinComponent
  * Příklad fungování modelu
  * Ovlada sest navestidel a 2 InOuty pomoci dynamicky nalezených cest
  *
- * ## Refactored for Issue #296 (Phase 4: Path Discovery Restructuring)
+ * ## SP0.11 thin-shell refactor (Issue #733 — Goal 10)
  *
- * **Changes from Issue #296:**
+ * [ShuntingLoop] is now a thin kDisco process shell. It owns simulation lifecycle,
+ * publishes observation snapshots for the off-kernel dispatcher driver, and drains
+ * decisions posted back onto the sim thread via [controlStepListener]. Admission and
+ * route-reservation policy live outside this class in the dispatcher-agent stack.
+ *
+ * Both train admission and forward-path advancement happen pre-hold in the same
+ * iteration tick: [iteration] publishes one combined observation, then
+ * [controlStepListener] applies the dispatcher's decisions before the per-iteration
+ * `hold()` (SP0.11 — Issue #733). A newly admitted train therefore receives its
+ * first path reservation in the same tick it is admitted.
+ *
+ * **SP0.11 responsibilities kept here:**
+ * - simulation lifecycle (`hold`, `terminate`, `activate`)
+ * - live block/input observation publishing for the external driver
+ * - queued-train approval callback entry point
+ * - test-observability counters tied directly to simulation state
+ *
+ * **Previous changes (Issue #296):**
  * - Eliminated manual path construction (~100 lines removed)
  * - Integrated TopologyNavigator for dynamic path finding
  * - Uses PathReservationService architecture (Phases 1-3)
- * - Paths discovered on-demand when trains request routes
- * - Maintains backward compatibility with existing tests
  *
  * **Previous changes (Issue #280/#284):**
  * - Migrated from static cells to dynamic wrappers (DynamicInOut, DynamicRailSemaphore, DynamicRailSwitch)
- * - Updated grid coordinate lookups to retrieve dynamic wrappers
- * - All paths now use dynamic wrappers for consistent identity
  *
  * **Architecture:**
  * - Uses TopologyNavigator (Phase 1) for static path finding
- * - Compatible with PathReservationService (Phase 2) and TrainNavigationService (Phase 3)
  * - Koin DI integration for service injection
+ * - Optional [ControlStepListener] seam for sim-thread command draining
  *
- * **Testing:**
- * - All ShuntingLoop unit tests passing (19 tests maintained)
- * - Integration tests passing (operational and regression tests)
- * - Golden output validation (simulation results match baseline)
- *
+ * @see ControlStepListener
  * @see TopologyNavigator
- * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/296">Issue #296</a>
  * @see docs/PATH_RESERVATION_ARCHITECTURE.md
  */
 class ShuntingLoop(
@@ -68,10 +78,30 @@ class ShuntingLoop(
 	private val endTime: Long,
 	private val enableRealTimeSync: Boolean = false,
 	initialSpeedMultiplier: Double = 1.0,
-	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService()
+	/**
+	 * Station capacity — the fixed number of parallel tracks the physical station has, i.e. the
+	 * maximum number of trains that may be simultaneously approved (admitted) at any tick.
+	 *
+	 * This is the hard capacity gate enforced by [approveQueuedTrain]: once [approwedTrains] is
+	 * at capacity, further admissions for this tick are refused (a logged no-op) and the trains
+	 * stay queued until a slot frees. It defaults to
+	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2 for `vyhybna.xml`: tracks k1, k2) —
+	 * the same constant the rule-based dispatcher and the LLM `approve_train` tool/safety net
+	 * use, so the three agree by default. The value is the physical-track count, not a tunable
+	 * performance knob: exceeding it would admit a train with no track left to occupy.
+	 *
+	 * @since SP2b.9 review follow-up (PR #811) — closes the "approve_train cap is not a hard
+	 *   gate" finding. Previously [approveQueuedTrain] admitted blindly and the LLM path could
+	 *   overshoot the capacity contract within a single cycle because the tool and the admission
+	 *   safety net read stale approved-count snapshots; the sim-thread [approveQueuedTrain] is
+	 *   the single chokepoint that owns the true count, so the gate lives here.
+	 */
+	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 ) : Interlocking(context),
 	SpeedControllable,
-	KoinComponent {
+	KoinComponent,
+	ApprovesTrains,
+	ProvidesDispatchLoopObservation {
 	@kotlin.concurrent.Volatile
 	override var speedMultiplier: Double = initialSpeedMultiplier
 		set(value) {
@@ -83,6 +113,7 @@ class ShuntingLoop(
 		require(initialSpeedMultiplier > 0.0) {
 			"Speed multiplier must be positive, got: $initialSpeedMultiplier"
 		}
+		require(maxConcurrentTrains > 0) { "maxConcurrentTrains must be positive, got: $maxConcurrentTrains" }
 	}
 
 	// Inject registry for idempotent path reservation checks
@@ -90,13 +121,13 @@ class ShuntingLoop(
 		context.scope.get<PathReservationRegistry>()
 	}
 
+	// Lazy injection (SP0.11: moved from ctor param to lazy property — construction stays in scope)
+	private val pathReservationService: PathReservationService by lazy {
+		context.getRoutingServices().getPathReservationService()
+	}
+
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		// Physical limit: only 2 parallel tracks (k1 and k2) in shunting loop
-		// MAX_TRAINS = 2 enforces physical capacity constraint
-		// All 5 generated trains complete sequentially via queueing mechanism
-		private const val MAX_TRAINS: Int = 2
 
 		/** Report types enabled by the shunting-loop simulation scenario. */
 		internal val ENABLED_REPORT_TYPES =
@@ -139,13 +170,82 @@ class ShuntingLoop(
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
+	/**
+	 * Optional listener called at the start of each [iteration] to drain and apply
+	 * any pending decisions from the cross-thread command queue (SP0.9 — Issue #731).
+	 *
+	 * Set this **before** `context.run()` is called; the field is read on the kDisco
+	 * sim thread only, so no additional synchronization is needed after startup wiring
+	 * is complete.  Typical value:
+	 * [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+	 * from `:dispatcher-agent`.
+	 *
+	 * @since Issue #731 (SP0.9 — Goal 10)
+	 */
+	var controlStepListener: ControlStepListener? = null
+
+	/**
+	 * SP0.11: Hook called every [iteration] to publish a fresh [SimulationSnapshot] for the
+	 * off-kernel driver thread. Set this to [NetworkPerceptionPort.captureSnapshot] of the
+	 * externally-created perception port (wired in ExampleRegistry or Frame) before
+	 * `context.run()`.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	var snapshotCaptureHook: (() -> Unit)? = null
+
+	/**
+	 * SP0.11: Coroutine block started in a daemon thread alongside [startAction].
+	 * Set this to the agent-driver's run loop before `context.run()`. The block is
+	 * expected to loop while [isSimActive] returns `true` and call
+	 * [AgentLoopDriver.runCycle][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver.runCycle]
+	 * on each iteration.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	var agentDriverAction: (suspend () -> Unit)? = null
+
+	/** `true` from [startAction] to the moment [interLoopSleep] detects the end condition. */
+	@kotlin.concurrent.Volatile
+	private var simActive: Boolean = false
+
+	// SP0.11: Observation data published at the start of each iteration for the off-kernel
+	// driver thread. Written on the single kDisco sim thread as a single immutable snapshot
+	// so the driver thread always observes a consistent set of fields from the SAME sim tick
+	// (three independent @Volatile fields could be read cross-tick, producing a stale
+	// pathAlreadyExtendedBeyond and a duplicate re-decide). @Volatile ensures visibility.
+	@kotlin.concurrent.Volatile
+	private var latestObservation: TickObservation =
+		TickObservation(queuedTrains = emptyList(), innerBlockInputs = emptyList(), outerBlockInputs = emptyList())
+
+	/**
+	 * Immutable per-tick observation bundle published for the off-kernel driver thread.
+	 * The three lists are computed together on the sim thread and published via a single
+	 * [latestObservation] reference write, so a reader either sees all three from tick N
+	 * or all three from tick N-1 — never a mix.
+	 *
+	 * Public so off-kernel callers (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver])
+	 * can read all three fields with a single [getLatestObservation] call instead of three
+	 * separate accessor calls, which would defeat the single-tick atomicity this type exists
+	 * to guarantee.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10); single-snapshot publication added by the
+	 *   SP0.11 review follow-up; made public by the tearing-fix follow-up
+	 */
+	data class TickObservation(
+		val queuedTrains: List<QueuedTrainObservation>,
+		val innerBlockInputs: List<BlockInputObservation>,
+		val outerBlockInputs: List<BlockInputObservation>
+	)
+
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
-	// sites (placeTrain, iteration, tryReservePathFrom) serialize naturally. If a future
+	// sites (placeTrain, iteration, tryReservePath) serialize naturally. If a future
 	// dispatcher becomes concurrent, these need atomicfu.
 	private var trainsEnteredCount: Int = 0
 	private var trainsExitedCount: Int = 0
 	private var maxConcurrentTrainsCount: Int = 0
+	private var failedReservationsCount: Int = 0
 	private val blockTransitionsByTrain: MutableMap<String, Int> = mutableMapOf()
 
 	private inner class RealTimeSynch : LoopProcess() {
@@ -241,6 +341,7 @@ class ShuntingLoop(
 	}
 
 	override suspend fun startAction() {
+		simActive = true
 		env.addReportTypes(*ENABLED_REPORT_TYPES)
 
 		// Conditionally activate real-time synchronization for GUI mode
@@ -249,10 +350,18 @@ class ShuntingLoop(
 		}
 
 		Process.activate(generator)
+
+		// SP0.11: Launch the external agent-driver coroutine alongside the kDisco kernel.
+		// The action runs in a daemon thread so the JVM can exit cleanly when the
+		// simulation finishes; the loop inside the action checks [isSimActive].
+		// KMP: thread creation is JVM-only, hence the expect/actual indirection.
+		agentDriverAction?.let { action ->
+			platformStartDaemonThread("dispatcher-agent-driver", action)
+		}
 	}
 
 	override suspend fun iteration() {
-		// stare vlaky
+		// Prune terminated trains first so the snapshot reflects accurate approved-train counts.
 		val iter: MutableIterator<Train> = approwedTrains.iterator()
 		while (iter.hasNext()) {
 			val element: Train = iter.next()
@@ -261,130 +370,254 @@ class ShuntingLoop(
 				trainsExitedCount++
 			}
 		}
-		// nove vlaky a inouty
-		approveTrains()
+
+		// SP0.11: Publish a fresh snapshot and per-block observation data for the off-kernel
+		// driver thread.  Published before the applier fires so the applier's callbacks and
+		// the driver read current-tick state.  Written on the single kDisco sim thread as a
+		// single immutable [TickObservation] reference write; @Volatile ensures visibility.
+		snapshotCaptureHook?.invoke()
+		latestObservation =
+			TickObservation(
+				queuedTrains = unapprowedTrains.map { QueuedTrainObservation(it.name, it.timetableDestinationName) },
+				innerBlockInputs =
+					innerTrackBlocks.flatMap { block ->
+						block.ends().map { end -> toBlockInputObservation(block, Util.assertInstanceOf<DynamicRailSemaphore>(end)) }
+					},
+				outerBlockInputs = outerTrackblocks.map { (block, sem) -> toBlockInputObservation(block, sem) }
+			)
+
+		// SP0.9: Drain and apply any decisions posted to the cross-thread command queue.
+		controlStepListener?.onControlStep()
+
 		if (approwedTrains.size > maxConcurrentTrainsCount) {
 			maxConcurrentTrainsCount = approwedTrains.size
 		}
-		// Polling interval: 1.0s (matches baseline timing)
-		// Critical: Train entry events align with polling to catch RESERVED state
+		// This hold is only HALF the control period. [LoopProcess.actions] runs `iteration()` and
+		// then `interLoopSleep()`, which holds another 1.0 (see [interLoopSleep] below), so the
+		// effective control tick — the interval between successive `iteration()` calls, and hence
+		// between successive [controlStepListener] callbacks — is **2.0 simulated seconds**, not
+		// 1.0. Simulated time still advances in 1.0 increments; it is the control step that fires
+		// every 2.0. Pinned by `ShuntingLoopControlPeriodTest` (`:dispatcher-agent`): endTime = 20
+		// yields 11 control steps, at t = 0, 2, 4, …, 20.
 		hold(1.0)
-		for (block in innerTrackBlocks) checkBothEnds(block)
-		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)
 	}
 
-	private fun checkBothEnds(block: DynamicTrackBlock) {
-		// Inner blocks (k1, k2) have RailSemaphore ends only, no InOut
-		// Check both semaphore endpoints to see if path needs to be reserved
-		for (sep in block.ends()) {
-			if (checkOneEnd(block, Util.assertInstanceOf<DynamicRailSemaphore>(sep))) return
+	/**
+	 * Computes the [BlockInputObservation] for [block] toward [to] from live
+	 * block/registry state — the directional facts [DispatchObservation]'s
+	 * [SimulationSnapshot][cz.vutbr.fit.interlockSim.ports.SimulationSnapshot]
+	 * cannot carry (see [BlockInputObservation] KDoc).
+	 *
+	 * [toSeparatorName] is the next FREE separator one section ahead of [to]
+	 * ([PathReservationService.findNextReservationTarget]) — the read-only twin of the
+	 * pre-#729 `reservePathToAnyNextSemaphore(to)` call, so the applier's
+	 * `reservePath(train, to, target)` reproduces the prior first-FREE outcome.
+	 */
+	private fun toBlockInputObservation(
+		block: DynamicTrackBlock,
+		to: DynamicRailSemaphore
+	): BlockInputObservation {
+		val state = block.getState()
+		val ownerTrainId =
+			when (state) {
+				TrackFacility.State.FREE -> null
+				TrackFacility.State.RESERVED -> block.trainName
+				TrackFacility.State.OCCUPIED -> requireSimulationNotNull(block.getTrackOccupant()).name
+			}
+		val isApproachingThisInput =
+			state == TrackFacility.State.OCCUPIED &&
+				requireSimulationNotNull(block.getTrackOccupant()).nextSemaphore() == to
+		val pathSetUpTowardThisInput =
+			state == TrackFacility.State.RESERVED &&
+				block.isSetUpPath(env.toDynamic(block.getSecondEnd(to)))
+		val pathAlreadyExtendedBeyond = ownerTrainId != null && registry.isPathExtendedBeyond(ownerTrainId, to)
+		return BlockInputObservation(
+			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
+			towardSemaphoreName = to.name,
+			toSeparatorName =
+				findForwardReservationTargetName(
+					to,
+					isApproachingThisInput,
+					pathSetUpTowardThisInput,
+					pathAlreadyExtendedBeyond
+				),
+			state = state,
+			ownerTrainId = ownerTrainId,
+			isApproachingThisInput = isApproachingThisInput,
+			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
+			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
+		)
+	}
+
+	// Only inputs that can actually yield a forward reservation need a target searched for.
+	// findNextReservationTarget is a graph walk (BFS + per-candidate path enumeration); running
+	// it for FREE and already-extended inputs cost ~9% of fast-sim wall time (#738).
+	private fun findForwardReservationTargetName(
+		to: DynamicRailSemaphore,
+		isApproachingThisInput: Boolean,
+		pathSetUpTowardThisInput: Boolean,
+		pathAlreadyExtendedBeyond: Boolean
+	): String? {
+		val canReserveForward =
+			!pathAlreadyExtendedBeyond &&
+				(isApproachingThisInput || pathSetUpTowardThisInput)
+		return if (canReserveForward) {
+			pathReservationService.findNextReservationTarget(to)?.let(::nameOf)
+		} else {
+			null
 		}
 	}
 
 	/**
-	 * Try to reserve a path from the given semaphore using PathReservationService.
-	 *
-	 * Uses the new reservePathToAny() method which handles all target discovery
-	 * and path reservation internally, eliminating manual iteration.
-	 *
-	 * @param sem The semaphore to reserve paths from
-	 * @param trainName The train requesting the reservation
+	 * Name of a [DynamicPathSeparator] returned by
+	 * [PathReservationService.findNextReservationTarget] — a [DynamicInOut] or a
+	 * [DynamicRailSemaphore] (the only separator kinds that method returns). Used to
+	 * carry the `to` target across the pure [Dispatcher] seam as a name string.
 	 */
-	private fun tryReservePathFrom(
-		sem: DynamicRailSemaphore,
-		trainName: String
-	): Boolean {
-		val result = pathReservationService.reservePathToAnyNextSemaphore(trainName, sem)
-
-		return when (result) {
-			is PathReservationService.ReservationResult.Success -> {
-				logger.debug { "Reserved path from ${sem.name} for $trainName" }
-				// KMP-safe increment: Map.merge() is a JVM-only default method.
-				blockTransitionsByTrain[trainName] = (blockTransitionsByTrain[trainName] ?: 0) + 1
-				true
-			}
-			is PathReservationService.ReservationResult.Conflict -> {
-				logger.warn {
-					"Conflict for $trainName at ${sem.name}: " +
-						"block ${result.conflictingBlock.name ?: "unnamed"} " +
-						"owned by ${result.existingOwner}"
-				}
-				false
-			}
-			is PathReservationService.ReservationResult.NoPathExists -> {
-				logger.debug { "No path exists from ${sem.name} for $trainName" }
-				false
-			}
-			is PathReservationService.ReservationResult.AllPathsBlocked -> {
-				logger.debug {
-					"All paths blocked from ${sem.name} for $trainName " +
-						"(attempted: ${result.attemptedPaths})"
-				}
-				false
-			}
+	private fun nameOf(separator: DynamicPathSeparator): String? =
+		when (separator) {
+			is DynamicInOut -> separator.name
+			is DynamicRailSemaphore -> separator.name
+			else -> null
 		}
+
+	/**
+	 * Returns the list of trains currently queued but not yet approved, as published at the
+	 * start of the most recent [iteration]. Safe to call from off-kernel threads.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	fun getQueuedTrains(): List<QueuedTrainObservation> = latestObservation.queuedTrains
+
+	/**
+	 * Returns the block-input observations for all inner track blocks, as published at the
+	 * start of the most recent [iteration]. Safe to call from off-kernel threads.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	fun getInnerBlockInputs(): List<BlockInputObservation> = latestObservation.innerBlockInputs
+
+	/**
+	 * Returns the block-input observations for all outer track blocks, as published at the
+	 * start of the most recent [iteration]. Safe to call from off-kernel threads.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	fun getOuterBlockInputs(): List<BlockInputObservation> = latestObservation.outerBlockInputs
+
+	/**
+	 * Returns the full per-tick observation bundle (queued trains plus inner/outer block
+	 * inputs) as published at the start of the most recent [iteration], in a single
+	 * @Volatile read. Safe to call from off-kernel threads.
+	 *
+	 * Prefer this over calling [getQueuedTrains]/[getInnerBlockInputs]/[getOuterBlockInputs]
+	 * separately when a caller needs more than one of the three fields together — three
+	 * independent calls can observe different sim ticks if the sim thread republishes
+	 * [latestObservation] in between, tearing the single-tick guarantee [TickObservation]
+	 * exists to provide.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10); added by the tearing-fix follow-up
+	 */
+	fun getLatestObservation(): TickObservation = latestObservation
+
+	/**
+	 * [ProvidesDispatchLoopObservation] implementation — lets `:dispatcher-agent`'s Koin wiring
+	 * read the latest dispatch-loop observation via
+	 * [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.getMainProcess] without naming
+	 * [ShuntingLoop] directly (would pull kDisco's `Process` onto its main compile classpath,
+	 * Goal 10 dispatcher-cannot-approve-trains fix). Single @Volatile read, same atomicity as
+	 * [getLatestObservation].
+	 */
+	override fun latestDispatchLoopSnapshot(): DispatchLoopSnapshot =
+		latestObservation.let { DispatchLoopSnapshot(it.queuedTrains, it.innerBlockInputs, it.outerBlockInputs) }
+
+	/**
+	 * Returns a snapshot of the currently approved (active) trains. Used by the external
+	 * [DefaultNetworkPerceptionPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]
+	 * to build [SimulationSnapshot.trainPositions].
+	 *
+	 * Must only be called on the kDisco simulation thread.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	override fun getApprovedTrains(): List<Train> = approwedTrains.toList()
+
+	/** Returns `true` while the simulation is active (between [startAction] and [interLoopSleep] end). */
+	fun isSimActive(): Boolean = simActive
+
+	/**
+	 * Public entry point for the SP0.9 applier to approve a queued train.
+	 *
+	 * Moves the train named [trainId] from the unapproved queue into the approved set and
+	 * activates it. FIFO order is preserved because [RuleBasedDispatcher] walks
+	 * [DispatchObservation.unapprovedTrains] in queue order.
+	 *
+	 * **Idempotency (SP0.11):** if no unapproved train named [trainId] exists (e.g. the
+	 * async driver posted a duplicate [ApproveTrain] decision), the call is silently
+	 * ignored. The train was already approved by an earlier decision in the same drain.
+	 *
+	 * Must be called on the kDisco simulation thread (typically from
+	 * [ControlStepListener.onControlStep]).
+	 *
+	 * @param trainId The name/identifier of the train to approve.
+	 * @since Issue #731 (SP0.9 — Goal 10); idempotency added in SP0.11
+	 */
+	fun approveQueuedTrain(trainId: String) {
+		val train = unapprowedTrains.firstOrNull { it.name == trainId } ?: return
+		// SP2b.9 review follow-up (PR #811): hard capacity gate. approwedTrains is the single
+		// source of truth for the number of currently-admitted trains, owned by this sim-thread
+		// method. The LLM `approve_train` tool and the KoogAgentPlanAdapter admission safety net
+		// both read an off-thread approved-count snapshot that can go stale within one cycle
+		// (multiple tool calls see the same count), so without this gate the LLM path could
+		// admit more trains than the station has physical tracks (maxConcurrentTrains). The
+		// rule-based path never hits this branch: it produces exactly `cap - approvedCount`
+		// ApproveTrain decisions per cycle. Refusing here is a safe, idempotent no-op — the
+		// train stays queued and is admitted on a later tick once a slot frees (terminated
+		// trains are pruned from approwedTrains at the start of each iteration). Enforces the
+		// capacity invariant documented on getMaxConcurrentTrains.
+		if (approwedTrains.size >= maxConcurrentTrains) {
+			logger.warn {
+				"approveQueuedTrain: refusing to admit '$trainId' — $maxConcurrentTrains train(s) " +
+					"already approved (station capacity reached); train stays queued"
+			}
+			return
+		}
+		unapprowedTrains.remove(train)
+		approwedTrains.add(train)
+		activate(train)
 	}
 
-	private fun checkOneEnd(
-		block: DynamicTrackBlock,
-		to: DynamicRailSemaphore
-	): Boolean {
-		if (block.getState() == TrackFacility.State.FREE) {
-			return false
-		}
-
-		if (block.getState() == TrackFacility.State.OCCUPIED) {
-			val occupant = requireSimulationNotNull(block.getTrackOccupant())
-			if (occupant.nextSemaphore() != to) {
-				return false
-			}
-
-			// NEW: Idempotent check - skip if path already extends beyond this semaphore
-			if (registry.isPathExtendedBeyond(occupant.name, to)) {
-				logger.debug {
-					"Path already extends beyond ${to.name} for ${occupant.name}, " +
-						"skipping redundant reservation"
-				}
-				return true // ← Early exit, like working tag's pattern
-			}
-
-			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }
-			return tryReservePathFrom(to, occupant.name)
-		}
-
-		if (block.getState() == TrackFacility.State.RESERVED) {
-			// Check if path is already set up through this semaphore
-			val otherEnd = block.getSecondEnd(to)
-			if (block.isSetUpPath(env.toDynamic(otherEnd))) {
-				val trainName = requireSimulationNotNull(block.trainName)
-
-				// NEW: Idempotent check for reserved blocks too
-				if (registry.isPathExtendedBeyond(trainName, to)) {
-					logger.debug {
-						"Path already extends beyond ${to.name} for $trainName " +
-							"(reserved block), skipping"
-					}
-					return true
-				}
-
-				logger.debug { "Path already set up through ${to.name}, attempting extension" }
-				return tryReservePathFrom(to, trainName)
-			}
-		}
-
-		return false
+	/**
+	 * Increments the block-transition counter for [trainId].
+	 *
+	 * Called by [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+	 * on every successful path reservation; the counter previously lived inside [tryReservePath].
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	fun incrementBlockTransition(trainId: String) {
+		blockTransitionsByTrain[trainId] = (blockTransitionsByTrain[trainId] ?: 0) + 1
 	}
 
-	private fun approveTrains() {
-		while (approwedTrains.size < MAX_TRAINS && unapprowedTrains.isNotEmpty()) {
-			val poll: Train = unapprowedTrains.removeFirst()
-			approwedTrains.add(poll)
-			activate(poll)
-		}
+	/**
+	 * Increments the failed-reservation counter.
+	 *
+	 * Called by [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+	 * on every rejected reservation; the counter previously lived inside [tryReservePath].
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	fun incrementFailedReservation() {
+		failedReservationsCount++
 	}
 
+	/**
+	 * Second half of the control period. Together with the `hold(1.0)` that ends [iteration] this
+	 * makes the control tick **2.0 simulated seconds** — see the comment at the end of [iteration].
+	 */
 	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
+			simActive = false // signal the companion driver thread to stop
 			generator.terminate()
 			env.stop()
 			return
@@ -418,9 +651,25 @@ class ShuntingLoop(
 
 	fun getTrainsExited(): Int = trainsExitedCount
 
+	/**
+	 * Peak number of trains simultaneously approved (holding an admitted slot) at any
+	 * observed tick during this run.
+	 *
+	 * **Safety invariant:** this value must never exceed the station's fixed topology
+	 * capacity ([RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], or whatever
+	 * `maxConcurrentTrains` the wired dispatcher was constructed with) — that capacity is
+	 * not a tunable performance knob, it is how many parallel tracks the physical station
+	 * actually has (2 for `vyhybna.xml`: k1, k2). If a dispatcher ever let a 3rd train in
+	 * concurrently on this topology, that train would have no physical track left to occupy —
+	 * an unresolvable state, not a recoverable "wait and retry" condition, since every
+	 * available parallel track is already held by the other two approved trains.
+	 */
 	fun getMaxConcurrentTrains(): Int = maxConcurrentTrainsCount
 
 	fun getBlockTransitions(trainId: String): Int = blockTransitionsByTrain[trainId] ?: 0
 
 	fun getAllBlockTransitions(): Map<String, Int> = blockTransitionsByTrain.toMap()
+
+	/** Number of dispatcher reservation attempts that failed (Conflict/NoPathExists/AllPathsBlocked). */
+	fun getFailedReservations(): Int = failedReservationsCount
 }

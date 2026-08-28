@@ -18,6 +18,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
+import cz.vutbr.fit.interlockSim.PROGRAM_LLM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
@@ -70,11 +71,34 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("appTitle replaces the base window title")
+	fun appTitleReplacesBaseWindowTitle() {
+		// Issue #839: LLM-driven runs show a different base title.
+		runOnEDT {
+			frame.appTitle = PROGRAM_LLM_FULL_NAME
+
+			assertThat(frame.title).isEqualTo(PROGRAM_LLM_FULL_NAME)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("appTitle defaults to the plain program title")
+	fun appTitleDefaultsToPlainProgramTitle() {
+		runOnEDT {
+			assertThat(frame.appTitle).isEqualTo(PROGRAM_FULL_NAME)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("frame has correct initial size")
 	fun frameHasCorrectInitialSize() {
 		runOnEDT {
 			assertThat(frame.width).isEqualTo(1024)
-			assertThat(frame.height).isEqualTo(768)
+			// Height reserves room for the DispatcherControlPanel line so station tracks stay
+			// visible (PR #801 review comment, Issue #561).
+			assertThat(frame.height).isEqualTo(818)
 		}
 	}
 
@@ -138,14 +162,15 @@ class FrameTest : AbstractFrameTestBase() {
 	@DisplayName("frame has toolbar container at north")
 	fun frameHasToolbarContainerAtNorth() {
 		runOnEDT {
-			// North component is now a JPanel containing ToolBar + ControlPanel + SimulationControlPanel (Issues #205, #190)
+			// North component is now a JPanel containing ToolBar + ControlPanel + SimulationControlPanel
+			// (Issues #205, #190) + DispatcherControlPanel (Issue #561, Goal 10 SP2b.6)
 			val northComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.NORTH)
 			assertThat(northComponent).isNotNull()
 			assertThat(northComponent).isInstanceOf(javax.swing.JPanel::class)
 
-			// Verify the container has components (ToolBar, ControlPanel, SimulationControlPanel)
+			// Verify the container has components (ToolBar, ControlPanel, SimulationControlPanel, DispatcherControlPanel)
 			val panel = northComponent as javax.swing.JPanel
-			assertThat(panel.componentCount).isEqualTo(3)
+			assertThat(panel.componentCount).isEqualTo(4)
 		}
 	}
 

@@ -9,12 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Random
-import cz.hovorka.kdisco.dtMax
-import cz.hovorka.kdisco.dtMin
-import cz.hovorka.kdisco.maxAbsError
-import cz.hovorka.kdisco.maxRelError
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Random
+import cz.ksimulantenbande.kdisco.dtMax
+import cz.ksimulantenbande.kdisco.dtMin
+import cz.ksimulantenbande.kdisco.maxAbsError
+import cz.ksimulantenbande.kdisco.maxRelError
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -31,6 +31,13 @@ open class Generator(
 
 	override suspend fun startAction() {
 		dtMin = 1e-6
+		// Block-boundary and tail-entry events are now located by kDisco root-finding
+		// (`Process.waitCrossing`, see Train.kt) rather than by step granularity, so `dtMax` no
+		// longer has to be tiny to keep *those* events' overshoot negligible. Motor's
+		// AccelerationStopCondition (velocity-target detection, Train.kt) is NOT yet converted —
+		// it still relies on step granularity via plain `waitUntil` — so `dtMax` is deliberately
+		// left unchanged here rather than raised further; converting Motor and re-tuning dtMax
+		// is tracked separately (Issue #760, follow-up to #750).
 		dtMax = 1e-3
 		maxRelError = 1e-2
 		maxAbsError = 1e-2

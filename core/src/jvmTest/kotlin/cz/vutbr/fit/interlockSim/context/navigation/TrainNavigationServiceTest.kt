@@ -23,6 +23,8 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -30,6 +32,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -95,7 +98,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B (1 block)
-			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+			context = TestTopologies.simpleLinearPathSimulation()
 
 			// Get real services from context scope
 			service = context.getRoutingServices().getTrainNavigationService()
@@ -424,6 +427,57 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			}
 		}
 
+		/**
+		 * Regression for the "no topological path exists" deadlock.
+		 *
+		 * Reproduces a measured `shuntingLoopAI` run exactly: Train #2 runs `A -> B` (eastbound),
+		 * the dispatcher asks for `A -> doA1`, and the interlocking grants it — three blocks
+		 * reserved, no complaint. But `doA1` carries `orientation="true"`, so it faces **west**:
+		 * for an eastbound train it is a rear-facing terminus. When the train reaches `zA` — the
+		 * last point it can act on — [DefaultTrainNavigationService.buildPathWithDirection] walks
+		 * the reserved path, never reaches a forward-facing oriented separator, and returns `null`.
+		 *
+		 * That must be reported as [PathResult.OwnershipConflict], not
+		 * [PathResult.NoTopologicalPath]. Nothing here is a topology fault: `zA` continues through
+		 * block `kA` to InOut `A`, and `vyhybna.xml` has no dead end anywhere. The train is simply
+		 * waiting for the dispatcher to extend its route — the same state every other waiting train
+		 * is in — and the classification decides its fate in `Train.actions()`:
+		 * `OwnershipConflict` waits on `createPathAvailableCondition` and wakes the instant the
+		 * route is extended, while `NoTopologicalPath` takes the unbounded `hold(5.0)` poll and
+		 * logs ERROR every five seconds until the run ends.
+		 *
+		 * Measured: with the extension arriving 3 s later the train sailed through; at 39 s it
+		 * stalled for 50 s; in a run where it never arrived the train spun 48 times to the end of
+		 * the run, holding `kA` and blocking everything behind it.
+		 */
+		@Test
+		fun `findReservedPathForTrain reports a rear-facing terminus as a temporary conflict`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val doA1 = grid.getCellAt(16, 8) as DynamicRailSemaphore
+						val zA = grid.getCellAt(14, 8) as DynamicRailSemaphore
+
+						// The grant the dispatcher actually made, for an eastbound train.
+						val reservation = pathService.reservePath("train1", inOutA, doA1)
+						assertThat(reservation)
+							.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+
+						// The query the train makes on arriving at zA.
+						val result = service.findReservedPathForTrain("train1", zA)
+
+						assertThat(result).isInstanceOf(PathResult.OwnershipConflict::class)
+					}
+				}
+			}
+		}
+
 		@Test
 		fun `findReservedPathForTrain deduplicates blocks in path`() {
 			// Arrange: vyhybna.xml has switches that may create duplicate block references
@@ -473,6 +527,109 @@ class TrainNavigationServiceTest : KoinTestBase() {
 	}
 
 	@Nested
+	@DisplayName("reservedSeparatorsAhead (SP2a.1)")
+	inner class ReservedSeparatorsAheadTests {
+		private val editingContextFactory: JvmEditingContextFactory by inject()
+		private val simulationContextFactory: SimulationContextFactory by inject()
+
+		@Test
+		fun `returns oriented separators after the anchor along the reserved route, in order`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+						val registry: PathReservationRegistry = context.scope.get()
+
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+
+						pathService.reservePath("train1", inOutA, inOutB)
+
+						// Independent manual walk of the reserved path: every OrientedPathSeparator
+						// after the anchor, in route order. vyhybna's A→B route has intermediate
+						// signals, so this list is non-empty.
+						val reservedPath = registry.getPathInfo("train1")!!.reservedPath
+						val anchorIndex = reservedPath.indexOfFirst { it == inOutA }
+						assertThat(anchorIndex).isGreaterThan(-1)
+						val expected =
+							(anchorIndex + 1 until reservedPath.size)
+								.mapNotNull { reservedPath.elementAt(it) as? OrientedPathSeparator }
+						assertThat(expected).isNotEmpty()
+
+						// limit larger than available returns all of them.
+						val result = service.reservedSeparatorsAhead("train1", inOutA, expected.size + 5)
+						assertThat(result).isEqualTo(expected)
+
+						// limit 1 returns only the first oriented separator after the anchor.
+						val firstOnly = service.reservedSeparatorsAhead("train1", inOutA, 1)
+						assertThat(firstOnly).isEqualTo(expected.take(1))
+					}
+				}
+			}
+		}
+
+		@Test
+		fun `limit 0 returns an empty list`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						pathService.reservePath("train1", inOutA, inOutB)
+
+						assertThat(service.reservedSeparatorsAhead("train1", inOutA, 0)).isEmpty()
+					}
+				}
+			}
+		}
+
+		@Test
+		fun `unknown train (no PathInfo) returns an empty list`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+
+						// "noTrain" has no reserved path registered.
+						assertThat(service.reservedSeparatorsAhead("noTrain", inOutA, 5)).isEmpty()
+					}
+				}
+			}
+		}
+
+		@Test
+		fun `terminal anchor (within one semaphore of destination) returns an empty list`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						pathService.reservePath("train1", inOutA, inOutB)
+
+						// The destination InOut is the last element of the reserved route — there
+						// are no oriented separators after it.
+						assertThat(service.reservedSeparatorsAhead("train1", inOutB, 5)).isEmpty()
+					}
+				}
+			}
+		}
+	}
+
+	@Nested
 	@DisplayName("Method Consistency")
 	inner class MethodConsistencyTests {
 		private lateinit var context: DefaultSimulationContext
@@ -481,7 +638,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B
-			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+			context = TestTopologies.simpleLinearPathSimulation()
 
 			service = context.getRoutingServices().getTrainNavigationService()
 		}
@@ -745,7 +902,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val reserveResult1 = pathService.reservePath("train1", inOutA, inOutB)
 			assertThat(reserveResult1).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 			val train1ReservedBlocks =
-				(reserveResult1 as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+				assertReservationSuccess(reserveResult1).reservedBlocks.toSet()
 
 			val reserveResult2 = pathService.reservePath("train2", inOutB, inOutA)
 
@@ -1038,7 +1195,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			// Reserve path (full path via 7 blocks in vyhybna.xml)
 			val reserveResult = pathService.reservePath("train1", inOutA, inOutB)
 			assertThat(reserveResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
-			val reservedBlocks = (reserveResult as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+			val reservedBlocks = assertReservationSuccess(reserveResult).reservedBlocks.toSet()
 
 			// Navigate (returns path to next semaphore)
 			val navPath = navService.findReservedPathForTrain("train1", inOutA)
@@ -1093,7 +1250,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				// Reserve (full path from A to B)
 				val reserveResult = pathService.reservePath(trainId, inOutA, inOutB)
 				assertThat(reserveResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
-				val reservedBlocks = (reserveResult as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+				val reservedBlocks = assertReservationSuccess(reserveResult).reservedBlocks.toSet()
 
 				// Navigate (returns path to next semaphore)
 				val navPath = navService.findReservedPathForTrain(trainId, inOutA)

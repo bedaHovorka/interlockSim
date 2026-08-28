@@ -13,7 +13,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.hovorka.kdisco.Variable
+import cz.ksimulantenbande.kdisco.Variable
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 

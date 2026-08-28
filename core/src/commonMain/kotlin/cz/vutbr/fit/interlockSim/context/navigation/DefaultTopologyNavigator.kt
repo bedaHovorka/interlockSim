@@ -426,14 +426,21 @@ class DefaultTopologyNavigator(
 		// Query graph for all edges assigned to this location
 		val assignedEdges = context.getGraph().assignedEdges(location)
 
-		// Find the segment that connects to the current block
+		// Find the segment that connects to the current block. In a simulation context the graph
+		// edges are DynamicTrackBlock wrappers while `current` has already been normalized to its
+		// static ref by staticTrackBlock(); compare on the static ref of both sides so the switch
+		// constraint is not silently a no-op in simulation contexts (Issue #797 follow-up).
+		val currentStatic = staticRefOf(current)
 		for (segment in assignedEdges.keys) {
-			if (assignedEdges[segment] == current) {
+			if (staticRefOf(assignedEdges[segment]) == currentStatic) {
 				return segment
 			}
 		}
 		return null
 	}
+
+	/** Normalize a [TrackBlock] (possibly a [DynamicTrackBlock] wrapper) to its static ref. */
+	private fun staticRefOf(block: TrackBlock?): TrackBlock? = (block as? DynamicTrackBlock)?.staticRef ?: block
 
 	/**
 	 * Get the next track sections following a path separator while respecting static
@@ -476,7 +483,7 @@ class DefaultTopologyNavigator(
 	 * [getSwitchConstrainedNextTrackSections] so that invalid switch transitions are
 	 * never included in the returned routes.
 	 */
-	internal fun findAllSwitchConstrainedPaths(
+	override fun findAllSwitchConstrainedPaths(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int

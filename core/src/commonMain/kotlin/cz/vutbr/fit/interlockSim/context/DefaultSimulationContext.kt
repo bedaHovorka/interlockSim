@@ -9,10 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.hovorka.kdisco.DiscoException
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Random
-import cz.hovorka.kdisco.Simulation
+import cz.ksimulantenbande.kdisco.DiscoException
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Random
+import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
@@ -61,6 +61,7 @@ import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
+import cz.ksimulantenbande.kdisco.SimulationEvent as KDiscoSimulationEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent as AnimBlockEvent
 
 /**
@@ -149,7 +150,7 @@ open class DefaultSimulationContext(
 			.defaultContext()
 			.get()
 			.createScope(
-				scopeId = platformIdentityCode(this),
+				scopeId = nextContextScopeId(),
 				qualifier =
 					org.koin.core.qualifier
 						.named<DefaultSimulationContext>(),
@@ -164,7 +165,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Workers for each entry/exit point
 	 */
-	private var workers: MutableMap<DynamicInOut, InOutWorker> = HashMap()
+	private var workers: MutableMap<DynamicInOut, InOutWorker> = mutableMapOf()
 
 	/**
 	 * Cache of dynamic InOut wrappers (lazily created)
@@ -206,7 +207,7 @@ open class DefaultSimulationContext(
 	private val pendingBlockEventListeners: MutableList<(BlockEvent) -> Unit> = mutableListOf()
 
 	/** Raw kdisco event listeners registered before run(); wired into kdisco at run() time. */
-	private val pendingSimEventListeners: MutableList<(cz.hovorka.kdisco.SimulationEvent) -> Unit> = mutableListOf()
+	private val pendingSimEventListeners: MutableList<(KDiscoSimulationEvent) -> Unit> = mutableListOf()
 
 	/** Spatial-conflict event listeners registered before run(); wired into kdisco at run() time. */
 	private val pendingConflictEventListeners: MutableList<(ConflictDetectedEvent) -> Unit> = mutableListOf()
@@ -240,6 +241,15 @@ open class DefaultSimulationContext(
 	 */
 	@kotlin.concurrent.Volatile
 	private var currentController: SimulationController? = null
+
+	/**
+	 * Backing field for [lastRunEndTime]. Set from the kernel's own clock ([sim.time]) in the
+	 * `finally` block of [run], right before the [Simulation] reference is released.
+	 *
+	 * @since Issue #929
+	 */
+	final override var lastRunEndTime: Double? = null
+		private set
 
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
 	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
@@ -1227,7 +1237,7 @@ open class DefaultSimulationContext(
 		pendingBlockEventListeners += listener
 	}
 
-	override fun onSimulationEvent(listener: (cz.hovorka.kdisco.SimulationEvent) -> Unit) {
+	override fun onSimulationEvent(listener: (KDiscoSimulationEvent) -> Unit) {
 		if (simulationHasStarted) return
 		pendingSimEventListeners += listener
 	}
@@ -1373,7 +1383,9 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
-			flushUnresolvedReservationConflicts(sim.time())
+			val kernelEndTime = sim.time()
+			flushUnresolvedReservationConflicts(kernelEndTime)
+			lastRunEndTime = kernelEndTime
 			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
 			currentController = null
 		}
@@ -1410,7 +1422,7 @@ open class DefaultSimulationContext(
 		if (listeners.isEmpty()) return
 		val snapshot = listeners.toList()
 		sim.onEvent { event ->
-			if (event is cz.hovorka.kdisco.SimulationEvent.Custom) {
+			if (event is KDiscoSimulationEvent.Custom) {
 				val payload = event.payload
 				if (payload is T) {
 					snapshot.forEach { it(payload) }

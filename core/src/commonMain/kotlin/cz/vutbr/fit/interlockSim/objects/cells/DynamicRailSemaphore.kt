@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -50,6 +50,25 @@ sealed class DynamicRailSemaphore(
 	@kotlin.concurrent.Volatile
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
+	/**
+	 * The segment pair this semaphore's current proceed aspect is authorized for, as recorded by
+	 * the last [setUpSpeed] / [setUpPath] call from the reservation flow. `null` while the signal
+	 * is [Signal.STOP] (nothing authorized) and after [cancelPathSetup].
+	 *
+	 * Read by [authorizedDirection] / [isAllowingFor] so the canvas and the LLM dispatcher's
+	 * `all_signal_aspects` can distinguish a proceed aspect authorized for the forward direction
+	 * from one authorized for the opposite direction (Issue #812).
+	 *
+	 * Direct `signal =` writes that bypass [setUpSpeed] (interlocking-facade `clearSignal`,
+	 * actuator `setSignalAspect`) leave these `null`; [authorizedDirection] then defaults to the
+	 * canonical forward direction, which is correct for entry/facing signals.
+	 */
+	@kotlin.concurrent.Volatile
+	private var authorizedFrom: Cell.Segment? = null
+
+	@kotlin.concurrent.Volatile
+	private var authorizedTo: Cell.Segment? = null
+
 	// Static properties delegated from wrapped object
 	// orientation and direction() are delegated from OrientedPathSeparator
 	// spatialType is already available via PathSeparator delegation (getSpatialType())
@@ -73,6 +92,14 @@ sealed class DynamicRailSemaphore(
 				}
 			}
 			field = newSignal
+			// A STOP signal authorizes nothing: drop the recorded reservation direction so the
+			// next direct write (clearSignal/setSignalAspect without setUpSpeed) defaults cleanly
+			// to the canonical forward direction via authorizedDirection(). setUpSpeed records a
+			// fresh direction after setting a proceed aspect.
+			if (newSignal == Signal.STOP) {
+				authorizedFrom = null
+				authorizedTo = null
+			}
 			// Fire property change event only if signal actually changed
 			if (oldSignal != newSignal) {
 				val evt = ContextChangeEvent("signal", oldSignal, newSignal)
@@ -102,32 +129,117 @@ sealed class DynamicRailSemaphore(
 		to: Cell.Segment?,
 		allowedSpeed: Double
 	) {
-		val isValidDirection = checkPathSegments(from, to)
-
-		if (isValidDirection) {
-			signal = forSpeed(allowedSpeed)
-			logger.debug {
-				"SEMAPHORE_SIGNAL_UPDATED: ${staticRef.getName()} signal changed to $signal " +
-					"(allowedSpeed=$allowedSpeed)"
-			}
-		} else {
-			logger.warn {
-				"SEMAPHORE_SIGNAL_NOT_UPDATED: ${staticRef.getName()} signal remains $signal " +
-					"due to reverse direction (from=$from, to=$to, semaphoreDirection=${staticRef.direction()})"
-			}
+		checkPathSegments(from, to)
+		signal = forSpeed(allowedSpeed)
+		// Record the direction this proceed aspect was cleared for, so isAllowingFor /
+		// authorizedDirection can report proceed only for that direction (Issue #812). Only
+		// recorded for a proceed aspect — a STOP result (e.g. allowedSpeed == 0) authorizes
+		// nothing, and the signal setter has already cleared any prior direction.
+		if (signal.isAllowing()) {
+			authorizedFrom = from
+			authorizedTo = to
+		}
+		logger.debug {
+			"SEMAPHORE_SIGNAL_UPDATED: ${staticRef.getName()} signal changed to $signal " +
+				"(allowedSpeed=$allowedSpeed)"
 		}
 	}
 
 	override fun allowedSpeed(): Double = signal.allowedSpeed()
 
-	private fun checkPathSegments(
+	/**
+	 * The (from, to) segment pair this semaphore's current proceed aspect is authorized for, or
+	 * `null to null` when the signal is [Signal.STOP] (nothing is authorized).
+	 *
+	 * Backed by the [authorizedFrom]/[authorizedTo] pair recorded by [setUpSpeed] from the
+	 * reservation flow. When the signal was set by a direct `signal =` write that bypassed
+	 * [setUpSpeed] (interlocking-facade `clearSignal`, actuator `setSignalAspect`) and no
+	 * direction was recorded, defaults to the canonical **forward** direction
+	 * (`anti([direction()])` → [direction()]) — which is the correct authorization for an
+	 * entry/facing signal cleared outside the reservation flow.
+	 *
+	 * [ConstantSemaphore] (InOut `outSemaphore`, predzvěst/narážník) never calls [setUpSpeed];
+	 * its stored direction stays `null`, so it too reports the static forward — matching the
+	 * always-proceed-for-facing-direction semantics of a constant semaphore.
+	 *
+	 * Consumers: [DefaultNetworkPerceptionPort.toReading] (so the LLM dispatcher's
+	 * `all_signal_aspects` learns the actual reserved direction) and the canvas renderers via
+	 * [isAllowingFor]. The train's own next-separator perception ([separatorAspect]) does NOT
+	 * use it — the train is the reservation holder and always sees proceed-when-lit.
+	 *
+	 * @since Issue #812 (direction-aware signal display)
+	 */
+	open fun authorizedDirection(): Pair<Cell.Segment?, Cell.Segment?> {
+		if (!signal.isAllowing()) return null to null
+		val d = staticRef.direction()
+		return if (authorizedFrom != null) authorizedFrom to authorizedTo else anti(d) to d
+	}
+
+	/**
+	 * Returns true when this semaphore's current proceed aspect authorizes travel in the
+	 * direction [from] → [to].
+	 *
+	 * Compares the query against the **stored reservation direction** ([authorizedDirection]),
+	 * not the static orientation: a signal cleared for the reverse direction reports proceed for
+	 * the reverse query and STOP for the forward query, and vice-versa. Returns false when the
+	 * signal is [Signal.STOP]. When the direction is unknown (direct write, no [setUpSpeed]),
+	 * [authorizedDirection] defaults to the canonical forward, so [isAllowingFor] authorizes the
+	 * forward query only.
+	 *
+	 * Used by the canvas renderers (`AnimationStateCapture.captureSignalState`,
+	 * `SimulationCellRenderer`) to paint a forward-facing semaphore STOP when its proceed aspect
+	 * was cleared for the opposite direction — the Issue #812 perception-truthfulness fix. The
+	 * train's own perception ([separatorAspect]) does not use this; it reads `signal` directly
+	 * because the train is the reservation holder.
+	 *
+	 * @param from segment the approaching entity is travelling **from**
+	 * @param to   segment the approaching entity is travelling **to**
+	 * @return true if [signal] is currently allowing AND [from]/[to] match the direction the
+	 *   aspect was actually cleared for (stored, defaulting to static forward)
+	 * @since Issue #812 (direction-aware signal display)
+	 */
+	fun isAllowingFor(
 		from: Cell.Segment?,
 		to: Cell.Segment?
 	): Boolean {
+		if (!signal.isAllowing()) return false
+		val (af, at) = authorizedDirection()
+		return from == af && to == at
+	}
+
+	/**
+	 * Validate that [from]/[to] are the two segments of this semaphore's block boundary,
+	 * in either traversal order.
+	 *
+	 * ## Domain decision (Issue #566 / SP2b.9)
+	 *
+	 * A [DynamicRailSemaphore] marks a block boundary a train can legitimately cross from
+	 * either side -- e.g. the vyhybna.xml shunting loop is explicitly designed for trains to
+	 * traverse it in both directions (A→B and B→A), and [staticRef]'s `orientation` continues
+	 * to drive path-finding preference (see `PathReservationService.reservePathToAny`'s
+	 * same-side/opposite-side sorting) without restricting which direction the physical
+	 * signal is allowed to clear for. Earlier revisions treated the "exit-side" pairing
+	 * (`from == direction()`) as invalid and left the signal at STOP, which meant a fully
+	 * granted, block/switch-reserved route through such a boundary could never actually be
+	 * traversed -- `PathReservationService.reservePath` would report `Success` while the
+	 * train stalled forever at that one semaphore (see
+	 * `PathReservationServiceTest.SignalConfigurationTests`, "reservePath configures every
+	 * semaphore along a full InOut-to-InOut path, not just START"). Both segment orderings
+	 * are therefore accepted here; only a genuinely wrong (non-adjacent) segment pairing is
+	 * rejected.
+	 *
+	 * @throws PathSeparatorChangeException if [from]/[to] are not this boundary's two segments
+	 */
+	private fun checkPathSegments(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	) {
 		val d = staticRef.direction()
-		if (to == d && from == anti(d)) return true
-		if (from == d && to == anti(d)) return false
-		throw PathSeparatorChangeException("wrong aPath segments", this)
+		val antiD = anti(d)
+		val validPairing = (to == d && from == antiD) || (from == d && to == antiD)
+		if (!validPairing) {
+			throw PathSeparatorChangeException("wrong aPath segments", this)
+		}
 	}
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = staticRef.getFollowingSegment(from)

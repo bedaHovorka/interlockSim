@@ -41,6 +41,15 @@
 	<!-- Suppress verbose object logging during tests -->
 	<logger name="cz.vutbr.fit.interlockSim.objects" level="WARN"/>
 
+	<!--
+		PathCommandTranslator emits its skip/diagnostic messages at DEBUG. Enabling DEBUG here
+		makes the lambda bodies actually evaluate during tests, so a broken string interpolation
+		in a log statement fails the build instead of hiding behind a disabled log level.
+		The class is only exercised by PathCommandTranslatorTest, so this adds no test noise.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.sim.PathCommandTranslator" level="DEBUG"/>
+	<logger name="cz.vutbr.fit.interlockSim.sim.PathCommandTranslatorKt" level="DEBUG"/>
+
 	<!-- kDisco statistics suppressed during tests -->
 	<logger name="kDisco.statistics" level="ERROR"/>
 

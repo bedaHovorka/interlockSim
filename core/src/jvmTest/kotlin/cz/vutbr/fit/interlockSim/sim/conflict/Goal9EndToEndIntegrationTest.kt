@@ -21,7 +21,6 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
@@ -109,11 +108,8 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
-	private fun createShuntingLoopContext(): DefaultSimulationContext {
-		val editingContext =
-			editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
-		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-	}
+	private fun createShuntingLoopContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	/** Build a mock [Route] with the given total length for use in reroute candidates. */
 	private fun mockRoute(
