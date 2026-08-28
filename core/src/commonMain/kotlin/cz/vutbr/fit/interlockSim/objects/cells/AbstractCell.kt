@@ -20,7 +20,7 @@ abstract class AbstractCell : Cell {
 	protected fun joinsOnLine(): MutableSet<Cell.Segment> {
 		val st = getSpatialType()
 		requireValidState(st != null) { "Spatial type is null for cell: $this" }
-		val arr2set = arr2set(st!!.segments)
+		val arr2set = arr2set(st.segments)
 		requireValidState(arr2set.size == 2) { "Expected 2 segments but got ${arr2set.size}" }
 		return arr2set.toMutableSet()
 	}

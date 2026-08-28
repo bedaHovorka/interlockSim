@@ -48,9 +48,7 @@ class MultiTrainLoopTest : KoinTestBase() {
 	}
 
 	private fun loadLinearContext(): DefaultSimulationContext {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		ctx.getInOuts()
 		context = ctx
 		return ctx

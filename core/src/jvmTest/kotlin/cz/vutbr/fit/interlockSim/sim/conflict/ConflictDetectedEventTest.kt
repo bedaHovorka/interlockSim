@@ -74,9 +74,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("Two trains competing for the same path emit ConflictDetectedEvent mid-run")
 	fun twoTrainsCompetingForSamePathEmitConflictDetectedEvent() {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		val inOuts = ctx.getInOuts()
 
@@ -147,9 +145,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 		// Use a linear path with a semaphore that allows passage; each train will
 		// reserve the path in turn — the first completes and releases before the
 		// second claims anything, so there is never a spatial conflict.
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		val inOuts = ctx.getInOuts()
 
@@ -204,9 +200,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("ConflictDetectedEvent payload contains both train IDs and contested block")
 	fun conflictDetectedEventPayloadIsComplete() {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		val inOuts = ctx.getInOuts()
 
@@ -264,9 +258,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("Repeated AllPathsBlocked retries on the same contention emit only one ConflictDetectedEvent")
 	fun repeatedRetriesOnSameContentionEmitOnlyOneConflictDetectedEvent() {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		val inOuts = ctx.getInOuts()
 

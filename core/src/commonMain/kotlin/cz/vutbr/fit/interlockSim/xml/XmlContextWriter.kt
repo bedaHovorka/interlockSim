@@ -82,8 +82,7 @@ class XmlContextWriter {
 		val allNodes = linkedSetOf<Point>()
 		allNodes.addAll(context.getGraph().nodeSet())
 
-		@Suppress("UNCHECKED_CAST")
-		val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
+		val cellGrid = railwayNetGrid
 		for (entry in cellGrid) {
 			val cell = entry.value
 			if (cell is NodeCell) {
@@ -128,7 +127,7 @@ class XmlContextWriter {
 		builder.append('<').append(NodeCellFactory.tagNameFor(cell)).append(' ')
 		appendAttribute(builder, X, point.x)
 		appendAttribute(builder, Y, point.y)
-		cell.getSpatialType()?.let {
+		cell.getSpatialType().let {
 			appendEnumAttribute(builder, "SpatialType", it)
 		}
 		if (cell is OrientedPathSeparator) {

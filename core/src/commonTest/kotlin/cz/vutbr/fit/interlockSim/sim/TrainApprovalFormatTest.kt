@@ -36,7 +36,7 @@ class TrainApprovalFormatTest {
 		val msg = Train.formatApprovalMessage("IC 503", "Praha", "Brno")
 		val match = regex.find(msg)
 		assertTrue(match != null, "TextReporter regex should match: $msg")
-		assertEquals("IC 503", match!!.groupValues[1])
+		assertEquals("IC 503", match.groupValues[1])
 	}
 
 	@Test

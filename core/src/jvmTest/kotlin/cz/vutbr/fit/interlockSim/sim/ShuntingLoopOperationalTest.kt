@@ -521,7 +521,7 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 
 			// Assert - All tracks are FREE
 			for (entry in graph.entrySet()) {
-				val dynamicBlock = entry.value as cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+				val dynamicBlock = entry.value
 				assertThat(dynamicBlock.getState())
 					.isEqualTo(cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE)
 				assertThat(dynamicBlock.occupant).isNull()
@@ -571,7 +571,7 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 
 			// Assert - All dynamic blocks have staticRef
 			for (entry in graph.entrySet()) {
-				val dynamicBlock = entry.value as cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+				val dynamicBlock = entry.value
 				assertThat(dynamicBlock.staticRef).isNotNull()
 				assertThat(dynamicBlock.staticRef)
 					.isInstanceOf(cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock::class.java)

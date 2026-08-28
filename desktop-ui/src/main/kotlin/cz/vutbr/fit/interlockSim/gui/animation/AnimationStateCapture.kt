@@ -142,7 +142,6 @@ object AnimationStateCapture {
 						// Fallback for legacy code paths (should not happen after Issue #277)
 						context.toDynamic(graphBlock).occupant
 					}
-					else -> null
 				}
 
 			// Check if occupant is a Train
@@ -283,7 +282,7 @@ object AnimationStateCapture {
 			// Extract static block from DynamicTrackBlock wrapper
 			val staticBlock =
 				if (graphBlock is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock) {
-					graphBlock.staticRef as TrackBlock
+					graphBlock.staticRef
 				} else {
 					graphBlock as TrackBlock
 				}

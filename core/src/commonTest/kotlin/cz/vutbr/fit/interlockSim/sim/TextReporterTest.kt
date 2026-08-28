@@ -134,7 +134,7 @@ class TextReporterTest {
 		val wallTimeMatch = Regex("""(\d+\.\d)s wall""").find(summary)
 		assertTrue(wallTimeMatch != null, "Summary wall time should match N.Ds format: $summary")
 		// Ensure no extra decimal digits (e.g. "3.1000000000000001")
-		val wallValue = wallTimeMatch!!.groupValues[1]
+		val wallValue = wallTimeMatch.groupValues[1]
 		assertEquals(
 			wallValue,
 			wallValue.trimEnd('0').let { if (it.endsWith('.')) it + "0" else it },

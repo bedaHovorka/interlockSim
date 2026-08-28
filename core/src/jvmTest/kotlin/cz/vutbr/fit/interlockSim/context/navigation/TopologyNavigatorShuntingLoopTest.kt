@@ -739,9 +739,8 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 		val staticSeparator =
 			when (separator) {
 				is Cell -> separator
-				else -> separator as? Cell
 			}
 
-		return staticSeparator?.let { grid.getLocation(it) }
+		return staticSeparator.let { grid.getLocation(it) }
 	}
 }

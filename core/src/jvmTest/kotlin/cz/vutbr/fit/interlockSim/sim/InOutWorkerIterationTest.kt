@@ -42,9 +42,7 @@ class InOutWorkerIterationTest : KoinTestBase() {
 	}
 
 	private fun loadLinearContext(): DefaultSimulationContext {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true)
 		ctx.getInOuts()
 		context = ctx
 		return ctx

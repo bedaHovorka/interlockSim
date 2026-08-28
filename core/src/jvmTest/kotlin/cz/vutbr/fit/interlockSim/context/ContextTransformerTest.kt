@@ -164,7 +164,7 @@ class ContextTransformerTest : KoinTestBase() {
 					assertThat(inOuts).hasSize(2)
 
 					// Extract static refs from dynamic wrappers for comparison
-					val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
+					val staticRefs = inOuts.map { it.staticRef }
 					assertThat(staticRefs).containsAll(inA, inB)
 				}
 			}
@@ -308,7 +308,7 @@ class ContextTransformerTest : KoinTestBase() {
 					assertThat(inOuts).hasSize(2)
 
 					// Extract static refs from dynamic wrappers for comparison
-					val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
+					val staticRefs = inOuts.map { it.staticRef }
 					assertThat(staticRefs).containsAll(inA, inB)
 				}
 			}
@@ -415,7 +415,7 @@ class ContextTransformerTest : KoinTestBase() {
 					// Verify InOut list was copied via interface method
 					val inOuts = simulationContext.getInOuts()
 					assertThat(inOuts).hasSize(2)
-					val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
+					val staticRefs = inOuts.map { it.staticRef }
 					assertThat(staticRefs).containsAll(inA, inB)
 
 					// Verify graph was copied

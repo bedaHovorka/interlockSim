@@ -38,9 +38,7 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 
 	/** Creates a fresh linear-with-semaphore context for each test repetition. */
 	private fun newLinearContext(): DefaultSimulationContext {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		ctx.getInOuts()
 		context = ctx
 		return ctx

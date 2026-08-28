@@ -206,5 +206,5 @@ fun conflict(
 fun anti(segment: Cell.Segment): Cell.Segment {
 	val anti = segmentFor(-segment.dx, -segment.dy)
 	requireValidState(anti != null) { "Could not find anti-segment for $segment" }
-	return anti!!
+	return anti
 }

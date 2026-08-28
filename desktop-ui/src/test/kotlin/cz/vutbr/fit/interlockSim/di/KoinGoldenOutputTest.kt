@@ -140,7 +140,6 @@ class KoinGoldenOutputTest : IntegrationKoinTestBase() {
 							block.occupant != null
 						is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
 							ctx.toDynamic(block).occupant != null
-						else -> false
 					}
 				}
 			assertThat(occupiedBlocks).isEqualTo(EXPECTED_OCCUPIED_BLOCKS)
@@ -234,7 +233,6 @@ class KoinGoldenOutputTest : IntegrationKoinTestBase() {
 							block.occupant != null
 						is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
 							ctx.toDynamic(block).occupant != null
-						else -> false
 					}
 				}
 

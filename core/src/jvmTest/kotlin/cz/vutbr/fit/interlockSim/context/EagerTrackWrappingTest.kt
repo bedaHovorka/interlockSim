@@ -21,7 +21,6 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -122,7 +121,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			for (trackBlock in graph.values()) {
 				totalTracks++
 				val trackFacility = trackBlock as TrackFacility
-				val staticRef = (trackBlock as DynamicTrackBlock).staticRef as TrackFacility
+				val staticRef = trackBlock.staticRef as TrackFacility
 
 				// toDynamic should find wrapper (no lazy creation)
 				val dynamicTrack = context.toDynamic(trackFacility)
@@ -176,7 +175,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			assertThat(staticBlocks).isNotNull()
 
 			for (trackBlock in staticBlocks) {
-				val staticRef = (trackBlock as DynamicTrackBlock).staticRef as TrackFacility
+				val staticRef = trackBlock.staticRef as TrackFacility
 				val dynamicWrapper = context.toDynamic(staticRef)
 				assertThat(dynamicWrapper.staticRef)
 					.withMessage("Static track ${System.identityHashCode(staticRef)} must resolve to dynamic wrapper")

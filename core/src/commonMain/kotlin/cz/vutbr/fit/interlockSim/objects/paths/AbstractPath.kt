@@ -57,7 +57,7 @@ abstract class AbstractPath protected constructor(
 		// Track prevTrack = null;
 		var min = (sep as DynamicPathSeparator).allowedSpeed()
 
-		val it = getIterator(sep!!)
+		val it = getIterator(sep)
 		while (it.hasNext()) {
 			val e = it.next()
 

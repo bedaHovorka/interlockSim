@@ -50,9 +50,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 	}
 
 	private fun loadLinearContext(): DefaultSimulationContext {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		// Initialise dynamic InOut wrappers before use (mirrors ShuntingLoop tests).
 		ctx.getInOuts()
 		context = ctx

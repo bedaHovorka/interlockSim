@@ -66,9 +66,7 @@ class CollisionDetectionIntegrationTest : KoinTestBase() {
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
 	private fun newContext(): DefaultSimulationContext {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		return ctx
 	}

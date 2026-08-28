@@ -82,9 +82,7 @@ class CollisionDetectionActivationTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("A CRITICAL BlockEntryViolation still triggers auto-pause with no listener registered before run()")
 	fun collisionDetectionActivatesWithoutPreRegisteredListener() {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 
 		// Deliberately do NOT call ctx.getCollisionServices(), onCollisionWarning(), or

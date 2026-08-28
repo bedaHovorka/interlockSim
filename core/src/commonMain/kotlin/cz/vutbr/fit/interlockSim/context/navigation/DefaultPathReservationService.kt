@@ -2271,7 +2271,7 @@ class DefaultPathReservationService(
 					logger.info {
 						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
 							"configured to ${element.conf} for train $trainId " +
-							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
+							"(from=${from.hashCode()}, to=${to.hashCode()})"
 					}
 				} catch (e: PathSeparatorChangeException) {
 					// Issue #742: the route genuinely traverses this switch (both segments known)

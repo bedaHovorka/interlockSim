@@ -17,7 +17,6 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -93,7 +92,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			// Assert - All InOuts preserved
 			val inOuts = simulationContext.getInOuts()
 			assertThat(inOuts).hasSize(3)
-			val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
+			val staticRefs = inOuts.map { it.staticRef }
 			assertThat(staticRefs).containsAll(inA, inB, outC)
 
 			// Assert - Switch preserved in grid
@@ -124,11 +123,11 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val inOuts = simulationContext.getInOuts()
 			assertThat(inOuts).hasSize(4)
 
-			val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
+			val staticRefs = inOuts.map { it.staticRef }
 			assertThat(staticRefs).containsAll(inEntry1, inEntry2, outExit1, outExit2)
 
 			// Verify entry/exit configuration preserved
-			val dynamicInOuts = inOuts.map { it as DynamicInOut }
+			val dynamicInOuts = inOuts.toList()
 			val entryNames =
 				dynamicInOuts
 					.filter { it.staticRef.getName() in listOf("Entry1", "Entry2") }

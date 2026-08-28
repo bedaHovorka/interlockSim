@@ -233,8 +233,8 @@ class SimulationControlPanel : JPanel() {
 		stepTimeDeltaSpinner.isEnabled = false
 		// Commit the value immediately when focus is lost so action listeners always see
 		// the latest delta, even if the user typed a value but did not press Enter.
-		((stepTimeDeltaSpinner.editor as? JSpinner.DefaultEditor)?.textField as? JFormattedTextField)
-			?.focusLostBehavior = JFormattedTextField.COMMIT
+		(stepTimeDeltaSpinner.editor as? JSpinner.DefaultEditor)?.textField?.focusLostBehavior =
+			JFormattedTextField.COMMIT
 		stepTimeDeltaSpinner.addChangeListener {
 			val value = (stepTimeDeltaSpinner.value as? Number)?.toDouble() ?: return@addChangeListener
 			runner?.stepTimeDelta = value

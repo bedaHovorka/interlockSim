@@ -85,7 +85,7 @@ class DynamicInOutTest {
 		val staticInOuts = context.getInOutsList()
 		assertThat(staticInOuts.size).isEqualTo(2)
 
-		val staticInOut = staticInOuts[0] as InOut
+		val staticInOut = staticInOuts[0]
 		val dynamicInOut = context.toDynamic(staticInOut) as DynamicInOut
 
 		// Dynamic delegates name to static
@@ -103,7 +103,7 @@ class DynamicInOutTest {
 	@Test
 	fun `DynamicInOut identity based on wrapped static object`() {
 		val staticInOuts = context.getInOutsList()
-		val staticInOut = staticInOuts[0] as InOut
+		val staticInOut = staticInOuts[0]
 
 		val dynamic1 = context.toDynamic(staticInOut) as DynamicInOut
 		val dynamic2 = context.toDynamic(staticInOut) as DynamicInOut
@@ -126,7 +126,7 @@ class DynamicInOutTest {
 	@Test
 	fun `DynamicInOut hashCode stable based on static identity`() {
 		val staticInOuts = context.getInOutsList()
-		val staticInOut = staticInOuts[0] as InOut
+		val staticInOut = staticInOuts[0]
 
 		val dynamicInOut = context.toDynamic(staticInOut) as DynamicInOut
 
@@ -145,8 +145,8 @@ class DynamicInOutTest {
 		val staticInOuts = context.getInOutsList()
 		assertThat(staticInOuts.size).isEqualTo(2)
 
-		val static1 = staticInOuts[0] as InOut
-		val static2 = staticInOuts[1] as InOut
+		val static1 = staticInOuts[0]
+		val static2 = staticInOuts[1]
 
 		val dynamic1 = context.toDynamic(static1) as DynamicInOut
 		val dynamic2 = context.toDynamic(static2) as DynamicInOut
@@ -167,7 +167,7 @@ class DynamicInOutTest {
 	@Test
 	fun `DynamicInOut provides access to dynamic semaphores`() {
 		val staticInOuts = context.getInOutsList()
-		val staticInOut = staticInOuts[0] as InOut
+		val staticInOut = staticInOuts[0]
 
 		val dynamicInOut = context.toDynamic(staticInOut) as DynamicInOut
 
@@ -191,7 +191,7 @@ class DynamicInOutTest {
 	@Test
 	fun `toDynamic returns same wrapper for same static InOut`() {
 		val staticInOuts = context.getInOutsList()
-		val staticInOut = staticInOuts[0] as InOut
+		val staticInOut = staticInOuts[0]
 
 		val dynamic1 = context.toDynamic(staticInOut) as DynamicInOut
 		val dynamic2 = context.toDynamic(staticInOut) as DynamicInOut
@@ -210,7 +210,7 @@ class DynamicInOutTest {
 	@Test
 	fun `DynamicInOut delegates spatial type to static InOut`() {
 		val staticInOuts = context.getInOutsList()
-		val staticInOut = staticInOuts[0] as InOut
+		val staticInOut = staticInOuts[0]
 
 		val dynamicInOut = context.toDynamic(staticInOut) as DynamicInOut
 
@@ -229,7 +229,7 @@ class DynamicInOutTest {
 	@Test
 	fun `DynamicInOut toString provides useful debug output`() {
 		val staticInOuts = context.getInOutsList()
-		val staticInOut = staticInOuts[0] as InOut
+		val staticInOut = staticInOuts[0]
 
 		val dynamicInOut = context.toDynamic(staticInOut) as DynamicInOut
 

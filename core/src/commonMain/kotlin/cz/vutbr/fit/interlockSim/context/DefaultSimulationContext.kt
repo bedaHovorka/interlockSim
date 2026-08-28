@@ -806,8 +806,7 @@ open class DefaultSimulationContext(
 		track: Track
 	): Segment? =
 		if (track is TrackSection) {
-			@Suppress("UNCHECKED_CAST")
-			val section = track as TrackSection
+			val section = track
 			// Match Java 1:1: return directly (inner method should not return null here)
 			getSegment(separator, section) ?: throw IllegalStateException("getSegment returned null for TrackSection")
 		} else {
@@ -992,7 +991,7 @@ open class DefaultSimulationContext(
 		val graph = getGraph()
 		for (trackBlock in graph.values()) {
 			// TrackBlock extends TrackFacility, but graph stores DynamicTrackBlock wrappers
-			val dynamicBlock = trackBlock as DynamicTrackBlock
+			val dynamicBlock = trackBlock
 			val staticTrack = dynamicBlock.staticRef as TrackFacility
 
 			if (!staticTrackToDynamicMap.containsKey(staticTrack)) {

@@ -310,8 +310,7 @@ open class DefaultEditingContext(
 			}
 
 		if (builtPath != null && builtPath.isNotEmpty()) {
-			@Suppress("UNCHECKED_CAST")
-			val mapToAdd = builtPath as MutableMap<Point, TrackBlockPart>
+			val mapToAdd = builtPath
 			getGrid().putMap(mapToAdd)
 			getLinesKeys()[trackBlock] = mapToAdd.keys.toSet()
 			requireValidState(!getGraph().contains(key1, key2)) {
@@ -536,8 +535,8 @@ open class DefaultEditingContext(
 				)
 			}
 		}
-		if (nodeCell is InOut && !inouts.contains(nodeCell as InOut)) {
-			inouts.add(nodeCell as InOut)
+		if (nodeCell is InOut && !inouts.contains(nodeCell)) {
+			inouts.add(nodeCell)
 		}
 		firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
 		logger.trace { "Added ${nodeCell::class.simpleName} at (${key.x},${key.y})" }
@@ -556,7 +555,7 @@ open class DefaultEditingContext(
 				val set = getLinesKeys()[tl]
 				if (set != null) grid.keySet().removeAll(set)
 			}
-			if (cell is InOut) inouts.remove(cell as InOut)
+			if (cell is InOut) inouts.remove(cell)
 			firePropertyChange(
 				ContextChangeListener.CELL_REMOVED,
 				null,
