@@ -241,7 +241,7 @@ class KoogAgentPlanAdapterTest {
 		val recorded = mutableListOf<TickRecord>()
 		val idleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 0)
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(idleObservation) }
 
@@ -272,7 +272,7 @@ class KoogAgentPlanAdapterTest {
 		val recorded = mutableListOf<TickRecord>()
 		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
 
@@ -300,7 +300,7 @@ class KoogAgentPlanAdapterTest {
 		val recorded = mutableListOf<TickRecord>()
 		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
 
@@ -327,7 +327,7 @@ class KoogAgentPlanAdapterTest {
 		val recorded = mutableListOf<TickRecord>()
 		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
 
@@ -358,7 +358,7 @@ class KoogAgentPlanAdapterTest {
 				approvedTrainCount = 0
 			)
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(nonIdleObservation) }
 
@@ -390,7 +390,7 @@ class KoogAgentPlanAdapterTest {
 		// `observation` (the class-level fixture) uses SimulationSnapshot.EMPTY with no queued
 		// trains — structurally idle-looking but the pre-first-capture sentinel.
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(observation) }
 
@@ -418,7 +418,7 @@ class KoogAgentPlanAdapterTest {
 		val fallback = mockk<Dispatcher>()
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(observation) }
 
@@ -441,7 +441,7 @@ class KoogAgentPlanAdapterTest {
 		val fallback = mockk<Dispatcher>()
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -501,7 +501,7 @@ class KoogAgentPlanAdapterTest {
 		val fallback = mockk<Dispatcher>()
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -519,7 +519,7 @@ class KoogAgentPlanAdapterTest {
 		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -539,7 +539,7 @@ class KoogAgentPlanAdapterTest {
 		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback, Duration.ofMillis(50))
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -556,7 +556,7 @@ class KoogAgentPlanAdapterTest {
 		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -580,7 +580,7 @@ class KoogAgentPlanAdapterTest {
 		every { fallback.decide(any()) } throws RuntimeException("fallback boom")
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		assertFailure { runBlocking { planAdapter.plan(observation) } }
 			.isInstanceOf(RuntimeException::class.java)
@@ -614,7 +614,7 @@ class KoogAgentPlanAdapterTest {
 				}
 			}
 		val recorded = mutableListOf<TickRecord>()
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -665,7 +665,7 @@ class KoogAgentPlanAdapterTest {
 				}
 			}
 		val recorded = mutableListOf<TickRecord>()
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		val result = runBlocking { planAdapter.plan(observation) }
 
@@ -723,7 +723,7 @@ class KoogAgentPlanAdapterTest {
 		val fallback = mockk<Dispatcher>()
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -742,7 +742,7 @@ class KoogAgentPlanAdapterTest {
 		val recorded = mutableListOf<TickRecord>()
 		val idleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 0)
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(idleObservation) }
 
@@ -762,7 +762,7 @@ class KoogAgentPlanAdapterTest {
 		val recorded = mutableListOf<TickRecord>()
 		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(nonIdleObservation) }
 
@@ -784,7 +784,7 @@ class KoogAgentPlanAdapterTest {
 		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback, Duration.ofMillis(50))
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -803,7 +803,7 @@ class KoogAgentPlanAdapterTest {
 		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
 		val recorded = mutableListOf<TickRecord>()
 		val planAdapter = adapter(koogAgent, fallback)
-		planAdapter.tickListener = PlannerTickListener { recorded.add(it) }
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 
 		runBlocking { planAdapter.plan(observation) }
 
@@ -830,12 +830,12 @@ class KoogAgentPlanAdapterTest {
 
 		val fastRecorded = mutableListOf<TickRecord>()
 		val fastAdapter = adapter(fastAgent, fallback)
-		fastAdapter.tickListener = PlannerTickListener { fastRecorded.add(it) }
+		fastAdapter.addTickListener(PlannerTickListener { fastRecorded.add(it) })
 		runBlocking { fastAdapter.plan(fastObservation) }
 
 		val slowRecorded = mutableListOf<TickRecord>()
 		val slowAdapter = adapter(slowAgent, fallback)
-		slowAdapter.tickListener = PlannerTickListener { slowRecorded.add(it) }
+		slowAdapter.addTickListener(PlannerTickListener { slowRecorded.add(it) })
 		runBlocking { slowAdapter.plan(slowObservation) }
 
 		assertThat(slowRecorded.first().latencyMs!!)

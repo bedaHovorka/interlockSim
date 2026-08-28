@@ -42,10 +42,12 @@ import org.junit.jupiter.api.Test
  * written against. It had **no production caller**.
  *
  * The only `PlannerTickListener` installed in production was [AgentLoopDriver]'s own, which stores
- * the outcome for author attribution and forwards it nowhere. Worse, the driver *overwrites*
+ * the outcome for author attribution and forwards it nowhere. Worse, the driver *overwrote*
  * `plannerTickSource.tickListener` in its `init`, so a caller that installed its own listener before
  * constructing the driver had it silently discarded — there was no seam to wire a recorder onto at
- * all.
+ * all. (Issue #713 Task 9 later replaced that single slot with
+ * `KoogAgentPlanAdapter.addTickListener`, which fans out through a `CompositeTickListener` instead
+ * of overwriting — see `CompositeTickListenerTest`.)
  *
  * These tests pin the seam: the driver keeps its own attribution behaviour **and** forwards every
  * record to an optional observer.
@@ -68,7 +70,7 @@ class AgentLoopDriverTickRecordingTest {
 		every { perceptionPort.snapshot() } returns emptySnapshot(1.0)
 		val koogAdapter = mockk<KoogAgentPlanAdapter>(relaxed = true)
 		val tickListenerSlot = slot<PlannerTickListener>()
-		every { koogAdapter.tickListener = capture(tickListenerSlot) } returns Unit
+		every { koogAdapter.addTickListener(capture(tickListenerSlot)) } returns Unit
 		coEvery { koogAdapter.plan(any()) } coAnswers {
 			tickListenerSlot.captured.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 1.0))
 			listOf(DispatchDecision.ApproveTrain("T1"))
@@ -102,7 +104,7 @@ class AgentLoopDriverTickRecordingTest {
 		every { perceptionPort.snapshot() } returns emptySnapshot(1.0)
 		val koogAdapter = mockk<KoogAgentPlanAdapter>(relaxed = true)
 		val tickListenerSlot = slot<PlannerTickListener>()
-		every { koogAdapter.tickListener = capture(tickListenerSlot) } returns Unit
+		every { koogAdapter.addTickListener(capture(tickListenerSlot)) } returns Unit
 		val decision = DispatchDecision.ApproveTrain("T1")
 		coEvery { koogAdapter.plan(any()) } coAnswers {
 			tickListenerSlot.captured.onTick(TickRecord(TickOutcome.RULE_FALLBACK, 1.0))

@@ -89,7 +89,7 @@ class AgentLoopDriverAttributionTest {
 		every { perceptionPort.snapshot() } returns emptySnapshot(1.0)
 		val koogAdapter = mockk<KoogAgentPlanAdapter>(relaxed = true)
 		val tickListenerSlot = slot<PlannerTickListener>()
-		every { koogAdapter.tickListener = capture(tickListenerSlot) } returns Unit
+		every { koogAdapter.addTickListener(capture(tickListenerSlot)) } returns Unit
 		val decision = DispatchDecision.ApproveTrain("T1")
 		coEvery { koogAdapter.plan(any()) } coAnswers {
 			tickListenerSlot.captured.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 1.0))
@@ -120,7 +120,7 @@ class AgentLoopDriverAttributionTest {
 		every { perceptionPort.snapshot() } returns emptySnapshot(1.0)
 		val koogAdapter = mockk<KoogAgentPlanAdapter>(relaxed = true)
 		val tickListenerSlot = slot<PlannerTickListener>()
-		every { koogAdapter.tickListener = capture(tickListenerSlot) } returns Unit
+		every { koogAdapter.addTickListener(capture(tickListenerSlot)) } returns Unit
 		val decision = DispatchDecision.ApproveTrain("T1")
 		coEvery { koogAdapter.plan(any()) } coAnswers {
 			tickListenerSlot.captured.onTick(TickRecord(TickOutcome.RULE_FALLBACK, 1.0))
@@ -151,7 +151,7 @@ class AgentLoopDriverAttributionTest {
 		every { perceptionPort.snapshot() } returns emptySnapshot(1.0)
 		val koogAdapter = mockk<KoogAgentPlanAdapter>(relaxed = true)
 		val tickListenerSlot = slot<PlannerTickListener>()
-		every { koogAdapter.tickListener = capture(tickListenerSlot) } returns Unit
+		every { koogAdapter.addTickListener(capture(tickListenerSlot)) } returns Unit
 		val decision = DispatchDecision.ApproveTrain("T1")
 		coEvery { koogAdapter.plan(any()) } coAnswers {
 			tickListenerSlot.captured.onTick(

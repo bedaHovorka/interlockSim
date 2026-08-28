@@ -20,9 +20,11 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * Implementations must be thread-safe; [onTick] may be called from multiple coroutines
  * simultaneously.
  *
- * **Wiring note:** [KoogAgentPlanAdapter.tickListener] fires this at every `plan()` completion
- * (SP2c.20 follow-up, Issue #843), independent of the deprecated [PlannerCycleListener] slot
- * `MeasuringPlanAdapter` claims — the two listeners coexist without interfering.
+ * **Wiring note:** [KoogAgentPlanAdapter.addTickListener] registers this to fire at every
+ * `plan()` completion (SP2c.20 follow-up, Issue #843), independent of the deprecated
+ * [PlannerCycleListener] slot `MeasuringPlanAdapter` claims — the two listeners coexist without
+ * interfering. Multiple [PlannerTickListener]s registered via [KoogAgentPlanAdapter.addTickListener]
+ * also coexist without interfering (Issue #713 Task 9), fanned out through [CompositeTickListener].
  *
  * @see TickRecord
  * @see TickOutcome

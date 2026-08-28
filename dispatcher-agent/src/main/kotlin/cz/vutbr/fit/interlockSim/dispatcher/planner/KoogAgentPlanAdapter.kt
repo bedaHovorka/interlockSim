@@ -188,18 +188,29 @@ class KoogAgentPlanAdapter(
 	var cycleListener: PlannerCycleListener? = null
 
 	/**
-	 * Optional [PlannerTickListener] notified after every dispatch cycle with the full
-	 * [TickOutcome] taxonomy — the non-deprecated replacement for [cycleListener].
+	 * Fan-out target for every [PlannerTickListener] registered via [addTickListener] — the
+	 * non-deprecated replacement for [cycleListener].
 	 *
-	 * Independent of [cycleListener]: setting this does not disturb [MeasuringPlanAdapter]'s
-	 * claim on [cycleListener], and both fire for the same cycle without interfering. `null` in
-	 * runs that don't need per-cycle attribution (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
-	 * sets it to attribute `commandQueue.postAll` calls correctly).
+	 * A [CompositeTickListener] rather than a single nullable slot: [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
+	 * registers its own attribution listener unconditionally in its `init` block, and a single
+	 * slot meant a caller that registered a listener first had it silently discarded (Issue #843).
+	 * [addTickListener] lets any number of listeners join without displacing each other.
 	 *
-	 * `@Volatile` for the same safe-publication reason as [cycleListener].
+	 * Independent of [cycleListener]: registering here does not disturb [MeasuringPlanAdapter]'s
+	 * claim on [cycleListener], and both fire for the same cycle without interfering.
 	 */
-	@Volatile
-	var tickListener: PlannerTickListener? = null
+	private val tickListeners = CompositeTickListener()
+
+	/**
+	 * Registers [listener] to be notified after every dispatch cycle with the full [TickOutcome]
+	 * taxonomy, alongside any other listener already registered (e.g.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]'s own attribution listener).
+	 *
+	 * Thread-safe: backed by [CompositeTickListener]'s `CopyOnWriteArrayList`.
+	 */
+	fun addTickListener(listener: PlannerTickListener) {
+		tickListeners.addListener(listener)
+	}
 
 	override val capabilities: PlannerCapabilities =
 		PlannerCapabilities(
@@ -233,7 +244,7 @@ class KoogAgentPlanAdapter(
 	 *
 	 * ## Latency measurement (Issue #834, SP2c.11)
 	 *
-	 * [cycleListener] and [tickListener] both receive a latency figure via
+	 * [cycleListener] and every listener registered via [addTickListener] receive a latency figure via
 	 * [TickRecord.latencyMs], measured with a monotonic clock ([TimeSource.Monotonic]) around the
 	 * `withTimeout { a.decideAsync(observation) }` call only — deliberately **not** the whole
 	 * `plan()` attempt. Including [getOrCreateAgent] would fold the one-time
@@ -494,7 +505,7 @@ class KoogAgentPlanAdapter(
 		simTime: Double,
 		latencyMs: Long?
 	) {
-		tickListener?.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
+		tickListeners.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
 	}
 
