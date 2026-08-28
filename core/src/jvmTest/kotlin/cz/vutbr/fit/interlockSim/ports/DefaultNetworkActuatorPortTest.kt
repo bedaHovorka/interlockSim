@@ -508,7 +508,10 @@ class DefaultNetworkActuatorPortTest {
 			val facade = mockk<InterlockingFacade>()
 			val reason = "T1 holds no block bounded by 'A'; legal origins: X, Y"
 			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
-				InterlockingFacade.RouteResponse.Denied(reason, originNotContiguous = true)
+				InterlockingFacade.RouteResponse.Denied(
+					reason,
+					InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart
+				)
 
 			val result =
 				portWithFacade(inOuts = listOf(a, b), facade = facade)

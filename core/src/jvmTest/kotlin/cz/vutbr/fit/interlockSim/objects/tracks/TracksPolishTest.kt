@@ -21,13 +21,13 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.message
+import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
+import cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.mockk.mockk
@@ -191,7 +191,7 @@ class TracksPolishTest {
 
 		@Test
 		fun `constructor with minimum length`() {
-			val minLength = StaticTrack.MIN_LENGTH
+			val minLength = MIN_TRACK_LENGTH
 			val block = SimpleTrackBlock(separator1, separator2, minLength, 30.0, 30.0)
 
 			assertThat(block.length()).isEqualTo(minLength)
@@ -199,7 +199,7 @@ class TracksPolishTest {
 
 		@Test
 		fun `constructor with minimal max speed`() {
-			val minSpeed = PathElement.MINIMAL_MAX_SPEED
+			val minSpeed = MINIMAL_MAX_SPEED
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, minSpeed, minSpeed)
 
 			assertThat(block.maxSpeed(separator1)).isEqualTo(minSpeed)
