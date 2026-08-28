@@ -77,8 +77,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * ## Historical: the legacy fallback-reason taxonomy (removed in Issue #713)
  *
  * Until Issue #713 the planner reported through two now-deleted types: a three-value
- * fallback-reason enum (`EMPTY_NO_TOOLS` / `TIMEOUT` / `EXCEPTION`, Issue #817) and the
- * two-callback cycle listener (`onLlmSuccess` / `onFallback`) that carried it. Issue #842 added
+ * fallback-reason enum, `FallbackReason` (`EMPTY_NO_TOOLS` / `TIMEOUT` / `EXCEPTION`, Issue #817)
+ * and the two-callback cycle listener, `PlannerCycleListener` (`onLlmSuccess` / `onFallback`)
+ * that carried it. Issue #842 added
  * this taxonomy alongside them together with a **lossy, one-directional** projection bridge;
  * Issue #713 then moved every producer and consumer onto [PlannerTickListener] and deleted all
  * three. The bridge's mapping is recorded here rather than lost with it, because it is what any
