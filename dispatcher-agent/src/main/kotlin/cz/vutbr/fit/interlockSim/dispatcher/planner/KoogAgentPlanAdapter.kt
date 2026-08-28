@@ -171,8 +171,8 @@ class KoogAgentPlanAdapter(
 
 	/**
 	 * Fan-out target for every [PlannerTickListener] registered via [addTickListener] — the sole
-	 * reporting seam of this adapter since Issue #713 Task 10 retired the deprecated
-	 * `PlannerCycleListener` slot.
+	 * reporting seam of this adapter since Issue #713 retired the legacy two-callback
+	 * cycle-listener slot.
 	 *
 	 * A [CompositeTickListener] rather than a single nullable slot: [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
 	 * registers its own attribution listener unconditionally in its `init` block, and a single
@@ -408,7 +408,7 @@ class KoogAgentPlanAdapter(
 	 * `decide()` returns, because the outcome depends on the oracle's result; if `decide()` throws
 	 * there, the exception escapes to [plan]'s exception handler, which reports `RULE_FALLBACK`
 	 * via this method — so the cycle is still accounted for exactly once, never silently dropped
-	 * and (unlike the pre-#713 `PlannerCycleListener` path) never double-counted.
+	 * and (unlike the pre-#713 two-callback listener path) never double-counted.
 	 *
 	 * @param latencyMs Cycle latency to report alongside the tick, or `null` if no meaningful
 	 *   inference attempt was measured for this cycle — see [plan]'s "Latency measurement" KDoc.

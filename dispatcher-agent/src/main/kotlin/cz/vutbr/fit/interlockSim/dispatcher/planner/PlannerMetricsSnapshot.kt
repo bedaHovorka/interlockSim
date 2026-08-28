@@ -46,9 +46,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * | [TickOutcome.RULE_FALLBACK] | fallback | a deterministic planner originated the actions |
  *
  * **Why [TickOutcome.LLM_SILENT_NONACTIONABLE] is a fallback and not a success.** Before Issue
- * #713 Task 10 this snapshot was fed by the deprecated [PlannerCycleListener], whose
- * `onFallback` fired for all three [FallbackReason] values *before* the outcome split — so
- * every silent cycle on a non-idle station was counted as a fallback, including the ones
+ * #713 this snapshot was fed by the legacy two-callback cycle listener, whose `onFallback` fired
+ * for all three legacy fallback reasons *before* the outcome split — so every silent cycle on a
+ * non-idle station was counted as a fallback, including the ones
  * `KoogAgentPlanAdapter.runFallback` goes on to classify as
  * [TickOutcome.LLM_SILENT_NONACTIONABLE]. Scoring it as a success here would silently raise
  * [ollamaSuccessRate] against every run already recorded in

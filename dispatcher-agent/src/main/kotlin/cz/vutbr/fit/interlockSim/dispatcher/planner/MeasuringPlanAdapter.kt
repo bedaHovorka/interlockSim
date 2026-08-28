@@ -215,10 +215,10 @@ class MeasuringPlanAdapter(
 		// Issue #834 review finding #6, extended by Issue #713 Task 10: successRate here is not
 		// comparable to a pre-#834 run's — #834 reclassified idle ticks (former RULE_FALLBACK) to
 		// LLM_NO_OP, and REVISED's cap-full no_op converts former fallback ticks into LLM
-		// successes. #713 re-keyed the counters from FallbackReason onto TickOutcome; that
+		// successes. #713 re-keyed the counters from the legacy fallback reasons onto TickOutcome; that
 		// migration reclassified no outcome — LLM_SILENT_NONACTIONABLE deliberately stayed on the
 		// fallback side. It can still move the rate very slightly, in one unreachable case: the
-		// old PlannerCycleListener path counted TWO fallbacks for a silent cycle whose
+		// old two-callback listener path counted TWO fallbacks for a silent cycle whose
 		// fallbackDispatcher.decide() threw (EMPTY_NO_TOOLS from onFallback, then EXCEPTION from
 		// plan()'s catch), where reportTick — and now this adapter — counts one. Removing that
 		// double count can only raise the rate. Read it as a within-#834 figure.
@@ -244,7 +244,7 @@ class MeasuringPlanAdapter(
 			}
 		// byOutcome is its own field, not a parenthetical on fallback=: it covers ALL outcomes
 		// and so sums to totalCycles, not to fallbackCount. Attached to fallback= (as the
-		// pre-#713 FallbackReason breakdown legitimately was) it would read as a breakdown of a
+		// pre-#713 fallback-reason breakdown legitimately was) it would read as a breakdown of a
 		// number it does not add up to.
 		return "[MeasuringPlanAdapter] $label — " +
 			"totalCycles=${snapshot.totalCycles} " +

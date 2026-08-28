@@ -588,7 +588,7 @@ class KoogAgentPlanAdapterTest {
 	}
 
 	/**
-	 * Issue #713 Task 10 retired the deprecated `PlannerCycleListener` slot, so every observer —
+	 * Issue #713 retired the legacy two-callback cycle-listener slot, so every observer —
 	 * `MeasuringPlanAdapter` included — now shares the one [PlannerTickListener] seam. This test
 	 * guards the property that made that migration safe: a second registration does not displace
 	 * the first, both see the same tick.

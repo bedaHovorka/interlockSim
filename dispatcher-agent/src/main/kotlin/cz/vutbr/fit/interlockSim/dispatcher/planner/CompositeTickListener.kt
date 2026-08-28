@@ -21,11 +21,11 @@ import java.util.concurrent.CopyOnWriteArrayList
  * claims it unconditionally in its `init` block, so a caller that registered its own listener
  * beforehand had it silently discarded — there was no seam at all onto which a run recorder could
  * be wired, which is exactly the mechanism Issue #843 fixed once already (every per-run JSON
- * reported `totalTicks = 0`). Moving [MeasuringPlanAdapter] off the deprecated
- * [PlannerCycleListener] slot onto that single [PlannerTickListener] slot would recreate the
- * regression, because `AgentLoopDriver` claims it too. This class is the same "one slot, two
- * owners" fix [CompositeActionOutcomeSink] applied to [ActionOutcomeSink] in Issue #847 round 4,
- * mirrored here for [PlannerTickListener].
+ * reported `totalTicks = 0`). Moving [MeasuringPlanAdapter] off the legacy two-callback
+ * cycle-listener slot (deleted in Issue #713) onto that single [PlannerTickListener] slot would
+ * recreate the regression, because `AgentLoopDriver` claims it too. This class is the same "one
+ * slot, two owners" fix [CompositeActionOutcomeSink] applied to [ActionOutcomeSink] in Issue
+ * #847 round 4, mirrored here for [PlannerTickListener].
  *
  * ## Thread-safety
  *

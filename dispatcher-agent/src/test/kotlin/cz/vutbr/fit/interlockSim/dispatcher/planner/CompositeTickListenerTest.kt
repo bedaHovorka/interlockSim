@@ -41,8 +41,8 @@ import java.time.Duration
  * it unconditionally in its `init` block, so a caller that registered a listener before
  * constructing the driver had it silently discarded — the exact mechanism Issue #843 fixed once
  * already (every per-run JSON reported `totalTicks = 0`). Moving [MeasuringPlanAdapter] off the
- * deprecated [PlannerCycleListener] slot onto the single `KoogAgentPlanAdapter.tickListener` slot
- * would recreate it. These tests exist so that regression cannot happen silently again.
+ * legacy two-callback cycle-listener slot (deleted in Issue #713) onto the single
+ * `KoogAgentPlanAdapter.tickListener` slot would recreate it. These tests exist so that regression cannot happen silently again.
  *
  * The construction helper below mirrors the one in `KoogAgentPlanAdapterTest`, and the second
  * test mirrors the `AgentLoopDriver` construction pattern used by `AgentLoopDriverAttributionTest`

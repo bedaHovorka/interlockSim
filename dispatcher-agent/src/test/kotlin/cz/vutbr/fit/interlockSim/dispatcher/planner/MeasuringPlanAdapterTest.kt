@@ -185,7 +185,7 @@ class MeasuringPlanAdapterTest {
 		/**
 		 * The fallback oracle finds nothing actionable either, so the cycle is reported as
 		 * [TickOutcome.LLM_SILENT_NONACTIONABLE] — which the partition on [PlannerMetricsSnapshot]
-		 * scores as a fallback, exactly as the pre-Issue-#713 `FallbackReason.EMPTY_NO_TOOLS`
+		 * scores as a fallback, exactly as the pre-Issue-#713 `EMPTY_NO_TOOLS` fallback-reason
 		 * counter did.
 		 */
 		@Test

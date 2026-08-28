@@ -31,19 +31,20 @@ enum class TimeoutNoOpCause {
 	 * The LLM responded, the response was structurally parseable, but the single repair
 	 * attempt still failed to turn it into a valid action set.
 	 *
-	 * Not yet emitted by any code path in Issue #842 — `FallbackReason.toTickOutcome` only
-	 * produces [DEADLINE_MISS] and [EMPTY_UNPARSEABLE]. This value is forward-looking
-	 * taxonomy for the SP2c.20/.22 repair-attempt wiring.
+	 * Not emitted by any code path today — indeed no producer reports a
+	 * [TickOutcome.TIMEOUT_NOOP] tick at all since Issue #713 removed the legacy projection
+	 * bridge, which itself only ever produced [DEADLINE_MISS] and [EMPTY_UNPARSEABLE]. This value
+	 * is forward-looking taxonomy for the SP2c.20/.22 repair-attempt wiring.
 	 */
 	UNREPAIRABLE_OUTPUT,
 
 	/**
 	 * The LLM response was empty or could not be parsed at all, so there was nothing to repair.
 	 *
-	 * This is also the cause used for the [TickOutcome.TIMEOUT_NOOP] branch of the legacy
-	 * `FallbackReason.EMPTY_NO_TOOLS` split — see `FallbackReason.toTickOutcome`. An empty
-	 * response can never be distinguished from a dead model without an explicit, mandatory
-	 * `no_op` emission (SP2c.6), so it must never be scored as [TickOutcome.LLM_NO_OP].
+	 * This is also the cause that encodes the degraded half of the legacy `EMPTY_NO_TOOLS`
+	 * split — see the "Historical" section of [TickOutcome]'s KDoc. An empty response can never
+	 * be distinguished from a dead model without an explicit, mandatory `no_op` emission
+	 * (SP2c.6), so it must never be scored as [TickOutcome.LLM_NO_OP].
 	 */
 	EMPTY_UNPARSEABLE
 }

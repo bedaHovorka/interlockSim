@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -26,10 +27,10 @@ import org.junit.jupiter.params.provider.EnumSource
  *
  * Verifies:
  * - [TickOutcome.tickClass] and [TickOutcome.countsAsLlmSuccess] match the taxonomy table.
- * - [TickRecord]'s `timeoutNoOpCause` invariant.
- * - [FallbackReason.toTickOutcome] correctly projects all three legacy [FallbackReason] values
- *   onto [TickOutcome], including the [FallbackReason.EMPTY_NO_TOOLS] split.
- * - [FallbackReason] and [PlannerCycleListener] are marked `@Deprecated`.
+ * - [TickRecord]'s `timeoutNoOpCause` invariant, swept over every outcome/cause combination.
+ * - The encodings that the legacy fallback-reason taxonomy (deleted in Issue #713) mapped onto,
+ *   and the safety rule behind its `EMPTY_NO_TOOLS` split — see the "Historical" section of
+ *   [TickOutcome]'s KDoc.
  *
  * @since Issue #842 (Goal 10 SP2c.19 — tick-outcome taxonomy)
  */
@@ -169,130 +170,106 @@ class TickOutcomeTest {
 			val record = TickRecord(outcome = TickOutcome.LLM_ACTIONS, simTime = 3.0)
 			assertThat(record.timeoutNoOpCause).isNull()
 		}
-	}
-
-	// ── TickOutcomeProjection invariant ────────────────────────────────────────
-
-	@Nested
-	@DisplayName("TickOutcomeProjection timeoutNoOpCause invariant")
-	inner class TickOutcomeProjectionInvariant {
-		@Test
-		fun `TIMEOUT_NOOP without a cause throws IllegalArgumentException`() {
-			try {
-				TickOutcomeProjection(outcome = TickOutcome.TIMEOUT_NOOP)
-				error("Expected IllegalArgumentException")
-			} catch (e: IllegalArgumentException) {
-				assertThat(e.message).isNotNull()
-			}
-		}
 
 		@Test
-		fun `non-TIMEOUT_NOOP outcome with a cause throws IllegalArgumentException`() {
-			try {
-				TickOutcomeProjection(
-					outcome = TickOutcome.LLM_NO_OP,
-					timeoutNoOpCause = TimeoutNoOpCause.EMPTY_UNPARSEABLE
-				)
-				error("Expected IllegalArgumentException")
-			} catch (e: IllegalArgumentException) {
-				assertThat(e.message).isNotNull()
-			}
-		}
-	}
-
-	// ── FallbackReason to TickOutcome projection ──────────────────────────────
-
-	@Nested
-	@DisplayName("FallbackReason.toTickOutcome projection")
-	inner class FallbackReasonProjection {
-		@Test
-		fun `EMPTY_NO_TOOLS without explicitNoOp projects to TIMEOUT_NOOP EMPTY_UNPARSEABLE`() {
-			val projection = FallbackReason.EMPTY_NO_TOOLS.toTickOutcome()
-
-			assertThat(projection.outcome).isEqualTo(TickOutcome.TIMEOUT_NOOP)
-			assertThat(projection.timeoutNoOpCause).isEqualTo(TimeoutNoOpCause.EMPTY_UNPARSEABLE)
-		}
-
-		@Test
-		fun `EMPTY_NO_TOOLS with explicitNoOp false projects to TIMEOUT_NOOP EMPTY_UNPARSEABLE`() {
-			val projection = FallbackReason.EMPTY_NO_TOOLS.toTickOutcome(explicitNoOp = false)
-
-			assertThat(projection.outcome).isEqualTo(TickOutcome.TIMEOUT_NOOP)
-			assertThat(projection.timeoutNoOpCause).isEqualTo(TimeoutNoOpCause.EMPTY_UNPARSEABLE)
-		}
-
-		@Test
-		fun `EMPTY_NO_TOOLS with explicitNoOp true projects to LLM_NO_OP (a success)`() {
-			val projection = FallbackReason.EMPTY_NO_TOOLS.toTickOutcome(explicitNoOp = true)
-
-			assertThat(projection.outcome).isEqualTo(TickOutcome.LLM_NO_OP)
-			assertThat(projection.timeoutNoOpCause).isNull()
-			assertThat(projection.outcome.countsAsLlmSuccess).isTrue()
-		}
-
-		@Test
-		fun `TIMEOUT projects to TIMEOUT_NOOP DEADLINE_MISS`() {
-			val projection = FallbackReason.TIMEOUT.toTickOutcome()
-
-			assertThat(projection.outcome).isEqualTo(TickOutcome.TIMEOUT_NOOP)
-			assertThat(projection.timeoutNoOpCause).isEqualTo(TimeoutNoOpCause.DEADLINE_MISS)
-		}
-
-		@Test
-		fun `TIMEOUT ignores explicitNoOp and still projects to TIMEOUT_NOOP DEADLINE_MISS`() {
-			val projection = FallbackReason.TIMEOUT.toTickOutcome(explicitNoOp = true)
-
-			assertThat(projection.outcome).isEqualTo(TickOutcome.TIMEOUT_NOOP)
-			assertThat(projection.timeoutNoOpCause).isEqualTo(TimeoutNoOpCause.DEADLINE_MISS)
-		}
-
-		@Test
-		fun `EXCEPTION projects to LLM_EXCEPTION`() {
-			val projection = FallbackReason.EXCEPTION.toTickOutcome()
-
-			assertThat(projection.outcome).isEqualTo(TickOutcome.LLM_EXCEPTION)
-			assertThat(projection.timeoutNoOpCause).isNull()
-		}
-
-		@Test
-		fun `EXCEPTION ignores explicitNoOp and still projects to LLM_EXCEPTION`() {
-			val projection = FallbackReason.EXCEPTION.toTickOutcome(explicitNoOp = true)
-
-			assertThat(projection.outcome).isEqualTo(TickOutcome.LLM_EXCEPTION)
-			assertThat(projection.timeoutNoOpCause).isNull()
-		}
-
-		@Test
-		fun `every projected TickOutcome-cause pair satisfies the TickRecord invariant`() {
-			// Every FallbackReason, under both explicitNoOp settings, must project to a pair
-			// that TickRecord actually accepts — regression guard against the projection and
-			// TickRecord's invariant drifting apart.
-			FallbackReason.entries.forEach { reason ->
-				listOf(false, true).forEach { explicitNoOp ->
-					val projection = reason.toTickOutcome(explicitNoOp)
-					TickRecord(
-						outcome = projection.outcome,
-						simTime = 0.0,
-						timeoutNoOpCause = projection.timeoutNoOpCause
-					)
+		@DisplayName("a cause is accepted on TIMEOUT_NOOP and rejected on every other outcome")
+		fun `TickRecord accepts a cause on exactly one outcome`() {
+			// Replaces the projection-era guard that every projected (outcome, cause) pair was one
+			// TickRecord would accept. With that bridge gone, the same drift is caught at the source:
+			// sweep the whole product of outcomes and causes (plus the no-cause case) and assert that
+			// TickRecord accepts precisely the TIMEOUT_NOOP-with-a-cause combinations.
+			val causes: List<TimeoutNoOpCause?> = listOf(null) + TimeoutNoOpCause.entries
+			TickOutcome.entries.forEach { outcome ->
+				causes.forEach { cause ->
+					val legal = (outcome == TickOutcome.TIMEOUT_NOOP) == (cause != null)
+					val accepted =
+						try {
+							TickRecord(outcome = outcome, simTime = 0.0, timeoutNoOpCause = cause)
+							true
+						} catch (_: IllegalArgumentException) {
+							false
+						}
+					assertThat(accepted, name = "TickRecord($outcome, $cause) accepted").isEqualTo(legal)
 				}
 			}
 		}
 	}
 
-	// ── Legacy deprecation ────────────────────────────────────────────────────
+	// ── Legacy fallback-reason encodings (Issue #713 — bridge deleted) ────────
 
+	/**
+	 * The legacy three-value fallback-reason enum and the projection bridge that mapped it onto
+	 * [TickOutcome] were deleted in Issue #713, but the encodings they projected onto are still
+	 * this taxonomy's contract, and are still how every figure recorded before that migration has
+	 * to be read — see the "Historical" section of [TickOutcome]'s KDoc.
+	 *
+	 * These tests assert those encodings directly against [TickOutcome] and [TickRecord], so the
+	 * bridge's removal did not take its invariants with it. The one that matters most is the
+	 * safety rule the split exists to enforce: an empty response can never be distinguished from a
+	 * dead model, so it must never be scored as a success unless the silence was independently
+	 * explained (Issue #834).
+	 */
 	@Nested
-	@DisplayName("legacy types are marked @Deprecated")
-	inner class LegacyDeprecation {
+	@DisplayName("legacy fallback-reason encodings")
+	inner class LegacyFallbackEncodings {
 		@Test
-		fun `FallbackReason is annotated Deprecated`() {
-			assertThat(FallbackReason::class.annotations.any { it is Deprecated }).isTrue()
+		@DisplayName("an unexplained empty response is a degraded TIMEOUT_NOOP + EMPTY_UNPARSEABLE")
+		fun `an unexplained empty response is not scored as a success`() {
+			val record =
+				TickRecord(
+					outcome = TickOutcome.TIMEOUT_NOOP,
+					simTime = 1.0,
+					timeoutNoOpCause = TimeoutNoOpCause.EMPTY_UNPARSEABLE
+				)
+
+			assertThat(record.outcome.countsAsLlmSuccess).isFalse()
+			assertThat(record.outcome.tickClass).isEqualTo(TickClass.DEGRADED)
+			assertThat(record.timeoutNoOpCause).isEqualTo(TimeoutNoOpCause.EMPTY_UNPARSEABLE)
 		}
 
 		@Test
-		fun `PlannerCycleListener is annotated Deprecated`() {
-			assertThat(PlannerCycleListener::class.annotations.any { it is Deprecated }).isTrue()
+		@DisplayName("an independently explained empty cycle is LLM_NO_OP: a success carrying no cause")
+		fun `an explained empty cycle is scored as a success`() {
+			val record = TickRecord(outcome = TickOutcome.LLM_NO_OP, simTime = 1.0)
+
+			assertThat(record.outcome.countsAsLlmSuccess).isTrue()
+			assertThat(record.outcome.tickClass).isEqualTo(TickClass.SUCCESS)
+			assertThat(record.timeoutNoOpCause).isNull()
+		}
+
+		@Test
+		@DisplayName("the two halves of the EMPTY_NO_TOOLS split stay on opposite sides of the partition")
+		fun `the halves of the empty-cycle split never agree`() {
+			// The whole reason one legacy value had to become two: whether an empty cycle scores as a
+			// success depends entirely on whether its silence was independently explained. If these
+			// two ever agreed, the safety rule would have been quietly dropped.
+			assertThat(TickOutcome.LLM_NO_OP.countsAsLlmSuccess)
+				.isNotEqualTo(TickOutcome.TIMEOUT_NOOP.countsAsLlmSuccess)
+		}
+
+		@Test
+		@DisplayName("a missed inference deadline is TIMEOUT_NOOP + DEADLINE_MISS")
+		fun `a missed deadline is a degraded TIMEOUT_NOOP`() {
+			val record =
+				TickRecord(
+					outcome = TickOutcome.TIMEOUT_NOOP,
+					simTime = 1.0,
+					timeoutNoOpCause = TimeoutNoOpCause.DEADLINE_MISS
+				)
+
+			assertThat(record.outcome.countsAsLlmSuccess).isFalse()
+			assertThat(record.outcome.tickClass).isEqualTo(TickClass.DEGRADED)
+			assertThat(record.timeoutNoOpCause).isEqualTo(TimeoutNoOpCause.DEADLINE_MISS)
+		}
+
+		@Test
+		@DisplayName("a throwable on the LLM path is LLM_EXCEPTION: degraded, and carrying no cause")
+		fun `an LLM-path throwable is a degraded LLM_EXCEPTION`() {
+			val record = TickRecord(outcome = TickOutcome.LLM_EXCEPTION, simTime = 1.0)
+
+			assertThat(record.outcome.countsAsLlmSuccess).isFalse()
+			assertThat(record.outcome.tickClass).isEqualTo(TickClass.DEGRADED)
+			assertThat(record.timeoutNoOpCause).isNull()
 		}
 	}
 }
