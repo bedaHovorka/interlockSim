@@ -23,7 +23,6 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import java.awt.BasicStroke
 import java.awt.Graphics2D
 import java.lang.Math.round
-import java.util.Collection
 import java.util.EnumMap
 
 /**
