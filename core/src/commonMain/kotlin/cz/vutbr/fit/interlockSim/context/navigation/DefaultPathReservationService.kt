@@ -1961,10 +1961,20 @@ class DefaultPathReservationService(
 		}
 
 	/**
-	 * Explore all outgoing paths from a separator.
-	 * At every junction, all outgoing branches are enqueued, which enables full parallel path
-	 * discovery. Where only a single outgoing section exists, that one section is enqueued.
-	 * The section the separator was reached through is never enqueued again.
+	 * Enqueue the sections to continue exploring from [separator], which was reached via
+	 * [currentSection].
+	 *
+	 * At a junction — more than one outgoing section — every branch is enqueued, which is what
+	 * makes parallel path discovery possible. Where exactly one outgoing section remains, that
+	 * one is enqueued. If none remains, or [separator] has no location in the grid, nothing is
+	 * enqueued and this arm of the search ends here.
+	 *
+	 * [currentSection] is excluded, so the search does not immediately turn back on the section
+	 * it arrived on. The comparison is `!=`, which is reference equality today because no
+	 * `TrackSection` implementation overrides `equals`; an override would silently widen this
+	 * filter. The exclusion is local — it does not stop the same section being enqueued later
+	 * from its other end. Traversal-level cycle protection is the caller's `visited` set in
+	 * [findNextSemaphoresVia], and it is keyed on separators, not sections.
 	 */
 	private fun exploreOutgoingPaths(
 		separator: PathSeparator,
