@@ -297,8 +297,10 @@ class ShuntingLoop(
 		val zB: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZB_X, COORD_SEM_ZB_Y)
 		val doA2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA2_X, COORD_SEM_DOA2_Y)
 		val doB2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB2_X, COORD_SEM_DOB2_Y)
-		val vA: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, COORD_SW_A_X, COORD_SW_A_Y)
-		val vB: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, COORD_SW_B_X, COORD_SW_B_Y)
+		// Topology preconditions (SIM-004): assert vyhybna.xml really has switches at these
+		// coordinates. elementAt() throws if the cell is missing or of the wrong type.
+		elementAt<DynamicRailSwitch>(context, COORD_SW_A_X, COORD_SW_A_Y)
+		elementAt<DynamicRailSwitch>(context, COORD_SW_B_X, COORD_SW_B_Y)
 
 		val k1: DynamicTrackBlock = getBlock(context, "k1", doA1, doB1)
 		val k2: DynamicTrackBlock = getBlock(context, "k2", doA2, doB2)
@@ -334,7 +336,7 @@ class ShuntingLoop(
 		val graph = context.getGraph() // ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>
 		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
 		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
-		val block = graph.get(point1, point2) ?: throw IllegalArgumentException("Cannot get block between cells")
+		val block = graph[point1, point2] ?: throw IllegalArgumentException("Cannot get block between cells")
 		val dynamicBlock = Util.assertInstanceOf<DynamicTrackBlock>(block)
 		dynamicBlock.name = name
 		return dynamicBlock

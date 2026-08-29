@@ -924,7 +924,7 @@ class Train :
 				when (lastSeparator) {
 					is DynamicRailSemaphore -> lastSeparator
 					is DynamicInOut -> lastSeparator.outSemaphore
-					else -> throw IllegalStateException("Last path separator must be DynamicRailSemaphore or DynamicInOut")
+					else -> error("Last path separator must be DynamicRailSemaphore or DynamicInOut")
 				}
 			val nextSignal: Signal = nextSemaphore.signal
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")

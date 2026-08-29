@@ -1915,7 +1915,7 @@ class DefaultPathReservationService(
 			// Only explore outgoing paths if we haven't reached a stopping point
 			// This discovers parallel paths UP TO the first layer of forward-facing semaphores
 			if (!stopExploration) {
-				exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, queue)
+				exploreOutgoingPaths(nextSeparator, currentSection, queue)
 			}
 		}
 
@@ -1962,13 +1962,13 @@ class DefaultPathReservationService(
 
 	/**
 	 * Explore all outgoing paths from a separator.
-	 * At the FIRST junction, explores ALL branches. At subsequent junctions, uses single-path navigation.
+	 * At every junction, all outgoing branches are enqueued, which enables full parallel path
+	 * discovery. Where only a single outgoing section exists, that one section is enqueued.
+	 * The section the separator was reached through is never enqueued again.
 	 */
 	private fun exploreOutgoingPaths(
 		separator: PathSeparator,
-		currentSep: PathSeparator,
 		currentSection: TrackSection,
-		start: PathSeparator,
 		queue: MutableList<Pair<PathSeparator, TrackSection?>>
 	) {
 		val grid = environment.getRailWayNetGrid()
