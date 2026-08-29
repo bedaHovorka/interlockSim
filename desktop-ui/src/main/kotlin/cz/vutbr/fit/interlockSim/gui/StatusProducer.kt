@@ -15,7 +15,7 @@ import java.awt.event.MouseEvent
  * Caution: Class implementing this interface must be {@link Component}
  * @see StatusBar
  */
-interface StatusProducer {
+fun interface StatusProducer {
 	/**
 	 * get status of Component
 	 * @param e

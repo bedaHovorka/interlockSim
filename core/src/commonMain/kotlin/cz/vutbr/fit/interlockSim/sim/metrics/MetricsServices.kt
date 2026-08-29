@@ -27,7 +27,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * @see cz.vutbr.fit.interlockSim.context.SimulationEnvironment.getMetricsServices
  * @since Issue #672 (Goal 6 SP1)
  */
-interface MetricsServices {
+fun interface MetricsServices {
 	/**
 	 * Get the [MetricsCollectionService] scoped to this simulation context.
 	 *

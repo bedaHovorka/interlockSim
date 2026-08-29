@@ -21,7 +21,7 @@ package cz.vutbr.fit.interlockSim.context
  *
  * @see JvmEditingContextFactory (jvmMain) for the full JVM-capable interface
  */
-interface EditingContextFactory {
+fun interface EditingContextFactory {
 	/**
 	 * Create an empty editing context.
 	 *

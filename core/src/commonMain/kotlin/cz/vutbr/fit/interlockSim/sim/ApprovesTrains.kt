@@ -15,7 +15,7 @@ package cz.vutbr.fit.interlockSim.sim
  * approved trains via [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.getMainProcess]
  * without depending on kDisco's `Process` type to name [ShuntingLoop]/[MultiTrainLoop] directly.
  */
-interface ApprovesTrains {
+fun interface ApprovesTrains {
 	/** Currently approved (active) trains, snapshotted at call time. */
 	fun getApprovedTrains(): List<Train>
 }
