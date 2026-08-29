@@ -50,7 +50,9 @@ The `testutil` package provides:
 Shared fixture-library helpers from `:core-test` (same package, KMP `commonMain`) are also
 visible here: `ContextTracker` (the registry behind `tracked()`), `runSampled` (listener-wiring
 harness), `ArrivalTally` (completed-journey witness), `sameStatic`/`separatorLabel`
-(dynamic-wrapper-safe separator identity).
+(dynamic-wrapper-safe separator identity). From `:core-test` `jvmMain`:
+`TrainKinematicSampler`/`TrainKinematicSample` and `AspectFlipOnce` (Issue #989 train-kinematics
+sampling and one-shot aspect flips).
 
 ## Quick Start
 
@@ -352,4 +354,4 @@ TestTopologies.linearPathWithSemaphoreSequence(
 
 ---
 
-**Last Updated**: 2026-09-08 (PR #1043 review round: shared PathExistence BFS helper; Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, and cleanup contract; PR #1047 review round: cleanup contract narrowed to the non-duplicated cases)
+**Last Updated**: 2026-09-11 (PR #1021 round: `:core-test` jvmMain sampling helpers `TrainKinematicSampler`/`AspectFlipOnce` listed; earlier: PR #1043 review round — shared PathExistence BFS helper, Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, cleanup contract; PR #1047 review round — cleanup contract narrowed to the non-duplicated cases)

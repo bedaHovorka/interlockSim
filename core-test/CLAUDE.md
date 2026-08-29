@@ -27,7 +27,10 @@ fixtures from their test scopes.
   `ContextTracker`, `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
-  `NavigationDecoratingContext`, `ShuntingLoopLookups`).
+  `NavigationDecoratingContext`, `ShuntingLoopLookups`,
+  `TrainKinematicSampler`/`TrainKinematicSample` and `AspectFlipOnce`
+  (Issue #989 sampling/aspect-flip helpers; cadence pinned by
+  `:core` jvmTest `TrainKinematicSamplerContractTest`).
 - `src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` — 25 XML
   fixture networks, from `minimal-network.xml` up to `praha-hlavni-nadrazi.xml`,
   including six `invalid-*.xml` negative cases. This directory is one of the
