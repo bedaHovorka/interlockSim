@@ -34,16 +34,22 @@
  * Drives `MultiTrainLoop` (one A→B spec) on `vyhybna.xml`, samples the authoritative
  * heading at every block/section transition, and asserts no >90° flip occurs
  * mid-journey.
+ *
+ * A second test guards the sampler itself (#789): sampling is per train, so a train that
+ * yields no sample must skip only itself and never abort the frame for the trains after it.
  */
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.sim.ApprovesTrains
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
@@ -68,14 +74,25 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 	private val flips = mutableListOf<String>()
 	private val resolvedFlips = mutableListOf<String>()
 
+	/**
+	 * Sample every train approved in the current frame.
+	 *
+	 * Takes an [ApprovesTrains] rather than the loop itself so a test can control the exact
+	 * train list — and its order — of a single frame.
+	 *
+	 * A train that cannot be sampled (no section, no resolvable heading, already arrived)
+	 * must skip **only itself**: `continue`, never `return`. A `return` here would abort the
+	 * whole frame and silently drop every train after the skipped one, which can hide a real
+	 * heading flip (#789).
+	 */
 	private fun sample(
-		loop: MultiTrainLoop,
+		trainSource: ApprovesTrains,
 		destinationName: String
 	) {
-		for (train in loop.getApprovedTrains()) {
+		for (train in trainSource.getApprovedTrains()) {
 			val trainNumber = train.trainNumber
-			val section = train.frontSection ?: return
-			val heading = calculator.calculateTrainHeadingRadians(train, section) ?: return
+			val section = train.frontSection ?: continue
+			val heading = calculator.calculateTrainHeadingRadians(train, section) ?: continue
 			val entry = train.trainEntrySeparator
 			val entryName = (DynamicWrapperUtils.unwrapToStatic(entry) as? NodeCell)?.getName()
 
@@ -83,13 +100,13 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 			// the arrival sample at the destination InOut (#719 canvas-side fix).
 			sampleResolved(train, section, heading)
 
-			if (trainNumber in arrived) return
+			if (trainNumber in arrived) continue
 			// The front has reached the destination InOut: the last section can't be
 			// advanced past the InOut, so the RAW arrival sample is excluded — the raw
 			// flip there is expected and corrected canvas-side by TrainHeadingResolver.
 			if (entryName == destinationName) {
 				arrived.add(trainNumber)
-				return
+				continue
 			}
 			val prev = prevHeading[trainNumber]
 			if (prev != null) {
@@ -115,6 +132,13 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		}
 	}
 
+	/**
+	 * Sample the resolved heading of a **single** train.
+	 *
+	 * The `?: return` below is deliberately *not* a `continue` (#789): this helper's whole body
+	 * handles one train, so the `return` already skips exactly that train and nothing else — the
+	 * caller's loop carries on with the next train. A `continue` would not even compile here.
+	 */
 	private fun sampleResolved(
 		train: Train,
 		section: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection,
@@ -195,5 +219,86 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		}
 		assertThat(flips).isEmpty()
 		assertThat(resolvedFlips).isEmpty()
+	}
+
+	/**
+	 * Frame independence (#789): a train that yields no sample must skip only itself.
+	 *
+	 * A train is added to `approvedTrains` when it is dispatched, but its `frontSection` stays
+	 * `null` until it actually starts moving, so a real multi-train run always has frames that
+	 * mix not-yet-started trains with a train already under way.
+	 *
+	 * The frame is ordered null-section-first on purpose. `getApprovedTrains()` returns trains in
+	 * approval order, which is also start order, so a not-yet-started train would otherwise always
+	 * trail the running one and could never suppress it. `sample()` must not depend on that order.
+	 *
+	 * `sample()` is invoked only for such mixed frames, so every recorded sample proves that a
+	 * train behind a null-section train was still sampled. With a `return` on the null guards the
+	 * maps stay empty.
+	 *
+	 * Heading flips are not asserted here — the three-train spec has mixed destinations, which the
+	 * single `destinationName` arrival exclusion does not model. This test asserts frame
+	 * independence only; the flip assertions live in the straight A→B test above.
+	 */
+	@Test
+	fun `a train without a section does not suppress the trains after it in the same frame`() {
+		val context =
+			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+		val simContext = context
+		calculator = TrainPositionCalculator(context, simContext.separatorPositionCache)
+
+		val destinationName = "B"
+		val loop =
+			MultiTrainLoop(
+				context = context,
+				endTime = 600L,
+				trainSpecs =
+					listOf(
+						MultiTrainLoop.TrainSpec(inName = "A", outName = destinationName, inTime = 0.0, length = 40.0),
+						MultiTrainLoop.TrainSpec(inName = "B", outName = "A", inTime = 1.0, length = 40.0),
+						MultiTrainLoop.TrainSpec(inName = "A", outName = destinationName, inTime = 2.0, length = 40.0)
+					)
+			)
+		simContext.setMainProcess(loop)
+
+		val nullSectionFirst =
+			ApprovesTrains {
+				loop.getApprovedTrains().sortedBy { if (it.frontSection == null) 0 else 1 }
+			}
+		var mixedFrames = 0
+
+		fun sampleMixedFrame() {
+			val trains = nullSectionFirst.getApprovedTrains()
+			if (trains.any { it.frontSection == null } && trains.any { it.frontSection != null }) {
+				mixedFrames++
+				sample(nullSectionFirst, destinationName)
+			}
+		}
+
+		val reportListener =
+			ContextPropertyChangeListener { event ->
+				if (event.propertyName != ReportType.TRAIN_EVENTS.name) return@ContextPropertyChangeListener
+				sampleMixedFrame()
+			}
+		val blockListener =
+			object : BlockEventListener {
+				override fun onBlockEvent(event: BlockEvent) {
+					sampleMixedFrame()
+				}
+			}
+
+		simContext.addPropertyChangeListener(reportListener)
+		simContext.addBlockEventListener(blockListener)
+		try {
+			context.run()
+		} finally {
+			simContext.removePropertyChangeListener(reportListener)
+			simContext.removeBlockEventListener(blockListener)
+		}
+
+		// Sanity: the mixed frame must actually occur, otherwise the scenario is vacuous.
+		assertThat(mixedFrames, "mixed frames").isGreaterThan(0)
+		assertThat(prevResolvedHeading, "resolved samples behind a null-section train").isNotEmpty()
+		assertThat(prevHeading, "raw samples behind a null-section train").isNotEmpty()
 	}
 }
