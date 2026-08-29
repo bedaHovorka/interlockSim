@@ -19,7 +19,11 @@ plugins {
     id("app.cash.burst") apply false
     id("dev.mokkery") apply false
 
-    id("org.sonarqube") version "6.2.0.5505"
+    // 7.3.1 is the newest safe release, not the newest release. Do not bump blindly:
+    //   7.0.0 - fixes the Gradle 9 cross-project configuration resolution error (#1000)
+    //   7.2.0 to 7.2.2 - marked DO NOT UPGRADE by SonarSource (sources dropped from analysis)
+    //   7.4.0 - open regression SCANGRADLE-441: sonarResolver loses task dependencies
+    id("org.sonarqube") version "7.3.1.8318"
     jacoco
 }
 
@@ -124,9 +128,11 @@ sonar {
         property("sonar.java.binaries", "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main")
         property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test")
 
-        property("sonar.java.source", javaVersion)
-        property("sonar.java.target", javaVersion)
-        property("sonar.kotlin.source.version", kotlinVersion)
+        // Read lazily through providers: the v7 plugin fails on eager gradle-property reads
+        // inside this block (component2(...) must not be null). See issue #1000.
+        property("sonar.java.source", providers.gradleProperty("javaVersion").get())
+        property("sonar.java.target", providers.gradleProperty("javaVersion").get())
+        property("sonar.kotlin.source.version", providers.gradleProperty("kotlinVersion").get())
 
         property(
             "sonar.junit.reportPaths",
