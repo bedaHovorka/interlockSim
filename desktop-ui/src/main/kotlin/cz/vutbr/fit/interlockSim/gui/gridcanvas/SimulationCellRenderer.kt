@@ -71,8 +71,8 @@ open class SimulationCellRenderer(
 		// Draw only the active direction to indicate switch position
 		drawSegments(g, *activeSegments.toTypedArray())
 
-		// TODO (Issue #153): Add visual indicator for locked state (cell.locked)
-		// Future: Animate switch transitions
+		// The locked state (cell.locked) is not shown. Tracked in issue #1008.
+		// Switch transitions are not animated.
 	}
 
 	override fun draw(
@@ -99,8 +99,8 @@ open class SimulationCellRenderer(
 		drawTriangle(g, staticRef)
 		g.color = oldColor
 
-		// TODO (Issue #153): Add more sophisticated signal aspect rendering
-		// Future: Animate signal changes
+		// Signal aspect rendering is basic (no sophisticated variants). Tracked in issue #669.
+		// Signal changes are not animated.
 	}
 
 	override fun draw(
@@ -110,8 +110,8 @@ open class SimulationCellRenderer(
 		// Render base configuration from static reference
 		drawStaticInOut(g, cell.staticRef)
 
-		// TODO (Issue #153): Add visual indicator for occupancy state
-		// Future: Animate train entry/exit
+		// The occupancy state is not shown. Tracked in issue #1008.
+		// Train entry/exit is not animated.
 	}
 
 	// EXTENSION - additional railway element renderers can be added here

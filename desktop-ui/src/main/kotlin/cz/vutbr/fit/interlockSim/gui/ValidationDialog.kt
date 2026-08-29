@@ -39,7 +39,7 @@ import javax.swing.WindowConstants
  *   - Unparseable XML (malformed): Shows error, blocks opening
  *   - Parseable XML with validation warnings: Shows dialog, allows "Open Anyway"
  * - SIMULATION MODE: Transformation to simulation blocks invalid XML
- * - SAVE OPERATION: Show this dialog as WARNING before saving (TODO: implement)
+ * - SAVE OPERATION: not wired — the dialog is not shown before saving
  *
  * Rationale:
  * - Users need to open broken files to fix them in the editor
