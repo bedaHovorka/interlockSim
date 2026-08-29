@@ -6,13 +6,6 @@ on:
     types: [ completed ]
   workflow_dispatch:  # Allow manual trigger
 
-permissions:
-  contents: read
-  checks: write
-  pull-requests: read  # Required for PR analysis
-  actions: read  # Required to download artifacts from the triggering gradle-java21.yml run
-  packages: read  # Required for GitHub Packages (kDisco dependency)
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
   # Never cancel a trunk analysis mid-flight: develop is the branch whose history and
@@ -28,6 +21,14 @@ jobs:
   sonarqube:
     name: SonarQube Code Analysis
     runs-on: ubuntu-latest
+    # Granted on the job, not the workflow, so the scope is visible next to the work it
+    # covers and cannot leak to a job added later.
+    permissions:
+      contents: read        # checkout
+      checks: write         # check run for the analysis
+      pull-requests: read   # PR analysis
+      actions: read         # download the artifact from the triggering run
+      packages: read        # GitHub Packages (kDisco dependency)
     timeout-minutes: 35  # a workflow_dispatch run builds and tests everything itself
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
@@ -58,7 +59,7 @@ jobs:
           ${{ runner.os }}-sonar-
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1  # v4.4.4
       with:
         gradle-version: wrapper
         cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}

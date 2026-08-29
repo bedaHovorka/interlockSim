@@ -71,10 +71,14 @@ val checkKdisco by tasks.registering {
 // ===========================================
 
 tasks.register("test") {
+    group = "verification"
+    description = "Run the unit tests of every JVM subproject"
     dependsOn(":core:jvmTest", ":desktop-ui:test", ":dispatcher-agent:test")
 }
 
 tasks.register("integrationTest") {
+    group = "verification"
+    description = "Run the integration tests of every JVM subproject"
     dependsOn(":core:integrationTest", ":desktop-ui:integrationTest", ":dispatcher-agent:integrationTest")
 }
 
@@ -82,17 +86,29 @@ listOf(
     "runSim", "runEditor", "runExample", "runExampleGui", "runSimFromXml",
     "shadowJar", "verifyKoinConfiguration", "koinStatus", "printConfig",
 ).forEach { name ->
-    tasks.register(name) { dependsOn(":desktop-ui:$name") }
+    tasks.register(name) {
+        group = "application"
+        description = "Delegate to :desktop-ui:$name"
+        dependsOn(":desktop-ui:$name")
+    }
 }
 
 // :fast-sim and native subprojects are only included on Linux hosts; guard lifecycle tasks accordingly.
 // Defined in settings.gradle.kts and shared via gradle.extra.
 val isLinuxHost: Boolean by gradle.extra
 if (isLinuxHost) {
-	tasks.register("buildFastSim") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
-	tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
-	tasks.register("buildFastSimRelease") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
-	tasks.register("runFastSimRelease") { dependsOn(":fast-sim:runReleaseExecutableLinuxX64") }
+	listOf(
+		Triple("buildFastSim", "build", ":fast-sim:linkReleaseExecutableLinuxX64"),
+		Triple("runFastSim", "application", ":fast-sim:runDebugExecutableLinuxX64"),
+		Triple("buildFastSimRelease", "build", ":fast-sim:linkReleaseExecutableLinuxX64"),
+		Triple("runFastSimRelease", "application", ":fast-sim:runReleaseExecutableLinuxX64"),
+	).forEach { (name, taskGroup, target) ->
+		tasks.register(name) {
+			group = taskGroup
+			description = "Delegate to $target"
+			dependsOn(target)
+		}
+	}
 }
 
 // ===========================================

@@ -62,6 +62,7 @@ val serializationVersion: String by project
 val kotlinxIoVersion: String by project
 val ktlintVersion: String by project
 val atomicfuVersion: String by project
+val detektFormattingVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -222,6 +223,8 @@ fun String.escapeKotlinStringLiteral(): String = replace("\\", "\\\\").replace("
 
 val generateNativeResourceRoot =
     tasks.register("generateNativeResourceRoot") {
+        group = "build"
+        description = "Generate NativeResourceRoots.kt with the absolute resource paths baked in"
         val coreMainResources = layout.projectDirectory.dir("src/commonMain/resources").asFile
         val coreTestResources = layout.projectDirectory.dir("src/commonTest/resources").asFile
         val coreTestProjectResources =
@@ -579,7 +582,7 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
 }
 
 dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 // ===========================================

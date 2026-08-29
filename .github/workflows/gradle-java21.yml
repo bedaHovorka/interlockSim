@@ -4,11 +4,6 @@ on:
   push:  # Every push, any branch — no PR trigger, so each commit runs CI exactly once.
   workflow_dispatch:  # Allow manual trigger
 
-permissions:
-  contents: read
-  checks: write  # For test reporting
-  packages: read  # For GitHub Packages (kDisco dependency)
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,6 +16,12 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Permissions are granted per job, not once for the whole workflow, so a job only ever
+    # holds the rights it actually needs.
+    permissions:
+      contents: read      # checkout
+      checks: write       # test reporting
+      packages: read      # GitHub Packages (kDisco dependency)
     timeout-minutes: 25  # Increased from 15 to 25 minutes for Kotlin compilation overhead
 
     steps:
@@ -44,7 +45,7 @@ jobs:
           koin-
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1  # v4.4.4
       with:
         gradle-version: wrapper
         cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
@@ -244,6 +245,9 @@ jobs:
 
   fast-sim:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read      # checkout
+      packages: read      # GitHub Packages (kDisco dependency)
     timeout-minutes: 30
     needs: [build]  # Gate: don't spend native build time unless JVM build passes
 
@@ -258,7 +262,7 @@ jobs:
         java-version: ${{ env.JAVA_VERSION }}
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1  # v4.4.4
       with:
         gradle-version: wrapper
         cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
@@ -376,6 +380,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [build, fast-sim]
+    # Downloads two artifacts from this same run and diffs them. Nothing else, so nothing
+    # more is granted. Every job must declare its own block: with no workflow-level
+    # permissions left, a job without one falls back to the repository default, which can
+    # be wider than this.
+    permissions:
+      contents: read
 
     steps:
     - name: Download JVM smoke test output

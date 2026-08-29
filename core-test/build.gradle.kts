@@ -20,6 +20,7 @@ val assertkVersion: String by project
 val koinVersion: String by project
 val kotlinVersion: String by project
 val kdiscoVersion: String by project
+val detektFormattingVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -125,7 +126,7 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
 }
 
 dependencies {
-	detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
+	detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 // Suppress automatic SonarQube sub-module detection for :core-test.

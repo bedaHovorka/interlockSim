@@ -34,6 +34,7 @@ val kotlinVersion: String by project
 val jmhVersion: String by project
 val coroutinesVersion: String by project
 val ktlintVersion: String by project
+val detektFormattingVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -67,6 +68,8 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     // Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
     testImplementation(project(":core-test"))
+
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 application {
@@ -611,10 +614,6 @@ tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
 
 tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
     jvmTarget = "21"
-}
-
-dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
 }
 
 // ===========================================
