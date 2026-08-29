@@ -74,7 +74,7 @@ class Doubleton<T, V>(
 	private var secondValue: V? = null
 
 	init {
-		require(first != second) { "arguments is equal" }
+		require(first != second) { "arguments are equal" }
 		this.first = first
 		this.second = second
 	}
