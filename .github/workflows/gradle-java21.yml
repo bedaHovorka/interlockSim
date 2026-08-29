@@ -107,6 +107,12 @@ jobs:
         # directory, a second copy of the layout that had to be changed together with
         # build.gradle.kts whenever a module was added, renamed or moved (issue #699).
         # These globs carry no module name at all, so a new module is picked up on its own.
+        #
+        # The last line ships the raw JaCoCo .exec data too. The Sonar job normally reuses the
+        # finished XML, but a GitHub workflow_run job always runs the DEFAULT branch's copy of
+        # sonarqube.yml, so until this change is merged the old job still rebuilds
+        # jacocoAggregatedReport itself — and without the .exec files it would write an empty
+        # report over the good one. It also keeps the artifact self-sufficient.
         path: |
           */build/classes/kotlin/main
           */build/classes/kotlin/test
@@ -115,6 +121,7 @@ jobs:
           */build/test-results/*
           */build/reports/jacoco/*/jacocoTestReport.xml
           build/reports/jacoco/aggregated/jacocoTestReport.xml
+          */build/jacoco/*.exec
         retention-days: 7
         if-no-files-found: error
 
