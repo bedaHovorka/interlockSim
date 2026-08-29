@@ -233,26 +233,6 @@ private class SwitchMap<V> {
 private val logger = KotlinLogging.logger {}
 
 /**
- * allowed speed
- * @deprecated Use [cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED] from domain.PhysicsConstants
- */
-@Deprecated(
-	"Use COMMON_BRANCH_SPEED from domain.PhysicsConstants",
-	ReplaceWith("COMMON_BRANCH_SPEED", "cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED")
-)
-const val COMMON_BRANCH_SPEED = cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED
-
-/**
- * allowed speed
- * @deprecated Use [cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED] from domain.PhysicsConstants
- */
-@Deprecated(
-	"Use COMMON_MAIN_SPEED from domain.PhysicsConstants",
-	ReplaceWith("COMMON_MAIN_SPEED", "cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED")
-)
-const val COMMON_MAIN_SPEED = cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED
-
-/**
  *
  */
 const val UNSUPORTED_SWITCH_TYPES_MESSAGE = "unsuported switch types"

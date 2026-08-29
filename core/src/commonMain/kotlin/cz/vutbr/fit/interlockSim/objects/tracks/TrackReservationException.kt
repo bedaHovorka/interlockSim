@@ -15,9 +15,9 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 /**
  * Base exception for all track reservation errors.
  *
- * This sealed hierarchy replaces string-based error classification
- * (DynamicTrackBlockErrors constants) with type-safe exception subtypes,
- * enabling compile-time error handling validation and cleaner catch blocks.
+ * This sealed hierarchy replaces the former string-constant error classification
+ * with type-safe exception subtypes, enabling compile-time error handling
+ * validation and cleaner catch blocks.
  *
  * ## Design Benefits
  *

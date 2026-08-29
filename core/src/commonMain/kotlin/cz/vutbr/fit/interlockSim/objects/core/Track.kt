@@ -16,7 +16,7 @@ package cz.vutbr.fit.interlockSim.objects.core
  * Combines both static (immutable) and dynamic (mutable) track aspects.
  * For interface segregation, see StaticTrack and DynamicTrackBehavior.
  *
- * Note: Track length constants are defined in [StaticTrack.Companion].
+ * Note: Track length constants live in cz.vutbr.fit.interlockSim.domain.PhysicsConstants.
  */
 interface Track :
 	StaticTrack,

@@ -341,50 +341,6 @@ class PathReservationRegistry(
 		}
 
 	/**
-	 * Register blocks as reserved by a train.
-	 *
-	 * **DEPRECATED:** Use registerAtomic() for better error handling.
-	 *
-	 * This creates bidirectional mappings for all blocks in the list.
-	 * If the train already has reserved blocks, the new blocks are added to the existing list.
-	 *
-	 * ## Preconditions
-	 *
-	 * - No block in the list should be already owned by a different train
-	 * - Caller is responsible for validating blocks are FREE before registration
-	 *
-	 * ## State Changes
-	 *
-	 * For each block:
-	 * - Adds block to trainToBlocks[trainId]
-	 * - Sets blockToTrain[block] = trainId
-	 *
-	 * @param trainId The train identifier (typically Train.getClass().getSimpleName() + instance)
-	 * @param blocks List of blocks to register as reserved
-	 * @throws IllegalStateException if any block is already registered to a different train
-	 * @deprecated Use registerAtomic() for explicit result handling instead of exceptions
-	 */
-	@Deprecated(
-		message = "Use registerAtomic() for better error handling",
-		replaceWith = ReplaceWith("registerAtomic(trainId, blocks)")
-	)
-	fun register(
-		trainId: String,
-		blocks: List<DynamicTrackBlock>
-	) {
-		// Delegate to registerAtomic() and convert result to exception for backward compatibility
-		when (val result = registerAtomic(trainId, blocks)) {
-			is RegistrationResult.Success -> return
-			is RegistrationResult.Conflict -> {
-				throw IllegalStateException(
-					"Block ${result.conflictingBlock} already reserved by ${result.existingOwner} " +
-						"(attempted reservation by $trainId)"
-				)
-			}
-		}
-	}
-
-	/**
 	 * Unregister all blocks reserved by a train.
 	 *
 	 * Removes all bidirectional mappings for the given train, regardless of block state.

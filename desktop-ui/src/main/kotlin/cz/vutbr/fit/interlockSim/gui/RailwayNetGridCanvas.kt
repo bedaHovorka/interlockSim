@@ -772,17 +772,6 @@ class RailwayNetGridCanvas :
 
 	private fun cellOn(e: MouseEvent): Cell? = cellOn(e.x, e.y)
 
-	// Deprecated methods - kept for backwards compatibility
-	@Deprecated("Use setContext instead")
-	fun setEditing(editingContext: EditingContext) {
-		setContext(editingContext)
-	}
-
-	@Deprecated("Use setContext instead")
-	fun setSimulation(context: Context<*, *>) {
-		setContext(context)
-	}
-
 	// Scrollable interface implementation
 	override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
 

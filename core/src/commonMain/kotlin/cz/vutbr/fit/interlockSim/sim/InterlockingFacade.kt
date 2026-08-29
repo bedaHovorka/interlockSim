@@ -150,8 +150,8 @@ interface InterlockingFacade {
 			 * knows it (it is the caller's own `fromEndpointName`) and [Denied.reason] names it
 			 * and every legal alternative.
 			 *
-			 * @since Issue #893 (phase alpha, task A-R1b), promoted from the
-			 *   `originNotContiguous` boolean by Issue #834 task alpha-7a.
+			 * @since Issue #893 (phase alpha, task A-R1b), carved out as its own cause by
+			 *   Issue #834 task alpha-7a.
 			 */
 			data object NonContiguousStart : DenialCause
 
@@ -246,55 +246,11 @@ interface InterlockingFacade {
 		 *   alpha-7a). Defaults to [DenialCause.Other], the residual cause, so a denial raised
 		 *   without a reservation outcome behind it can never be mistaken for contention.
 		 *   [requestRouteByEndpoints] populates it from the kernel result it already holds.
-		 *
-		 * **Data-class surface change (Issue #834).** [cause] replaced the former
-		 * `originNotContiguous: Boolean` as the second *component*, so `component2()` now returns
-		 * [DenialCause] and `copy(originNotContiguous = …)` no longer compiles — use
-		 * `copy(cause = …)`. No in-repo call site used either form, but an external consumer of
-		 * this type would.
 		 */
 		data class Denied(
 			val reason: String,
 			val cause: DenialCause = DenialCause.Other
-		) : RouteResponse {
-			/**
-			 * Source-compatibility constructor for Issue #893's `originNotContiguous` call sites.
-			 *
-			 * @param originNotContiguous `true` selects [DenialCause.NonContiguousStart],
-			 *   `false` selects [DenialCause.Other] — the same two-way split this boolean
-			 *   expressed before [DenialCause] existed.
-			 */
-			@Deprecated(
-				"Pass a DenialCause instead: it distinguishes all six denial causes, not two.",
-				ReplaceWith(
-					"Denied(reason, if (originNotContiguous) DenialCause.NonContiguousStart else DenialCause.Other)"
-				)
-			)
-			constructor(
-				reason: String,
-				originNotContiguous: Boolean
-			) : this(
-				reason,
-				if (originNotContiguous) DenialCause.NonContiguousStart else DenialCause.Other
-			)
-
-			/**
-			 * `true` when this denial is specifically
-			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
-			 * surfaced through [requestRouteByEndpoints] — the requested origin bounds none of the
-			 * blocks the train holds or occupies (Issue #893, task A-R1b).
-			 *
-			 * Derived from [cause] since Issue #834 task alpha-7a, which replaced this boolean
-			 * with the full [DenialCause] hierarchy. It is retained so #893's semantics and tests
-			 * read unchanged, but it answers only one of five questions — branch on [cause].
-			 */
-			@Deprecated(
-				"Branch on `cause` instead; this flag collapses four distinct causes into 'not it'.",
-				ReplaceWith("cause is InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart")
-			)
-			val originNotContiguous: Boolean
-				get() = cause is DenialCause.NonContiguousStart
-		}
+		) : RouteResponse
 	}
 
 	/**

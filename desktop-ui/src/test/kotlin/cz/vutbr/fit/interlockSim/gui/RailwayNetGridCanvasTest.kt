@@ -534,32 +534,4 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			assertThat(listeners.size > 0).isEqualTo(true)
 		}
 	}
-
-	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("deprecated setEditing method still works")
-	fun deprecatedSetEditingMethodStillWorks() {
-		runOnEDT {
-			// When: Using deprecated method
-			@Suppress("DEPRECATION")
-			canvas.setEditing(editingContext)
-
-			// Then: Canvas should be in editing mode
-			assertThat(canvas.getEditingContext()).isEqualTo(editingContext)
-		}
-	}
-
-	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("deprecated setSimulation method still works")
-	fun deprecatedSetSimulationMethodStillWorks() {
-		runOnEDT {
-			// When: Using deprecated method
-			@Suppress("DEPRECATION")
-			canvas.setSimulation(simulationContext)
-
-			// Then: Canvas should be in simulation mode
-			assertThat(canvas.getSimulationContext()).isEqualTo(simulationContext)
-		}
-	}
 }
