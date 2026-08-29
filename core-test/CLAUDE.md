@@ -23,7 +23,8 @@ fixtures from their test scopes.
 
 - `src/commonMain/kotlin/.../testutil/` — `CommonTestFixtures`, `TestTopologies`,
   `TestContextBuilder`, `MockSimulationContext`, `CommonKoinTestBase`,
-  `ShuntingLoopRuns`, and others.
+  `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
+  (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
   `NavigationDecoratingContext`, `ShuntingLoopLookups`).
 - `src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` — 25 XML
