@@ -58,9 +58,6 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
     testImplementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
-    testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
     testImplementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
     testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("io.insert-koin:koin-test:$koinVersion")
@@ -68,6 +65,10 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     // Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
     testImplementation(project(":core-test"))
+
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
+    testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
 
     detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
