@@ -55,6 +55,10 @@ val mockkVersion: String by project
 val coroutinesVersion: String by project
 val koogVersion: String by project
 val serializationVersion: String by project
+val mockwebserverVersion: String by project
+val detektFormattingVersion: String by project
+val ktlintVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -111,10 +115,8 @@ dependencies {
     testImplementation("ch.qos.logback:logback-classic:$logbackVersion")
     // MockWebServer (SP2b.9, Issue #815): network-free HTTP mock for OllamaModelPrewarmer's
     // live POST path/method/body assertion. Test-only; production code uses the JDK HttpClient.
-    // Pinned to the OkHttp 5.x line: a transitive dep (aws smithy kotlin via koog-agents)
-    // forces okhttp to 5.3.2, and OkHttp 5.x removed okhttp3.internal.Util that
-    // mockwebserver:4.x is built against — a 4.x mockwebserver throws NoClassDefFoundError.
-    testImplementation("com.squareup.okhttp3:mockwebserver:5.0.0")
+    // The version lives in gradle.properties; the 5.x pin is explained there.
+    testImplementation("com.squareup.okhttp3:mockwebserver:$mockwebserverVersion")
     // kDisco: :core uses implementation() so the kDisco API is not exported transitively;
     // add explicitly so test code that compiles against ShuntingLoop (a kDisco Process
     // subclass) can resolve kDisco supertype members.
@@ -123,6 +125,8 @@ dependencies {
     // transitively; add explicitly for test code that uses runBlocking (e.g. AgentLoopDriverTest).
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
+
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 tasks.test {
@@ -329,8 +333,24 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
 }
 
 // ===========================================
+// Ktlint Configuration
+// ===========================================
+
+// Only the engine pin, nothing else: the version comes from gradle.properties
+// (ktlintVersion) instead of floating with the plugin default, so every module
+// checks with the same engine. This module has no generated sources, so it needs
+// none of :core's filters.
+ktlint {
+    version.set(ktlintVersion)
+}
+
+// ===========================================
 // JaCoCo Report Configuration
 // ===========================================
+
+jacoco {
+    toolVersion = jacocoToolVersion
+}
 
 tasks.named<JacocoReport>("jacocoTestReport") {
     dependsOn(tasks.named("test"))
@@ -355,9 +375,13 @@ tasks.named<JacocoReport>("jacocoTestReport") {
     }
 }
 
-dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
-}
+// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
+// resolves a relative coverage path against THIS module's base directory.
+val aggregatedCoverageReport: String =
+    rootProject.layout.buildDirectory
+        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
+        .get()
+        .asFile.absolutePath
 
 // ===========================================
 // SonarQube per-module configuration
@@ -378,6 +402,16 @@ sonar {
         property("sonar.tests", "src/test/kotlin")
         property("sonar.java.binaries", "build/classes/kotlin/main")
         property("sonar.java.test.binaries", "build/classes/kotlin/test")
-        property("sonar.sourceEncoding", "UTF-8")
+        property(
+            "sonar.junit.reportPaths",
+            "build/test-results/test,build/test-results/integrationTest",
+        )
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            listOf(
+                file("build/reports/jacoco/test/jacocoTestReport.xml").absolutePath,
+                aggregatedCoverageReport,
+            ).joinToString(","),
+        )
     }
 }

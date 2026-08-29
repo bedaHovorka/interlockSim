@@ -4,11 +4,6 @@ on:
   push:  # Every push, any branch — no PR trigger, so each commit runs CI exactly once.
   workflow_dispatch:  # Allow manual trigger
 
-permissions:
-  contents: read
-  checks: write  # For test reporting
-  packages: read  # For GitHub Packages (kDisco dependency)
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,6 +16,12 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Permissions are granted per job, not once for the whole workflow, so a job only ever
+    # holds the rights it actually needs.
+    permissions:
+      contents: read      # checkout
+      checks: write       # test reporting
+      packages: read      # GitHub Packages (kDisco dependency)
     timeout-minutes: 25  # Increased from 15 to 25 minutes for Kotlin compilation overhead
 
     steps:
@@ -44,7 +45,7 @@ jobs:
           koin-
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1  # v4.4.4
       with:
         gradle-version: wrapper
         cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
@@ -72,6 +73,9 @@ jobs:
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The module list is deliberate: :fast-sim runs its own ktlintCheck inside the
+      # linuxX64 job, and an unqualified ktlintCheck would run it twice here. A new
+      # module that applies the ktlint plugin must be added to this line.
       run: ./gradlew :desktop-ui:ktlintCheck :core:ktlintCheck :dispatcher-agent:ktlintCheck --no-daemon --stacktrace
 
     - name: Run unit tests
@@ -93,29 +97,37 @@ jobs:
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./gradlew jacocoTestReport :core:jacocoTestReport --no-daemon --stacktrace
+      # jacocoAggregatedReport merges the .exec data of all modules against all class
+      # directories. Sonar reads it alongside the per-module reports so that a :core class
+      # exercised only by a :dispatcher-agent test is counted (see PR #945). The
+      # unqualified jacocoTestReport name selects every module's report task, so no
+      # module is named on this line either.
+      run: ./gradlew jacocoTestReport jacocoAggregatedReport --no-daemon --stacktrace
 
     - name: Upload Sonar inputs
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: sonar-inputs-${{ github.sha }}
+        # Patterns, not a module list. This block used to name every module and every output
+        # directory, a second copy of the layout that had to be changed together with
+        # build.gradle.kts whenever a module was added, renamed or moved (issue #699).
+        # These globs carry no module name at all, so a new module is picked up on its own.
+        #
+        # The last line ships the raw JaCoCo .exec data too, so the artifact is
+        # self-sufficient: any coverage report can be rebuilt from it without
+        # re-running the tests. Keep that line — a workflow_run job always runs
+        # the DEFAULT branch's workflow copy, so what the Sonar job needs must
+        # be carried here, not rebuilt there.
         path: |
-          desktop-ui/build/classes/kotlin/main
-          desktop-ui/build/classes/kotlin/test
-          desktop-ui/build/test-results/test
-          desktop-ui/build/test-results/integrationTest
-          desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml
-          core/build/classes/kotlin/jvm/main
-          core/build/classes/kotlin/jvm/test
-          core/build/test-results/jvmTest
-          core/build/test-results/integrationTest
-          core/build/reports/jacoco/jvmTest/jacocoTestReport.xml
-          dispatcher-agent/build/classes/kotlin/main
-          dispatcher-agent/build/classes/kotlin/test
-          dispatcher-agent/build/test-results/test
-          dispatcher-agent/build/test-results/integrationTest
-          dispatcher-agent/build/reports/jacoco/test/jacocoTestReport.xml
+          */build/classes/kotlin/main
+          */build/classes/kotlin/test
+          */build/classes/kotlin/jvm/main
+          */build/classes/kotlin/jvm/test
+          */build/test-results/*
+          */build/reports/jacoco/*/jacocoTestReport.xml
+          build/reports/jacoco/aggregated/jacocoTestReport.xml
+          */build/jacoco/*.exec
         retention-days: 7
         if-no-files-found: error
 
@@ -238,6 +250,9 @@ jobs:
 
   fast-sim:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read      # checkout
+      packages: read      # GitHub Packages (kDisco dependency)
     timeout-minutes: 30
     needs: [build]  # Gate: don't spend native build time unless JVM build passes
 
@@ -252,7 +267,7 @@ jobs:
         java-version: ${{ env.JAVA_VERSION }}
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1  # v4.4.4
       with:
         gradle-version: wrapper
         cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
@@ -370,6 +385,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [build, fast-sim]
+    # Downloads two artifacts from this same run and diffs them. Nothing else, so nothing
+    # more is granted. Every job must declare its own block: with no workflow-level
+    # permissions left, a job without one falls back to the repository default, which can
+    # be wider than this.
+    permissions:
+      contents: read
 
     steps:
     - name: Download JVM smoke test output

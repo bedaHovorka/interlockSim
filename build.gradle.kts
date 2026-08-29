@@ -19,7 +19,11 @@ plugins {
     id("app.cash.burst") apply false
     id("dev.mokkery") apply false
 
-    id("org.sonarqube") version "6.2.0.5505"
+    // 7.3.1 is the newest safe release, not the newest release. Do not bump blindly:
+    //   7.0.0 - fixes the Gradle 9 cross-project configuration resolution error (#1000)
+    //   7.2.0 to 7.2.2 - marked DO NOT UPGRADE by SonarSource (sources dropped from analysis)
+    //   7.4.0 - open regression SCANGRADLE-441: sonarResolver loses task dependencies
+    id("org.sonarqube") version "7.3.1.8318"
     jacoco
 }
 
@@ -34,7 +38,7 @@ val assertkVersion: String by project
 val mockkVersion: String by project
 val koinVersion: String by project
 val javaVersion: String by project
-val kotlinVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -67,10 +71,14 @@ val checkKdisco by tasks.registering {
 // ===========================================
 
 tasks.register("test") {
+    group = "verification"
+    description = "Run the unit tests of every JVM subproject"
     dependsOn(":core:jvmTest", ":desktop-ui:test", ":dispatcher-agent:test")
 }
 
 tasks.register("integrationTest") {
+    group = "verification"
+    description = "Run the integration tests of every JVM subproject"
     dependsOn(":core:integrationTest", ":desktop-ui:integrationTest", ":dispatcher-agent:integrationTest")
 }
 
@@ -78,17 +86,29 @@ listOf(
     "runSim", "runEditor", "runExample", "runExampleGui", "runSimFromXml",
     "shadowJar", "verifyKoinConfiguration", "koinStatus", "printConfig",
 ).forEach { name ->
-    tasks.register(name) { dependsOn(":desktop-ui:$name") }
+    tasks.register(name) {
+        group = "application"
+        description = "Delegate to :desktop-ui:$name"
+        dependsOn(":desktop-ui:$name")
+    }
 }
 
 // :fast-sim and native subprojects are only included on Linux hosts; guard lifecycle tasks accordingly.
 // Defined in settings.gradle.kts and shared via gradle.extra.
 val isLinuxHost: Boolean by gradle.extra
 if (isLinuxHost) {
-	tasks.register("buildFastSim") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
-	tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
-	tasks.register("buildFastSimRelease") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
-	tasks.register("runFastSimRelease") { dependsOn(":fast-sim:runReleaseExecutableLinuxX64") }
+	listOf(
+		Triple("buildFastSim", "build", ":fast-sim:linkReleaseExecutableLinuxX64"),
+		Triple("runFastSim", "application", ":fast-sim:runDebugExecutableLinuxX64"),
+		Triple("buildFastSimRelease", "build", ":fast-sim:linkReleaseExecutableLinuxX64"),
+		Triple("runFastSimRelease", "application", ":fast-sim:runReleaseExecutableLinuxX64"),
+	).forEach { (name, taskGroup, target) ->
+		tasks.register(name) {
+			group = taskGroup
+			description = "Delegate to $target"
+			dependsOn(target)
+		}
+	}
 }
 
 // ===========================================
@@ -101,80 +121,83 @@ sonar {
         property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
         property("sonar.projectVersion", version.toString())
 
-        // Source and test paths (desktop-ui + :core KMP subproject).
-        // :dispatcher-agent sources/tests are configured in dispatcher-agent/build.gradle.kts
-        // via its own sonar {} block to avoid double-indexing (SonarQube Gradle plugin v6
-        // auto-detects JVM subproject source sets; listing them here AND in the subproject
-        // causes "can't be indexed twice" errors — Issue #762).
-        // Kept in sync with sonar-project.properties (used for local sonar-scanner runs).
-        property(
-            "sonar.sources",
-            "desktop-ui/src/main/kotlin,core/src/commonMain/kotlin," +
-                "core/src/jvmMain/kotlin,core/src/nativeMain/kotlin",
-        )
-        property(
-            "sonar.tests",
-            "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin,core/src/jvmTest/kotlin",
-        )
-        property("sonar.java.binaries", "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main")
-        property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test")
+        // Server coordinates. Neither value is a secret, so a local run needs only a token:
+        //   SONAR_TOKEN=… ./gradlew sonar
+        // A -Dsonar.host.url / -Dsonar.organization system property overrides either value
+        // at scan time (see docs/KOTLIN_STYLE_GUIDE.md, "Running SonarQube Analysis").
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.organization", "bedahovorka")
 
-        property("sonar.java.source", javaVersion)
-        property("sonar.java.target", javaVersion)
-        property("sonar.language", "java,kotlin")
-        property("sonar.kotlin.source.version", kotlinVersion)
-
+        // Sources, tests, binaries, test reports and coverage reports are NOT listed here.
+        // Every analyzed module declares its own in its own build script, so this file no
+        // longer duplicates the module layout (Issue #699). Letting the plugin see each
+        // module also lets it auto-detect sonar.java.libraries — the dependency classpath
+        // the Kotlin analyzer needs for type resolution. While :core and :desktop-ui were
+        // skipped with isSkipProject, they had no classpath at all and every Kotlin rule
+        // that needs type information was degraded on them.
+        //
+        // sonar.java.source / sonar.java.target are gone too: this project has zero .java
+        // files, so the Java sensor never runs and both properties did nothing.
+        //
+        // Read lazily through a provider: the v7 plugin fails on eager gradle-property reads
+        // inside this block (component2(...) must not be null). See issue #1000.
+        // major.minor only — the analyzer does not know patch versions and warns
+        // "Failed to find Kotlin version '2.3.20'. Defaulting to 2.4" if given the full one.
         property(
-            "sonar.junit.reportPaths",
-            "desktop-ui/build/test-results/test," +
-                "desktop-ui/build/test-results/integrationTest," +
-                "core/build/test-results/jvmTest," +
-                "core/build/test-results/integrationTest," +
-                "dispatcher-agent/build/test-results/test," +
-                "dispatcher-agent/build/test-results/integrationTest",
-        )
-        property(
-            "sonar.coverage.jacoco.xmlReportPaths",
-            listOf(
-                file("desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml"),
-                file("core/build/reports/jacoco/jvmTest/jacocoTestReport.xml"),
-                file("dispatcher-agent/build/reports/jacoco/test/jacocoTestReport.xml"),
-            ).joinToString(",") { it.absolutePath },
+            "sonar.kotlin.source.version",
+            providers.gradleProperty("kotlinVersion").get().substringBeforeLast('.'),
         )
 
         property("sonar.sourceEncoding", "UTF-8")
         property("sonar.qualitygate.wait", "false")
 
-        // :fast-sim and :core's nativeMain compile to linuxX64 native — JaCoCo cannot
-        // instrument native code (coverage comes from :core:linuxX64Test).
-        // :core-test is test-support infrastructure, not production code requiring coverage.
-        property(
-            "sonar.coverage.exclusions",
-            "fast-sim/**,core-test/**,core/src/nativeMain/**," +
-                "desktop-ui/src/main/kotlin/**/gui/MenuBar.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/Frame.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/RailwayNetGridCanvas.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/ToolBar.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/ValidationDialog.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/RenameDialog.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/action/**," +
-                "desktop-ui/src/main/kotlin/**/gui/gridcanvas/**," +
-                "desktop-ui/src/main/kotlin/**/gui/animation/**",
-        )
+        // Coverage exclusions live in the module they belong to. A pattern set here is
+        // inherited by every module and matched against the MODULE-relative path, so a
+        // repo-relative pattern such as "desktop-ui/src/main/kotlin/**/gui/Frame.kt" would
+        // silently never match inside :desktop-ui, where the path is "src/main/kotlin/...".
+        //
+        // :fast-sim and :core-test need no entry at all: neither is analyzed (both set
+        // isSkipProject = true), so there is nothing to exclude.
     }
 }
 
+// CI reuses the compiled classes, test results and coverage reports that the build
+// workflow already produced, so it must not re-run any of that. It used to cancel the
+// dependencies with nine -x flags in sonarqube.yml — a second copy of the module layout
+// that had to be kept in step with this list by hand (issue #699). One flag replaces them:
+//
+//     ./gradlew sonar -PsonarReuseOutputs=true
+//
+// The value is read, not just its presence: a bare -PsonarReuseOutputs would set an empty
+// string, which is invisible in a build log. getOrElse("false").toBoolean() also fails
+// safe — a typo makes the tasks run, which is slower but never a silently empty analysis.
+val sonarReuseOutputs = providers.gradleProperty("sonarReuseOutputs").getOrElse("false").toBoolean()
+
 tasks.named("sonar") {
-    dependsOn(
-        ":desktop-ui:test", ":desktop-ui:integrationTest", ":desktop-ui:jacocoTestReport",
-        ":core:jvmTest", ":core:integrationTest", ":core:jacocoTestReport",
-        ":dispatcher-agent:test", ":dispatcher-agent:integrationTest", ":dispatcher-agent:jacocoTestReport",
-    )
+    // Always: writes :core's jvm compile classpath for the Kotlin analyzer. It is cheap and
+    // CI cannot supply it from the artifact, so reuse must never drop it.
+    dependsOn(":core:sonarJavaLibraries")
+
+    if (!sonarReuseOutputs) {
+        dependsOn(
+            ":desktop-ui:test", ":desktop-ui:integrationTest", ":desktop-ui:jacocoTestReport",
+            ":core:jvmTest", ":core:integrationTest", ":core:jacocoTestReport",
+            ":dispatcher-agent:test", ":dispatcher-agent:integrationTest", ":dispatcher-agent:jacocoTestReport",
+            "jacocoAggregatedReport",
+        )
+    }
 }
 
 // ===========================================
 // Aggregated JaCoCo Report (cross-module)
 // ===========================================
+
+// Pin the aggregate's engine to the same version the modules pin: without this the
+// report every module's xmlReportPaths consumes floats on Gradle's default, and a
+// Gradle upgrade can silently swap the engine behind the cross-module coverage.
+jacoco {
+    toolVersion = jacocoToolVersion
+}
 
 val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
     group = "verification"
@@ -201,10 +224,13 @@ val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
     )
 
     reports {
+        // XML is the only output anything consumes — Sonar through the modules'
+        // xmlReportPaths, the sonar-inputs artifact, the workflow's verify step.
+        // The HTML site (13 MB, about 1200 files per CI run) had no consumer, so
+        // stop generating it; the per-module HTML reports stay for local browsing.
         xml.required.set(true)
         xml.outputLocation.set(file("build/reports/jacoco/aggregated/jacocoTestReport.xml"))
-        html.required.set(true)
-        html.outputLocation.set(file("build/reports/jacoco/aggregated/html"))
+        html.required.set(false)
         csv.required.set(false)
     }
 }

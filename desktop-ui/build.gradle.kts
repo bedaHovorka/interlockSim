@@ -34,6 +34,8 @@ val kotlinVersion: String by project
 val jmhVersion: String by project
 val coroutinesVersion: String by project
 val ktlintVersion: String by project
+val detektFormattingVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -57,9 +59,6 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
     testImplementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
-    testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
     testImplementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
     testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("io.insert-koin:koin-test:$koinVersion")
@@ -67,14 +66,24 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     // Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
     testImplementation(project(":core-test"))
+
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
+    testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
+
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 application {
     mainClass.set("cz.vutbr.fit.interlockSim.MainKt")
 }
 
+// UTF-8 per .editorconfig. Neither Java compile task has sources (this module is
+// pure Kotlin), but the Sonar Gradle plugin adopts their options.encoding as the
+// module's sonar.sourceEncoding: with the old ISO-8859-1 value the analysis read
+// every non-ASCII character in the Kotlin sources as mojibake.
 tasks.compileJava {
-    options.encoding = "ISO-8859-1"
+    options.encoding = "UTF-8"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial"))
     options.isDeprecation = true
     options.isDebug = true
@@ -83,7 +92,7 @@ tasks.compileJava {
 }
 
 tasks.compileTestJava {
-    options.encoding = "ISO-8859-1"
+    options.encoding = "UTF-8"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial"))
     options.isDeprecation = true
 }
@@ -326,7 +335,6 @@ tasks.javadoc {
         links("https://docs.oracle.com/en/java/javase/21/docs/api/")
         addStringOption("sourcepath", "src/main/java")
     }
-    options.encoding = "ISO-8859-1"
 }
 
 sourceSets {
@@ -434,7 +442,7 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
 // ===========================================
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = jacocoToolVersion
 }
 
 tasks.test {
@@ -482,18 +490,50 @@ tasks.jacocoTestCoverageVerification {
 }
 
 // ===========================================
-// SonarQube — skip (root handles it)
+// SonarQube — this module's own report paths
 // ===========================================
 
-// sonarqube plugin is NOT declared in this subproject's plugins {} block.
-// The root project applies it and the Gradle SonarQube plugin automatically
-// propagates its extension to all subprojects, making the sonarqube {} DSL
-// available here without an explicit apply.
-// isSkipProject = true tells the scanner to ignore this subproject's own
-// contribution — the root aggregator config points sonar.sources directly
-// to desktop-ui/src/... and collects all coverage from there.
-sonarqube {
-    isSkipProject = true
+// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
+// resolves a relative coverage path against THIS module's base directory.
+val aggregatedCoverageReport: String =
+    rootProject.layout.buildDirectory
+        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
+        .get()
+        .asFile.absolutePath
+
+// The org.sonarqube plugin is NOT declared in this subproject's plugins {} block. The root
+// project applies it and the plugin propagates its extension to every subproject, so the
+// sonar {} DSL is available here without an explicit apply.
+//
+// sonar.sources, sonar.tests, sonar.java.binaries and sonar.java.libraries are all
+// auto-detected from this module's java source sets — only the report paths need declaring.
+sonar {
+    properties {
+        property(
+            "sonar.junit.reportPaths",
+            "build/test-results/test,build/test-results/integrationTest",
+        )
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            listOf(
+                file("build/reports/jacoco/test/jacocoTestReport.xml").absolutePath,
+                aggregatedCoverageReport,
+            ).joinToString(","),
+        )
+        // Swing widgets with no headless test path. Paths are module-relative.
+        property(
+            "sonar.coverage.exclusions",
+            "src/main/kotlin/**/gui/MenuBar.kt," +
+                "src/main/kotlin/**/gui/Frame.kt," +
+                "src/main/kotlin/**/gui/RailwayNetGridCanvas.kt," +
+                "src/main/kotlin/**/gui/ToolBar.kt," +
+                "src/main/kotlin/**/gui/ValidationDialog.kt," +
+                "src/main/kotlin/**/gui/RenameDialog.kt," +
+                "src/main/kotlin/**/gui/action/**," +
+                "src/main/kotlin/**/gui/gridcanvas/**," +
+                "src/main/kotlin/**/gui/animation/**",
+        )
+    }
 }
 
 // ===========================================
@@ -579,10 +619,6 @@ tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
 
 tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
     jvmTarget = "21"
-}
-
-dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
 }
 
 // ===========================================
@@ -692,7 +728,7 @@ tasks.register("printConfig") {
             |
             |Java Configuration:
             |  Java Version: $javaVersion
-            |  Source Encoding: ISO-8859-1
+            |  Source Encoding: UTF-8
             |  Target Compatibility: ${java.targetCompatibility}
             |
             |Dependencies:

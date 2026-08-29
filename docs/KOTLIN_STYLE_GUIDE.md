@@ -2136,19 +2136,30 @@ docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar ...
 
 SonarQube integration provides: code smells, security vulnerabilities, coverage (JaCoCo), duplication, complexity metrics, technical debt.
 
-**Configuration files:**
-- `build.gradle.kts` - SonarQube plugin and JaCoCo configuration (primary)
-- `sonar-project.properties` - Additional SonarQube settings (optional)
+**Configuration files** (there is no `sonar-project.properties`; it was deleted 2026-08-29
+because the Gradle plugin never read it and it had drifted out of sync):
+- `build.gradle.kts` - SonarQube plugin, the `sonar {}` block and JaCoCo configuration (primary)
+- `core/build.gradle.kts`, `desktop-ui/build.gradle.kts`, and
+  `dispatcher-agent/build.gradle.kts` - per-module `sonar {}` configuration
 - `.github/workflows/sonarqube.yml` - CI/CD integration for automated analysis
 
 ### Running SonarQube Analysis
 
-**SonarCloud (recommended):** Sign up at https://sonarcloud.io, generate token, run:
+`./gradlew sonar` is the only supported way to analyze this project. Do not run the
+`sonar-scanner` CLI at the repository root — there is no properties file for it, and it would
+push a wrong-config analysis to the real project key.
+
+**SonarCloud:** the host URL (`https://sonarcloud.io`) and organization (`bedahovorka`) are
+defaults in the root `sonar {}` block, so a local run needs only a token:
 ```bash
-./gradlew clean test jacocoTestReport sonar \
-  -Dsonar.host.url=https://sonarcloud.io \
-  -Dsonar.organization=<your-org> \
-  -Dsonar.token=<your-token>
+SONAR_TOKEN='<your-token>' ./gradlew clean test jacocoTestReport sonar
+```
+Override either default with `-Dsonar.host.url=…` / `-Dsonar.organization=…`; system properties
+win over the build script.
+
+**Inspect the computed properties without contacting the server** (no token needed):
+```bash
+./gradlew sonar -Dsonar.scanner.internal.dumpToFile=$PWD/build/sonar-dump.properties
 ```
 
 **Local server:** `docker run -d -p 9000:9000 sonarqube:lts-community`, then use `-Dsonar.host.url=http://localhost:9000`
@@ -2159,7 +2170,38 @@ Generate with `./gradlew test jacocoTestReport`. View HTML at `build/reports/jac
 
 ### Quality Gates and CI/CD
 
-Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true`. CI/CD via `.github/workflows/sonarqube.yml` (requires SONAR_TOKEN/SONAR_ORGANIZATION secrets).
+`sonar.qualitygate.wait` stays `false` in `build.gradle.kts`, so a local `./gradlew sonar`
+returns as soon as it has uploaded. CI overrides it per run:
+
+- **Pull request** — `-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600`. A red
+  gate fails the SonarQube Analysis workflow for that PR.
+- **Branch (including `develop`)** — no wait. The "Report quality gate" step reads the real
+  result and writes the status and every condition into the job summary. A red trunk is
+  visible but never blocks unrelated work.
+
+CI needs only the `SONAR_TOKEN` secret. The host URL and organization are defaults in the
+root `sonar {}` block.
+
+### Which module owns which Sonar setting
+
+Every analyzed module declares its own sources, tests, binaries and report paths in its own
+build script. The root `build.gradle.kts` holds only what is global — project key, name and
+version, host URL, organization, encoding, Kotlin source version and the gate switch. Do not
+move module paths back into the root: that duplication was Issue #699, and it is also what
+caused the "file can't be indexed twice" failure in Issue #762.
+
+Two module-level details worth knowing:
+
+- **Coverage exclusions are module-relative.** A pattern is matched against the path inside
+  its own module, so write `src/main/kotlin/**/gui/Frame.kt`, not
+  `desktop-ui/src/main/kotlin/**/gui/Frame.kt`.
+- **`:core` supplies its own classpath.** `sonar.java.libraries` is the dependency classpath
+  the Kotlin analyzer uses for type resolution (the property is shared with the Java analyzer,
+  which is why it has `java` in its name). The Gradle plugin auto-detects it from java source
+  sets, which a Kotlin Multiplatform project does not have, so `:core:sonarJavaLibraries`
+  writes it to `build/sonar/java-libraries.txt` and the `sonar {}` block reads that file.
+  Resolving the configuration inside the block instead would re-create Issue #1000, because
+  the block runs during the **root** `:sonar` task.
 
 ## Code Modification Guidelines
 

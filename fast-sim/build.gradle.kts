@@ -13,6 +13,7 @@ plugins {
 }
 
 val ktlintVersion: String by project
+val detektFormattingVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -139,7 +140,7 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
 }
 
 dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 // ===========================================
@@ -160,4 +161,17 @@ ktlint {
         reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN)
         reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.CHECKSTYLE)
     }
+}
+
+// ===========================================
+// SonarQube — skip (root handles it)
+// ===========================================
+
+// :fast-sim compiles to a linuxX64 native binary. It has no JVM source set, no Java
+// binaries and no JaCoCo coverage, so there is nothing for the scanner to analyze here.
+// Without this flag the plugin auto-detects it as a Sonar sub-module and emits an empty
+// one (the stale build/sonar/interlockSim_fast-sim/ directory is the evidence).
+// Other analyzed modules declare their paths in their own build scripts.
+sonar {
+    isSkipProject = true
 }

@@ -62,6 +62,8 @@ val serializationVersion: String by project
 val kotlinxIoVersion: String by project
 val ktlintVersion: String by project
 val atomicfuVersion: String by project
+val detektFormattingVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -222,6 +224,8 @@ fun String.escapeKotlinStringLiteral(): String = replace("\\", "\\\\").replace("
 
 val generateNativeResourceRoot =
     tasks.register("generateNativeResourceRoot") {
+        group = "build"
+        description = "Generate NativeResourceRoots.kt with the absolute resource paths baked in"
         val coreMainResources = layout.projectDirectory.dir("src/commonMain/resources").asFile
         val coreTestResources = layout.projectDirectory.dir("src/commonTest/resources").asFile
         val coreTestProjectResources =
@@ -436,12 +440,77 @@ val heavyTest by tasks.registering(Test::class) {
 // SonarQube Configuration
 // ===========================================
 
-// Suppress automatic SonarQube sub-module for :core.
-// The root sonar{} block explicitly registers all :core source/binary/report paths,
-// so letting the plugin auto-discover them here causes "can't be indexed twice".
-// Note: sonar.skip is a boolean field (isSkipProject), not a string property.
-sonarqube {
-    isSkipProject = true
+// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
+// resolves a relative coverage path against THIS module's base directory.
+val aggregatedCoverageReport: String =
+    rootProject.layout.buildDirectory
+        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
+        .get()
+        .asFile.absolutePath
+
+// The Kotlin analyzer needs the dependency classpath (sonar.java.libraries) for type
+// resolution. The Gradle plugin auto-detects it from the java plugin's source sets, which a
+// Kotlin Multiplatform project does not have, so :core has to supply it.
+//
+// It is written to a file by a task that belongs to :core, so the configuration is resolved
+// in its OWN project context. That is what keeps it clear of the Gradle 9 cross-project
+// resolution error (issue #1000).
+val sonarJavaLibrariesFile = layout.buildDirectory.file("sonar/java-libraries.txt")
+
+val sonarJavaLibraries by tasks.registering {
+    group = "verification"
+    description = "Write :core's jvm compile classpath for the Sonar Kotlin analyzer"
+
+    val classpath = configurations.named("jvmCompileClasspath")
+    val out = sonarJavaLibrariesFile
+    inputs.files(classpath)
+    outputs.file(out)
+
+    doLast {
+        val target = out.get().asFile
+        target.parentFile.mkdirs()
+        target.writeText(classpath.get().files.joinToString(",") { it.absolutePath })
+    }
+}
+
+// :core declares its own Sonar paths. The root build.gradle.kts deliberately lists none,
+// so nothing is indexed twice (Issue #762).
+//
+// The plugin auto-detects sonar.sources and sonar.tests for a Kotlin Multiplatform project,
+// but NOT sonar.java.binaries and NOT sonar.java.libraries: those come from the java plugin's
+// source sets, which a KMP project does not have. The Kotlin analyzer needs both for type
+// resolution, so they are wired here from the jvm target.
+//
+// jvmCompileClasspath is this project's OWN configuration, so resolving it here is safe —
+// it is exactly the cross-project resolution that issue #1000 was about that we must avoid.
+sonar {
+    properties {
+        property("sonar.java.binaries", "build/classes/kotlin/jvm/main")
+        property("sonar.java.test.binaries", "build/classes/kotlin/jvm/test")
+        // Read from the file that :core:sonarJavaLibraries writes. Resolving the configuration
+        // here instead would repeat issue #1000: the sonar {} properties block is evaluated
+        // lazily during the ROOT :sonar task, so touching :core's own configuration from there
+        // is cross-project resolution — a hard error on Gradle 9. Reading a file is plain IO.
+        val librariesFile = sonarJavaLibrariesFile.get().asFile
+        property(
+            "sonar.java.libraries",
+            if (librariesFile.isFile) librariesFile.readText() else "",
+        )
+        property(
+            "sonar.junit.reportPaths",
+            "build/test-results/jvmTest,build/test-results/integrationTest",
+        )
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            listOf(
+                file("build/reports/jacoco/jvmTest/jacocoTestReport.xml").absolutePath,
+                aggregatedCoverageReport,
+            ).joinToString(","),
+        )
+        // nativeMain compiles to linuxX64. JaCoCo cannot instrument native code; that
+        // coverage comes from :core:linuxX64Test instead. Paths are module-relative.
+        property("sonar.coverage.exclusions", "src/nativeMain/**")
+    }
 }
 
 // ===========================================
@@ -449,7 +518,7 @@ sonarqube {
 // ===========================================
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = jacocoToolVersion
 }
 
 val jacocoTestReport by tasks.registering(JacocoReport::class) {
@@ -514,7 +583,7 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
 }
 
 dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 // ===========================================

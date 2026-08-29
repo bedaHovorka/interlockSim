@@ -1,21 +1,19 @@
 name: SonarQube Analysis
 
 on:
+  # The trigger couples by workflow NAME: renaming "Gradle Build with Kotlin 2.0 and
+  # Java 21" in gradle-java21.yml silently breaks this trigger. The name's "2.0" is
+  # stale, but renaming it is a deliberate change, not a drive-by.
   workflow_run:
     workflows: [ "Gradle Build with Kotlin 2.0 and Java 21" ]
     types: [ completed ]
   workflow_dispatch:  # Allow manual trigger
 
-permissions:
-  contents: read
-  checks: write
-  pull-requests: read  # Required for PR analysis
-  actions: read  # Required to download artifacts from the triggering gradle-java21.yml run
-  packages: read  # Required for GitHub Packages (kDisco dependency)
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
-  cancel-in-progress: true
+  # Never cancel a trunk analysis mid-flight: develop is the branch whose history and
+  # quality gate other work is measured against. Feature branches may still be cancelled.
+  cancel-in-progress: ${{ github.event.workflow_run.head_branch != 'develop' }}
 
 env:
   JAVA_VERSION: '21'
@@ -26,7 +24,15 @@ jobs:
   sonarqube:
     name: SonarQube Code Analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Granted on the job, not the workflow, so the scope is visible next to the work it
+    # covers and cannot leak to a job added later.
+    permissions:
+      contents: read        # checkout
+      checks: write         # check run for the analysis
+      pull-requests: read   # PR analysis
+      actions: read         # download the artifact from the triggering run
+      packages: read        # GitHub Packages (kDisco dependency)
+    timeout-minutes: 35  # a workflow_dispatch run builds and tests everything itself
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
@@ -49,12 +55,14 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.sonar/cache
-        key: ${{ runner.os }}-sonar
+        # The cache holds analyzer plugin JARs tied to the scanner version, so key it on the
+        # files that pin that version. A bare ${{ runner.os }}-sonar key never invalidates.
+        key: ${{ runner.os }}-sonar-${{ hashFiles('build.gradle.kts', 'gradle.properties') }}
         restore-keys: |
-          ${{ runner.os }}-sonar
+          ${{ runner.os }}-sonar-
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1  # v4.4.4
       with:
         gradle-version: wrapper
         cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
@@ -62,7 +70,11 @@ jobs:
     - name: Make Gradle wrapper executable
       run: chmod +x gradlew
 
+    # A workflow_dispatch run has no triggering workflow_run, so there is no artifact to
+    # download (the name would resolve to "sonar-inputs-" with an empty run-id). Such a run
+    # builds and tests everything itself instead — that is what the reuse flag below buys.
     - name: Download build/test outputs from gradle-java21.yml
+      if: github.event_name == 'workflow_run'
       uses: actions/download-artifact@v4
       with:
         name: sonar-inputs-${{ github.event.workflow_run.head_sha }}
@@ -70,63 +82,157 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         path: .
 
-    - name: Generate coverage report summary
-      if: always()
+    # With -PsonarReuseOutputs=true Gradle no longer re-runs the tests, so a partial or
+    # failed artifact download would produce a SUCCESSFUL analysis with missing coverage
+    # instead of an error. That is the failure mode behind PR #945's 71.6 % surprise, so
+    # fail loudly here rather than publish a wrong number.
+    - name: Verify reused Sonar inputs
+      if: github.event_name == 'workflow_run'
       run: |
-        if [ -f desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml ]; then
-          echo "## Code Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "JaCoCo coverage data reused from gradle-java21.yml (no re-run of tests)" >> $GITHUB_STEP_SUMMARY
+        # Patterns again, no module names: whatever the build produced must have arrived
+        # non-empty, and the cross-module aggregate must be there.
+        found=0
+        bad=0
+        for f in */build/reports/jacoco/*/jacocoTestReport.xml; do
+          [ -e "$f" ] || continue
+          found=$((found + 1))
+          if [ ! -s "$f" ]; then
+            echo "::error::empty JaCoCo report in the reused artifact: $f"
+            bad=1
+          fi
+        done
+        if [ "$found" -eq 0 ]; then
+          echo "::error::the reused artifact contains no per-module JaCoCo report"
+          bad=1
         fi
+        if [ ! -s build/reports/jacoco/aggregated/jacocoTestReport.xml ]; then
+          echo "::error::the cross-module aggregated JaCoCo report is missing or empty"
+          bad=1
+        fi
+        [ "$bad" -eq 0 ] || exit 1
+        echo "Reused Sonar inputs present: $found per-module reports plus the aggregate"
 
     # SonarCloud Analysis (for public repositories)
-    # Requires SONAR_TOKEN and SONAR_ORGANIZATION secrets configured in GitHub
+    # Requires the SONAR_TOKEN secret configured in GitHub (host URL and organization
+    # are defaults in the root sonar {} block of build.gradle.kts, not secrets)
     # If secrets are not configured, this step will skip gracefully
     #
-    # Reuses gradle-java21.yml's compiled classes/test-results/jacoco XML (downloaded above)
-    # instead of rebuilding and retesting — the :desktop-ui:test, :desktop-ui:integrationTest,
-    # :desktop-ui:jacocoTestReport, :core:jvmTest, :core:integrationTest and
-    # :core:jacocoTestReport tasks that "sonar" hard-depends on (build.gradle.kts) are
-    # explicitly excluded so Gradle doesn't re-walk that graph.
+    # Reuses gradle-java21.yml's compiled classes, test results and JaCoCo XML (downloaded
+    # above) instead of rebuilding and retesting. -PsonarReuseOutputs=true tells
+    # build.gradle.kts not to attach the test and coverage tasks to "sonar"; the list of
+    # those tasks lives there and only there.
     - name: SonarCloud Scan
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Branch and PR values are user input (a ref may legally contain quotes, $ and
+        # more), so they are interpolated ONLY here, into environment variables — never
+        # into the run script below, where the same bytes would be shell code (CWE-78).
+        # The script quotes every one of them at its use sites.
+        EVENT_NAME: ${{ github.event_name }}
+        # A workflow_run carries the branch that was built in head_branch — except for
+        # a tag push, where no branch exists and head_branch is null. Never fall back
+        # to github.ref_name for a workflow_run: there it is the DEFAULT branch, so a
+        # tag's code would be analyzed as develop and overwrite the trunk analysis.
+        # EVENT_REF_NAME serves the workflow_dispatch case (the dispatched-on branch).
+        EVENT_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        EVENT_REF_NAME: ${{ github.ref_name }}
+        EVENT_PR_LIST_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}
       run: |
+        # The host URL and the organization are not secrets. They are defaults in the root
+        # sonar {} block of build.gradle.kts, so only the token has to come from a secret.
         if [ -z "$SONAR_TOKEN" ]; then
           echo "⚠️  SONAR_TOKEN not configured - skipping SonarCloud analysis"
           echo "To enable: Add SONAR_TOKEN secret in repository settings"
           exit 0
         fi
-        if [ -z "$SONAR_ORGANIZATION" ]; then
-          echo "⚠️  SONAR_ORGANIZATION not configured - skipping SonarCloud analysis"
-          echo "To enable: Add SONAR_ORGANIZATION secret in repository settings"
-          exit 0
-        fi
 
         echo "🔍 Running SonarCloud analysis..."
 
+        # Every analysis must carry exactly one explicit scope. With neither sonar.branch.name
+        # nor sonar.pullrequest.* set, the scanner writes to the MAIN branch (develop) — that is
+        # how pushes to feature branches used to overwrite the trunk. The two are mutually
+        # exclusive, so never emit both, and fail loudly rather than fall through unscoped.
+        #
+        # On the FREE SonarCloud plan a non-main branch analysis is accepted but not retained:
+        # the compute-engine task reports SUCCESS, yet the branch keeps no analysisDate and
+        # the measures API answers 403 (measured 2026-08-29 with four successful tasks). So a
+        # push to a feature branch with no PR currently produces nothing readable. It is still
+        # sent, deliberately: it costs about a minute, it keeps the trunk safe, and it starts
+        # working the day the plan is upgraded, with no change here.
+        #
         # PR context comes from the workflow_run event's pull_requests[] array, which GitHub
         # populates for same-repo branches with an open PR regardless of whether the
         # triggering gradle-java21.yml run itself fired on push or pull_request.
-        PR_ARGS=""
-        PR_COUNT=$(jq 'length' <<< '${{ toJson(github.event.workflow_run.pull_requests) }}')
+        # A branch name is user input, so it must pass an allowlist before any use. Git
+        # itself already rejects space ~ ^ : ? * [ \ in refs, but quotes, $ and other
+        # shell-meaningful bytes are legal ref characters — the allowlist is stricter
+        # than git and fails closed.
+        ref_name_ok() { [[ "$1" =~ ^[A-Za-z0-9._/+,-]+$ ]]; }
+
+        HEAD_BRANCH="$EVENT_HEAD_BRANCH"
+        # workflow_dispatch has no workflow_run event, so its scope is the branch the
+        # run was dispatched on. A workflow_run with no head_branch is a tag push:
+        # there is no branch scope to analyze under, so skip rather than write the
+        # tag's code onto the trunk.
+        if [ "$EVENT_NAME" != "workflow_run" ] && [ -n "$EVENT_REF_NAME" ]; then
+            HEAD_BRANCH="$EVENT_REF_NAME"
+        fi
+        if [ "$EVENT_NAME" = "workflow_run" ] && [ -z "$HEAD_BRANCH" ]; then
+            echo "Tag push (no branch scope): nothing to analyze, skipping SonarCloud scan"
+            exit 0
+        fi
+        if [ -n "$HEAD_BRANCH" ] && ! ref_name_ok "$HEAD_BRANCH"; then
+          echo "::error::head branch name has characters outside the allowlist: $HEAD_BRANCH"
+          exit 1
+        fi
+        PR_COUNT=$(jq 'length' <<< "$EVENT_PR_LIST_JSON")
         if [ "$PR_COUNT" -gt 0 ]; then
-          PR_NUMBER=$(jq -r '.[0].number' <<< '${{ toJson(github.event.workflow_run.pull_requests) }}')
-          PR_BASE=$(jq -r '.[0].base.ref' <<< '${{ toJson(github.event.workflow_run.pull_requests) }}')
-          PR_ARGS="-Dsonar.pullrequest.key=$PR_NUMBER -Dsonar.pullrequest.branch=${{ github.event.workflow_run.head_branch }} -Dsonar.pullrequest.base=$PR_BASE"
-          echo "PR analysis mode: PR #$PR_NUMBER (${{ github.event.workflow_run.head_branch }} → $PR_BASE)"
+          PR_NUMBER=$(jq -r '.[0].number' <<< "$EVENT_PR_LIST_JSON")
+          PR_BASE=$(jq -r '.[0].base.ref' <<< "$EVENT_PR_LIST_JSON")
+          if ! ref_name_ok "$PR_BASE"; then
+            echo "::error::PR base branch name has characters outside the allowlist: $PR_BASE"
+            exit 1
+          fi
+          SCOPE_ARGS="-Dsonar.pullrequest.key=$PR_NUMBER -Dsonar.pullrequest.branch=$HEAD_BRANCH -Dsonar.pullrequest.base=$PR_BASE"
+          echo "PR analysis mode: PR #$PR_NUMBER ($HEAD_BRANCH → $PR_BASE)"
+        elif [ -n "$HEAD_BRANCH" ]; then
+          SCOPE_ARGS="-Dsonar.branch.name=$HEAD_BRANCH"
+          echo "Branch analysis mode: $HEAD_BRANCH"
+        else
+          echo "::error::cannot determine the analysis scope (no PR and no branch name)"
+          exit 1
         fi
 
+        # Reuse the build workflow's outputs instead of re-running its tests. One flag
+        # replaces the nine -x flags that used to mirror build.gradle.kts by hand (#699).
+        # A manual dispatch has no artifact, so it builds and tests everything itself.
+        REUSE_ARGS=""
+        if [ "$EVENT_NAME" = "workflow_run" ]; then
+          REUSE_ARGS="-PsonarReuseOutputs=true"
+        fi
+
+        # Wait for the quality gate on a PR, so a red gate turns the PR's check red. The
+        # trunk deliberately does not wait: a red develop must be visible (see the summary
+        # step below) but must never block unrelated work. sonar.qualitygate.wait stays
+        # false in build.gradle.kts so a local ./gradlew sonar does not block for minutes;
+        # a system property overrides the build script.
+        GATE_ARGS=""
+        if [ "$PR_COUNT" -gt 0 ]; then
+          GATE_ARGS="-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600"
+          echo "Quality gate: enforced (this run fails if the gate is red)"
+        else
+          echo "Quality gate: reported only (branch analysis never blocks)"
+        fi
+
+        # No -Dsonar.token on the command line: the scanner reads the SONAR_TOKEN
+        # environment variable natively, and a -D would put the secret in the process
+        # list (and in an unquoted expansion).
         ./gradlew sonar \
-          -x :desktop-ui:test -x :desktop-ui:integrationTest -x :desktop-ui:jacocoTestReport \
-          -x :core:jvmTest -x :core:integrationTest -x :core:jacocoTestReport \
-          -x :dispatcher-agent:test -x :dispatcher-agent:integrationTest -x :dispatcher-agent:jacocoTestReport \
-          -Dsonar.host.url=https://sonarcloud.io \
-          -Dsonar.organization=$SONAR_ORGANIZATION \
-          -Dsonar.token=$SONAR_TOKEN \
-          $PR_ARGS \
+          $REUSE_ARGS \
+          $SCOPE_ARGS \
+          $GATE_ARGS \
           --no-daemon --warning-mode=all --stacktrace
 
         echo "✓ SonarCloud analysis completed successfully"
@@ -144,15 +250,53 @@ jobs:
     #       -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
     #       --no-daemon --warning-mode=all --stacktrace
 
-    - name: SonarQube Quality Gate Check
-      if: success()
+    # Reads the real gate result and writes it into the job summary. The step this replaced
+    # only echoed a fixed sentence behind "if: success()" and could never fail or report
+    # anything, which made a red gate look like a green build.
+    - name: Report quality gate
+      if: always()
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
-        echo "✓ SonarCloud analysis completed"
-        echo "Quality Gate status will be available at SonarQube dashboard"
-        echo "View results at: https://sonarcloud.io/project/overview?id=bedaHovorka_interlockSim"
-        echo ""
-        echo "Note: Quality gate waiting is disabled by default for legacy code"
-        echo "Enable in build.gradle.kts: sonar.qualitygate.wait=true"
+        RT=build/sonar/report-task.txt
+        if [ ! -s "$RT" ]; then
+          echo "No analysis was published, so there is no quality gate to report." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        CE_URL=$(sed -n 's/^ceTaskUrl=//p' "$RT")
+        DASH=$(sed -n 's/^dashboardUrl=//p' "$RT")
+        # The scanner recorded the server it published to; build the gate URL from it
+        # so a -Dsonar.host.url override or a self-hosted server reports correctly.
+        SRV_URL=$(sed -n 's/^serverUrl=//p' "$RT")
+
+        # The gate is computed asynchronously, so wait for the compute-engine task.
+        STATUS=PENDING
+        for _ in $(seq 1 60); do
+          BODY=$(curl -sS -u "$SONAR_TOKEN:" "$CE_URL")
+          STATUS=$(jq -r '.task.status' <<< "$BODY")
+          case "$STATUS" in PENDING|IN_PROGRESS) sleep 5 ;; *) break ;; esac
+        done
+        ANALYSIS_ID=$(jq -r '.task.analysisId // empty' <<< "$BODY")
+
+        {
+          echo "## SonarCloud quality gate"
+          echo
+          if [ "$STATUS" != "SUCCESS" ] || [ -z "$ANALYSIS_ID" ]; then
+            echo "Analysis task status: \`$STATUS\` — no gate result available."
+          else
+            GATE=$(curl -sS -u "$SONAR_TOKEN:" \
+              "$SRV_URL/api/qualitygates/project_status?analysisId=$ANALYSIS_ID")
+            echo "**Status: $(jq -r '.projectStatus.status' <<< "$GATE")**"
+            echo
+            echo "| | condition | actual | required |"
+            echo "|---|---|---|---|"
+            jq -r '.projectStatus.conditions[]
+                   | "| \(if .status=="OK" then "pass" else "FAIL" end) | \(.metricKey) | \(.actualValue // "-") | \(.comparator) \(.errorThreshold) |"' \
+              <<< "$GATE"
+          fi
+          echo
+          echo "[Open in SonarCloud]($DASH)"
+        } >> "$GITHUB_STEP_SUMMARY"
 
     # Optional: Comment PR with SonarQube results link
     # Requires additional permissions and SonarCloud PR decoration enabled

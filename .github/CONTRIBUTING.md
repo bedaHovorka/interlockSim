@@ -144,14 +144,16 @@ Our CI/CD pipeline includes two main workflows:
 
 **Steps:**
 1. Compile Kotlin and Java sources
-2. Run unit tests
-3. Run integration tests
-4. Verify Koin DI configuration
-5. Create JAR artifacts (shadowJar)
-6. Upload JAR artifact (90-day retention)
-7. Upload test results
-8. Generate test report summary
-9. Run smoke test (shunting loop, 300 simulated seconds)
+2. Check code formatting (ktlintCheck on every module that applies it)
+3. Run unit tests
+4. Run integration tests
+5. Generate the JaCoCo coverage report (per module plus the cross-module aggregate)
+6. Upload the `sonar-inputs` artifact for the SonarQube workflow to reuse
+7. Run the linuxX64 native tests (`:core:linuxX64Test`)
+8. Verify Koin DI configuration
+9. Create JAR artifacts (shadowJar) and upload the JAR artifact (90-day retention)
+10. Upload test results (30-day retention) and generate the test report summary
+11. Run smoke test (shunting loop, 1024 simulated seconds)
 
 **Duration:** ~10-15 minutes
 
@@ -168,14 +170,14 @@ Our CI/CD pipeline includes two main workflows:
 
 **Steps:**
 1. Download build/test/coverage outputs from the triggering Gradle Build run (no rebuild or re-test)
-2. Generate coverage report summary
+2. Verify the reused Sonar inputs are present and non-empty
 3. Run SonarCloud scan (if configured)
-4. Display quality gate status
+4. Report quality gate status into the job summary
 
 **Duration:** ~2-5 minutes (analysis only — build and test happen once, in Gradle Build)
 
 **SonarCloud:**
-- Requires `SONAR_TOKEN` and `SONAR_ORGANIZATION` secrets
+- Requires the `SONAR_TOKEN` secret (the organization is a default in the root `sonar {}` block)
 - Skips gracefully if not configured
 - View results at: https://sonarcloud.io/project/overview?id=bedaHovorka_interlockSim
 
