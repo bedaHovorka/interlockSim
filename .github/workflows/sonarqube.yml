@@ -171,10 +171,24 @@ jobs:
           REUSE_ARGS="-PsonarReuseOutputs=true"
         fi
 
+        # Wait for the quality gate on a PR, so a red gate turns the PR's check red. The
+        # trunk deliberately does not wait: a red develop must be visible (see the summary
+        # step below) but must never block unrelated work. sonar.qualitygate.wait stays
+        # false in build.gradle.kts so a local ./gradlew sonar does not block for minutes;
+        # a system property overrides the build script.
+        GATE_ARGS=""
+        if [ "$PR_COUNT" -gt 0 ]; then
+          GATE_ARGS="-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600"
+          echo "Quality gate: enforced (this run fails if the gate is red)"
+        else
+          echo "Quality gate: reported only (branch analysis never blocks)"
+        fi
+
         ./gradlew sonar \
           $REUSE_ARGS \
           -Dsonar.token=$SONAR_TOKEN \
           $SCOPE_ARGS \
+          $GATE_ARGS \
           --no-daemon --warning-mode=all --stacktrace
 
         echo "✓ SonarCloud analysis completed successfully"
@@ -192,15 +206,50 @@ jobs:
     #       -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
     #       --no-daemon --warning-mode=all --stacktrace
 
-    - name: SonarQube Quality Gate Check
-      if: success()
+    # Reads the real gate result and writes it into the job summary. The step this replaced
+    # only echoed a fixed sentence behind "if: success()" and could never fail or report
+    # anything, which made a red gate look like a green build.
+    - name: Report quality gate
+      if: always()
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
-        echo "✓ SonarCloud analysis completed"
-        echo "Quality Gate status will be available at SonarQube dashboard"
-        echo "View results at: https://sonarcloud.io/project/overview?id=bedaHovorka_interlockSim"
-        echo ""
-        echo "Note: Quality gate waiting is disabled by default for legacy code"
-        echo "Enable in build.gradle.kts: sonar.qualitygate.wait=true"
+        RT=build/sonar/report-task.txt
+        if [ ! -s "$RT" ] || [ -z "$SONAR_TOKEN" ]; then
+          echo "No analysis was published, so there is no quality gate to report." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        CE_URL=$(sed -n 's/^ceTaskUrl=//p' "$RT")
+        DASH=$(sed -n 's/^dashboardUrl=//p' "$RT")
+
+        # The gate is computed asynchronously, so wait for the compute-engine task.
+        STATUS=PENDING
+        for _ in $(seq 1 60); do
+          BODY=$(curl -sS -u "$SONAR_TOKEN:" "$CE_URL")
+          STATUS=$(jq -r '.task.status' <<< "$BODY")
+          case "$STATUS" in PENDING|IN_PROGRESS) sleep 5 ;; *) break ;; esac
+        done
+        ANALYSIS_ID=$(jq -r '.task.analysisId // empty' <<< "$BODY")
+
+        {
+          echo "## SonarCloud quality gate"
+          echo
+          if [ "$STATUS" != "SUCCESS" ] || [ -z "$ANALYSIS_ID" ]; then
+            echo "Analysis task status: \`$STATUS\` — no gate result available."
+          else
+            GATE=$(curl -sS -u "$SONAR_TOKEN:" \
+              "https://sonarcloud.io/api/qualitygates/project_status?analysisId=$ANALYSIS_ID")
+            echo "**Status: $(jq -r '.projectStatus.status' <<< "$GATE")**"
+            echo
+            echo "| | condition | actual | required |"
+            echo "|---|---|---|---|"
+            jq -r '.projectStatus.conditions[]
+                   | "| \(if .status=="OK" then "pass" else "FAIL" end) | \(.metricKey) | \(.actualValue // "-") | \(.comparator) \(.errorThreshold) |"' \
+              <<< "$GATE"
+          fi
+          echo
+          echo "[Open in SonarCloud]($DASH)"
+        } >> "$GITHUB_STEP_SUMMARY"
 
     # Optional: Comment PR with SonarQube results link
     # Requires additional permissions and SonarCloud PR decoration enabled

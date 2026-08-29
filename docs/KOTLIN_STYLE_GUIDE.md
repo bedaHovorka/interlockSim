@@ -2169,7 +2169,38 @@ Generate with `./gradlew test jacocoTestReport`. View HTML at `build/reports/jac
 
 ### Quality Gates and CI/CD
 
-Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true`. CI/CD via `.github/workflows/sonarqube.yml` (requires SONAR_TOKEN/SONAR_ORGANIZATION secrets).
+`sonar.qualitygate.wait` stays `false` in `build.gradle.kts`, so a local `./gradlew sonar`
+returns as soon as it has uploaded. CI overrides it per run:
+
+- **Pull request** — `-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600`. A red
+  gate fails the SonarQube Analysis workflow for that PR.
+- **Branch (including `develop`)** — no wait. The "Report quality gate" step reads the real
+  result and writes the status and every condition into the job summary. A red trunk is
+  visible but never blocks unrelated work.
+
+CI needs only the `SONAR_TOKEN` secret. The host URL and organization are defaults in the
+root `sonar {}` block.
+
+### Which module owns which Sonar setting
+
+Every analyzed module declares its own sources, tests, binaries and report paths in its own
+build script. The root `build.gradle.kts` holds only what is global — project key, name and
+version, host URL, organization, encoding, Kotlin source version and the gate switch. Do not
+move module paths back into the root: that duplication was Issue #699, and it is also what
+caused the "file can't be indexed twice" failure in Issue #762.
+
+Two module-level details worth knowing:
+
+- **Coverage exclusions are module-relative.** A pattern is matched against the path inside
+  its own module, so write `src/main/kotlin/**/gui/Frame.kt`, not
+  `desktop-ui/src/main/kotlin/**/gui/Frame.kt`.
+- **`:core` supplies its own classpath.** `sonar.java.libraries` is the dependency classpath
+  the Kotlin analyzer uses for type resolution (the property is shared with the Java analyzer,
+  which is why it has `java` in its name). The Gradle plugin auto-detects it from java source
+  sets, which a Kotlin Multiplatform project does not have, so `:core:sonarJavaLibraries`
+  writes it to `build/sonar/java-libraries.txt` and the `sonar {}` block reads that file.
+  Resolving the configuration inside the block instead would re-create Issue #1000, because
+  the block runs during the **root** `:sonar` task.
 
 ## Code Modification Guidelines
 
