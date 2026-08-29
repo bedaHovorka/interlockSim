@@ -588,6 +588,79 @@ class MeasuringPlanAdapterTest {
 		}
 	}
 
+	// ── onTick log text (Issue #713 Task 10) ─────────────────────────────────
+
+	/**
+	 * Verifies the other [MeasuringPlanAdapter] log integration point: a non-success tick
+	 * emits the `"[MeasuringPlanAdapter] fallback:"` INFO line with the running figures, and
+	 * a plain success tick that is not a checkpoint emits neither that line nor a summary.
+	 *
+	 * Same Logback `ListAppender` setup as [LogFinalSummaryLogText] — the dispatcher package
+	 * logger is pinned to WARN in `logback-test.xml`, so both loggers must be raised to INFO
+	 * for the lines to reach the appender.
+	 *
+	 * Ticks are driven directly through [MeasuringPlanAdapter.onTick] (the reporting seam since
+	 * Issue #713 Task 10) rather than through a mocked LLM cycle: the outcome classification is
+	 * already pinned by the [TickOutcomePartition] tests, the log branch is what is under test.
+	 */
+	@Nested
+	@DisplayName("onTick logs the fallback line and stays silent on plain successes")
+	inner class OnTickLogText {
+		private lateinit var appender: ListAppender<ILoggingEvent>
+		private lateinit var rootLogger: LogbackLogger
+		private lateinit var dispatcherLogger: LogbackLogger
+		private var originalRootLevel: Level = Level.WARN
+		private var originalDispatcherLevel: Level = Level.WARN
+
+		@BeforeEach
+		fun attachAppender() {
+			rootLogger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as LogbackLogger
+			dispatcherLogger =
+				LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.dispatcher") as LogbackLogger
+			originalRootLevel = rootLogger.level
+			originalDispatcherLevel = dispatcherLogger.level
+			rootLogger.level = Level.INFO
+			dispatcherLogger.level = Level.INFO
+			appender = ListAppender()
+			rootLogger.addAppender(appender)
+			appender.start()
+		}
+
+		@AfterEach
+		fun detachAppender() {
+			rootLogger.detachAppender(appender)
+			rootLogger.level = originalRootLevel
+			dispatcherLogger.level = originalDispatcherLevel
+		}
+
+		private fun adapterLogMessages(): List<String> =
+			appender.list.map { it.formattedMessage }.filter { it.contains("[MeasuringPlanAdapter]") }
+
+		@Test
+		fun `a fallback tick emits the fallback INFO line with the running figures`() {
+			val adapter = measuring(mockk<KoogDispatchAgent>(), mockk<Dispatcher>())
+
+			adapter.onTick(TickRecord(outcome = TickOutcome.RULE_FALLBACK, simTime = 5.0))
+
+			val fallbackLines = adapterLogMessages().filter { it.contains("[MeasuringPlanAdapter] fallback:") }
+			assertThat(fallbackLines).isNotEmpty()
+			assertThat(fallbackLines.first()).contains("outcome=RULE_FALLBACK")
+			assertThat(fallbackLines.first()).contains("simTime=5.0s")
+			assertThat(fallbackLines.first()).contains("fallbackTotal=1")
+			assertThat(fallbackLines.first()).contains("ollamaSuccessRate=0%")
+		}
+
+		@Test
+		fun `a plain success tick that is not a checkpoint logs nothing`() {
+			val adapter = measuring(mockk<KoogDispatchAgent>(), mockk<Dispatcher>())
+
+			// Cycle 1 of REPORT_EVERY_N_CYCLES=10 with a success outcome — the early-return path.
+			adapter.onTick(TickRecord(outcome = TickOutcome.LLM_ACTIONS, simTime = 1.0))
+
+			assertThat(adapterLogMessages()).isEqualTo(emptyList<String>())
+		}
+	}
+
 	// ── TickOutcome partition (Issue #713 Task 10) ────────────────────────────
 
 	/**

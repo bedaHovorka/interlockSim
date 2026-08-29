@@ -25,6 +25,7 @@ import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * Unit tests for HashMapGraph.
@@ -144,6 +145,19 @@ class HashMapGraphTest {
 		val addInfo = graph.extensionalObject("A", 100)
 
 		assertThat(addInfo).isEqualTo("infoA")
+	}
+
+	@Test
+	fun extensionalObject_duplicateNodeEdgePair_throwsIllegalState() {
+		graph.put("A", "infoA", "B", "infoB", 100)
+		graph.put("A", "infoC", "C", "infoD", 100)
+
+		val failure =
+			assertFailsWith<IllegalStateException> {
+				graph.extensionalObject("A", 100)
+			}
+
+		assertThat(failure.message).isEqualTo("Multiple extensional objects found for node A and edge 100")
 	}
 
 	// === Node operations ===

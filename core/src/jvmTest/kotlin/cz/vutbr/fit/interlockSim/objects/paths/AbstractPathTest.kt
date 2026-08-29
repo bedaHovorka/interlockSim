@@ -21,8 +21,12 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
@@ -31,6 +35,8 @@ import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import io.mockk.every
+import io.mockk.spyk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -506,6 +512,49 @@ class AbstractPathTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Semaphore Setup")
 	inner class SemaphoreSetupTests {
+		/**
+		 * Drives [AbstractPath.cancelPathSetup] through a full successful iteration.
+		 *
+		 * Two fixture details make the happy path reachable at all. The shared
+		 * [MockSimulationContext.getSegment] returns the same segment for both directions,
+		 * so [AbstractPath.pathIterating] always dies on the segment-conflict check; the
+		 * spy below directs the two directions apart (`from` = B, `to` = A). And the
+		 * path must hold the *dynamic* [DynamicTrackBlock] wrapper, because
+		 * [AbstractPath.toTrackFacility] returns path elements as-is and the static
+		 * [SimpleTrackBlock] rejects dynamic operations by design.
+		 *
+		 * The block is reserved from `end1` first, because the block-level cancel
+		 * throws unless the block is RESERVED from the very separator the path
+		 * iterates with.
+		 */
+		@Test
+		fun `path cancelPathSetup clears a reservation made from the starting separator`() {
+			// Arrange
+			val context = spyk(createMockSimulationContext())
+			every {
+				context.getSegment(any<DynamicPathSeparator>(), any(), any())
+			} answers {
+				if (secondArg<Track?>() == null) Cell.Segment.B else Cell.Segment.A
+			}
+			val block = DynamicTrackBlock(SimpleTrackBlock(end1, end2, 100.0, 80.0), end1, end2)
+			val semaphore = createDynamicInstance(RailSemaphore(false, Cell.SpatialType.HORIZONTAL))
+			val path = ArrayPath(context)
+			path.addFirst(end1)
+			path.addLast(block)
+			path.addLast(semaphore)
+
+			// Reserve the block from end1 so the cancel has a real reservation to clear.
+			block.setUpPath(end1, "test-train")
+			assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+
+			// Act — the path-level cancel must complete without throwing.
+			path.cancelPathSetup(end1)
+
+			// Assert — the reservation is gone.
+			assertThat(block.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(block.isSetUpPath(end1)).isFalse()
+		}
+
 		@Test
 		fun `path with semaphore at end`() {
 			// Arrange
