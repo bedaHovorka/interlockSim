@@ -21,7 +21,7 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
@@ -323,8 +323,8 @@ class DynamicTrackTest {
 
 	@Test
 	fun `static object is accessible`() {
-		assertThat(dynamicTrack1.staticRef).isSameAs(staticTrack1)
-		assertThat(dynamicTrack2.staticRef).isSameAs(staticTrack2)
+		assertThat(dynamicTrack1.staticRef).isSameInstanceAs(staticTrack1)
+		assertThat(dynamicTrack2.staticRef).isSameInstanceAs(staticTrack2)
 	}
 
 	@Test
@@ -375,7 +375,7 @@ class DynamicTrackTest {
 		val reservedFromEvent = capturedEvents.find { it.propertyName == "reservedFrom" }
 		assertThat(reservedFromEvent).isNotNull()
 		assertThat(reservedFromEvent!!.oldValue).isNull()
-		assertThat(reservedFromEvent.newValue).isSameAs(separator1)
+		assertThat(reservedFromEvent.newValue).isSameInstanceAs(separator1)
 	}
 
 	@Test
@@ -404,12 +404,12 @@ class DynamicTrackTest {
 		val occupantEvent = capturedEvents.find { it.propertyName == "occupant" }
 		assertThat(occupantEvent).isNotNull()
 		assertThat(occupantEvent!!.oldValue).isNull()
-		assertThat(occupantEvent.newValue).isSameAs(occupant)
+		assertThat(occupantEvent.newValue).isSameInstanceAs(occupant)
 
 		// Verify "reservedFrom" event
 		val reservedFromEvent = capturedEvents.find { it.propertyName == "reservedFrom" }
 		assertThat(reservedFromEvent).isNotNull()
-		assertThat(reservedFromEvent!!.oldValue).isSameAs(separator1)
+		assertThat(reservedFromEvent!!.oldValue).isSameInstanceAs(separator1)
 		assertThat(reservedFromEvent.newValue).isNull()
 	}
 
@@ -439,7 +439,7 @@ class DynamicTrackTest {
 		// Verify "occupant" event
 		val occupantEvent = capturedEvents.find { it.propertyName == "occupant" }
 		assertThat(occupantEvent).isNotNull()
-		assertThat(occupantEvent!!.oldValue).isSameAs(occupant)
+		assertThat(occupantEvent!!.oldValue).isSameInstanceAs(occupant)
 		assertThat(occupantEvent.newValue).isNull()
 	}
 
@@ -468,7 +468,7 @@ class DynamicTrackTest {
 		// Verify "reservedFrom" event
 		val reservedFromEvent = capturedEvents.find { it.propertyName == "reservedFrom" }
 		assertThat(reservedFromEvent).isNotNull()
-		assertThat(reservedFromEvent!!.oldValue).isSameAs(separator1)
+		assertThat(reservedFromEvent!!.oldValue).isSameInstanceAs(separator1)
 		assertThat(reservedFromEvent.newValue).isNull()
 	}
 

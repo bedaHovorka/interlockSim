@@ -625,6 +625,6 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		assertThat(stream)
 			.withMessage("Fixture file should exist: $fileName")
 			.isNotNull()
-		return stream!!
+		return stream
 	}
 }

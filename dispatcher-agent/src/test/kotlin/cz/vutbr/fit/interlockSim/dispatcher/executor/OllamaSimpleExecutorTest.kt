@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.executor
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -62,7 +62,7 @@ class OllamaSimpleExecutorTest {
 
 		// Second call returns cached executor (same instance — reference identity)
 		val koogExecutor2 = executor.getExecutor()
-		assertThat(koogExecutor2).isSameAs(koogExecutor)
+		assertThat(koogExecutor2).isSameInstanceAs(koogExecutor)
 	}
 
 	/**

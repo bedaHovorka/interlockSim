@@ -156,9 +156,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 			"same-block reservation emits ConflictDetectedEvent and auto-resolver records choice in DispatcherPreferenceStore"
 		)
 		fun sameBlockReservation_emitsConflictDetectedEvent_andAutoResolverRecordsChoiceInDispatcherPreferenceStore() {
-			val ctx =
-				TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-					as DefaultSimulationContext
+			val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 			extraContext = ctx
 
 			val conflictEvents = mutableListOf<ConflictDetectedEvent>()
@@ -488,9 +486,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		@Timeout(value = 60, unit = TimeUnit.SECONDS)
 		@DisplayName("sequential same-path reservations produce no ConflictDetectedEvent")
 		fun sequentialSamePathReservations_produceNoConflictDetectedEvent() {
-			val ctx =
-				TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-					as DefaultSimulationContext
+			val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 			extraContext = ctx
 
 			val conflictEvents = mutableListOf<ConflictDetectedEvent>()

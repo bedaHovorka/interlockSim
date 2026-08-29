@@ -64,7 +64,7 @@ class StatusBar :
 			override fun mouseMoved(e: MouseEvent) {
 				val source = e.source
 				requireValidState(source is StatusProducer) { "Source must be a StatusProducer" }
-				val status = (source as StatusProducer).getStatus(e)
+				val status = source.getStatus(e)
 				text = status
 			}
 		}

@@ -16,7 +16,7 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -46,7 +46,7 @@ class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 			context.setMainProcess(loop)
 
 			val mainProcess = context.getMainProcess()
-			assertThat(mainProcess).isSameAs(loop)
+			assertThat(mainProcess).isSameInstanceAs(loop)
 			assertThat(mainProcess is SpeedControllable).isTrue()
 
 			val controllable = mainProcess as SpeedControllable

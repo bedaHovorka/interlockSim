@@ -69,6 +69,10 @@ kotlin {
     jvmToolchain(21)
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        // Issue #713: the build is warning-free as of this commit. A new warning is a
+        // regression, so fail on it. If a Kotlin version bump introduces a brand-new
+        // warning kind, fix the warning — do not turn this flag back off.
+        allWarningsAsErrors.set(true)
     }
 }
 

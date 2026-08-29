@@ -47,9 +47,7 @@ class CollisionWarningSubscriptionTest : KoinTestBase() {
 	}
 
 	private fun singleTrainContext(): DefaultSimulationContext {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		ctx.getInOuts()
 		context = ctx
 		return ctx

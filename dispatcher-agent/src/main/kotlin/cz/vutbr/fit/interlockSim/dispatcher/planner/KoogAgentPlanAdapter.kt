@@ -142,13 +142,6 @@ import kotlin.time.TimeSource
  *                       installs the queue-posting wrapper on its `current`; this adapter reads
  *                       its per-cycle emission counter to detect whether the LLM acted via tools
  *                       (see the "How the LLM acted via tools is detected" section).
- * @param cycleListener  Optional [PlannerCycleListener] notified after every dispatch cycle
- *                       with either [PlannerCycleListener.onLlmSuccess] or
- *                       [PlannerCycleListener.onFallback].  Used by [MeasuringPlanAdapter]
- *                       to collect fallback metrics without coupling the two classes.
- *                       Thread-safe: reads are done under `@Volatile`; write must happen
- *                       before the first [plan] call (typically from the same thread that
- *                       constructs the outer [MeasuringPlanAdapter]).
  */
 class KoogAgentPlanAdapter(
 	private val agentFactory: KoogAgentFactory,
@@ -177,29 +170,28 @@ class KoogAgentPlanAdapter(
 	}
 
 	/**
-	 * Optional [PlannerCycleListener] notified after every dispatch cycle.
+	 * Fan-out target for every [PlannerTickListener] registered via [addTickListener] — the sole
+	 * reporting seam of this adapter since Issue #713 retired the legacy two-callback
+	 * cycle-listener slot.
 	 *
-	 * Set by [MeasuringPlanAdapter] immediately after construction to collect fallback metrics.
-	 * `null` in production runs that don't need metrics.  `@Volatile` for safe publication:
-	 * written once by the constructing thread (before any [plan] call) and read by the
-	 * coroutine running [plan] (the `dispatcher-agent-driver` daemon thread).
+	 * A [CompositeTickListener] rather than a single nullable slot: [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
+	 * registers its own attribution listener unconditionally in its `init` block, and a single
+	 * slot meant a caller that registered a listener first had it silently discarded (Issue #843).
+	 * [addTickListener] lets any number of listeners join without displacing each other —
+	 * [MeasuringPlanAdapter] and the driver's attribution listener now share this one seam.
 	 */
-	@Volatile
-	var cycleListener: PlannerCycleListener? = null
+	private val tickListeners = CompositeTickListener()
 
 	/**
-	 * Optional [PlannerTickListener] notified after every dispatch cycle with the full
-	 * [TickOutcome] taxonomy — the non-deprecated replacement for [cycleListener].
+	 * Registers [listener] to be notified after every dispatch cycle with the full [TickOutcome]
+	 * taxonomy, alongside any other listener already registered (e.g.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]'s own attribution listener).
 	 *
-	 * Independent of [cycleListener]: setting this does not disturb [MeasuringPlanAdapter]'s
-	 * claim on [cycleListener], and both fire for the same cycle without interfering. `null` in
-	 * runs that don't need per-cycle attribution (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
-	 * sets it to attribute `commandQueue.postAll` calls correctly).
-	 *
-	 * `@Volatile` for the same safe-publication reason as [cycleListener].
+	 * Thread-safe: backed by [CompositeTickListener]'s `CopyOnWriteArrayList`.
 	 */
-	@Volatile
-	var tickListener: PlannerTickListener? = null
+	fun addTickListener(listener: PlannerTickListener) {
+		tickListeners.addListener(listener)
+	}
 
 	override val capabilities: PlannerCapabilities =
 		PlannerCapabilities(
@@ -233,7 +225,7 @@ class KoogAgentPlanAdapter(
 	 *
 	 * ## Latency measurement (Issue #834, SP2c.11)
 	 *
-	 * [cycleListener] and [tickListener] both receive a latency figure via
+	 * Every listener registered via [addTickListener] receives a latency figure via
 	 * [TickRecord.latencyMs], measured with a monotonic clock ([TimeSource.Monotonic]) around the
 	 * `withTimeout { a.decideAsync(observation) }` call only — deliberately **not** the whole
 	 * `plan()` attempt. Including [getOrCreateAgent] would fold the one-time
@@ -315,7 +307,6 @@ class KoogAgentPlanAdapter(
 						"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
 						"(simTime=${observation.snapshot.simTime}); not falling back"
 				}
-				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
 				reportTick(outcome, observation.snapshot.simTime, latencyMs)
 				decisions
 			} else if (isIdleStation(observation)) {
@@ -330,7 +321,6 @@ class KoogAgentPlanAdapter(
 						"an idle station (no active or queued trains) — reporting LLM_NO_OP, not " +
 						"falling back (simTime=${observation.snapshot.simTime})"
 				}
-				cycleListener?.onLlmSuccess(observation.snapshot.simTime)
 				reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime, latencyMs)
 				emptyList()
 			} else {
@@ -341,7 +331,7 @@ class KoogAgentPlanAdapter(
 				// finds nothing legal to do means this tick was never actionable in the first
 				// place, not a genuine dispatch miss. runFallback classifies the reported
 				// TickOutcome from the returned decision list — see its KDoc.
-				runFallback(FallbackReason.EMPTY_NO_TOOLS, observation, latencyMs) {
+				runFallback(observation = observation, latencyMs = latencyMs, outcomeFromFallbackOracle = true) {
 					logger.warn {
 						"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
 							"consulting rule-based fallback (simTime=${observation.snapshot.simTime})"
@@ -352,7 +342,11 @@ class KoogAgentPlanAdapter(
 			// cycleStart is always set here: TimeoutCancellationException can only originate from
 			// inside the withTimeout block, which starts after the mark is taken. The elapsed time
 			// is the deadline itself — a real, reportable latency, not a missing one.
-			runFallback(FallbackReason.TIMEOUT, observation, cycleStart?.elapsedNow()?.inWholeMilliseconds) {
+			runFallback(
+				observation = observation,
+				latencyMs = cycleStart?.elapsedNow()?.inWholeMilliseconds,
+				outcomeFromFallbackOracle = false
+			) {
 				logger.warn {
 					"KoogAgentPlanAdapter: LLM timed out after ${inferenceTimeout.toSeconds()}s — " +
 						"applying rule-based fallback (simTime=${observation.snapshot.simTime})"
@@ -362,9 +356,21 @@ class KoogAgentPlanAdapter(
 			// Parent coroutine was cancelled — propagate rather than swallow.
 			throw e
 		} catch (e: Exception) {
+			// HAZARD (issue #999): this handler also swallows a tick-listener throw from the
+			// reportTick(...) calls inside the try above — from here it is indistinguishable
+			// from an LLM failure, so a cycle the LLM already acted on is re-reported as
+			// RULE_FALLBACK and the fallback dispatches on top of the emitted actions. Every
+			// current listener is contractually non-throwing (MeasuringPlanAdapter.onTick is
+			// "MUST NOT THROW", pinned by test); isolate the fan-out from this catch before
+			// a throwing listener can join the seam.
+			//
 			// cycleStart is null only if getOrCreateAgent() itself threw — inference never
 			// started, so there is no cycle latency to report (null, not a fabricated 0).
-			runFallback(FallbackReason.EXCEPTION, observation, cycleStart?.elapsedNow()?.inWholeMilliseconds) {
+			runFallback(
+				observation = observation,
+				latencyMs = cycleStart?.elapsedNow()?.inWholeMilliseconds,
+				outcomeFromFallbackOracle = false
+			) {
 				logger.warn(e) {
 					"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
 						"(simTime=${observation.snapshot.simTime})"
@@ -374,15 +380,15 @@ class KoogAgentPlanAdapter(
 	}
 
 	/**
-	 * Runs the shared rule-based-fallback sequence: log via [logAction], notify [cycleListener],
-	 * consult [fallbackDispatcher], then report the [TickOutcome] the consultation earned.
+	 * Runs the shared rule-based-fallback sequence: log via [logAction], consult
+	 * [fallbackDispatcher], then report the [TickOutcome] the consultation earned.
 	 * Shared by all three fallback sites in [plan] (empty LLM cycle on a non-idle station — see
 	 * [isIdleStation], inference timeout, LLM exception) so they cannot drift out of sync with
 	 * each other.
 	 *
 	 * ## Outcome classification (Issue #927)
 	 *
-	 * For [reason] == [FallbackReason.EMPTY_NO_TOOLS] (the LLM answered silently on a non-idle
+	 * For [outcomeFromFallbackOracle] == `true` (the LLM answered silently on a non-idle
 	 * station), the reported outcome depends on what [fallbackDispatcher] actually found:
 	 * - `decide()` returns at least one **actionable** decision (not just
 	 *   [DispatchDecision.NoAction]) → [TickOutcome.RULE_FALLBACK] — a genuine miss, the fallback
@@ -397,40 +403,45 @@ class KoogAgentPlanAdapter(
 	 * check would be dead code against any contract-compliant dispatcher and would let the
 	 * non-actionable classification never fire in production.
 	 *
-	 * For the other two [reason] values (`TIMEOUT`, `EXCEPTION`) the LLM path itself failed —
-	 * whatever [fallbackDispatcher] returns is always reported as [TickOutcome.RULE_FALLBACK],
+	 * For [outcomeFromFallbackOracle] == `false` (inference timeout, LLM exception) the LLM path
+	 * itself failed — whatever [fallbackDispatcher] returns is always reported as [TickOutcome.RULE_FALLBACK],
 	 * unchanged from before #927: a timed-out or exception-throwing cycle is a genuine LLM-side
 	 * failure regardless of how many decisions the fallback happens to find.
 	 *
 	 * ## Tick-accounting ordering
 	 *
-	 * For `TIMEOUT`/`EXCEPTION` the tick is reported BEFORE [fallbackDispatcher.decide] is
-	 * called, so a throwing fallback cannot drop the cycle from tick accounting (the pre-#927
-	 * ordering). For `EMPTY_NO_TOOLS` the tick is reported AFTER `decide()` returns, because the
-	 * outcome depends on the oracle's result; if `decide()` throws there, the exception escapes
-	 * to [plan]'s `EXCEPTION` handler, which reports `RULE_FALLBACK` via this method — so the
-	 * cycle is still accounted for, never silently dropped.
+	 * When [outcomeFromFallbackOracle] is `false` the tick is reported BEFORE
+	 * [fallbackDispatcher.decide] is called, so a throwing fallback cannot drop the cycle from
+	 * tick accounting (the pre-#927 ordering). When it is `true` the tick is reported AFTER
+	 * `decide()` returns, because the outcome depends on the oracle's result; if `decide()` throws
+	 * there, the exception escapes to [plan]'s exception handler, which reports `RULE_FALLBACK`
+	 * via this method — so the cycle is still accounted for exactly once, never silently dropped
+	 * and (unlike the pre-#713 two-callback listener path) never double-counted.
 	 *
 	 * @param latencyMs Cycle latency to report alongside the tick, or `null` if no meaningful
 	 *   inference attempt was measured for this cycle — see [plan]'s "Latency measurement" KDoc.
+	 * @param outcomeFromFallbackOracle `true` to let [fallbackDispatcher]'s result select the
+	 *   reported outcome — the silent-cycle case, where the dispatcher is consulted as an oracle
+	 *   and finding nothing actionable means [TickOutcome.LLM_SILENT_NONACTIONABLE]. `false` to
+	 *   report [TickOutcome.RULE_FALLBACK] unconditionally, because the LLM path itself failed.
 	 */
 	private fun runFallback(
-		reason: FallbackReason,
 		observation: DispatchObservation,
 		latencyMs: Long?,
+		outcomeFromFallbackOracle: Boolean,
 		logAction: () -> Unit
 	): List<DispatchDecision> {
 		logAction()
-		cycleListener?.onFallback(reason, observation.snapshot.simTime)
-		// TIMEOUT/EXCEPTION: always RULE_FALLBACK. Report the tick BEFORE consulting the
-		// fallback so a throwing fallback dispatcher cannot drop this cycle from accounting.
-		if (reason != FallbackReason.EMPTY_NO_TOOLS) {
+		// The oracle does not select the outcome (timeout/exception): always RULE_FALLBACK. Report
+		// the tick BEFORE consulting the fallback so a throwing fallback cannot drop it from
+		// accounting.
+		if (!outcomeFromFallbackOracle) {
 			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
 			return fallbackDispatcher.decide(observation)
 		}
-		// EMPTY_NO_TOOLS: the outcome depends on what the fallback oracle finds, so decide()
+		// Oracle-selected: the outcome depends on what the fallback oracle finds, so decide()
 		// must run before the tick is reported. If decide() throws, the exception escapes to
-		// plan()'s EXCEPTION handler, which reports RULE_FALLBACK above — the cycle is still
+		// plan()'s exception handler, which reports RULE_FALLBACK above — the cycle is still
 		// accounted for (as a degraded RULE_FALLBACK), never silently dropped.
 		val decisions = fallbackDispatcher.decide(observation)
 		// The Dispatcher contract guarantees decide() never returns empty (it returns
@@ -494,7 +505,7 @@ class KoogAgentPlanAdapter(
 		simTime: Double,
 		latencyMs: Long?
 	) {
-		tickListener?.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
+		tickListeners.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
 	}
 

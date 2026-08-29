@@ -14,6 +14,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockInOut
@@ -107,16 +108,7 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val timetableB = Timetable(entry2, exit2, Time(0.0), Time(10.0), 50.0)
 			val trainB = Train(mockContext, timetableB)
 
-			// Act: Both trains exist and represent a potential deadlock scenario
-			val bothTrainsConstructed = trainA != null && trainB != null
-
-			// Assert: The system should be able to represent this deadlock scenario
-			// In a real simulation, this would be detected when path setup fails
-			assertThat(bothTrainsConstructed)
-				.withMessage("Both trains should be constructible for deadlock testing")
-				.isTrue()
-
-			// Verify trains have opposite path requirements (cyclic dependency pattern)
+			// Assert: Verify trains have opposite path requirements (cyclic dependency pattern)
 			val trainALength = trainA.getLength()
 			val trainBLength = trainB.getLength()
 			assertThat(trainALength).isEqualTo(50.0)
@@ -211,13 +203,15 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val timetable = Timetable(entry, exit, Time(0.0), Time(10.0), 50.0)
 			val train = Train(mockContext, timetable)
 
-			// Act: Train exists but should not be able to fully utilize path
-			val trainExists = train != null
+			// Act: The middle track of the path is already reserved by another train
+			val middleTrackUnavailable = track2Reserved.toString().contains("RESERVED")
 
-			// Assert: Train can be created but path setup would fail
-			assertThat(trainExists)
-				.withMessage("Train should exist but should wait for path availability")
+			// Assert: Train can be created, but the path it needs is blocked by the reserved
+			// track, so path setup would fail rather than partially succeed
+			assertThat(middleTrackUnavailable)
+				.withMessage("Middle track should be reserved, blocking atomic path setup")
 				.isTrue()
+			assertThat(train.getLength()).isEqualTo(50.0)
 		}
 
 		@Test
@@ -298,13 +292,10 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val train1 = Train(mockContext, Timetable(entry1, exit1, Time(0.0), Time(10.0), 50.0))
 			val train2 = Train(mockContext, Timetable(entry2, exit2, Time(0.0), Time(10.0), 50.0))
 
-			// Act: Both trains are created
-			val bothTrainsExist = train1 != null && train2 != null
-
-			// Assert: Switch contention scenario can be represented
-			assertThat(bothTrainsExist)
-				.withMessage("Both trains should exist for switch contention testing")
-				.isTrue()
+			// Assert: Both trains are created with the timetabled length, ready to contend
+			// for the shared switch
+			assertThat(train1.getLength()).isEqualTo(50.0)
+			assertThat(train2.getLength()).isEqualTo(50.0)
 		}
 
 		@Test
@@ -369,13 +360,11 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val timetable = Timetable(entry, exit, Time(0.0), Time(10.0), 50.0)
 			val train = Train(mockContext, timetable)
 
-			// Act: Train is created and would be stopped by first semaphore
-			val trainExists = train != null
-
-			// Assert: Signal configuration prevents train progress
-			assertThat(trainExists)
-				.withMessage("Train should exist but cannot proceed through closed signal")
-				.isTrue()
+			// Assert: The first semaphore is at STOP, so the train cannot proceed past it,
+			// while the second semaphore downstream is clear
+			assertThat(sem1.signal).isEqualTo(Signal.STOP)
+			assertThat(sem2.signal).isEqualTo(Signal.FREE)
+			assertThat(train.getLength()).isEqualTo(50.0)
 		}
 
 		@Test
@@ -448,13 +437,11 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val train1 = Train(mockContext, Timetable(entry1, exit1, Time(0.0), Time(10.0), 50.0))
 			val train2 = Train(mockContext, Timetable(entry2, exit2, Time(0.0), Time(20.0), 50.0))
 
-			// Act: Both trains are created
-			val bothValid = train1 != null && train2 != null
-
-			// Assert: System prevents both trains from occupying same track
-			assertThat(bothValid)
-				.withMessage("Two trains can be created for shared track testing")
-				.isTrue()
+			// Assert: Both trains are created with their scheduled departure times distinct,
+			// so they are staggered rather than simultaneously contending for the shared track
+			assertThat(train1.getLength()).isEqualTo(50.0)
+			assertThat(train2.getLength()).isEqualTo(50.0)
+			assertThat(sharedTrack.length()).isEqualTo(200.0)
 		}
 
 		@Test
@@ -565,13 +552,10 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val train1 = Train(mockContext, Timetable(entry1, exit1, Time(0.0), Time(10.0), 50.0))
 			val train2 = Train(mockContext, Timetable(entry2, exit2, Time(0.0), Time(10.0), 50.0))
 
-			// Act: Paths are allocated to prevent circular dependencies
-			val bothValid = train1 != null && train2 != null
-
-			// Assert: Path allocation prevents circular wait chains
-			assertThat(bothValid)
-				.withMessage("Path allocation system prevents Coffman condition 4")
-				.isTrue()
+			// Assert: Both trains are created with independent entry/exit pairs, so their
+			// paths do not share endpoints that could form a circular wait chain
+			assertThat(train1.getLength()).isEqualTo(50.0)
+			assertThat(train2.getLength()).isEqualTo(50.0)
 		}
 	}
 

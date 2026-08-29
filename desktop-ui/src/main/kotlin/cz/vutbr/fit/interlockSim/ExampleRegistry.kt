@@ -583,7 +583,7 @@ class ExampleRegistry {
 		plannerOverride: DispatcherPlanner? = null,
 		// SP2c.20 follow-up (#843): the un-wrapped KoogAgentPlanAdapter behind plannerOverride
 		// (when plannerOverride is a MeasuringPlanAdapter wrapping one), so AgentLoopDriver can
-		// attribute each cycle correctly via its tickListener. null for rule-based examples.
+		// attribute each cycle correctly via addTickListener. null for rule-based examples.
 		plannerTickSource: KoogAgentPlanAdapter? = null,
 		// Issue #907: when true, the sim thread blocks on a per-tick semaphore between
 		// driverSignal.signal() and applier.onControlStep(), ensuring the driver's decisions for

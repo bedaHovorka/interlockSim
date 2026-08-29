@@ -25,6 +25,7 @@ import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * Unit tests for HashMapGraph.
@@ -146,6 +147,19 @@ class HashMapGraphTest {
 		assertThat(addInfo).isEqualTo("infoA")
 	}
 
+	@Test
+	fun extensionalObject_duplicateNodeEdgePair_throwsIllegalState() {
+		graph.put("A", "infoA", "B", "infoB", 100)
+		graph.put("A", "infoC", "C", "infoD", 100)
+
+		val failure =
+			assertFailsWith<IllegalStateException> {
+				graph.extensionalObject("A", 100)
+			}
+
+		assertThat(failure.message).isEqualTo("Multiple extensional objects found for node A and edge 100")
+	}
+
 	// === Node operations ===
 
 	@Test
@@ -217,8 +231,7 @@ class HashMapGraphTest {
 		graph.put("A", "D", 200)
 		graph.put("B", "C", 250)
 
-		@Suppress("UNCHECKED_CAST")
-		val removed = graph.removeAll("A") as Collection<Int>
+		val removed = graph.removeAll("A")
 
 		assertThat(removed).hasSize(3)
 		@Suppress("UNCHECKED_CAST")
@@ -234,8 +247,7 @@ class HashMapGraphTest {
 		graph.put("A", "B", 100)
 		graph.put("C", "D", 200)
 
-		@Suppress("UNCHECKED_CAST")
-		val nodes = graph.remove(100) as Collection<String>
+		val nodes = graph.remove(100)
 
 		assertThat(nodes).hasSize(2)
 		@Suppress("UNCHECKED_CAST")
@@ -250,8 +262,7 @@ class HashMapGraphTest {
 		graph.put("C", "D", 100)
 		graph.put("E", "F", 200)
 
-		@Suppress("UNCHECKED_CAST")
-		val nodes = graph.remove(100) as Collection<String>
+		val nodes = graph.remove(100)
 
 		assertThat(nodes).hasSize(4)
 		@Suppress("UNCHECKED_CAST")
@@ -267,8 +278,7 @@ class HashMapGraphTest {
 		graph.put("A", "C", 150)
 		graph.put("B", "C", 200)
 
-		@Suppress("UNCHECKED_CAST")
-		val edges = graph.get("A") as Collection<Int>
+		val edges = graph.get("A")
 
 		assertThat(edges).hasSize(2)
 		assertThat(edges as Iterable<Int>).containsExactlyInAnyOrder(100, 150)
@@ -289,8 +299,7 @@ class HashMapGraphTest {
 		graph.put("B", "C", 150)
 		graph.put("C", "D", 200)
 
-		@Suppress("UNCHECKED_CAST")
-		val values = graph.values() as Collection<Int>
+		val values = graph.values()
 
 		assertThat(values).hasSize(3)
 		assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(100, 150, 200)
@@ -316,8 +325,7 @@ class HashMapGraphTest {
 		graph.put("A", "D", 3)
 		graph.put("A", "E", 4)
 
-		@Suppress("UNCHECKED_CAST")
-		assertThat(graph.get("A") as Collection<Int>).hasSize(4)
+		assertThat(graph.get("A")).hasSize(4)
 		@Suppress("UNCHECKED_CAST")
 		assertThat(graph.nodeSet() as Iterable<String>).containsExactlyInAnyOrder("A", "B", "C", "D", "E")
 		assertThat(graph.size()).isEqualTo(4)

@@ -15,9 +15,9 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
-import assertk.assertions.isNotSameAs
+import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isNull
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -69,7 +69,7 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 			try {
 				controller.start(it)
 
-				assertThat(pacingDelegateOf(it)).isSameAs(controller.runner!!)
+				assertThat(pacingDelegateOf(it)).isSameInstanceAs(controller.runner!!)
 			} finally {
 				controller.stop()
 			}
@@ -84,11 +84,11 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 			val controller = SimulationController()
 			try {
 				controller.start(it)
-				assertThat(pacingDelegateOf(it)).isSameAs(controller.runner!!)
+				assertThat(pacingDelegateOf(it)).isSameInstanceAs(controller.runner!!)
 
 				controller.stop()
 
-				assertThat(pacingDelegateOf(it)).isSameAs(NoOpSimulationController)
+				assertThat(pacingDelegateOf(it)).isSameInstanceAs(NoOpSimulationController)
 			} finally {
 				controller.stop()
 			}
@@ -103,7 +103,7 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 			val controller = SimulationController()
 			try {
 				controller.start(it)
-				assertThat(pacingDelegateOf(it)).isSameAs(controller.runner!!)
+				assertThat(pacingDelegateOf(it)).isSameInstanceAs(controller.runner!!)
 
 				// Stop the runner directly (NOT controller.stop()) so `runner` stays non-null
 				// and the monitor's `runner === newRunner` guard passes — exercising the
@@ -112,7 +112,7 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 
 				awaitMonitorDetach(controller)
 
-				assertThat(pacingDelegateOf(it)).isSameAs(NoOpSimulationController)
+				assertThat(pacingDelegateOf(it)).isSameInstanceAs(NoOpSimulationController)
 			} finally {
 				controller.stop()
 			}
@@ -128,18 +128,18 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 		try {
 			controller.start(ctxA)
 			val runnerA = controller.runner!!
-			assertThat(pacingDelegateOf(ctxA)).isSameAs(runnerA)
+			assertThat(pacingDelegateOf(ctxA)).isSameInstanceAs(runnerA)
 
 			controller.stop()
-			assertThat(pacingDelegateOf(ctxA)).isSameAs(NoOpSimulationController)
+			assertThat(pacingDelegateOf(ctxA)).isSameInstanceAs(NoOpSimulationController)
 
 			// Re-start on a fresh context: a new runner is created and attached to ctxB's
 			// scoped DelegatingSimulationController; ctxA's delegate stays NoOp (no leak).
 			controller.start(ctxB)
 			val runnerB = controller.runner!!
-			assertThat(runnerA).isNotSameAs(runnerB)
-			assertThat(pacingDelegateOf(ctxB)).isSameAs(runnerB)
-			assertThat(pacingDelegateOf(ctxA)).isSameAs(NoOpSimulationController)
+			assertThat(runnerA).isNotSameInstanceAs(runnerB)
+			assertThat(pacingDelegateOf(ctxB)).isSameInstanceAs(runnerB)
+			assertThat(pacingDelegateOf(ctxA)).isSameInstanceAs(NoOpSimulationController)
 		} finally {
 			controller.stop()
 			ctxA.close()

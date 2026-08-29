@@ -14,8 +14,8 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.COMMON_BRANCH_SPEED
-import cz.vutbr.fit.interlockSim.objects.cells.COMMON_MAIN_SPEED
+import cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED
+import cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -739,9 +739,7 @@ class PathValidationTest : KoinTestBase() {
 			try {
 				val maxSpeed = path.maxSpeed(sem1)
 				// If dynamic wrappers are initialized, verify reasonable speed
-				assertThat(maxSpeed).isNotNull()
-				val nonNullMaxSpeed = maxSpeed ?: error("maxSpeed should not be null after assertion")
-				assertThat(nonNullMaxSpeed > 0.0).isTrue()
+				assertThat(maxSpeed > 0.0).isTrue()
 			} catch (e: ClassCastException) {
 				// Expected - static separators cannot be cast to DynamicPathSeparator
 				assertThat(e.message).isNotNull()

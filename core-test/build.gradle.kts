@@ -27,6 +27,14 @@ version = "1.0"
 val isLinuxHost: Boolean by gradle.extra
 
 kotlin {
+	// Applies to every compilation (metadata, jvm, linuxX64).
+	compilerOptions {
+		// Issue #713: the build is warning-free as of this commit. A new warning is a
+		// regression, so fail on it. If a Kotlin version bump introduces a brand-new
+		// warning kind, fix the warning — do not turn this flag back off.
+		allWarningsAsErrors.set(true)
+	}
+
 	jvm {
 		compilerOptions {
 			jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
@@ -54,6 +62,10 @@ kotlin {
 				// commonMain (not commonTest) because core-test is a test-support library
 				// consumed from test source sets of other modules.
 				implementation(kotlin("test"))
+				// kdisco: ShuntingLoopRuns and NavigationDecoratingContext name kDisco types
+				// (Process, Condition) in commonMain signatures. :core declares kdisco with
+				// implementation(), so it does not reach this module transitively.
+				implementation("cz.ksimulantenbande.kdisco:kdisco-core:$kdiscoVersion")
 			}
 		}
 		val jvmMain by getting {
@@ -63,10 +75,6 @@ kotlin {
 				// when compiled outside a test source set — the junit5 variant makes them
 				// available for commonMain JVM compilation of CommonKoinTestBase.
 				implementation(kotlin("test-junit5"))
-				// kdisco: NavigationDecoratingContext overrides createPathAvailableCondition,
-				// whose return type Condition is a kDisco type. :core declares kdisco with
-				// implementation(), so it does not reach this module transitively.
-				implementation("cz.ksimulantenbande.kdisco:kdisco-core:$kdiscoVersion")
 			}
 		}
 	}

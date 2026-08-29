@@ -19,7 +19,6 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.coreTestModule
 import org.junit.jupiter.api.AfterEach
@@ -100,8 +99,8 @@ class InOutIntegrationTest {
 
 				assertThat(inOuts).hasSize(2)
 
-				val inOut1 = inOuts[0] as InOut
-				val inOut2 = inOuts[1] as InOut
+				val inOut1 = inOuts[0]
+				val inOut2 = inOuts[1]
 
 				// Names should be non-null and non-empty
 				assertThat(inOut1.getName()).isNotNull()
@@ -126,8 +125,8 @@ class InOutIntegrationTest {
 
 				// At least one should exist (actual entry/exit validation is in XML schema)
 				// This test verifies InOut objects are correctly instantiated
-				val inOut1 = inOuts[0] as InOut
-				val inOut2 = inOuts[1] as InOut
+				val inOut1 = inOuts[0]
+				val inOut2 = inOuts[1]
 
 				assertThat(inOut1).isNotNull()
 				assertThat(inOut2).isNotNull()
@@ -151,8 +150,8 @@ class InOutIntegrationTest {
 				assertThat(inOuts.size).isEqualTo(2)
 
 				// All InOuts are distinct objects
-				val inOut1 = inOuts[0] as InOut
-				val inOut2 = inOuts[1] as InOut
+				val inOut1 = inOuts[0]
+				val inOut2 = inOuts[1]
 
 				// Reference inequality (different objects)
 				assertThat(inOut1).isNotSameInstanceAs(inOut2)

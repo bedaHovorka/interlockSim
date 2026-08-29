@@ -284,7 +284,10 @@ class RequestRouteApplyFailureCodeTest {
 		val reason = "T1 holds no block bounded by 'zA'; legal origins: doA1"
 		val facade = mockk<InterlockingFacade>()
 		every { facade.requestRouteByEndpoints("T1", "zA", "doA1") } returns
-			InterlockingFacade.RouteResponse.Denied(reason, originNotContiguous = true)
+			InterlockingFacade.RouteResponse.Denied(
+				reason,
+				InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart
+			)
 		val networkActuator = facadeWiredPort(facade)
 
 		val correlationMap = CommandCorrelationMap()

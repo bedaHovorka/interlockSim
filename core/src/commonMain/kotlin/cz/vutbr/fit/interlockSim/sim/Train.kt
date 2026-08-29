@@ -626,7 +626,7 @@ class Train :
 				// lets the loop's destination check / passivation handle the next iteration.
 				current = next
 				val upcoming: TrackSection? =
-					if (path != null && current != null) {
+					if (current != null) {
 						val nextPathResult = trainNavService.findReservedPathForTrain(name, where)
 						if (nextPathResult is PathResult.Available) nextPathResult.path.getNext(current) else null
 					} else {

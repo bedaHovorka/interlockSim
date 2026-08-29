@@ -309,11 +309,8 @@ class DefaultRunSnapshotStoreTest {
 		// The searched-for text is built from CURRENT_SCHEMA_VERSION rather than hardcoded, so a
 		// schema bump cannot turn this replacement into a silent no-op that makes the test assert
 		// nothing (Issue #834, SP2c.11: the bump from 1 to 2 did exactly that to the literal form).
-		return kotlinx.serialization.json
-			.Json {
-				prettyPrint = true
-				encodeDefaults = true
-			}.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		return FUTURE_SCHEMA_JSON_CODEC
+			.encodeToString(DispatcherRunSnapshot.serializer(), snap)
 			.replace(
 				"\"schemaVersion\": ${DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION}",
 				"\"schemaVersion\": 9999"
@@ -321,6 +318,13 @@ class DefaultRunSnapshotStoreTest {
 	}
 
 	private companion object {
+		/** Codec used to build a synthetic future-schema-version JSON document for tests. */
+		private val FUTURE_SCHEMA_JSON_CODEC =
+			Json {
+				prettyPrint = true
+				encodeDefaults = true
+			}
+
 		/**
 		 * A literal schema-version-1 run document, exactly as `DefaultRunSnapshotStore` wrote it
 		 * before SP2c.11 added `railwayOutcome`. Written out in full rather than derived from the

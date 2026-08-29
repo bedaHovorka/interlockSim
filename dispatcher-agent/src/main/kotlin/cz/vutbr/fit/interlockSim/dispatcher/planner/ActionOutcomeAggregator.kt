@@ -39,12 +39,10 @@ class ActionOutcomeAggregator : ActionOutcomeSink {
 	)
 
 	private val totalOutcomes = AtomicLong(0L)
-	private val phaseCounts: Map<ActionPhase, AtomicLong> =
-		ActionPhase.entries.associateWith { AtomicLong(0L) }
+	private val phaseCounts: Map<ActionPhase, AtomicLong> = concurrentEnumCounters(ActionPhase.entries)
 	private val applyFailureCounts: Map<ApplyFailureCode, AtomicLong> =
-		ApplyFailureCode.entries.associateWith { AtomicLong(0L) }
-	private val authorCounts: Map<ActionAuthor, AtomicLong> =
-		ActionAuthor.entries.associateWith { AtomicLong(0L) }
+		concurrentEnumCounters(ApplyFailureCode.entries)
+	private val authorCounts: Map<ActionAuthor, AtomicLong> = concurrentEnumCounters(ActionAuthor.entries)
 
 	/** Called on the sim thread. Allocation-light; no logging (SP2c.20 review checklist). */
 	override fun onActionOutcome(outcome: ActionOutcome) {

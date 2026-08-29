@@ -439,8 +439,11 @@ class GeneratorTest : KoinTestBase() {
 			// Arrange & Act
 			val generator = Generator(mockContext, shuffleInOuts = false)
 
-			// Assert
-			assertThat(generator is cz.vutbr.fit.interlockSim.sim.LoopProcess).isEqualTo(true)
+			// Assert - verified via reflection (matching the sibling tests in this group)
+			// rather than a Kotlin `is` check, which the compiler already resolves statically
+			// from Generator's declared supertype.
+			assertThat(generator.javaClass.superclass)
+				.isEqualTo(cz.vutbr.fit.interlockSim.sim.LoopProcess::class.java)
 		}
 
 		/**

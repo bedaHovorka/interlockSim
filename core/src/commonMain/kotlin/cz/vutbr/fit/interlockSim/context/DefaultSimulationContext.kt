@@ -806,8 +806,7 @@ open class DefaultSimulationContext(
 		track: Track
 	): Segment? =
 		if (track is TrackSection) {
-			@Suppress("UNCHECKED_CAST")
-			val section = track as TrackSection
+			val section = track
 			// Match Java 1:1: return directly (inner method should not return null here)
 			getSegment(separator, section) ?: throw IllegalStateException("getSegment returned null for TrackSection")
 		} else {
@@ -992,8 +991,7 @@ open class DefaultSimulationContext(
 		val graph = getGraph()
 		for (trackBlock in graph.values()) {
 			// TrackBlock extends TrackFacility, but graph stores DynamicTrackBlock wrappers
-			val dynamicBlock = trackBlock as DynamicTrackBlock
-			val staticTrack = dynamicBlock.staticRef as TrackFacility
+			val staticTrack = trackBlock.staticRef as TrackFacility
 
 			if (!staticTrackToDynamicMap.containsKey(staticTrack)) {
 				val dynamicTrack = DynamicTrack(staticTrack)
@@ -1003,13 +1001,13 @@ open class DefaultSimulationContext(
 			}
 
 			// Ensure lookups by DynamicTrackBlock (graph values) still work by aliasing to the same wrapper
-			if (!staticTrackToDynamicMap.containsKey(dynamicBlock)) {
-				staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]
+			if (!staticTrackToDynamicMap.containsKey(trackBlock)) {
+				staticTrackToDynamicMap[trackBlock] = staticTrackToDynamicMap[staticTrack]
 					?: error("Expected DynamicTrack for $staticTrack to be registered in the map")
 			}
 
 			// Recursively map any internal TrackSection objects
-			mapInternalSections(dynamicBlock)
+			mapInternalSections(trackBlock)
 		}
 		logger.debug {
 			"Initialized $trackMappedCount dynamic track wrappers (total in map: ${staticTrackToDynamicMap.size})"

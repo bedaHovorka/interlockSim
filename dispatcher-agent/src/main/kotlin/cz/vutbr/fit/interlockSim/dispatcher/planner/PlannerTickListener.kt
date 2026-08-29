@@ -13,20 +13,23 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * Listener that a dispatcher planner calls after each tick completes, reporting the full
  * [TickOutcome] taxonomy via a single [TickRecord].
  *
- * Replaces the two-callback [PlannerCycleListener] (`onLlmSuccess` / `onFallback`), which could
- * not distinguish an explicit, healthy LLM no-op from a harness-applied safe do-nothing — see
- * [TickOutcome] for the full rationale.
+ * Replaces the two-callback cycle listener (`onLlmSuccess` / `onFallback`) that Issue #713
+ * deleted, which could not distinguish an explicit, healthy LLM no-op from a harness-applied
+ * safe do-nothing — see [TickOutcome] for the full rationale.
  *
  * Implementations must be thread-safe; [onTick] may be called from multiple coroutines
  * simultaneously.
  *
- * **Wiring note:** [KoogAgentPlanAdapter.tickListener] fires this at every `plan()` completion
- * (SP2c.20 follow-up, Issue #843), independent of the deprecated [PlannerCycleListener] slot
- * `MeasuringPlanAdapter` claims — the two listeners coexist without interfering.
+ * **Wiring note:** [KoogAgentPlanAdapter.addTickListener] registers this to fire at every
+ * `plan()` completion (SP2c.20 follow-up, Issue #843). This is the adapter's only reporting
+ * seam: since Issue #713 retired the legacy two-callback cycle-listener slot, every
+ * observer — [MeasuringPlanAdapter] and
+ * [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]'s attribution listener included —
+ * registers here. Any number of [PlannerTickListener]s coexist without displacing each other
+ * (Issue #713 Task 9), fanned out in registration order through [CompositeTickListener].
  *
  * @see TickRecord
  * @see TickOutcome
- * @see PlannerCycleListener
  * @since Issue #842 (Goal 10 SP2c.19 — tick-outcome taxonomy)
  */
 fun interface PlannerTickListener {

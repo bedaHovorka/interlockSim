@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.ports
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.ProvidesDispatchLoopObservation
@@ -39,7 +39,7 @@ class DispatchLoopPortsTest {
 		val expected = listOf(QueuedTrainObservation("Train #1", "inout_A"))
 		val port = DefaultDispatchLoopSensorPort { makeObservation(queuedTrains = expected) }
 
-		assertThat(port.getQueuedTrains()).isSameAs(expected)
+		assertThat(port.getQueuedTrains()).isSameInstanceAs(expected)
 	}
 
 	@Test
@@ -47,7 +47,7 @@ class DispatchLoopPortsTest {
 		val expected = listOf(makeBlockInput("k1", "zA"))
 		val port = DefaultDispatchLoopSensorPort { makeObservation(innerBlockInputs = expected) }
 
-		assertThat(port.getInnerBlockInputs()).isSameAs(expected)
+		assertThat(port.getInnerBlockInputs()).isSameInstanceAs(expected)
 	}
 
 	@Test
@@ -55,7 +55,7 @@ class DispatchLoopPortsTest {
 		val expected = listOf(makeBlockInput("kA", "doA1"))
 		val port = DefaultDispatchLoopSensorPort { makeObservation(outerBlockInputs = expected) }
 
-		assertThat(port.getOuterBlockInputs()).isSameAs(expected)
+		assertThat(port.getOuterBlockInputs()).isSameInstanceAs(expected)
 	}
 
 	@Test
@@ -172,7 +172,7 @@ class DispatchLoopPortsTest {
 			)
 		val provider = ProvidesDispatchLoopObservation { snapshot }
 
-		assertThat(provider.latestDispatchLoopSnapshot()).isSameAs(snapshot)
+		assertThat(provider.latestDispatchLoopSnapshot()).isSameInstanceAs(snapshot)
 	}
 
 	// ── DispatchLoopActuatorPort contract ─────────────────────────────────────

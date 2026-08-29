@@ -68,9 +68,7 @@ class ReservationConflictWarningTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("Two trains competing for the same path emit exactly one ReservationConflict warning")
 	fun twoTrainsCompetingForSamePathEmitExactlyOneConflictWarning() {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		val inOuts = ctx.getInOuts()
 
@@ -158,9 +156,7 @@ class ReservationConflictWarningTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("Routine blocked-path contention that clears normally does not emit a ReservationConflict warning")
 	fun routineBlockedPathContentionDoesNotEmitConflictWarning() {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		val inOuts = ctx.getInOuts()
 
@@ -249,9 +245,7 @@ class ReservationConflictWarningTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("Contention still unresolved when the run ends is reported via the end-of-run flush")
 	fun unresolvedContentionAtRunEndEmitsConflictWarning() {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		val inOuts = ctx.getInOuts()
 

@@ -134,11 +134,16 @@ class AgentLoopDriver(
 	/**
 	 * Optional observer receiving every [TickRecord] produced by [plannerTickSource].
 	 *
-	 * Exists because this class *overwrites* `plannerTickSource.tickListener` in its `init` block,
+	 * This class registers its own attribution listener on `plannerTickSource` via
+	 * [KoogAgentPlanAdapter.addTickListener] in its `init` block, which fans out through a
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.CompositeTickListener] rather than claiming a
+	 * single slot — a caller that registered a listener on `plannerTickSource` before constructing
+	 * this driver keeps receiving ticks alongside this driver's own listener (Issue #713 Task 9).
+	 * Before that fix, this class *overwrote* `plannerTickSource.tickListener` in its `init` block,
 	 * so a caller that installed its own listener beforehand had it silently discarded — there was
 	 * no seam at all onto which a run recorder could be wired, which is why
 	 * `DispatcherRunRecorder.onTick` had no production caller and every per-run JSON reported
-	 * `totalTicks = 0`.
+	 * `totalTicks = 0` (Issue #843).
 	 *
 	 * Invoked on the dispatcher-agent driver thread, synchronously inside `planner.plan()`.
 	 * Implementations must be cheap and non-blocking; `DefaultDispatcherRunRecorder.onTick` is a
@@ -183,14 +188,15 @@ class AgentLoopDriver(
 
 	init {
 		// The listener fires synchronously inside plannerTickSource.plan()'s suspend body — all
-		// four call sites (LLM success, EMPTY_NO_TOOLS/TIMEOUT/EXCEPTION fallback) are inline in
+		// four call sites (LLM actions, idle no-op, and both runFallback branches) are inline in
 		// KoogAgentPlanAdapter.plan's try/catch, not in a spawned coroutine — so lastTickOutcome
 		// is always fresh by the time plan() returns below in runCycle().
-		plannerTickSource?.tickListener =
+		plannerTickSource?.addTickListener(
 			PlannerTickListener { record ->
 				lastTickOutcome = record.outcome
 				onTickRecord?.invoke(record)
 			}
+		)
 	}
 
 	private fun pauseUntilNextSnapshot() {

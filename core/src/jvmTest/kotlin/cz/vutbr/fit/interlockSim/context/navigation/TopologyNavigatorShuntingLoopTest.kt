@@ -735,13 +735,7 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 		separator: PathSeparator,
 		grid: cz.vutbr.fit.interlockSim.context.RailwayNetGrid<Cell>
 	): Point? {
-		// Unwrap DynamicPathSeparator to NodeCell for grid lookup
-		val staticSeparator =
-			when (separator) {
-				is Cell -> separator
-				else -> separator as? Cell
-			}
-
-		return staticSeparator?.let { grid.getLocation(it) }
+		// PathSeparator already extends Cell, so no unwrapping is needed for the grid lookup.
+		return grid.getLocation(separator)
 	}
 }

@@ -81,17 +81,12 @@ class TestContextBuilder {
 			throw IllegalArgumentException("Both cells must exist before connecting them")
 		}
 
-		if (fromCell !is cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
-			throw IllegalArgumentException("From cell must be a NodeCell")
-		}
-		if (toCell !is cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
-			throw IllegalArgumentException("To cell must be a NodeCell")
-		}
-
+		// DefaultEditingContext.getRailWayNetGrid() is covariantly typed RailwayNetGrid<NodeCell>,
+		// so both cells are already guaranteed to be NodeCell here.
 		val trackBlock =
 			cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock(
-				fromCell as cz.vutbr.fit.interlockSim.objects.cells.NodeCell,
-				toCell as cz.vutbr.fit.interlockSim.objects.cells.NodeCell,
+				fromCell,
+				toCell,
 				length,
 				maxSpeed
 			)

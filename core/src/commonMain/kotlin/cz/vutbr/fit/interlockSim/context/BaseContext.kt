@@ -10,12 +10,12 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.domain.COMMON_MAX_SPEED
+import cz.vutbr.fit.interlockSim.domain.COMMON_TRACK_LENGTH
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
-import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
@@ -154,7 +154,7 @@ abstract class BaseContext<T : TrackBlock>(
 	 * Open to allow subclass override if needed.
 	 * Fires PropertyChangeEvent when value changes.
 	 */
-	open var currentTrackLength: Double = StaticTrack.COMMON_TRACK_LENGTH
+	open var currentTrackLength: Double = COMMON_TRACK_LENGTH
 		set(value) {
 			val old = field
 			field = value

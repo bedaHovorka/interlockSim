@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.ksimulantenbande.kdisco.Process
+import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -17,7 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -352,7 +352,7 @@ enum class Signal(
 	private val allowedSpeed: Double
 
 	init {
-		this.allowedSpeed = if (speed != null) speed / 3.6 else PathElement.ABSOLUTE_MAX_SPEED
+		this.allowedSpeed = if (speed != null) speed / 3.6 else ABSOLUTE_MAX_SPEED
 	}
 
 	/**

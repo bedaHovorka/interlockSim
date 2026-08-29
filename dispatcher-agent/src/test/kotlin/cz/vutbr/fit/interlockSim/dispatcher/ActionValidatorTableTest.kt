@@ -345,7 +345,7 @@ class ActionValidatorTableTest {
 		assertThat((verdict as ValidationVerdict.Rejected).code, name = "code for $code")
 			.isEqualTo(code)
 		// ValidationVerdict.Rejected contract: detail is never empty (ValidationVerdict KDoc).
-		assertThat((verdict as ValidationVerdict.Rejected).detail, name = "detail non-empty for $code")
+		assertThat(verdict.detail, name = "detail non-empty for $code")
 			.isNotEmpty()
 	}
 

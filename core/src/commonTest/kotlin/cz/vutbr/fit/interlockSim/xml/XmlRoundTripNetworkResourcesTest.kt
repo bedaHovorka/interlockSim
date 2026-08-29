@@ -277,7 +277,7 @@ class XmlRoundTripNetworkResourcesTest {
 			assertThat(ctx2.getInOuts()).hasSize(1)
 			val inOut = ctx2.getInOuts().first()
 			assertThat(inOut).isInstanceOf<InOut>()
-			assertThat((inOut as InOut).getName()).isEqualTo("OnlyOne")
+			assertThat(inOut.getName()).isEqualTo("OnlyOne")
 		}
 	}
 }

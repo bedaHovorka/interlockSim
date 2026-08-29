@@ -12,10 +12,11 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 
 /**
- * Exhaustive taxonomy of what happened on a single dispatcher tick, replacing the legacy
- * two-way split ([PlannerCycleListener.onLlmSuccess] / [FallbackReason]) that could not tell
- * "the LLM correctly decided nothing was needed" apart from "the LLM failed to produce
- * anything" — both were counted as `FallbackReason.EMPTY_NO_TOOLS`.
+ * Exhaustive taxonomy of what happened on a single dispatcher tick, replacing the legacy two-way
+ * split — a "the LLM succeeded" callback versus a three-value fallback reason — that could not
+ * tell "the LLM correctly decided nothing was needed" apart from "the LLM failed to produce
+ * anything": both were counted as the single legacy reason `EMPTY_NO_TOOLS`. See the
+ * "Historical" section below for that taxonomy and how it maps onto this one.
  *
  * On `vyhybna.xml`, a high [LLM_NO_OP] rate is expected and healthy: most ticks genuinely
  * require no intervention, and constraint C6 makes an explicit `no_op` a first-class,
@@ -25,8 +26,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * [LLM_NO_OP] is produced on the live path by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
  * in two cases (Issue #834): an idle station (no active or queued trains) with no LLM emissions,
  * and a cycle whose only tool emission(s) were an explicit `no_op`. Before Issue #834 both cases
- * were mis-scored as [RULE_FALLBACK] via the undifferentiated `FallbackReason.EMPTY_NO_TOOLS`
- * path, which is why `noOpRate` read `0` in every run measured before that fix.
+ * were mis-scored as [RULE_FALLBACK] via the undifferentiated legacy `EMPTY_NO_TOOLS` path,
+ * which is why `noOpRate` read `0` in every run measured before that fix.
  *
  * | Outcome | Meaning | [tickClass] | Counts as LLM success | Counts toward actionable-rate denominator |
  * |---|---|---|---|---|
@@ -73,17 +74,61 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * harness intervention. [TickClass.NONACTIONABLE] is a fourth, dedicated bucket for exactly this
  * case, keeping [TickClass.DEGRADED]'s meaning ("the harness had to intervene") intact.
  *
- * ## Migration from [FallbackReason]
+ * ## Historical: the legacy fallback-reason taxonomy (removed in Issue #713)
  *
- * `FallbackReason` predates this split and cannot express it on its own — see
- * `FallbackReason.toTickOutcome` for the documented, lossy projection used to replay legacy
- * data (or legacy call sites not yet migrated) onto this taxonomy.
+ * Until Issue #713 the planner reported through two now-deleted types: a three-value
+ * fallback-reason enum, `FallbackReason` (`EMPTY_NO_TOOLS` / `TIMEOUT` / `EXCEPTION`, Issue #817)
+ * and the two-callback cycle listener, `PlannerCycleListener` (`onLlmSuccess` / `onFallback`)
+ * that carried it. Issue #842 added
+ * this taxonomy alongside them together with a **lossy, one-directional** projection bridge;
+ * Issue #713 then moved every producer and consumer onto [PlannerTickListener] and deleted all
+ * three. The bridge's mapping is recorded here rather than lost with it, because it is what any
+ * figure recorded before the migration has to be read through (e.g.
+ * `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`):
+ *
+ * | Legacy reason | Fate | New encoding |
+ * |---|---|---|
+ * | `EMPTY_NO_TOOLS` | **splits** | [LLM_NO_OP] (success) when the cycle is known to have carried an explicit `no_op` emission, else [TIMEOUT_NOOP] with [TimeoutNoOpCause.EMPTY_UNPARSEABLE] (degraded) |
+ * | `TIMEOUT` | renamed, semantics changed | [TIMEOUT_NOOP] with [TimeoutNoOpCause.DEADLINE_MISS] |
+ * | `EXCEPTION` | renamed | [LLM_EXCEPTION] |
+ *
+ * `EMPTY_NO_TOOLS` alone was ambiguous — it could mean either "the LLM correctly decided to do
+ * nothing" ([LLM_NO_OP]) or "the LLM produced nothing at all" ([TIMEOUT_NOOP] with
+ * [TimeoutNoOpCause.EMPTY_UNPARSEABLE]). Telling those apart requires knowing whether the cycle
+ * carried an *explicit* `no_op` emission — information the legacy enum did not itself carry,
+ * which is exactly why the bridge had to take that fact as an extra argument instead of being a
+ * pure enum-to-enum lookup, and why one legacy value had to become two opposite outcomes here.
+ *
+ * ### Safety rule: an empty response is never a success
+ *
+ * The split is only trustworthy once the loop makes `no_op` an explicit, mandatory emission
+ * (SP2c.6's "exactly one action per tick, `no_op` included" contract). Until a producer can
+ * independently prove that contract was satisfied for a given cycle, it MUST score the cycle on
+ * the degraded side — **an empty response can never be distinguished from a dead model, so it
+ * must never be scored as a success.** The bridge encoded that by defaulting its "was there an
+ * explicit no_op?" argument to `false`.
+ *
+ * The rule outlives the bridge, because it is still what justifies two live decisions — neither
+ * of which is safe to "simplify" without re-deriving it:
+ *
+ * - **Issue #834's classification.** [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.plan]
+ *   scores an emission-less cycle as [LLM_NO_OP] only where the silence is independently
+ *   explained: an explicit `no_op` emission, or an idle station. It is also why
+ *   `KoogAgentPlanAdapter.isIdleStation` is deliberately narrow — no approved and no unapproved
+ *   trains, never the wider "no action was applicable". A wider predicate would readmit
+ *   precisely the ambiguity the split removed, by folding genuine LLM failures on a busy station
+ *   back into the success bucket.
+ * - **[LLM_SILENT_NONACTIONABLE] is not a success.** The fallback oracle establishes only that
+ *   nothing was legal to do this tick, not that the model was alive and chose silence — so the
+ *   outcome sits in [TickClass.NONACTIONABLE], outside [countsAsLlmSuccess], and is counted on
+ *   the fallback side by [PlannerMetricsSnapshot]. Promoting it to a success would score exactly
+ *   the silence this taxonomy was built to stop scoring, and would move every rate already
+ *   recorded.
  *
  * @see TickClass
  * @see TimeoutNoOpCause
  * @see TickRecord
  * @see PlannerTickListener
- * @see FallbackReason
  * @since Issue #842 (Goal 10 SP2c.19 — tick-outcome taxonomy)
  */
 enum class TickOutcome {
@@ -117,8 +162,10 @@ enum class TickOutcome {
 	 * **Not currently emitted by [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]**
 	 * — that adapter maps its generic-exception catch block to [RULE_FALLBACK] (the fallback
 	 * dispatcher's decisions are actually posted, so they must be attributed as a fallback,
-	 * not a no-op). This outcome is reserved for future producers and is reachable today only
-	 * via the legacy `FallbackReason.toTickOutcome` projection. Its [toActionAuthor] mapping to
+	 * not a no-op). Issue #713 removed the legacy projection bridge that was its only other
+	 * source, so no code path produces it today; it is retained for future producers and as the
+	 * encoding of the legacy `EXCEPTION` reason when reading pre-#713 data. Its [toActionAuthor]
+	 * mapping to
 	 * [ActionAuthor.TIMEOUT_NOOP] is correct for attribution because, like [TIMEOUT_NOOP], it is
 	 * a no-dispatching-action degraded outcome — but no live producer pairs it with dispatching
 	 * actions, so the mapping is never exercised against a real tick (Issue #843 review).

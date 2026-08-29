@@ -32,7 +32,6 @@ class BlockEventSubscriptionTest : KoinTestBase() {
 	private fun twoTrainLinearContext(): DefaultSimulationContext {
 		val ctx =
 			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
 		ctx.getInOuts()
 		context = ctx
 		return ctx

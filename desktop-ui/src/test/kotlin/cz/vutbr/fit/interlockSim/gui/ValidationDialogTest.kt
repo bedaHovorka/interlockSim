@@ -328,8 +328,9 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 		predicate: (T) -> Boolean = { true }
 	): T? {
 		for (component in container.components) {
-			if (type.isInstance(component) && predicate(component as T)) {
-				return component
+			val typed = if (type.isInstance(component)) type.cast(component) else null
+			if (typed != null && predicate(typed)) {
+				return typed
 			}
 			if (component is java.awt.Container) {
 				val found = findComponentOfType(component, type, predicate)

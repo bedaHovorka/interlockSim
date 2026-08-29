@@ -46,7 +46,7 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() { // Future: implements Nav
 		override fun hashCode(): Int {
 			val k = key
 			val v = value
-			return (k?.hashCode() ?: 0) xor (v?.hashCode() ?: 0)
+			return k.hashCode() xor (v?.hashCode() ?: 0)
 		}
 	}
 

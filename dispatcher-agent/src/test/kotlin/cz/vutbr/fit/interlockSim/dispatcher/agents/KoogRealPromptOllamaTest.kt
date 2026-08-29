@@ -389,7 +389,7 @@ class KoogRealPromptOllamaTest : DispatcherKoinTestBase() {
 					script.forEach { cycle ->
 						current = cycle
 						// Production tolerates a failed cycle: KoogAgentPlanAdapter catches it,
-						// counts a FallbackReason.EXCEPTION and answers with the rule-based
+						// reports a RULE_FALLBACK tick and answers with the rule-based
 						// dispatcher, so the run continues. This harness calls the agent directly,
 						// so it has to tolerate it the same way — otherwise a cycle that exhausts
 						// Koog's 20-iteration cap would fail an assertion about *vocabulary*, which

@@ -9,12 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 
 /**
@@ -93,7 +93,7 @@ class DynamicInOut(
 		sem.cancelPathSetup(from, to)
 	}
 
-	override fun allowedSpeed(): Double = PathElement.ABSOLUTE_MAX_SPEED
+	override fun allowedSpeed(): Double = ABSOLUTE_MAX_SPEED
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		if (from == null) return staticRef.direction()

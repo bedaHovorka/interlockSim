@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.Condition
 import cz.ksimulantenbande.kdisco.Head
-import cz.ksimulantenbande.kdisco.Link
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
@@ -78,7 +77,7 @@ class InOutWorker(
 				}
 				continue
 			}
-			val firstLink = first as Link
+			val firstLink = first
 			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
 
 			try {

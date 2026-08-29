@@ -79,12 +79,23 @@ kotlin {
     // fixes so the whole branch yields a clean, JDK-21-pinned patched build.
     jvmToolchain(21)
     applyDefaultHierarchyTemplate()
+
+    // Applies to every compilation (metadata, jvm, linuxX64). expect/actual classes are
+    // still Beta in Kotlin; this flag opts into the behaviour the warning asks for.
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+
+        // Issue #713: the build is warning-free as of this commit. A new warning is a
+        // regression, so fail on it. If a Kotlin version bump introduces a brand-new
+        // warning kind, fix the warning — do not turn this flag back off.
+        allWarningsAsErrors.set(true)
+    }
+
     jvm {
         compilations.all {
             compileTaskProvider.configure {
                 compilerOptions {
                     jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-                    freeCompilerArgs.add("-Xexpect-actual-classes")
                 }
             }
         }

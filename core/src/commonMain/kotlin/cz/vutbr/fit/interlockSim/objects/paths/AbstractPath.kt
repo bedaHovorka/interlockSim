@@ -52,12 +52,12 @@ abstract class AbstractPath protected constructor(
 		return last.asRailSemaphore()
 	}
 
-	override fun maxSpeed(sep: PathSeparator?): Double {
-		var prevSep = sep
+	override fun maxSpeed(from: PathSeparator?): Double {
+		var prevSep = from
 		// Track prevTrack = null;
-		var min = (sep as DynamicPathSeparator).allowedSpeed()
+		var min = (from as DynamicPathSeparator).allowedSpeed()
 
-		val it = getIterator(sep!!)
+		val it = getIterator(from)
 		while (it.hasNext()) {
 			val e = it.next()
 
@@ -144,8 +144,8 @@ abstract class AbstractPath protected constructor(
 		logger.debug { "PATH_RESERVATION_COMPLETE: from=$from, reserved $blockCount blocks" }
 	}
 
-	override fun cancelPathSetup(sep: DynamicPathSeparator) {
-		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
+	override fun cancelPathSetup(from: DynamicPathSeparator) {
+		pathIterating(from, CANCEL_PATH_SETUP) { track, separator ->
 			toTrackFacility(track).cancelPathSetup(separator)
 			true
 		}

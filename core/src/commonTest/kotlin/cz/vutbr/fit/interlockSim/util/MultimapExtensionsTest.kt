@@ -158,7 +158,7 @@ class MultimapExtensionsTest {
 		multiMap.putMulti("B", 1)
 		multiMap.putMulti("C", 1)
 
-		val values = multiMap.valuesMulti() as Collection<Int>
+		val values = multiMap.valuesMulti()
 
 		assertThat(values).withMessage("Same value can exist in multiple key sets").hasSize(3)
 		assertThat(values).allMatch { v: Int -> v == 1 }
@@ -342,7 +342,7 @@ class MultimapExtensionsTest {
 
 		assertThat(values).isNotNull()
 		assertThat(values).hasSize(1)
-		assertThat(values as Set<Int?>).containsNull()
+		assertThat(values).containsNull()
 	}
 
 	@Test
@@ -354,7 +354,7 @@ class MultimapExtensionsTest {
 		val values = multiMapNullable.getMulti("A")
 
 		assertThat(values).withMessage("Set stores only one null value").hasSize(1)
-		assertThat(values as Set<Int?>).containsNull()
+		assertThat(values).containsNull()
 	}
 
 	@Test

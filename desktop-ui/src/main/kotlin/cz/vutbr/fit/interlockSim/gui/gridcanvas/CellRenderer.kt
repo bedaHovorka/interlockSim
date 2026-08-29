@@ -23,7 +23,6 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import java.awt.BasicStroke
 import java.awt.Graphics2D
 import java.lang.Math.round
-import java.util.Collection
 import java.util.EnumMap
 
 /**
@@ -61,8 +60,8 @@ abstract class CellRenderer(
 		g.stroke = BasicStroke(2f)
 		for (s in segments) {
 			g.drawLine(
-				round(cellWidth * s.getRx()).toInt(),
-				round(cellHeight * s.getRy()).toInt(),
+				round(cellWidth * s.getRx()),
+				round(cellHeight * s.getRy()),
 				cellWidth / 2,
 				cellHeight / 2
 			)
@@ -85,11 +84,7 @@ abstract class CellRenderer(
 		g: Graphics2D,
 		type: Cell.SpatialType
 	) {
-		val segs = type.segments
-		if (segs != null) {
-			val segsArray: Array<Segment> = segs.toMutableList().toTypedArray()
-			drawSegments(g, *segsArray)
-		}
+		drawSegments(g, *type.segments)
 	}
 
 	// Draw triangle indicator for switches and semaphores
@@ -100,7 +95,7 @@ abstract class CellRenderer(
 		val thetaObj = ANGLES[cell.getSpatialType()]
 		requireValidState(thetaObj != null) { "No angle defined for spatial type: ${cell.getSpatialType()}" }
 
-		val theta = if (cell.getOrientation()) thetaObj!! + Math.PI else thetaObj!!
+		val theta = if (cell.getOrientation()) thetaObj + Math.PI else thetaObj
 		val xs = intArrayOf(cellWidth / 4, cellWidth / 4, 3 * cellWidth / 4)
 		val ys = intArrayOf(cellHeight / 4, 3 * cellHeight / 4, cellHeight / 2)
 

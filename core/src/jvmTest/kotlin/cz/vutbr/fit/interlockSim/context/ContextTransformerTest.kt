@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.containsAll
+import assertk.assertions.containsAtLeast
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
@@ -164,8 +164,8 @@ class ContextTransformerTest : KoinTestBase() {
 					assertThat(inOuts).hasSize(2)
 
 					// Extract static refs from dynamic wrappers for comparison
-					val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
-					assertThat(staticRefs).containsAll(inA, inB)
+					val staticRefs = inOuts.map { it.staticRef }
+					assertThat(staticRefs).containsAtLeast(inA, inB)
 				}
 			}
 		}
@@ -308,8 +308,8 @@ class ContextTransformerTest : KoinTestBase() {
 					assertThat(inOuts).hasSize(2)
 
 					// Extract static refs from dynamic wrappers for comparison
-					val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
-					assertThat(staticRefs).containsAll(inA, inB)
+					val staticRefs = inOuts.map { it.staticRef }
+					assertThat(staticRefs).containsAtLeast(inA, inB)
 				}
 			}
 		}
@@ -415,8 +415,8 @@ class ContextTransformerTest : KoinTestBase() {
 					// Verify InOut list was copied via interface method
 					val inOuts = simulationContext.getInOuts()
 					assertThat(inOuts).hasSize(2)
-					val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
-					assertThat(staticRefs).containsAll(inA, inB)
+					val staticRefs = inOuts.map { it.staticRef }
+					assertThat(staticRefs).containsAtLeast(inA, inB)
 
 					// Verify graph was copied
 					assertThat(simulationContext.getGraph().size()).isGreaterThan(0)

@@ -38,7 +38,7 @@ abstract class ContinuousInvariantChecker : Continuous() {
 	final override fun derivatives() {
 		requireSimulation(check()) {
 			val sb = StringBuilder(Process.time().toString()).append(" : ")
-			val msg = report(sb as StringBuilder)
+			val msg = report(sb)
 			msg.toString()
 		}
 	}

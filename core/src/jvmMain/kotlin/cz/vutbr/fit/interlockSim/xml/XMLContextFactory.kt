@@ -345,14 +345,14 @@ class XMLContextFactory : JvmEditingContextFactory {
 				.map { arg ->
 					// Convert wrapper classes to primitive types for constructor lookup
 					when (arg.javaClass) {
-						java.lang.Boolean::class.java -> Boolean::class.javaPrimitiveType
-						java.lang.Integer::class.java -> Int::class.javaPrimitiveType
-						java.lang.Double::class.java -> Double::class.javaPrimitiveType
-						java.lang.Float::class.java -> Float::class.javaPrimitiveType
-						java.lang.Long::class.java -> Long::class.javaPrimitiveType
-						java.lang.Short::class.java -> Short::class.javaPrimitiveType
-						java.lang.Byte::class.java -> Byte::class.javaPrimitiveType
-						java.lang.Character::class.java -> Char::class.javaPrimitiveType
+						Boolean::class.javaObjectType -> Boolean::class.javaPrimitiveType
+						Int::class.javaObjectType -> Int::class.javaPrimitiveType
+						Double::class.javaObjectType -> Double::class.javaPrimitiveType
+						Float::class.javaObjectType -> Float::class.javaPrimitiveType
+						Long::class.javaObjectType -> Long::class.javaPrimitiveType
+						Short::class.javaObjectType -> Short::class.javaPrimitiveType
+						Byte::class.javaObjectType -> Byte::class.javaPrimitiveType
+						Char::class.javaObjectType -> Char::class.javaPrimitiveType
 						else -> arg.javaClass
 					}
 				}.toTypedArray()

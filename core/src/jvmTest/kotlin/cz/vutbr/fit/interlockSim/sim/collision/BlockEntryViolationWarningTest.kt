@@ -53,9 +53,7 @@ class BlockEntryViolationWarningTest : KoinTestBase() {
 	}
 
 	private fun singleTrainContext(): DefaultSimulationContext {
-		val ctx =
-			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-				as DefaultSimulationContext
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 		context = ctx
 		return ctx
 	}
