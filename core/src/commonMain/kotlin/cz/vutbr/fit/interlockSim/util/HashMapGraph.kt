@@ -65,8 +65,8 @@ class HashMapGraph<N, E, X> :
 			}
 
 			override fun remove() {
-				if (current == null) throw IllegalStateException()
-				this@HashMapGraph.removeAll(current!!)
+				val node = checkNotNull(current)
+				this@HashMapGraph.removeAll(node)
 				current = null
 			}
 

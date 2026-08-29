@@ -243,12 +243,10 @@ data class OllamaExecutorConfig(
 	 */
 	fun validateToolCapableModel() {
 		val toolIncapable = setOf("mistral", "llama2")
-		if (modelName in toolIncapable) {
-			throw IllegalArgumentException(
-				"Model '$modelName' does not support tool calling (function calling). " +
-					"Use version-specific tag like 'mistral:7b-instruct-v0.3' or " +
-					"'llama3.1:8b' per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md"
-			)
+		require(modelName !in toolIncapable) {
+			"Model '$modelName' does not support tool calling (function calling). " +
+				"Use version-specific tag like 'mistral:7b-instruct-v0.3' or " +
+				"'llama3.1:8b' per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md"
 		}
 	}
 

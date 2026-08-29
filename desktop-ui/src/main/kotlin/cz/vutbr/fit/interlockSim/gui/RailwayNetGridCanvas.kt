@@ -121,22 +121,34 @@ class RailwayNetGridCanvas :
 		}
 
 		@Suppress("EmptyFunctionBlock")
-		protected open fun middleMouseClicked(e: MouseEvent) {}
+		protected open fun middleMouseClicked(e: MouseEvent) {
+			// Optional hook: no mode binds the middle button, so the base dispatch does nothing.
+		}
 
 		@Suppress("EmptyFunctionBlock")
-		protected open fun leftMouseClicked(e: MouseEvent) {}
+		protected open fun leftMouseClicked(e: MouseEvent) {
+			// Optional hook: overridden by GridMouseEditListener; simulation mode ignores clicks.
+		}
 
 		@Suppress("EmptyFunctionBlock")
-		override fun mouseEntered(e: MouseEvent) {}
+		override fun mouseEntered(e: MouseEvent) {
+			// MouseListener member the canvas does not use: entering the canvas changes no state.
+		}
 
 		@Suppress("EmptyFunctionBlock")
-		override fun mouseExited(e: MouseEvent) {}
+		override fun mouseExited(e: MouseEvent) {
+			// MouseListener member the canvas does not use: leaving the canvas changes no state.
+		}
 
 		@Suppress("EmptyFunctionBlock")
-		override fun mousePressed(e: MouseEvent) {}
+		override fun mousePressed(e: MouseEvent) {
+			// MouseListener member the canvas does not use: it acts on the completed click only.
+		}
 
 		@Suppress("EmptyFunctionBlock")
-		override fun mouseReleased(e: MouseEvent) {}
+		override fun mouseReleased(e: MouseEvent) {
+			// MouseListener member the canvas does not use: mouseClicked() carries the button.
+		}
 	}
 
 	// Mouse event handler for editing mode - allows creation and connection of elements
@@ -570,7 +582,7 @@ class RailwayNetGridCanvas :
 
 	// Highlight the selected cell for connection
 	private fun paintMarkSelected(g: Graphics2D) {
-		val cell = context!!.getRailWayNetGrid().get(selectedKey!!)
+		val cell = context!!.getRailWayNetGrid()[selectedKey!!]
 		if (cell !is NodeCell) {
 			selectedKey = null
 			return

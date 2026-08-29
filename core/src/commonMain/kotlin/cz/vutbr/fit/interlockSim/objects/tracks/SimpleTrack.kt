@@ -48,8 +48,8 @@ abstract class SimpleTrack(
 	private val ends: Array<PathSeparator>
 
 	init {
-		if (length < MIN_TRACK_LENGTH || maxSpeed1 < MINIMAL_MAX_SPEED || maxSpeed2 < MINIMAL_MAX_SPEED) {
-			throw IllegalArgumentException("length or maxspeed is very small")
+		require(!(length < MIN_TRACK_LENGTH || maxSpeed1 < MINIMAL_MAX_SPEED || maxSpeed2 < MINIMAL_MAX_SPEED)) {
+			"length or maxspeed is very small"
 		}
 		ends = arrayOf(end1, end2)
 		speeds[end2] = maxSpeed2

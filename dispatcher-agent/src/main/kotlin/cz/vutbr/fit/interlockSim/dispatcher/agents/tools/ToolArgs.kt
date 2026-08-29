@@ -143,7 +143,7 @@ internal fun resolveTrainId(
 ): String? {
 	if (raw in known) return raw
 	val suffix = "#$raw"
-	return known.filter { it.endsWith(suffix) }.singleOrNull()
+	return known.singleOrNull { it.endsWith(suffix) }
 }
 
 /**

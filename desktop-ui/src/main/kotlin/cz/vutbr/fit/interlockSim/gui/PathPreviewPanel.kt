@@ -345,12 +345,10 @@ class PathPreviewPanel :
 			fromCombo.selectedIndex = 0
 		}
 
-		if (prevTo != null && inOuts.contains(prevTo)) {
-			toCombo.selectedItem = prevTo
-		} else if (inOuts.size > 1) {
-			toCombo.selectedIndex = 1
-		} else if (inOuts.isNotEmpty()) {
-			toCombo.selectedIndex = 0
+		when {
+			prevTo != null && inOuts.contains(prevTo) -> toCombo.selectedItem = prevTo
+			inOuts.size > 1 -> toCombo.selectedIndex = 1
+			inOuts.isNotEmpty() -> toCombo.selectedIndex = 0
 		}
 
 		// Clear stale results when topology changes

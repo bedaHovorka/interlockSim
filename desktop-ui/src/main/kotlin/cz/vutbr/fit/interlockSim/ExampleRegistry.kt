@@ -85,6 +85,12 @@ import java.util.concurrent.Semaphore
 class ExampleRegistry {
 	companion object {
 		private const val END_TIME_NOT_SPECIFIED = "End time of simulation not specified"
+
+		/** Classpath location of the built-in shunting-loop network shared by every example. */
+		private const val VYHYBNA_RESOURCE = "cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
+
+		/** Failure message when [VYHYBNA_RESOURCE] is missing from the classpath. */
+		private const val VYHYBNA_NOT_FOUND = "Resource file vyhybna.xml not found"
 	}
 
 	/**
@@ -176,9 +182,9 @@ class ExampleRegistry {
 		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -218,9 +224,9 @@ class ExampleRegistry {
 		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -336,9 +342,9 @@ class ExampleRegistry {
 		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -429,9 +435,9 @@ class ExampleRegistry {
 		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -484,9 +490,9 @@ class ExampleRegistry {
 		val endTime = requireEndTimeArg(args)
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -825,9 +831,9 @@ class ExampleRegistry {
 	): SimulationContext {
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -859,9 +865,9 @@ class ExampleRegistry {
 	): SimulationContext {
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -894,9 +900,9 @@ class ExampleRegistry {
 	): SimulationContext {
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()
@@ -922,9 +928,9 @@ class ExampleRegistry {
 	): SimulationContext {
 		val xml =
 			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				Resources.read(VYHYBNA_RESOURCE)
 			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
 			}
 		return xml
 			.byteInputStream()

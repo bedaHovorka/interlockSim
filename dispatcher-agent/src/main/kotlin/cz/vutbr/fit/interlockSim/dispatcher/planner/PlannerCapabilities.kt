@@ -96,13 +96,11 @@ fun assertPlannerPacingCompatible(
 	planner: DispatcherPlanner,
 	controller: SimulationController
 ) {
-	if (planner.capabilities.isAsynchronous && controller is NoOpSimulationController) {
-		throw IllegalStateException(
-			"Async dispatcher planner '${planner.capabilities.name}' requires a pacing " +
-				"SimulationController to enforce the " +
-				"${PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER}x speed cap (Issue #187), " +
-				"but $controller is a NoOpSimulationController. " +
-				"Wire a pacing controller (SimulationRunner via DelegatingSimulationController, SP4.2 #564)."
-		)
+	check(!planner.capabilities.isAsynchronous || controller !is NoOpSimulationController) {
+		"Async dispatcher planner '${planner.capabilities.name}' requires a pacing " +
+			"SimulationController to enforce the " +
+			"${PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER}x speed cap (Issue #187), " +
+			"but $controller is a NoOpSimulationController. " +
+			"Wire a pacing controller (SimulationRunner via DelegatingSimulationController, SP4.2 #564)."
 	}
 }

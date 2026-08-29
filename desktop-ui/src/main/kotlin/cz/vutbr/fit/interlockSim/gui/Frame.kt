@@ -331,7 +331,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Tracks modification state for unsaved changes warning.
 	 */
 	val modificationTracker: ModificationTracker =
-		ModificationTracker { isDirty ->
+		ModificationTracker { _ ->
 			updateTitle()
 		}
 

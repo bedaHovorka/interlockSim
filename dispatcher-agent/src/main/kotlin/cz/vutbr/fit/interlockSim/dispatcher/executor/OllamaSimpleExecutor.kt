@@ -156,10 +156,8 @@ class OllamaSimpleExecutor(
 	 * @throws Exception if model is not pulled on the Ollama instance
 	 */
 	fun getExecutor(): PromptExecutor {
-		if (closed) {
-			throw IllegalStateException(
-				"OllamaSimpleExecutor has been closed; getExecutor() must not be called after close()"
-			)
+		check(!closed) {
+			"OllamaSimpleExecutor has been closed; getExecutor() must not be called after close()"
 		}
 		return promptExecutor
 	}

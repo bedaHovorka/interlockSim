@@ -86,11 +86,9 @@ class DynamicRailSwitch(
 	 * @throws IllegalStateException if switch is locked (safety property SI-5)
 	 */
 	fun changeConf() {
-		if (locked) {
-			throw IllegalStateException(
-				"Cannot change switch configuration while locked " +
-					"(safety SI-5: switch cannot toggle during train movement)"
-			)
+		check(!locked) {
+			"Cannot change switch configuration while locked " +
+				"(safety SI-5: switch cannot toggle during train movement)"
 		}
 		val oldConf = conf
 		conf = if (conf == Conf.MAIN) Conf.BRANCH else Conf.MAIN
@@ -152,7 +150,7 @@ class DynamicRailSwitch(
 		if (from == null || to == null) {
 			throw PathSeparatorChangeException("switch segments cannot be null", this)
 		}
-		return staticRef.confs.get(from, to) ?: throw PathSeparatorChangeException(
+		return staticRef.confs[from, to] ?: throw PathSeparatorChangeException(
 			"switch doesn't join this segments",
 			this
 		)

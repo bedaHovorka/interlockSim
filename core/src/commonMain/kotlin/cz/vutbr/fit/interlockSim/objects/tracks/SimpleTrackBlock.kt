@@ -17,6 +17,15 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 
+/** Shared prefix of every Phase 1 (#100.2) stub message; see the class KDoc. */
+private const val PHASE_1_BEHAVIOR_REMOVED = "Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. "
+
+/** Stub message tail for the path-reservation methods. */
+private const val USE_WRAPPER_FOR_PATH_OPERATIONS = "Use DynamicTrack wrapper for path operations."
+
+/** Stub message tail for the occupancy methods. */
+private const val USE_WRAPPER_FOR_OCCUPANCY_OPERATIONS = "Use DynamicTrack wrapper for occupancy operations."
+
 /**
  * This is common track block with one section
  *
@@ -86,8 +95,7 @@ class SimpleTrackBlock :
 
 	override fun isFreeFrom(sep: DynamicPathSeparator): Boolean =
 		throw UnsupportedOperationException(
-			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-				"Use DynamicTrack wrapper for path operations."
+			PHASE_1_BEHAVIOR_REMOVED + USE_WRAPPER_FOR_PATH_OPERATIONS
 		)
 
 	override fun setUpPath(
@@ -95,38 +103,32 @@ class SimpleTrackBlock :
 		reservingTrainId: String
 	): Unit =
 		throw UnsupportedOperationException(
-			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-				"Use DynamicTrack wrapper for path operations."
+			PHASE_1_BEHAVIOR_REMOVED + USE_WRAPPER_FOR_PATH_OPERATIONS
 		)
 
 	override fun isSetUpPath(from: DynamicPathSeparator): Boolean =
 		throw UnsupportedOperationException(
-			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-				"Use DynamicTrack wrapper for path operations."
+			PHASE_1_BEHAVIOR_REMOVED + USE_WRAPPER_FOR_PATH_OPERATIONS
 		)
 
 	override fun cancelPathSetup(from: DynamicPathSeparator): Unit =
 		throw UnsupportedOperationException(
-			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-				"Use DynamicTrack wrapper for path operations."
+			PHASE_1_BEHAVIOR_REMOVED + USE_WRAPPER_FOR_PATH_OPERATIONS
 		)
 
 	override fun enter(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
-			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-				"Use DynamicTrack wrapper for occupancy operations."
+			PHASE_1_BEHAVIOR_REMOVED + USE_WRAPPER_FOR_OCCUPANCY_OPERATIONS
 		)
 
 	override fun leave(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
-			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-				"Use DynamicTrack wrapper for occupancy operations."
+			PHASE_1_BEHAVIOR_REMOVED + USE_WRAPPER_FOR_OCCUPANCY_OPERATIONS
 		)
 
 	override fun getTrackOccupant(): TrackOccupant =
 		throw UnsupportedOperationException(
-			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-				"Use DynamicTrack wrapper for occupancy operations."
+			PHASE_1_BEHAVIOR_REMOVED + USE_WRAPPER_FOR_OCCUPANCY_OPERATIONS
 		)
 
 	// Note: SimpleTrack.ends() returns Array<PathSeparator> which should be Array<NodeCell>

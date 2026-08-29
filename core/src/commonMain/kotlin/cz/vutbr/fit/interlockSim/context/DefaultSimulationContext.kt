@@ -1104,7 +1104,7 @@ open class DefaultSimulationContext(
 								is DynamicInOut -> cell.staticRef
 								is DynamicRailSemaphore -> cell.staticRef
 								is DynamicRailSwitch -> cell.staticRef
-								else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
+								else -> error("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
 							}
 						if (staticRef !in staticToDynamicMap) {
 							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y) - staticRef not mapped")

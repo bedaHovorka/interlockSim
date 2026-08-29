@@ -43,6 +43,9 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
+/** Failure message when a scoped definition is resolved outside a `DefaultSimulationContext` scope. */
+private const val NO_SIMULATION_CONTEXT_SOURCE = "DefaultSimulationContext source not found in scope"
+
 /**
  * Simulation core module (commonMain bindings only)
  *
@@ -161,7 +164,7 @@ val navigationModule: Module =
 			scoped<TopologyNavigator> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				DefaultTopologyNavigator(context)
 			}
 
@@ -172,7 +175,7 @@ val navigationModule: Module =
 			scoped<PathReservationRegistry> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				PathReservationRegistry(context)
 			}
 
@@ -181,7 +184,7 @@ val navigationModule: Module =
 			scoped<PathInfoBuilder> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				PathInfoBuilder(context)
 			}
 
@@ -190,7 +193,7 @@ val navigationModule: Module =
 			scoped<PathReservationService> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				val navigator: TopologyNavigator = get()
 				val registry: PathReservationRegistry = get()
 				val pathInfoBuilder: PathInfoBuilder = get()
@@ -203,7 +206,7 @@ val navigationModule: Module =
 			scoped<TrainNavigationService> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				val registry: PathReservationRegistry = get()
 				DefaultTrainNavigationService(context, registry)
 			}
@@ -227,7 +230,7 @@ val navigationModule: Module =
 			scoped<CollisionDetectionService> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				DefaultCollisionDetectionService(context, context)
 			}
 
@@ -237,7 +240,7 @@ val navigationModule: Module =
 			scoped<TemporalConflictDetector> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				TemporalConflictDetector(context)
 			}
 
@@ -250,7 +253,7 @@ val navigationModule: Module =
 			scoped<ConflictResolver> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				DefaultConflictResolver.forEnvironment(
 					context,
 					preferenceStore = get<StrategyPreferenceStore>()
@@ -280,7 +283,7 @@ val navigationModule: Module =
 			scoped<MetricsCollectionService> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				DefaultMetricsCollectionService(context)
 			}
 
@@ -292,7 +295,7 @@ val navigationModule: Module =
 			scoped<InterlockingFacade> {
 				val context =
 					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				val registry: PathReservationRegistry = get()
 				DefaultInterlockingFacade(context, registry)
 			}

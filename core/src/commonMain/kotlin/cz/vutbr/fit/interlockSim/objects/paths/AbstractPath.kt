@@ -233,31 +233,39 @@ abstract class AbstractPath protected constructor(
 		// getSegment() returns null when no segment exists (e.g., InOut.getFollowingSegment)
 		// The Java version did not check for nulls here
 
-		if (methodName == IS_SET_UP_PATH) {
-			// Java: return separator.getFollowingSegment(from) == to;
-			// NOTE: getFollowingSegment accepts nullable Segment, so no null check needed
-			return dynamicSeparator.getFollowingSegment(from) === to
-		} else if (methodName == CANCEL_PATH_SETUP) {
-			// Java: separator.cancelPathSetup(from, to);
-			dynamicSeparator.cancelPathSetup(from, to)
-			// Tier 1: Unlock switch after cancelling path setup
-			if (dynamicSeparator.isSwitch() && dynamicSeparator is DynamicRailSwitch) {
-				dynamicSeparator.unlock()
-				logger.debug { "Switch ${dynamicSeparator.hashCode()} unlocked after CANCEL_PATH_SETUP" }
+		when (methodName) {
+			IS_SET_UP_PATH -> {
+				// Java: return separator.getFollowingSegment(from) == to;
+				// NOTE: getFollowingSegment accepts nullable Segment, so no null check needed
+				return dynamicSeparator.getFollowingSegment(from) === to
 			}
-		} else if (methodName == SET_UP_PATH) {
-			val following = dynamicSeparator.getFollowingSegment(from)
-			logger.debug { "SET_UP_PATH: getFollowingSegment($from) returned $following, expected $to" }
-			requireSimulation(following === to) {
-				"Separator $dynamicSeparator: getFollowingSegment($from) returned $following but expected $to"
+
+			CANCEL_PATH_SETUP -> {
+				// Java: separator.cancelPathSetup(from, to);
+				dynamicSeparator.cancelPathSetup(from, to)
+				// Tier 1: Unlock switch after cancelling path setup
+				if (dynamicSeparator.isSwitch() && dynamicSeparator is DynamicRailSwitch) {
+					dynamicSeparator.unlock()
+					logger.debug { "Switch ${dynamicSeparator.hashCode()} unlocked after CANCEL_PATH_SETUP" }
+				}
 			}
-			// Note: Switch configuration is handled by PathReservationService.configureSwitchesInPath()
-			// See Issue #300 - AbstractPath iteration was causing incorrect switch configuration
-		} else if (methodName == IS_FREE_FROM) {
-			// Java: //EMPTY
-			// Intentionally empty - segments can be null, no action needed
-		} else {
-			throw IllegalArgumentException("wrong method name")
+
+			SET_UP_PATH -> {
+				val following = dynamicSeparator.getFollowingSegment(from)
+				logger.debug { "SET_UP_PATH: getFollowingSegment($from) returned $following, expected $to" }
+				requireSimulation(following === to) {
+					"Separator $dynamicSeparator: getFollowingSegment($from) returned $following but expected $to"
+				}
+				// Note: Switch configuration is handled by PathReservationService.configureSwitchesInPath()
+				// See Issue #300 - AbstractPath iteration was causing incorrect switch configuration
+			}
+
+			IS_FREE_FROM -> {
+				// Java: //EMPTY
+				// Intentionally empty - segments can be null, no action needed
+			}
+
+			else -> throw IllegalArgumentException("wrong method name")
 		}
 		return true
 	}
@@ -303,7 +311,7 @@ abstract class AbstractPath protected constructor(
 	}
 
 	protected fun getIterator(sep: PathSeparator): Iterator<PathElement> {
-		if (!isEnd(sep)) throw IllegalArgumentException("Is not end of abstrPath")
+		require(isEnd(sep)) { "Is not end of abstrPath" }
 		if (sep == getFirst()) return iterator()
 		requireSimulation(sep == getLast()) { "Separator must be either first or last" }
 		return descendingIterator()
@@ -312,7 +320,7 @@ abstract class AbstractPath protected constructor(
 	override fun equalsWithElements(path: Path): Boolean {
 		if (path === this) return true
 		if (size != path.size) return false
-		if (size == 0) return true
+		if (isEmpty()) return true
 
 		val thisIt = this.iterator()
 		val pathIt = path.iterator()

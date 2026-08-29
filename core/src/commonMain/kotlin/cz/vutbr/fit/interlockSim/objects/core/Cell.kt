@@ -153,32 +153,29 @@ fun segmentFor(
 	dx: Int,
 	dy: Int
 ): Cell.Segment? =
-	if (dx < 0) {
-		if (dy < 0) {
-			Cell.Segment.B
-		} else if (dy > 0) {
-			Cell.Segment.D
-		} else {
-			Cell.Segment.A
-		}
-	} else if (dx == 0) {
-		if (dy < 0) {
-			Cell.Segment.C
-		} else if (dy > 0) {
-			Cell.Segment.H
-		} else {
-			null
-		}
-	} else if (dx > 0) {
-		if (dy < 0) {
-			Cell.Segment.E
-		} else if (dy > 0) {
-			Cell.Segment.G
-		} else {
-			Cell.Segment.F
-		}
-	} else {
-		null
+	when {
+		dx < 0 ->
+			when {
+				dy < 0 -> Cell.Segment.B
+				dy > 0 -> Cell.Segment.D
+				else -> Cell.Segment.A
+			}
+
+		dx == 0 ->
+			when {
+				dy < 0 -> Cell.Segment.C
+				dy > 0 -> Cell.Segment.H
+				else -> null
+			}
+
+		dx > 0 ->
+			when {
+				dy < 0 -> Cell.Segment.E
+				dy > 0 -> Cell.Segment.G
+				else -> Cell.Segment.F
+			}
+
+		else -> null
 	}
 
 /**

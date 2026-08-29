@@ -189,9 +189,7 @@ inline fun requireValidArgument(
 	contract {
 		returns() implies value
 	}
-	if (!value) {
-		throw IllegalArgumentException(lazyMessage())
-	}
+	require(value) { lazyMessage() }
 }
 
 /**
@@ -210,7 +208,5 @@ inline fun requireValidState(
 	contract {
 		returns() implies value
 	}
-	if (!value) {
-		throw IllegalStateException(lazyMessage())
-	}
+	check(value) { lazyMessage() }
 }
