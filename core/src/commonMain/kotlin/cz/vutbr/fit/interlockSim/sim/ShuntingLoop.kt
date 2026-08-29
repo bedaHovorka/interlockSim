@@ -165,7 +165,28 @@ class ShuntingLoop(
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
 	private val unapprowedTrains: ArrayDeque<Train> = ArrayDeque()
-	private val approwedTrains: MutableList<Train> = mutableListOf()
+
+	/**
+	 * Trains admitted for dispatch, held as an immutable copy-on-write list (Issue #994).
+	 *
+	 * **Threading contract:** written only on the kDisco simulation thread, one whole-list
+	 * replacement at a time; read from any thread. `@Volatile` publishes each replacement, so a
+	 * reader always walks a frozen list and can never observe a half-applied mutation. That is what
+	 * makes [getApprovedTrains] safe for the off-kernel dispatcher driver thread this class starts
+	 * in [startAction] — before the copy-on-write conversion the getter copied the live mutable
+	 * list, so a concurrent admission or retirement could tear the copy (a `null` element, an
+	 * `IndexOutOfBoundsException` from the single-element fast path, or a
+	 * `ConcurrentModificationException`).
+	 *
+	 * A lock was deliberately not used: the sibling reader [MultiTrainLoop.getTrainSnapshot] can be
+	 * re-entered on the simulation thread from inside the collision-warning emit path, and the
+	 * non-reentrant `kotlinx.atomicfu.locks.SynchronizedObject` available in `commonMain` (see
+	 * [DispatcherModeState]) would deadlock there; both loops therefore use the same pattern.
+	 * `Collections.synchronizedList` and `CopyOnWriteArrayList` are JVM-only and are rejected by
+	 * the `commonMain` purity gate.
+	 */
+	@kotlin.concurrent.Volatile
+	private var approwedTrains: List<Train> = emptyList()
 	private val generator: InnerGenerator = InnerGenerator(context)
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
@@ -364,13 +385,12 @@ class ShuntingLoop(
 
 	override suspend fun iteration() {
 		// Prune terminated trains first so the snapshot reflects accurate approved-train counts.
-		val iter: MutableIterator<Train> = approwedTrains.iterator()
-		while (iter.hasNext()) {
-			val element: Train = iter.next()
-			if (element.terminated()) {
-				iter.remove()
-				trainsExitedCount++
-			}
+		// Copy-on-write: publish the survivors as one new list instead of removing in place,
+		// so an off-thread reader never walks a list that is being mutated (Issue #994).
+		val terminated: List<Train> = approwedTrains.filter { it.terminated() }
+		if (terminated.isNotEmpty()) {
+			approwedTrains = approwedTrains - terminated.toSet()
+			trainsExitedCount += terminated.size
 		}
 
 		// SP0.11: Publish a fresh snapshot and per-block observation data for the off-kernel
@@ -538,11 +558,15 @@ class ShuntingLoop(
 	 * [DefaultNetworkPerceptionPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]
 	 * to build [SimulationSnapshot.trainPositions].
 	 *
-	 * Must only be called on the kDisco simulation thread.
+	 * Safe to call from any thread: the returned list is the immutable copy-on-write snapshot
+	 * described on [approwedTrains], so it never changes under the caller. It may already be stale
+	 * by the time the caller reads it — the simulation thread publishes a replacement on every
+	 * admission and retirement.
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
+	 * @since Issue #994 — returns the published snapshot instead of copying a live mutable list
 	 */
-	override fun getApprovedTrains(): List<Train> = approwedTrains.toList()
+	override fun getApprovedTrains(): List<Train> = approwedTrains
 
 	/** Returns `true` while the simulation is active (between [startAction] and [interLoopSleep] end). */
 	fun isSimActive(): Boolean = simActive
@@ -585,7 +609,7 @@ class ShuntingLoop(
 			return
 		}
 		unapprowedTrains.remove(train)
-		approwedTrains.add(train)
+		approwedTrains = approwedTrains + train
 		activate(train)
 	}
 

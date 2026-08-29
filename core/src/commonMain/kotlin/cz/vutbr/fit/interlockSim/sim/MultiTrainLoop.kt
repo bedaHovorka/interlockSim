@@ -131,7 +131,26 @@ open class MultiTrainLoop(
 
 	private val pendingSpecs: ArrayDeque<TrainSpec> = ArrayDeque(trainSpecs.sortedBy { it.inTime })
 	private val unapprovedTrains: ArrayDeque<Train> = ArrayDeque()
-	private val approvedTrains: MutableList<Train> = mutableListOf()
+
+	/**
+	 * Trains admitted for dispatch, held as an immutable copy-on-write list (Issue #994).
+	 *
+	 * **Threading contract:** written only on the kDisco simulation thread, one whole-list
+	 * replacement at a time; read from any thread. `@Volatile` publishes each replacement, so a
+	 * reader always walks a frozen list and can never observe a half-applied mutation. This is what
+	 * makes [getApprovedTrains] and [getTrainSnapshot] safe off the simulation thread — before the
+	 * copy-on-write conversion both walked the live mutable list and could raise
+	 * `ConcurrentModificationException` (or read a nulled-out slot) out of the collision-detection
+	 * path while the simulation admitted or retired a train.
+	 *
+	 * A lock was deliberately not used: [getTrainSnapshot] can be re-entered on the simulation
+	 * thread itself from inside the collision-warning emit path, and the non-reentrant
+	 * `kotlinx.atomicfu.locks.SynchronizedObject` available in `commonMain` (see
+	 * [DispatcherModeState]) would deadlock there. `Collections.synchronizedList` and
+	 * `CopyOnWriteArrayList` are JVM-only and are rejected by the `commonMain` purity gate.
+	 */
+	@kotlin.concurrent.Volatile
+	private var approvedTrains: List<Train> = emptyList()
 	private val trainToSpec: MutableMap<Train, TrainSpec> = mutableMapOf()
 	private val generator: DeterministicGenerator = DeterministicGenerator(context)
 
@@ -239,27 +258,31 @@ open class MultiTrainLoop(
 	}
 
 	private fun cleanupTerminatedTrains() {
-		val iter = approvedTrains.iterator()
-		while (iter.hasNext()) {
-			val train = iter.next()
-			if (train.terminated()) {
-				iter.remove()
-				trainToSpec.remove(train)
-				trainsExitedCount++
-				logger.debug { "MultiTrainLoop: ${train.name} completed journey" }
-			}
+		val terminated = approvedTrains.filter { it.terminated() }
+		if (terminated.isEmpty()) {
+			return
+		}
+		// Copy-on-write: publish the survivors as one new list instead of removing in place,
+		// so an off-thread reader never walks a list that is being mutated (Issue #994).
+		approvedTrains = approvedTrains - terminated.toSet()
+		terminated.forEach { train ->
+			trainToSpec.remove(train)
+			trainsExitedCount++
+			logger.debug { "MultiTrainLoop: ${train.name} completed journey" }
 		}
 	}
 
 	private fun approveTrains() {
 		while (approvedTrains.size < maxConcurrentTrains && unapprovedTrains.isNotEmpty()) {
 			val train = unapprovedTrains.removeFirst()
-			approvedTrains.add(train)
+			approvedTrains = approvedTrains + train
 			logger.debug { "MultiTrainLoop: approved ${train.name} for dispatch" }
 		}
 	}
 
 	private suspend fun startApprovedTrains() {
+		// Iterate the published snapshot: the body suspends (reserveEntryPath, Process.activate),
+		// and approvedTrains may be replaced across those suspension points.
 		for (train in approvedTrains) {
 			if (trainHasActivePath(train)) {
 				continue
@@ -405,15 +428,22 @@ open class MultiTrainLoop(
 	fun getOccupiedResourceCount(): Int = blockResources.occupiedCount()
 
 	/**
-	 * Test-observability: snapshot of the currently approved trains.
+	 * Snapshot of the currently approved trains.
 	 *
 	 * Returns the trains that have been dispatched and are currently running (or finishing).
-	 * Intended for tests that need to inspect per-train invariants (e.g. animation
-	 * `trainEntrySeparator` consistency) during a running simulation. Read-only copy.
+	 * Used by tests that inspect per-train invariants (e.g. animation `trainEntrySeparator`
+	 * consistency) during a running simulation, and by the animation and dispatcher perception
+	 * ports.
+	 *
+	 * Safe to call from any thread: the returned list is the immutable copy-on-write snapshot
+	 * described on [approvedTrains], so it never changes under the caller. It may already be
+	 * stale by the time the caller reads it — the simulation thread publishes a replacement on
+	 * every admission and retirement.
 	 *
 	 * @since PR #633 — animation entrySeparator race regression test
+	 * @since Issue #994 — returns the published snapshot instead of copying a live mutable list
 	 */
-	override fun getApprovedTrains(): List<Train> = approvedTrains.toList()
+	override fun getApprovedTrains(): List<Train> = approvedTrains
 
 	/**
 	 * Return a [TrainSnapshot] for the approved train with the given [trainId], or `null`
@@ -424,10 +454,15 @@ open class MultiTrainLoop(
 	 * Register this method as the snapshot provider via
 	 * `collisionDetectionService.registerTrainSnapshotProvider(multiTrainLoop::getTrainSnapshot)`.
 	 *
+	 * Safe to call from any thread: the lookup walks the immutable copy-on-write snapshot
+	 * described on [approvedTrains]. The per-train values it reads (velocity, distance) are
+	 * still sampled while the simulation runs, so the snapshot is a point-in-time estimate.
+	 *
 	 * @param trainId The identifier of the queried train (matches [Train.name]).
 	 * @return A [TrainSnapshot] capturing the train's current velocity, position, and length;
 	 *   `null` when the train is not (yet) in [approvedTrains].
 	 * @since Issue #614 (Goal 3 SP4)
+	 * @since Issue #994 — reads the published snapshot instead of the live mutable list
 	 */
 	fun getTrainSnapshot(trainId: String): TrainSnapshot? =
 		approvedTrains.find { it.name == trainId }?.let { train ->
