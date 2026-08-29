@@ -122,7 +122,7 @@ class RailwayNetGridCanvas :
 
 		@Suppress("EmptyFunctionBlock")
 		protected open fun middleMouseClicked(e: MouseEvent) {
-			// Optional hook: no mode binds the middle button, so the base dispatch does nothing.
+			// Optional hook: editing mode overrides this to remove a cell; simulation mode ignores it.
 		}
 
 		@Suppress("EmptyFunctionBlock")
