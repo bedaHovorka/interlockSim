@@ -292,21 +292,24 @@ class HashMapGraph<N, E, X> :
 					entryNode: N
 				) {
 					if (node == entryNode && edge == entryEdge) {
-						requireValidState(getResult() == null) {
+						requireValidState(result == null) {
 							"Multiple extensional objects found for node $node and edge $edge"
 						}
-						setResult(key.getValue(node)!!)
+						result = key.getValue(node)!!
 					}
 				}
 			}
 		p.process()
-		return p.getResult()!!
+		return p.result!!
 	}
 
 	abstract inner class DoubletonEntrySetProcessor<T>(
 		private val map2: MutableMap<Doubleton<N, X>, E>
 	) {
-		private var result: T? = null
+		/**
+		 * Result collected while processing the entry set, or null if nothing matched yet.
+		 */
+		var result: T? = null
 
 		fun process() {
 			val entries = map2.entries
@@ -325,12 +328,6 @@ class HashMapGraph<N, E, X> :
 			entryEdge: E,
 			entryNode: N
 		)
-
-		fun getResult(): T? = result
-
-		fun setResult(result: T) {
-			this.result = result
-		}
 	}
 
 	override fun contains(

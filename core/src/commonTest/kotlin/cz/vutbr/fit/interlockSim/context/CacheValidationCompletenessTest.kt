@@ -61,8 +61,8 @@ class CacheValidationCompletenessTest : KoinComponent {
 			for (dynamicInOut in context.getInOuts()) {
 				val staticInOut = dynamicInOut.staticRef
 
-				val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
-				val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
+				val inSemaphore = context.toDynamic(staticInOut.inSemaphore)
+				val outSemaphore = context.toDynamic(staticInOut.outSemaphore)
 
 				assertThat(inSemaphore).isNotNull()
 				assertThat(outSemaphore).isNotNull()

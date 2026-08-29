@@ -311,7 +311,7 @@ open class DefaultEditingContext(
 		if (builtPath != null && builtPath.isNotEmpty()) {
 			val mapToAdd = builtPath
 			getGrid().putMap(mapToAdd)
-			getLinesKeys()[trackBlock] = mapToAdd.keys.toSet()
+			linesKeys[trackBlock] = mapToAdd.keys.toSet()
 			requireValidState(!getGraph().contains(key1, key2)) {
 				"Graph already contains edge between ($key1, $key2)"
 			}
@@ -551,7 +551,7 @@ open class DefaultEditingContext(
 		if (cell is NodeCell) {
 			grid.remove(key)
 			for (tl in getGraph().removeAll(key)) {
-				val set = getLinesKeys()[tl]
+				val set = linesKeys[tl]
 				if (set != null) grid.keySet().removeAll(set)
 			}
 			if (cell is InOut) inouts.remove(cell)
@@ -570,7 +570,7 @@ open class DefaultEditingContext(
 		checkNotFrozen("remove track block")
 		val grid = getGrid()
 		getGraph().remove(block)
-		grid.keySet().removeAll(getLinesKeys().remove(block) ?: emptySet())
+		grid.keySet().removeAll(linesKeys.remove(block) ?: emptySet())
 		firePropertyChange(
 			ContextChangeListener.TRACK_BLOCK_REMOVED,
 			null,

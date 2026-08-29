@@ -118,8 +118,8 @@ class DynamicWrapperIdentityTest : KoinComponent {
 		loadVyhybnaSimulationContext().use { context ->
 			for (dynamicInOut in context.getInOuts()) {
 				val staticInOut = dynamicInOut.staticRef
-				val inSemaphore = staticInOut.getInSemaphore()
-				val outSemaphore = staticInOut.getOutSemaphore()
+				val inSemaphore = staticInOut.inSemaphore
+				val outSemaphore = staticInOut.outSemaphore
 
 				val dynamicInSemaphore = context.toDynamic(inSemaphore)
 				val dynamicOutSemaphore = context.toDynamic(outSemaphore)

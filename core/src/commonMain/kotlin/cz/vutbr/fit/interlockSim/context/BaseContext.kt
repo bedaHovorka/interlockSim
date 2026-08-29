@@ -126,8 +126,9 @@ abstract class BaseContext<T : TrackBlock>(
 	/**
 	 * Maps track blocks to their line cell keys for removal tracking.
 	 * Used to efficiently remove intermediate TrackBlockPart cells when a TrackBlock is removed.
+	 * Protected to allow subclasses to manage line cell removal.
 	 */
-	private val linesKeys: MutableMap<T, Set<Point>> = HashMap()
+	protected val linesKeys: MutableMap<T, Set<Point>> = HashMap()
 
 	/**
 	 * List of entry/exit points in the railway network.
@@ -277,14 +278,6 @@ abstract class BaseContext<T : TrackBlock>(
 		val snapshot = listeners
 		snapshot.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
 	}
-
-	/**
-	 * Get the track block line keys mapping.
-	 * Protected to allow subclasses to manage line cell removal.
-	 *
-	 * @return map of track blocks to their intermediate cell keys
-	 */
-	protected fun getLinesKeys(): MutableMap<T, Set<Point>> = linesKeys
 
 	/**
 	 * Get the list of InOut elements (entry/exit points) in the railway network.

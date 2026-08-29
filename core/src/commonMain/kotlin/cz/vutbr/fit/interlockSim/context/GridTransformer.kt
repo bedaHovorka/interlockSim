@@ -117,11 +117,11 @@ object GridTransformer {
 			if (cell is InOut && dynamicCell is DynamicInOut) {
 				// Map InOut's semaphores to their Dynamic wrappers
 				// These semaphores might be used in paths before they're encountered as separate cells
-				if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) {
-					staticToDynamicMap[cell.getInSemaphore()] = dynamicCell.inSemaphore
+				if (!staticToDynamicMap.containsKey(cell.inSemaphore)) {
+					staticToDynamicMap[cell.inSemaphore] = dynamicCell.inSemaphore
 				}
-				if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) {
-					staticToDynamicMap[cell.getOutSemaphore()] = dynamicCell.outSemaphore
+				if (!staticToDynamicMap.containsKey(cell.outSemaphore)) {
+					staticToDynamicMap[cell.outSemaphore] = dynamicCell.outSemaphore
 				}
 			}
 		}
@@ -136,8 +136,8 @@ object GridTransformer {
 	 * @return DynamicInOut with initialized in/out semaphores
 	 */
 	private fun createDynamic(inOut: InOut): DynamicInOut {
-		val inSemaphore = createDynamicInstance(inOut.getInSemaphore())
-		val outSemaphore = createConstantInstance(inOut.getOutSemaphore(), Signal.FREE)
+		val inSemaphore = createDynamicInstance(inOut.inSemaphore)
+		val outSemaphore = createConstantInstance(inOut.outSemaphore, Signal.FREE)
 		return DynamicInOut(inOut, inSemaphore, outSemaphore)
 	}
 }

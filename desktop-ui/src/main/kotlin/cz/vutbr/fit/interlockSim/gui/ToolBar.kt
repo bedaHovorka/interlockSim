@@ -40,16 +40,16 @@ class ToolBar : JToolBar() {
 			toggleButton.addHierarchyListener {
 				if (toggleButton.isShowing) {
 					val canvas = getKoin().get<Frame>().railwayNetGridCanvas
-					toggleButton.isSelected = canvas.isShowGrid()
+					toggleButton.isSelected = canvas.showGrid
 				}
 			}
 		}
 
 		override fun actionPerformed(e: ActionEvent) {
 			val canvas = getKoin().get<Frame>().railwayNetGridCanvas
-			canvas.setShowGrid(!canvas.isShowGrid())
+			canvas.showGrid = !canvas.showGrid
 			canvas.repaint(100)
-			toggleButton.isSelected = canvas.isShowGrid()
+			toggleButton.isSelected = canvas.showGrid
 		}
 	}
 

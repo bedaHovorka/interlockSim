@@ -100,7 +100,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = emptyMap(),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the track block part
 		renderer.draw(graphics, trackBlockPart)
@@ -125,7 +125,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = emptyMap(),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the track block part
 		renderer.draw(graphics, trackBlockPart)
@@ -150,7 +150,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = emptyMap(),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the track block part
 		renderer.draw(graphics, trackBlockPart)
@@ -167,7 +167,7 @@ class AnimatedSimulationCellRendererTest {
 		val trackBlock = mockk<TrackBlock>()
 		val trackBlockPart = createMockTrackBlockPart(trackBlock)
 		val animationState = AnimationState.EMPTY // No track states
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the track block part
 		renderer.draw(graphics, trackBlockPart)
@@ -194,7 +194,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = mapOf(staticSemaphore to signalState),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -219,7 +219,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = mapOf(staticSemaphore to signalState),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -244,7 +244,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = mapOf(staticSemaphore to signalState),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -269,7 +269,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = mapOf(staticSemaphore to signalState),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -294,7 +294,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = mapOf(staticSemaphore to signalState),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -319,7 +319,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = mapOf(staticSemaphore to signalState),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -344,7 +344,7 @@ class AnimatedSimulationCellRendererTest {
 				signalStates = mapOf(staticSemaphore to signalState),
 				switchStates = emptyMap()
 			)
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -361,7 +361,7 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.STOP)
 		val animationState = AnimationState.EMPTY // No signal states
-		every { animationController.getCurrentState() } returns animationState
+		every { animationController.currentState } returns animationState
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -378,8 +378,8 @@ class AnimatedSimulationCellRendererTest {
 		val dynamicInOut =
 			DynamicInOut(
 				staticInOut,
-				createDynamicInstance(staticInOut.getInSemaphore()),
-				createDynamicInstance(staticInOut.getOutSemaphore())
+				createDynamicInstance(staticInOut.inSemaphore),
+				createDynamicInstance(staticInOut.outSemaphore)
 			)
 
 		renderer.draw(graphics, dynamicInOut)

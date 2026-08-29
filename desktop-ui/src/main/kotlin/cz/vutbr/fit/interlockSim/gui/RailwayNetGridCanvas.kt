@@ -258,17 +258,54 @@ class RailwayNetGridCanvas :
 	}
 
 	// Instance variables
-	private var showGrid: Boolean = false
+
+	/** Whether the helper grid is painted over the canvas. */
+	var showGrid: Boolean = false
 	private var context: Context<*, *>? = null
 	private val editListener = GridMouseEditListener()
 	private val simulationControlListener = GridMouseSimulationControlListener()
 	private var state = State.EDITING
-	private var toolbarCellClass: Class<out NodeCell>? = null
-	private var toolbarArgs: Array<Any?>? = null
+
+	/**
+	 * Internal test accessor for toolbar cell class.
+	 *
+	 * This accessor is intended for testing purposes only. It allows tests to verify
+	 * that [setNodeOnToolbar] correctly stores the toolbar state.
+	 *
+	 * The currently selected cell class for toolbar operations, or null if none selected.
+	 *
+	 * @see setNodeOnToolbar
+	 */
+	internal var toolbarCellClass: Class<out NodeCell>? = null
+		private set
+
+	/**
+	 * Internal test accessor for toolbar constructor arguments.
+	 *
+	 * This accessor is intended for testing purposes only. It allows tests to verify
+	 * that [setNodeOnToolbar] correctly stores the toolbar state.
+	 *
+	 * The constructor arguments for the selected cell class, or null if none selected.
+	 *
+	 * @see setNodeOnToolbar
+	 */
+	internal var toolbarArgs: Array<Any?>? = null
+		private set
+
 	private var selectedKey: GridPoint? = null
 
 	// Animation support (Issue #202)
-	private var animationController: AnimationController? = null
+
+	/**
+	 * The current animation controller if running (Issue #205), or null if not in simulation mode.
+	 *
+	 * Used by [cz.vutbr.fit.interlockSim.gui.Frame] to access animation state
+	 * for time display updates in [cz.vutbr.fit.interlockSim.gui.animation.ControlPanel].
+	 *
+	 * **Must be read from EDT.**
+	 */
+	var animationController: AnimationController? = null
+		private set
 	private var animatedRenderer: CellRenderer? = null
 
 	// Event timeline integration (Issue #205)
@@ -402,18 +439,6 @@ class RailwayNetGridCanvas :
 	fun setEventTimelinePanel(panel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel?) {
 		eventTimelinePanel = panel
 	}
-
-	/**
-	 * Get the current animation controller if running (Issue #205).
-	 *
-	 * Used by [cz.vutbr.fit.interlockSim.gui.Frame] to access animation state
-	 * for time display updates in [cz.vutbr.fit.interlockSim.gui.animation.ControlPanel].
-	 *
-	 * **Must be called from EDT.**
-	 *
-	 * @return The current animation controller, or null if not in simulation mode
-	 */
-	fun getAnimationController(): AnimationController? = animationController
 
 	// Change mouse listeners based on mode
 	private fun changeListeners(
@@ -867,13 +892,6 @@ class RailwayNetGridCanvas :
 		return ctx
 	}
 
-	// Grid display options
-	fun isShowGrid(): Boolean = showGrid
-
-	fun setShowGrid(b: Boolean) {
-		showGrid = b
-	}
-
 	// Toolbar management
 	fun setNodeOnToolbar(
 		cellClass: Class<out NodeCell>?,
@@ -882,28 +900,6 @@ class RailwayNetGridCanvas :
 		toolbarArgs = args
 		toolbarCellClass = cellClass
 	}
-
-	/**
-	 * Internal test accessor for toolbar cell class.
-	 *
-	 * This accessor is intended for testing purposes only. It allows tests to verify
-	 * that [setNodeOnToolbar] correctly stores the toolbar state.
-	 *
-	 * @return The currently selected cell class for toolbar operations, or null if none selected.
-	 * @see setNodeOnToolbar
-	 */
-	internal fun getToolbarCellClass(): Class<out NodeCell>? = toolbarCellClass
-
-	/**
-	 * Internal test accessor for toolbar constructor arguments.
-	 *
-	 * This accessor is intended for testing purposes only. It allows tests to verify
-	 * that [setNodeOnToolbar] correctly stores the toolbar state.
-	 *
-	 * @return The constructor arguments for the selected cell class, or null if none selected.
-	 * @see setNodeOnToolbar
-	 */
-	internal fun getToolbarArgs(): Array<Any?>? = toolbarArgs
 
 	// ContextPropertyChangeListener for context updates
 	override fun propertyChange(event: ContextChangeEvent) {

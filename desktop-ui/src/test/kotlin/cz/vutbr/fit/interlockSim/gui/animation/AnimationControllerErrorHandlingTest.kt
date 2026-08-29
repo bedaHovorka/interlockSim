@@ -90,16 +90,16 @@ class AnimationControllerErrorHandlingTest : KoinTestBase() {
 			// Start controller (calls captureAndUpdateState internally - Failure 1)
 			controller.start()
 			assertThat(isRunning(controller)).isTrue()
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(1)
+			assertThat(controller.consecutiveFailures).isEqualTo(1)
 
 			// Trigger state captures (simulate PropertyChangeEvents)
 			triggerStateCapture(controller) // Failure 2
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(2)
+			assertThat(controller.consecutiveFailures).isEqualTo(2)
 			assertThat(controller.isInErrorState()).isFalse()
 			assertThat(isRunning(controller)).isTrue()
 
 			triggerStateCapture(controller) // Success
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(0) // Reset
+			assertThat(controller.consecutiveFailures).isEqualTo(0) // Reset
 			assertThat(controller.isInErrorState()).isFalse()
 			assertThat(isRunning(controller)).isTrue()
 
@@ -129,18 +129,18 @@ class AnimationControllerErrorHandlingTest : KoinTestBase() {
 			// Start controller (calls captureAndUpdateState internally - Failure 1)
 			controller.start()
 			assertThat(isRunning(controller)).isTrue()
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(1)
+			assertThat(controller.consecutiveFailures).isEqualTo(1)
 			val timer = getRepaintTimer(controller)
 			assertThat(timer.isRunning).isTrue()
 
 			// Trigger state captures (simulate PropertyChangeEvents)
 			triggerStateCapture(controller) // Failure 2
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(2)
+			assertThat(controller.consecutiveFailures).isEqualTo(2)
 			assertThat(controller.isInErrorState()).isFalse()
 			assertThat(timer.isRunning).isTrue()
 
 			triggerStateCapture(controller) // Failure 3 - circuit breaker trips
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(3)
+			assertThat(controller.consecutiveFailures).isEqualTo(3)
 			assertThat(controller.isInErrorState()).isTrue()
 			assertThat(timer.isRunning).isFalse() // Timer stopped by circuit breaker
 
@@ -171,10 +171,10 @@ class AnimationControllerErrorHandlingTest : KoinTestBase() {
 
 			// Start controller and trigger circuit breaker (1 call in start + 2 triggers = 3 failures)
 			controller.start()
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(1)
+			assertThat(controller.consecutiveFailures).isEqualTo(1)
 			repeat(2) { triggerStateCapture(controller) }
 			assertThat(controller.isInErrorState()).isTrue()
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(3)
+			assertThat(controller.consecutiveFailures).isEqualTo(3)
 
 			// Stop controller
 			controller.stop()
@@ -193,7 +193,7 @@ class AnimationControllerErrorHandlingTest : KoinTestBase() {
 
 			// Verify error state is reset
 			assertThat(controller.isInErrorState()).isFalse()
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(0)
+			assertThat(controller.consecutiveFailures).isEqualTo(0)
 			assertThat(isRunning(controller)).isTrue()
 
 			// Clean up

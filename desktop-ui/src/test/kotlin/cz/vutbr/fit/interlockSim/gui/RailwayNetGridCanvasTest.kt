@@ -226,7 +226,7 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			assertThat(canvas.autoscrolls).isEqualTo(true)
 
 			// Verify grid is initially hidden
-			assertThat(canvas.isShowGrid()).isEqualTo(false)
+			assertThat(canvas.showGrid).isEqualTo(false)
 		}
 	}
 
@@ -254,15 +254,15 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 	fun toggleGridVisibility() {
 		runOnEDT {
 			// Initially hidden
-			assertThat(canvas.isShowGrid()).isEqualTo(false)
+			assertThat(canvas.showGrid).isEqualTo(false)
 
 			// Show grid
-			canvas.setShowGrid(true)
-			assertThat(canvas.isShowGrid()).isEqualTo(true)
+			canvas.showGrid = true
+			assertThat(canvas.showGrid).isEqualTo(true)
 
 			// Hide grid
-			canvas.setShowGrid(false)
-			assertThat(canvas.isShowGrid()).isEqualTo(false)
+			canvas.showGrid = false
+			assertThat(canvas.showGrid).isEqualTo(false)
 		}
 	}
 
@@ -272,8 +272,8 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 	fun setNodeOnToolbarStoresToolbarState() {
 		runOnEDT {
 			// Given: Initial state should be null
-			assertThat(canvas.getToolbarCellClass()).isEqualTo(null)
-			assertThat(canvas.getToolbarArgs()).isEqualTo(null)
+			assertThat(canvas.toolbarCellClass).isEqualTo(null)
+			assertThat(canvas.toolbarArgs).isEqualTo(null)
 
 			// When: Setting toolbar node with specific class and arguments
 			val expectedClass = InOut::class.java
@@ -281,11 +281,11 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas.setNodeOnToolbar(expectedClass, expectedArgs)
 
 			// Then: Toolbar state should be stored correctly
-			assertThat(canvas.getToolbarCellClass()).isEqualTo(expectedClass)
-			assertThat(canvas.getToolbarArgs()).isNotNull()
-			assertThat(canvas.getToolbarArgs()!!.size).isEqualTo(2)
-			assertThat(canvas.getToolbarArgs()!![0]).isEqualTo("testArg1")
-			assertThat(canvas.getToolbarArgs()!![1]).isEqualTo("testArg2")
+			assertThat(canvas.toolbarCellClass).isEqualTo(expectedClass)
+			assertThat(canvas.toolbarArgs).isNotNull()
+			assertThat(canvas.toolbarArgs!!.size).isEqualTo(2)
+			assertThat(canvas.toolbarArgs!![0]).isEqualTo("testArg1")
+			assertThat(canvas.toolbarArgs!![1]).isEqualTo("testArg2")
 		}
 	}
 
@@ -296,14 +296,14 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Given: Toolbar has been set
 			canvas.setNodeOnToolbar(InOut::class.java, arrayOf("test"))
-			assertThat(canvas.getToolbarCellClass()).isNotNull()
+			assertThat(canvas.toolbarCellClass).isNotNull()
 
 			// When: Clearing toolbar by setting null
 			canvas.setNodeOnToolbar(null, null)
 
 			// Then: Toolbar state should be null
-			assertThat(canvas.getToolbarCellClass()).isEqualTo(null)
-			assertThat(canvas.getToolbarArgs()).isEqualTo(null)
+			assertThat(canvas.toolbarCellClass).isEqualTo(null)
+			assertThat(canvas.toolbarArgs).isEqualTo(null)
 		}
 	}
 
@@ -314,7 +314,7 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Given: Toolbar set with InOut
 			canvas.setNodeOnToolbar(InOut::class.java, arrayOf("initial"))
-			assertThat(canvas.getToolbarCellClass()).isEqualTo(InOut::class.java)
+			assertThat(canvas.toolbarCellClass).isEqualTo(InOut::class.java)
 
 			// When: Replacing with RailSemaphore
 			val newClass = cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore::class.java
@@ -322,11 +322,11 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas.setNodeOnToolbar(newClass, newArgs)
 
 			// Then: Toolbar state should be updated
-			assertThat(canvas.getToolbarCellClass()).isEqualTo(newClass)
-			assertThat(canvas.getToolbarArgs()).isNotNull()
-			assertThat(canvas.getToolbarArgs()!!.size).isEqualTo(2)
-			assertThat(canvas.getToolbarArgs()!![0]).isEqualTo(true)
-			assertThat(canvas.getToolbarArgs()!![1]).isEqualTo(SpatialType.HORIZONTAL)
+			assertThat(canvas.toolbarCellClass).isEqualTo(newClass)
+			assertThat(canvas.toolbarArgs).isNotNull()
+			assertThat(canvas.toolbarArgs!!.size).isEqualTo(2)
+			assertThat(canvas.toolbarArgs!![0]).isEqualTo(true)
+			assertThat(canvas.toolbarArgs!![1]).isEqualTo(SpatialType.HORIZONTAL)
 		}
 	}
 

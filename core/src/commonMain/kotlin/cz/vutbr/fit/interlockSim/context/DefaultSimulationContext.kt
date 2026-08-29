@@ -465,9 +465,9 @@ open class DefaultSimulationContext(
 					if (inout is InOut && dynamicInOut is DynamicInOut) {
 						logger.debug {
 							"GridTransformer mapped InOut ${inout.getName()}: " +
-								"inSem@${platformIdentityCode(inout.getInSemaphore())} -> " +
+								"inSem@${platformIdentityCode(inout.inSemaphore)} -> " +
 								"${platformIdentityCode(dynamicInOut.inSemaphore)}, " +
-								"outSem@${platformIdentityCode(inout.getOutSemaphore())} -> " +
+								"outSem@${platformIdentityCode(inout.outSemaphore)} -> " +
 								"${platformIdentityCode(dynamicInOut.outSemaphore)}"
 						}
 					}
@@ -953,11 +953,11 @@ open class DefaultSimulationContext(
 						// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
 						// These semaphores might be used in paths before they're encountered as separate cells
 						// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
-						if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) {
-							staticToDynamicMap[cell.getInSemaphore()] = dynamic.inSemaphore
+						if (!staticToDynamicMap.containsKey(cell.inSemaphore)) {
+							staticToDynamicMap[cell.inSemaphore] = dynamic.inSemaphore
 						}
-						if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) {
-							staticToDynamicMap[cell.getOutSemaphore()] = dynamic.outSemaphore
+						if (!staticToDynamicMap.containsKey(cell.outSemaphore)) {
+							staticToDynamicMap[cell.outSemaphore] = dynamic.outSemaphore
 						}
 						// Also add to dynamicInOuts list if it doesn't exist yet
 						if (dynamicInOuts == null) {
@@ -1470,8 +1470,8 @@ open class DefaultSimulationContext(
 	}
 
 	private fun createDynamic(i: InOut): DynamicInOut {
-		val inSemaphore = createDynamicInstance(i.getInSemaphore())
-		val outSemaphore = createConstantInstance(i.getOutSemaphore(), Signal.FREE)
+		val inSemaphore = createDynamicInstance(i.inSemaphore)
+		val outSemaphore = createConstantInstance(i.outSemaphore, Signal.FREE)
 		return DynamicInOut(i, inSemaphore, outSemaphore)
 	}
 

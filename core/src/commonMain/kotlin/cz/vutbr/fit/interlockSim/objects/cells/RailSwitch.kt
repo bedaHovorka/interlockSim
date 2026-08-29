@@ -81,21 +81,21 @@ class RailSwitch : NodeCell {
 		 */
 		SIMPLE_LEFT_TRUE(true);
 
-		private val mergingPosition: Boolean
-		private val kind: Kind
+		/**
+		 * Merging position (by simple kind).
+		 */
+		val mergingPosition: Boolean
+
+		/**
+		 * Kind of this switch configuration.
+		 */
+		val kind: Kind
 
 		init {
 			// constructor only for simple kinds
 			this.mergingPosition = mergingOrientation
 			this.kind = Kind.SIMPLE
 		}
-
-		/**
-		 * @return merging position (by simple kind)
-		 */
-		fun getMergingPosition(): Boolean = mergingPosition
-
-		fun getKind(): Kind = kind
 	}
 
 	val speeds: HashMap<Conf, Double> = HashMap()
@@ -258,11 +258,11 @@ private object SwitchTables {
 		putBranches(Type.SIMPLE_RIGHT_TRUE, Cell.SpatialType.VERTICAL, Cell.Segment.E)
 
 		for (t in Type.entries) {
-			if (t.getKind() == RailSwitch.Kind.SIMPLE) {
+			if (t.kind == RailSwitch.Kind.SIMPLE) {
 				for (st in SUPPORTED_SIMPLE_SPATIAL_TYPES) {
 					val confs = EnumUnorientedGraph<Cell.Segment, RailSwitch.Conf>()
 					// the merging segment is in the anti-direction
-					val merging = st.segments[if (t.getMergingPosition()) 0 else 1]
+					val merging = st.segments[if (t.mergingPosition) 0 else 1]
 					val mainDir = anti(merging)
 					val set = branches.get(t, st)
 					requireSimulation(set!!.size == 1) { "Branch set must have exactly 1 element: $set" }

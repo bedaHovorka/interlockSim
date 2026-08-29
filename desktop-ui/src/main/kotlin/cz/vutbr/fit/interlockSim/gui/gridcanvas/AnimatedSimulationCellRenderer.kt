@@ -60,7 +60,7 @@ private val logger = KotlinLogging.logger {}
  * 1. AnimationController captures state from SimulationContext (kDisco thread)
  * 2. State marshaled to EDT via SwingUtilities.invokeLater
  * 3. Swing Timer triggers repaint() at 30 FPS (on EDT)
- * 4. This renderer queries AnimationController.getCurrentState() (on EDT)
+ * 4. This renderer queries AnimationController.currentState (on EDT)
  * 5. Color set via Graphics2D.color based on state
  * 6. Parent renderer draws geometry with the set color
  * ```
@@ -68,7 +68,7 @@ private val logger = KotlinLogging.logger {}
  * ## Thread Safety
  *
  * All state reads happen on Swing EDT:
- * - [AnimationController.getCurrentState] is EDT-confined
+ * - [AnimationController.currentState] is EDT-confined
  * - Graphics2D operations are inherently EDT-only
  * - No synchronization needed (single-threaded rendering)
  *
@@ -125,7 +125,7 @@ class AnimatedSimulationCellRenderer(
 		g: Graphics2D,
 		cell: TrackBlockPart
 	) {
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 		val trackBlock = cell.getTrackBlock()
 		val trackState = state.trackStates[trackBlock]
 
@@ -156,7 +156,7 @@ class AnimatedSimulationCellRenderer(
 		g: Graphics2D,
 		cell: DynamicRailSemaphore
 	) {
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 		val staticSemaphore = cell.staticRef
 		val signalState = state.signalStates[staticSemaphore]
 
@@ -223,7 +223,7 @@ class AnimatedSimulationCellRenderer(
 		g: Graphics2D,
 		cell: DynamicRailSwitch
 	) {
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 		val staticSwitch = cell.staticRef
 		val capturedState = state.switchStates[staticSwitch]
 
@@ -412,7 +412,7 @@ class AnimatedSimulationCellRenderer(
 		cellWidth: Int,
 		cellHeight: Int
 	) {
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 		headingResolver.retainTrains(state.trainStates.keys)
 
 		// Render each train

@@ -103,14 +103,18 @@ class AnimationController(
 	 *
 	 * **Threading Model:**
 	 * - **Written on:** EDT only (via updateState called from SwingUtilities.invokeLater)
-	 * - **Read on:** EDT only (via getCurrentState during rendering and time display)
+	 * - **Read on:** EDT only (during rendering and time display)
 	 * - **Thread-safety:** EDT-confined (strict single-threaded access)
+	 *
+	 * **Must be read from EDT** (rendering or timer callbacks).
+	 * Accessing from non-EDT threads would violate EDT-confinement guarantee.
 	 *
 	 * **Rationale for no @Volatile:**
 	 * All access is EDT-confined (writes marshaled via invokeLater, reads during EDT paint/timer).
 	 * No concurrent access occurs, so volatile memory barrier is unnecessary.
 	 */
-	private var currentState: AnimationState = AnimationState.EMPTY
+	var currentState: AnimationState = AnimationState.EMPTY
+		private set
 
 	/**
 	 * Swing timer for periodic canvas repainting.
@@ -150,8 +154,11 @@ class AnimationController(
 	/**
 	 * Circuit breaker for state capture failures.
 	 * Tracks consecutive failures to detect persistent vs transient issues.
+	 *
+	 * Number of consecutive state capture failures (testing support).
 	 */
-	private var consecutiveFailures: Int = 0
+	internal var consecutiveFailures: Int = 0
+		private set
 
 	/**
 	 * Whether animation is in error state (stopped due to persistent failures).
@@ -159,26 +166,10 @@ class AnimationController(
 	private var isInErrorState: Boolean = false
 
 	/**
-	 * Get current animation state.
-	 *
-	 * **Must be called from EDT** (rendering or timer callbacks).
-	 * Accessing from non-EDT threads would violate EDT-confinement guarantee.
-	 *
-	 * @return Current immutable animation state
-	 */
-	fun getCurrentState(): AnimationState = currentState
-
-	/**
 	 * Check if animation is in error state (testing support).
 	 * @return true if animation is stopped due to persistent failures
 	 */
 	internal fun isInErrorState(): Boolean = isInErrorState
-
-	/**
-	 * Get consecutive failure count (testing support).
-	 * @return Number of consecutive state capture failures
-	 */
-	internal fun getConsecutiveFailures(): Int = consecutiveFailures
 
 	/**
 	 * Start animation controller.
