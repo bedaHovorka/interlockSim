@@ -492,7 +492,7 @@ tasks.jacocoTestCoverageVerification {
 // isSkipProject = true tells the scanner to ignore this subproject's own
 // contribution — the root aggregator config points sonar.sources directly
 // to desktop-ui/src/... and collects all coverage from there.
-sonarqube {
+sonar {
     isSkipProject = true
 }
 

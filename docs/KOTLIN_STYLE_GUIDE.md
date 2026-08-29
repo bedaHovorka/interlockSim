@@ -2136,19 +2136,29 @@ docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar ...
 
 SonarQube integration provides: code smells, security vulnerabilities, coverage (JaCoCo), duplication, complexity metrics, technical debt.
 
-**Configuration files:**
-- `build.gradle.kts` - SonarQube plugin and JaCoCo configuration (primary)
-- `sonar-project.properties` - Additional SonarQube settings (optional)
+**Configuration files** (there is no `sonar-project.properties`; it was deleted 2026-08-29
+because the Gradle plugin never read it and it had drifted out of sync):
+- `build.gradle.kts` - SonarQube plugin, the `sonar {}` block and JaCoCo configuration (primary)
+- `dispatcher-agent/build.gradle.kts` - the one module with its own `sonar {}` block (Issue #762)
 - `.github/workflows/sonarqube.yml` - CI/CD integration for automated analysis
 
 ### Running SonarQube Analysis
 
-**SonarCloud (recommended):** Sign up at https://sonarcloud.io, generate token, run:
+`./gradlew sonar` is the only supported way to analyze this project. Do not run the
+`sonar-scanner` CLI at the repository root — there is no properties file for it, and it would
+push a wrong-config analysis to the real project key.
+
+**SonarCloud:** the host URL (`https://sonarcloud.io`) and organization (`bedahovorka`) are
+defaults in the root `sonar {}` block, so a local run needs only a token:
 ```bash
-./gradlew clean test jacocoTestReport sonar \
-  -Dsonar.host.url=https://sonarcloud.io \
-  -Dsonar.organization=<your-org> \
-  -Dsonar.token=<your-token>
+SONAR_TOKEN=<your-token> ./gradlew clean test jacocoTestReport sonar
+```
+Override either default with `-Dsonar.host.url=…` / `-Dsonar.organization=…`; system properties
+win over the build script.
+
+**Inspect the computed properties without contacting the server** (no token needed):
+```bash
+./gradlew sonar -Dsonar.scanner.internal.dumpToFile=$PWD/build/sonar-dump.properties
 ```
 
 **Local server:** `docker run -d -p 9000:9000 sonarqube:lts-community`, then use `-Dsonar.host.url=http://localhost:9000`

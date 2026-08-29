@@ -101,12 +101,17 @@ sonar {
         property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
         property("sonar.projectVersion", version.toString())
 
+        // Server coordinates. Neither value is a secret, so a local run needs only a token:
+        //   SONAR_TOKEN=… ./gradlew sonar
+        // CI still overrides these with -Dsonar.* system properties, which win over the extension.
+        property("sonar.host.url", providers.gradleProperty("sonar.host.url").orElse("https://sonarcloud.io").get())
+        property("sonar.organization", providers.gradleProperty("sonar.organization").orElse("bedahovorka").get())
+
         // Source and test paths (desktop-ui + :core KMP subproject).
         // :dispatcher-agent sources/tests are configured in dispatcher-agent/build.gradle.kts
         // via its own sonar {} block to avoid double-indexing (SonarQube Gradle plugin v6
         // auto-detects JVM subproject source sets; listing them here AND in the subproject
         // causes "can't be indexed twice" errors — Issue #762).
-        // Kept in sync with sonar-project.properties (used for local sonar-scanner runs).
         property(
             "sonar.sources",
             "desktop-ui/src/main/kotlin,core/src/commonMain/kotlin," +
@@ -121,7 +126,6 @@ sonar {
 
         property("sonar.java.source", javaVersion)
         property("sonar.java.target", javaVersion)
-        property("sonar.language", "java,kotlin")
         property("sonar.kotlin.source.version", kotlinVersion)
 
         property(

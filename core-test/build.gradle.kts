@@ -129,8 +129,8 @@ dependencies {
 }
 
 // Suppress automatic SonarQube sub-module detection for :core-test.
-// Requires the sonarqube plugin applied at root (build.gradle.kts) via id("org.sonarqube").
+// Requires the org.sonarqube plugin applied at root (build.gradle.kts) via id("org.sonarqube").
 // Test support code is excluded from coverage requirements via root sonar.coverage.exclusions = "core-test/**".
-sonarqube {
+sonar {
 	isSkipProject = true
 }
