@@ -359,6 +359,14 @@ dependencies {
     detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
 }
 
+// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
+// resolves a relative coverage path against THIS module's base directory.
+val aggregatedCoverageReport: String =
+    rootProject.layout.buildDirectory
+        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
+        .get()
+        .asFile.absolutePath
+
 // ===========================================
 // SonarQube per-module configuration
 // ===========================================
@@ -385,7 +393,10 @@ sonar {
         )
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
-            "build/reports/jacoco/test/jacocoTestReport.xml",
+            listOf(
+                file("build/reports/jacoco/test/jacocoTestReport.xml").absolutePath,
+                aggregatedCoverageReport,
+            ).joinToString(","),
         )
     }
 }

@@ -144,15 +144,31 @@ sonar {
     }
 }
 
+// CI reuses the compiled classes, test results and coverage reports that the build
+// workflow already produced, so it must not re-run any of that. It used to cancel the
+// dependencies with nine -x flags in sonarqube.yml — a second copy of the module layout
+// that had to be kept in step with this list by hand (issue #699). One flag replaces them:
+//
+//     ./gradlew sonar -PsonarReuseOutputs=true
+//
+// The value is read, not just its presence: a bare -PsonarReuseOutputs would set an empty
+// string, which is invisible in a build log. getOrElse("false").toBoolean() also fails
+// safe — a typo makes the tasks run, which is slower but never a silently empty analysis.
+val sonarReuseOutputs = providers.gradleProperty("sonarReuseOutputs").getOrElse("false").toBoolean()
+
 tasks.named("sonar") {
-    dependsOn(
-        ":desktop-ui:test", ":desktop-ui:integrationTest", ":desktop-ui:jacocoTestReport",
-        ":core:jvmTest", ":core:integrationTest", ":core:jacocoTestReport",
-        ":dispatcher-agent:test", ":dispatcher-agent:integrationTest", ":dispatcher-agent:jacocoTestReport",
-        // Writes :core's jvm compile classpath for the Kotlin analyzer. Cheap, and it must run
-        // even when the test tasks are skipped, so CI's -x flags never drop it.
-        ":core:sonarJavaLibraries",
-    )
+    // Always: writes :core's jvm compile classpath for the Kotlin analyzer. It is cheap and
+    // CI cannot supply it from the artifact, so reuse must never drop it.
+    dependsOn(":core:sonarJavaLibraries")
+
+    if (!sonarReuseOutputs) {
+        dependsOn(
+            ":desktop-ui:test", ":desktop-ui:integrationTest", ":desktop-ui:jacocoTestReport",
+            ":core:jvmTest", ":core:integrationTest", ":core:jacocoTestReport",
+            ":dispatcher-agent:test", ":dispatcher-agent:integrationTest", ":dispatcher-agent:jacocoTestReport",
+            "jacocoAggregatedReport",
+        )
+    }
 }
 
 // ===========================================

@@ -485,6 +485,14 @@ tasks.jacocoTestCoverageVerification {
 // SonarQube — skip (root handles it)
 // ===========================================
 
+// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
+// resolves a relative coverage path against THIS module's base directory.
+val aggregatedCoverageReport: String =
+    rootProject.layout.buildDirectory
+        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
+        .get()
+        .asFile.absolutePath
+
 // The org.sonarqube plugin is NOT declared in this subproject's plugins {} block. The root
 // project applies it and the plugin propagates its extension to every subproject, so the
 // sonar {} DSL is available here without an explicit apply.
@@ -499,7 +507,10 @@ sonar {
         )
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
-            "build/reports/jacoco/test/jacocoTestReport.xml",
+            listOf(
+                file("build/reports/jacoco/test/jacocoTestReport.xml").absolutePath,
+                aggregatedCoverageReport,
+            ).joinToString(","),
         )
         // Swing widgets with no headless test path. Paths are module-relative.
         property(

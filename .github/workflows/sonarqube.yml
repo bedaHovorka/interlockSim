@@ -28,7 +28,7 @@ jobs:
   sonarqube:
     name: SonarQube Code Analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35  # a workflow_dispatch run builds and tests everything itself
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
@@ -66,7 +66,11 @@ jobs:
     - name: Make Gradle wrapper executable
       run: chmod +x gradlew
 
+    # A workflow_dispatch run has no triggering workflow_run, so there is no artifact to
+    # download (the name would resolve to "sonar-inputs-" with an empty run-id). Such a run
+    # builds and tests everything itself instead — that is what the reuse flag below buys.
     - name: Download build/test outputs from gradle-java21.yml
+      if: github.event_name == 'workflow_run'
       uses: actions/download-artifact@v4
       with:
         name: sonar-inputs-${{ github.event.workflow_run.head_sha }}
@@ -74,24 +78,45 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         path: .
 
-    - name: Generate coverage report summary
-      if: always()
+    # With -PsonarReuseOutputs=true Gradle no longer re-runs the tests, so a partial or
+    # failed artifact download would produce a SUCCESSFUL analysis with missing coverage
+    # instead of an error. That is the failure mode behind PR #945's 71.6 % surprise, so
+    # fail loudly here rather than publish a wrong number.
+    - name: Verify reused Sonar inputs
+      if: github.event_name == 'workflow_run'
       run: |
-        if [ -f desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml ]; then
-          echo "## Code Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "JaCoCo coverage data reused from gradle-java21.yml (no re-run of tests)" >> $GITHUB_STEP_SUMMARY
+        # Patterns again, no module names: whatever the build produced must have arrived
+        # non-empty, and the cross-module aggregate must be there.
+        found=0
+        bad=0
+        for f in */build/reports/jacoco/*/jacocoTestReport.xml; do
+          [ -e "$f" ] || continue
+          found=$((found + 1))
+          if [ ! -s "$f" ]; then
+            echo "::error::empty JaCoCo report in the reused artifact: $f"
+            bad=1
+          fi
+        done
+        if [ "$found" -eq 0 ]; then
+          echo "::error::the reused artifact contains no per-module JaCoCo report"
+          bad=1
         fi
+        if [ ! -s build/reports/jacoco/aggregated/jacocoTestReport.xml ]; then
+          echo "::error::the cross-module aggregated JaCoCo report is missing or empty"
+          bad=1
+        fi
+        [ "$bad" -eq 0 ] || exit 1
+        echo "Reused Sonar inputs present: $found per-module reports plus the aggregate"
 
     # SonarCloud Analysis (for public repositories)
     # Requires the SONAR_TOKEN secret configured in GitHub (host URL and organization
     # are defaults in the root sonar {} block of build.gradle.kts, not secrets)
     # If secrets are not configured, this step will skip gracefully
     #
-    # Reuses gradle-java21.yml's compiled classes/test-results/jacoco XML (downloaded above)
-    # instead of rebuilding and retesting — the :desktop-ui:test, :desktop-ui:integrationTest,
-    # :desktop-ui:jacocoTestReport, :core:jvmTest, :core:integrationTest and
-    # :core:jacocoTestReport tasks that "sonar" hard-depends on (build.gradle.kts) are
-    # explicitly excluded so Gradle doesn't re-walk that graph.
+    # Reuses gradle-java21.yml's compiled classes, test results and JaCoCo XML (downloaded
+    # above) instead of rebuilding and retesting. -PsonarReuseOutputs=true tells
+    # build.gradle.kts not to attach the test and coverage tasks to "sonar"; the list of
+    # those tasks lives there and only there.
     - name: SonarCloud Scan
       env:
         GITHUB_ACTOR: ${{ github.actor }}
@@ -138,10 +163,16 @@ jobs:
           exit 1
         fi
 
+        # Reuse the build workflow's outputs instead of re-running its tests. One flag
+        # replaces the nine -x flags that used to mirror build.gradle.kts by hand (#699).
+        # A manual dispatch has no artifact, so it builds and tests everything itself.
+        REUSE_ARGS=""
+        if [ "${{ github.event_name }}" = "workflow_run" ]; then
+          REUSE_ARGS="-PsonarReuseOutputs=true"
+        fi
+
         ./gradlew sonar \
-          -x :desktop-ui:test -x :desktop-ui:integrationTest -x :desktop-ui:jacocoTestReport \
-          -x :core:jvmTest -x :core:integrationTest -x :core:jacocoTestReport \
-          -x :dispatcher-agent:test -x :dispatcher-agent:integrationTest -x :dispatcher-agent:jacocoTestReport \
+          $REUSE_ARGS \
           -Dsonar.token=$SONAR_TOKEN \
           $SCOPE_ARGS \
           --no-daemon --warning-mode=all --stacktrace

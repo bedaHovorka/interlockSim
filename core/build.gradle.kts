@@ -436,6 +436,14 @@ val heavyTest by tasks.registering(Test::class) {
 // SonarQube Configuration
 // ===========================================
 
+// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
+// resolves a relative coverage path against THIS module's base directory.
+val aggregatedCoverageReport: String =
+    rootProject.layout.buildDirectory
+        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
+        .get()
+        .asFile.absolutePath
+
 // The Kotlin analyzer needs the dependency classpath (sonar.java.libraries) for type
 // resolution. The Gradle plugin auto-detects it from the java plugin's source sets, which a
 // Kotlin Multiplatform project does not have, so :core has to supply it.
@@ -490,7 +498,10 @@ sonar {
         )
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
-            "build/reports/jacoco/jvmTest/jacocoTestReport.xml",
+            listOf(
+                file("build/reports/jacoco/jvmTest/jacocoTestReport.xml").absolutePath,
+                aggregatedCoverageReport,
+            ).joinToString(","),
         )
         // nativeMain compiles to linuxX64. JaCoCo cannot instrument native code; that
         // coverage comes from :core:linuxX64Test instead. Paths are module-relative.

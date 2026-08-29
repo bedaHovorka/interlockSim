@@ -93,29 +93,28 @@ jobs:
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./gradlew jacocoTestReport :core:jacocoTestReport --no-daemon --stacktrace
+      # jacocoAggregatedReport merges the .exec data of all modules against all class
+      # directories. Sonar reads it alongside the per-module reports so that a :core class
+      # exercised only by a :dispatcher-agent test is counted (see PR #945).
+      run: ./gradlew jacocoTestReport :core:jacocoTestReport jacocoAggregatedReport --no-daemon --stacktrace
 
     - name: Upload Sonar inputs
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: sonar-inputs-${{ github.sha }}
+        # Patterns, not a module list. This block used to name every module and every output
+        # directory, a second copy of the layout that had to be changed together with
+        # build.gradle.kts whenever a module was added, renamed or moved (issue #699).
+        # These globs carry no module name at all, so a new module is picked up on its own.
         path: |
-          desktop-ui/build/classes/kotlin/main
-          desktop-ui/build/classes/kotlin/test
-          desktop-ui/build/test-results/test
-          desktop-ui/build/test-results/integrationTest
-          desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml
-          core/build/classes/kotlin/jvm/main
-          core/build/classes/kotlin/jvm/test
-          core/build/test-results/jvmTest
-          core/build/test-results/integrationTest
-          core/build/reports/jacoco/jvmTest/jacocoTestReport.xml
-          dispatcher-agent/build/classes/kotlin/main
-          dispatcher-agent/build/classes/kotlin/test
-          dispatcher-agent/build/test-results/test
-          dispatcher-agent/build/test-results/integrationTest
-          dispatcher-agent/build/reports/jacoco/test/jacocoTestReport.xml
+          */build/classes/kotlin/main
+          */build/classes/kotlin/test
+          */build/classes/kotlin/jvm/main
+          */build/classes/kotlin/jvm/test
+          */build/test-results/*
+          */build/reports/jacoco/*/jacocoTestReport.xml
+          build/reports/jacoco/aggregated/jacocoTestReport.xml
         retention-days: 7
         if-no-files-found: error
 
