@@ -29,12 +29,8 @@ abstract class AbstractRailwayNetGrid<out T : Cell>(
 	// mutation paths in DefaultRailWayNetGrid, including removals via keySet()
 	// iterator/removeAll. While an entry is present, the cell is already strongly
 	// referenced by cells, so GC-based collection would not help here.
-	private val reverseTable: MutableMap<@UnsafeVariance T, Point> = HashMap()
-	private val cells: Array2DMap<@UnsafeVariance T> = Array2DMap()
-
-	protected fun getCells(): Array2DMap<@UnsafeVariance T> = cells
-
-	protected fun getReverseTable(): MutableMap<@UnsafeVariance T, Point> = reverseTable
+	protected val reverseTable: MutableMap<@UnsafeVariance T, Point> = HashMap()
+	protected val cells: Array2DMap<@UnsafeVariance T> = Array2DMap()
 
 	override fun getCellAt(
 		x: Int,

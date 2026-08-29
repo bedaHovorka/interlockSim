@@ -7,7 +7,7 @@
 
 	Bridge integration test (Goal 7 / Issue #187): with real DefaultSimulationContext
 	and a real ShuntingLoop, SimulationController.setSpeed must reach the live
-	ShuntingLoop instance through DefaultSimulationContext.getMainProcess() and the
+	ShuntingLoop instance through DefaultSimulationContext.mainProcess and the
 	SpeedControllable cast — closing the loop the user observed broken in
 	`exampleGui shuntingLoop`.
 */
@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit
 @DisplayName("SimulationController -> ShuntingLoop bridge (real types)")
 class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 	@Test
-	@DisplayName("Real ShuntingLoop is recognised as SpeedControllable via getMainProcess()")
+	@DisplayName("Real ShuntingLoop is recognised as SpeedControllable via mainProcess")
 	fun realShuntingLoopIsRecognizedAsSpeedControllable() {
 		val factory = get<SimulationContextFactory>()
 		val ctx = TestFixtures.loadShuntingXml().use { factory.createContext(it) as DefaultSimulationContext }
@@ -45,7 +45,7 @@ class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 			val loop = ShuntingLoop(context, 60L, enableRealTimeSync = true)
 			context.setMainProcess(loop)
 
-			val mainProcess = context.getMainProcess()
+			val mainProcess = context.mainProcess
 			assertThat(mainProcess).isSameInstanceAs(loop)
 			assertThat(mainProcess is SpeedControllable).isTrue()
 

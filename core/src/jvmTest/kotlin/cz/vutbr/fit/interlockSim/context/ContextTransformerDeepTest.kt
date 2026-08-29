@@ -166,7 +166,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			// Assert - Network transformed preserving structure
 			assertThat(simulationContext.getGraph().size()).isEqualTo(graphSizeAfterJoin)
 			assertThat(simulationContext.getInOuts()).hasSize(2)
-			assertThat((simulationContext as DefaultSimulationContext).isFrozen()).isTrue()
+			assertThat((simulationContext as DefaultSimulationContext).isFrozen).isTrue()
 		}
 
 		@Test

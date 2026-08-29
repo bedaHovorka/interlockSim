@@ -408,7 +408,7 @@ class TrainPhysicsTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Verify train created successfully with very small length
-			assertThat(train.getLength())
+			assertThat(train.trainLength)
 				.isCloseTo(0.1, 1e-6)
 
 			// Distance calculations with small values should not cause overflow

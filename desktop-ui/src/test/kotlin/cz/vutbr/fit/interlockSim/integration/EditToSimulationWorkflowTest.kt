@@ -175,7 +175,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 
 		// Verify simulation context is frozen (immutable)
 		val simContextBase = simulationContext as BaseContext<*>
-		val simFrozen = simContextBase.isFrozen()
+		val simFrozen = simContextBase.isFrozen
 		assertThat(simFrozen).isTrue()
 	}
 

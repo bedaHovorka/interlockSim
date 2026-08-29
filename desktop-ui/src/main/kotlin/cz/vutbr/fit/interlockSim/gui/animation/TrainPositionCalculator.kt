@@ -54,7 +54,7 @@ import kotlin.math.atan2
  * ```kotlin
  * val calculator = TrainPositionCalculator(
  *     simulationContext,
- *     simulationContext.getSeparatorPositionCache()
+ *     simulationContext.separatorPositionCache
  * )
  * val gridLocation = calculator.calculateTrainGridLocation(
  *     currentSection = train.getCurrentSection(),

@@ -60,7 +60,7 @@ class RedSignalWaitHeadingFlipRegressionTest : KoinTestBase() {
 
 	private fun sample(loop: MultiTrainLoop) {
 		for (train in loop.getApprovedTrains()) {
-			val trainNumber = train.getNumber()
+			val trainNumber = train.trainNumber
 			val section = train.frontSection ?: continue
 			val rawHeading = calculator.calculateTrainHeadingRadians(train, section) ?: continue
 			val location =
@@ -106,7 +106,7 @@ class RedSignalWaitHeadingFlipRegressionTest : KoinTestBase() {
 		val context =
 			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
 		val simContext = context
-		calculator = TrainPositionCalculator(context, simContext.getSeparatorPositionCache())
+		calculator = TrainPositionCalculator(context, simContext.separatorPositionCache)
 
 		// Same spec as the `shuntingLoop` example (runExampleGui): the opposing B→A train
 		// and the follower A→B train force RED-signal waits at the switch semaphores.

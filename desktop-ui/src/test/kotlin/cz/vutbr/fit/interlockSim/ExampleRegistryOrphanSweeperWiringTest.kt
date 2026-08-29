@@ -75,7 +75,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	@DisplayName("the per-tick control step drives a sweep")
 	fun controlStepDrivesASweep() {
 		val context = createShuntingLoopAIContext()
-		val loop = context.getMainProcess() as ShuntingLoop
+		val loop = context.mainProcess as ShuntingLoop
 		val sweeper = checkNotNull(context.scope.getOrNull<OrphanReservationSweeper>())
 		val before = sweeper.sweepCount
 
@@ -91,7 +91,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	@DisplayName("a freshly built network has nothing to reclaim")
 	fun freshNetworkReleasesNothing() {
 		val context = createShuntingLoopAIContext()
-		val loop = context.getMainProcess() as ShuntingLoop
+		val loop = context.mainProcess as ShuntingLoop
 		val sweeper = checkNotNull(context.scope.getOrNull<OrphanReservationSweeper>())
 
 		checkNotNull(loop.controlStepListener).onControlStep()

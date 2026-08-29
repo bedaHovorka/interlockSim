@@ -353,7 +353,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 			readerThreads.forEach { it.join(5000) }
 
 			// Assert - Writer succeeded, most readers succeeded
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 			assertThat(readerSuccessCount.get()).isGreaterThan(readerCount / 2)
 		}
 
@@ -379,7 +379,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 						repeat(iterations) {
 							try {
 								val cell = context.getRailWayNetGrid().getCellAt(5, 5)
-								val frozen = context.isFrozen()
+								val frozen = context.isFrozen
 								val inOuts = context.getInOuts()
 								if (cell != null && frozen && inOuts.size == 2) {
 									totalSuccessCount.incrementAndGet()

@@ -116,7 +116,7 @@ class TrainEntrySeparatorRaceTest : KoinTestBase() {
 				loop.getApprovedTrains().forEach { train ->
 					if (!entrySeparatorConsistentWithFrontSection(train)) {
 						violations.add(
-							"train ${train.getNumber()}: entrySeparator=${train.trainEntrySeparator} " +
+							"train ${train.trainNumber}: entrySeparator=${train.trainEntrySeparator} " +
 								"is not an end of frontSection=${train.frontSection}"
 						)
 					}
@@ -129,7 +129,7 @@ class TrainEntrySeparatorRaceTest : KoinTestBase() {
 					loop.getApprovedTrains().forEach { train ->
 						if (!entrySeparatorConsistentWithFrontSection(train)) {
 							violations.add(
-								"train ${train.getNumber()}: entrySeparator=${train.trainEntrySeparator} " +
+								"train ${train.trainNumber}: entrySeparator=${train.trainEntrySeparator} " +
 									"is not an end of frontSection=${train.frontSection} (block event)"
 							)
 						}

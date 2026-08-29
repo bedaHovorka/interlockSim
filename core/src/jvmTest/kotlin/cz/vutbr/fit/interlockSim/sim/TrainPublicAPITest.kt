@@ -71,7 +71,7 @@ class TrainPublicAPITest : KoinTestBase() {
 
 			// Act
 			val numberFromProperty = train.trainNumber
-			val numberFromGetter = train.getNumber()
+			val numberFromGetter = train.trainNumber
 
 			// Assert - Both should return the same value
 			assertThat(numberFromProperty).isEqualTo(numberFromGetter)
@@ -117,7 +117,7 @@ class TrainPublicAPITest : KoinTestBase() {
 
 			// Act
 			val lengthFromProperty = train.trainLength
-			val lengthFromGetter = train.getLength()
+			val lengthFromGetter = train.trainLength
 
 			// Assert - Both should return the same value
 			assertThat(lengthFromProperty).isEqualTo(lengthFromGetter)
@@ -233,7 +233,7 @@ class TrainPublicAPITest : KoinTestBase() {
 
 			// Assert - Should return timetable length
 			assertThat(length).isEqualTo(expectedLength)
-			assertThat(train.getLength()).isEqualTo(expectedLength)
+			assertThat(train.trainLength).isEqualTo(expectedLength)
 		}
 	}
 }

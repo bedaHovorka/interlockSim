@@ -235,7 +235,7 @@ class DispatcherAgentPortBindingTest : DispatcherKoinTestBase() {
 			val loop = ShuntingLoop(context, endTime = 300L)
 
 			// Resolve the port under test via the production Koin binding — proves the binding
-			// added for the Goal 10 fix actually reflects context.getMainProcess() rather than
+			// added for the Goal 10 fix actually reflects context.mainProcess rather than
 			// permanently returning DispatchLoopSnapshot.EMPTY (the perception-port dual-instance
 			// bug this fix is modeled on).
 			val perceptionPort = context.scope.get<NetworkPerceptionPort>()
@@ -311,7 +311,7 @@ class DispatcherAgentPortBindingTest : DispatcherKoinTestBase() {
 		loadShuntingLoopContext().use { context ->
 			val perceptionPort = context.scope.get<NetworkPerceptionPort>()
 
-			// context.getMainProcess() is null until setMainProcess() is called — never
+			// context.mainProcess is null until setMainProcess() is called — never
 			// called in this test. No sim thread is running, so calling the query methods
 			// synchronously from the test thread is safe here (unlike during a live run).
 			assertThat(perceptionPort.allTrainPositions()).isEmpty()
@@ -356,7 +356,7 @@ class DispatcherAgentPortBindingTest : DispatcherKoinTestBase() {
 		loadShuntingLoopContext().use { context ->
 			val sensorPort = context.scope.get<DispatchLoopSensorPort>()
 
-			// context.getMainProcess() is null until setMainProcess() is called — never called
+			// context.mainProcess is null until setMainProcess() is called — never called
 			// in this test. No sim thread is running, so a synchronous query is safe here.
 			assertThat(sensorPort.snapshot()).isEqualTo(DispatchLoopSnapshot.EMPTY)
 			// SP2b.9 review follow-up (PR #811): also exercise the three query-method branches

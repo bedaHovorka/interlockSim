@@ -178,8 +178,11 @@ abstract class BaseContext<T : TrackBlock>(
 	 * Frozen state flag - when true, network structure is immutable.
 	 * Used for simulation contexts to prevent runtime modifications after initialization.
 	 * Default is false (mutable) for editing contexts.
+	 *
+	 * True if context is frozen and modifications are not allowed.
 	 */
-	private var frozen: Boolean = false
+	var isFrozen: Boolean = false
+		private set
 
 	companion object {
 		/**
@@ -302,13 +305,6 @@ abstract class BaseContext<T : TrackBlock>(
 		}
 
 	/**
-	 * Check if this context is frozen (immutable network structure).
-	 *
-	 * @return true if context is frozen and modifications are not allowed
-	 */
-	fun isFrozen(): Boolean = frozen
-
-	/**
 	 * Freeze this context, making the network structure immutable.
 	 *
 	 * Once frozen, any attempt to modify the network structure (adding/removing cells,
@@ -326,8 +322,8 @@ abstract class BaseContext<T : TrackBlock>(
 	 * @see checkNotFrozen
 	 */
 	fun freeze() {
-		if (!frozen) {
-			frozen = true
+		if (!isFrozen) {
+			isFrozen = true
 			logger.info { "Context frozen - network structure is now immutable" }
 			firePropertyChangeAlways("frozen", false, true)
 		}
@@ -343,7 +339,7 @@ abstract class BaseContext<T : TrackBlock>(
 	 * @throws UnsupportedOperationException if context is frozen
 	 */
 	protected fun checkNotFrozen(operation: String) {
-		if (frozen) {
+		if (isFrozen) {
 			throw UnsupportedOperationException(
 				"Cannot $operation: context is frozen. " +
 					"Network structure is immutable after simulation initialization. " +

@@ -189,7 +189,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		/**
 		 * Exercises LengthChecker.report() via reflection on a freshly created Train.
 		 *
-		 * report() appends: front.getTotalDistance() + ' ' + tail.getTotalDistance() + ' ' + getLength()
+		 * report() appends: front.getTotalDistance() + ' ' + tail.getTotalDistance() + ' ' + length
 		 * On a fresh train, distances are 0.0 and length is the timetable value.
 		 */
 		@Test

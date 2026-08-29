@@ -40,7 +40,7 @@ class MainProcessDispatchLoopSensorPort(
 	private val context: DefaultSimulationContext
 ) : DispatchLoopSensorPort {
 	private fun snapshotOrEmpty(): DispatchLoopSnapshot =
-		(context.getMainProcess() as? ProvidesDispatchLoopObservation)?.latestDispatchLoopSnapshot()
+		(context.mainProcess as? ProvidesDispatchLoopObservation)?.latestDispatchLoopSnapshot()
 			?: DispatchLoopSnapshot.EMPTY
 
 	override fun snapshot(): DispatchLoopSnapshot = snapshotOrEmpty()

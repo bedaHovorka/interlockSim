@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 /**
  * Implemented by main-loop processes that track which trains have been approved onto
  * the network. Lets callers outside `:core` (e.g. `:dispatcher-agent`'s Koin wiring) read
- * approved trains via [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.getMainProcess]
+ * approved trains via [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.mainProcess]
  * without depending on kDisco's `Process` type to name [ShuntingLoop]/[MultiTrainLoop] directly.
  */
 fun interface ApprovesTrains {

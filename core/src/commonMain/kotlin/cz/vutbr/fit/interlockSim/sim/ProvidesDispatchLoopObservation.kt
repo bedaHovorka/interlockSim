@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
  * Implemented by main-loop processes that publish per-tick dispatch-loop observation data
  * (queued trains, block-input state). Lets callers outside `:core` (e.g. `:dispatcher-agent`'s
  * Koin wiring) read the latest observation via
- * [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.getMainProcess] without depending
+ * [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.mainProcess] without depending
  * on kDisco's `Process` type to name [ShuntingLoop] directly — mirrors [ApprovesTrains]'s
  * rationale for the same cross-module constraint.
  */

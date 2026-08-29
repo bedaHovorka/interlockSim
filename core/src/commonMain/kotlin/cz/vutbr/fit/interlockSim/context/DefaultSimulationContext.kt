@@ -190,13 +190,20 @@ open class DefaultSimulationContext(
 	 * Valid for context lifetime (grid is immutable after freeze).
 	 *
 	 * Used by TrainPositionCalculator to avoid O(n²) grid scans at 30 FPS.
+	 *
+	 * Maps each PathSeparator to its grid Point for O(1) position lookups.
 	 */
-	private lateinit var separatorPositionCache: Map<PathSeparator, Point>
+	lateinit var separatorPositionCache: Map<PathSeparator, Point>
 
 	/**
-	 * Main simulation process
+	 * Main simulation process.
+	 *
+	 * `null` until one has been registered via [setMainProcess]. Callers may downcast to
+	 * runtime-control interfaces such as [cz.vutbr.fit.interlockSim.sim.SpeedControllable]
+	 * to retune the live simulation (e.g. wall-clock pacing) from the EDT.
 	 */
-	private var mainProcess: LoopProcess? = null
+	var mainProcess: LoopProcess? = null
+		private set
 
 	/**
 	 * kdisco-engine Simulation instance; set in [run], used in [stop] to signal exit.
@@ -226,7 +233,7 @@ open class DefaultSimulationContext(
 	/**
 	 * True once run() has been invoked and the simulation has started.
 	 * Guards onBlockEvent/onSimulationEvent: listeners registered after this point are silently ignored.
-	 * Distinct from isFrozen() because fromEditingContext() freezes the context before run() is called.
+	 * Distinct from isFrozen because fromEditingContext() freezes the context before run() is called.
 	 */
 	private var simulationHasStarted: Boolean = false
 
@@ -1797,19 +1804,6 @@ open class DefaultSimulationContext(
 	override fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder = routeFinderInstance
 
 	/**
-	 * Get PathSeparator grid position cache for animation rendering.
-	 *
-	 * Returns a map from PathSeparator to grid Point for O(1) position lookups.
-	 * Used by TrainPositionCalculator to avoid O(n²) grid scans at 30 FPS.
-	 *
-	 * The cache is populated once during fromEditingContext() transformation and
-	 * remains valid for the context lifetime (grid is immutable after freeze).
-	 *
-	 * @return Map from PathSeparator to grid Point
-	 */
-	fun getSeparatorPositionCache(): Map<PathSeparator, Point> = separatorPositionCache
-
-	/**
 	 * Configure semaphore signal appearance after path reservation.
 	 *
 	 * This method separates signal configuration from block reservation logic.
@@ -1866,12 +1860,4 @@ open class DefaultSimulationContext(
 	fun setMainProcess(process: LoopProcess) {
 		mainProcess = process
 	}
-
-	/**
-	 * Returns the currently registered main process, or `null` if none has been set
-	 * via [setMainProcess]. Callers may downcast to runtime-control interfaces such
-	 * as [cz.vutbr.fit.interlockSim.sim.SpeedControllable] to retune the live
-	 * simulation (e.g. wall-clock pacing) from the EDT.
-	 */
-	fun getMainProcess(): LoopProcess? = mainProcess
 }

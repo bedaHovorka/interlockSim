@@ -41,7 +41,7 @@ private val logger = KotlinLogging.logger {}
  *
  * - Trains are collected from occupied track blocks (via TrackOccupant interface)
  * - Grid positions calculated via linear interpolation along track sections
- * - Uses new public Train API: getNumber(), getFrontSection(), getFrontPosition()
+ * - Uses the public Train API: trainNumber, frontSection, frontPosition
  *
  * ## Usage
  *
@@ -140,7 +140,7 @@ object AnimationStateCapture {
 			// Check if occupant is a Train
 			if (occupant is Train) {
 				trains.add(occupant)
-				logger.trace { "Found train #${occupant.getNumber()} in block ${System.identityHashCode(graphBlock)}" }
+				logger.trace { "Found train #${occupant.trainNumber} in block ${System.identityHashCode(graphBlock)}" }
 			}
 		}
 
@@ -151,12 +151,12 @@ object AnimationStateCapture {
 		val positionCalculator =
 			TrainPositionCalculator(
 				context,
-				(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.getSeparatorPositionCache()
+				(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.separatorPositionCache
 					?: emptyMap()
 			)
 
 		return trains.associate { train ->
-			train.getNumber() to captureTrainState(train, positionCalculator, context)
+			train.trainNumber to captureTrainState(train, positionCalculator, context)
 		}
 	}
 
@@ -178,11 +178,11 @@ object AnimationStateCapture {
 		positionCalculator: TrainPositionCalculator,
 		context: SimulationContext
 	): TrainState {
-		val trainNumber = train.getNumber()
+		val trainNumber = train.trainNumber
 		val position = train.totalDistance
 		val velocity = train.getVelocity()
 		val acceleration = train.getAcceleration()
-		val length = train.getLength()
+		val length = train.trainLength
 
 		// Calculate grid location for train front
 		val currentSection = train.frontSection

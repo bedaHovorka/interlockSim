@@ -523,7 +523,7 @@ class ShuntingLoop(
 	/**
 	 * [ProvidesDispatchLoopObservation] implementation — lets `:dispatcher-agent`'s Koin wiring
 	 * read the latest dispatch-loop observation via
-	 * [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.getMainProcess] without naming
+	 * [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.mainProcess] without naming
 	 * [ShuntingLoop] directly (would pull kDisco's `Process` onto its main compile classpath,
 	 * Goal 10 dispatcher-cannot-approve-trains fix). Single @Volatile read, same atomicity as
 	 * [getLatestObservation].

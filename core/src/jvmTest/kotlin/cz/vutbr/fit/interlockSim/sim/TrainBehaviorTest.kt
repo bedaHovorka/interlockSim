@@ -144,7 +144,7 @@ class TrainBehaviorTest : KoinTestBase() {
 			// Motor.derivatives() ensures: acceleration ≤ MAXIMAL_ACCELERATION
 
 			// Verify train is constructed properly
-			assertThat(train.getLength()).isEqualTo(100.0)
+			assertThat(train.trainLength).isEqualTo(100.0)
 		}
 
 		/**
@@ -497,7 +497,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * train length, verified by LengthChecker invariant.
 		 *
 		 * Physics: LengthChecker.check():
-		 * |front.getTotalDistance() - tail.getTotalDistance() - getLength()| ≤ maxAbsError
+		 * |front.getTotalDistance() - tail.getTotalDistance() - length| ≤ maxAbsError
 		 *
 		 * Railway Context: Train length determines track occupation for
 		 * interlocking calculations.
@@ -511,7 +511,7 @@ class TrainBehaviorTest : KoinTestBase() {
 			val train = Train(context, timetable)
 
 			// Verify train length
-			assertThat(train.getLength()).isEqualTo(trainLength)
+			assertThat(train.trainLength).isEqualTo(trainLength)
 
 			// LengthChecker (inner class) validates:
 			// Math.abs(front.distance - tail.distance - length) ≤ maxAbsError
@@ -526,7 +526,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 *
 		 * Physics: Train.actions() logic:
 		 * - activate(front)
-		 * - waitUntil { front.getTotalDistance() >= getLength() }
+		 * - waitUntil { front.getTotalDistance() >= length }
 		 * - activate(tail)
 		 *
 		 * Railway Context: Tail position determines when track sections
@@ -541,10 +541,10 @@ class TrainBehaviorTest : KoinTestBase() {
 			val train = Train(context, timetable)
 
 			// Train activates tail after front travels train length:
-			// waitUntil { front.getTotalDistance() >= getLength() }
+			// waitUntil { front.getTotalDistance() >= length }
 
 			// Verify train length matches
-			assertThat(train.getLength()).isEqualTo(trainLength)
+			assertThat(train.trainLength).isEqualTo(trainLength)
 		}
 
 		/**

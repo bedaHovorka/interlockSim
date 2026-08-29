@@ -435,7 +435,7 @@ open class MultiTrainLoop(
 				trainId = trainId,
 				velocity = train.getVelocity(),
 				totalDistance = train.totalDistance,
-				length = train.getLength()
+				length = train.trainLength
 			)
 		}
 }

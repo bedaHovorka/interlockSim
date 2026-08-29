@@ -69,7 +69,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 
 		// Convert to simulation context
 		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-		assertThat(simulationContext.isFrozen()).isTrue()
+		assertThat(simulationContext.isFrozen).isTrue()
 
 		// Before the fix (#190), any call to stop() would call System.exit(0)
 		// and terminate the JVM. Now, the JVM continues running.
@@ -95,7 +95,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 		// Create first simulation context
 		val simulationContext1 = simulationContextFactory.createContext(editingContext1) as DefaultSimulationContext
 		assertThat(simulationContext1).isNotNull()
-		assertThat(simulationContext1.isFrozen()).isTrue()
+		assertThat(simulationContext1.isFrozen).isTrue()
 
 		// Build second network (separate instance)
 		val editingContext2 = editingContextFactory.createEmptyContext()
@@ -108,7 +108,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 		// This should work now that System.exit(0) is removed
 		val simulationContext2 = simulationContextFactory.createContext(editingContext2) as DefaultSimulationContext
 		assertThat(simulationContext2).isNotNull()
-		assertThat(simulationContext2.isFrozen()).isTrue()
+		assertThat(simulationContext2.isFrozen).isTrue()
 
 		// Both contexts should be independent and functional
 		// If we got here without JVM exit, test passed!

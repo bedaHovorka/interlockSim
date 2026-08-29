@@ -248,7 +248,7 @@ val dispatcherAgentModule: Module =
 
 			// DispatchLoopSensorPort (scoped per context), backing KoogAgentFactory's
 			// queued_trains/block_inputs tools. MainProcessDispatchLoopSensorPort resolves
-			// context.getMainProcess() lazily at query time (always after
+			// context.mainProcess lazily at query time (always after
 			// context.setMainProcess(loop) has run) via the interface-based lookup pattern (see
 			// mainProcessActiveTrains / ProvidesDispatchLoopObservation).
 			scoped<DispatchLoopSensorPort> {

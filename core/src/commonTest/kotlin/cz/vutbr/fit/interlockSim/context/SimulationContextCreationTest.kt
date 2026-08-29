@@ -64,7 +64,7 @@ class SimulationContextCreationTest : KoinComponent {
 			).use { simCtx ->
 				assertThat(simCtx).isNotNull()
 				assertThat(simCtx.getInOuts()).hasSize(2)
-				assertThat(simCtx.isFrozen()).isTrue()
+				assertThat(simCtx.isFrozen).isTrue()
 			}
 	}
 
@@ -77,7 +77,7 @@ class SimulationContextCreationTest : KoinComponent {
 			).use { simCtx ->
 				assertThat(simCtx).isNotNull()
 				assertThat(simCtx.getInOuts()).hasSize(2)
-				assertThat(simCtx.isFrozen()).isTrue()
+				assertThat(simCtx.isFrozen).isTrue()
 			}
 	}
 
@@ -90,7 +90,7 @@ class SimulationContextCreationTest : KoinComponent {
 			).use { simCtx ->
 				assertThat(simCtx).isNotNull()
 				assertThat(simCtx.getInOuts()).hasSize(3)
-				assertThat(simCtx.isFrozen()).isTrue()
+				assertThat(simCtx.isFrozen).isTrue()
 			}
 	}
 
@@ -103,7 +103,7 @@ class SimulationContextCreationTest : KoinComponent {
 			).use { simCtx ->
 				assertThat(simCtx).isNotNull()
 				assertThat(simCtx.getInOuts()).hasSize(2)
-				assertThat(simCtx.isFrozen()).isTrue()
+				assertThat(simCtx.isFrozen).isTrue()
 			}
 	}
 
@@ -152,7 +152,7 @@ class SimulationContextCreationTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				assertThat(simCtx.isFrozen()).isTrue()
+				assertThat(simCtx.isFrozen).isTrue()
 			}
 	}
 
@@ -213,7 +213,7 @@ class SimulationContextCreationTest : KoinComponent {
 			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
 				assertThat(simCtx).isNotNull()
 				assertThat(simCtx.getInOuts()).hasSize(2)
-				assertThat(simCtx.isFrozen()).isTrue()
+				assertThat(simCtx.isFrozen).isTrue()
 				assertThat(simCtx.getGraph().entrySet().size).isEqualTo(1)
 			}
 		}
@@ -223,7 +223,7 @@ class SimulationContextCreationTest : KoinComponent {
 	fun emptySimulationContextCanBeCreated() {
 		CommonTestFixtures.createEmptySimulationContext(processFactory).use { simCtx ->
 			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.isFrozen()).isTrue()
+			assertThat(simCtx.isFrozen).isTrue()
 		}
 	}
 }

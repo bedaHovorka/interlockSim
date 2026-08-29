@@ -1009,7 +1009,7 @@ class Train :
 			}
 			if (where == timetable.getIn()) {
 				fromHome = true
-				initPositionFromFrontOffset(front.getTotalDistance(), getLength())
+				initPositionFromFrontOffset(front.getTotalDistance(), length)
 				start()
 			}
 
@@ -1042,12 +1042,12 @@ class Train :
 
 	private inner class LengthChecker : ContinuousInvariantChecker() {
 		override fun check(): Boolean =
-			kotlin.math.abs(front.getTotalDistance() - tail.getTotalDistance() - getLength()) <= maxAbsError
+			kotlin.math.abs(front.getTotalDistance() - tail.getTotalDistance() - length) <= maxAbsError
 
 		override fun report(reportObj: StringBuilder): StringBuilder {
 			requireSimulationNotNull(reportObj) { "Report object must not be null" }
 			reportObj.append(front.getTotalDistance()).append(' ').append(tail.getTotalDistance())
-			return reportObj.append(' ').append(getLength())
+			return reportObj.append(' ').append(length)
 		}
 	}
 
@@ -1411,7 +1411,7 @@ class Train :
 		// permanently outside the network. `waitUntilCrossing` resumes as soon as the level
 		// condition holds while still root-finding a within-step crossing. The `dtMin` slack makes
 		// the threshold reachable.
-		waitUntilCrossing { (getLength() - dtMin) - front.getTotalDistance() }
+		waitUntilCrossing { (length - dtMin) - front.getTotalDistance() }
 		Process.activate(tail)
 
 		out()
@@ -1460,19 +1460,14 @@ class Train :
 		get() = getVelocity()
 
 	/**
-	 * @return length of train
-	 */
-	fun getLength(): Double {
-		return length // pozdeji soucet vagonu
-	}
-
-	/**
-	 * Length of train in meters (Kotlin property accessor).
-	 * Delegates to [getLength].
+	 * Length of train in meters.
+	 *
+	 * Currently the length configured for the train as a whole; it is not yet
+	 * computed as the sum of the individual wagon lengths.
 	 * @since 2026-02-06 (Public Train API for animation)
 	 */
 	val trainLength: Double
-		get() = getLength()
+		get() = length
 
 	/**
 	 * Reverse the train's direction of travel.
@@ -1540,24 +1535,15 @@ class Train :
 	}
 
 	/**
-	 * Get train number for identification and rendering.
+	 * Unique train number for identification and rendering.
 	 *
 	 * Each train is assigned a unique sequential number starting from 1.
 	 * Used for train overlay rendering and identification in animation.
-	 *
-	 * @return Unique train number
 	 * @since 2026-01-22 (Issue #203)
-	 */
-	fun getNumber(): Int = number
-
-	/**
-	 * Unique train number for identification (Kotlin property accessor).
-	 * Each train is assigned a sequential number starting from 1.
-	 * Delegates to [getNumber].
 	 * @since 2026-02-06 (Public Train API for animation)
 	 */
 	val trainNumber: Int
-		get() = getNumber()
+		get() = number
 
 	/**
 	 * Origin InOut where this train entered the network.

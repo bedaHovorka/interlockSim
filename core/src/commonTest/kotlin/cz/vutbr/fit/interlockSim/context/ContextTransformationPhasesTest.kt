@@ -126,7 +126,7 @@ class ContextTransformationPhasesTest : CommonKoinTestBase() {
 		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		assertThat(simulationContext).isNotNull()
-		assertThat((simulationContext as DefaultSimulationContext).isFrozen()).isTrue()
+		assertThat((simulationContext as DefaultSimulationContext).isFrozen).isTrue()
 	}
 
 	@Test
@@ -152,7 +152,7 @@ class ContextTransformationPhasesTest : CommonKoinTestBase() {
 		assertThat(simulationContext.currentTrackLength).isEqualTo(600.0)
 		assertThat(simulationContext.currentNameString).isEqualTo("TestNetwork")
 		assertThat(simulationContext.getInOuts().first().staticRef).isNotNull()
-		assertThat(simulationContext.isFrozen()).isTrue()
+		assertThat(simulationContext.isFrozen).isTrue()
 	}
 
 	@Test
@@ -165,6 +165,6 @@ class ContextTransformationPhasesTest : CommonKoinTestBase() {
 		assertThat(simulationContext.getRailWayNetGrid().count()).isEqualTo(0)
 		assertThat(simulationContext.getGraph().size()).isEqualTo(0)
 		assertThat(simulationContext.getInOuts().size).isEqualTo(0)
-		assertThat(simulationContext.isFrozen()).isTrue()
+		assertThat(simulationContext.isFrozen).isTrue()
 	}
 }
