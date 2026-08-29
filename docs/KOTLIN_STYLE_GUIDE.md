@@ -2152,7 +2152,7 @@ push a wrong-config analysis to the real project key.
 **SonarCloud:** the host URL (`https://sonarcloud.io`) and organization (`bedahovorka`) are
 defaults in the root `sonar {}` block, so a local run needs only a token:
 ```bash
-SONAR_TOKEN=<your-token> ./gradlew clean test jacocoTestReport sonar
+SONAR_TOKEN='<your-token>' ./gradlew clean test jacocoTestReport sonar
 ```
 Override either default with `-Dsonar.host.url=…` / `-Dsonar.organization=…`; system properties
 win over the build script.

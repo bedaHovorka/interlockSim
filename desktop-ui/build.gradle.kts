@@ -490,7 +490,7 @@ tasks.jacocoTestCoverageVerification {
 }
 
 // ===========================================
-// SonarQube — skip (root handles it)
+// SonarQube — this module's own report paths
 // ===========================================
 
 // Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
