@@ -123,9 +123,10 @@ sonar {
 
         // Server coordinates. Neither value is a secret, so a local run needs only a token:
         //   SONAR_TOKEN=… ./gradlew sonar
-        // CI still overrides these with -Dsonar.* system properties, which win over the extension.
-        property("sonar.host.url", providers.gradleProperty("sonar.host.url").orElse("https://sonarcloud.io").get())
-        property("sonar.organization", providers.gradleProperty("sonar.organization").orElse("bedahovorka").get())
+        // A -Dsonar.host.url / -Dsonar.organization system property overrides either value
+        // at scan time (see docs/KOTLIN_STYLE_GUIDE.md, "Running SonarQube Analysis").
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.organization", "bedahovorka")
 
         // Sources, tests, binaries, test reports and coverage reports are NOT listed here.
         // Every analyzed module declares its own in its own build script, so this file no
