@@ -413,5 +413,13 @@ sonar {
                 aggregatedCoverageReport,
             ).joinToString(","),
         )
+        // DispatcherReliabilityReport.kt is a fun main() CLI entry point for the
+        // dispatcherReliabilityReport Gradle task. It reads a hardcoded
+        // DefaultRunSnapshotStore.DEFAULT_ROOT, so testing it would require changing production
+        // code to inject the root; that is out of scope, leaving the file permanently unmeasurable.
+        property(
+            "sonar.coverage.exclusions",
+            "src/main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/planner/DispatcherReliabilityReport.kt",
+        )
     }
 }

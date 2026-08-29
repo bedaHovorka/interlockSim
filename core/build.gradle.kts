@@ -509,7 +509,16 @@ sonar {
         )
         // nativeMain compiles to linuxX64. JaCoCo cannot instrument native code; that
         // coverage comes from :core:linuxX64Test instead. Paths are module-relative.
-        property("sonar.coverage.exclusions", "src/nativeMain/**")
+        // RequireFunctions.kt declares all nine public functions inline, so the compiler copies
+        // each body into its call site: JaCoCo credits the caller and the synthetic non-inlined
+        // copy in the class file is never executed, leaving the file permanently unmeasurable.
+        // It is already covered by core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/exceptions/
+        // RequireFunctionsTest.kt and desktop-ui/src/test/kotlin/cz/vutbr/fit/interlockSim/
+        // exceptions/RequireFunctionsTest.kt.
+        property(
+            "sonar.coverage.exclusions",
+            "src/nativeMain/**,src/commonMain/kotlin/cz/vutbr/fit/interlockSim/exceptions/RequireFunctions.kt",
+        )
     }
 }
 
