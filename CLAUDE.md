@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Last Updated:** 2026-08-28
+**Last Updated:** 2026-08-29
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this
 repository. It holds repo-wide rules only; module-specific guidance lives in the per-subproject
@@ -235,6 +235,9 @@ Dual-level detekt:
 SonarQube/SonarCloud analysis and JaCoCo configuration:
 [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under "Code Quality Enforcement".
 
+The clean-code trinity: **ktlint** (format), **detekt** (code smells), **SonarCloud**
+(bugs, coverage, duplication). All three must pass before merge.
+
 ## Logging
 
 kotlin-logging (SLF4J wrapper) with Logback backend:
@@ -251,9 +254,12 @@ under "Logging Configuration".
 
 ## Continuous Integration
 
-GitHub Actions (`.github/workflows/gradle-java21.yml`) runs on push/PR to main/develop:
-Java 21 compile, tests, JAR packaging (90-day artifact retention), dependency caching.
-CI never runs `heavyTest`, `aiSweep`, or detekt. Build status:
+GitHub Actions (`.github/workflows/gradle-java21.yml`) runs on every push, on any branch —
+there is no pull_request trigger, so each commit runs CI exactly once: Java 21 compile,
+tests, `ktlintCheck`, JAR packaging (90-day artifact retention), dependency caching, and
+the `sonar-inputs` artifact that the SonarCloud workflow
+(`.github/workflows/sonarqube.yml`) reuses to enforce the quality gate on PRs.
+CI never runs `heavyTest`, `aiSweep`, or `detekt`. Build status:
 [GitHub Actions](https://github.com/bedaHovorka/interlockSim/actions)
 
 ## Documentation
