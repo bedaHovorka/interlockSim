@@ -90,11 +90,13 @@ class MeasuringPlanAdapter(
 	 * Plain cycle counter, kept only to gate the periodic-summary modulo check without building
 	 * a [PlannerMetricsSnapshot] first.
 	 *
-	 * Deliberately redundant with `outcomeCounters.values.sum()`: reading that sum on every tick
-	 * to answer "is this the tenth cycle?" allocated a whole snapshot nine times out of ten
-	 * (Issue #713 Task 10). It is never published: [getMetricsSnapshot] derives every figure —
-	 * total cycles included — from the counter map alone, so a tick landing between the two
-	 * increments cannot produce an inconsistent snapshot.
+	 * Deliberately redundant with `outcomeCounters.values.sum()`, and not only for cost
+	 * (Issue #713 Task 10): [AtomicLong.incrementAndGet] returns a unique, stable per-call cycle
+	 * number, whereas re-summing the outcome counters is a non-atomic read across eight
+	 * [AtomicLong]s — two concurrent ticks could both see the same total and fire the checkpoint
+	 * twice, or both see a pre-increment total and skip it. It is never published:
+	 * [getMetricsSnapshot] derives every figure — total cycles included — from the counter map
+	 * alone, so a tick landing between the two increments cannot produce an inconsistent snapshot.
 	 */
 	private val cycleCount = AtomicLong(0L)
 
@@ -253,9 +255,12 @@ class MeasuringPlanAdapter(
 			"byOutcome=[$byOutcomeStr] " +
 			"successRate=${formatRate(snapshot.ollamaSuccessRate)}"
 	}
-
-	private fun formatRate(rate: Double): String {
-		val pct = (rate * 100.0).toLong()
-		return "$pct%"
-	}
 }
+
+/**
+ * Formats a 0.0–1.0 rate as an integer percentage string (for example `27%`).
+ *
+ * Shared by [MeasuringPlanAdapter] and [DefaultDispatcherRunRecorder] so the two summary lines
+ * cannot drift apart in formatting.
+ */
+internal fun formatRate(rate: Double): String = "${(rate * 100.0).toLong()}%"

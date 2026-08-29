@@ -356,6 +356,14 @@ class KoogAgentPlanAdapter(
 			// Parent coroutine was cancelled — propagate rather than swallow.
 			throw e
 		} catch (e: Exception) {
+			// HAZARD (issue #999): this handler also swallows a tick-listener throw from the
+			// reportTick(...) calls inside the try above — from here it is indistinguishable
+			// from an LLM failure, so a cycle the LLM already acted on is re-reported as
+			// RULE_FALLBACK and the fallback dispatches on top of the emitted actions. Every
+			// current listener is contractually non-throwing (MeasuringPlanAdapter.onTick is
+			// "MUST NOT THROW", pinned by test); isolate the fan-out from this catch before
+			// a throwing listener can join the seam.
+			//
 			// cycleStart is null only if getOrCreateAgent() itself threw — inference never
 			// started, so there is no cycle latency to report (null, not a fabricated 0).
 			runFallback(

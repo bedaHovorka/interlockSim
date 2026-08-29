@@ -262,21 +262,17 @@ class HashMapGraph<N, E, X> :
 
 	override fun assignedEdges(node: N): Map<X, E> {
 		val lmap = mutableMapOf<X, E>()
-		// Captured under a distinct name: the anonymous processor's own `node` parameter
-		// (renamed to match DoubletonEntrySetProcessor's supertype name) would otherwise
-		// shadow this outer node.
-		val targetNode = node
 		(
 			object : DoubletonEntrySetProcessor<X>(map) {
 				override fun processEntryNode(
 					key: Doubleton<N, X>,
-					edge: E,
-					node: N
+					entryEdge: E,
+					entryNode: N
 				) {
-					if (targetNode == node) {
-						val aInf = key.getValue(targetNode)
-						requireValidState(!lmap.containsKey(aInf)) { "Duplicate additional info key $aInf for node $targetNode" }
-						lmap[aInf!!] = edge
+					if (node == entryNode) {
+						val aInf = key.getValue(node)
+						requireValidState(!lmap.containsKey(aInf)) { "Duplicate additional info key $aInf for node $node" }
+						lmap[aInf!!] = entryEdge
 					}
 				}
 			}
@@ -288,23 +284,18 @@ class HashMapGraph<N, E, X> :
 		node: N,
 		edge: E
 	): X {
-		// Captured under distinct names: the anonymous processor's own `node`/`edge`
-		// parameters (renamed to match DoubletonEntrySetProcessor's supertype names) would
-		// otherwise shadow these outer values.
-		val targetNode = node
-		val targetEdge = edge
 		val p =
 			object : DoubletonEntrySetProcessor<X>(map) {
 				override fun processEntryNode(
 					key: Doubleton<N, X>,
-					edge: E,
-					node: N
+					entryEdge: E,
+					entryNode: N
 				) {
-					if (targetNode == node && targetEdge == edge) {
+					if (node == entryNode && edge == entryEdge) {
 						requireValidState(getResult() == null) {
-							"Multiple extensional objects found for node $targetNode and edge $targetEdge"
+							"Multiple extensional objects found for node $node and edge $edge"
 						}
-						setResult(key.getValue(targetNode)!!)
+						setResult(key.getValue(node)!!)
 					}
 				}
 			}
@@ -331,8 +322,8 @@ class HashMapGraph<N, E, X> :
 
 		abstract fun processEntryNode(
 			key: Doubleton<N, X>,
-			edge: E,
-			node: N
+			entryEdge: E,
+			entryNode: N
 		)
 
 		fun getResult(): T? = result

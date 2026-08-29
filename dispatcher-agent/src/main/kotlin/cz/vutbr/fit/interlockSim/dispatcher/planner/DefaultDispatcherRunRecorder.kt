@@ -311,8 +311,6 @@ class DefaultDispatcherRunRecorder(
 		)
 	}
 
-	private fun formatRate(rate: Double): String = "${(rate * 100.0).toLong()}%"
-
 	/**
 	 * Renders one railway figure, printing `n/a` for a figure nobody measured.
 	 *

@@ -54,16 +54,4 @@ class CompositeTickListener(
 	override fun onTick(record: TickRecord) {
 		delegates.forEach { it.onTick(record) }
 	}
-
-	companion object {
-		/**
-		 * Builds a composite from possibly-absent delegates, dropping the nulls.
-		 *
-		 * Mirrors [CompositeActionOutcomeSink.of] — most dispatcher components are resolved with
-		 * `scope.getOrNull(...)` because a context may legitimately lack them; this spares every
-		 * call site a null branch.
-		 */
-		fun of(vararg delegates: PlannerTickListener?): CompositeTickListener =
-			CompositeTickListener(CopyOnWriteArrayList(delegates.filterNotNull()))
-	}
 }

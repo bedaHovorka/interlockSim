@@ -59,8 +59,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  *
  * ## Consistency
  *
- * Only [ollamaSuccessCount] and [outcomeCounts] are stored; the remaining three figures are
- * computed, so no writer can publish a snapshot whose total disagrees with its breakdown. The
+ * Only [ollamaSuccessCount] and [outcomeCounts] are stored; the remaining figures are derived
+ * from the stored breakdown ([totalCycles] once, at construction), so no writer can publish a
+ * snapshot whose total disagrees with its breakdown. The
  * one remaining degree of freedom — [ollamaSuccessCount] versus the partition — is closed by an
  * `init` invariant, mirroring [DispatcherRunSnapshot]'s
  * `ticksByOutcome.values.sum() == totalTicks` check.
@@ -87,9 +88,8 @@ data class PlannerMetricsSnapshot(
 		}
 	}
 
-	/** Total dispatch cycles observed: `outcomeCounts.values.sum()`. */
-	val totalCycles: Long
-		get() = outcomeCounts.values.sum()
+	/** Total dispatch cycles observed: `outcomeCounts.values.sum()` (computed once, here). */
+	val totalCycles: Long = outcomeCounts.values.sum()
 
 	/** Cycles not credited to the LLM: `totalCycles - ollamaSuccessCount`. */
 	val fallbackCount: Long

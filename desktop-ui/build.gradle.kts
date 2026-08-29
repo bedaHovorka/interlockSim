@@ -88,13 +88,23 @@ tasks.compileTestJava {
     options.isDeprecation = true
 }
 
+// Issue #713: the build is warning-free as of this commit. A new warning is a
+// regression, so fail on it. If a Kotlin version bump introduces a brand-new
+// warning kind, fix the warning — do not turn this flag back off.
+// Applied to every Kotlin compile task in this module — main, test, and the
+// me.champeau.jmh plugin's compileJmhKotlin (which is not wired into build/test/check
+// and so never runs in the gate or in CI, but is guarded anyway so a new warning in the
+// JMH benchmark sources cannot go unnoticed) — so any future source set is guarded too,
+// without remembering to add a per-task block for it.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+
 tasks.compileKotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-        // Issue #713: the build is warning-free as of this commit. A new warning is a
-        // regression, so fail on it. If a Kotlin version bump introduces a brand-new
-        // warning kind, fix the warning — do not turn this flag back off.
-        allWarningsAsErrors.set(true)
     }
     dependsOn(rootProject.tasks.named("checkKdisco"))
 }
@@ -102,20 +112,6 @@ tasks.compileKotlin {
 tasks.compileTestKotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-        // Issue #713: the build is warning-free as of this commit. A new warning is a
-        // regression, so fail on it. If a Kotlin version bump introduces a brand-new
-        // warning kind, fix the warning — do not turn this flag back off.
-        allWarningsAsErrors.set(true)
-    }
-}
-
-// Issue #713: compileJmhKotlin is a third Kotlin compile task the me.champeau.jmh plugin
-// registers for src/jmh/kotlin/. It is not wired into build/test/check and so never runs
-// in the gate or in CI, but it is guarded anyway so a new warning in the JMH benchmark
-// sources cannot go unnoticed.
-tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileJmhKotlin") {
-    compilerOptions {
-        allWarningsAsErrors.set(true)
     }
 }
 
