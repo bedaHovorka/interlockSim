@@ -77,8 +77,12 @@ application {
     mainClass.set("cz.vutbr.fit.interlockSim.MainKt")
 }
 
+// UTF-8 per .editorconfig. Neither Java compile task has sources (this module is
+// pure Kotlin), but the Sonar Gradle plugin adopts their options.encoding as the
+// module's sonar.sourceEncoding: with the old ISO-8859-1 value the analysis read
+// every non-ASCII character in the Kotlin sources as mojibake.
 tasks.compileJava {
-    options.encoding = "ISO-8859-1"
+    options.encoding = "UTF-8"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial"))
     options.isDeprecation = true
     options.isDebug = true
@@ -87,7 +91,7 @@ tasks.compileJava {
 }
 
 tasks.compileTestJava {
-    options.encoding = "ISO-8859-1"
+    options.encoding = "UTF-8"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial"))
     options.isDeprecation = true
 }
@@ -330,7 +334,6 @@ tasks.javadoc {
         links("https://docs.oracle.com/en/java/javase/21/docs/api/")
         addStringOption("sourcepath", "src/main/java")
     }
-    options.encoding = "ISO-8859-1"
 }
 
 sourceSets {
@@ -724,7 +727,7 @@ tasks.register("printConfig") {
             |
             |Java Configuration:
             |  Java Version: $javaVersion
-            |  Source Encoding: ISO-8859-1
+            |  Source Encoding: UTF-8
             |  Target Compatibility: ${java.targetCompatibility}
             |
             |Dependencies:
