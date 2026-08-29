@@ -2139,7 +2139,8 @@ SonarQube integration provides: code smells, security vulnerabilities, coverage 
 **Configuration files** (there is no `sonar-project.properties`; it was deleted 2026-08-29
 because the Gradle plugin never read it and it had drifted out of sync):
 - `build.gradle.kts` - SonarQube plugin, the `sonar {}` block and JaCoCo configuration (primary)
-- `dispatcher-agent/build.gradle.kts` - the one module with its own `sonar {}` block (Issue #762)
+- `core/build.gradle.kts`, `desktop-ui/build.gradle.kts`, and
+  `dispatcher-agent/build.gradle.kts` - per-module `sonar {}` configuration
 - `.github/workflows/sonarqube.yml` - CI/CD integration for automated analysis
 
 ### Running SonarQube Analysis
