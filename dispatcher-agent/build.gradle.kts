@@ -57,6 +57,8 @@ val koogVersion: String by project
 val serializationVersion: String by project
 val mockwebserverVersion: String by project
 val detektFormattingVersion: String by project
+val ktlintVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -331,8 +333,24 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
 }
 
 // ===========================================
+// Ktlint Configuration
+// ===========================================
+
+// Only the engine pin, nothing else: the version comes from gradle.properties
+// (ktlintVersion) instead of floating with the plugin default, so every module
+// checks with the same engine. This module has no generated sources, so it needs
+// none of :core's filters.
+ktlint {
+    version.set(ktlintVersion)
+}
+
+// ===========================================
 // JaCoCo Report Configuration
 // ===========================================
+
+jacoco {
+    toolVersion = jacocoToolVersion
+}
 
 tasks.named<JacocoReport>("jacocoTestReport") {
     dependsOn(tasks.named("test"))
@@ -384,7 +402,6 @@ sonar {
         property("sonar.tests", "src/test/kotlin")
         property("sonar.java.binaries", "build/classes/kotlin/main")
         property("sonar.java.test.binaries", "build/classes/kotlin/test")
-        property("sonar.sourceEncoding", "UTF-8")
         property(
             "sonar.junit.reportPaths",
             "build/test-results/test,build/test-results/integrationTest",
