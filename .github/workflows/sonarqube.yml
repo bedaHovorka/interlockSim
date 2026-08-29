@@ -113,6 +113,13 @@ jobs:
         # how pushes to feature branches used to overwrite the trunk. The two are mutually
         # exclusive, so never emit both, and fail loudly rather than fall through unscoped.
         #
+        # On the FREE SonarCloud plan a non-main branch analysis is accepted but not retained:
+        # the compute-engine task reports SUCCESS, yet the branch keeps no analysisDate and
+        # the measures API answers 403 (measured 2026-08-29 with four successful tasks). So a
+        # push to a feature branch with no PR currently produces nothing readable. It is still
+        # sent, deliberately: it costs about a minute, it keeps the trunk safe, and it starts
+        # working the day the plan is upgraded, with no change here.
+        #
         # PR context comes from the workflow_run event's pull_requests[] array, which GitHub
         # populates for same-repo branches with an open PR regardless of whether the
         # triggering gradle-java21.yml run itself fired on push or pull_request.

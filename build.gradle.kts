@@ -111,66 +111,36 @@ sonar {
         property("sonar.host.url", providers.gradleProperty("sonar.host.url").orElse("https://sonarcloud.io").get())
         property("sonar.organization", providers.gradleProperty("sonar.organization").orElse("bedahovorka").get())
 
-        // Source and test paths (desktop-ui + :core KMP subproject).
-        // :dispatcher-agent sources/tests are configured in dispatcher-agent/build.gradle.kts
-        // via its own sonar {} block to avoid double-indexing (SonarQube Gradle plugin v6
-        // auto-detects JVM subproject source sets; listing them here AND in the subproject
-        // causes "can't be indexed twice" errors — Issue #762).
-        property(
-            "sonar.sources",
-            "desktop-ui/src/main/kotlin,core/src/commonMain/kotlin," +
-                "core/src/jvmMain/kotlin,core/src/nativeMain/kotlin",
-        )
-        property(
-            "sonar.tests",
-            "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin,core/src/jvmTest/kotlin",
-        )
-        property("sonar.java.binaries", "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main")
-        property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test")
-
-        // Read lazily through providers: the v7 plugin fails on eager gradle-property reads
+        // Sources, tests, binaries, test reports and coverage reports are NOT listed here.
+        // Every analyzed module declares its own in its own build script, so this file no
+        // longer duplicates the module layout (Issue #699). Letting the plugin see each
+        // module also lets it auto-detect sonar.java.libraries — the dependency classpath
+        // the Kotlin analyzer needs for type resolution. While :core and :desktop-ui were
+        // skipped with isSkipProject, they had no classpath at all and every Kotlin rule
+        // that needs type information was degraded on them.
+        //
+        // sonar.java.source / sonar.java.target are gone too: this project has zero .java
+        // files, so the Java sensor never runs and both properties did nothing.
+        //
+        // Read lazily through a provider: the v7 plugin fails on eager gradle-property reads
         // inside this block (component2(...) must not be null). See issue #1000.
-        property("sonar.java.source", providers.gradleProperty("javaVersion").get())
-        property("sonar.java.target", providers.gradleProperty("javaVersion").get())
-        property("sonar.kotlin.source.version", providers.gradleProperty("kotlinVersion").get())
-
+        // major.minor only — the analyzer does not know patch versions and warns
+        // "Failed to find Kotlin version '2.3.20'. Defaulting to 2.4" if given the full one.
         property(
-            "sonar.junit.reportPaths",
-            "desktop-ui/build/test-results/test," +
-                "desktop-ui/build/test-results/integrationTest," +
-                "core/build/test-results/jvmTest," +
-                "core/build/test-results/integrationTest," +
-                "dispatcher-agent/build/test-results/test," +
-                "dispatcher-agent/build/test-results/integrationTest",
-        )
-        property(
-            "sonar.coverage.jacoco.xmlReportPaths",
-            listOf(
-                file("desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml"),
-                file("core/build/reports/jacoco/jvmTest/jacocoTestReport.xml"),
-                file("dispatcher-agent/build/reports/jacoco/test/jacocoTestReport.xml"),
-            ).joinToString(",") { it.absolutePath },
+            "sonar.kotlin.source.version",
+            providers.gradleProperty("kotlinVersion").get().substringBeforeLast('.'),
         )
 
         property("sonar.sourceEncoding", "UTF-8")
         property("sonar.qualitygate.wait", "false")
 
-        // :fast-sim and :core's nativeMain compile to linuxX64 native — JaCoCo cannot
-        // instrument native code (coverage comes from :core:linuxX64Test).
-        // :core-test is test-support infrastructure, not production code requiring coverage.
-        property(
-            "sonar.coverage.exclusions",
-            "fast-sim/**,core-test/**,core/src/nativeMain/**," +
-                "desktop-ui/src/main/kotlin/**/gui/MenuBar.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/Frame.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/RailwayNetGridCanvas.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/ToolBar.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/ValidationDialog.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/RenameDialog.kt," +
-                "desktop-ui/src/main/kotlin/**/gui/action/**," +
-                "desktop-ui/src/main/kotlin/**/gui/gridcanvas/**," +
-                "desktop-ui/src/main/kotlin/**/gui/animation/**",
-        )
+        // Coverage exclusions live in the module they belong to. A pattern set here is
+        // inherited by every module and matched against the MODULE-relative path, so a
+        // repo-relative pattern such as "desktop-ui/src/main/kotlin/**/gui/Frame.kt" would
+        // silently never match inside :desktop-ui, where the path is "src/main/kotlin/...".
+        //
+        // :fast-sim and :core-test need no entry at all: neither is analyzed (both set
+        // isSkipProject = true), so there is nothing to exclude.
     }
 }
 
@@ -179,6 +149,9 @@ tasks.named("sonar") {
         ":desktop-ui:test", ":desktop-ui:integrationTest", ":desktop-ui:jacocoTestReport",
         ":core:jvmTest", ":core:integrationTest", ":core:jacocoTestReport",
         ":dispatcher-agent:test", ":dispatcher-agent:integrationTest", ":dispatcher-agent:jacocoTestReport",
+        // Writes :core's jvm compile classpath for the Kotlin analyzer. Cheap, and it must run
+        // even when the test tasks are skipped, so CI's -x flags never drop it.
+        ":core:sonarJavaLibraries",
     )
 }
 

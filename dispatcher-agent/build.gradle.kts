@@ -379,5 +379,13 @@ sonar {
         property("sonar.java.binaries", "build/classes/kotlin/main")
         property("sonar.java.test.binaries", "build/classes/kotlin/test")
         property("sonar.sourceEncoding", "UTF-8")
+        property(
+            "sonar.junit.reportPaths",
+            "build/test-results/test,build/test-results/integrationTest",
+        )
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            "build/reports/jacoco/test/jacocoTestReport.xml",
+        )
     }
 }

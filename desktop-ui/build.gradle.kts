@@ -485,15 +485,36 @@ tasks.jacocoTestCoverageVerification {
 // SonarQube — skip (root handles it)
 // ===========================================
 
-// sonarqube plugin is NOT declared in this subproject's plugins {} block.
-// The root project applies it and the Gradle SonarQube plugin automatically
-// propagates its extension to all subprojects, making the sonarqube {} DSL
-// available here without an explicit apply.
-// isSkipProject = true tells the scanner to ignore this subproject's own
-// contribution — the root aggregator config points sonar.sources directly
-// to desktop-ui/src/... and collects all coverage from there.
+// The org.sonarqube plugin is NOT declared in this subproject's plugins {} block. The root
+// project applies it and the plugin propagates its extension to every subproject, so the
+// sonar {} DSL is available here without an explicit apply.
+//
+// sonar.sources, sonar.tests, sonar.java.binaries and sonar.java.libraries are all
+// auto-detected from this module's java source sets — only the report paths need declaring.
 sonar {
-    isSkipProject = true
+    properties {
+        property(
+            "sonar.junit.reportPaths",
+            "build/test-results/test,build/test-results/integrationTest",
+        )
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            "build/reports/jacoco/test/jacocoTestReport.xml",
+        )
+        // Swing widgets with no headless test path. Paths are module-relative.
+        property(
+            "sonar.coverage.exclusions",
+            "src/main/kotlin/**/gui/MenuBar.kt," +
+                "src/main/kotlin/**/gui/Frame.kt," +
+                "src/main/kotlin/**/gui/RailwayNetGridCanvas.kt," +
+                "src/main/kotlin/**/gui/ToolBar.kt," +
+                "src/main/kotlin/**/gui/ValidationDialog.kt," +
+                "src/main/kotlin/**/gui/RenameDialog.kt," +
+                "src/main/kotlin/**/gui/action/**," +
+                "src/main/kotlin/**/gui/gridcanvas/**," +
+                "src/main/kotlin/**/gui/animation/**",
+        )
+    }
 }
 
 // ===========================================
