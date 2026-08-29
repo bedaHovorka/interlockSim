@@ -38,7 +38,7 @@ val assertkVersion: String by project
 val mockkVersion: String by project
 val koinVersion: String by project
 val javaVersion: String by project
-val kotlinVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -191,6 +191,13 @@ tasks.named("sonar") {
 // Aggregated JaCoCo Report (cross-module)
 // ===========================================
 
+// Pin the aggregate's engine to the same version the modules pin: without this the
+// report every module's xmlReportPaths consumes floats on Gradle's default, and a
+// Gradle upgrade can silently swap the engine behind the cross-module coverage.
+jacoco {
+    toolVersion = jacocoToolVersion
+}
+
 val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
     group = "verification"
     description = "Generate aggregated JaCoCo coverage report across all modules"
@@ -216,10 +223,13 @@ val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
     )
 
     reports {
+        // XML is the only output anything consumes — Sonar through the modules'
+        // xmlReportPaths, the sonar-inputs artifact, the workflow's verify step.
+        // The HTML site (13 MB, about 1200 files per CI run) had no consumer, so
+        // stop generating it; the per-module HTML reports stay for local browsing.
         xml.required.set(true)
         xml.outputLocation.set(file("build/reports/jacoco/aggregated/jacocoTestReport.xml"))
-        html.required.set(true)
-        html.outputLocation.set(file("build/reports/jacoco/aggregated/html"))
+        html.required.set(false)
         csv.required.set(false)
     }
 }

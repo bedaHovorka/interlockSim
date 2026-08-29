@@ -35,6 +35,7 @@ val jmhVersion: String by project
 val coroutinesVersion: String by project
 val ktlintVersion: String by project
 val detektFormattingVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -441,7 +442,7 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
 // ===========================================
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = jacocoToolVersion
 }
 
 tasks.test {

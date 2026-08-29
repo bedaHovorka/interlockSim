@@ -63,6 +63,7 @@ val kotlinxIoVersion: String by project
 val ktlintVersion: String by project
 val atomicfuVersion: String by project
 val detektFormattingVersion: String by project
+val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -517,7 +518,7 @@ sonar {
 // ===========================================
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = jacocoToolVersion
 }
 
 val jacocoTestReport by tasks.registering(JacocoReport::class) {
