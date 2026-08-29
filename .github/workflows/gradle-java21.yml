@@ -73,6 +73,9 @@ jobs:
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The module list is deliberate: :fast-sim runs its own ktlintCheck inside the
+      # linuxX64 job, and an unqualified ktlintCheck would run it twice here. A new
+      # module that applies the ktlint plugin must be added to this line.
       run: ./gradlew :desktop-ui:ktlintCheck :core:ktlintCheck :dispatcher-agent:ktlintCheck --no-daemon --stacktrace
 
     - name: Run unit tests
@@ -96,8 +99,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # jacocoAggregatedReport merges the .exec data of all modules against all class
       # directories. Sonar reads it alongside the per-module reports so that a :core class
-      # exercised only by a :dispatcher-agent test is counted (see PR #945).
-      run: ./gradlew jacocoTestReport :core:jacocoTestReport jacocoAggregatedReport --no-daemon --stacktrace
+      # exercised only by a :dispatcher-agent test is counted (see PR #945). The
+      # unqualified jacocoTestReport name selects every module's report task, so no
+      # module is named on this line either.
+      run: ./gradlew jacocoTestReport jacocoAggregatedReport --no-daemon --stacktrace
 
     - name: Upload Sonar inputs
       uses: actions/upload-artifact@v4
@@ -109,11 +114,11 @@ jobs:
         # build.gradle.kts whenever a module was added, renamed or moved (issue #699).
         # These globs carry no module name at all, so a new module is picked up on its own.
         #
-        # The last line ships the raw JaCoCo .exec data too. The Sonar job normally reuses the
-        # finished XML, but a GitHub workflow_run job always runs the DEFAULT branch's copy of
-        # sonarqube.yml, so until this change is merged the old job still rebuilds
-        # jacocoAggregatedReport itself — and without the .exec files it would write an empty
-        # report over the good one. It also keeps the artifact self-sufficient.
+        # The last line ships the raw JaCoCo .exec data too, so the artifact is
+        # self-sufficient: any coverage report can be rebuilt from it without
+        # re-running the tests. Keep that line — a workflow_run job always runs
+        # the DEFAULT branch's workflow copy, so what the Sonar job needs must
+        # be carried here, not rebuilt there.
         path: |
           */build/classes/kotlin/main
           */build/classes/kotlin/test
