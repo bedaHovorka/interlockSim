@@ -259,12 +259,15 @@ jobs:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
         RT=build/sonar/report-task.txt
-        if [ ! -s "$RT" ] || [ -z "$SONAR_TOKEN" ]; then
+        if [ ! -s "$RT" ]; then
           echo "No analysis was published, so there is no quality gate to report." >> "$GITHUB_STEP_SUMMARY"
           exit 0
         fi
         CE_URL=$(sed -n 's/^ceTaskUrl=//p' "$RT")
         DASH=$(sed -n 's/^dashboardUrl=//p' "$RT")
+        # The scanner recorded the server it published to; build the gate URL from it
+        # so a -Dsonar.host.url override or a self-hosted server reports correctly.
+        SRV_URL=$(sed -n 's/^serverUrl=//p' "$RT")
 
         # The gate is computed asynchronously, so wait for the compute-engine task.
         STATUS=PENDING
@@ -282,7 +285,7 @@ jobs:
             echo "Analysis task status: \`$STATUS\` — no gate result available."
           else
             GATE=$(curl -sS -u "$SONAR_TOKEN:" \
-              "https://sonarcloud.io/api/qualitygates/project_status?analysisId=$ANALYSIS_ID")
+              "$SRV_URL/api/qualitygates/project_status?analysisId=$ANALYSIS_ID")
             echo "**Status: $(jq -r '.projectStatus.status' <<< "$GATE")**"
             echo
             echo "| | condition | actual | required |"
