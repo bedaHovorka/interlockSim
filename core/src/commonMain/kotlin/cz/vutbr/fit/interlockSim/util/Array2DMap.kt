@@ -13,8 +13,9 @@ package cz.vutbr.fit.interlockSim.util
  * ADT for grid
  * @param <V> type of values
  *
+ * Future: implements NavigableMap<Point, V> - see issue #57
  */
-class Array2DMap<V> : AbstractMutableMap<Point, V>() { // Future: implements NavigableMap<Point, V> - see issue #57
+class Array2DMap<V : Any> : AbstractMutableMap<Point, V>() {
 	private inner class Entry(
 		override val key: Point
 	) : MutableMap.MutableEntry<Point, V> {
@@ -49,7 +50,7 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() { // Future: implements Nav
 		override fun hashCode(): Int {
 			val k = key
 			val v = value
-			return k.hashCode() xor (v?.hashCode() ?: 0)
+			return k.hashCode() xor v.hashCode()
 		}
 	}
 

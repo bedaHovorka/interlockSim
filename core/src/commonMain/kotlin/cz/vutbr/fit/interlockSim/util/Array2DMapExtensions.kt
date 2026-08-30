@@ -23,7 +23,7 @@ package cz.vutbr.fit.interlockSim.util
  *
  * Useful for: Starting point for grid traversal in pathfinding algorithms.
  */
-fun <V> Array2DMap<V>.firstPoint(): Point? = keys.firstOrNull()
+fun <V : Any> Array2DMap<V>.firstPoint(): Point? = keys.firstOrNull()
 
 /**
  * Returns the last (largest) point in the map, or null if the map is empty.
@@ -31,18 +31,19 @@ fun <V> Array2DMap<V>.firstPoint(): Point? = keys.firstOrNull()
  *
  * Useful for: End point for grid traversal, bounds checking.
  */
-fun <V> Array2DMap<V>.lastPoint(): Point? = keys.lastOrNull()
+fun <V : Any> Array2DMap<V>.lastPoint(): Point? = keys.lastOrNull()
 
 /**
  * Returns the first point-value entry in the map, or null if the map is empty.
  */
-fun <V> Array2DMap<V>.firstEntry(): Map.Entry<Point, V>? =
+fun <V : Any> Array2DMap<V>.firstEntry(): Map.Entry<Point, V>? =
 	firstPoint()?.let { point -> entries.find { it.key == point } }
 
 /**
  * Returns the last point-value entry in the map, or null if the map is empty.
  */
-fun <V> Array2DMap<V>.lastEntry(): Map.Entry<Point, V>? = lastPoint()?.let { point -> entries.find { it.key == point } }
+fun <V : Any> Array2DMap<V>.lastEntry(): Map.Entry<Point, V>? =
+	lastPoint()?.let { point -> entries.find { it.key == point } }
 
 /**
  * Returns the least point strictly greater than the given point, or null if no such point exists.
@@ -52,7 +53,7 @@ fun <V> Array2DMap<V>.lastEntry(): Map.Entry<Point, V>? = lastPoint()?.let { poi
  * @param point the reference point
  * @return the next point after the given point, or null
  */
-fun <V> Array2DMap<V>.higherPoint(point: Point): Point? {
+fun <V : Any> Array2DMap<V>.higherPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
 	return keys
 		.filter { comparator.compare(it, point) > 0 }
@@ -67,7 +68,7 @@ fun <V> Array2DMap<V>.higherPoint(point: Point): Point? {
  * @param point the reference point
  * @return the previous point before the given point, or null
  */
-fun <V> Array2DMap<V>.lowerPoint(point: Point): Point? {
+fun <V : Any> Array2DMap<V>.lowerPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
 	return keys
 		.filter { comparator.compare(it, point) < 0 }
@@ -82,7 +83,7 @@ fun <V> Array2DMap<V>.lowerPoint(point: Point): Point? {
  * @param point the reference point
  * @return the ceiling point, or null
  */
-fun <V> Array2DMap<V>.ceilingPoint(point: Point): Point? {
+fun <V : Any> Array2DMap<V>.ceilingPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
 	return keys
 		.filter { comparator.compare(it, point) >= 0 }
@@ -97,7 +98,7 @@ fun <V> Array2DMap<V>.ceilingPoint(point: Point): Point? {
  * @param point the reference point
  * @return the floor point, or null
  */
-fun <V> Array2DMap<V>.floorPoint(point: Point): Point? {
+fun <V : Any> Array2DMap<V>.floorPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
 	return keys
 		.filter { comparator.compare(it, point) <= 0 }
@@ -114,7 +115,7 @@ fun <V> Array2DMap<V>.floorPoint(point: Point): Point? {
  * @param toPoint high endpoint (exclusive) of the points in the returned map
  * @return a view of the specified range within this map
  */
-fun <V> Array2DMap<V>.subMap(
+fun <V : Any> Array2DMap<V>.subMap(
 	fromPoint: Point,
 	toPoint: Point
 ): Map<Point, V> {
@@ -132,7 +133,7 @@ fun <V> Array2DMap<V>.subMap(
  * @param toPoint high endpoint (exclusive) of the points in the returned map
  * @return a view of the portion of this map whose points are less than toPoint
  */
-fun <V> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V> {
+fun <V : Any> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
 	return keys
 		.filter { comparator.compare(it, toPoint) < 0 }
@@ -147,7 +148,7 @@ fun <V> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V> {
  * @param fromPoint low endpoint (inclusive) of the points in the returned map
  * @return a view of the portion of this map whose points are greater than or equal to fromPoint
  */
-fun <V> Array2DMap<V>.tailMap(fromPoint: Point): Map<Point, V> {
+fun <V : Any> Array2DMap<V>.tailMap(fromPoint: Point): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
 	return keys
 		.filter { comparator.compare(it, fromPoint) >= 0 }
@@ -162,7 +163,7 @@ fun <V> Array2DMap<V>.tailMap(fromPoint: Point): Map<Point, V> {
  * @param point the center point
  * @return sequence of neighboring points that exist in this map
  */
-fun <V> Array2DMap<V>.neighbors4(point: Point): Sequence<Point> =
+fun <V : Any> Array2DMap<V>.neighbors4(point: Point): Sequence<Point> =
 	sequence {
 		val candidates =
 			listOf(
@@ -186,7 +187,7 @@ fun <V> Array2DMap<V>.neighbors4(point: Point): Sequence<Point> =
  * @param point the center point
  * @return sequence of neighboring points that exist in this map
  */
-fun <V> Array2DMap<V>.neighbors8(point: Point): Sequence<Point> =
+fun <V : Any> Array2DMap<V>.neighbors8(point: Point): Sequence<Point> =
 	sequence {
 		for (dy in -1..1) {
 			for (dx in -1..1) {
@@ -207,7 +208,7 @@ fun <V> Array2DMap<V>.neighbors8(point: Point): Sequence<Point> =
  * @param point the center point
  * @return sequence of neighboring point-value pairs
  */
-fun <V> Array2DMap<V>.neighborEntries4(point: Point): Sequence<Pair<Point, V>> =
+fun <V : Any> Array2DMap<V>.neighborEntries4(point: Point): Sequence<Pair<Point, V>> =
 	neighbors4(point).map { p -> p to this[p]!! }
 
 /**
@@ -218,7 +219,7 @@ fun <V> Array2DMap<V>.neighborEntries4(point: Point): Sequence<Pair<Point, V>> =
  * @param point the center point
  * @return sequence of neighboring point-value pairs
  */
-fun <V> Array2DMap<V>.neighborEntries8(point: Point): Sequence<Pair<Point, V>> =
+fun <V : Any> Array2DMap<V>.neighborEntries8(point: Point): Sequence<Pair<Point, V>> =
 	neighbors8(point).map { p -> p to this[p]!! }
 
 /**
@@ -230,7 +231,7 @@ fun <V> Array2DMap<V>.neighborEntries8(point: Point): Sequence<Pair<Point, V>> =
  * @param distance the maximum Manhattan distance
  * @return sequence of points within the distance that exist in this map
  */
-fun <V> Array2DMap<V>.pointsWithinManhattan(
+fun <V : Any> Array2DMap<V>.pointsWithinManhattan(
 	point: Point,
 	distance: Int
 ): Sequence<Point> =
@@ -257,7 +258,7 @@ fun <V> Array2DMap<V>.pointsWithinManhattan(
  * @param maxY maximum y coordinate (inclusive)
  * @return sequence of points in the region that exist in this map
  */
-fun <V> Array2DMap<V>.pointsInRegion(
+fun <V : Any> Array2DMap<V>.pointsInRegion(
 	minX: Int,
 	minY: Int,
 	maxX: Int,
