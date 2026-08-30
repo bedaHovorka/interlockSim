@@ -24,7 +24,10 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() { // Future: implements Nav
 		 */
 
 		override val value: V
-			get() = this@Array2DMap.get(key)!!
+			// getValue, not get(key)!!: an entry always describes a key that is present, so a
+			// miss is a broken invariant. getValue reports it as NoSuchElementException naming
+			// the key, instead of a NullPointerException that says nothing (kotlin:S6611).
+			get() = this@Array2DMap.getValue(key)
 
 		override fun setValue(newValue: V): V = this@Array2DMap.put(key, newValue)!!
 
