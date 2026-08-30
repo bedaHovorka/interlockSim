@@ -93,7 +93,7 @@ class NativeJvmParityTest {
 			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
 			reporter.printSummary()
-			val loop = ctx.getMainProcess() as ShuntingLoop
+			val loop = ctx.mainProcess as ShuntingLoop
 			trainsEntered = loop.getTrainsEntered()
 			trainsExited = loop.getTrainsExited()
 		}

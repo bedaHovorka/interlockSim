@@ -152,7 +152,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 
 			// Assert - Documents current behavior
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(0.0)
+			assertThat(train.trainLength).isEqualTo(0.0)
 		}
 
 		/**
@@ -182,7 +182,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 
 			// Assert - Documents current behavior
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(-50.0)
+			assertThat(train.trainLength).isEqualTo(-50.0)
 		}
 
 		/**

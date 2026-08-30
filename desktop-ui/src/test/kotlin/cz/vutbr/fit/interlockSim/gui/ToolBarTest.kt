@@ -115,7 +115,7 @@ class ToolBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Get canvas initial grid state
 			val canvas = frame.railwayNetGridCanvas
-			val initialGridState = canvas.isShowGrid()
+			val initialGridState = canvas.showGrid
 			
 			// Find grid toggle button
 			val toggleButtons = toolBar.components.filterIsInstance<JToggleButton>()
@@ -135,7 +135,7 @@ class ToolBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Get canvas and initial state
 			val canvas = frame.railwayNetGridCanvas
-			val initialGridState = canvas.isShowGrid()
+			val initialGridState = canvas.showGrid
 			
 			// Find grid toggle button
 			val toggleButtons = toolBar.components.filterIsInstance<JToggleButton>()
@@ -145,10 +145,10 @@ class ToolBarTest : AbstractFrameTestBase() {
 			gridToggleButton.doClick()
 			
 			// Verify canvas state changed
-			assertThat(canvas.isShowGrid()).isEqualTo(!initialGridState)
+			assertThat(canvas.showGrid).isEqualTo(!initialGridState)
 			
 			// Verify button state matches canvas
-			assertThat(gridToggleButton.isSelected).isEqualTo(canvas.isShowGrid())
+			assertThat(gridToggleButton.isSelected).isEqualTo(canvas.showGrid)
 		}
 	}
 
@@ -262,7 +262,7 @@ class ToolBarTest : AbstractFrameTestBase() {
 	fun toolbarMaintainsStateAcrossMultipleGridToggles() {
 		runOnEDT {
 			val canvas = frame.railwayNetGridCanvas
-			val initialState = canvas.isShowGrid()
+			val initialState = canvas.showGrid
 
 			// Find grid toggle button
 			val toggleButtons = toolBar.components.filterIsInstance<JToggleButton>()
@@ -270,13 +270,13 @@ class ToolBarTest : AbstractFrameTestBase() {
 
 			// Toggle multiple times
 			gridToggleButton.doClick()
-			assertThat(canvas.isShowGrid()).isEqualTo(!initialState)
+			assertThat(canvas.showGrid).isEqualTo(!initialState)
 
 			gridToggleButton.doClick()
-			assertThat(canvas.isShowGrid()).isEqualTo(initialState)
+			assertThat(canvas.showGrid).isEqualTo(initialState)
 
 			gridToggleButton.doClick()
-			assertThat(canvas.isShowGrid()).isEqualTo(!initialState)
+			assertThat(canvas.showGrid).isEqualTo(!initialState)
 		}
 	}
 }

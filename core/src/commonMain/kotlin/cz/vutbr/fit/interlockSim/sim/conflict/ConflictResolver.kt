@@ -42,7 +42,7 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  * @see DefaultConflictResolver
  * @since Issue #585 (Goal 9 SP3)
  */
-interface ConflictResolver {
+fun interface ConflictResolver {
 	/**
 	 * Generate candidate resolutions for [conflict].
 	 *

@@ -24,7 +24,7 @@ private val logger = KotlinLogging.logger {}
  * is defined exactly once (PR #769 review).
  */
 fun mainProcessActiveTrains(context: DefaultSimulationContext): List<Train> {
-	val mainProcess = context.getMainProcess() ?: return emptyList()
+	val mainProcess = context.mainProcess ?: return emptyList()
 	val approver = mainProcess as? ApprovesTrains
 	if (approver == null) {
 		logger.debug {

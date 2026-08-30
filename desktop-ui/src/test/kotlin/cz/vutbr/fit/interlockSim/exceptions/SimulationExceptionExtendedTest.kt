@@ -63,7 +63,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(null)
 			assertThat(exception.getObject()).isEqualTo(null)
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 
 		@Test
@@ -77,7 +77,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(null)
 			assertThat(exception.getObject()).isEqualTo(testObj)
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 
 		@Test
@@ -91,7 +91,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(testCause)
 			assertThat(exception.getObject()).isEqualTo(testObj)
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 
 		@Test
@@ -105,7 +105,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			assertThat(exception.message).isEqualTo(testMessage)
 			assertThat(exception.cause).isEqualTo(testCause)
 			assertThat(exception.getObject()).isEqualTo(testObj)
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 	}
 
@@ -227,7 +227,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			val exception = SimulationException()
 
 			// Assert
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 
 		@Test
@@ -239,7 +239,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			val exception = SimulationException(testObj)
 
 			// Assert
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 
 		@Test
@@ -251,7 +251,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			val exception = SimulationException(testCause, testObj)
 
 			// Assert
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 
 		@Test
@@ -321,8 +321,8 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			// Assert
 			assertThat(exception1.severity).isEqualTo(Severity.FATAL)
 			assertThat(exception2.severity).isEqualTo(Severity.FATAL)
-			assertThat(exception1.getTime()).isNotNull()
-			assertThat(exception2.getTime()).isNotNull()
+			assertThat(exception1.time).isNotNull()
+			assertThat(exception2.time).isNotNull()
 		}
 
 		@Test

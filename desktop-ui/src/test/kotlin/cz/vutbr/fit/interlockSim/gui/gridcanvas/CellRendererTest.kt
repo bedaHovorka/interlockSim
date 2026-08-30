@@ -45,8 +45,8 @@ class CellRendererTest {
 
 // Helper method to create DynamicInOut with required semaphores
 	private fun createDynamicInOut(staticInOut: InOut): DynamicInOut {
-		val inSemaphore = createDynamicInstance(staticInOut.getInSemaphore())
-		val outSemaphore = createDynamicInstance(staticInOut.getOutSemaphore())
+		val inSemaphore = createDynamicInstance(staticInOut.inSemaphore)
+		val outSemaphore = createDynamicInstance(staticInOut.outSemaphore)
 		return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
 	}
 

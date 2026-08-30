@@ -19,6 +19,6 @@ sealed class BlockEvent {
 	) : BlockEvent()
 }
 
-interface BlockEventListener {
+fun interface BlockEventListener {
 	fun onBlockEvent(event: BlockEvent)
 }

@@ -51,7 +51,7 @@ class ExampleRegistryCollisionWiringTest : KoinTestBase() {
 	fun multiTrainLoopExampleWiresSnapshotProvider() {
 		val registry = get<ExampleRegistry>()
 		val context = createExampleContext(registry, get(), "createMultiTrainLoopExample", "multiTrainLoop", "60")
-		val mainProcess = context.getMainProcess() as MultiTrainLoop
+		val mainProcess = context.mainProcess as MultiTrainLoop
 
 		// Predict the next train name the same way MultiTrainLoopTest does: Train's counter is a
 		// simple shared incrementing field, so a throwaway probe constructed here reveals the

@@ -184,6 +184,23 @@ class DynamicInOutTest {
 	}
 
 	/**
+	 * Test: asRailSemaphore() returns the static InOut's output semaphore.
+	 *
+	 * Expected: an InOut's rail-semaphore view delegates to the wrapped static [InOut], not the
+	 * dynamic [DynamicInOut.outSemaphore] wrapper — the direction a train sees when it exits
+	 * through this InOut, expressed in the static object model.
+	 */
+	@Test
+	fun `asRailSemaphore returns the static out semaphore`() {
+		val staticInOuts = context.getInOutsList()
+		val staticInOut = staticInOuts[0]
+
+		val dynamicInOut = context.toDynamic(staticInOut) as DynamicInOut
+
+		assertThat(dynamicInOut.asRailSemaphore()).isEqualTo(staticInOut.outSemaphore)
+	}
+
+	/**
 	 * Test: toDynamic() returns same wrapper for same static (IdentityHashMap).
 	 *
 	 * Expected: Multiple calls to toDynamic(static) return identical wrapper instance.

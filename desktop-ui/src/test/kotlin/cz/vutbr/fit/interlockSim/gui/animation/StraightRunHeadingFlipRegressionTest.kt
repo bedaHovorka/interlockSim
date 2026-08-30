@@ -73,7 +73,7 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		destinationName: String
 	) {
 		for (train in loop.getApprovedTrains()) {
-			val trainNumber = train.getNumber()
+			val trainNumber = train.trainNumber
 			val section = train.frontSection ?: return
 			val heading = calculator.calculateTrainHeadingRadians(train, section) ?: return
 			val entry = train.trainEntrySeparator
@@ -120,7 +120,7 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		section: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection,
 		rawHeading: Double
 	) {
-		val trainNumber = train.getNumber()
+		val trainNumber = train.trainNumber
 		val location =
 			calculator.calculateTrainGridLocation(train, section, train.frontPosition)
 				?: return
@@ -155,7 +155,7 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		val context =
 			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
 		val simContext = context
-		calculator = TrainPositionCalculator(context, simContext.getSeparatorPositionCache())
+		calculator = TrainPositionCalculator(context, simContext.separatorPositionCache)
 
 		val destinationName = "B"
 		val loop =

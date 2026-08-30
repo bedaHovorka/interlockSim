@@ -56,7 +56,7 @@ data class BlockOccupancyEvent(
  * Subscriber interface for external agents that need to react to block occupancy
  * or reservation changes.
  */
-interface BlockOccupancyListener {
+fun interface BlockOccupancyListener {
 	/**
 	 * Called whenever a block's occupancy or reservation state changes.
 	 *

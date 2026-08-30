@@ -49,7 +49,7 @@ package cz.vutbr.fit.interlockSim.sim
  * @since Issue #540 (SP0.1 — Goal 10); reshaped to a pure seam in Issue #729
  *   (SP0.7 — Goal 10)
  */
-interface Dispatcher {
+fun interface Dispatcher {
 	/**
 	 * Decide what to do given [observed].
 	 *

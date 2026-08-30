@@ -50,7 +50,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Get separator position cache from context (performance optimization)
 		val cache =
 			(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
-				?.getSeparatorPositionCache() ?: emptyMap()
+				?.separatorPositionCache ?: emptyMap()
 
 		calculator = TrainPositionCalculator(context, cache)
 
@@ -65,7 +65,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Verify that cache was populated during context creation
 		val cache =
 			(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
-				?.getSeparatorPositionCache() ?: emptyMap()
+				?.separatorPositionCache ?: emptyMap()
 
 		// Cache should contain all PathSeparators from grid (InOuts, semaphores, switches)
 		assertThat(cache.size > 0).isEqualTo(true)

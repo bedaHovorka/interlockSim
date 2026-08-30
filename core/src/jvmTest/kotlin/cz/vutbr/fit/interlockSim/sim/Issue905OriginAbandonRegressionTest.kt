@@ -104,7 +104,7 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 	 *
 	 * **Without the fix:** `Front.actions()` executed `if (where is DynamicInOut) break`,
 	 * silently exiting the loop. The train never entered any block, so:
-	 * - `waitUntilCrossing { (getLength() - dtMin) - front.getTotalDistance() }` never fired,
+	 * - `waitUntilCrossing { (length - dtMin) - front.getTotalDistance() }` never fired,
 	 * - `out()` never ran, leaving the InOutWorker queue head stuck,
 	 * - the `approwedTrains` slot was held permanently,
 	 * - and a FATAL `requireSimulation` exception was thrown at `pathToSemaphore?.getFirst() == where`.

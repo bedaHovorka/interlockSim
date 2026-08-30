@@ -34,7 +34,7 @@ class ContextSerializationTest : CommonKoinTestBase() {
 		editingContextFactory.createEmptyContext().use { context ->
 			context.putCell(Point(1, 1), inA)
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 		}
 	}
 
@@ -47,7 +47,7 @@ class ContextSerializationTest : CommonKoinTestBase() {
 			context.currentTrackLength = 500.0
 			context.currentNameString = "TestName"
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isNotNull()
 			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull()
 			assertThat(context.currentMaxSpeed).isEqualTo(120.0)
@@ -61,16 +61,16 @@ class ContextSerializationTest : CommonKoinTestBase() {
 	@Test
 	fun freeze_isIdempotent() {
 		editingContextFactory.createEmptyContext().use { context ->
-			assertThat(context.isFrozen()).isFalse()
+			assertThat(context.isFrozen).isFalse()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
+			assertThat(context.isFrozen).isTrue()
 		}
 	}
 
@@ -212,9 +212,9 @@ class ContextSerializationTest : CommonKoinTestBase() {
 	@Test
 	fun unFrozenToFrozen_isOneWay() {
 		editingContextFactory.createEmptyContext().use { context ->
-			assertThat(context.isFrozen()).isFalse()
+			assertThat(context.isFrozen).isFalse()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 		}
 	}
 
@@ -222,8 +222,8 @@ class ContextSerializationTest : CommonKoinTestBase() {
 	fun newContext_startsUnfrozen() {
 		val context1 = editingContextFactory.createEmptyContext()
 		val context2 = DefaultEditingContext(20, 20)
-		assertThat(context1.isFrozen()).isFalse()
-		assertThat(context2.isFrozen()).isFalse()
+		assertThat(context1.isFrozen).isFalse()
+		assertThat(context2.isFrozen).isFalse()
 	}
 
 	private class TestPropertyChangeListener : ContextPropertyChangeListener {

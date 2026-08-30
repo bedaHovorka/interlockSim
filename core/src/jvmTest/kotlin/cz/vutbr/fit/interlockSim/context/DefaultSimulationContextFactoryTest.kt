@@ -92,7 +92,7 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 		fun createContext_editingContext_resultIsFrozen() {
 			TestFixtures.loadShuntingEditingContext(editingFactory).use { editingContext ->
 				factory.createContext(editingContext).use { result ->
-					assertThat((result as BaseContext<*>).isFrozen()).isTrue()
+					assertThat((result as BaseContext<*>).isFrozen).isTrue()
 				}
 			}
 		}

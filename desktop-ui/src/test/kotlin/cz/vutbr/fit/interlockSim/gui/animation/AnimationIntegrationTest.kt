@@ -85,7 +85,7 @@ class AnimationIntegrationTest : KoinTestBase() {
 		}
 
 		// Then: Controller should be initialized and state should be captured
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 		assertThat(state).isNotNull()
 		assertThat(state.simulationTime).isEqualTo(0.0)
 	}
@@ -99,7 +99,7 @@ class AnimationIntegrationTest : KoinTestBase() {
 		}
 
 		// When: Getting current animation state
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 
 		// Then: State should be initialized (track states may be empty in fresh simulation)
 		assertThat(state.trackStates).isNotNull()
@@ -114,7 +114,7 @@ class AnimationIntegrationTest : KoinTestBase() {
 		}
 
 		// When: Getting current animation state
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 
 		// Then: State should contain signal states from the simulation context
 		assertThat(state.signalStates).isNotEmpty()
@@ -165,7 +165,7 @@ class AnimationIntegrationTest : KoinTestBase() {
 		}
 
 		// Then: State should still be accessible (frozen at last captured state)
-		val state = animationController.getCurrentState()
+		val state = animationController.currentState
 		assertThat(state).isNotNull()
 	}
 
@@ -177,14 +177,14 @@ class AnimationIntegrationTest : KoinTestBase() {
 			animationController.start()
 		}
 
-		val stateBefore = animationController.getCurrentState()
+		val stateBefore = animationController.currentState
 
 		SwingUtilities.invokeAndWait {
 			animationController.stop()
 		}
 
 		// When: Accessing state after stop
-		val stateAfter = animationController.getCurrentState()
+		val stateAfter = animationController.currentState
 
 		// Then: State should be the same (frozen)
 		assertThat(stateAfter).isEqualTo(stateBefore)

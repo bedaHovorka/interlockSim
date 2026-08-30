@@ -101,7 +101,7 @@ class Issue797StoppedAtAllowingSignalTest : KoinTestBase() {
 				}
 
 			assertThat(
-				frozenAtGreen.map { "Train #${it.getNumber()} at ${it.signalAheadName}=${it.signalAheadAspect}" },
+				frozenAtGreen.map { "Train #${it.trainNumber} at ${it.signalAheadName}=${it.signalAheadAspect}" },
 				name = "trains standing still in front of an allowing signal"
 			).isEmpty()
 

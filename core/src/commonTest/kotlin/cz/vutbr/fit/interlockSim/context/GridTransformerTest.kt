@@ -123,8 +123,8 @@ class GridTransformerTest : CommonKoinTestBase() {
 		// Verify InOut's embedded semaphores are also mapped
 		assertThat(result.staticToDynamicMap).hasSize(3) // InOut + 2 semaphores
 		assertThat(result.staticToDynamicMap[inOut]).isSameInstanceAs(dynamicInOut)
-		assertThat(result.staticToDynamicMap[inOut.getInSemaphore()]).isNotNull()
-		assertThat(result.staticToDynamicMap[inOut.getOutSemaphore()]).isNotNull()
+		assertThat(result.staticToDynamicMap[inOut.inSemaphore]).isNotNull()
+		assertThat(result.staticToDynamicMap[inOut.outSemaphore]).isNotNull()
 	}
 
 	// --- Grid Structure Preservation ---
@@ -293,8 +293,8 @@ class GridTransformerTest : CommonKoinTestBase() {
 		assertThat(dynamicInOut!!).isInstanceOf<DynamicInOut>()
 
 		// Verify embedded semaphores are also mapped
-		assertThat(result.staticToDynamicMap[inOut.getInSemaphore()]).isNotNull()
-		assertThat(result.staticToDynamicMap[inOut.getOutSemaphore()]).isNotNull()
+		assertThat(result.staticToDynamicMap[inOut.inSemaphore]).isNotNull()
+		assertThat(result.staticToDynamicMap[inOut.outSemaphore]).isNotNull()
 	}
 
 	// --- Performance ---

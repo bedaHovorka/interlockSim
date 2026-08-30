@@ -243,6 +243,25 @@ class HashMapGraphTest {
 	}
 
 	@Test
+	fun nodeCollectionIterator_remove_removesAllEdgesOfCurrentNode() {
+		graph.put("A", "B", 100)
+		graph.put("A", "C", 150)
+		graph.put("B", "C", 250)
+
+		val iterator = graph.NodeCollection().iterator()
+		while (iterator.hasNext()) {
+			if (iterator.next() == "A") {
+				iterator.remove()
+				break
+			}
+		}
+
+		assertThat(graph.get("A", "B")).isNull()
+		assertThat(graph.get("A", "C")).isNull()
+		assertThat(graph.get("B", "C")).withMessage("Edge not connected to A should remain").isEqualTo(250)
+	}
+
+	@Test
 	fun removeByValue_existingValue_removesEdgeAndReturnsNodes() {
 		graph.put("A", "B", 100)
 		graph.put("C", "D", 200)

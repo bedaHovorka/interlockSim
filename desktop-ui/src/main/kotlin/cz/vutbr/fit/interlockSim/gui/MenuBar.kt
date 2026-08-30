@@ -40,6 +40,9 @@ class MenuBar : JMenuBar() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
+		/** System property naming the process working directory; the file chooser's start location. */
+		private const val WORKING_DIRECTORY_PROPERTY = "user.dir"
+
 		/**
 		 * Pure validation: returns true if [context] has enough InOut elements to be saved.
 		 * Does not show any dialog — callers handle error presentation.
@@ -69,7 +72,7 @@ class MenuBar : JMenuBar() {
 	 */
 	private inner class OpenAction : AbstractAction("Open...") {
 		override fun actionPerformed(e: ActionEvent) {
-			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			val fileChooser = JFileChooser(System.getProperty(WORKING_DIRECTORY_PROPERTY))
 			fileChooser.dialogTitle = "Open Railway Network"
 
 			val returnValue = fileChooser.showOpenDialog(this@MenuBar)
@@ -172,7 +175,7 @@ class MenuBar : JMenuBar() {
 
 	private inner class SaveAsAction : AbstractAction("Save as...") {
 		override fun actionPerformed(e: ActionEvent) {
-			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			val fileChooser = JFileChooser(System.getProperty(WORKING_DIRECTORY_PROPERTY))
 			fileChooser.dialogTitle = "Save Railway Network"
 
 			val returnValue = fileChooser.showSaveDialog(this@MenuBar)
@@ -256,7 +259,7 @@ class MenuBar : JMenuBar() {
 			performSave(currentFile)
 		} else {
 			// Show save dialog
-			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			val fileChooser = JFileChooser(System.getProperty(WORKING_DIRECTORY_PROPERTY))
 			fileChooser.dialogTitle = "Save Railway Network"
 
 			val returnValue = fileChooser.showSaveDialog(this)
@@ -295,7 +298,7 @@ class MenuBar : JMenuBar() {
 	 */
 	private inner class StartSimulationAction : AbstractAction("Start...") {
 		override fun actionPerformed(e: ActionEvent) {
-			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			val fileChooser = JFileChooser(System.getProperty(WORKING_DIRECTORY_PROPERTY))
 			fileChooser.dialogTitle = "Start Simulation"
 
 			val returnValue = fileChooser.showOpenDialog(this@MenuBar)

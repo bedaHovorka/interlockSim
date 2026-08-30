@@ -22,8 +22,15 @@ class InOut(
 	orientation: Boolean,
 	spatialType: Cell.SpatialType
 ) : OrientedNodeCell(orientation, spatialType, name) {
-	private val inSemaphore: RailSemaphore
-	private val outSemaphore: RailSemaphore
+	/**
+	 * Semaphore on input.
+	 */
+	val inSemaphore: RailSemaphore
+
+	/**
+	 * Semaphore on output.
+	 */
+	val outSemaphore: RailSemaphore
 
 	init {
 		this.inSemaphore = RailSemaphore(!orientation, spatialType)
@@ -40,16 +47,6 @@ class InOut(
 		requireSimulation(from === direction()) { "Invalid segment: $from, expected: ${direction()}" }
 		return null
 	}
-
-	/**
-	 * @return semaphore on input
-	 */
-	fun getInSemaphore(): RailSemaphore = inSemaphore
-
-	/**
-	 * @return semaphore on output
-	 */
-	fun getOutSemaphore(): RailSemaphore = outSemaphore
 
 	/**
 	 * Implementation of asRailSemaphore() for InOut.
@@ -86,8 +83,8 @@ class InOut(
 	 *
 	 * @return Track connection direction (same as output direction)
 	 * @see DynamicInOut.getSemaphoreFor
-	 * @see getInSemaphore
-	 * @see getOutSemaphore
+	 * @see inSemaphore
+	 * @see outSemaphore
 	 */
 	fun getTrackConnectionDirection(): Cell.Segment = direction()
 }

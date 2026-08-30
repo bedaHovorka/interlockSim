@@ -101,6 +101,48 @@ class ExampleRegistry {
 	}
 
 	/**
+	 * Reads an example network XML from the classpath.
+	 *
+	 * Internal for direct testing of the found/missing resource paths.
+	 *
+	 * @param path Classpath location of the XML resource
+	 * @return Content of the resource
+	 * @throws ContextCreationException if the resource is missing from the classpath
+	 */
+	internal fun readExampleXml(path: String = BuiltinNetworks.VYHYBNA_XML_PATH): String =
+		try {
+			Resources.read(path)
+		} catch (e: IllegalArgumentException) {
+			throw ContextCreationException("Example resource not found on classpath: $path", e)
+		}
+
+	/**
+	 * Creates a [DefaultSimulationContext] from the built-in network XML and hands it
+	 * to [block] for example-specific wiring.
+	 *
+	 * This is the one shared path for every example factory: read the XML, parse it with
+	 * [factory], and initialize the dynamic wrapper map by calling `getInOuts()` — a
+	 * step every example needs before it can build its simulation process.
+	 *
+	 * @param factory The simulation context factory to parse the XML with
+	 * @param block Wiring applied to the fresh context; its receiver is the context
+	 * @return The wired context, ready to run
+	 * @throws ContextCreationException if the resource or the XML is invalid
+	 */
+	private inline fun withExampleContext(
+		factory: SimulationContextFactory,
+		block: DefaultSimulationContext.() -> Unit
+	): SimulationContext =
+		readExampleXml()
+			.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				context.apply(block)
+			}
+
+	/**
 	 * Registry of console-based examples. Maps example name to factory function.
 	 *
 	 * **shuntingLoopAI** is registered here (in addition to [guiExamples]) since
@@ -174,24 +216,11 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = endTime
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				val loop = ShuntingLoop(context, time)
-				wireDispatcherAgent(context, loop, NoOpSimulationController, barrierControlStep = true)
-				context.setMainProcess(loop)
-				context
-			}
+		return withExampleContext(factory) {
+			val loop = ShuntingLoop(this, endTime)
+			wireDispatcherAgent(this, loop, NoOpSimulationController, barrierControlStep = true)
+			setMainProcess(loop)
+		}
 	}
 
 	/**
@@ -216,24 +245,11 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = endTime
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				val loop = ShuntingLoop(context, time)
-				wireSynchronousDispatcher(context, loop)
-				context.setMainProcess(loop)
-				context
-			}
+		return withExampleContext(factory) {
+			val loop = ShuntingLoop(this, endTime)
+			wireSynchronousDispatcher(this, loop)
+			setMainProcess(loop)
+		}
 	}
 
 	/**
@@ -334,73 +350,59 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = endTime
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				// Headless: no real-time sync for the ShuntingLoop itself — the simulation
-				// runs at full speed. Pacing only applies to the agent-driver loop below.
-				val loop = ShuntingLoop(context, time)
-				// Issue #873 (R8 resolution): build the LLM-backed planner with rule-based fallback.
-				// KoogAgentPlanAdapter is async (isAsynchronous=true); ThrottlingSimulationController
-				// provides the required pacing for assertPlannerPacingCompatible without `:desktop-ui`.
-				// Capped at AGENT_MAX_SPEED_MULTIPLIER so the agent driver has sufficient wall-clock
-				// time to produce decisions before the simulation advances past the relevant state.
-				val koogAdapter =
-					KoogAgentPlanAdapter(
-						agentFactory = context.scope.get<KoogAgentFactory>(),
-						context = context,
-						fallbackDispatcher = RuleBasedDispatcher(),
-						inferenceTimeout =
-							Duration.ofSeconds(context.scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
-						commandQueue = context.scope.get<ActuatorCommandQueue>(),
-						sinkHolder = context.scope.get<SinkHolder>(),
-						// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
-						// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
-						cycleHistory = context.scope.get<CycleHistory>()
-					)
-				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
-				// Register in scope so callers outside this factory can retrieve it after the run
-				// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
-				context.scope.declare(aiPlanner)
-				// Issue #847 round 4 (R4-5): DispatcherAgentModule binds the recorder with
-				// arm = RULE_BASED and model = "" for EVERY context, with a comment saying LLM arms
-				// would override it — nothing ever did. Left as-is, every LLM run would be written to
-				// dispatcher-runs/rule_based/ under an empty model name, silently merging the two arms
-				// whose comparison is the whole point of A4. Override with what this example actually
-				// runs, so the per-run JSON identifies its own arm and parameters.
-				declareLlmToolCallingRecorder(context.scope)
-				val pacingController =
-					ThrottlingSimulationController(
-						initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
-					)
-				wireDispatcherAgent(
-					context,
-					loop,
-					pacingController,
-					plannerOverride = aiPlanner,
-					plannerTickSource = koogAdapter
+		return withExampleContext(factory) {
+			// Headless: no real-time sync for the ShuntingLoop itself — the simulation
+			// runs at full speed. Pacing only applies to the agent-driver loop below.
+			val loop = ShuntingLoop(this, endTime)
+			// Issue #873 (R8 resolution): build the LLM-backed planner with rule-based fallback.
+			// KoogAgentPlanAdapter is async (isAsynchronous=true); ThrottlingSimulationController
+			// provides the required pacing for assertPlannerPacingCompatible without `:desktop-ui`.
+			// Capped at AGENT_MAX_SPEED_MULTIPLIER so the agent driver has sufficient wall-clock
+			// time to produce decisions before the simulation advances past the relevant state.
+			val koogAdapter =
+				KoogAgentPlanAdapter(
+					agentFactory = scope.get<KoogAgentFactory>(),
+					context = this,
+					fallbackDispatcher = RuleBasedDispatcher(),
+					inferenceTimeout = Duration.ofSeconds(scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
+					commandQueue = scope.get<ActuatorCommandQueue>(),
+					sinkHolder = scope.get<SinkHolder>(),
+					// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
+					// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
+					cycleHistory = scope.get<CycleHistory>()
 				)
-				// Issue #847 cleanup pass: declare under the SimulationController supertype so
-				// Main.runExample() can retrieve and pass the SAME instance to context.run().
-				// Without this, run() defaults to NoOpSimulationController, and pacingController
-				// only ever paces the AgentLoopDriver thread — never the kDisco kernel loop it was
-				// built to be paced against. assertPlannerPacingCompatible checks that the
-				// controller TYPE can pace; nothing previously checked that the SAME INSTANCE
-				// reaches the simulation kernel.
-				context.scope.declare<SimulationController>(pacingController)
-				context.setMainProcess(loop)
-				context
-			}
+			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
+			// Register in scope so callers outside this factory can retrieve it after the run
+			// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
+			scope.declare(aiPlanner)
+			// Issue #847 round 4 (R4-5): DispatcherAgentModule binds the recorder with
+			// arm = RULE_BASED and model = "" for EVERY context, with a comment saying LLM arms
+			// would override it — nothing ever did. Left as-is, every LLM run would be written to
+			// dispatcher-runs/rule_based/ under an empty model name, silently merging the two arms
+			// whose comparison is the whole point of A4. Override with what this example actually
+			// runs, so the per-run JSON identifies its own arm and parameters.
+			declareLlmToolCallingRecorder(scope)
+			val pacingController =
+				ThrottlingSimulationController(
+					initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
+				)
+			wireDispatcherAgent(
+				this,
+				loop,
+				pacingController,
+				plannerOverride = aiPlanner,
+				plannerTickSource = koogAdapter
+			)
+			// Issue #847 cleanup pass: declare under the SimulationController supertype so
+			// Main.runExample() can retrieve and pass the SAME instance to context.run().
+			// Without this, run() defaults to NoOpSimulationController, and pacingController
+			// only ever paces the AgentLoopDriver thread — never the kDisco kernel loop it was
+			// built to be paced against. assertPlannerPacingCompatible checks that the
+			// controller TYPE can pace; nothing previously checked that the SAME INSTANCE
+			// reaches the simulation kernel.
+			scope.declare<SimulationController>(pacingController)
+			setMainProcess(loop)
+		}
 	}
 
 	/**
@@ -427,29 +429,16 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = endTime
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				val loop = ShuntingLoop(context, time, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
-				// SP4.2 (Issue #564): pace the agent loop with the GUI's real-time sync.
-				// The scoped DelegatingSimulationController is handed to the driver here;
-				// gui.SimulationController attaches the live SimulationRunner as its
-				// delegate when the run starts (and detaches it on stop).
-				wireDispatcherAgent(context, loop, context.scope.get<DelegatingSimulationController>())
-				context.setMainProcess(loop)
-				context
-			}
+		return withExampleContext(factory) {
+			// Enable real-time synchronization for GUI mode with 1x speed multiplier
+			val loop = ShuntingLoop(this, endTime, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
+			// SP4.2 (Issue #564): pace the agent loop with the GUI's real-time sync.
+			// The scoped DelegatingSimulationController is handed to the driver here;
+			// gui.SimulationController attaches the live SimulationRunner as its
+			// delegate when the run starts (and detaches it on stop).
+			wireDispatcherAgent(this, loop, scope.get<DelegatingSimulationController>())
+			setMainProcess(loop)
+		}
 	}
 
 	/**
@@ -482,60 +471,46 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val time = endTime
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				val loop = ShuntingLoop(context, time, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
-				// SP2b.9 (Issue #566): build the LLM-backed planner with rule-based fallback.
-				// KoogAgentPlanAdapter is async (isAsynchronous=true); DelegatingSimulationController
-				// provides the required pacing for assertPlannerPacingCompatible.
-				// Issue #817: wrap with MeasuringPlanAdapter to log and measure fallback vs LLM success rate.
-				val koogAdapter =
-					KoogAgentPlanAdapter(
-						agentFactory = context.scope.get<KoogAgentFactory>(),
-						context = context,
-						fallbackDispatcher = RuleBasedDispatcher(),
-						inferenceTimeout =
-							Duration.ofSeconds(context.scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
-						commandQueue = context.scope.get<ActuatorCommandQueue>(),
-						sinkHolder = context.scope.get<SinkHolder>(),
-						// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
-						// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
-						cycleHistory = context.scope.get<CycleHistory>()
-					)
-				val aiPlanner = MeasuringPlanAdapter(koogAdapter)
-				// Register in scope so callers outside this factory (e.g. Frame's
-				// SimulationController.STOPPED handler) can retrieve it after the run ends
-				// and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
-				context.scope.declare(aiPlanner)
-				// Issue #928: DispatcherAgentModule binds the recorder with arm = RULE_BASED and
-				// model = "" for EVERY context. createShuntingLoopAIExample (the console variant)
-				// overrides this since #847 round 4, but this GUI variant never did — so every GUI
-				// shuntingLoopAI run was written to dispatcher-runs/rule_based/ under an empty model
-				// name, silently merging the two arms whose comparison is the whole point of A4.
-				// Override with what this example actually runs, mirroring createShuntingLoopAIExample.
-				declareLlmToolCallingRecorder(context.scope)
-				wireDispatcherAgent(
-					context,
-					loop,
-					context.scope.get<DelegatingSimulationController>(),
-					plannerOverride = aiPlanner,
-					plannerTickSource = koogAdapter
+		return withExampleContext(factory) {
+			// Enable real-time synchronization for GUI mode with 1x speed multiplier
+			val loop = ShuntingLoop(this, endTime, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
+			// SP2b.9 (Issue #566): build the LLM-backed planner with rule-based fallback.
+			// KoogAgentPlanAdapter is async (isAsynchronous=true); DelegatingSimulationController
+			// provides the required pacing for assertPlannerPacingCompatible.
+			// Issue #817: wrap with MeasuringPlanAdapter to log and measure fallback vs LLM success rate.
+			val koogAdapter =
+				KoogAgentPlanAdapter(
+					agentFactory = scope.get<KoogAgentFactory>(),
+					context = this,
+					fallbackDispatcher = RuleBasedDispatcher(),
+					inferenceTimeout = Duration.ofSeconds(scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
+					commandQueue = scope.get<ActuatorCommandQueue>(),
+					sinkHolder = scope.get<SinkHolder>(),
+					// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
+					// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
+					cycleHistory = scope.get<CycleHistory>()
 				)
-				context.setMainProcess(loop)
-				context
-			}
+			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
+			// Register in scope so callers outside this factory (e.g. Frame's
+			// SimulationController.STOPPED handler) can retrieve it after the run ends
+			// and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
+			scope.declare(aiPlanner)
+			// Issue #928: DispatcherAgentModule binds the recorder with arm = RULE_BASED and
+			// model = "" for EVERY context. createShuntingLoopAIExample (the console variant)
+			// overrides this since #847 round 4, but this GUI variant never did — so every GUI
+			// shuntingLoopAI run was written to dispatcher-runs/rule_based/ under an empty model
+			// name, silently merging the two arms whose comparison is the whole point of A4.
+			// Override with what this example actually runs, mirroring createShuntingLoopAIExample.
+			declareLlmToolCallingRecorder(scope)
+			wireDispatcherAgent(
+				this,
+				loop,
+				scope.get<DelegatingSimulationController>(),
+				plannerOverride = aiPlanner,
+				plannerTickSource = koogAdapter
+			)
+			setMainProcess(loop)
+		}
 	}
 
 	/**
@@ -817,38 +792,41 @@ class ExampleRegistry {
 	}
 
 	/**
+	 * Train specs shared by the console and GUI multi-train examples:
+	 * three trains (A→B, B→A, A→B) entering one time unit apart.
+	 */
+	private val multiTrainSpecs =
+		listOf(
+			MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 0.0, length = 40.0),
+			MultiTrainLoop.TrainSpec(inName = "B", outName = "A", inTime = 1.0, length = 40.0),
+			MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 2.0, length = 40.0)
+		)
+
+	/**
+	 * Shared body of the console and GUI multi-train examples; they differ only in
+	 * real-time synchronization (the GUI needs it for smooth 1x animation).
+	 */
+	private fun createMultiTrainLoop(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		enableRealTimeSync: Boolean
+	): SimulationContext {
+		val endTime = if (args.size >= 3) args[2].toLong() else 300L
+		return withExampleContext(factory) {
+			val process = MultiTrainLoop(this, endTime, multiTrainSpecs, enableRealTimeSync = enableRealTimeSync)
+			(getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
+				?.registerTrainSnapshotProvider(process::getTrainSnapshot)
+			setMainProcess(process)
+		}
+	}
+
+	/**
 	 * Creates a console-based multi-train shunting loop example with three simultaneous trains.
 	 */
 	private fun createMultiTrainLoopExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val endTime = if (args.size >= 3) args[2].toLong() else 300L
-				val specs =
-					listOf(
-						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 0.0, length = 40.0),
-						MultiTrainLoop.TrainSpec(inName = "B", outName = "A", inTime = 1.0, length = 40.0),
-						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 2.0, length = 40.0)
-					)
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				val process = MultiTrainLoop(context, endTime, specs, enableRealTimeSync = false)
-				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
-					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
-				context.setMainProcess(process)
-				context
-			}
-	}
+	): SimulationContext = createMultiTrainLoop(factory, args, enableRealTimeSync = false)
 
 	/**
 	 * Creates a GUI-based multi-train shunting loop example with three simultaneous trains.
@@ -856,33 +834,24 @@ class ExampleRegistry {
 	private fun createMultiTrainLoopGuiExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
+	): SimulationContext = createMultiTrainLoop(factory, args, enableRealTimeSync = true)
+
+	/**
+	 * Shared body of the console and GUI three-train examples; they differ only in
+	 * real-time synchronization (the GUI needs it for smooth 1x animation).
+	 */
+	private fun createThreeTrainLoop(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		enableRealTimeSync: Boolean
 	): SimulationContext {
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val endTime = if (args.size >= 3) args[2].toLong() else 300L
-				val specs =
-					listOf(
-						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 0.0, length = 40.0),
-						MultiTrainLoop.TrainSpec(inName = "B", outName = "A", inTime = 1.0, length = 40.0),
-						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 2.0, length = 40.0)
-					)
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				val process = MultiTrainLoop(context, endTime, specs, enableRealTimeSync = true)
-				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
-					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
-				context.setMainProcess(process)
-				context
-			}
+		val endTime = if (args.size >= 3) args[2].toLong() else 300L
+		return withExampleContext(factory) {
+			val process = ThreeTrainLoop(this, endTime, enableRealTimeSync = enableRealTimeSync)
+			(getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
+				?.registerTrainSnapshotProvider(process::getTrainSnapshot)
+			setMainProcess(process)
+		}
 	}
 
 	/**
@@ -891,27 +860,7 @@ class ExampleRegistry {
 	private fun createThreeTrainLoopExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val endTime = if (args.size >= 3) args[2].toLong() else 300L
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				val process = ThreeTrainLoop(context, endTime, enableRealTimeSync = false)
-				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
-					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
-				context.setMainProcess(process)
-				context
-			}
-	}
+	): SimulationContext = createThreeTrainLoop(factory, args, enableRealTimeSync = false)
 
 	/**
 	 * Creates a GUI-based three-train shunting loop prototype (Issue #584).
@@ -919,26 +868,5 @@ class ExampleRegistry {
 	private fun createThreeTrainLoopGuiExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val xml =
-			try {
-				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException("Resource file vyhybna.xml not found", e)
-			}
-		return xml
-			.byteInputStream()
-			.use { stream ->
-				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
-				val endTime = if (args.size >= 3) args[2].toLong() else 300L
-				// Initialize dynamic wrapper map by calling getInOuts()
-				context.getInOuts()
-				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				val process = ThreeTrainLoop(context, endTime, enableRealTimeSync = true)
-				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
-					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
-				context.setMainProcess(process)
-				context
-			}
-	}
+	): SimulationContext = createThreeTrainLoop(factory, args, enableRealTimeSync = true)
 }

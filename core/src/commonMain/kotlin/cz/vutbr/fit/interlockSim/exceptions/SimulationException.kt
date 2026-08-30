@@ -22,7 +22,10 @@ open class SimulationException(
 	cause: Throwable?,
 	private val obj: Any?
 ) : Exception(message, cause) {
-	private val time: Double = runCatching { Process.time() }.getOrDefault(Double.NaN)
+	/**
+	 * Model time of exception.
+	 */
+	val time: Double = runCatching { Process.time() }.getOrDefault(Double.NaN)
 
 	/**
 	 * Create SimulationException with default FATAL severity
@@ -73,11 +76,6 @@ open class SimulationException(
 	 * @return object getter
 	 */
 	open fun getObject(): Any? = obj
-
-	/**
-	 * @return model time of exception
-	 */
-	fun getTime(): Double = time
 
 	override fun toString(): String {
 		val msg = message?.takeIf { it.isNotEmpty() } ?: ""

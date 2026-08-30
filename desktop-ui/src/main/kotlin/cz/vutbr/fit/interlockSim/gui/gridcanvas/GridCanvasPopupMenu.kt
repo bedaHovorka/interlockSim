@@ -87,6 +87,4 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 		key: cz.vutbr.fit.interlockSim.util.Point,
 		cell: NodeCell
 	)
-
-	protected fun getState(): State? = state
 }

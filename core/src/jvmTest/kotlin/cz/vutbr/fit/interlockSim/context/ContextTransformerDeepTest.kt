@@ -166,7 +166,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			// Assert - Network transformed preserving structure
 			assertThat(simulationContext.getGraph().size()).isEqualTo(graphSizeAfterJoin)
 			assertThat(simulationContext.getInOuts()).hasSize(2)
-			assertThat((simulationContext as DefaultSimulationContext).isFrozen()).isTrue()
+			assertThat((simulationContext as DefaultSimulationContext).isFrozen).isTrue()
 		}
 
 		@Test
@@ -359,8 +359,8 @@ class ContextTransformerDeepTest : KoinTestBase() {
 				) as DefaultSimulationContext
 
 			// Assert - InOut's internal semaphores are also mapped
-			val inSem = inOut.getInSemaphore()
-			val outSem = inOut.getOutSemaphore()
+			val inSem = inOut.inSemaphore
+			val outSem = inOut.outSemaphore
 
 			// These should not throw (they're mapped during InOut dynamic wrapper creation)
 			val dynamicInSem = simulationContext.toDynamic(inSem)

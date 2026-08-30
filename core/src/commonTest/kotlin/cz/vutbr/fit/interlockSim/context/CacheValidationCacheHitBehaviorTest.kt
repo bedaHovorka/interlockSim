@@ -67,7 +67,7 @@ class CacheValidationCacheHitBehaviorTest : KoinComponent {
 	fun `same wrapper returned for InOut semaphore repeated calls`() {
 		loadVyhybnaSimulationContext().use { context ->
 			val dynamicInOut = context.getInOuts().first()
-			val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
+			val staticSemaphore = dynamicInOut.staticRef.inSemaphore
 
 			val wrapper1 = context.toDynamic(staticSemaphore)
 			val wrapper2 = context.toDynamic(staticSemaphore)

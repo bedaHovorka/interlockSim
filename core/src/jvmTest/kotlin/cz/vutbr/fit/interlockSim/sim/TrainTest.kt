@@ -95,7 +95,7 @@ class TrainTest : KoinTestBase() {
 
 			// Assert
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(0.0)
+			assertThat(train.trainLength).isEqualTo(0.0)
 		}
 
 		@Test
@@ -109,7 +109,7 @@ class TrainTest : KoinTestBase() {
 
 			// Assert
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(-50.0)
+			assertThat(train.trainLength).isEqualTo(-50.0)
 		}
 	}
 
@@ -124,7 +124,7 @@ class TrainTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val actualLength = train.getLength()
+			val actualLength = train.trainLength
 
 			// Assert
 			assertThat(actualLength).isEqualTo(expectedLength)
@@ -138,7 +138,7 @@ class TrainTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val actualLength = train.getLength()
+			val actualLength = train.trainLength
 
 			// Assert
 			assertThat(actualLength).isEqualTo(expectedLength)
@@ -152,7 +152,7 @@ class TrainTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val actualLength = train.getLength()
+			val actualLength = train.trainLength
 
 			// Assert
 			assertThat(actualLength).isEqualTo(expectedLength)

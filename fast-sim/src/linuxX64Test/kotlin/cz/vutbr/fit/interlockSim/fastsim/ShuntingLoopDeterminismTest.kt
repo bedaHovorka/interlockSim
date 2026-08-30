@@ -108,7 +108,7 @@ class ShuntingLoopDeterminismTest {
 							"($elapsed) — possible performance regression or near-deadlock"
 					)
 				}
-				val loop = ctx.getMainProcess() as ShuntingLoop
+				val loop = ctx.mainProcess as ShuntingLoop
 
 				assertEquals(
 					EXPECTED_TRAINS_ENTERED,

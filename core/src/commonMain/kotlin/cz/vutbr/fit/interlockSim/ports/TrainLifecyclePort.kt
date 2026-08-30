@@ -48,7 +48,7 @@ package cz.vutbr.fit.interlockSim.ports
  * @see cz.vutbr.fit.interlockSim.sim.DispatchDecision.HoldTrain
  * @since Issue #556 (SP2b.1 — Goal 10)
  */
-interface TrainLifecyclePort {
+fun interface TrainLifecyclePort {
 	/**
 	 * Instruct [trainId] to hold in place for [holdDurationSeconds] simulation
 	 * seconds.

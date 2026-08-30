@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -64,18 +65,19 @@ class TrainPublicAPITest : KoinTestBase() {
 	@DisplayName("Kotlin property accessors")
 	inner class PropertyAccessorTests {
 		@Test
-		fun trainNumber_delegatesToGetNumber() {
+		fun trainNumber_isPositiveAndSequential() {
 			// Arrange
 			val timetable = createTimetableWithLength(150.0)
-			val train = Train(mockContext, timetable)
+			val train1 = Train(mockContext, timetable)
+			val train2 = Train(mockContext, timetable)
 
 			// Act
-			val numberFromProperty = train.trainNumber
-			val numberFromGetter = train.getNumber()
+			val number1 = train1.trainNumber
+			val number2 = train2.trainNumber
 
-			// Assert - Both should return the same value
-			assertThat(numberFromProperty).isEqualTo(numberFromGetter)
-			assertThat(numberFromProperty).isNotNull()
+			// Assert - Numbers are unique sequential counters starting from 1
+			assertThat(number1).isGreaterThan(0)
+			assertThat(number2).isGreaterThan(number1)
 		}
 
 		@Test
@@ -109,19 +111,17 @@ class TrainPublicAPITest : KoinTestBase() {
 		}
 
 		@Test
-		fun trainLength_delegatesToGetLength() {
+		fun trainLength_returnsTimetableLength() {
 			// Arrange
 			val expectedLength = 150.0
 			val timetable = createTimetableWithLength(expectedLength)
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val lengthFromProperty = train.trainLength
-			val lengthFromGetter = train.getLength()
+			val length = train.trainLength
 
-			// Assert - Both should return the same value
-			assertThat(lengthFromProperty).isEqualTo(lengthFromGetter)
-			assertThat(lengthFromProperty).isEqualTo(expectedLength)
+			// Assert - The train length is the length configured in the timetable
+			assertThat(length).isEqualTo(expectedLength)
 		}
 	}
 
@@ -233,7 +233,7 @@ class TrainPublicAPITest : KoinTestBase() {
 
 			// Assert - Should return timetable length
 			assertThat(length).isEqualTo(expectedLength)
-			assertThat(train.getLength()).isEqualTo(expectedLength)
+			assertThat(train.trainLength).isEqualTo(expectedLength)
 		}
 	}
 }

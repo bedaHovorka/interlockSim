@@ -90,7 +90,7 @@ class PathInfoBuilder(
 		target: DynamicPathSeparator,
 		trackSections: List<TrackSection>
 	): PathInfo {
-		val entryDirections = buildEntryDirectionsFromTrackSections(start, trackSections)
+		val entryDirections = buildEntryDirectionsFromTrackSections(trackSections)
 
 		logger.debug {
 			"Built PathInfo: start=$start, target=$target, " +
@@ -100,7 +100,7 @@ class PathInfoBuilder(
 
 		// Build full Path object for storage
 		// This creates a proper Path including separators for compatibility
-		val fullPath = buildFullPath(start, target, trackSections)
+		val fullPath = buildFullPath(start, trackSections)
 
 		return PathInfo(
 			start = start,
@@ -118,12 +118,13 @@ class PathInfoBuilder(
 	 * - Each track section serves as entry direction for blocks it contains
 	 * - TrackSection can contain multiple DynamicTrackBlocks
 	 *
-	 * @param start Starting separator (for traversal context)
+	 * The walk needs no starting separator: a track section is its own entry direction for
+	 * every block it contains, so the mapping depends only on [trackSections].
+	 *
 	 * @param trackSections List of track sections in path order
 	 * @return Map of block -> entry track section
 	 */
 	private fun buildEntryDirectionsFromTrackSections(
-		start: DynamicPathSeparator,
 		trackSections: List<TrackSection>
 	): Map<DynamicTrackBlock, TrackSection> {
 		val result = mutableMapOf<DynamicTrackBlock, TrackSection>()
@@ -182,14 +183,15 @@ class PathInfoBuilder(
 	 * Creates an ArrayPath including separators for compatibility with existing code.
 	 * This reconstructs the full path structure that working solution uses.
 	 *
+	 * The terminal separator is *derived* by walking `getSecondEnd()` through [trackSections]
+	 * from [start]; it is not taken from the caller's target, so no target parameter is needed.
+	 *
 	 * @param start Starting separator
-	 * @param target Target separator
 	 * @param trackSections List of track sections in order
 	 * @return Complete Path object
 	 */
 	private fun buildFullPath(
 		start: DynamicPathSeparator,
-		target: DynamicPathSeparator,
 		trackSections: List<TrackSection>
 	): Path {
 		val path = ArrayPath(context)

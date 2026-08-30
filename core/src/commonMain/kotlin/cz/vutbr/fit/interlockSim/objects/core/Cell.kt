@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.core
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.util.Point
+import kotlin.math.sign
 import kotlin.math.sqrt
 
 /**
@@ -153,32 +154,17 @@ fun segmentFor(
 	dx: Int,
 	dy: Int
 ): Cell.Segment? =
-	if (dx < 0) {
-		if (dy < 0) {
-			Cell.Segment.B
-		} else if (dy > 0) {
-			Cell.Segment.D
-		} else {
-			Cell.Segment.A
-		}
-	} else if (dx == 0) {
-		if (dy < 0) {
-			Cell.Segment.C
-		} else if (dy > 0) {
-			Cell.Segment.H
-		} else {
-			null
-		}
-	} else if (dx > 0) {
-		if (dy < 0) {
-			Cell.Segment.E
-		} else if (dy > 0) {
-			Cell.Segment.G
-		} else {
-			Cell.Segment.F
-		}
-	} else {
-		null
+	when (dx.sign to dy.sign) {
+		-1 to -1 -> Cell.Segment.B
+		-1 to 0 -> Cell.Segment.A
+		-1 to 1 -> Cell.Segment.D
+		0 to -1 -> Cell.Segment.C
+		0 to 0 -> null
+		0 to 1 -> Cell.Segment.H
+		1 to -1 -> Cell.Segment.E
+		1 to 0 -> Cell.Segment.F
+		1 to 1 -> Cell.Segment.G
+		else -> null // unreachable: Int.sign is -1, 0, or 1
 	}
 
 /**

@@ -74,7 +74,7 @@ abstract class CellRenderer(
 		g: Graphics2D,
 		segments: Collection<Segment>?
 	) {
-		if (segments == null || segments.isEmpty()) return
+		if (segments.isNullOrEmpty()) return
 		val segsArray: Array<Segment> = segments.toMutableList().toTypedArray()
 		drawSegments(g, *segsArray)
 	}

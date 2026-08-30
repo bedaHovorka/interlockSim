@@ -536,8 +536,8 @@ class GeneratorTest : KoinTestBase() {
 			// Assert
 			assertThat(gen1.trains.size).isEqualTo(1)
 			assertThat(gen2.trains.size).isEqualTo(1)
-			assertThat(gen1.trains[0].getLength()).isEqualTo(50.0)
-			assertThat(gen2.trains[0].getLength()).isEqualTo(100.0)
+			assertThat(gen1.trains[0].trainLength).isEqualTo(50.0)
+			assertThat(gen2.trains[0].trainLength).isEqualTo(100.0)
 		}
 	}
 

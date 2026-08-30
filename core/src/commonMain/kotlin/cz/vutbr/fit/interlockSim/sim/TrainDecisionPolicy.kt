@@ -86,5 +86,7 @@ interface TrainDecisionPolicy {
 	 * @param directive The typed directive to deliver (RouteGranted, RouteDenied, HoldAt,
 	 *   or HoldImmediately).
 	 */
-	fun acceptDirective(directive: TrainDirective) {}
+	fun acceptDirective(directive: TrainDirective) {
+		// Default: policies that ignore dispatcher directives need no behaviour here.
+	}
 }

@@ -95,7 +95,7 @@ interface AgentService {
  *
  * @since Issue #547 (SP1.2 — Goal 10)
  */
-interface KoogDispatchAgent {
+fun interface KoogDispatchAgent {
 	/**
 	 * Asynchronously decide on dispatch actions given the current network observation.
 	 *

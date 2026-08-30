@@ -86,8 +86,8 @@ class PerceptionMappingTest {
 		// Build a DynamicInOut with a constant-FREE outSemaphore (the predzvěst/narážník case)
 		// and a dynamic inSemaphore.
 		val static = InOut("X", true, Cell.SpatialType.HORIZONTAL)
-		val outSemaphore = createConstantInstance(static.getOutSemaphore(), Signal.FREE)
-		val inSemaphore = createDynamicInstance(static.getInSemaphore())
+		val outSemaphore = createConstantInstance(static.outSemaphore, Signal.FREE)
+		val inSemaphore = createDynamicInstance(static.inSemaphore)
 		val dynamicInOut = DynamicInOut(static, inSemaphore, outSemaphore)
 
 		assertThat(separatorAspect(dynamicInOut)).isEqualTo(Signal.FREE)
@@ -109,8 +109,8 @@ class PerceptionMappingTest {
 	@Test
 	fun `separatorName returns the name for a DynamicInOut`() {
 		val static = InOut("X", true, Cell.SpatialType.HORIZONTAL)
-		val outSemaphore = createConstantInstance(static.getOutSemaphore(), Signal.FREE)
-		val inSemaphore = createDynamicInstance(static.getInSemaphore())
+		val outSemaphore = createConstantInstance(static.outSemaphore, Signal.FREE)
+		val inSemaphore = createDynamicInstance(static.inSemaphore)
 		val dynamicInOut = DynamicInOut(static, inSemaphore, outSemaphore)
 
 		assertThat(separatorName(dynamicInOut)).isEqualTo("X")

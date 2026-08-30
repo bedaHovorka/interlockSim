@@ -144,7 +144,7 @@ class ContextTransformationTest : CommonKoinTestBase() {
 
 			simulationContextFactory.createContext(editingContext).use { simulationContext ->
 				assertThat(simulationContext).isInstanceOf(DefaultSimulationContext::class)
-				assertThat((simulationContext as DefaultSimulationContext).isFrozen()).isTrue()
+				assertThat((simulationContext as DefaultSimulationContext).isFrozen).isTrue()
 			}
 		}
 	}

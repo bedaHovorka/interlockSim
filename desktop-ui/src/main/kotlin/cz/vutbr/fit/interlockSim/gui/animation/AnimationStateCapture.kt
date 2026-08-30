@@ -41,7 +41,7 @@ private val logger = KotlinLogging.logger {}
  *
  * - Trains are collected from occupied track blocks (via TrackOccupant interface)
  * - Grid positions calculated via linear interpolation along track sections
- * - Uses new public Train API: getNumber(), getFrontSection(), getFrontPosition()
+ * - Uses the public Train API: trainNumber, frontSection, frontPosition
  *
  * ## Usage
  *
@@ -86,8 +86,8 @@ object AnimationStateCapture {
 				simulationTime = captureSimulationTime(),
 				trainStates = captureTrainStates(context),
 				trackStates = captureTrackStates(context),
-				signalStates = captureSignalStates(context, semaphoreCache),
-				switchStates = captureSwitchStates(context, switchCache)
+				signalStates = captureSignalStates(semaphoreCache),
+				switchStates = captureSwitchStates(switchCache)
 			)
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to capture animation state from simulation context" }
@@ -140,7 +140,7 @@ object AnimationStateCapture {
 			// Check if occupant is a Train
 			if (occupant is Train) {
 				trains.add(occupant)
-				logger.trace { "Found train #${occupant.getNumber()} in block ${System.identityHashCode(graphBlock)}" }
+				logger.trace { "Found train #${occupant.trainNumber} in block ${System.identityHashCode(graphBlock)}" }
 			}
 		}
 
@@ -151,12 +151,12 @@ object AnimationStateCapture {
 		val positionCalculator =
 			TrainPositionCalculator(
 				context,
-				(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.getSeparatorPositionCache()
+				(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.separatorPositionCache
 					?: emptyMap()
 			)
 
 		return trains.associate { train ->
-			train.getNumber() to captureTrainState(train, positionCalculator, context)
+			train.trainNumber to captureTrainState(train, positionCalculator)
 		}
 	}
 
@@ -170,19 +170,17 @@ object AnimationStateCapture {
 	 *
 	 * @param train Train to capture state from
 	 * @param positionCalculator Calculator for grid position interpolation
-	 * @param context Simulation context for accessing InOut information
 	 * @return Immutable train state snapshot
 	 */
 	private fun captureTrainState(
 		train: Train,
-		positionCalculator: TrainPositionCalculator,
-		context: SimulationContext
+		positionCalculator: TrainPositionCalculator
 	): TrainState {
-		val trainNumber = train.getNumber()
+		val trainNumber = train.trainNumber
 		val position = train.totalDistance
 		val velocity = train.getVelocity()
 		val acceleration = train.getAcceleration()
-		val length = train.getLength()
+		val length = train.trainLength
 
 		// Calculate grid location for train front
 		val currentSection = train.frontSection
@@ -319,14 +317,10 @@ object AnimationStateCapture {
 	 * The transformation from static to dynamic happens during ContextTransformer.createSimulationContext()
 	 * via GridTransformer.transformGrid().
 	 *
-	 * @param context Simulation context to query
 	 * @param semaphoreCache Pre-built list of all semaphores in grid (from AnimationController)
 	 * @return Map of [RailSemaphore] (static reference) to [SignalState]
 	 */
-	private fun captureSignalStates(
-		context: SimulationContext,
-		semaphoreCache: List<DynamicRailSemaphore>
-	): Map<RailSemaphore, SignalState> {
+	private fun captureSignalStates(semaphoreCache: List<DynamicRailSemaphore>): Map<RailSemaphore, SignalState> {
 		logger.trace { "Capturing state for ${semaphoreCache.size} semaphores (using cache)" }
 
 		return semaphoreCache.associate { dynamicSemaphore ->
@@ -375,14 +369,10 @@ object AnimationStateCapture {
 	 * The transformation from static to dynamic happens during ContextTransformer.createSimulationContext()
 	 * via GridTransformer.transformGrid().
 	 *
-	 * @param context Simulation context to query
 	 * @param switchCache Pre-built list of all switches in grid (from AnimationController)
 	 * @return Map of [RailSwitch] (static reference) to [SwitchState]
 	 */
-	private fun captureSwitchStates(
-		context: SimulationContext,
-		switchCache: List<DynamicRailSwitch>
-	): Map<RailSwitch, SwitchState> {
+	private fun captureSwitchStates(switchCache: List<DynamicRailSwitch>): Map<RailSwitch, SwitchState> {
 		logger.trace { "Capturing state for ${switchCache.size} switches (using cache)" }
 
 		return switchCache.associate { dynamicSwitch ->

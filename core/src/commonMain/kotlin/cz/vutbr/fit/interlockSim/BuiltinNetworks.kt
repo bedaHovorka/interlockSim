@@ -22,8 +22,11 @@ import cz.vutbr.fit.interlockSim.util.Resources
  * @since Issue #415 (fast-sim native CLI)
  */
 object BuiltinNetworks {
+	/** Classpath location of the built-in shunting-loop network (vyhybna.xml). Single source of truth. */
+	const val VYHYBNA_XML_PATH = "cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
+
 	/** Shunting loop network (vyhybna.xml). Used by ShuntingLoop simulation and fast-sim embedded example. */
 	val VYHYBNA_XML: String by lazy {
-		Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		Resources.read(VYHYBNA_XML_PATH)
 	}
 }

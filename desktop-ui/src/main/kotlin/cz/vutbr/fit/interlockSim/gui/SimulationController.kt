@@ -151,7 +151,7 @@ internal class SimulationController(
 		val newRunner = SimulationRunner(context)
 		newRunner.speedMultiplier = desiredSpeed
 		runner = newRunner
-		val mainProcess = (context as? DefaultSimulationContext)?.getMainProcess()
+		val mainProcess = (context as? DefaultSimulationContext)?.mainProcess
 		val controllable = mainProcess as? SpeedControllable
 		speedControllable = controllable
 		controllable?.speedMultiplier = desiredSpeed

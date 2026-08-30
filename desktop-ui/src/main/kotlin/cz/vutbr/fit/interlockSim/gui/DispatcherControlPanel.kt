@@ -144,7 +144,7 @@ class DispatcherControlPanel : JPanel() {
 		// Mode combo box
 		modeComboBox.isEditable = false
 		modeComboBox.isEnabled = false
-		modeComboBox.addActionListener { evt ->
+		modeComboBox.addActionListener { _ ->
 			if (!updatingFromState) {
 				val selected = modeComboBox.selectedItem as? DispatcherMode
 				if (selected != null) {

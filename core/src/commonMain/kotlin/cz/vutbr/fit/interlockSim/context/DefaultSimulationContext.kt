@@ -190,13 +190,21 @@ open class DefaultSimulationContext(
 	 * Valid for context lifetime (grid is immutable after freeze).
 	 *
 	 * Used by TrainPositionCalculator to avoid O(n²) grid scans at 30 FPS.
+	 *
+	 * Maps each PathSeparator to its grid Point for O(1) position lookups.
 	 */
-	private lateinit var separatorPositionCache: Map<PathSeparator, Point>
+	lateinit var separatorPositionCache: Map<PathSeparator, Point>
+		private set
 
 	/**
-	 * Main simulation process
+	 * Main simulation process.
+	 *
+	 * `null` until one has been registered via [setMainProcess]. Callers may downcast to
+	 * runtime-control interfaces such as [cz.vutbr.fit.interlockSim.sim.SpeedControllable]
+	 * to retune the live simulation (e.g. wall-clock pacing) from the EDT.
 	 */
-	private var mainProcess: LoopProcess? = null
+	var mainProcess: LoopProcess? = null
+		private set
 
 	/**
 	 * kdisco-engine Simulation instance; set in [run], used in [stop] to signal exit.
@@ -226,7 +234,7 @@ open class DefaultSimulationContext(
 	/**
 	 * True once run() has been invoked and the simulation has started.
 	 * Guards onBlockEvent/onSimulationEvent: listeners registered after this point are silently ignored.
-	 * Distinct from isFrozen() because fromEditingContext() freezes the context before run() is called.
+	 * Distinct from isFrozen because fromEditingContext() freezes the context before run() is called.
 	 */
 	private var simulationHasStarted: Boolean = false
 
@@ -299,9 +307,7 @@ open class DefaultSimulationContext(
 	 * [MetricsServices] accessor instead of flattening it onto [SimulationEnvironment].
 	 */
 	private val metricsServicesInstance: MetricsServices by lazy {
-		object : MetricsServices {
-			override fun getMetricsCollectionService(): MetricsCollectionService = metricsCollectionServiceInstance
-		}
+		MetricsServices { metricsCollectionServiceInstance }
 	}
 
 	/**
@@ -465,9 +471,9 @@ open class DefaultSimulationContext(
 					if (inout is InOut && dynamicInOut is DynamicInOut) {
 						logger.debug {
 							"GridTransformer mapped InOut ${inout.getName()}: " +
-								"inSem@${platformIdentityCode(inout.getInSemaphore())} -> " +
+								"inSem@${platformIdentityCode(inout.inSemaphore)} -> " +
 								"${platformIdentityCode(dynamicInOut.inSemaphore)}, " +
-								"outSem@${platformIdentityCode(inout.getOutSemaphore())} -> " +
+								"outSem@${platformIdentityCode(inout.outSemaphore)} -> " +
 								"${platformIdentityCode(dynamicInOut.outSemaphore)}"
 						}
 					}
@@ -852,7 +858,7 @@ open class DefaultSimulationContext(
 		current: DynamicTrackBlock?
 	): Segment? {
 		if (current != null) {
-			requireSimulation(getGraph().get(location).contains(current)) {
+			requireSimulation(getGraph()[location].contains(current)) {
 				"Current track block $current not found in graph at location $location"
 			}
 		}
@@ -953,11 +959,11 @@ open class DefaultSimulationContext(
 						// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
 						// These semaphores might be used in paths before they're encountered as separate cells
 						// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
-						if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) {
-							staticToDynamicMap[cell.getInSemaphore()] = dynamic.inSemaphore
+						if (!staticToDynamicMap.containsKey(cell.inSemaphore)) {
+							staticToDynamicMap[cell.inSemaphore] = dynamic.inSemaphore
 						}
-						if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) {
-							staticToDynamicMap[cell.getOutSemaphore()] = dynamic.outSemaphore
+						if (!staticToDynamicMap.containsKey(cell.outSemaphore)) {
+							staticToDynamicMap[cell.outSemaphore] = dynamic.outSemaphore
 						}
 						// Also add to dynamicInOuts list if it doesn't exist yet
 						if (dynamicInOuts == null) {
@@ -1097,7 +1103,7 @@ open class DefaultSimulationContext(
 								is DynamicInOut -> cell.staticRef
 								is DynamicRailSemaphore -> cell.staticRef
 								is DynamicRailSwitch -> cell.staticRef
-								else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
+								else -> error("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
 							}
 						if (staticRef !in staticToDynamicMap) {
 							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y) - staticRef not mapped")
@@ -1470,8 +1476,8 @@ open class DefaultSimulationContext(
 	}
 
 	private fun createDynamic(i: InOut): DynamicInOut {
-		val inSemaphore = createDynamicInstance(i.getInSemaphore())
-		val outSemaphore = createConstantInstance(i.getOutSemaphore(), Signal.FREE)
+		val inSemaphore = createDynamicInstance(i.inSemaphore)
+		val outSemaphore = createConstantInstance(i.outSemaphore, Signal.FREE)
 		return DynamicInOut(i, inSemaphore, outSemaphore)
 	}
 
@@ -1797,19 +1803,6 @@ open class DefaultSimulationContext(
 	override fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder = routeFinderInstance
 
 	/**
-	 * Get PathSeparator grid position cache for animation rendering.
-	 *
-	 * Returns a map from PathSeparator to grid Point for O(1) position lookups.
-	 * Used by TrainPositionCalculator to avoid O(n²) grid scans at 30 FPS.
-	 *
-	 * The cache is populated once during fromEditingContext() transformation and
-	 * remains valid for the context lifetime (grid is immutable after freeze).
-	 *
-	 * @return Map from PathSeparator to grid Point
-	 */
-	fun getSeparatorPositionCache(): Map<PathSeparator, Point> = separatorPositionCache
-
-	/**
 	 * Configure semaphore signal appearance after path reservation.
 	 *
 	 * This method separates signal configuration from block reservation logic.
@@ -1866,12 +1859,4 @@ open class DefaultSimulationContext(
 	fun setMainProcess(process: LoopProcess) {
 		mainProcess = process
 	}
-
-	/**
-	 * Returns the currently registered main process, or `null` if none has been set
-	 * via [setMainProcess]. Callers may downcast to runtime-control interfaces such
-	 * as [cz.vutbr.fit.interlockSim.sim.SpeedControllable] to retune the live
-	 * simulation (e.g. wall-clock pacing) from the EDT.
-	 */
-	fun getMainProcess(): LoopProcess? = mainProcess
 }

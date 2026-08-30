@@ -143,7 +143,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		editingContext.currentNameString = "Transformation Test"
 
 		// Verify editing context is mutable (not frozen)
-		val isFrozen = editingContext.isFrozen()
+		val isFrozen = editingContext.isFrozen
 		assertThat(isFrozen).isEqualTo(false)
 
 		// Phase 2: Transform to simulation context
@@ -159,7 +159,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 
 		// Verify simulation context is immutable (frozen)
 		val simContextBase = simulationContext as BaseContext<*>
-		val simContextFrozen = simContextBase.isFrozen()
+		val simContextFrozen = simContextBase.isFrozen
 		assertThat(simContextFrozen).isTrue()
 
 		// Phase 3: Verify structure preservation
@@ -205,7 +205,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		// Phase 2: Verify initialization
 		assertThat(simulationContext).isNotNull()
 		val simContextBase2 = simulationContext as BaseContext<*>
-		val simFrozen = simContextBase2.isFrozen()
+		val simFrozen = simContextBase2.isFrozen
 		assertThat(simFrozen).isTrue()
 		val simInOuts: Collection<*> = simulationContext.getInOuts()
 		assertThat(simInOuts).hasSize(2)
@@ -236,7 +236,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		// Phase 6: Teardown (implicit - context goes out of scope)
 		// Verify context is still accessible and consistent
 		assertThat(simulationContext.getInOuts()).hasSize(2)
-		assertThat(simulationContext.isFrozen()).isTrue()
+		assertThat(simulationContext.isFrozen).isTrue()
 	}
 
 	/**
@@ -277,7 +277,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		// Phase 3: Transform to simulation context
 		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
 		val originalCtxBase = originalContext as BaseContext<*>
-		val origFrozen = originalCtxBase.isFrozen()
+		val origFrozen = originalCtxBase.isFrozen
 		assertThat(origFrozen).isTrue()
 
 		// Phase 4: Deserialize from XML
@@ -312,7 +312,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(cellB as Any).isInstanceOf(InOut::class)
 
 		// Phase 8: Verify loaded context is not frozen
-		assertThat(loadedContext.isFrozen()).isFalse()
+		assertThat(loadedContext.isFrozen).isFalse()
 	}
 
 	/**

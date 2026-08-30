@@ -36,20 +36,20 @@ class ContextImmutabilityTest : CommonKoinTestBase() {
 	@Test
 	fun `editing context starts unfrozen`() {
 		editingContextFactory.createEmptyContext().use { context ->
-			assertThat(context.isFrozen()).isFalse()
+			assertThat(context.isFrozen).isFalse()
 		}
 	}
 
 	@Test
 	fun `freeze is idempotent`() {
 		editingContextFactory.createEmptyContext().use { context ->
-			assertThat(context.isFrozen()).isFalse()
+			assertThat(context.isFrozen).isFalse()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 			context.freeze()
-			assertThat(context.isFrozen()).isTrue()
+			assertThat(context.isFrozen).isTrue()
 		}
 	}
 
@@ -140,7 +140,7 @@ class ContextImmutabilityTest : CommonKoinTestBase() {
 			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 			editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { simulationContext ->
-				assertThat(simulationContext.isFrozen()).isTrue()
+				assertThat(simulationContext.isFrozen).isTrue()
 			}
 		}
 	}
@@ -153,7 +153,7 @@ class ContextImmutabilityTest : CommonKoinTestBase() {
 			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 			editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { simulationContext ->
-				assertThat(simulationContext.isFrozen()).isTrue()
+				assertThat(simulationContext.isFrozen).isTrue()
 			}
 		}
 	}
@@ -162,9 +162,9 @@ class ContextImmutabilityTest : CommonKoinTestBase() {
 	fun `editing context remains mutable after another context is frozen`() {
 		editingContextFactory.createEmptyContext().use { frozenContext ->
 			frozenContext.freeze()
-			assertThat(frozenContext.isFrozen()).isTrue()
+			assertThat(frozenContext.isFrozen).isTrue()
 			editingContextFactory.createEmptyContext().use { mutableContext ->
-				assertThat(mutableContext.isFrozen()).isFalse()
+				assertThat(mutableContext.isFrozen).isFalse()
 				mutableContext.putCell(Point(1, 1), inA)
 				mutableContext.putCell(Point(5, 5), outB)
 				val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -231,13 +231,13 @@ class ContextImmutabilityTest : CommonKoinTestBase() {
 		assertThat(context.getRailWayNetGrid().getCellAt(1, 1)!!).isInstanceOf<InOut>()
 		assertThat(context.getRailWayNetGrid().getCellAt(5, 5)!!).isInstanceOf<InOut>()
 		assertThat(context.getGraph().size()).isGreaterThan(0)
-		assertThat(context.isFrozen()).isTrue()
+		assertThat(context.isFrozen).isTrue()
 	}
 
 	@Test
 	fun `context allows modifications before freeze`() {
 		val context = editingContextFactory.createEmptyContext()
-		assertThat(context.isFrozen()).isFalse()
+		assertThat(context.isFrozen).isFalse()
 		context.putCell(Point(1, 1), inA)
 		context.putCell(Point(5, 5), outB)
 		context.putCell(Point(3, 3), semaphore)
@@ -246,6 +246,6 @@ class ContextImmutabilityTest : CommonKoinTestBase() {
 		context.moveCell(Point(3, 3), Point(4, 4))
 		context.removeCell(Point(4, 4))
 		context.removeLine(trackBlock)
-		assertThat(context.isFrozen()).isFalse()
+		assertThat(context.isFrozen).isFalse()
 	}
 }

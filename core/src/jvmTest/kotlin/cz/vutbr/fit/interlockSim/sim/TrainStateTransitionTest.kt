@@ -185,7 +185,7 @@ class TrainStateTransitionTest : KoinTestBase() {
 			// Train implements TrackOccupant interface
 			assertThat(train, name = "Train should be a TrackOccupant")
 				.isNotNull()
-			assertThat(train.getLength(), name = "Train length for occupancy detection")
+			assertThat(train.trainLength, name = "Train length for occupancy detection")
 				.isEqualTo(150.0)
 		}
 
@@ -202,7 +202,7 @@ class TrainStateTransitionTest : KoinTestBase() {
 
 			// Assert
 			// Train should have a length that can be queried for occupancy calculation
-			val trainLength = train.getLength()
+			val trainLength = train.trainLength
 			assertThat(trainLength, name = "Train length for track occupation notification")
 				.isEqualTo(150.0)
 		}
@@ -223,7 +223,7 @@ class TrainStateTransitionTest : KoinTestBase() {
 			// Train should transition to stopped state, signaling it has left the track
 			assertThat(train.getVelocity(), name = "Train velocity when leaving track")
 				.isEqualTo(0.0)
-			assertThat(train.getLength(), name = "Train length after leaving track")
+			assertThat(train.trainLength, name = "Train length after leaving track")
 				.isEqualTo(150.0)
 		}
 

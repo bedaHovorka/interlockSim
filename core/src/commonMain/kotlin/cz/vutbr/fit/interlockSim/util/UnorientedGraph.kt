@@ -43,7 +43,7 @@ interface UnorientedGraph<N, E> {
 	 * @param node
 	 * @return all edges, which joins with node
 	 */
-	fun get(node: N): Collection<E>
+	operator fun get(node: N): Collection<E>
 
 	/**
 	 * Remove edge from graph

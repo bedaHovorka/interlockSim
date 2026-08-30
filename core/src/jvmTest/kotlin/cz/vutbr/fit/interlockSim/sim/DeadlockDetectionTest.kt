@@ -109,8 +109,8 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val trainB = Train(mockContext, timetableB)
 
 			// Assert: Verify trains have opposite path requirements (cyclic dependency pattern)
-			val trainALength = trainA.getLength()
-			val trainBLength = trainB.getLength()
+			val trainALength = trainA.trainLength
+			val trainBLength = trainB.trainLength
 			assertThat(trainALength).isEqualTo(50.0)
 			assertThat(trainBLength).isEqualTo(50.0)
 		}
@@ -170,7 +170,7 @@ class DeadlockDetectionTest : KoinTestBase() {
 				}
 
 			// Act: All trains are created successfully
-			val allTrainsValid = trains.all { it.getLength() == 50.0 }
+			val allTrainsValid = trains.all { it.trainLength == 50.0 }
 
 			// Assert: Circular dependencies can be represented
 			assertThat(allTrainsValid)
@@ -211,7 +211,7 @@ class DeadlockDetectionTest : KoinTestBase() {
 			assertThat(middleTrackUnavailable)
 				.withMessage("Middle track should be reserved, blocking atomic path setup")
 				.isTrue()
-			assertThat(train.getLength()).isEqualTo(50.0)
+			assertThat(train.trainLength).isEqualTo(50.0)
 		}
 
 		@Test
@@ -235,7 +235,7 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val train2 = Train(mockContext, Timetable(entry2, exit2, Time(0.0), Time(10.0), 50.0))
 
 			// Act: Both trains are valid but only one can hold the shared track
-			val bothValid = train1.getLength() == 50.0 && train2.getLength() == 50.0
+			val bothValid = train1.trainLength == 50.0 && train2.trainLength == 50.0
 
 			// Assert: System supports multiple paths with shared resources
 			assertThat(bothValid)
@@ -294,8 +294,8 @@ class DeadlockDetectionTest : KoinTestBase() {
 
 			// Assert: Both trains are created with the timetabled length, ready to contend
 			// for the shared switch
-			assertThat(train1.getLength()).isEqualTo(50.0)
-			assertThat(train2.getLength()).isEqualTo(50.0)
+			assertThat(train1.trainLength).isEqualTo(50.0)
+			assertThat(train2.trainLength).isEqualTo(50.0)
 		}
 
 		@Test
@@ -328,7 +328,7 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act: Train can use path
-			val trainValid = train.getLength() == 50.0
+			val trainValid = train.trainLength == 50.0
 
 			// Assert: Path constraint prevents multiple trains on same switch
 			assertThat(trainValid)
@@ -364,7 +364,7 @@ class DeadlockDetectionTest : KoinTestBase() {
 			// while the second semaphore downstream is clear
 			assertThat(sem1.signal).isEqualTo(Signal.STOP)
 			assertThat(sem2.signal).isEqualTo(Signal.FREE)
-			assertThat(train.getLength()).isEqualTo(50.0)
+			assertThat(train.trainLength).isEqualTo(50.0)
 		}
 
 		@Test
@@ -384,7 +384,7 @@ class DeadlockDetectionTest : KoinTestBase() {
 				}
 
 			// Act: All trains are created
-			val allTrainsValid = trains.all { it.getLength() == 50.0 }
+			val allTrainsValid = trains.all { it.trainLength == 50.0 }
 
 			// Assert: Circular signal scenario can be represented
 			assertThat(allTrainsValid)
@@ -439,8 +439,8 @@ class DeadlockDetectionTest : KoinTestBase() {
 
 			// Assert: Both trains are created with their scheduled departure times distinct,
 			// so they are staggered rather than simultaneously contending for the shared track
-			assertThat(train1.getLength()).isEqualTo(50.0)
-			assertThat(train2.getLength()).isEqualTo(50.0)
+			assertThat(train1.trainLength).isEqualTo(50.0)
+			assertThat(train2.trainLength).isEqualTo(50.0)
 			assertThat(sharedTrack.length()).isEqualTo(200.0)
 		}
 
@@ -472,14 +472,14 @@ class DeadlockDetectionTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act: Train can traverse both tracks
-			val trainLength = train.getLength()
+			val trainLength = train.trainLength
 
 			// Assert: Train should release tracks to allow other trains to use them
 			assertThat(trainLength).isEqualTo(50.0)
 
 			// Verify train can conceptually move from Track1 to Track2
 			mockContext.advanceTime(1.0)
-			val stillValid = train.getLength() == 50.0
+			val stillValid = train.trainLength == 50.0
 			assertThat(stillValid)
 				.withMessage("Train should continue to be valid after time advance")
 				.isTrue()
@@ -554,8 +554,8 @@ class DeadlockDetectionTest : KoinTestBase() {
 
 			// Assert: Both trains are created with independent entry/exit pairs, so their
 			// paths do not share endpoints that could form a circular wait chain
-			assertThat(train1.getLength()).isEqualTo(50.0)
-			assertThat(train2.getLength()).isEqualTo(50.0)
+			assertThat(train1.trainLength).isEqualTo(50.0)
+			assertThat(train2.trainLength).isEqualTo(50.0)
 		}
 	}
 

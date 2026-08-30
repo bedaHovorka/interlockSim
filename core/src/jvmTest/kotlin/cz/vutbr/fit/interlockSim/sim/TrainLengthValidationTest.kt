@@ -75,7 +75,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should create train successfully
 			val train = Train(context, timetable)
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(40.0)
+			assertThat(train.trainLength).isEqualTo(40.0)
 		}
 
 		@Test
@@ -89,7 +89,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should create train successfully (edge case)
 			val train = Train(context, timetable)
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(100.0)
+			assertThat(train.trainLength).isEqualTo(100.0)
 		}
 
 		@Test
@@ -103,7 +103,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should create train successfully
 			val train = Train(context, timetable)
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(0.1)
+			assertThat(train.trainLength).isEqualTo(0.1)
 		}
 	}
 
@@ -195,7 +195,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should create train successfully
 			val train = Train(context, timetable)
 			assertThat(train).isNotNull()
-			assertThat(train.getLength()).isEqualTo(40.0)
+			assertThat(train.trainLength).isEqualTo(40.0)
 		}
 	}
 

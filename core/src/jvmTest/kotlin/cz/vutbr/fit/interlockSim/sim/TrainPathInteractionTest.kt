@@ -82,7 +82,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act: Train is created with a path context
-			val trainLength = train.getLength()
+			val trainLength = train.trainLength
 
 			// Assert: Train exists and has correct properties
 			assertThat(trainLength)
@@ -104,7 +104,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Assert: Train instance is valid for path operations
-			assertThat(train.getLength()).isEqualTo(50.0)
+			assertThat(train.trainLength).isEqualTo(50.0)
 		}
 
 		@Test
@@ -123,7 +123,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act: Verify train can be used with multi-track paths
-			val trainLength = train.getLength()
+			val trainLength = train.trainLength
 
 			// Assert: Train properties allow progression through multi-track paths
 			assertThat(trainLength)

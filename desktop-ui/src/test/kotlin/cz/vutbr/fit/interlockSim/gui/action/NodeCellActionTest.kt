@@ -111,8 +111,8 @@ class NodeCellActionTest : AbstractFrameTestBase() {
 		action.actionPerformed(mockEvent)
 
 // Verify setNodeOnToolbar was called with correct arguments
-		val actualCellClass = canvas.getToolbarCellClass()
-		val actualArgs = canvas.getToolbarArgs()
+		val actualCellClass = canvas.toolbarCellClass
+		val actualArgs = canvas.toolbarArgs
 
 		assertThat(actualCellClass).isEqualTo(cellClass)
 		assertThat(actualArgs).isNotNull()
@@ -168,7 +168,7 @@ class NodeCellActionTest : AbstractFrameTestBase() {
 		action.actionPerformed(mockEvent)
 
 // Verify toolbar state was updated
-		val actualCellClass = canvas.getToolbarCellClass()
+		val actualCellClass = canvas.toolbarCellClass
 
 		assertThat(actualCellClass).isEqualTo(cellClass)
 	}
@@ -191,7 +191,7 @@ class NodeCellActionTest : AbstractFrameTestBase() {
 // Verify toolbar state and icon
 		assertThat(action.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
 
-		val actualCellClass = canvas.getToolbarCellClass()
+		val actualCellClass = canvas.toolbarCellClass
 
 		assertThat(actualCellClass).isEqualTo(cellClass)
 	}

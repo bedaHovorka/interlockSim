@@ -96,7 +96,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	@DisplayName("the per-tick control step signals the driver, and the signal counts the tick")
 	fun controlStepSignalsTheDriver() {
 		val context = createShuntingLoopAIContext()
-		val loop = context.getMainProcess() as ShuntingLoop
+		val loop = context.mainProcess as ShuntingLoop
 		val signal = checkNotNull(context.scope.getOrNull<DefaultSnapshotSignal>())
 		val before = signal.signalCount
 

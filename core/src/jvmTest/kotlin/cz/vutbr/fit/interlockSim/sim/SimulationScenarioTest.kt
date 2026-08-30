@@ -223,7 +223,7 @@ class SimulationScenarioTest : KoinTestBase() {
 			// Assert - Verify train is created successfully
 			assertThat(train).isNotNull()
 			assertThat(train.getVelocity()).isEqualTo(0.0)
-			assertThat(train.getLength()).isEqualTo(100.0)
+			assertThat(train.trainLength).isEqualTo(100.0)
 
 			// InOutWorker will be created for entry point when run() is called
 		}
@@ -453,7 +453,7 @@ class SimulationScenarioTest : KoinTestBase() {
 			val train = Train(context, mockTimetable)
 
 			// Zero length is currently allowed (SIM-005)
-			assertThat(train.getLength()).isEqualTo(0.0)
+			assertThat(train.trainLength).isEqualTo(0.0)
 		}
 	}
 

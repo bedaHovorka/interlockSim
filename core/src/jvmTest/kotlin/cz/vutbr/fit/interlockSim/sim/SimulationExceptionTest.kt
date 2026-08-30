@@ -103,7 +103,7 @@ class SimulationExceptionTest : KoinTestBase() {
 			assertThat(exception.message).isEqualTo(testMessage)
 			assertThat(exception.cause).isEqualTo(testCause)
 			assertThat(exception.getObject()).isEqualTo(mockTrack)
-			assertThat(exception.getTime()).isNotNull()
+			assertThat(exception.time).isNotNull()
 		}
 
 		@Test
@@ -137,7 +137,7 @@ class SimulationExceptionTest : KoinTestBase() {
 			val exception = SimulationException(testMessage, null, mockTrack)
 
 			// Act
-			val time = exception.getTime()
+			val time = exception.time
 
 			// Assert
 			assertThat(time).isNotNull()
@@ -221,8 +221,8 @@ class SimulationExceptionTest : KoinTestBase() {
 			val exception2 = SimulationException("Message 2", null, null)
 
 			// Act
-			val time1 = exception1.getTime()
-			val time2 = exception2.getTime()
+			val time1 = exception1.time
+			val time2 = exception2.time
 
 			// Assert - times may be the same depending on kDisco time, so just verify both are valid
 			assertThat(time1).isNotNull()

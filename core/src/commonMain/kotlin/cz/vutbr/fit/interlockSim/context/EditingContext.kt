@@ -230,7 +230,7 @@ interface EditingContext :
 	 *
 	 * ## Usage
 	 *
-	 * Use this method to:
+	 * Use this property to:
 	 * - **Test preconditions**: Verify context state before operations
 	 * - **Debug immutability**: Check why editing operations fail
 	 * - **Conditional logic**: Branch based on mutability state (rare)
@@ -239,21 +239,22 @@ interface EditingContext :
 	 *
 	 * ```kotlin
 	 * val context: EditingContext = factory.createEmptyContext()
-	 * println(context.isFrozen())  // false (editing allowed)
+	 * println(context.isFrozen)  // false (editing allowed)
 	 *
 	 * context.freeze()
-	 * println(context.isFrozen())  // true (editing prohibited)
+	 * println(context.isFrozen)  // true (editing prohibited)
 	 *
 	 * // Safe check before modification
-	 * if (!context.isFrozen()) {
+	 * if (!context.isFrozen) {
 	 *     context.putCell(Point(1, 1), inA)
 	 * }
 	 * ```
 	 *
-	 * @return true if context is frozen and modifications are not allowed, false otherwise
+	 * True if context is frozen and modifications are not allowed, false otherwise.
+	 *
 	 * @see freeze
 	 */
-	fun isFrozen(): Boolean
+	val isFrozen: Boolean
 
 	/**
 	 * Fire a property change event for cell modification.

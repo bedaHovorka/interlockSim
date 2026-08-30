@@ -41,7 +41,7 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  * @see DispatcherPreferenceStore
  * @since Issue #568 (Goal 9 → Goal 10 prereq)
  */
-interface AutoConflictResolutionService {
+fun interface AutoConflictResolutionService {
 	/**
 	 * Select and record the top-ranked resolution for [event].
 	 *

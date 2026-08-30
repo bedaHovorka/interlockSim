@@ -105,7 +105,7 @@ class DynamicInOut(
 	 * Implementation of asRailSemaphore() for DynamicInOut.
 	 * Returns the output semaphore of the static InOut reference.
 	 */
-	override fun asRailSemaphore(): RailSemaphore = staticRef.getOutSemaphore()
+	override fun asRailSemaphore(): RailSemaphore = staticRef.outSemaphore
 
 	/**
 	 * Hash code based on the static object (stable hash code).

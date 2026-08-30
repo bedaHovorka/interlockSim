@@ -110,6 +110,12 @@ open class DefaultEditingContext(
 	}
 
 	/**
+	 * Maps track blocks to their line cell keys for removal tracking.
+	 * Used to efficiently remove intermediate TrackBlockPart cells when a TrackBlock is removed.
+	 */
+	private val linesKeys: MutableMap<TrackBlock, Set<Point>> = HashMap()
+
+	/**
 	 * Get the railway network grid for editing operations.
 	 *
 	 * **Covariant return type**: Overrides [BaseContext.getRailWayNetGrid] to return
@@ -218,8 +224,8 @@ open class DefaultEditingContext(
 
 		if (key1.distance(key2) <= sqrt(2.0)) return null
 
-		val nodecell1: NodeCell = CellUtilities.assertNodeCell(getGrid().get(key1)!!)
-		val nodecell2: NodeCell = CellUtilities.assertNodeCell(getGrid().get(key2)!!)
+		val nodecell1: NodeCell = CellUtilities.assertNodeCell(getGrid()[key1]!!)
+		val nodecell2: NodeCell = CellUtilities.assertNodeCell(getGrid()[key2]!!)
 
 		for (s1: Segment in nodecell1.joins()) {
 			val p1 = s1.transform(key1)
@@ -311,7 +317,7 @@ open class DefaultEditingContext(
 		if (builtPath != null && builtPath.isNotEmpty()) {
 			val mapToAdd = builtPath
 			getGrid().putMap(mapToAdd)
-			getLinesKeys()[trackBlock] = mapToAdd.keys.toSet()
+			linesKeys[trackBlock] = mapToAdd.keys.toSet()
 			requireValidState(!getGraph().contains(key1, key2)) {
 				"Graph already contains edge between ($key1, $key2)"
 			}
@@ -515,7 +521,7 @@ open class DefaultEditingContext(
 			if (p.x < 0 || p.y < 0 || p.x >= grid.cols || p.y >= grid.rows) {
 				continue
 			}
-			val cell2 = grid.get(p)
+			val cell2 = grid[p]
 			if (cell2 !is NodeCell) continue
 			val nodeCell2 = cell2
 
@@ -547,11 +553,11 @@ open class DefaultEditingContext(
 	override fun removeCell(key: Point) {
 		checkNotFrozen("remove cell")
 		val grid = getGrid()
-		val cell = grid.get(key)
+		val cell = grid[key]
 		if (cell is NodeCell) {
 			grid.remove(key)
 			for (tl in getGraph().removeAll(key)) {
-				val set = getLinesKeys()[tl]
+				val set = linesKeys[tl]
 				if (set != null) grid.keySet().removeAll(set)
 			}
 			if (cell is InOut) inouts.remove(cell)
@@ -570,7 +576,7 @@ open class DefaultEditingContext(
 		checkNotFrozen("remove track block")
 		val grid = getGrid()
 		getGraph().remove(block)
-		grid.keySet().removeAll(getLinesKeys().remove(block) ?: emptySet())
+		grid.keySet().removeAll(linesKeys.remove(block) ?: emptySet())
 		firePropertyChange(
 			ContextChangeListener.TRACK_BLOCK_REMOVED,
 			null,
@@ -587,10 +593,10 @@ open class DefaultEditingContext(
 	) {
 		checkNotFrozen("move cell")
 		val grid = getGrid()
-		val fromCell = grid.get(from)
+		val fromCell = grid[from]
 		if (fromCell !is NodeCell) return
 
-		val toCell = grid.get(to)
+		val toCell = grid[to]
 		if (toCell != null) return
 
 		putCell(to, fromCell)
@@ -609,7 +615,7 @@ open class DefaultEditingContext(
 		// pokusit se nakreslit primku
 		val lineParts = findTrackLineParts(key1, key2, trackBlock)
 
-		if (lineParts == null || lineParts.isEmpty()) {
+		if (lineParts.isNullOrEmpty()) {
 			logger.debug {
 				"Join failed between (${key1.x},${key1.y}) and (${key2.x},${key2.y})"
 			}

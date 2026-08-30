@@ -331,7 +331,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Tracks modification state for unsaved changes warning.
 	 */
 	val modificationTracker: ModificationTracker =
-		ModificationTracker { isDirty ->
+		ModificationTracker { _ ->
 			updateTitle()
 		}
 
@@ -723,8 +723,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		animationUpdateTimer =
 			Timer(100) {
 				// 10 Hz update rate
-				val controller = railwayNetGridCanvas.getAnimationController()
-				controller?.getCurrentState()?.let { state ->
+				val controller = railwayNetGridCanvas.animationController
+				controller?.currentState?.let { state ->
 					controlPanel.updateTime(state.simulationTime)
 				}
 			}

@@ -65,7 +65,7 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 			Thread.sleep(100)
 
 			// Get the animation controller
-			val controller = frame.railwayNetGridCanvas.getAnimationController()
+			val controller = frame.railwayNetGridCanvas.animationController
 			assertThat(controller != null).isTrue()
 
 			// Verify AnimationController is registered as listener
