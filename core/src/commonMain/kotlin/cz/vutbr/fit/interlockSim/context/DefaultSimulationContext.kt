@@ -307,9 +307,7 @@ open class DefaultSimulationContext(
 	 * [MetricsServices] accessor instead of flattening it onto [SimulationEnvironment].
 	 */
 	private val metricsServicesInstance: MetricsServices by lazy {
-		object : MetricsServices {
-			override fun getMetricsCollectionService(): MetricsCollectionService = metricsCollectionServiceInstance
-		}
+		MetricsServices { metricsCollectionServiceInstance }
 	}
 
 	/**
@@ -860,7 +858,7 @@ open class DefaultSimulationContext(
 		current: DynamicTrackBlock?
 	): Segment? {
 		if (current != null) {
-			requireSimulation(getGraph().get(location).contains(current)) {
+			requireSimulation(getGraph()[location].contains(current)) {
 				"Current track block $current not found in graph at location $location"
 			}
 		}
