@@ -70,6 +70,10 @@ abstract class SimpleTrack(
 			} else {
 				from
 			}
-		return speeds[staticFrom]!!
+		// getValue, not speeds[staticFrom]!!: isEnd above already proved this separator is an
+		// end, so a miss means the speeds map and ends array disagree. getValue reports that
+		// as NoSuchElementException naming the key, not a bare NullPointerException
+		// (kotlin:S6611).
+		return speeds.getValue(staticFrom)
 	}
 }
