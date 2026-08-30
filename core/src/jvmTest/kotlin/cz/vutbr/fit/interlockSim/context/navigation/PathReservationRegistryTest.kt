@@ -9,10 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
-import assertk.assertions.hasMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
@@ -36,16 +34,6 @@ import org.koin.test.inject
 
 /**
  * Comprehensive test suite for PathReservationRegistry atomic operations.
- *
- * ## Test Coverage
- *
- * - ✅ registerAtomic() success
- * - ✅ registerAtomic() conflict detection
- * - ✅ registerAtomic() atomicity (no partial registration)
- * - ✅ registerAtomic() idempotent (same train can re-register)
- * - ✅ Deprecated register() backward compatibility
- * - ✅ Bidirectional mapping integrity
- * - ✅ Unregister operations
  *
  * @since Issue #292 Phase 2 Enhancement (Plan Phase 2)
  */
@@ -206,35 +194,6 @@ class PathReservationRegistryTest : KoinTestBase() {
 			val conflict = result as PathReservationRegistry.RegistrationResult.Conflict
 			assertThat(conflict.reason)
 				.isEqualTo(PathReservationRegistry.ConflictReason.RESERVED_BY_OTHER_TRAIN)
-		}
-	}
-
-	@Nested
-	inner class BackwardCompatibility {
-		@Test
-		fun `deprecated register() succeeds when no conflicts`() {
-			// Act
-			@Suppress("DEPRECATION")
-			registry.register("train1", blocks)
-
-			// Assert
-			val registeredBlocks = registry.getBlocks("train1")
-			assertThat(registeredBlocks).containsExactly(*blocks.toTypedArray())
-		}
-
-		@Test
-		fun `deprecated register() throws IllegalStateException on conflict`() {
-			// Arrange
-			registry.registerAtomic("train1", blocks)
-
-			// Act & Assert
-			assertFailure {
-				@Suppress("DEPRECATION")
-				registry.register("train2", blocks)
-			}.isInstanceOf(IllegalStateException::class)
-				.hasMessage(
-					"Block ${blocks.first()} already reserved by train1 (attempted reservation by train2)"
-				)
 		}
 	}
 

@@ -290,14 +290,6 @@ class DynamicTrack(
 
 	private fun errorStateMessage(from: TrackFacility.State): String = "Wrong state: $state , expected : $from"
 
-	private fun assertGoodStateChange(
-		from: TrackFacility.State,
-		to: TrackFacility.State
-	) {
-		val stateChange = stateChange(from, to)
-		requireSimulation(stateChange) { errorStateMessage(from) }
-	}
-
 	/**
 	 * Equality based on the static object (stable identity).
 	 *

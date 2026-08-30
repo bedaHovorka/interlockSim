@@ -225,11 +225,10 @@ open class DefaultEditingContext(
 			val p1 = s1.transform(key1)
 			if (used(p1)) continue
 			for (s2: Segment in nodecell2.joins()) {
-				if (s1 == s2) continue // stejne segmenty se nepropoji
+				if (s1 == s2) continue // the same segments cannot be joined
 				val p2 = s2.transform(key2)
 				if (used(p2)) continue
 				val distance = p1.distance(p2)
-				// if (distance <= 1) continue;
 				distanceMap.putMulti(distance, Tranporter(p1, p2, s1, s2))
 			}
 		}

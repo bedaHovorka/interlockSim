@@ -28,28 +28,6 @@ package cz.vutbr.fit.interlockSim.objects.core
  * @see TrackFacility which combines both static and dynamic aspects
  */
 interface StaticTrack : PathElement {
-	companion object {
-		/**
-		 * Minimum allowed track length in meters
-		 * @deprecated Use [cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH] from domain.PhysicsConstants
-		 */
-		@Deprecated(
-			"Use MIN_TRACK_LENGTH from domain.PhysicsConstants",
-			ReplaceWith("MIN_TRACK_LENGTH", "cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH")
-		)
-		const val MIN_LENGTH = cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH
-
-		/**
-		 * Typical track length in meters
-		 * @deprecated Use [cz.vutbr.fit.interlockSim.domain.COMMON_TRACK_LENGTH] from domain.PhysicsConstants
-		 */
-		@Deprecated(
-			"Use COMMON_TRACK_LENGTH from domain.PhysicsConstants",
-			ReplaceWith("COMMON_TRACK_LENGTH", "cz.vutbr.fit.interlockSim.domain.COMMON_TRACK_LENGTH")
-		)
-		const val COMMON_TRACK_LENGTH = cz.vutbr.fit.interlockSim.domain.COMMON_TRACK_LENGTH
-	}
-
 	/**
 	 * Gets the length of the track in meters.
 	 *

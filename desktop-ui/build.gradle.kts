@@ -537,30 +537,6 @@ sonar {
 }
 
 // ===========================================
-// Deprecation Analysis
-// ===========================================
-
-tasks.register("checkDeprecations") {
-    group = "verification"
-    description = "Check for deprecated API usage and generate report"
-    dependsOn("clean", "compileJava", "compileTestJava")
-    doLast {
-        println(
-            """
-            |
-            |Deprecation Analysis Complete
-            |=============================
-            |Review compiler output above for deprecation warnings
-            |
-            |To save detailed report to file:
-            |  ./gradlew :desktop-ui:clean :desktop-ui:compileJava :desktop-ui:compileTestJava 2>&1 | tee desktop-ui/build/reports/deprecation-report.txt
-            |
-            """.trimMargin(),
-        )
-    }
-}
-
-// ===========================================
 // Ktlint Configuration
 // ===========================================
 

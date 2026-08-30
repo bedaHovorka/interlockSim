@@ -16,6 +16,8 @@ import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -183,6 +185,27 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// When entering from end[1] and going beyond end, it should clamp to end[0] (the computed exit)
 		assertThat(gridLocation!!.x).isEqualTo(computedExitPos!!.x.toFloat())
 		assertThat(gridLocation.y).isEqualTo(computedExitPos.y.toFloat())
+	}
+
+	@Test
+	fun testCalculateTrainGridLocation_beyondEnd_entrySeparatorWithoutGridPosition() {
+		// Issue #289 transition window: when the entry end has no grid position,
+		// calculateTrainGridLocation returns null. The exit end is a real fixture
+		// end with a known grid position, so only the entry check produces the null.
+		val realEnd = getFirstTrackSection()!!.ends()[0]
+		val unknownSeparator = mockk<PathSeparator>()
+		val trackSection = mockk<TrackSection>()
+		every { trackSection.ends() } returns arrayOf(unknownSeparator, realEnd)
+		every { trackSection.length() } returns 10.0
+
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				mockTrain,
+				trackSection,
+				20.0 // Beyond end
+			)
+
+		assertThat(gridLocation).isNull()
 	}
 
 	@Test
