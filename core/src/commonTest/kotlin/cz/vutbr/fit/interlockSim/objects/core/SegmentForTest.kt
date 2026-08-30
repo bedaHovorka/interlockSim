@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.objects.core
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import kotlin.test.Test
@@ -31,6 +30,7 @@ class SegmentForTest {
 				-1 to 0 to Segment.A,
 				-1 to 1 to Segment.D,
 				0 to -1 to Segment.C,
+				0 to 0 to null,
 				0 to 1 to Segment.H,
 				1 to -1 to Segment.E,
 				1 to 0 to Segment.F,
@@ -44,13 +44,6 @@ class SegmentForTest {
 					.isEqualTo(expected[dx to dy])
 			}
 		}
-	}
-
-	@Test
-	fun `segmentFor returns null for zero displacement`() {
-		assertThat(segmentFor(0, 0))
-			.withMessage("No segment can express a zero displacement")
-			.isNull()
 	}
 
 	@Test
@@ -69,8 +62,10 @@ class SegmentForTest {
 		}
 	}
 
+	// Deliberately kept alongside the jvmTest round-trip in CellTest: this commonTest
+	// copy also exercises the mapping on linuxX64, where jvmTest never runs.
 	@Test
-	fun `segmentFor inverts every segment direction`() {
+	fun `segmentFor maps each segment's own direction back to itself`() {
 		for (segment in Segment.entries) {
 			assertThat(segmentFor(segment.dx, segment.dy))
 				.withMessage("segmentFor must map segment $segment's direction back to itself")

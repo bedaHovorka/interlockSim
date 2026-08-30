@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.core
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.util.Point
+import kotlin.math.sign
 import kotlin.math.sqrt
 
 /**
@@ -144,16 +145,6 @@ fun d2r(d: Int): Float = (d + 1) * 0.5f
 fun r2d(r: Float): Int = (2 * r - 1).toInt()
 
 /**
- * Sign of an integer: -1, 0, or 1. kotlin.math.sign has no Int overload.
- */
-private fun signOf(value: Int): Int =
-	when {
-		value < 0 -> -1
-		value > 0 -> 1
-		else -> 0
-	}
-
-/**
  * This is from d-coordinates conversion
  * @param dx
  * @param dy
@@ -163,7 +154,7 @@ fun segmentFor(
 	dx: Int,
 	dy: Int
 ): Cell.Segment? =
-	when (signOf(dx) to signOf(dy)) {
+	when (dx.sign to dy.sign) {
 		-1 to -1 -> Cell.Segment.B
 		-1 to 0 -> Cell.Segment.A
 		-1 to 1 -> Cell.Segment.D
@@ -173,7 +164,7 @@ fun segmentFor(
 		1 to -1 -> Cell.Segment.E
 		1 to 0 -> Cell.Segment.F
 		1 to 1 -> Cell.Segment.G
-		else -> null // unreachable: signOf returns -1, 0, or 1
+		else -> null // unreachable: Int.sign is -1, 0, or 1
 	}
 
 /**
