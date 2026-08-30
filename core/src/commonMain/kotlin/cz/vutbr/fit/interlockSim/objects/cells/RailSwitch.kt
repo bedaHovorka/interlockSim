@@ -14,7 +14,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
-import io.github.oshai.kotlinlogging.KotlinLogging
 import cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED as DOMAIN_BRANCH_SPEED
 import cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED as DOMAIN_MAIN_SPEED
 
@@ -117,7 +116,7 @@ class RailSwitch : NodeCell {
 		mainSpeed: Double,
 		branchSpeed: Double
 	) : super(spatialType, name) {
-		this.confs = allConfs.get(type, spatialType)
+		this.confs = SwitchTables.allConfs.get(type, spatialType)
 			?: throw IllegalArgumentException(UNSUPORTED_SWITCH_TYPES_MESSAGE)
 		this.type = type
 		speeds.put(Conf.BRANCH, branchSpeed)
@@ -197,19 +196,13 @@ class RailSwitch : NodeCell {
 	/**
 	 * @return directions of branchs
 	 */
-	fun getBranchSegments(): Set<Cell.Segment> = getBranchSegments(this)
+	fun getBranchSegments(): Set<Cell.Segment> = SwitchTables.getBranchSegments(this)
 
 	@Suppress("OVERRIDE_BY_SYNTHETIC")
 	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> {
 		val map = confs.getJoinedNodesAndEdges(from)
 		@Suppress("UNCHECKED_CAST")
 		return (map as Map<Cell.Segment, *>).keys
-	}
-
-	companion object {
-		init {
-			putBranches()
-		}
 	}
 }
 
@@ -230,8 +223,6 @@ private class SwitchMap<V> {
 	): V? = map[t]?.get(st)
 }
 
-private val logger = KotlinLogging.logger {}
-
 /**
  *
  */
@@ -242,45 +233,56 @@ const val UNSUPORTED_SWITCH_TYPES_MESSAGE = "unsuported switch types"
  */
 val SUPPORTED_SIMPLE_SPATIAL_TYPES = arrayOf(Cell.SpatialType.HORIZONTAL, Cell.SpatialType.VERTICAL)
 
-private val branches = SwitchMap<Set<Cell.Segment>>()
-private val allConfs = SwitchMap<EnumUnorientedGraph<Cell.Segment, RailSwitch.Conf>>()
+/**
+ * The singleton switch tables: branch-segment sets and configuration graphs,
+ * keyed by switch [RailSwitch.Type] and [Cell.SpatialType]. Populated once,
+ * at object initialization (first access through [RailSwitch]).
+ */
+private object SwitchTables {
+	private val branches = SwitchMap<Set<Cell.Segment>>()
+	val allConfs = SwitchMap<EnumUnorientedGraph<Cell.Segment, RailSwitch.Conf>>()
 
-private fun putBranches() {
-	putBranches(Type.SIMPLE_LEFT_FALSE, Cell.SpatialType.HORIZONTAL, Cell.Segment.E)
-	putBranches(Type.SIMPLE_LEFT_FALSE, Cell.SpatialType.VERTICAL, Cell.Segment.G)
-	putBranches(Type.SIMPLE_LEFT_TRUE, Cell.SpatialType.HORIZONTAL, Cell.Segment.D)
-	putBranches(Type.SIMPLE_LEFT_TRUE, Cell.SpatialType.VERTICAL, Cell.Segment.B)
+	init {
+		putBranches()
+	}
 
-	putBranches(Type.SIMPLE_RIGHT_FALSE, Cell.SpatialType.HORIZONTAL, Cell.Segment.G)
-	putBranches(Type.SIMPLE_RIGHT_FALSE, Cell.SpatialType.VERTICAL, Cell.Segment.D)
-	putBranches(Type.SIMPLE_RIGHT_TRUE, Cell.SpatialType.HORIZONTAL, Cell.Segment.B)
-	putBranches(Type.SIMPLE_RIGHT_TRUE, Cell.SpatialType.VERTICAL, Cell.Segment.E)
+	private fun putBranches() {
+		putBranches(Type.SIMPLE_LEFT_FALSE, Cell.SpatialType.HORIZONTAL, Cell.Segment.E)
+		putBranches(Type.SIMPLE_LEFT_FALSE, Cell.SpatialType.VERTICAL, Cell.Segment.G)
+		putBranches(Type.SIMPLE_LEFT_TRUE, Cell.SpatialType.HORIZONTAL, Cell.Segment.D)
+		putBranches(Type.SIMPLE_LEFT_TRUE, Cell.SpatialType.VERTICAL, Cell.Segment.B)
 
-	for (t in Type.entries) {
-		if (t.getKind() == RailSwitch.Kind.SIMPLE) {
-			for (st in SUPPORTED_SIMPLE_SPATIAL_TYPES) {
-				val confs = EnumUnorientedGraph<Cell.Segment, RailSwitch.Conf>()
-				val merging = st.segments[if (t.getMergingPosition()) 0 else 1] // je v proti-directionu
-				val mainDir = anti(merging)
-				val set = branches.get(t, st)
-				requireSimulation(set!!.size == 1) { "Branch set must have exactly 1 element: $set" }
-				val branch = set.iterator().next()
-				confs.put(merging, branch, RailSwitch.Conf.BRANCH)
-				confs.put(merging, mainDir, RailSwitch.Conf.MAIN)
-				allConfs.put(t, st, confs)
+		putBranches(Type.SIMPLE_RIGHT_FALSE, Cell.SpatialType.HORIZONTAL, Cell.Segment.G)
+		putBranches(Type.SIMPLE_RIGHT_FALSE, Cell.SpatialType.VERTICAL, Cell.Segment.D)
+		putBranches(Type.SIMPLE_RIGHT_TRUE, Cell.SpatialType.HORIZONTAL, Cell.Segment.B)
+		putBranches(Type.SIMPLE_RIGHT_TRUE, Cell.SpatialType.VERTICAL, Cell.Segment.E)
+
+		for (t in Type.entries) {
+			if (t.getKind() == RailSwitch.Kind.SIMPLE) {
+				for (st in SUPPORTED_SIMPLE_SPATIAL_TYPES) {
+					val confs = EnumUnorientedGraph<Cell.Segment, RailSwitch.Conf>()
+					// the merging segment is in the anti-direction
+					val merging = st.segments[if (t.getMergingPosition()) 0 else 1]
+					val mainDir = anti(merging)
+					val set = branches.get(t, st)
+					requireSimulation(set!!.size == 1) { "Branch set must have exactly 1 element: $set" }
+					val branch = set.iterator().next()
+					confs.put(merging, branch, RailSwitch.Conf.BRANCH)
+					confs.put(merging, mainDir, RailSwitch.Conf.MAIN)
+					allConfs.put(t, st, confs)
+				}
 			}
 		}
 	}
-}
 
-private fun getBranchSegments(rSwitch: RailSwitch): Set<Cell.Segment> =
-	branches.get(rSwitch.type, rSwitch.getSpatialType())!!
+	fun getBranchSegments(rSwitch: RailSwitch): Set<Cell.Segment> = branches.get(rSwitch.type, rSwitch.getSpatialType())!!
 
-private fun putBranches(
-	t: Type,
-	st: Cell.SpatialType,
-	first: Cell.Segment,
-	vararg segments: Cell.Segment
-) {
-	branches.put(t, st, setOf(first, *segments))
+	private fun putBranches(
+		t: Type,
+		st: Cell.SpatialType,
+		first: Cell.Segment,
+		vararg segments: Cell.Segment
+	) {
+		branches.put(t, st, setOf(first, *segments))
+	}
 }

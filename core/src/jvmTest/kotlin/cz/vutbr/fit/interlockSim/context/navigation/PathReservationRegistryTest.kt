@@ -35,16 +35,6 @@ import org.koin.test.inject
 /**
  * Comprehensive test suite for PathReservationRegistry atomic operations.
  *
- * ## Test Coverage
- *
- * - ✅ registerAtomic() success
- * - ✅ registerAtomic() conflict detection
- * - ✅ registerAtomic() atomicity (no partial registration)
- * - ✅ registerAtomic() idempotent (same train can re-register)
- * - ✅ Deprecated register() backward compatibility
- * - ✅ Bidirectional mapping integrity
- * - ✅ Unregister operations
- *
  * @since Issue #292 Phase 2 Enhancement (Plan Phase 2)
  */
 @Tag("integration-test")

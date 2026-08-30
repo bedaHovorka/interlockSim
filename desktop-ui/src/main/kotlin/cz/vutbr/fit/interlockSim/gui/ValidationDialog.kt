@@ -30,10 +30,6 @@ import javax.swing.WindowConstants
  *
  * Issue #258: Validation behavior clarification and implementation
  * --------------------------------------------------------------
- * BEHAVIOR CHANGE (2026-01-21):
- * - BEFORE: ValidationDialog shown when opening files → blocked opening invalid files
- * - AFTER:  ValidationDialog shown only on SAVE → warns before saving invalid files
- *
  * Current Usage Pattern (2026-02-06 Update):
  * - EDITOR MODE: Opening files with errors shows ValidationDialog with "Open Anyway" option
  *   - Unparseable XML (malformed): Shows error, blocks opening
@@ -44,7 +40,6 @@ import javax.swing.WindowConstants
  * Rationale:
  * - Users need to open broken files to fix them in the editor
  * - But we must prevent running simulations with invalid configurations
- * - And we should warn before saving files that might have issues
  *
  * Bug Fixes (Issue #258):
  * - Fixed NullPointerException in createButtonPanel (rootPane timing issue)
