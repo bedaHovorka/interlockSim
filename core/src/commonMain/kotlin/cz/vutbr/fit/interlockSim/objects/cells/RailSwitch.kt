@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED as DOMAIN_MAIN_SPEED
 
 /**
  * Switch
- * CZ: "výhybka"
+ * Czech: "výhybka" (switch)
  */
 class RailSwitch : NodeCell {
 	enum class Kind(

@@ -144,6 +144,16 @@ fun d2r(d: Int): Float = (d + 1) * 0.5f
 fun r2d(r: Float): Int = (2 * r - 1).toInt()
 
 /**
+ * Sign of an integer: -1, 0, or 1. kotlin.math.sign has no Int overload.
+ */
+private fun signOf(value: Int): Int =
+	when {
+		value < 0 -> -1
+		value > 0 -> 1
+		else -> 0
+	}
+
+/**
  * This is from d-coordinates conversion
  * @param dx
  * @param dy
@@ -153,29 +163,17 @@ fun segmentFor(
 	dx: Int,
 	dy: Int
 ): Cell.Segment? =
-	when {
-		dx < 0 ->
-			when {
-				dy < 0 -> Cell.Segment.B
-				dy > 0 -> Cell.Segment.D
-				else -> Cell.Segment.A
-			}
-
-		dx == 0 ->
-			when {
-				dy < 0 -> Cell.Segment.C
-				dy > 0 -> Cell.Segment.H
-				else -> null
-			}
-
-		dx > 0 ->
-			when {
-				dy < 0 -> Cell.Segment.E
-				dy > 0 -> Cell.Segment.G
-				else -> Cell.Segment.F
-			}
-
-		else -> null
+	when (signOf(dx) to signOf(dy)) {
+		-1 to -1 -> Cell.Segment.B
+		-1 to 0 -> Cell.Segment.A
+		-1 to 1 -> Cell.Segment.D
+		0 to -1 -> Cell.Segment.C
+		0 to 0 -> null
+		0 to 1 -> Cell.Segment.H
+		1 to -1 -> Cell.Segment.E
+		1 to 0 -> Cell.Segment.F
+		1 to 1 -> Cell.Segment.G
+		else -> null // unreachable: signOf returns -1, 0, or 1
 	}
 
 /**

@@ -73,10 +73,10 @@ import cz.vutbr.fit.interlockSim.util.Point as GridPoint
  * Use [setEventTimelinePanel] before calling [setContext] with a [SimulationContext] to enable
  * event logging. Events are forwarded from AnimationController to the panel via PropertyChangeListener.
  *
- * Use [getAnimationController] to access the current animation state (e.g., for time display updates).
+ * Use [animationController] to access the current animation state (e.g., for time display updates).
  *
  * @see setEventTimelinePanel
- * @see getAnimationController
+ * @see animationController
  */
 class RailwayNetGridCanvas :
 	JComponent(),

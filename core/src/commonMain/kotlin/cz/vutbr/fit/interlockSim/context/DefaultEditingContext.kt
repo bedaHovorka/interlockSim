@@ -110,6 +110,12 @@ open class DefaultEditingContext(
 	}
 
 	/**
+	 * Maps track blocks to their line cell keys for removal tracking.
+	 * Used to efficiently remove intermediate TrackBlockPart cells when a TrackBlock is removed.
+	 */
+	private val linesKeys: MutableMap<TrackBlock, Set<Point>> = HashMap()
+
+	/**
 	 * Get the railway network grid for editing operations.
 	 *
 	 * **Covariant return type**: Overrides [BaseContext.getRailWayNetGrid] to return

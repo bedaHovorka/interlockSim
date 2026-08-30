@@ -124,13 +124,6 @@ abstract class BaseContext<T : TrackBlock>(
 		HashMapGraph<Point, T, Segment>()
 
 	/**
-	 * Maps track blocks to their line cell keys for removal tracking.
-	 * Used to efficiently remove intermediate TrackBlockPart cells when a TrackBlock is removed.
-	 * Protected to allow subclasses to manage line cell removal.
-	 */
-	protected val linesKeys: MutableMap<T, Set<Point>> = HashMap()
-
-	/**
 	 * List of entry/exit points in the railway network.
 	 * Protected to allow subclass access (DefaultSimulationContext needs this for getInOuts()).
 	 */

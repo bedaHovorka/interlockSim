@@ -88,9 +88,6 @@ class ExampleRegistry {
 
 		/** Classpath location of the built-in shunting-loop network shared by every example. */
 		private const val VYHYBNA_RESOURCE = "cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-
-		/** Failure message when [VYHYBNA_RESOURCE] is missing from the classpath. */
-		private const val VYHYBNA_NOT_FOUND = "Resource file vyhybna.xml not found"
 	}
 
 	/**
@@ -105,6 +102,22 @@ class ExampleRegistry {
 		}
 		return args[2].toLong()
 	}
+
+	/**
+	 * Reads an example network XML from the classpath.
+	 *
+	 * Internal for direct testing of the found/missing resource paths.
+	 *
+	 * @param path Classpath location of the XML resource
+	 * @return Content of the resource
+	 * @throws ContextCreationException if the resource is missing from the classpath
+	 */
+	internal fun readExampleXml(path: String = VYHYBNA_RESOURCE): String =
+		try {
+			Resources.read(path)
+		} catch (e: IllegalArgumentException) {
+			throw ContextCreationException("Example resource not found on classpath: $path", e)
+		}
 
 	/**
 	 * Registry of console-based examples. Maps example name to factory function.
@@ -180,13 +193,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+		return readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -222,13 +229,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+		return readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -340,13 +341,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+		return readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -433,13 +428,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+		return readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -488,13 +477,7 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+		return readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -828,14 +811,8 @@ class ExampleRegistry {
 	private fun createMultiTrainLoopExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+	): SimulationContext =
+		readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -854,7 +831,6 @@ class ExampleRegistry {
 				context.setMainProcess(process)
 				context
 			}
-	}
 
 	/**
 	 * Creates a GUI-based multi-train shunting loop example with three simultaneous trains.
@@ -862,14 +838,8 @@ class ExampleRegistry {
 	private fun createMultiTrainLoopGuiExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+	): SimulationContext =
+		readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -889,7 +859,6 @@ class ExampleRegistry {
 				context.setMainProcess(process)
 				context
 			}
-	}
 
 	/**
 	 * Creates a console-based three-train shunting loop prototype (Issue #584).
@@ -897,14 +866,8 @@ class ExampleRegistry {
 	private fun createThreeTrainLoopExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+	): SimulationContext =
+		readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -917,7 +880,6 @@ class ExampleRegistry {
 				context.setMainProcess(process)
 				context
 			}
-	}
 
 	/**
 	 * Creates a GUI-based three-train shunting loop prototype (Issue #584).
@@ -925,14 +887,8 @@ class ExampleRegistry {
 	private fun createThreeTrainLoopGuiExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val xml =
-			try {
-				Resources.read(VYHYBNA_RESOURCE)
-			} catch (e: IllegalArgumentException) {
-				throw ContextCreationException(VYHYBNA_NOT_FOUND, e)
-			}
-		return xml
+	): SimulationContext =
+		readExampleXml()
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -946,5 +902,4 @@ class ExampleRegistry {
 				context.setMainProcess(process)
 				context
 			}
-	}
 }

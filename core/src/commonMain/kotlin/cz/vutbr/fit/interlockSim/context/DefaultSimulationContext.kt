@@ -194,6 +194,7 @@ open class DefaultSimulationContext(
 	 * Maps each PathSeparator to its grid Point for O(1) position lookups.
 	 */
 	lateinit var separatorPositionCache: Map<PathSeparator, Point>
+		private set
 
 	/**
 	 * Main simulation process.
