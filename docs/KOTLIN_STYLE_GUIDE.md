@@ -2179,8 +2179,37 @@ returns as soon as it has uploaded. CI overrides it per run:
   result and writes the status and every condition into the job summary. A red trunk is
   visible but never blocks unrelated work.
 
+Which of the two a run gets is decided from `github.event.workflow_run.pull_requests`, and
+that array is **not** "the PRs of this commit": GitHub also lists PRs that merely share
+history with the run, and it is unstable between two runs of the same commit. On 2026-08-30 a
+push of `b78548fb` to `develop` was analyzed as PR #1012 (head branch
+`fix/sonar-mechanical-findings`), so the PR path's gate wait turned a trunk run red, while a
+second run of the same commit saw an empty array and passed. `sonarqube.yml` therefore keeps
+only entries whose `head.ref` is the branch that was actually built, and never analyzes
+`main` or `develop` as a PR — not even when a PR is open from `develop` to `main`.
+
 CI needs only the `SONAR_TOKEN` secret. The host URL and organization are defaults in the
-root `sonar {}` block.
+root `sonar {}` block. A missing token **fails** the scan step; it used to exit 0 with a
+warning, which made the job green with nothing analyzed.
+
+### Making the quality gate a required check (issue #1019)
+
+The gate is not yet a required status check on `develop`. Turning it on is a repository
+setting — Settings → Branches → the `develop` rule → add **SonarQube Code Analysis** to the
+required status checks — and it should happen only once all of the following hold:
+
+1. **The New Code definition is settled.** Measured 2026-08-29 the trunk gate was red on a
+   single condition, `new_security_hotspots_reviewed`, over a 210,728-line new-code window —
+   the whole codebase, because the default New Code definition treats the first analysis that
+   way. Requiring the check before that window is sane would block every merge on one
+   hotspot.
+2. **A stabilization period of green PR runs** (roughly two weeks), so an early flaky finding
+   does not block the team. The check only appears on PRs analyzed by the current
+   `sonarqube.yml`, and a `workflow_run` job always runs the **default branch's** copy of the
+   workflow, so the clock starts when that copy is on `develop`.
+3. **The token check stays a failure.** A required check that can pass without any analysis
+   behind it is weaker than it looks; the scan step must keep failing on a missing
+   `SONAR_TOKEN` (see above) rather than skipping.
 
 ### Which module owns which Sonar setting
 

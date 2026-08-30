@@ -171,14 +171,14 @@ Our CI/CD pipeline includes two main workflows:
 **Steps:**
 1. Download build/test/coverage outputs from the triggering Gradle Build run (no rebuild or re-test)
 2. Verify the reused Sonar inputs are present and non-empty
-3. Run SonarCloud scan (if configured)
+3. Run SonarCloud scan (fails the job if `SONAR_TOKEN` is missing)
 4. Report quality gate status into the job summary
 
 **Duration:** ~2-5 minutes (analysis only — build and test happen once, in Gradle Build)
 
 **SonarCloud:**
 - Requires the `SONAR_TOKEN` secret (the organization is a default in the root `sonar {}` block)
-- Skips gracefully if not configured
+- Fails the analysis job if the secret is missing — a green check must mean code was analyzed
 - View results at: https://sonarcloud.io/project/overview?id=bedaHovorka_interlockSim
 
 ### Verifying CI Status

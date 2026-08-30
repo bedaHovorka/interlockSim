@@ -115,7 +115,7 @@ jobs:
     # SonarCloud Analysis (for public repositories)
     # Requires the SONAR_TOKEN secret configured in GitHub (host URL and organization
     # are defaults in the root sonar {} block of build.gradle.kts, not secrets)
-    # If secrets are not configured, this step will skip gracefully
+    # A missing secret FAILS this step — see the comment on the check itself.
     #
     # Reuses gradle-java21.yml's compiled classes, test results and JaCoCo XML (downloaded
     # above) instead of rebuilding and retesting. -PsonarReuseOutputs=true tells
@@ -142,10 +142,17 @@ jobs:
       run: |
         # The host URL and the organization are not secrets. They are defaults in the root
         # sonar {} block of build.gradle.kts, so only the token has to come from a secret.
+        #
+        # A missing token is a hard failure, not a skip. This step used to exit 0 with a
+        # warning, which made the whole job green without a single line analyzed — and a
+        # branch-protection check that can pass vacuously is worse than no check at all
+        # (issue #1019). This workflow only ever runs in this repository (workflow_run and
+        # workflow_dispatch never run in a fork's context), so the secret is always
+        # reachable when the configuration is intact.
         if [ -z "$SONAR_TOKEN" ]; then
-          echo "⚠️  SONAR_TOKEN not configured - skipping SonarCloud analysis"
-          echo "To enable: Add SONAR_TOKEN secret in repository settings"
-          exit 0
+          echo "::error::SONAR_TOKEN is not configured, so nothing can be analyzed"
+          echo "To enable: add the SONAR_TOKEN secret in repository settings"
+          exit 1
         fi
 
         echo "🔍 Running SonarCloud analysis..."
@@ -164,7 +171,8 @@ jobs:
         #
         # PR context comes from the workflow_run event's pull_requests[] array, which GitHub
         # populates for same-repo branches with an open PR regardless of whether the
-        # triggering gradle-java21.yml run itself fired on push or pull_request.
+        # triggering gradle-java21.yml run itself fired on push or pull_request. That array
+        # is filtered below — it cannot be trusted as-is.
         # A branch name is user input, so it must pass an allowlist before any use. Git
         # itself already rejects space ~ ^ : ? * [ \ in refs, but quotes, $ and other
         # shell-meaningful bytes are legal ref characters — the allowlist is stricter
@@ -187,10 +195,23 @@ jobs:
           echo "::error::head branch name has characters outside the allowlist: $HEAD_BRANCH"
           exit 1
         fi
-        PR_COUNT=$(jq 'length' <<< "$EVENT_PR_LIST_JSON")
+        # pull_requests[] is not "the PRs of this commit": GitHub also lists PRs that merely
+        # share history with the run, and it is unstable between two runs of the SAME commit.
+        # Measured 2026-08-30: a push of b78548fb to develop was analyzed as PR #1012 — a PR
+        # whose head branch is fix/sonar-mechanical-findings — and, because PR mode enforces
+        # the gate, that red gate failed a trunk run (run 33297845941), while the second run
+        # of the same commit saw an empty array and passed. Keep only entries whose head
+        # branch is the branch that was actually built.
+        PR_LIST=$(jq -c --arg b "$HEAD_BRANCH" '[ (. // [])[] | select(.head.ref == $b) ]' \
+          <<< "$EVENT_PR_LIST_JSON")
+        # A long-lived branch is never analyzed as a PR, not even when a PR is open FROM it
+        # (develop → main). Its own branch analysis is the trunk history everything else is
+        # measured against, and PR mode would write that analysis onto the PR instead.
+        case "$HEAD_BRANCH" in main|develop) PR_LIST='[]' ;; esac
+        PR_COUNT=$(jq 'length' <<< "$PR_LIST")
         if [ "$PR_COUNT" -gt 0 ]; then
-          PR_NUMBER=$(jq -r '.[0].number' <<< "$EVENT_PR_LIST_JSON")
-          PR_BASE=$(jq -r '.[0].base.ref' <<< "$EVENT_PR_LIST_JSON")
+          PR_NUMBER=$(jq -r '.[0].number' <<< "$PR_LIST")
+          PR_BASE=$(jq -r '.[0].base.ref' <<< "$PR_LIST")
           if ! ref_name_ok "$PR_BASE"; then
             echo "::error::PR base branch name has characters outside the allowlist: $PR_BASE"
             exit 1
