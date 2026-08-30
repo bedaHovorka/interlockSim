@@ -178,7 +178,7 @@ Our CI/CD pipeline includes two main workflows:
 
 **SonarCloud:**
 - Requires the `SONAR_TOKEN` secret (the organization is a default in the root `sonar {}` block)
-- Skips gracefully if not configured
+- Fails the analysis job if the secret is missing — a green check must mean code was analyzed
 - View results at: https://sonarcloud.io/project/overview?id=bedaHovorka_interlockSim
 
 ### Verifying CI Status
