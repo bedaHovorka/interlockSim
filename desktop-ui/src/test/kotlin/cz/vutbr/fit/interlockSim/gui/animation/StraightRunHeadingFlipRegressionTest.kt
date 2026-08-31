@@ -46,29 +46,21 @@ import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.ApprovesTrains
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.testutil.HeadingFlipSampler
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.HeadingSamplerTestBase
 import cz.vutbr.fit.interlockSim.testutil.runSampled
 import cz.vutbr.fit.interlockSim.util.PointF
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
-class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
-	private val processFactory: SimulationProcessFactory by inject()
-
-	private lateinit var sampler: HeadingFlipSampler
-
+class StraightRunHeadingFlipRegressionTest : HeadingSamplerTestBase() {
 	@Test
 	fun `straight A to B run has no spurious mid-journey heading flips`() {
 		val context = startSamplerContext()
@@ -146,12 +138,12 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 	@Test
 	fun `an unresolvable heading skips only that train`() {
 		val calculator = mockk<TrainPositionCalculator>()
-		val sampler = HeadingFlipSampler(calculator)
+		val mockSampler = HeadingFlipSampler(calculator)
 
-		sampler.sample(listOf(unresolvableHeadingTrain(1, calculator), sampleableTrain(2, calculator)))
+		mockSampler.sample(listOf(unresolvableHeadingTrain(1, calculator), sampleableTrain(2, calculator)))
 
-		assertThat(sampler.rawSampledTrainNumbers).contains(2)
-		assertThat(sampler.resolvedSampledTrainNumbers).contains(2)
+		assertThat(mockSampler.rawSampledTrainNumbers).contains(2)
+		assertThat(mockSampler.resolvedSampledTrainNumbers).contains(2)
 	}
 
 	/**
@@ -181,19 +173,6 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		sampleableTrain(trainNumber, calculator).also {
 			every { calculator.calculateTrainHeadingRadians(it, it.frontSection) } returns null
 		}
-
-	/**
-	 * Build the shunting-loop context for a sim-level test, register it for the base class's
-	 * automatic cleanup, and point [sampler] at it. The mock-only unit tests need no context and
-	 * never call this.
-	 */
-	private fun startSamplerContext(): DefaultSimulationContext {
-		val context =
-			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
-		testContext = context
-		sampler = HeadingFlipSampler(TrainPositionCalculator(context, context.separatorPositionCache))
-		return context
-	}
 
 	/**
 	 * Wire the two sampling listeners, run the simulation, and sample every frame that passes

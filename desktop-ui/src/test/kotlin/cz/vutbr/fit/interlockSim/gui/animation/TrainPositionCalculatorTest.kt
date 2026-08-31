@@ -46,6 +46,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	fun setUp() {
 		context =
 			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+		testContext = context
 
 		// Get separator position cache from context (performance optimization)
 		val cache =

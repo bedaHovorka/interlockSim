@@ -15,12 +15,10 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.testutil.ArrivalTally
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.HeadingSamplerTestBase
 import cz.vutbr.fit.interlockSim.testutil.deg
 import cz.vutbr.fit.interlockSim.testutil.normalizeAngleDiff
 import cz.vutbr.fit.interlockSim.testutil.runSampled
@@ -29,7 +27,6 @@ import cz.vutbr.fit.interlockSim.util.PointF
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -62,7 +59,7 @@ import kotlin.math.hypot
  * @since Issue #788
  */
 @DisplayName("Raw calculator heading and drawn position at section boundaries (Issue #788)")
-class BoundaryHeadingAndPositionRegressionTest : KoinTestBase() {
+class BoundaryHeadingAndPositionRegressionTest : HeadingSamplerTestBase() {
 	private companion object {
 		const val END_TIME: Long = 600L
 		const val TRAIN_LENGTH: Double = 40.0
@@ -76,10 +73,6 @@ class BoundaryHeadingAndPositionRegressionTest : KoinTestBase() {
 		/** Trains that must complete their journey for the boundary state to be exercised. */
 		const val MIN_ARRIVALS: Int = 3
 	}
-
-	private val processFactory: SimulationProcessFactory by inject()
-
-	private lateinit var calculator: TrainPositionCalculator
 
 	private val previousHeading = mutableMapOf<Int, Double>()
 	private val previousSection = mutableMapOf<Int, TrackSection>()
@@ -140,10 +133,7 @@ class BoundaryHeadingAndPositionRegressionTest : KoinTestBase() {
 	@Timeout(value = 180, unit = TimeUnit.SECONDS)
 	@DisplayName("the raw heading never reverses and the drawn position never jumps back")
 	fun `raw heading and drawn position stay coherent at every boundary`() {
-		val context =
-			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
-		testContext = context
-		calculator = TrainPositionCalculator(context, context.separatorPositionCache)
+		val context = startSamplerContext()
 
 		val loop =
 			MultiTrainLoop(

@@ -12,6 +12,10 @@ The `testutil` package provides:
 - **AssertKExtensions** - Custom assertions
 - **HeadingFlipSampler** - Per-train raw/resolved heading sampling for the heading-flip
   regression tests (`gui.animation`), owner of the #789 per-train skip contract
+- **HeadingSamplerTestBase** - Shared scaffolding for those regression tests: injects the
+  process factory and exposes `startSamplerContext()`, which creates the shunting context,
+  registers it in `testContext` for `tearDownKoin()` cleanup (Issue #1026), and points the
+  `calculator`/`sampler` fields at it
 
 Shared fixture-library helpers from `:core-test` (same package, KMP `commonMain`) are also
 visible here: `runSampled` (listener-wiring harness), `ArrivalTally` (completed-journey
@@ -112,6 +116,16 @@ val context = TestTopologies.simpleLinearPath()
 // context never closed!
 ```
 
+**Contexts held across a whole test method (KoinTestBase subclasses):** register them in
+`testContext` — `tearDownKoin()` closes it after each test (Issue #1026):
+
+```kotlin
+val context = TestFixtures.newShuntingSimulationContext(...)
+testContext = context  // tearDownKoin() closes it
+```
+
+The heading-flip regression tests get this from `HeadingSamplerTestBase.startSamplerContext()`.
+
 **Nested contexts (XML → Editing → Simulation):**
 
 ```kotlin
@@ -180,17 +194,13 @@ fun testWithShuntingLoop() {
 ### Pattern 3: Shared Context Across Tests
 
 ```kotlin
-class MyTestSuite {
+class MyTestSuite : KoinTestBase() {
     private lateinit var context: SimulationContext
 
     @BeforeEach
     fun setUp() {
         context = TestTopologies.simpleLinearPathSimulation()
-    }
-
-    @AfterEach
-    fun tearDown() {
-        context.close()
+        testContext = context  // tearDownKoin() closes it — no manual @AfterEach needed
     }
 
     @Test
