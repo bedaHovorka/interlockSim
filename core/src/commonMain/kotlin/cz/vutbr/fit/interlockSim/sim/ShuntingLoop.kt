@@ -387,9 +387,9 @@ class ShuntingLoop(
 		// Prune terminated trains first so the snapshot reflects accurate approved-train counts.
 		// Copy-on-write: publish the survivors as one new list instead of removing in place,
 		// so an off-thread reader never walks a list that is being mutated (Issue #994).
-		val terminated: List<Train> = approwedTrains.filter { it.terminated() }
+		val (terminated, survivors) = approwedTrains.partition { it.terminated() }
 		if (terminated.isNotEmpty()) {
-			approwedTrains = approwedTrains - terminated.toSet()
+			approwedTrains = survivors
 			trainsExitedCount += terminated.size
 		}
 

@@ -16,17 +16,14 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.multiTrainSpecs
+import cz.vutbr.fit.interlockSim.testutil.probeConcurrentReads
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
-import kotlin.concurrent.thread
 
 private val logger = KotlinLogging.logger {}
 
@@ -44,11 +41,12 @@ private val logger = KotlinLogging.logger {}
  * collection on every iteration. Before the fix both readers walked the live mutable list, so
  * a mutation landing inside a read escaped as either a [java.util.ConcurrentModificationException]
  * or a [NullPointerException] on a slot the simulation thread had just cleared — straight out of
- * the collision-detection path. Which of the two surfaces depends on JIT state, so the test
+ * the collision-detection path. Which of the two surfaces depends on JIT state, so the probe
  * records one representative per exception type and fails on any of them.
  *
  * This test runs a real multi-train simulation on its own thread while a second thread
- * hammers both readers, and asserts that nothing escapes.
+ * hammers both readers, and asserts that nothing escapes. The thread harness lives in
+ * [probeConcurrentReads]; this test supplies only the topology, the workload and the asserts.
  */
 @Tag("integration-test")
 @DisplayName("MultiTrainLoop approved-train reads survive concurrent admission and retirement (#994)")
@@ -90,71 +88,31 @@ class MultiTrainLoopSnapshotRaceTest : KoinTestBase() {
 			MultiTrainLoop(
 				ctx,
 				endTime = END_TIME,
-				trainSpecs =
-					(0 until TRAIN_COUNT).map { index ->
-						MultiTrainLoop.TrainSpec(
-							inName = "A",
-							outName = "B",
-							inTime = index * TRAIN_INTERVAL,
-							length = TRAIN_LENGTH
-						)
-					},
+				trainSpecs = multiTrainSpecs(TRAIN_COUNT, TRAIN_INTERVAL, TRAIN_LENGTH),
 				maxConcurrentTrains = MAX_CONCURRENT_TRAINS
 			)
 		ctx.setMainProcess(loop)
 
-		val simRunning = AtomicBoolean(true)
-		// One representative per exception type: the JIT strips repeat stack traces, and a
-		// broken read fails thousands of times per second, so a flat list would drown the signal.
-		val readerFailures = ConcurrentHashMap<String, String>()
-		val readCount = AtomicLong(0)
-		val startBarrier = CyclicBarrier(2)
+		val result =
+			probeConcurrentReads(
+				readerCount = 1,
+				joinTimeoutMillis = JOIN_TIMEOUT_MILLIS,
+				threadNamePrefix = "issue-994",
+				readOnce = {
+					loop.getTrainSnapshot(ABSENT_TRAIN_ID)
+					loop.getApprovedTrains().forEach { train -> train.name }
+				},
+				runSimulation = { ctx.run() }
+			)
 
-		val simThread =
-			thread(name = "issue-994-sim", isDaemon = true) {
-				startBarrier.await()
-				try {
-					ctx.run()
-				} finally {
-					simRunning.set(false)
-				}
-			}
-
-		val readerThread =
-			thread(name = "issue-994-reader", isDaemon = true) {
-				startBarrier.await()
-				// The read counter is thread-local and published once at the end: a shared atomic
-				// in this loop costs more than the reads under test and would shrink the race
-				// window the test exists to hit.
-				var localReads = 0L
-				while (simRunning.get()) {
-					try {
-						loop.getTrainSnapshot(ABSENT_TRAIN_ID)
-						loop.getApprovedTrains().forEach { train -> train.name }
-						localReads++
-					} catch (failure: Throwable) {
-						readerFailures.putIfAbsent(
-							failure::class.simpleName.orEmpty(),
-							"${failure::class.simpleName} thrown at ${failure.stackTrace.firstOrNull()}"
-						)
-					}
-				}
-				readCount.addAndGet(localReads)
-			}
-
-		simThread.join(JOIN_TIMEOUT_MILLIS)
-		simRunning.set(false)
-		readerThread.join(JOIN_TIMEOUT_MILLIS)
-
-		val failureSummary = readerFailures.values.sorted()
 		logger.info {
-			"Issue #994 race probe: reads=${readCount.get()} entered=${loop.getTrainsEntered()} " +
+			"Issue #994 race probe: reads=${result.totalReads} entered=${loop.getTrainsEntered()} " +
 				"exited=${loop.getTrainsExited()} maxConcurrent=${loop.getMaxConcurrentTrains()} " +
-				"failures=$failureSummary"
+				"failures=${result.failures}"
 		}
 
-		assertThat(readCount.get(), name = "the reader thread actually read the approved set").isGreaterThan(0L)
+		assertThat(result.totalReads, name = "the reader thread actually read the approved set").isGreaterThan(0L)
 		assertThat(loop.getTrainsExited() > 0, name = "trains were retired during the run").isTrue()
-		assertThat(failureSummary, name = "no exception escaped an off-thread approved-train read").isEmpty()
+		assertThat(result.failures, name = "no exception escaped an off-thread approved-train read").isEmpty()
 	}
 }

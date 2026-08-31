@@ -19,18 +19,14 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.probeConcurrentReads
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
-import kotlin.concurrent.thread
 
 private val logger = KotlinLogging.logger {}
 
@@ -49,7 +45,8 @@ private val logger = KotlinLogging.logger {}
  * `ConcurrentModificationException`.
  *
  * The test drives a real `vyhybna.xml` run on its own thread under the synchronous
- * dispatcher and hammers the getter from several reader threads.
+ * dispatcher and hammers the getter from several reader threads. The thread harness lives in
+ * [probeConcurrentReads]; this test supplies only the fixture, the read and the asserts.
  */
 @Tag("integration-test")
 @DisplayName("ShuntingLoop approved-train reads survive concurrent admission and retirement (#994)")
@@ -82,59 +79,23 @@ class ShuntingLoopApprovedTrainsRaceTest : KoinTestBase() {
 		testContext = ctx
 		val loop = prepareShuntingLoop(ctx, endTime = END_TIME)
 
-		val simRunning = AtomicBoolean(true)
-		// One representative per exception type: the JIT strips repeat stack traces, and a broken
-		// read fails many times per second, so a flat list would drown the signal.
-		val readerFailures = ConcurrentHashMap<String, String>()
-		val readCount = AtomicLong(0)
-		val startBarrier = CyclicBarrier(READER_THREADS + 1)
+		val result =
+			probeConcurrentReads(
+				readerCount = READER_THREADS,
+				joinTimeoutMillis = JOIN_TIMEOUT_MILLIS,
+				threadNamePrefix = "issue-994-shunting",
+				readOnce = { loop.getApprovedTrains().forEach { train -> train.name } },
+				runSimulation = { ctx.run() }
+			)
 
-		val simThread =
-			thread(name = "issue-994-shunting-sim", isDaemon = true) {
-				startBarrier.await()
-				try {
-					ctx.run()
-				} finally {
-					simRunning.set(false)
-				}
-			}
-
-		val readerThreads =
-			List(READER_THREADS) { index ->
-				thread(name = "issue-994-shunting-reader-$index", isDaemon = true) {
-					startBarrier.await()
-					// The read counter is thread-local and published once at the end: a shared
-					// atomic in this loop costs more than the read under test and would shrink
-					// the race window the test exists to hit.
-					var localReads = 0L
-					while (simRunning.get()) {
-						try {
-							loop.getApprovedTrains().forEach { train -> train.name }
-							localReads++
-						} catch (failure: Throwable) {
-							readerFailures.putIfAbsent(
-								failure::class.simpleName.orEmpty(),
-								"${failure::class.simpleName} thrown at ${failure.stackTrace.firstOrNull()}"
-							)
-						}
-					}
-					readCount.addAndGet(localReads)
-				}
-			}
-
-		simThread.join(JOIN_TIMEOUT_MILLIS)
-		simRunning.set(false)
-		readerThreads.forEach { it.join(JOIN_TIMEOUT_MILLIS) }
-
-		val failureSummary = readerFailures.values.sorted()
 		logger.info {
-			"Issue #994 ShuntingLoop race probe: reads=${readCount.get()} " +
+			"Issue #994 ShuntingLoop race probe: reads=${result.totalReads} " +
 				"entered=${loop.getTrainsEntered()} exited=${loop.getTrainsExited()} " +
-				"maxConcurrent=${loop.getMaxConcurrentTrains()} failures=$failureSummary"
+				"maxConcurrent=${loop.getMaxConcurrentTrains()} failures=${result.failures}"
 		}
 
-		assertThat(readCount.get(), name = "the reader threads actually read the approved set").isGreaterThan(0L)
+		assertThat(result.totalReads, name = "the reader threads actually read the approved set").isGreaterThan(0L)
 		assertThat(loop.getTrainsExited() > 0, name = "trains were retired during the run").isTrue()
-		assertThat(failureSummary, name = "no exception escaped an off-thread approved-train read").isEmpty()
+		assertThat(result.failures, name = "no exception escaped an off-thread approved-train read").isEmpty()
 	}
 }

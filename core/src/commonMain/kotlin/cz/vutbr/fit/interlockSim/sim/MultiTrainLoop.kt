@@ -258,13 +258,13 @@ open class MultiTrainLoop(
 	}
 
 	private fun cleanupTerminatedTrains() {
-		val terminated = approvedTrains.filter { it.terminated() }
+		val (terminated, survivors) = approvedTrains.partition { it.terminated() }
 		if (terminated.isEmpty()) {
 			return
 		}
 		// Copy-on-write: publish the survivors as one new list instead of removing in place,
 		// so an off-thread reader never walks a list that is being mutated (Issue #994).
-		approvedTrains = approvedTrains - terminated.toSet()
+		approvedTrains = survivors
 		terminated.forEach { train ->
 			trainToSpec.remove(train)
 			trainsExitedCount++
@@ -273,10 +273,17 @@ open class MultiTrainLoop(
 	}
 
 	private fun approveTrains() {
-		while (approvedTrains.size < maxConcurrentTrains && unapprovedTrains.isNotEmpty()) {
+		// Copy-on-write: admit the whole batch first, then publish one replacement. Publishing
+		// per admission inside the loop would copy the entire list k times and show k
+		// intermediate snapshots to off-thread readers (Issue #994).
+		val batch: MutableList<Train> = mutableListOf()
+		while (batch.size + approvedTrains.size < maxConcurrentTrains && unapprovedTrains.isNotEmpty()) {
 			val train = unapprovedTrains.removeFirst()
-			approvedTrains = approvedTrains + train
+			batch.add(train)
 			logger.debug { "MultiTrainLoop: approved ${train.name} for dispatch" }
+		}
+		if (batch.isNotEmpty()) {
+			approvedTrains = approvedTrains + batch
 		}
 	}
 
@@ -437,8 +444,8 @@ open class MultiTrainLoop(
 	 *
 	 * Safe to call from any thread: the returned list is the immutable copy-on-write snapshot
 	 * described on [approvedTrains], so it never changes under the caller. It may already be
-	 * stale by the time the caller reads it — the simulation thread publishes a replacement on
-	 * every admission and retirement.
+	 * stale by the time the caller reads it — the simulation thread publishes a replacement
+	 * whenever trains are admitted or retired.
 	 *
 	 * @since PR #633 — animation entrySeparator race regression test
 	 * @since Issue #994 — returns the published snapshot instead of copying a live mutable list
