@@ -25,6 +25,8 @@ import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
@@ -167,6 +169,16 @@ val commonCoreTestModule: Module =
 
 			scoped<RouteFinder> {
 				DefaultRouteFinder(get<AutomaticPathFindingService>())
+			}
+
+			// Same binding as the JVM CoreTestModule: DefaultSimulationContext.run() lazily
+			// resolves CollisionDetectionService from this scope, so any commonTest that
+			// runs a context needs it. Mirrors CoreTestModule.kt line for line.
+			scoped<CollisionDetectionService> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultCollisionDetectionService(context, context)
 			}
 
 			scoped<TemporalConflictDetector> {
