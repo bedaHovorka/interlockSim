@@ -258,10 +258,10 @@ open class MultiTrainLoop(
 	}
 
 	private fun cleanupTerminatedTrains() {
-		val (terminated, survivors) = approvedTrains.partition { it.terminated() }
-		if (terminated.isEmpty()) {
+		if (approvedTrains.none { it.terminated() }) {
 			return
 		}
+		val (terminated, survivors) = approvedTrains.partition { it.terminated() }
 		// Copy-on-write: publish the survivors as one new list instead of removing in place,
 		// so an off-thread reader never walks a list that is being mutated (Issue #994).
 		approvedTrains = survivors

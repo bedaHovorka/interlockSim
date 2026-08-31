@@ -67,6 +67,13 @@ fun probeConcurrentReads(
 			startBarrier.await()
 			try {
 				runSimulation()
+			} catch (failure: Throwable) {
+				// Otherwise a crashed simulation is indistinguishable from a clean run: the readers
+				// would just stop when simRunning flips, and the probe would report zero failures.
+				readerFailures.putIfAbsent(
+					failure::class.qualifiedName ?: failure.toString(),
+					"${failure::class.qualifiedName} thrown on the simulation thread: ${failure.stackTrace.firstOrNull()}"
+				)
 			} finally {
 				simRunning.set(false)
 			}
@@ -85,9 +92,11 @@ fun probeConcurrentReads(
 						readOnce()
 						localReads++
 					} catch (failure: Throwable) {
+						// qualifiedName over simpleName: an anonymous/local exception type has no
+						// simpleName, which would collapse distinct failures under one blank key.
 						readerFailures.putIfAbsent(
-							failure::class.simpleName.orEmpty(),
-							"${failure::class.simpleName} thrown at ${failure.stackTrace.firstOrNull()}"
+							failure::class.qualifiedName ?: failure.toString(),
+							"${failure::class.qualifiedName} thrown at ${failure.stackTrace.firstOrNull()}"
 						)
 					}
 				}
