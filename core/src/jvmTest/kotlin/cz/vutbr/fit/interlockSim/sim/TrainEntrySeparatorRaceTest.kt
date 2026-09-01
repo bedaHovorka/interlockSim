@@ -96,7 +96,7 @@ class TrainEntrySeparatorRaceTest : KoinTestBase() {
 				.withConnection(5, 5, 7, 7, 100.0, 80.0)
 				.withConnection(7, 7, 9, 9, 100.0, 80.0)
 				.buildSimulationContext()
-		testContext = ctx
+				.tracked()
 
 		val loop =
 			MultiTrainLoop(

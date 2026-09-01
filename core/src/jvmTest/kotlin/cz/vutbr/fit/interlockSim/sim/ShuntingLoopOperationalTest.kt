@@ -77,9 +77,8 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 		// Load vyhybna.xml - the ONLY configuration where ShuntingLoop can operate (SIM-004)
 		val xml =
 			TestFixtures.loadShuntingXml()
-		val context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		val context = (simulationContextFactory.createContext(xml) as DefaultSimulationContext).tracked()
 		validContext = MockSimulationContext(context)
-		testContext = context // Track underlying context for cleanup (MockSimulationContext delegates to it)
 	}
 
 	/**

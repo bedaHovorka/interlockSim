@@ -65,8 +65,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = simulationContextFactory.createEmptyContext()
-			testContext = context // Track for cleanup
+			context = simulationContextFactory.createEmptyContext().tracked()
 		}
 
 		// Note: Editing operation tests removed after Issue #153.5
@@ -95,8 +94,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
-			testContext = context // Track for cleanup
+			context = (simulationContextFactory.createEmptyContext() as DefaultSimulationContext).tracked()
 		}
 
 		@Test
@@ -163,8 +161,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = simulationContextFactory.createEmptyContext()
-			testContext = context // Track for cleanup
+			context = simulationContextFactory.createEmptyContext().tracked()
 		}
 
 		@Test
@@ -253,8 +250,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 				org.koin.java.KoinJavaComponent.get<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>(
 					cz.vutbr.fit.interlockSim.context.SimulationProcessFactory::class.java
 				)
-			context = DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-			testContext = context // Track for cleanup
+			context = DefaultSimulationContext.fromEditingContext(editingContext, processFactory).tracked()
 		}
 
 		@Test
@@ -319,8 +315,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			editingContext.joinCells(pA, r1, tl)
 
 			// Convert to simulation context for testing
-			context = this@DefaultSimulationContextTest.simulationContextFactory.createContext(editingContext)
-			testContext = context // Track for cleanup
+			context = this@DefaultSimulationContextTest.simulationContextFactory.createContext(editingContext).tracked()
 			// Trigger lazy initialization of dynamic wrappers
 			context.getInOuts()
 		}
@@ -333,8 +328,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
-			testContext = context // Track for cleanup
+			context = (simulationContextFactory.createEmptyContext() as DefaultSimulationContext).tracked()
 		}
 
 		@Test
@@ -390,8 +384,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = simulationContextFactory.createEmptyContext()
-			testContext = context // Track for cleanup
+			context = simulationContextFactory.createEmptyContext().tracked()
 		}
 
 		@Test
@@ -491,8 +484,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = editingContextFactory.createEmptyContext()
-			testContext = context // Track for cleanup
+			context = editingContextFactory.createEmptyContext().tracked()
 		}
 
 		@Test

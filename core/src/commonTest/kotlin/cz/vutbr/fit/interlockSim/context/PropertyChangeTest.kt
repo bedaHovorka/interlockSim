@@ -38,8 +38,7 @@ class PropertyChangeTest : CommonKoinTestBase() {
 	private lateinit var listener: TestPropertyChangeListener
 
 	override fun afterKoinSetUp() {
-		context = editingContextFactory.createEmptyContext()
-		testContext = context // Track for cleanup
+		context = editingContextFactory.createEmptyContext().tracked()
 		listener = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener)
 	}

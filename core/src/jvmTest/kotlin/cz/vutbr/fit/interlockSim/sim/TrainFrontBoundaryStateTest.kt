@@ -312,7 +312,7 @@ class TrainFrontBoundaryStateTest : KoinTestBase() {
 				.withConnection(5, 5, 7, 7, 100.0, 80.0)
 				.withConnection(7, 7, 9, 9, 100.0, 80.0)
 				.buildSimulationContext()
-		testContext = ctx
+				.tracked()
 
 		val loop =
 			MultiTrainLoop(
@@ -334,8 +334,7 @@ class TrainFrontBoundaryStateTest : KoinTestBase() {
 	@Timeout(value = 180, unit = TimeUnit.SECONDS)
 	@DisplayName("incremental route reservation never swaps the entry end in place")
 	fun `published front state stays coherent across an incremental-reservation run`() {
-		val ctx = TestFixtures.newShuntingSimulationContext(initializeDynamicMapping = true)
-		testContext = ctx
+		val ctx = TestFixtures.newShuntingSimulationContext(initializeDynamicMapping = true).tracked()
 		val loop = prepareShuntingLoop(ctx, SHUNTING_END_TIME)
 		runSampledWithWitness(ctx) { loop.getApprovedTrains() }
 

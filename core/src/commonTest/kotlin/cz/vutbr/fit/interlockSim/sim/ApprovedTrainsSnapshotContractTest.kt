@@ -133,8 +133,7 @@ class ApprovedTrainsSnapshotContractTest : CommonKoinTestBase() {
 	 */
 	@Test
 	fun `getApprovedTrains snapshots stay frozen across later admissions and retirements`() {
-		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true)
-		testContext = ctx
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked()
 		val loop =
 			MultiTrainLoop(
 				context = ctx,
@@ -159,7 +158,7 @@ class ApprovedTrainsSnapshotContractTest : CommonKoinTestBase() {
 				NetworkResources.VYHYBNA_XML,
 				get()
 			)
-		testContext = ctx
+			.tracked()
 		val loop = prepareShuntingLoop(ctx, endTime = SHUNTING_END_TIME)
 
 		val captures = runCapturingApprovalSnapshots(ctx, loop)
@@ -179,8 +178,7 @@ class ApprovedTrainsSnapshotContractTest : CommonKoinTestBase() {
 	 */
 	@Test
 	fun `no approved train is lost when admission interleaves with blocked entries`() {
-		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-		testContext = ctx
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false).tracked()
 		val loop =
 			MultiTrainLoop(
 				context = ctx,

@@ -34,7 +34,7 @@ abstract class HeadingSamplerTestBase : KoinTestBase() {
 	protected fun startSamplerContext(): DefaultSimulationContext {
 		val context =
 			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
-		testContext = context
+				.tracked()
 		calculator = TrainPositionCalculator(context, context.separatorPositionCache)
 		sampler = HeadingFlipSampler(calculator)
 		return context
