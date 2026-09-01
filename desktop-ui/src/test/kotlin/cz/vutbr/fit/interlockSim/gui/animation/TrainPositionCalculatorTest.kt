@@ -479,6 +479,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// A train always moves forward along its section: entering from opposite ends must
 		// produce opposite (≈180°) headings. This is the invariant that prevents the nose
 		// from flipping (front/tail swap) at block boundaries.
+		//
+		// This still describes the calculator's contract after Issue #788: the direction
+		// follows whichever end the train says it entered through. What #788 changed is the
+		// input — `Train` no longer publishes the *exit* end of the section the front has just
+		// left, so in a running simulation the two headings below can only ever come from two
+		// genuinely opposite travel directions.
 		val trackSection = getFirstTrackSection()
 		assertThat(trackSection).isNotNull()
 

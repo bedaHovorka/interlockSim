@@ -15,19 +15,19 @@ import org.junit.jupiter.api.Test
 import kotlin.math.PI
 
 /**
- * Unit tests for [TrainHeadingResolver] (Issue #719).
+ * Unit tests for [TrainHeadingResolver] (Issue #719, revised for Issue #788).
  *
- * The resolver is the canvas-side guard against the spurious 180° nose flips that appear
- * when the simulation's `(frontSection, trainEntrySeparator)` pair goes stale at boundaries
- * with no upcoming section:
+ * The resolver was introduced as the canvas-side guard against the spurious 180° nose flips
+ * the simulation produced when its `(frontSection, trainEntrySeparator)` pair went stale at a
+ * boundary with no section to enter — at the destination InOut after arrival, and while the
+ * route beyond the separator was not reserved yet. Issue #788 fixed that in `:core`, so the
+ * authoritative heading no longer reverses there.
  *
- * - the front reaches the destination InOut (arrival), and
- * - the front waits before a RED signal (ownership conflict, no reserved next path).
- *
- * In both states the authoritative heading reverses by exactly 180° while the front is
- * frozen at the crossed separator. The resolver must hold the previous heading there, but
- * must still accept a genuine reversal ([cz.vutbr.fit.interlockSim.sim.Train.reverseDirection])
- * once the train moves with the flipped heading persisting.
+ * The resolver is kept as defence in depth (owner decision, #788), and these tests pin its
+ * behaviour rather than a simulation defect: a 180° change while the front does not move is
+ * suppressed, and a genuine reversal
+ * ([cz.vutbr.fit.interlockSim.sim.Train.reverseDirection]) is accepted once the train moves
+ * with the flipped heading persisting.
  */
 class TrainHeadingResolverTest {
 	private lateinit var resolver: TrainHeadingResolver

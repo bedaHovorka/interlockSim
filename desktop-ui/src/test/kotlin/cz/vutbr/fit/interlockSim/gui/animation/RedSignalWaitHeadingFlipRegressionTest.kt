@@ -5,111 +5,67 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * Regression test (#719): the rendered nose heading must not flip 180° while a train
- * waits before a RED signal, nor when its front reaches the destination InOut.
+ * Regression test (#719, revised for #788): the rendered nose heading must not flip 180°
+ * when a train's front runs out of track to advance into.
  *
- * Root cause: after the front crosses a separator, `Train.Site.actions()` advances
- * `entrySeparator` to that separator. When there is no upcoming section to advance
- * `frontSection` to — the next path is not reserved yet (RED signal / ownership
- * conflict) or the separator is the destination InOut — the pair goes stale:
- * `frontSection` keeps reporting the just-traversed section while `entrySeparator`
- * points at its *exit* end. The raw authoritative heading then reverses 180°, which
- * made a waiting train render *beyond* the semaphore (looking like a collision with
- * the opposing train on the switch) and made an arriving train flip its nose.
+ * Root cause: after the front crossed a separator, `Train.Site.actions()` advanced
+ * `entrySeparator` to that separator. When there was no upcoming section to advance
+ * `frontSection` to — the next path not reserved yet, or the separator being the
+ * destination InOut — the pair went stale: `frontSection` kept reporting the
+ * just-traversed section while `entrySeparator` pointed at its *exit* end. The raw
+ * authoritative heading then reversed 180°, which made a waiting train render *beyond*
+ * the semaphore (looking like a collision with the opposing train on the switch) and made
+ * an arriving train flip its nose.
  *
- * The canvas-side fix routes headings through [TrainHeadingResolver], which suppresses
- * a 180° flip while the front is stationary (both stale states freeze the front at the
- * crossed separator) and accepts it only when the train actually moves (genuine
- * reversal).
+ * #719 fixed the symptom canvas-side by routing headings through [TrainHeadingResolver];
+ * #788 fixed the cause in `:core`, which is why the raw flips [HeadingFlipSampler.flips]
+ * records must now stay empty.
  *
- * Drives the three-train shunting-loop spec (same as the `shuntingLoop` example used
- * by `runExampleGui`) on `vyhybna.xml`, where opposing trains force RED-signal waits,
- * samples the RESOLVED heading at every train/block event, and asserts no >90° flip
- * ever occurs — including waits before RED signals and arrivals at destination InOuts.
+ * Drives the three-train shunting-loop spec (same as the `shuntingLoop` example used by
+ * `runExampleGui`) on `vyhybna.xml`, samples both the raw and the resolved heading at every
+ * train/block event, and asserts that neither ever flips by more than 90°.
+ *
+ * Scope note (measured while fixing #788): [MultiTrainLoop] reserves a train's whole
+ * entry-to-exit path before admitting it, so trains in this scenario never come to a stand
+ * in front of a STOP signal mid-route. The boundary this test actually exercises is arrival
+ * at the destination InOut — before #788 that produced exactly one raw 180° flip per train.
+ * The class name is kept for continuity with #719/#786.
  */
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
-import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
-import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
-import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
+import cz.vutbr.fit.interlockSim.testutil.ArrivalTally
+import cz.vutbr.fit.interlockSim.testutil.HeadingFlipSampler
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.deg
-import cz.vutbr.fit.interlockSim.testutil.normalizeAngleDiff
-import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
+import cz.vutbr.fit.interlockSim.testutil.runSampled
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import kotlin.math.abs
 
 class RedSignalWaitHeadingFlipRegressionTest : KoinTestBase() {
+	private companion object {
+		/** Trains that must complete their journey for the boundary state to be exercised. */
+		const val MIN_ARRIVALS: Int = 3
+	}
+
 	private val processFactory: SimulationProcessFactory by inject()
 
-	private lateinit var calculator: TrainPositionCalculator
-	private val resolver = TrainHeadingResolver()
-	private val prevResolvedHeading = mutableMapOf<Int, Double>()
-	private val resolvedFlips = mutableListOf<String>()
-	private val rawFlipsObserved = mutableListOf<String>()
-	private val prevRawHeading = mutableMapOf<Int, Double>()
-
-	private fun sample(loop: MultiTrainLoop) {
-		for (train in loop.getApprovedTrains()) {
-			val trainNumber = train.trainNumber
-			val section = train.frontSection ?: continue
-			val rawHeading = calculator.calculateTrainHeadingRadians(train, section) ?: continue
-			val location =
-				calculator.calculateTrainGridLocation(train, section, train.frontPosition)
-					?: continue
-
-			// Record raw flips only as evidence that the stale boundary state actually
-			// occurred during this run (the scenario would be vacuous otherwise).
-			val prevRaw = prevRawHeading[trainNumber]
-			if (prevRaw != null && abs(normalizeAngleDiff(rawHeading - prevRaw)) > Math.PI / 2.0) {
-				rawFlipsObserved.add(
-					"raw train#$trainNumber ${deg(prevRaw)} -> ${deg(rawHeading)} " +
-						"entrySep=${entryLabel(train.trainEntrySeparator)}"
-				)
-			}
-			prevRawHeading[trainNumber] = rawHeading
-
-			// The RESOLVED heading (what the renderer draws) must never flip.
-			val resolved = resolver.resolveHeading(trainNumber, rawHeading, location)
-			val prev = prevResolvedHeading[trainNumber]
-			if (prev != null) {
-				val delta = normalizeAngleDiff(resolved - prev)
-				if (abs(delta) > Math.PI / 2.0) {
-					resolvedFlips.add(
-						"RESOLVED_FLIP train#$trainNumber ${deg(prev)} -> ${deg(resolved)} " +
-							"(delta ${deg(delta)}); raw=${deg(rawHeading)}; " +
-							"entrySep=${entryLabel(train.trainEntrySeparator)}"
-					)
-				}
-			}
-			prevResolvedHeading[trainNumber] = resolved
-		}
-	}
-
-	private fun entryLabel(entry: cz.vutbr.fit.interlockSim.objects.core.PathSeparator?): String {
-		if (entry == null) return "null"
-		val name = (DynamicWrapperUtils.unwrapToStatic(entry) as? NodeCell)?.getName()
-		return name ?: "?"
-	}
+	private lateinit var sampler: HeadingFlipSampler
+	private val arrivals = ArrivalTally()
 
 	@Test
-	fun `resolved heading never flips during RED signal waits and arrivals`() {
+	fun `raw and resolved heading never flip where the front cannot advance`() {
 		val context =
 			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
-		val simContext = context
-		calculator = TrainPositionCalculator(context, simContext.separatorPositionCache)
+		sampler = HeadingFlipSampler(TrainPositionCalculator(context, context.separatorPositionCache))
 
-		// Same spec as the `shuntingLoop` example (runExampleGui): the opposing B→A train
-		// and the follower A→B train force RED-signal waits at the switch semaphores.
+		// Same spec as the `shuntingLoop` example (runExampleGui): two A→B trains and one
+		// opposing B→A train on the passing loop — the boundary each of them reaches is
+		// arrival at its destination InOut (see the scope note above).
 		val loop =
 			MultiTrainLoop(
 				context = context,
@@ -121,35 +77,23 @@ class RedSignalWaitHeadingFlipRegressionTest : KoinTestBase() {
 						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 2.0, length = 40.0)
 					)
 			)
-		simContext.setMainProcess(loop)
+		context.setMainProcess(loop)
 
-		val reportListener =
-			ContextPropertyChangeListener { event ->
-				if (event.propertyName != ReportType.TRAIN_EVENTS.name) return@ContextPropertyChangeListener
-				sample(loop)
-			}
-		val blockListener =
-			object : BlockEventListener {
-				override fun onBlockEvent(event: BlockEvent) {
-					sample(loop)
-				}
-			}
-
-		simContext.addPropertyChangeListener(reportListener)
-		simContext.addBlockEventListener(blockListener)
-		try {
-			context.run()
-		} finally {
-			simContext.removePropertyChangeListener(reportListener)
-			simContext.removeBlockEventListener(blockListener)
+		runSampled(context) { message ->
+			message?.let(arrivals::record)
+			sampler.sample(loop.getApprovedTrains())
 		}
 
-		if (resolvedFlips.isNotEmpty()) {
-			resolvedFlips.forEach { println("HEADING_FLIP: $it") }
-		}
-		// Sanity: the stale boundary state (raw 180° flip) must actually occur in this
-		// scenario, otherwise the regression is not being exercised.
-		assertThat(rawFlipsObserved).isNotEmpty()
-		assertThat(resolvedFlips).isEmpty()
+		sampler.flips.forEach { println("HEADING_FLIP: $it") }
+		sampler.resolvedFlips.forEach { println("HEADING_FLIP: $it") }
+		// Non-vacuity witness that replaces the old "a raw flip must occur" assertion, which
+		// pinned the #788 defect as expected behaviour: the boundary state is reached by every
+		// train that arrives at its destination InOut, so require the arrivals instead.
+		assertThat(
+			arrivals.arrivedTrainNumbers.size >= MIN_ARRIVALS,
+			name = "trains reached their destination InOut (boundary state exercised)"
+		).isTrue()
+		assertThat(sampler.flips, name = "raw heading reversals").isEmpty()
+		assertThat(sampler.resolvedFlips, name = "resolved heading reversals").isEmpty()
 	}
 }

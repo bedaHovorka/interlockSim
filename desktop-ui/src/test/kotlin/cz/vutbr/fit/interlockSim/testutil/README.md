@@ -10,6 +10,12 @@ The `testutil` package provides:
 - **TestContextBuilder** - Custom topology builder
 - **KoinTestBase** - Base class for Koin DI tests
 - **AssertKExtensions** - Custom assertions
+- **HeadingFlipSampler** - Per-train raw/resolved heading sampling for the heading-flip
+  regression tests (`gui.animation`), owner of the #789 per-train skip contract
+
+Shared fixture-library helpers from `:core-test` (same package, KMP `commonMain`) are also
+visible here: `runSampled` (listener-wiring harness), `ArrivalTally` (completed-journey
+witness), `sameStatic`/`separatorLabel` (dynamic-wrapper-safe separator identity).
 
 ## Quick Start
 

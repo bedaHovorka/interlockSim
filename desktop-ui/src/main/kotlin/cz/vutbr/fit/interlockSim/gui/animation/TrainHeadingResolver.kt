@@ -23,33 +23,30 @@ import kotlin.math.round
  * and falling back to frame-to-frame delta inference, the previously rendered heading, and
  * finally a default heading.
  *
- * ## Spurious 180° flip suppression (Issue #719)
+ * ## Spurious 180° flip suppression (Issue #719, superseded as of Issue #788)
  *
- * `Train.Site.actions()` advances `entrySeparator` to the separator the front just crossed.
- * At two boundaries there is no upcoming [cz.vutbr.fit.interlockSim.objects.tracks.TrackSection]
- * to advance `frontSection` to:
+ * The simulation used to publish a stale `(frontSection, trainEntrySeparator)` pair whenever the
+ * front had crossed out of its section with no [cz.vutbr.fit.interlockSim.objects.tracks.TrackSection]
+ * to enter — at the destination InOut after arrival, and while the route beyond the separator was
+ * not reserved yet (the signal ahead showing STOP). `frontSection` kept reporting the section just
+ * traversed while `trainEntrySeparator` already pointed at its *exit* end, so the authoritative
+ * heading read the exit end as the entry end and reversed by exactly 180°: an arriving train
+ * flipped its nose, and a waiting train was drawn with its body on the wrong side of the nose.
  *
- * 1. **Arrival at the destination InOut** — the InOut is not a `TrackSection`, so `frontSection`
- *    keeps reporting the just-traversed last section while `entrySeparator` already points at
- *    its *exit* end (the InOut).
- * 2. **Waiting before a RED signal** — the next path is not reserved yet (ownership conflict),
- *    so there is no upcoming section either; `frontSection` stays on the just-traversed section
- *    with `entrySeparator` at its exit end (the semaphore).
+ * That was fixed at the source in Issue #788 — `Train` now publishes the entry separator and the
+ * distance along the section as a coherent pair, so the authoritative heading is correct at those
+ * boundaries too, and every non-GUI consumer of it sees the right direction.
  *
- * In both stale states the authoritative heading calculation treats the exit end as the entry
- * end and reverses the heading by exactly 180°, which made the rendered nose flip backward at
- * arrival and made a train waiting before a RED signal appear *beyond* the semaphore (the body
- * was drawn on the wrong side of the nose).
- *
- * The mid-journey variant of this lag was fixed in the simulation (PR #718) by advancing
- * `frontSection` atomically with `entrySeparator`; at the boundaries above there is nothing to
- * advance to, so the correction lives here on the animated-canvas side (owner decision, #719):
+ * This resolver is deliberately **kept** as a second layer of defence (owner decision, #788): it
+ * costs one comparison per train per frame and it keeps the canvas stable against any future
+ * regression in the published pair, or against a heading that a new consumer derives differently.
+ * It no longer compensates for a known simulation defect. Its rules are:
  *
  * - A candidate flip is an authoritative heading that is the exact opposite (±180°) of the
  *   previously rendered heading. Track directions on the grid change in 45° steps, so an
- *   instantaneous 180° change can only be the stale boundary state or a genuine reversal.
- * - While the train front does not move (both stale states freeze the front at the crossed
- *   separator), the flip is suppressed and the previous heading is kept.
+ *   instantaneous 180° change can only be a genuine reversal or a defect in the published pair.
+ * - While the train front does not move, the flip is suppressed and the previous heading is
+ *   kept — a nose cannot turn round without the train going anywhere.
  * - A genuine reversal ([cz.vutbr.fit.interlockSim.sim.Train.reverseDirection], GitHub #62)
  *   also starts at velocity 0, but the train then *moves* with the flipped heading persisting.
  *   Once the front moves more than [MOVEMENT_EPSILON] grid cells away from where the flip was
@@ -65,6 +62,7 @@ import kotlin.math.round
  * @see cz.vutbr.fit.interlockSim.gui.gridcanvas.AnimatedSimulationCellRenderer
  * @see TrainPositionCalculator.calculateTrainHeadingRadians
  * @since Issue #719 (arrival / RED-signal heading flip)
+ * @since Issue #788 (source fixed in `:core`; kept as defence in depth)
  */
 class TrainHeadingResolver(
 	private val defaultHeading: Double = DEFAULT_TRAIN_HEADING

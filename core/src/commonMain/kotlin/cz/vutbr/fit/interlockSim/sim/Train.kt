@@ -701,6 +701,52 @@ class Train :
 
 		internal fun getFrontSection(): TrackSection? = getSection()
 
+		/**
+		 * The section the front has fully traversed and now stands at the far end of, or `null`
+		 * whenever the front is inside or entering a section normally.
+		 *
+		 * Issue #788: [actions] rebases [position] to ~0 at the separator the front has just
+		 * crossed and only then advances [current]/[next]. When there is no section to enter —
+		 * the route beyond the separator is not reserved yet (the signal ahead shows STOP), or
+		 * the separator is the destination InOut — [onNext] goes false and [getSection] keeps
+		 * reporting the section that was just traversed. The raw pair (traversed section,
+		 * separator just crossed) then reads as "entering that section through its exit end",
+		 * which reverses the heading derived from it by exactly 180°.
+		 *
+		 * This helper identifies that state so the published front state can describe the same
+		 * physical point the other way round — still on the traversed section, entered through
+		 * that section's own entry end, standing at its far end. Advancing the pair to the next
+		 * section is not an option here precisely because there is no next section yet.
+		 */
+		private fun traversedSectionAtExit(): TrackSection? = if (onNext) null else current
+
+		/**
+		 * The end of [getFrontSection] through which the front entered it: the separator most
+		 * recently crossed, except at the boundary identified by [traversedSectionAtExit], where
+		 * that separator is the section's *exit* end and the opposite end is published instead.
+		 *
+		 * The separator most recently crossed is always an end of [current], so the
+		 * [cz.vutbr.fit.interlockSim.objects.core.StaticTrack.getSecondEnd] lookup below always
+		 * resolves. Only meaningful for the [Front] — the [Tail] never writes [entrySeparator].
+		 */
+		internal fun publishedEntrySeparator(): DynamicPathSeparator? {
+			val crossed = this@Train.entrySeparator ?: return null
+			val traversed = traversedSectionAtExit() ?: return crossed
+			return env.toDynamic(traversed.getSecondEnd(crossed))
+		}
+
+		/**
+		 * Distance along [getFrontSection] to publish, kept consistent with
+		 * [publishedEntrySeparator]: the length of the traversed section at the boundary (the
+		 * front stands at its far end), the integrated position otherwise.
+		 *
+		 * Publishing both together is what keeps the rendered position unchanged. At the
+		 * boundary the raw pair interpolates from the exit end at ratio ~0 and the published
+		 * pair interpolates from the entry end at ratio 1 — the same point, reached from the
+		 * other side, now with the travel direction the right way round.
+		 */
+		internal fun publishedPosition(): Double = traversedSectionAtExit()?.length() ?: position.state
+
 		internal fun getTailSection(): TrackSection? = getSection()
 	}
 
@@ -1262,9 +1308,13 @@ class Train :
 	private val trainNavService: TrainNavigationService
 
 	/**
-	 * The separator through which the train entered the current section.
-	 * Used by animation calculator to determine interpolation direction.
-	 * Null if train hasn't entered any section yet (initialization).
+	 * The separator the train's **front** most recently crossed. Written only by the [Front]
+	 * (see [Site.isFront]); null until the train enters the network.
+	 *
+	 * This is the raw state, not what the animation reads: at a boundary where the front has
+	 * crossed out of its section with nothing to enter, this separator is that section's *exit*
+	 * end. [trainEntrySeparator] publishes the coherent value — see [Site.publishedEntrySeparator]
+	 * (Issue #788).
 	 */
 	private var entrySeparator: DynamicPathSeparator? = null
 
@@ -1765,12 +1815,18 @@ class Train :
 	 * Used for train position interpolation in animation rendering.
 	 * Returns position within the current section (0.0 to section length).
 	 *
+	 * Published together with [frontSection] and [trainEntrySeparator]: when the front has
+	 * crossed out of its section and has no section to enter yet, this is the section length
+	 * rather than the rebased ~0, because the entry separator published then is the section's
+	 * other end (Issue #788).
+	 *
 	 * @return Distance along current section in meters
 	 * @since 2026-01-22 (Issue #203)
 	 * @since 2026-02-06 (Converted to Kotlin property for idiomatic API)
+	 * @since Issue #788 (published consistently with [trainEntrySeparator] at boundaries)
 	 */
 	val frontPosition: Double
-		get() = front.getPosition()
+		get() = front.publishedPosition()
 
 	/**
 	 * Total distance traveled by the train's front since departure.
@@ -1786,13 +1842,24 @@ class Train :
 		get() = front.getTotalDistance()
 
 	/**
-	 * Separator where train entered current section.
-	 * Used for correct position interpolation in animation.
+	 * Separator through which the train's front entered [frontSection].
+	 *
+	 * Used together with [frontSection] and [frontPosition] for position interpolation and for
+	 * the authoritative heading in animation: the front always travels from this separator
+	 * towards the section's other end.
+	 *
+	 * This is the separator the front most recently crossed, except at the boundary where the
+	 * front has crossed out of its section and has no section to enter yet — there the
+	 * separator just crossed is the *exit* end of [frontSection] and the opposite end is
+	 * published instead, so the direction never reverses while the front is standing still
+	 * (Issue #788).
+	 *
 	 * @return entry separator, or null if train hasn't entered any section yet
 	 * @since 2026-02-06 (Converted to Kotlin property for idiomatic API)
+	 * @since Issue #788 (always the end the front entered [frontSection] through)
 	 */
 	val trainEntrySeparator: DynamicPathSeparator?
-		get() = entrySeparator
+		get() = front.publishedEntrySeparator()
 
 	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()
