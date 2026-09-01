@@ -17,6 +17,23 @@ The `testutil` package provides:
   process factory and exposes `startSamplerContext()`, which creates the shunting context,
   registers it with `tracked()` for `tearDownKoin()` cleanup (Issues #1026, #1038), and points the
   `calculator`/`sampler` fields at it
+- **ContextRoundTrip** - `saveAndReloadThroughFile` / `saveAndReloadThroughStream`
+  extensions on `ContextFactory`: save a context, load it back, run a verify lambda, and
+  close the loaded context (Issue #1035). The source context stays open — the caller owns it
+- **ContextPropertyEvents** - `TestPropertyChangeListener` plus
+  `assertMaxSpeedPropertyEventFires` / `assertNetworkProperties` / `assertFrozen`, shared by
+  the context lifecycle workflow integration tests
+- **NetworkBuilders** - `buildLinearNetwork`: two InOuts on a square grid joined by one
+  track, the smallest network that can be transformed and simulated. The caller owns the
+  returned context and must close it (`.use`)
+- **RailwayNetGridAssertions** - `gridContainsCellType<T>` and `countCellTypes`: one shared
+  grid scan replacing the four private copies that classified cells by type
+- **EditingContextCleanupContractTest** - Contract tests pinning the `.use {}` cleanup
+  pattern: scope closed on success, on failure inside the block, on double close, for
+  the loaded context of a round trip, and a round trip failing at the save step (Issue #1035)
+- **RudyUjezdStructure** - `assertRudyUjezdStationInOuts`: asserts the four station
+  InOuts of the `rudyUjezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
+  the parse test and the stream round trip of the XML factory tests
 
 Shared fixture-library helpers from `:core-test` (same package, KMP `commonMain`) are also
 visible here: `ContextTracker` (the registry behind `tracked()`), `runSampled` (listener-wiring
@@ -193,7 +210,26 @@ fun testWithShuntingLoop() {
 }
 ```
 
-### Pattern 3: Shared Contexts Across Tests
+### Pattern 3: Save-and-Reload Round Trip
+
+```kotlin
+@Test
+fun roundTrip(@TempDir tempDir: File) {
+    DefaultEditingContext(40, 40).use { editingContext ->
+        // ... build the network ...
+
+        xmlFactory.saveAndReloadThroughFile(editingContext, File(tempDir, "test.xml")) { loaded ->
+            // Verify the loaded context; it is closed by the helper afterwards
+        }
+    }
+}
+```
+
+The stream variant `saveAndReloadThroughStream(editingContext) { loaded -> ... }` does the
+same through `ByteArrayOutputStream`/`ByteArrayInputStream`. Both close the loaded context
+and leave the source context to the caller (Issue #1035).
+
+### Pattern 4: Shared Contexts Across Tests
 
 ```kotlin
 class MyTestSuite : KoinTestBase() {
@@ -304,4 +340,4 @@ TestTopologies.linearPathWithSemaphoreSequence(
 
 ---
 
-**Last Updated**: 2026-02-05 (Issue #253 Post-Implementation Review)
+**Last Updated**: 2026-09-03 (Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, and cleanup contract)

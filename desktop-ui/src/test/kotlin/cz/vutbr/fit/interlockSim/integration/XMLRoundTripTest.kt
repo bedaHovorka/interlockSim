@@ -26,6 +26,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.gridContainsCellType
+import cz.vutbr.fit.interlockSim.testutil.saveAndReloadThroughFile
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
@@ -66,33 +68,30 @@ class XMLRoundTripTest : KoinTestBase() {
 		@TempDir tempDir: File
 	) {
 		// Create network with specific properties
-		val editingContext = DefaultEditingContext(40, 40)
+		DefaultEditingContext(40, 40).use { editingContext ->
+			val inA = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("Exit", true, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(35, 5), inB)
 
-		val inA = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
-		val inB = InOut("Exit", true, Cell.SpatialType.HORIZONTAL)
-		editingContext.putCell(Point(5, 5), inA)
-		editingContext.putCell(Point(35, 5), inB)
+			val track = SimpleTrackBlock(inA, inB, 400.0, 90.0)
+			editingContext.joinCells(Point(5, 5), Point(35, 5), track)
 
-		val track = SimpleTrackBlock(inA, inB, 400.0, 90.0)
-		editingContext.joinCells(Point(5, 5), Point(35, 5), track)
+			// Set distinctive property values
+			editingContext.currentMaxSpeed = 125.5
+			editingContext.currentTrackLength = 400.0
+			editingContext.currentNameString = "Property Test Network"
 
-		// Set distinctive property values
-		editingContext.currentMaxSpeed = 125.5
-		editingContext.currentTrackLength = 400.0
-		editingContext.currentNameString = "Property Test Network"
+			// Save, load, and verify structure
+			xmlFactory.saveAndReloadThroughFile(editingContext, File(tempDir, "properties-test.xml")) { loadedContext ->
+				val loadedBase = loadedContext as BaseContext<*>
 
-		// Transform and save
-		val xmlFile = File(tempDir, "properties-test.xml")
-		xmlFactory.saveContext(editingContext, xmlFile)
-
-		// Load and verify structure
-		val loadedContext = xmlFactory.createContext(xmlFile)
-		val loadedBase = loadedContext as BaseContext<*>
-
-		// Verify context loads successfully and property values are preserved (Issue #248)
-		assertThat(loadedBase.currentMaxSpeed).isEqualTo(125.5)
-		assertThat(loadedBase.currentTrackLength).isEqualTo(400.0)
-		assertThat(loadedBase.currentNameString).isEqualTo("Property Test Network")
+				// Verify context loads successfully and property values are preserved (Issue #248)
+				assertThat(loadedBase.currentMaxSpeed).isEqualTo(125.5)
+				assertThat(loadedBase.currentTrackLength).isEqualTo(400.0)
+				assertThat(loadedBase.currentNameString).isEqualTo("Property Test Network")
+			}
+		}
 	}
 
 	/**
@@ -105,44 +104,41 @@ class XMLRoundTripTest : KoinTestBase() {
 		@TempDir tempDir: File
 	) {
 		// Create network with railway switch
-		val editingContext = DefaultEditingContext(40, 40)
+		DefaultEditingContext(40, 40).use { editingContext ->
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val railSwitch = RailSwitch("Switch_001", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val inC = InOut("C", true, Cell.SpatialType.HORIZONTAL)
 
-		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		val railSwitch = RailSwitch("Switch_001", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
-		val inC = InOut("C", true, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), railSwitch)
+			editingContext.putCell(Point(25, 5), inB)
+			editingContext.putCell(Point(25, 10), inC)
 
-		editingContext.putCell(Point(5, 5), inA)
-		editingContext.putCell(Point(15, 5), railSwitch)
-		editingContext.putCell(Point(25, 5), inB)
-		editingContext.putCell(Point(25, 10), inC)
+			val trackASwitch = SimpleTrackBlock(inA, railSwitch, 100.0, 80.0)
+			val trackSwitchB = SimpleTrackBlock(railSwitch, inB, 100.0, 80.0)
+			val trackSwitchC = SimpleTrackBlock(railSwitch, inC, 100.0, 60.0)
+			editingContext.joinCells(Point(5, 5), Point(15, 5), trackASwitch)
+			editingContext.joinCells(Point(15, 5), Point(25, 5), trackSwitchB)
+			editingContext.joinCells(Point(15, 5), Point(25, 10), trackSwitchC)
 
-		val trackASwitch = SimpleTrackBlock(inA, railSwitch, 100.0, 80.0)
-		val trackSwitchB = SimpleTrackBlock(railSwitch, inB, 100.0, 80.0)
-		val trackSwitchC = SimpleTrackBlock(railSwitch, inC, 100.0, 60.0)
-		editingContext.joinCells(Point(5, 5), Point(15, 5), trackASwitch)
-		editingContext.joinCells(Point(15, 5), Point(25, 5), trackSwitchB)
-		editingContext.joinCells(Point(15, 5), Point(25, 10), trackSwitchC)
+			// Save, load, and verify switch configuration
+			xmlFactory.saveAndReloadThroughFile(editingContext, File(tempDir, "switch-test.xml")) { loadedContext ->
+				val loadedSwitch = loadedContext.getRailWayNetGrid().getCellAt(15, 5)
 
-		// Transform and save
-		val xmlFile = File(tempDir, "switch-test.xml")
-		xmlFactory.saveContext(editingContext, xmlFile)
+				assertThat(loadedSwitch).isNotNull()
+				assertThat(loadedSwitch as Any).isInstanceOf(RailSwitch::class)
 
-		// Load and verify switch configuration
-		val loadedContext = xmlFactory.createContext(xmlFile)
-		val loadedSwitch = loadedContext.getRailWayNetGrid().getCellAt(15, 5)
-
-		assertThat(loadedSwitch).isNotNull()
-		assertThat(loadedSwitch as Any).isInstanceOf(RailSwitch::class)
-
-		val switch: RailSwitch = loadedSwitch as RailSwitch
-		val switchType: RailSwitch.Type = switch.type
-		assertThat(switchType).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		val switchSpatialType: Cell.SpatialType = switch.getSpatialType()
-		assertThat(switchSpatialType).isEqualTo(Cell.SpatialType.HORIZONTAL)
-		// Cell names ARE now preserved in XML serialization (fixed in PR #306)
-		val switchName: String = switch.getName()
-		assertThat(switchName).isEqualTo("Switch_001")
+				val switch: RailSwitch = loadedSwitch as RailSwitch
+				val switchType: RailSwitch.Type = switch.type
+				assertThat(switchType).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+				val switchSpatialType: Cell.SpatialType = switch.getSpatialType()
+				assertThat(switchSpatialType).isEqualTo(Cell.SpatialType.HORIZONTAL)
+				// Cell names ARE now preserved in XML serialization (fixed in PR #306)
+				val switchName: String = switch.getName()
+				assertThat(switchName).isEqualTo("Switch_001")
+			}
+		}
 	}
 
 	/**
@@ -154,50 +150,46 @@ class XMLRoundTripTest : KoinTestBase() {
 		@TempDir tempDir: File
 	) {
 		// Create network with semaphores
-		val editingContext = DefaultEditingContext(40, 40)
+		DefaultEditingContext(40, 40).use { editingContext ->
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val semaphore1 = RailSemaphore("Signal_Oriented", true, Cell.SpatialType.HORIZONTAL) // orientation: true
+			val semaphore2 = RailSemaphore("Signal_NotOriented", false, Cell.SpatialType.HORIZONTAL) // orientation: false
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 
-		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		val semaphore1 = RailSemaphore("Signal_Oriented", true, Cell.SpatialType.HORIZONTAL) // orientation: true
-		val semaphore2 = RailSemaphore("Signal_NotOriented", false, Cell.SpatialType.HORIZONTAL) // orientation: false
-		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(35, 5), inB)
 
-		editingContext.putCell(Point(5, 5), inA)
-		editingContext.putCell(Point(35, 5), inB)
+			// Place semaphores outside the track path (not between inA and inB)
+			editingContext.putCell(Point(15, 10), semaphore1)
+			editingContext.putCell(Point(25, 10), semaphore2)
 
-		// Place semaphores outside the track path (not between inA and inB)
-		editingContext.putCell(Point(15, 10), semaphore1)
-		editingContext.putCell(Point(25, 10), semaphore2)
+			val track = SimpleTrackBlock(inA, inB, 300.0, 80.0)
+			editingContext.joinCells(Point(5, 5), Point(35, 5), track)
 
-		val track = SimpleTrackBlock(inA, inB, 300.0, 80.0)
-		editingContext.joinCells(Point(5, 5), Point(35, 5), track)
+			// Save, load, and verify semaphore configurations
+			xmlFactory.saveAndReloadThroughFile(editingContext, File(tempDir, "semaphore-test.xml")) { loadedContext ->
+				val loadedSem1 = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
+				val loadedSem2 = loadedContext.getRailWayNetGrid().getCellAt(25, 10)
 
-		// Transform and save
-		val xmlFile = File(tempDir, "semaphore-test.xml")
-		xmlFactory.saveContext(editingContext, xmlFile)
+				assertThat(loadedSem1).isNotNull()
+				assertThat(loadedSem2).isNotNull()
+				assertThat(loadedSem1 as Any).isInstanceOf(RailSemaphore::class)
+				assertThat(loadedSem2 as Any).isInstanceOf(RailSemaphore::class)
 
-		// Load and verify semaphore configurations
-		val loadedContext = xmlFactory.createContext(xmlFile)
+				val sem1 = loadedSem1 as RailSemaphore
+				val sem2 = loadedSem2 as RailSemaphore
 
-		val loadedSem1 = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
-		val loadedSem2 = loadedContext.getRailWayNetGrid().getCellAt(25, 10)
-
-		assertThat(loadedSem1).isNotNull()
-		assertThat(loadedSem2).isNotNull()
-		assertThat(loadedSem1 as Any).isInstanceOf(RailSemaphore::class)
-		assertThat(loadedSem2 as Any).isInstanceOf(RailSemaphore::class)
-
-		val sem1 = loadedSem1 as RailSemaphore
-		val sem2 = loadedSem2 as RailSemaphore
-
-		val sem1Orientation = sem1.getOrientation()
-		assertThat(sem1Orientation).isTrue()
-		val sem2Orientation = sem2.getOrientation()
-		assertThat(sem2Orientation).isEqualTo(false)
-		// Cell names ARE now preserved in XML serialization (fixed in PR #306)
-		val sem1Name = sem1.getName()
-		assertThat(sem1Name).isEqualTo("Signal_Oriented")
-		val sem2Name = sem2.getName()
-		assertThat(sem2Name).isEqualTo("Signal_NotOriented")
+				val sem1Orientation = sem1.getOrientation()
+				assertThat(sem1Orientation).isTrue()
+				val sem2Orientation = sem2.getOrientation()
+				assertThat(sem2Orientation).isEqualTo(false)
+				// Cell names ARE now preserved in XML serialization (fixed in PR #306)
+				val sem1Name = sem1.getName()
+				assertThat(sem1Name).isEqualTo("Signal_Oriented")
+				val sem2Name = sem2.getName()
+				assertThat(sem2Name).isEqualTo("Signal_NotOriented")
+			}
+		}
 	}
 
 	/**
@@ -210,42 +202,39 @@ class XMLRoundTripTest : KoinTestBase() {
 		@TempDir tempDir: File
 	) {
 		// Create network with multiple InOut points
-		val editingContext = DefaultEditingContext(50, 50)
+		DefaultEditingContext(50, 50).use { editingContext ->
+			val entryA = InOut("Platform_1_Entry", false, Cell.SpatialType.HORIZONTAL)
+			val exitA = InOut("Platform_1_Exit", true, Cell.SpatialType.HORIZONTAL)
+			val entryB = InOut("Platform_2_Entry", false, Cell.SpatialType.VERTICAL)
+			val exitB = InOut("Platform_2_Exit", true, Cell.SpatialType.VERTICAL)
 
-		val entryA = InOut("Platform_1_Entry", false, Cell.SpatialType.HORIZONTAL)
-		val exitA = InOut("Platform_1_Exit", true, Cell.SpatialType.HORIZONTAL)
-		val entryB = InOut("Platform_2_Entry", false, Cell.SpatialType.VERTICAL)
-		val exitB = InOut("Platform_2_Exit", true, Cell.SpatialType.VERTICAL)
+			editingContext.putCell(Point(5, 10), entryA)
+			editingContext.putCell(Point(45, 10), exitA)
+			editingContext.putCell(Point(25, 5), entryB)
+			editingContext.putCell(Point(25, 45), exitB)
 
-		editingContext.putCell(Point(5, 10), entryA)
-		editingContext.putCell(Point(45, 10), exitA)
-		editingContext.putCell(Point(25, 5), entryB)
-		editingContext.putCell(Point(25, 45), exitB)
+			val trackH = SimpleTrackBlock(entryA, exitA, 400.0, 100.0)
+			val trackV = SimpleTrackBlock(entryB, exitB, 400.0, 80.0)
+			editingContext.joinCells(Point(5, 10), Point(45, 10), trackH)
+			editingContext.joinCells(Point(25, 5), Point(25, 45), trackV)
 
-		val trackH = SimpleTrackBlock(entryA, exitA, 400.0, 100.0)
-		val trackV = SimpleTrackBlock(entryB, exitB, 400.0, 80.0)
-		editingContext.joinCells(Point(5, 10), Point(45, 10), trackH)
-		editingContext.joinCells(Point(25, 5), Point(25, 45), trackV)
+			// Save, load, and verify InOut configurations
+			xmlFactory.saveAndReloadThroughFile(editingContext, File(tempDir, "inout-test.xml")) { loadedContext ->
+				val loadedEditingContext = loadedContext as EditingContext
 
-		// Transform and save
-		val xmlFile = File(tempDir, "inout-test.xml")
-		xmlFactory.saveContext(editingContext, xmlFile)
+				val loadedInOuts = loadedEditingContext.getInOuts()
+				assertThat(loadedInOuts).hasSize(4)
 
-		// Load and verify InOut configurations
-		val loadedContext = xmlFactory.createContext(xmlFile) as EditingContext
-
-		val loadedInOuts = loadedContext.getInOuts()
-		assertThat(loadedInOuts).hasSize(4)
-
-		// Extract static refs from dynamic wrappers (convert to list for type inference)
-
-		val namesList = loadedInOuts.map { inOut -> inOut.getName() }
-		val names: Set<String> = namesList.toSet()
-		assertThat(names).hasSize(4)
-		assertThat(names.contains("Platform_1_Entry")).isTrue()
-		assertThat(names.contains("Platform_1_Exit")).isTrue()
-		assertThat(names.contains("Platform_2_Entry")).isTrue()
-		assertThat(names.contains("Platform_2_Exit")).isTrue()
+				// Extract static refs from dynamic wrappers (convert to list for type inference)
+				val namesList = loadedInOuts.map { inOut -> inOut.getName() }
+				val names: Set<String> = namesList.toSet()
+				assertThat(names).hasSize(4)
+				assertThat(names.contains("Platform_1_Entry")).isTrue()
+				assertThat(names.contains("Platform_1_Exit")).isTrue()
+				assertThat(names.contains("Platform_2_Entry")).isTrue()
+				assertThat(names.contains("Platform_2_Exit")).isTrue()
+			}
+		}
 	}
 
 	/**
@@ -258,61 +247,38 @@ class XMLRoundTripTest : KoinTestBase() {
 		@TempDir tempDir: File
 	) {
 		// Load the complex vyhybna.xml network
-		val originalContext = TestFixtures.loadShuntingEditingContext(xmlFactory)
+		TestFixtures.loadShuntingEditingContext(xmlFactory).use { originalContext ->
+			// Save to file, load back, and verify
+			val xmlFile = File(tempDir, "vyhybna-roundtrip.xml")
+			xmlFactory.saveAndReloadThroughFile(originalContext, xmlFile) { loadedContext ->
+				assertThat(xmlFile.exists()).isTrue()
+				val loadedEditingContext = loadedContext as EditingContext
 
-		// Save to file
-		val xmlFile = File(tempDir, "vyhybna-roundtrip.xml")
-		xmlFactory.saveContext(originalContext, xmlFile)
-		assertThat(xmlFile.exists()).isTrue()
+				// Verify basic structure is preserved
+				val originalCols = originalContext.getRailWayNetGrid().cols
+				val loadedCols = loadedEditingContext.getRailWayNetGrid().cols
+				assertThat(loadedCols).isEqualTo(originalCols)
 
-		// Load back
-		val loadedContext = xmlFactory.createContext(xmlFile) as EditingContext
+				val originalRows = originalContext.getRailWayNetGrid().rows
+				val loadedRows = loadedEditingContext.getRailWayNetGrid().rows
+				assertThat(loadedRows).isEqualTo(originalRows)
 
-		// Verify basic structure is preserved
-		val originalCols = originalContext.getRailWayNetGrid().cols
-		val loadedCols = loadedContext.getRailWayNetGrid().cols
-		assertThat(loadedCols).isEqualTo(originalCols)
+				// Verify InOuts count
+				val originalInOuts = originalContext.getInOuts()
+				val originalInOutCount = originalInOuts.size
+				val loadedRTInOuts = loadedEditingContext.getInOuts()
+				assertThat(loadedRTInOuts).hasSize(originalInOutCount)
 
-		val originalRows = originalContext.getRailWayNetGrid().rows
-		val loadedRows = loadedContext.getRailWayNetGrid().rows
-		assertThat(loadedRows).isEqualTo(originalRows)
+				// Verify graph structure (track connections)
+				assertThat(loadedEditingContext.getGraph().size()).isEqualTo(originalContext.getGraph().size())
+				assertThat(loadedEditingContext.getGraph().size()).isGreaterThan(0)
 
-		// Verify InOuts count
-		val originalInOuts = originalContext.getInOuts()
-		val originalInOutCount = originalInOuts.size
-		val loadedRTInOuts = loadedContext.getInOuts()
-		assertThat(loadedRTInOuts).hasSize(originalInOutCount)
+				// Verify at least one switch exists (vyhybna has switches)
+				assertThat(gridContainsCellType<RailSwitch>(loadedEditingContext)).isTrue()
 
-		// Verify graph structure (track connections)
-		assertThat(loadedContext.getGraph().size()).isEqualTo(originalContext.getGraph().size())
-		assertThat(loadedContext.getGraph().size()).isGreaterThan(0)
-
-		// Verify at least one switch exists (vyhybna has switches)
-		var foundSwitch = false
-		for (x in 0 until loadedContext.getRailWayNetGrid().cols) {
-			for (y in 0 until loadedContext.getRailWayNetGrid().rows) {
-				val cell = loadedContext.getRailWayNetGrid().getCellAt(x, y)
-				if (cell is RailSwitch) {
-					foundSwitch = true
-					break
-				}
+				// Verify at least one semaphore exists
+				assertThat(gridContainsCellType<RailSemaphore>(loadedEditingContext)).isTrue()
 			}
-			if (foundSwitch) break
 		}
-		assertThat(foundSwitch).isTrue()
-
-		// Verify at least one semaphore exists
-		var foundSemaphore = false
-		for (x in 0 until loadedContext.getRailWayNetGrid().cols) {
-			for (y in 0 until loadedContext.getRailWayNetGrid().rows) {
-				val cell = loadedContext.getRailWayNetGrid().getCellAt(x, y)
-				if (cell is RailSemaphore) {
-					foundSemaphore = true
-					break
-				}
-			}
-			if (foundSemaphore) break
-		}
-		assertThat(foundSemaphore).isTrue()
 	}
 }
