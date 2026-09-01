@@ -8,43 +8,52 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import assertk.assertThat
-import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import org.junit.jupiter.api.Test
 
 /**
  * Contract tests for the `KoinTestBase` cleanup path every leak fix since Issue #1026 relies on:
- * a context registered in [testContext] must be closed by `tearDownKoin()`, the field must be
- * reset so the regular `@AfterEach` run of the same method stays safe, and a close before
- * teardown (the multi-context tests do that) must not break the teardown re-close.
+ * every context registered via [KoinTestBase.tracked] must be closed by `tearDownKoin()`, the
+ * tracked list must be cleared so the automatic `@AfterEach` re-run is a safe no-op, and a
+ * context closed by hand before teardown must not abort the remaining cleanup.
  *
  * Uses the light [buildMinimalSimulation] fixture — the contract is about the Koin scope's
  * lifecycle, so no railway content is needed.
  */
 class KoinTestBaseCleanupContractTest : KoinTestBase() {
 	@Test
-	fun `tearDownKoin closes the registered testContext and resets the field`() {
-		val context = buildMinimalSimulation()
-		testContext = context
+	fun `tearDownKoin closes all tracked contexts`() {
+		val a = buildMinimalSimulation().tracked()
+		val b = buildMinimalSimulation().tracked()
 
 		tearDownKoin()
 
-		// Context.close() must have run — the Koin scope the context owns is released.
-		assertThat(context.scope.closed, name = "koin scope closed by tearDownKoin()").isTrue()
-		// The field is reset, so the @AfterEach invocation of the same method is a safe no-op.
-		assertThat(testContext, name = "testContext reset for the @AfterEach rerun").isNull()
+		assertThat(a.scope.closed, name = "first tracked context closed").isTrue()
+		assertThat(b.scope.closed, name = "second tracked context closed").isTrue()
+	}
+
+	@Test
+	fun `tearDownKoin is safe to call again after clearing the list`() {
+		// After tearDownKoin() clears trackedContexts, the automatic @AfterEach invocation of
+		// tearDownKoin() finds an empty list and calls stopKoin() on an already-stopped Koin —
+		// both must be no-ops. Trigger that scenario by calling tearDownKoin manually here; the
+		// @AfterEach will repeat it.
+		val context = buildMinimalSimulation().tracked()
+
+		tearDownKoin()
+		assertThat(context.scope.closed, name = "closed after first teardown").isTrue()
+		// @AfterEach will call tearDownKoin() again with an empty list — must not throw.
 	}
 
 	@Test
 	fun `a context closed before teardown is safely re-closed by tearDownKoin`() {
-		val context = buildMinimalSimulation()
-		testContext = context
+		val context = buildMinimalSimulation().tracked()
 
-		// The multi-context tests close their extra contexts by hand before the teardown.
+		// Closing a context before teardown should not abort the remaining tracked cleanup.
 		context.close()
 
-		// Must not throw, and the scope stays closed.
+		// Must not throw.
 		tearDownKoin()
-		assertThat(context.scope.closed, name = "koin scope closed").isTrue()
+		assertThat(context.scope.closed, name = "scope closed").isTrue()
 	}
 }

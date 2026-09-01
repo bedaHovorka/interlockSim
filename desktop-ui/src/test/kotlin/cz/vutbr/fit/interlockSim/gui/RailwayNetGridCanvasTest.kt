@@ -22,7 +22,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -61,23 +60,13 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas = RailwayNetGridCanvas()
 
 			// Create a simple editing context with one InOut node
-			editingContext = editingContextFactory.createEmptyContext()
+			editingContext = editingContextFactory.createEmptyContext().tracked()
 			val inA = InOut("A", false, SpatialType.HORIZONTAL)
 			val pA = Point(5, 5)
 			editingContext.putCell(pA, inA)
 
 			// Create simulation context from editing context
-			simulationContext = simulationContextFactory.createContext(editingContext)
-			testContext = simulationContext
-		}
-	}
-
-	/** [testContext] tracks only the simulation context; close the editing context by hand. */
-	@AfterEach
-	override fun tearDown() {
-		super.tearDown()
-		if (::editingContext.isInitialized) {
-			editingContext.close()
+			simulationContext = simulationContextFactory.createContext(editingContext).tracked()
 		}
 	}
 

@@ -32,12 +32,31 @@ import org.koin.core.module.Module
  */
 abstract class CommonKoinTestBase : KoinComponent {
 
+	private val trackedContexts = mutableListOf<Context<*, *>>()
+
 	/**
-	 * Optional context tracking for automatic cleanup.
-	 * Tests that create a context in @BeforeTest should assign this field.
-	 * It is closed automatically in [tearDownKoin].
+	 * Optional context tracking for automatic cleanup — **deprecated single-slot alias**.
+	 *
+	 * Assigning this field registers the context for automatic close in [tearDownKoin],
+	 * identical to calling [tracked]. New code should call [tracked] directly.
 	 */
+	@Deprecated(
+		"Use tracked() instead. Assign the context via .tracked() at the creation site.",
+		ReplaceWith("context.tracked()")
+	)
 	protected var testContext: Context<*, *>? = null
+		set(value) {
+			if (value != null) trackedContexts.add(value)
+			field = value
+		}
+
+	/**
+	 * Registers this context for automatic close in [tearDownKoin].
+	 *
+	 * Call once per context created in @BeforeTest.  Close is wrapped in [runCatching] so a
+	 * context closed by hand before teardown does not abort the remaining cleanup.
+	 */
+	protected fun <T : Context<*, *>> T.tracked(): T = also { trackedContexts.add(it) }
 
 	/**
 	 * Override this method to use a different test module.
@@ -63,7 +82,9 @@ abstract class CommonKoinTestBase : KoinComponent {
 
 	@AfterTest
 	fun tearDownKoin() {
-		testContext?.close()
+		trackedContexts.forEach { runCatching { it.close() } }
+		trackedContexts.clear()
+		@Suppress("DEPRECATION")
 		testContext = null
 		stopKoin()
 	}
