@@ -130,8 +130,9 @@ class Issue1025StaleTailReleaseTest : DispatcherKoinTestBase() {
 					snapshotSignal = driverSignal
 				)
 
-			// Wired exactly as ExampleRegistry.wireDispatcherAgent wires it, apart from the
-			// staleness threshold.
+			// Uses the same production OrphanReservationSweeper + RegistryPartialRouteReleaser
+			// wiring as ExampleRegistry.wireDispatcherAgent, with only the staleness threshold
+			// overridden for this test harness.
 			val sweeper =
 				OrphanReservationSweeper(
 					perceptionPort = perceptionPort,
@@ -146,10 +147,7 @@ class Issue1025StaleTailReleaseTest : DispatcherKoinTestBase() {
 				)
 
 			val decisionsApplied = Semaphore(0)
-			loop.snapshotCaptureHook = {
-				perceptionPort.captureSnapshot()
-				projector.captureOnSimThread()
-			}
+			loop.snapshotCaptureHook = { projector.captureOnSimThread() }
 			loop.controlStepListener =
 				ControlStepListener {
 					driverSignal.signal()
