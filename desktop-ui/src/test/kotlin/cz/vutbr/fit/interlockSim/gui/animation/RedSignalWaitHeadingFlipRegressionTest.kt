@@ -36,32 +36,23 @@ package cz.vutbr.fit.interlockSim.gui.animation
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.testutil.ArrivalTally
-import cz.vutbr.fit.interlockSim.testutil.HeadingFlipSampler
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.HeadingSamplerTestBase
 import cz.vutbr.fit.interlockSim.testutil.runSampled
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
-class RedSignalWaitHeadingFlipRegressionTest : KoinTestBase() {
+class RedSignalWaitHeadingFlipRegressionTest : HeadingSamplerTestBase() {
 	private companion object {
 		/** Trains that must complete their journey for the boundary state to be exercised. */
 		const val MIN_ARRIVALS: Int = 3
 	}
 
-	private val processFactory: SimulationProcessFactory by inject()
-
-	private lateinit var sampler: HeadingFlipSampler
 	private val arrivals = ArrivalTally()
 
 	@Test
 	fun `raw and resolved heading never flip where the front cannot advance`() {
-		val context =
-			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
-		sampler = HeadingFlipSampler(TrainPositionCalculator(context, context.separatorPositionCache))
+		val context = startSamplerContext()
 
 		// Same spec as the `shuntingLoop` example (runExampleGui): two A→B trains and one
 		// opposing B→A train on the passing loop — the boundary each of them reaches is

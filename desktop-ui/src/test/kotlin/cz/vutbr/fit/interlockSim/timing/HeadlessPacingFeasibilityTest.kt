@@ -222,13 +222,23 @@ class HeadlessPacingFeasibilityTest : IntegrationKoinTestBase() {
 		context.setMainProcess(loop)
 		context.run(controller)
 
+		// The paced test runs this twice, so [testContext] (which holds only one context) would
+		// drop the first run's context unregistered. Close here instead; Scope.close() is
+		// idempotent, so tearDownKoin()'s re-close of the last registered context is safe.
+		context.close()
+
 		return RunOutcome(
 			trainsExited = loop.getTrainsExited(),
 			maxConcurrentTrains = loop.getMaxConcurrentTrains()
 		)
 	}
 
-	private fun loadShuntingContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
+	/**
+	 * Loads the context and registers it in [testContext], so tearDownKoin() closes it when a
+	 * test holds exactly one context. Tests that create several contexts close them explicitly.
+	 */
+	private fun loadShuntingContext(): DefaultSimulationContext =
+		TestFixtures.newShuntingSimulationContext().also { testContext = it }
 
 	companion object {
 		private val logger = KotlinLogging.logger {}
