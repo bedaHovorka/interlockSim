@@ -78,7 +78,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 	private val editingContextFactory: XMLContextFactory by inject()
 
 	@Nested
-	@DisplayName("Factory instance and initialization")
+	@DisplayName("Parse tests: factory and empty-context basics")
 	inner class FactoryInstanceTests {
 		@Test
 		fun factoryInjection_always_returnsSameInstance() {
@@ -113,7 +113,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Parsing valid XML fixtures")
+	@DisplayName("Parse tests: fixture loading, grid size, and cell presence")
 	inner class ValidXMLParsingTests {
 		@Test
 		fun parseXML_minimalNetwork_createsTwoInOuts() {
@@ -337,7 +337,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Error handling for invalid XML")
+	@DisplayName("Parse tests: invalid input handling")
 	inner class InvalidXMLParsingTests {
 		// Every test below asserts that creation THROWS — the block throws before a
 		// context exists, so there is no scope to close and no `.use {}` wrapping (Issue #1035).
@@ -416,7 +416,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Round-trip serialization (save & load)")
+	@DisplayName("Serialization / round-trip tests")
 	inner class SerializationTests {
 		private var tempFile: File? = null
 
@@ -583,7 +583,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Edge cases and boundary conditions")
+	@DisplayName("Edge cases (empty, minimal, oversized networks)")
 	inner class EdgeCaseTests {
 		@Test
 		fun parseXML_largeGridSize_succeeds() {
@@ -665,7 +665,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Complex railway station configurations")
+	@DisplayName("Topology / path existence: complex station configurations")
 	inner class ComplexStationConfigurationTests {
 		// Helper methods for complex station validation
 
@@ -1068,8 +1068,9 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Praha Topology Improvements (PR #347)")
+	@DisplayName("Topology / path existence: Praha improvements (PR #347)")
 	inner class PragueTopologyImprovementsTests {
+
 		@Test
 		@DisplayName("Praha XML loads with exact element counts after PR #347 additions")
 		fun testPragueExactElementCounts() {
@@ -1263,7 +1264,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Name attribute persistence and validation (Issue #306)")
+	@DisplayName("Name-attribute tests")
 	inner class NameAttributeTests {
 		@Test
 		@DisplayName("save and load preserves RailSemaphore names")
