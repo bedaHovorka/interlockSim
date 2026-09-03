@@ -61,7 +61,7 @@ class ShuntingLoopControlPeriodTest : DispatcherKoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("control steps fire at t = 0, 2, 4, … — one every 2.0 simulated seconds")
 	fun controlStepPeriodIsTwoSimulatedSeconds() {
-		val context = fixture.loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext().tracked()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 

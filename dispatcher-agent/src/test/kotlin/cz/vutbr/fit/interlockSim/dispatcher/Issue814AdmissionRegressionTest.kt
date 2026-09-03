@@ -251,7 +251,7 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 		plannerBuilder: (ActuatorCommandQueue, SafetyNet?) -> ScriptedPlanner,
 		withSafetyNet: Boolean
 	): RunOutcome {
-		val context = fixture.loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext().tracked()
 		context.getInOuts()
 		val loop = ShuntingLoop(context, endTime = endTimeSeconds)
 
@@ -491,7 +491,7 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 		@Test
 		@DisplayName("the default rule-based planner exits at least four trains with no conflicts")
 		fun ruleBasedBaselineIsHealthy() {
-			val context = fixture.loadShuntingLoopContext()
+			val context = fixture.loadShuntingLoopContext().tracked()
 			context.getInOuts()
 			val loop = ShuntingLoop(context, endTime = endTimeSeconds)
 			val conflictEvents = mutableListOf<ConflictDetectedEvent>()

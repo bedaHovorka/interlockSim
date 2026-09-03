@@ -86,7 +86,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		context = TestFixtures.newShuntingSimulationContext()
+		context = TestFixtures.newShuntingSimulationContext().tracked()
 		// Attached to the ROOT logger rather than a named one: `Train`'s logger is declared in a
 		// companion object, so its name depends on how kotlin-logging derives it, and this
 		// assertion must not.
@@ -99,7 +99,6 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	fun tearDown() {
 		rootLogger.detachAppender(appender)
 		appender.stop()
-		context.close()
 	}
 
 	/** Stall WARNs that name [trainId]. */

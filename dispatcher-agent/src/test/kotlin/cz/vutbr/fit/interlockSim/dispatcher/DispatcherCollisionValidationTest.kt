@@ -93,7 +93,7 @@ class DispatcherCollisionValidationTest : DispatcherKoinTestBase() {
 	@Timeout(60, unit = TimeUnit.SECONDS)
 	@DisplayName("zero Goal 3 collision warnings with lifted dispatcher stack (SP2b.7 safety net)")
 	fun dispatcherRoutingProducesZeroCollisionWarnings() {
-		val context = fixture.loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext().tracked()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
