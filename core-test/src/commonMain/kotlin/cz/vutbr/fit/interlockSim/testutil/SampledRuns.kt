@@ -23,7 +23,7 @@ import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
  * (core `TrainFrontBoundaryStateTest`; desktop `StraightRun`/`RedSignalWait`/`Boundary`
  * heading tests): register a property-change listener filtered to the interesting report
  * types, register a block listener, `run()`, and always remove both listeners. The
- * removal matters — the base classes close `testContext`, and a listener left on a closed
+ * removal matters — the base classes close every tracked context, and a listener left on a closed
  * context turns one test's noise into the next test's failure.
  *
  * [onFrame] receives the report message for a report event, or `null` for a block event.

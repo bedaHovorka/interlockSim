@@ -112,7 +112,7 @@ object TestFixtures {
 	 * test's module configured it.
 	 *
 	 * The returned context owns a Koin scope and must be closed by the caller (directly, via
-	 * `use { … }`, or by assigning it to `KoinTestBase.testContext`).
+	 * `use { … }`, or by registering it with `KoinTestBase.tracked()`).
 	 *
 	 * @param simulationContextFactory factory performing the editing → simulation transformation
 	 * @param editingContextFactory when non-null, parses the XML explicitly; when `null` the

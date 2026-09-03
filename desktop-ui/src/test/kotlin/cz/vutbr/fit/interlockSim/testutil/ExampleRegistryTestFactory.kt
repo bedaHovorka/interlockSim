@@ -24,7 +24,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
  * that, seventeen copies in all (Issue #955, cluster U1).
  *
  * The context is fully wired but **not run**, and the caller owns it: close it, or hand it to
- * `KoinTestBase.testContext`.
+ * `KoinTestBase.tracked()`.
  *
  * @param registry the registry instance to call, normally `get<ExampleRegistry>()`
  * @param contextFactory the factory the example should build its context with

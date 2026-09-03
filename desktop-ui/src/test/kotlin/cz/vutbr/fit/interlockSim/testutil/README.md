@@ -8,18 +8,20 @@ The `testutil` package provides:
 - **TestFixtures** - XML configuration loading
 - **TestTopologies** - Programmatic network creation
 - **TestContextBuilder** - Custom topology builder
-- **KoinTestBase** - Base class for Koin DI tests
+- **KoinTestBase** - Base class for Koin DI tests; `tracked()` registers a context for
+  automatic close in `tearDownKoin()` (Issue #1038)
 - **AssertKExtensions** - Custom assertions
 - **HeadingFlipSampler** - Per-train raw/resolved heading sampling for the heading-flip
   regression tests (`gui.animation`), owner of the #789 per-train skip contract
 - **HeadingSamplerTestBase** - Shared scaffolding for those regression tests: injects the
   process factory and exposes `startSamplerContext()`, which creates the shunting context,
-  registers it in `testContext` for `tearDownKoin()` cleanup (Issue #1026), and points the
+  registers it with `tracked()` for `tearDownKoin()` cleanup (Issues #1026, #1038), and points the
   `calculator`/`sampler` fields at it
 
 Shared fixture-library helpers from `:core-test` (same package, KMP `commonMain`) are also
-visible here: `runSampled` (listener-wiring harness), `ArrivalTally` (completed-journey
-witness), `sameStatic`/`separatorLabel` (dynamic-wrapper-safe separator identity).
+visible here: `ContextTracker` (the registry behind `tracked()`), `runSampled` (listener-wiring
+harness), `ArrivalTally` (completed-journey witness), `sameStatic`/`separatorLabel`
+(dynamic-wrapper-safe separator identity).
 
 ## Quick Start
 
@@ -116,12 +118,12 @@ val context = TestTopologies.simpleLinearPath()
 // context never closed!
 ```
 
-**Contexts held across a whole test method (KoinTestBase subclasses):** register them in
-`testContext` — `tearDownKoin()` closes it after each test (Issue #1026):
+**Contexts held across a whole test method (KoinTestBase subclasses):** register them with
+`.tracked()` — `tearDownKoin()` closes every tracked context after each test, in reverse
+registration order (Issues #1026, #1038):
 
 ```kotlin
-val context = TestFixtures.newShuntingSimulationContext(...)
-testContext = context  // tearDownKoin() closes it
+val context = TestFixtures.newShuntingSimulationContext(...).tracked()  // tearDownKoin() closes it
 ```
 
 The heading-flip regression tests get this from `HeadingSamplerTestBase.startSamplerContext()`.
@@ -191,16 +193,18 @@ fun testWithShuntingLoop() {
 }
 ```
 
-### Pattern 3: Shared Context Across Tests
+### Pattern 3: Shared Contexts Across Tests
 
 ```kotlin
 class MyTestSuite : KoinTestBase() {
+    private lateinit var editing: EditingContext
     private lateinit var context: SimulationContext
 
     @BeforeEach
     fun setUp() {
-        context = TestTopologies.simpleLinearPathSimulation()
-        testContext = context  // tearDownKoin() closes it — no manual @AfterEach needed
+        editing = editingContextFactory.createEmptyContext().tracked()
+        context = simulationContextFactory.createContext(editing).tracked()
+        // tearDownKoin() closes both (simulation first, then editing) — no manual @AfterEach needed
     }
 
     @Test

@@ -56,8 +56,10 @@ import org.koin.test.KoinTest
  * in @BeforeEach would fail without this base class.
  *
  * Context Resource Management:
- * Register every Context created in @BeforeEach with [tracked] so it is automatically closed
- * in [tearDownKoin]. Multiple contexts per test are fully supported.
+ * Register every Context created in @BeforeEach (or in a helper) with [tracked] so it is
+ * automatically closed in [tearDownKoin]. Any number of contexts per test is supported; they are
+ * closed in reverse registration order by a shared [ContextTracker], and a failing close is
+ * reported after the remaining cleanup ran (see its KDoc for the full contract).
  *
  * Pattern A - One or more contexts registered at creation:
  * ```kotlin
@@ -87,41 +89,28 @@ import org.koin.test.KoinTest
  * @since 2026-01-12 (Koin migration)
  * @since 2026-01-16 (Performance optimization - lightweight module by default)
  * @since 2026-01-27 (Context cleanup pattern)
- * @since 2026-09-01 (Multi-context tracked() registration — Issue #1038)
+ * @since 2026-09-03 (Multi-context tracked() registration via ContextTracker — Issue #1038)
  */
 abstract class KoinTestBase : KoinTest {
-	private val trackedContexts = mutableListOf<Context<*, *>>()
+	private val tracker = ContextTracker()
+
+	/** Number of contexts registered with [tracked] and not yet closed by [tearDownKoin]. */
+	protected val trackedContextCount: Int
+		get() = tracker.size
 
 	/**
-	 * Optional context tracking for automatic cleanup — **deprecated single-slot alias**.
-	 *
-	 * Assigning this field registers the context for automatic close in [tearDownKoin],
-	 * identical to calling [tracked]. New code should call [tracked] directly; this field
-	 * exists to avoid a big-bang migration of the existing call sites.
-	 */
-	@Deprecated(
-		"Use tracked() instead. Assign the context via .tracked() at the creation site.",
-		ReplaceWith("context.tracked()")
-	)
-	protected var testContext: Context<*, *>? = null
-		set(value) {
-			if (value != null) trackedContexts.add(value)
-			field = value
-		}
-
-	/**
-	 * Registers this context for automatic close in [tearDownKoin].
-	 *
-	 * Call once per context created in @BeforeEach (or in a helper).  The list is closed and
-	 * cleared in [tearDownKoin], so each test starts with an empty registry.  Close is wrapped in
-	 * [runCatching] so a context that was already closed by hand does not abort teardown.
+	 * Registers this context for automatic close in [tearDownKoin] and returns it, so the call
+	 * reads fluently at the creation site:
 	 *
 	 * ```kotlin
 	 * editingContext = factory.createEmptyContext().tracked()
 	 * simulationContext = simFactory.createContext(editingContext).tracked()
 	 * ```
+	 *
+	 * Call once per context. A context closed by hand before teardown is simply closed again —
+	 * `Context.close()` is idempotent.
 	 */
-	protected fun <T : Context<*, *>> T.tracked(): T = also { trackedContexts.add(it) }
+	protected fun <T : Context<*, *>> T.tracked(): T = tracker.track(this)
 
 	/**
 	 * Override this method to use a different test module.
@@ -138,12 +127,16 @@ abstract class KoinTestBase : KoinTest {
 		}
 	}
 
+	/**
+	 * Closes every tracked context, then stops Koin. Koin is stopped even when a close fails; the
+	 * first failure is rethrown afterwards so a broken teardown is reported, not swallowed.
+	 */
 	@AfterEach
 	fun tearDownKoin() {
-		trackedContexts.forEach { runCatching { it.close() } }
-		trackedContexts.clear()
-		@Suppress("DEPRECATION")
-		testContext = null
-		stopKoin()
+		try {
+			tracker.closeAll()
+		} finally {
+			stopKoin()
+		}
 	}
 }
