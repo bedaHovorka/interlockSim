@@ -60,8 +60,9 @@ class AnimationIntegrationTest : KoinTestBase() {
 	fun setup() {
 		// Create real simulation context from vyhybna.xml
 		simulationContext =
-			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
-		testContext = simulationContext
+			TestFixtures
+				.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+				.tracked()
 
 		// Create mock canvas (minimal Swing component)
 		mockCanvas = mockk<Component>(relaxed = true)

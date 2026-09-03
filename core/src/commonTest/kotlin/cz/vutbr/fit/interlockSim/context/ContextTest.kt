@@ -42,8 +42,7 @@ class ContextTest : CommonKoinTestBase() {
 			editingContext.joinCells(r1, pB, tl)
 			editingContext.joinCells(pA, r1, tl)
 
-			context = simulationContextFactory.createContext(editingContext)
-			testContext = context
+			context = simulationContextFactory.createContext(editingContext).tracked()
 		}
 	}
 

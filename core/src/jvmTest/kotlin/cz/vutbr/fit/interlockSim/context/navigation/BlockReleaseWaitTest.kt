@@ -47,8 +47,7 @@ class BlockReleaseWaitTest : KoinTestBase() {
 	@Test
 	fun `train B waits for train A to release a block then reserves it in a later event`() =
 		runBlocking {
-			val context = TestFixtures.loadShuntingSimulationContext(simulationContextFactory)
-			testContext = context
+			val context = TestFixtures.loadShuntingSimulationContext(simulationContextFactory).tracked()
 
 			val registry = context.scope.get<PathReservationRegistry>()
 			val block = Util.assertInstanceOf<DynamicTrackBlock>(context.getGraph().values().first())

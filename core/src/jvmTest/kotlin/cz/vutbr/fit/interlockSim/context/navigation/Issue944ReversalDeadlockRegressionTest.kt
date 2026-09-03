@@ -85,8 +85,8 @@ class Issue944ReversalDeadlockRegressionTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-		testContext = simulationContext
+		simulationContext =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
 		registry = simulationContext.scope.get()
 		service = simulationContext.getRoutingServices().getPathReservationService()

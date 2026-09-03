@@ -36,8 +36,7 @@ class BresenhamJoinTest : CommonKoinTestBase() {
 	private lateinit var context: EditingContext
 
 	override fun afterKoinSetUp() {
-		context = editingContextFactory.createEmptyContext()
-		testContext = context // Track for cleanup
+		context = editingContextFactory.createEmptyContext().tracked()
 	}
 
 	@Test

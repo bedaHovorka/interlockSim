@@ -28,16 +28,25 @@ import org.koin.core.module.Module
  * Uses [KoinComponent] instead of koin-test's KoinTest so no additional
  * dependency beyond koin-core is required in commonMain.
  *
+ * Register every Context created in [afterKoinSetUp] with [tracked]; [tearDownKoin] closes them
+ * all through a shared [ContextTracker] (reverse order, failures reported after cleanup).
+ *
  * @since 2026 (commonTest migration — Task 3c)
+ * @since 2026-09-03 (Multi-context tracked() registration via ContextTracker — Issue #1038)
  */
 abstract class CommonKoinTestBase : KoinComponent {
+	private val tracker = ContextTracker()
+
+	/** Number of contexts registered with [tracked] and not yet closed by [tearDownKoin]. */
+	protected val trackedContextCount: Int
+		get() = tracker.size
 
 	/**
-	 * Optional context tracking for automatic cleanup.
-	 * Tests that create a context in @BeforeTest should assign this field.
-	 * It is closed automatically in [tearDownKoin].
+	 * Registers this context for automatic close in [tearDownKoin] and returns it, so the call
+	 * reads fluently at the creation site: `context = buildMinimalSimulation().tracked()`.
+	 * Call once per context; a context closed by hand earlier is simply closed again.
 	 */
-	protected var testContext: Context<*, *>? = null
+	protected fun <T : Context<*, *>> T.tracked(): T = tracker.track(this)
 
 	/**
 	 * Override this method to use a different test module.
@@ -61,10 +70,13 @@ abstract class CommonKoinTestBase : KoinComponent {
 	 */
 	protected open fun afterKoinSetUp() {}
 
+	/** Closes every tracked context, then stops Koin (always); the first close failure is rethrown afterwards. */
 	@AfterTest
 	fun tearDownKoin() {
-		testContext?.close()
-		testContext = null
-		stopKoin()
+		try {
+			tracker.closeAll()
+		} finally {
+			stopKoin()
+		}
 	}
 }

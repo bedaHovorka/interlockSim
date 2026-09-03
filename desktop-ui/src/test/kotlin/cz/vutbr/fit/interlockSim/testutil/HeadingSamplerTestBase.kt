@@ -17,7 +17,7 @@ import org.koin.test.inject
  * factory, the [TrainPositionCalculator] they read positions and headings through, and the
  * [HeadingFlipSampler] that records heading flips.
  *
- * [startSamplerContext] registers the created context in [testContext] (Issue #1026), so
+ * [startSamplerContext] registers the created context with [tracked] (Issue #1026), so
  * `KoinTestBase.tearDownKoin()` closes its Koin scope after each test — the caller does
  * NOT own the context and must not close it.
  *
@@ -33,8 +33,9 @@ abstract class HeadingSamplerTestBase : KoinTestBase() {
 	/** Build the shunting-loop context for a sim-level test and point [calculator]/[sampler] at it. */
 	protected fun startSamplerContext(): DefaultSimulationContext {
 		val context =
-			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
-		testContext = context
+			TestFixtures
+				.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+				.tracked()
 		calculator = TrainPositionCalculator(context, context.separatorPositionCache)
 		sampler = HeadingFlipSampler(calculator)
 		return context

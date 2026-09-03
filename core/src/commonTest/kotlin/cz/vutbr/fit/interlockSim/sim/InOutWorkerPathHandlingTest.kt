@@ -48,8 +48,7 @@ class InOutWorkerPathHandlingTest : CommonKoinTestBase() {
 	override fun afterKoinSetUp() {
 		// Create a context with a connected InOut
 		val (ctx, inOut) = createTestContextWithInOut("TEST_ENTRY", false, SpatialType.HORIZONTAL)
-		context = MockSimulationContext(ctx as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
-		testContext = context // Track for cleanup
+		context = MockSimulationContext(ctx as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext).tracked()
 		entryInOut = inOut
 		worker = InOutWorker(context, entryInOut)
 		queue = worker.getQueqe()

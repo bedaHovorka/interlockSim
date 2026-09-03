@@ -22,7 +22,7 @@ fixtures from their test scopes.
 ## Contents
 
 - `src/commonMain/kotlin/.../testutil/` — `CommonTestFixtures`, `TestTopologies`,
-  `TestContextBuilder`, `MockSimulationContext`, `CommonKoinTestBase`,
+  `TestContextBuilder`, `MockSimulationContext`, `CommonKoinTestBase`, `ContextTracker`,
   `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,

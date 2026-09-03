@@ -75,8 +75,7 @@ class ShuntingLoopApprovedTrainsRaceTest : KoinTestBase() {
 	@DisplayName("getApprovedTrains never tears while the simulation mutates the approved set")
 	fun `approved train reads are safe off the simulation thread`() {
 		val ctx: DefaultSimulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-		testContext = ctx
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 		val loop = prepareShuntingLoop(ctx, endTime = END_TIME)
 
 		val result =
