@@ -82,7 +82,8 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
+		simulationContext =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
 		realEnvironment = simulationContext
 		navigator = simulationContext.scope.get()

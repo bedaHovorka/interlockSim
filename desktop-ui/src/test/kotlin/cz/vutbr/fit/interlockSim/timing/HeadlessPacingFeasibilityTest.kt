@@ -228,8 +228,7 @@ class HeadlessPacingFeasibilityTest : IntegrationKoinTestBase() {
 		)
 	}
 
-	private fun loadShuntingContext(): DefaultSimulationContext =
-		TestFixtures.newShuntingSimulationContext().tracked()
+	private fun loadShuntingContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext().tracked()
 
 	companion object {
 		private val logger = KotlinLogging.logger {}

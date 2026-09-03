@@ -33,7 +33,8 @@ abstract class HeadingSamplerTestBase : KoinTestBase() {
 	/** Build the shunting-loop context for a sim-level test and point [calculator]/[sampler] at it. */
 	protected fun startSamplerContext(): DefaultSimulationContext {
 		val context =
-			TestFixtures.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
+			TestFixtures
+				.newShuntingSimulationContext(processFactory = processFactory, initializeDynamicMapping = true)
 				.tracked()
 		calculator = TrainPositionCalculator(context, context.separatorPositionCache)
 		sampler = HeadingFlipSampler(calculator)

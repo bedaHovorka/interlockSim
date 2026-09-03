@@ -154,11 +154,11 @@ class ApprovedTrainsSnapshotContractTest : CommonKoinTestBase() {
 	@Test
 	fun `ShuntingLoop approved-train snapshots stay frozen across admissions and retirements`() {
 		val ctx =
-			CommonTestFixtures.parseSimulationContext(
-				NetworkResources.VYHYBNA_XML,
-				get()
-			)
-			.tracked()
+			CommonTestFixtures
+				.parseSimulationContext(
+					NetworkResources.VYHYBNA_XML,
+					get()
+				).tracked()
 		val loop = prepareShuntingLoop(ctx, endTime = SHUNTING_END_TIME)
 
 		val captures = runCapturingApprovalSnapshots(ctx, loop)
