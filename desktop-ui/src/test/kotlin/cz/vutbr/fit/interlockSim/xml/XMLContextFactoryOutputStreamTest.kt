@@ -409,13 +409,11 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 				// Verify UTF-8 encoding by checking byte array
 				val bytes = outputStream.toByteArray()
 				val utf8String = String(bytes, Charsets.UTF_8)
-				val latin1String = String(bytes, Charsets.ISO_8859_1)
 
 				// UTF-8 should parse correctly
 				assertThat(utf8String).contains("<?xml version=\"1.0\"?>")
 
-				// If encoding is not UTF-8, strings would differ
-				// (This test is informational - verifies consistent encoding)
+				// Sanity check: we decoded the output successfully
 				assertThat(utf8String).isNotNull()
 			}
 		}
