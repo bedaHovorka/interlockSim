@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.xml
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
@@ -394,9 +395,11 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 	inner class EncodingTests {
 		@Test
 		fun saveContext_usesUTF8Encoding() {
-			// Create context
+			// The name needs a character outside ASCII. With ASCII-only names UTF-8 and Latin-1
+			// produce the same bytes, so the test cannot tell the two encodings apart.
+			val nonAsciiName = "Entry_\u0159"
 			editingContextFactory.createEmptyContext().use { context ->
-				context.putCell(Point(1, 1), InOut("Entry", true, Cell.SpatialType.HORIZONTAL))
+				context.putCell(Point(1, 1), InOut(nonAsciiName, true, Cell.SpatialType.HORIZONTAL))
 				context.putCell(Point(2, 1), InOut("Exit", false, Cell.SpatialType.HORIZONTAL))
 
 				// Save to OutputStream
@@ -406,15 +409,19 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 					name = "saveContext(stream) must succeed"
 				).isTrue()
 
-				// Verify UTF-8 encoding by checking byte array
+				// Read the same bytes twice, once per encoding
 				val bytes = outputStream.toByteArray()
 				val utf8String = String(bytes, Charsets.UTF_8)
+				val latin1String = String(bytes, Charsets.ISO_8859_1)
 
 				// UTF-8 should parse correctly
 				assertThat(utf8String).contains("<?xml version=\"1.0\"?>")
 
-				// Sanity check: we decoded the output successfully
-				assertThat(utf8String).isNotNull()
+				// The name comes back only if the bytes really are UTF-8. The character is two
+				// bytes in UTF-8, so a Latin-1 read of the same bytes must show mojibake instead.
+				assertThat(utf8String, name = "the name must decode from UTF-8").contains(nonAsciiName)
+				assertThat(latin1String, name = "the same bytes must not decode as Latin-1")
+					.doesNotContain(nonAsciiName)
 			}
 		}
 
