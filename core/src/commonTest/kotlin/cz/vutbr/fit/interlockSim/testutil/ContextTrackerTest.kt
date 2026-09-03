@@ -13,6 +13,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -26,6 +27,11 @@ import kotlin.test.assertFailsWith
  */
 class ContextTrackerTest : CommonKoinTestBase() {
 	private val tracker = ContextTracker()
+
+	@AfterTest
+	fun closeTracker() {
+		runCatching { tracker.closeAll() }.getOrNull()
+	}
 
 	@Test
 	fun trackReturnsTheSameInstance() {
