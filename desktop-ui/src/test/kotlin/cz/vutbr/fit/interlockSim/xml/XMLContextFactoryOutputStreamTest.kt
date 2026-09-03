@@ -87,19 +87,20 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_emptyContextWithInOuts_producesValidXML() {
 			// Create empty context with minimum required InOuts
-			val emptyContext = editingContextFactory.createEmptyContext()
-			emptyContext.putCell(Point(1, 1), InOut("ENTRY", true, Cell.SpatialType.HORIZONTAL))
-			emptyContext.putCell(Point(2, 1), InOut("EXIT", false, Cell.SpatialType.HORIZONTAL))
-			val outputStream = ByteArrayOutputStream()
+			editingContextFactory.createEmptyContext().use { emptyContext ->
+				emptyContext.putCell(Point(1, 1), InOut("ENTRY", true, Cell.SpatialType.HORIZONTAL))
+				emptyContext.putCell(Point(2, 1), InOut("EXIT", false, Cell.SpatialType.HORIZONTAL))
+				val outputStream = ByteArrayOutputStream()
 
-			// Save to OutputStream
-			val success = editingContextFactory.saveContext(context = emptyContext, stream = outputStream)
+				// Save to OutputStream
+				val success = editingContextFactory.saveContext(context = emptyContext, stream = outputStream)
 
-			// Verify success and XML structure
-			assertThat(success).isTrue()
-			val xmlString = outputStream.toString(Charsets.UTF_8)
-			assertThat(xmlString).contains("<net X=\"100\" Y=\"100\"")
-			assertThat(xmlString).contains("InOut")
+				// Verify success and XML structure
+				assertThat(success).isTrue()
+				val xmlString = outputStream.toString(Charsets.UTF_8)
+				assertThat(xmlString).contains("<net X=\"100\" Y=\"100\"")
+				assertThat(xmlString).contains("InOut")
+			}
 		}
 
 		@Test
@@ -110,7 +111,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 				val outputStream = ByteArrayOutputStream()
 
 				// Save to OutputStream
-				editingContextFactory.saveContext(context, outputStream)
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 
 				// Verify XML contains track block
 				val xmlString = outputStream.toString(Charsets.UTF_8)
@@ -128,7 +132,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 				val outputStream = ByteArrayOutputStream()
 
 				// Save to OutputStream
-				editingContextFactory.saveContext(context, outputStream)
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 
 				// Verify XML contains RailSwitch with type
 				val xmlString = outputStream.toString(Charsets.UTF_8)
@@ -145,7 +152,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 				val outputStream = ByteArrayOutputStream()
 
 				// Save to OutputStream
-				editingContextFactory.saveContext(context, outputStream)
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 
 				// Verify XML contains RailSemaphore with orientation
 				val xmlString = outputStream.toString(Charsets.UTF_8)
@@ -156,18 +166,22 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 
 		@Test
 		fun saveContext_outputStream_flushesData() {
-			val context = editingContextFactory.createEmptyContext()
-			context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
-			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
+			editingContextFactory.createEmptyContext().use { context ->
+				context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
+				context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
-			// Use ByteArrayOutputStream to verify data is flushed
-			val outputStream = ByteArrayOutputStream()
-			editingContextFactory.saveContext(context, outputStream)
+				// Use ByteArrayOutputStream to verify data is flushed
+				val outputStream = ByteArrayOutputStream()
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 
-			// Verify data is immediately available (not buffered)
-			assertThat(outputStream.size())
-				.withMessage("OutputStream should contain data after save")
-				.isGreaterThan(0)
+				// Verify data is immediately available (not buffered)
+				assertThat(outputStream.size())
+					.withMessage("OutputStream should contain data after save")
+					.isGreaterThan(0)
+			}
 		}
 	}
 
@@ -312,12 +326,15 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			val xml = getFixtureStream(fixtureName)
 			editingContextFactory.createContext(xml).use { context ->
 				// Save to File
-				editingContextFactory.saveContext(context, tempFile!!)
+				assertThat(editingContextFactory.saveContext(context, tempFile!!), name = "saveContext(file) must succeed").isTrue()
 				val fileContent = tempFile!!.readText()
 
 				// Save to OutputStream
 				val outputStream = ByteArrayOutputStream()
-				editingContextFactory.saveContext(context, outputStream)
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 				val streamContent = outputStream.toString(Charsets.UTF_8)
 
 				// Verify outputs are identical
@@ -332,41 +349,43 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_failingOutputStream_returnsFalse() {
 			// Create context
-			val context = editingContextFactory.createEmptyContext()
-			context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
-			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
+			editingContextFactory.createEmptyContext().use { context ->
+				context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
+				context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
-			// Create OutputStream that throws IOException
-			val failingStream =
-				object : OutputStream() {
-					override fun write(b: Int): Unit = throw java.io.IOException("Simulated write failure")
-				}
+				// Create OutputStream that throws IOException
+				val failingStream =
+					object : OutputStream() {
+						override fun write(b: Int): Unit = throw java.io.IOException("Simulated write failure")
+					}
 
-			// Attempt to save (should return false)
-			val success = editingContextFactory.saveContext(context, failingStream)
+				// Attempt to save (should return false)
+				val success = editingContextFactory.saveContext(context, failingStream)
 
-			// Verify failure is handled gracefully
-			assertThat(success).isFalse()
+				// Verify failure is handled gracefully
+				assertThat(success).isFalse()
+			}
 		}
 
 		@Test
 		fun saveContext_outputStreamThrowsOnFlush_returnsFalse() {
 			// Create context
-			val context = editingContextFactory.createEmptyContext()
-			context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
-			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
+			editingContextFactory.createEmptyContext().use { context ->
+				context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
+				context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
-			// Create OutputStream that throws IOException on flush
-			val failingStream =
-				object : ByteArrayOutputStream() {
-					override fun flush(): Unit = throw java.io.IOException("Simulated flush failure")
-				}
+				// Create OutputStream that throws IOException on flush
+				val failingStream =
+					object : ByteArrayOutputStream() {
+						override fun flush(): Unit = throw java.io.IOException("Simulated flush failure")
+					}
 
-			// Attempt to save (should return false)
-			val success = editingContextFactory.saveContext(context, failingStream)
+				// Attempt to save (should return false)
+				val success = editingContextFactory.saveContext(context, failingStream)
 
-			// Verify failure is handled gracefully
-			assertThat(success).isFalse()
+				// Verify failure is handled gracefully
+				assertThat(success).isFalse()
+			}
 		}
 	}
 
@@ -376,45 +395,53 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_usesUTF8Encoding() {
 			// Create context
-			val context = editingContextFactory.createEmptyContext()
-			context.putCell(Point(1, 1), InOut("Entry", true, Cell.SpatialType.HORIZONTAL))
-			context.putCell(Point(2, 1), InOut("Exit", false, Cell.SpatialType.HORIZONTAL))
+			editingContextFactory.createEmptyContext().use { context ->
+				context.putCell(Point(1, 1), InOut("Entry", true, Cell.SpatialType.HORIZONTAL))
+				context.putCell(Point(2, 1), InOut("Exit", false, Cell.SpatialType.HORIZONTAL))
 
-			// Save to OutputStream
-			val outputStream = ByteArrayOutputStream()
-			editingContextFactory.saveContext(context, outputStream)
+				// Save to OutputStream
+				val outputStream = ByteArrayOutputStream()
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 
-			// Verify UTF-8 encoding by checking byte array
-			val bytes = outputStream.toByteArray()
-			val utf8String = String(bytes, Charsets.UTF_8)
-			val latin1String = String(bytes, Charsets.ISO_8859_1)
+				// Verify UTF-8 encoding by checking byte array
+				val bytes = outputStream.toByteArray()
+				val utf8String = String(bytes, Charsets.UTF_8)
+				val latin1String = String(bytes, Charsets.ISO_8859_1)
 
-			// UTF-8 should parse correctly
-			assertThat(utf8String).contains("<?xml version=\"1.0\"?>")
+				// UTF-8 should parse correctly
+				assertThat(utf8String).contains("<?xml version=\"1.0\"?>")
 
-			// If encoding is not UTF-8, strings would differ
-			// (This test is informational - verifies consistent encoding)
-			assertThat(utf8String).isNotNull()
+				// If encoding is not UTF-8, strings would differ
+				// (This test is informational - verifies consistent encoding)
+				assertThat(utf8String).isNotNull()
+			}
 		}
 
 		@Test
 		fun saveContext_specialCharactersInNames_encodedCorrectly() {
 			// Create context with special characters (if names support them)
-			val context = editingContextFactory.createEmptyContext()
-			context.putCell(Point(1, 1), InOut("Entry_A", true, Cell.SpatialType.HORIZONTAL))
-			context.putCell(Point(2, 1), InOut("Exit_B", false, Cell.SpatialType.HORIZONTAL))
+			editingContextFactory.createEmptyContext().use { context ->
+				context.putCell(Point(1, 1), InOut("Entry_A", true, Cell.SpatialType.HORIZONTAL))
+				context.putCell(Point(2, 1), InOut("Exit_B", false, Cell.SpatialType.HORIZONTAL))
 
-			// Save to OutputStream
-			val outputStream = ByteArrayOutputStream()
-			editingContextFactory.saveContext(context, outputStream)
+				// Save to OutputStream
+				val outputStream = ByteArrayOutputStream()
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 
-			// Load back to verify round-trip encoding
-			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
-			editingContextFactory.createContext(inputStream).use { loadedContext ->
-				// Verify names are preserved
-				val cellA = loadedContext.getRailWayNetGrid().getCellAt(1, 1)
-				assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
-				assertThat((cellA as InOut).getName()).isEqualTo("Entry_A")
+				// Load back to verify round-trip encoding
+				val inputStream = ByteArrayInputStream(outputStream.toByteArray())
+				editingContextFactory.createContext(inputStream).use { loadedContext ->
+					// Verify names are preserved
+					val cellA = loadedContext.getRailWayNetGrid().getCellAt(1, 1)
+					assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
+					assertThat((cellA as InOut).getName()).isEqualTo("Entry_A")
+				}
 			}
 		}
 	}
@@ -430,7 +457,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 				// Measure save time
 				val outputStream = ByteArrayOutputStream()
 				val startTime = System.nanoTime()
-				editingContextFactory.saveContext(context, outputStream)
+				assertThat(
+					editingContextFactory.saveContext(context, outputStream),
+					name = "saveContext(stream) must succeed"
+				).isTrue()
 				val elapsedTime = System.nanoTime() - startTime
 
 				// Verify save completes in reasonable time (< 1 second for rudyUjezd)

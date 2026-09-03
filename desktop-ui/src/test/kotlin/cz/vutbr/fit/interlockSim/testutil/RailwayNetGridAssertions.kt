@@ -31,18 +31,14 @@ const val RAIL_SWITCH_KEY: String = "RailSwitch"
 const val RAIL_SEMAPHORE_KEY: String = "RailSemaphore"
 
 /**
- * Scan the whole grid of [context] for a cell of type [T], for example to assert that
+ * Report whether the grid of [context] holds a cell of type [T], for example to assert that
  * vyhybna content (switches, semaphores) survives a round trip.
+ *
+ * `RailwayNetGrid` iterates its populated cells only, so this costs one pass over the cells
+ * that exist, not over every coordinate of a grid that can be 500x500.
  */
-inline fun <reified T : Cell> gridContainsCellType(context: Context<*, *>): Boolean {
-	val grid = context.getRailWayNetGrid()
-	for (x in 0 until grid.cols) {
-		for (y in 0 until grid.rows) {
-			if (grid.getCellAt(x, y) is T) return true
-		}
-	}
-	return false
-}
+inline fun <reified T : Cell> gridContainsCellType(context: Context<*, *>): Boolean =
+	context.getRailWayNetGrid().any { it.value is T }
 
 /**
  * Count the InOut, RailSwitch, and RailSemaphore cells of [grid], keyed by [INOUT_KEY],

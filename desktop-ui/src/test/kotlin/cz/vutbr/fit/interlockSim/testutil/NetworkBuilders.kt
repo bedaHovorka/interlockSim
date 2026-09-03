@@ -15,8 +15,9 @@ import cz.vutbr.fit.interlockSim.util.Point
 
 /**
  * Build a [gridSize]x[gridSize] network with one entry InOut ([entryName] at [entryAt]) and one
- * exit InOut ([exitName] at [exitAt]), joined by a single [trackLength] m / [trackMaxSpeed] km/h
+ * exit InOut ([exitName] at [exitAt]), joined by a single [trackLength] m / [trackMaxSpeed] m/s
  * track. Both InOuts are horizontal; the entry faces one way and the exit the other.
+ * (`StaticTrack.maxSpeed` documents the speed unit as m/s.)
  *
  * This is the smallest network that can be transformed and simulated, so several lifecycle and
  * workflow tests start from it (Issue #1035 review round). Add obstacles such as semaphores only

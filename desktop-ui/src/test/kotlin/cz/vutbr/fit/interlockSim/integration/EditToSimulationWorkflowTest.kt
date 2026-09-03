@@ -79,7 +79,10 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		buildWorkflowTestNetwork().use { editingContext ->
 			// Step 2: Save to XML
 			val xmlFile = File(tempDir, "test-network.xml")
-			editingContextFactory.saveContext(editingContext, xmlFile)
+			assertThat(
+				editingContextFactory.saveContext(editingContext, xmlFile),
+				name = "saveContext(file) must succeed"
+			).isTrue()
 			assertThat(xmlFile.exists()).isTrue()
 
 			// Step 3: Transform to simulation context
@@ -175,7 +178,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 
 	/**
 	 * Build the 50x50 two-InOut network of the complete-workflow test: "Entry_A"
-	 * (10,10) and "Exit_B" (40,10) joined by one 500 m / 100 km/h track, with the
+	 * (10,10) and "Exit_B" (40,10) joined by one 500 m / 100 m/s track, with the
 	 * properties 120.0 / 500.0 / "Test Network" set.
 	 *
 	 * The caller owns the returned context and must close it (`.use`) — Issue #1035.

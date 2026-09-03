@@ -171,7 +171,10 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 
 			// Phase 2: Serialize to XML
 			val xmlFile = File(tempDir, "lifecycle-test.xml")
-			editingContextFactory.saveContext(editingContext, xmlFile)
+			assertThat(
+				editingContextFactory.saveContext(editingContext, xmlFile),
+				name = "saveContext(file) must succeed"
+			).isTrue()
 			assertThat(xmlFile.exists()).isTrue()
 
 			// Phase 3: Transform to simulation context

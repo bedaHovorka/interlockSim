@@ -440,7 +440,10 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			editingContextFactory.createContext(xml).use { context ->
 				// Save to file
-				val saved = editingContextFactory.saveContext(context, tempFile!!)
+				assertThat(
+					editingContextFactory.saveContext(context, tempFile!!),
+					name = "saveContext(file) must succeed"
+				).isTrue()
 
 				// Verify file exists and is readable
 				assertThat(tempFile!!).exists().isFile()
@@ -545,24 +548,36 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun saveContext_overwritesExistingFile() {
-			// Create initial context and save
+			// Create the initial context and save it. It needs its own two InOuts at coordinates
+			// that minimal-network.xml does not use: with 0 InOuts the save fails validation, no
+			// file is written, and the test would pass even if overwriting were broken.
 			editingContextFactory.createEmptyContext().use { context1 ->
-				editingContextFactory.saveContext(context1, tempFile!!)
+				context1.putCell(Point(50, 50), InOut("FIRST_A", true, Cell.SpatialType.HORIZONTAL))
+				context1.putCell(Point(60, 50), InOut("FIRST_B", false, Cell.SpatialType.HORIZONTAL))
+				assertThat(
+					editingContextFactory.saveContext(context1, tempFile!!),
+					name = "the first saveContext must succeed, otherwise nothing is overwritten"
+				).isTrue()
 			}
+			assertThat(tempFile!!.exists(), name = "the first save must write the file").isTrue()
 
-			// Load a different fixture and save to same file
+			// Load a different fixture and save to the same file
 			val xml = getFixtureStream("minimal-network.xml")
 			editingContextFactory.createContext(xml).use { context2 ->
-				editingContextFactory.saveContext(context2, tempFile!!)
+				assertThat(
+					editingContextFactory.saveContext(context2, tempFile!!),
+					name = "the overwriting saveContext must succeed"
+				).isTrue()
 			}
 
 			// Verify loaded context matches context2 (not context1)
 			editingContextFactory.createContext(tempFile!!).use { loadedContext ->
-				val cell = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
-				assertThat(cell)
+				val grid = loadedContext.getRailWayNetGrid()
+				assertThat(grid.getCellAt(10, 10))
 					.isNotNull()
 					.isInstanceOf(InOut::class)
 					.withMessage("Loaded context should contain the InOut from context2, proving file was overwritten")
+				assertThat(grid.getCellAt(50, 50), name = "the InOut of context1 must be gone").isEqualTo(null)
 			}
 		}
 	}
@@ -842,13 +857,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 				val counts = countCellTypes(context.getRailWayNetGrid())
 
 				// Verify element counts meet thresholds (adjusted for simplified topology)
-				assertThat(counts["InOut"]!!)
+				assertThat(counts.getValue(INOUT_KEY))
 					.withMessage("Praha should have at least 6 InOut points (4 north + 6 south)")
 					.isGreaterThan(5)
-				assertThat(counts["RailSwitch"]!!)
+				assertThat(counts.getValue(RAIL_SWITCH_KEY))
 					.withMessage("Praha should have at least 8 switches (4 north throat + 4 south throat)")
 					.isGreaterThan(7)
-				assertThat(counts["RailSemaphore"]!!)
+				assertThat(counts.getValue(RAIL_SEMAPHORE_KEY))
 					.withMessage("Praha should have at least 20 signals (entry + platform + exit)")
 					.isGreaterThan(19)
 			}
@@ -999,9 +1014,9 @@ class XMLContextFactoryTest : KoinTestBase() {
 					// Verify element counts match
 					val originalCounts = countCellTypes(originalContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
 					val loadedCounts = countCellTypes(loadedContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
-					assertThat(loadedCounts["InOut"]).isEqualTo(originalCounts["InOut"])
-					assertThat(loadedCounts["RailSwitch"]).isEqualTo(originalCounts["RailSwitch"])
-					assertThat(loadedCounts["RailSemaphore"]).isEqualTo(originalCounts["RailSemaphore"])
+					assertThat(loadedCounts.getValue(INOUT_KEY)).isEqualTo(originalCounts.getValue(INOUT_KEY))
+					assertThat(loadedCounts.getValue(RAIL_SWITCH_KEY)).isEqualTo(originalCounts.getValue(RAIL_SWITCH_KEY))
+					assertThat(loadedCounts.getValue(RAIL_SEMAPHORE_KEY)).isEqualTo(originalCounts.getValue(RAIL_SEMAPHORE_KEY))
 				}
 
 				tempFile.delete()
@@ -1330,7 +1345,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			tempFile.deleteOnExit()
 
 			context.use {
-				editingContextFactory.saveContext(it, tempFile)
+				assertThat(editingContextFactory.saveContext(it, tempFile), name = "saveContext(file) must succeed").isTrue()
 
 				// Read XML and verify name attribute is not present
 				val xmlContent = tempFile.readText()

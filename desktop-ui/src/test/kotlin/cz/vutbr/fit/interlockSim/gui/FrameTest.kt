@@ -195,15 +195,15 @@ class FrameTest : AbstractFrameTestBase() {
 	fun setContextUpdatesCanvasContext() {
 		runOnEDT {
 			// Create a context
-			val context = editingContextFactory.createEmptyContext()
+			editingContextFactory.createEmptyContext().use { context ->
+				// Set context on frame
+				frame.setContext(context)
 
-			// Set context on frame
-			frame.setContext(context)
-
-			// Verify canvas received the context
-			val canvasContext = frame.railwayNetGridCanvas.getEditingContext()
-			assertThat(canvasContext).isNotNull()
-			assertThat(canvasContext).isInstanceOf(EditingContext::class)
+				// Verify canvas received the context
+				val canvasContext = frame.railwayNetGridCanvas.getEditingContext()
+				assertThat(canvasContext).isNotNull()
+				assertThat(canvasContext).isInstanceOf(EditingContext::class)
+			}
 		}
 	}
 
@@ -213,24 +213,24 @@ class FrameTest : AbstractFrameTestBase() {
 	fun setContextRegistersStatusBarAsPropertyChangeListener() {
 		runOnEDT {
 			// Create a context
-			val context = editingContextFactory.createEmptyContext()
+			editingContextFactory.createEmptyContext().use { context ->
+				// Create a test listener to verify registration works
+				var listenerCalled = false
+				val testListener =
+					ContextPropertyChangeListener { _ ->
+						listenerCalled = true
+					}
 
-			// Create a test listener to verify registration works
-			var listenerCalled = false
-			val testListener =
-				ContextPropertyChangeListener { _ ->
-					listenerCalled = true
-				}
+				// Add test listener to verify the mechanism works
+				context.addPropertyChangeListener(testListener)
 
-			// Add test listener to verify the mechanism works
-			context.addPropertyChangeListener(testListener)
+				// Set context on frame (should register status bar as listener)
+				frame.setContext(context)
 
-			// Set context on frame (should register status bar as listener)
-			frame.setContext(context)
-
-			// Verify the context accepts property change listeners
-			// (The actual registration is internal to Frame, we just verify no exception)
-			context.removePropertyChangeListener(testListener)
+				// Verify the context accepts property change listeners
+				// (The actual registration is internal to Frame, we just verify no exception)
+				context.removePropertyChangeListener(testListener)
+			}
 		}
 	}
 
