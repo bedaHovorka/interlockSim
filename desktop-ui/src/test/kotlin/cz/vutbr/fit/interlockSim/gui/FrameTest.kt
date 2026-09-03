@@ -215,11 +215,8 @@ class FrameTest : AbstractFrameTestBase() {
 			// Create a context
 			editingContextFactory.createEmptyContext().use { context ->
 				// Create a test listener to verify registration works
-				var listenerCalled = false
 				val testListener =
-					ContextPropertyChangeListener { _ ->
-						listenerCalled = true
-					}
+					ContextPropertyChangeListener { _ -> }
 
 				// Add test listener to verify the mechanism works
 				context.addPropertyChangeListener(testListener)
