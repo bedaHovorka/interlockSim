@@ -106,7 +106,7 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		context = TestFixtures.newShuntingSimulationContext()
+		context = TestFixtures.newShuntingSimulationContext().tracked()
 		registryLogger = LoggerFactory.getLogger(REGISTRY_LOGGER) as Logger
 		appender = ListAppender<ILoggingEvent>().apply { start() }
 		registryLogger.addAppender(appender)
@@ -116,7 +116,6 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	fun tearDown() {
 		registryLogger.detachAppender(appender)
 		appender.stop()
-		context.close()
 	}
 
 	private fun registry(): PathReservationRegistry = context.scope.get<PathReservationRegistry>()

@@ -9,7 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.testutil
 
+import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule
+import cz.vutbr.fit.interlockSim.testutil.ContextTracker
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.koin.core.context.startKoin
@@ -26,11 +28,24 @@ import org.koin.core.module.Module
  *
  * A subclass that needs different modules overrides [getTestModules].
  *
- * A subclass may keep its own `@AfterEach` for extra teardown (detaching a log appender, closing a
- * context). JUnit 5 runs a subclass `@AfterEach` **before** the superclass one, so such teardown
- * still sees a live Koin container.
+ * Register every context created in a test with [tracked]; [tearDownKoin] closes them all through
+ * a shared [ContextTracker] (reverse order, failures reported after cleanup) — the same idiom as
+ * `:core` and `:desktop-ui`'s `KoinTestBase` and `CommonKoinTestBase` (Issue #1042).
  */
 abstract class DispatcherKoinTestBase {
+	private val tracker = ContextTracker()
+
+	/** Number of contexts registered with [tracked] and not yet closed by [tearDownKoin]. */
+	protected val trackedContextCount: Int
+		get() = tracker.size
+
+	/**
+	 * Registers this context for automatic close in [tearDownKoin] and returns it, so the call
+	 * reads fluently at the creation site: `context = TestFixtures.newShuntingSimulationContext().tracked()`.
+	 * Call once per context; a context closed by hand earlier is simply closed again.
+	 */
+	protected fun <T : Context<*, *>> T.tracked(): T = tracker.track(this)
+
 	/** Override to start Koin with different modules. Default: `dispatcherAgentTestModule`. */
 	protected open fun getTestModules(): List<Module> = listOf(dispatcherAgentTestModule)
 
@@ -41,8 +56,13 @@ abstract class DispatcherKoinTestBase {
 		}
 	}
 
+	/** Closes every tracked context, then stops Koin (always); the first close failure is rethrown afterwards. */
 	@AfterEach
 	fun tearDownKoin() {
-		stopKoin()
+		try {
+			tracker.closeAll()
+		} finally {
+			stopKoin()
+		}
 	}
 }
