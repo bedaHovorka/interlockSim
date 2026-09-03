@@ -10,6 +10,9 @@ The `testutil` package provides:
 - **TestContextBuilder** - Custom topology builder
 - **KoinTestBase** - Base class for Koin DI tests; `tracked()` registers a context for
   automatic close in `tearDownKoin()` (Issue #1038)
+- **KoinTestBaseCleanupContractTest** - Contract test pinning the KoinTestBase teardown
+  wiring: `tearDownKoin()` closes every `tracked()` context, clears the registry, and
+  closing an already-closed context again is safe
 - **AssertKExtensions** - Custom assertions
 - **HeadingFlipSampler** - Per-train raw/resolved heading sampling for the heading-flip
   regression tests (`gui.animation`), owner of the #789 per-train skip contract
@@ -35,9 +38,11 @@ The `testutil` package provides:
   close the simulation context around a verify lambda, mirroring the ContextRoundTrip
   ownership contract) and `assertNetworkTopology` (InOut count + non-empty graph
   preamble), shared by the editing-to-simulation integration tests (PR #1043 review round)
-- **EditingContextCleanupContractTest** - Contract tests pinning the `.use {}` cleanup
-  pattern: scope closed on success, on failure inside the block, on double close, for
-  the loaded context of a round trip, and a round trip failing at the save step (Issue #1035)
+- **EditingContextCleanupContractTest** - Contract tests pinning cleanup: a failure inside
+  a `.use {}` block still closes the context's scope, a round trip closes the loaded context
+  and leaves the source to the caller, and a round trip fails at the save step when the
+  source cannot be saved (Issue #1035; happy-path close and double close are pinned by
+  KoinTestBaseCleanupContractTest — removed here by the Issue #1046 dedupe)
 - **RudyUjezdStructure** - `assertRudyUjezdStationInOuts`: asserts the four station
   InOuts of the `rudyUjezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
   the parse test and the stream round trip of the XML factory tests
@@ -347,4 +352,4 @@ TestTopologies.linearPathWithSemaphoreSequence(
 
 ---
 
-**Last Updated**: 2026-09-05 (PR #1043 review round: shared PathExistence BFS helper; Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, and cleanup contract)
+**Last Updated**: 2026-09-08 (PR #1043 review round: shared PathExistence BFS helper; Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, and cleanup contract; PR #1047 review round: cleanup contract narrowed to the non-duplicated cases)
