@@ -40,6 +40,10 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - Unknown element types
  * - InOut count validation
  * - Schema validation edge cases
+ *
+ * Cleanup note: every `assertThatBlock { createContext(...) }` site below expects
+ * creation to throw — the block throws before a context exists, so there is no
+ * scope to close and no `.use {}` wrapping (Issue #1035).
  */
 @DisplayName("XML Package - Coverage Polish Tests")
 class XMLPolishTest : KoinTestBase() {
@@ -431,12 +435,13 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
-			val editingContext = editingContextFactory.createContext(stream) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
-
-			assertThat(context).isNotNull()
-			val inOuts = context.getInOuts()
-			assertThat(inOuts as Collection<*>).hasSize(1)
+			(editingContextFactory.createContext(stream) as EditingContext).use { editingContext ->
+				simulationContextFactory.createContext(editingContext).use { context ->
+					assertThat(context).isNotNull()
+					val inOuts = context.getInOuts()
+					assertThat(inOuts as Collection<*>).hasSize(1)
+				}
+			}
 		}
 
 		@Test
@@ -450,12 +455,13 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
-			val editingContext = editingContextFactory.createContext(stream) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
-
-			assertThat(context).isNotNull()
-			val inOuts = context.getInOuts()
-			assertThat(inOuts as Collection<*>).hasSize(3)
+			(editingContextFactory.createContext(stream) as EditingContext).use { editingContext ->
+				simulationContextFactory.createContext(editingContext).use { context ->
+					assertThat(context).isNotNull()
+					val inOuts = context.getInOuts()
+					assertThat(inOuts as Collection<*>).hasSize(3)
+				}
+			}
 		}
 	}
 
@@ -550,8 +556,9 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
-			val context = editingContextFactory.createContext(stream)
-			assertThat(context).isNotNull()
+			editingContextFactory.createContext(stream).use { context ->
+				assertThat(context).isNotNull()
+			}
 		}
 	}
 
@@ -600,10 +607,11 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
-			val context = editingContextFactory.createContext(stream)
-			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().cols).isEqualTo(500)
-			assertThat(context.getRailWayNetGrid().rows).isEqualTo(500)
+			editingContextFactory.createContext(stream).use { context ->
+				assertThat(context).isNotNull()
+				assertThat(context.getRailWayNetGrid().cols).isEqualTo(500)
+				assertThat(context.getRailWayNetGrid().rows).isEqualTo(500)
+			}
 		}
 	}
 }

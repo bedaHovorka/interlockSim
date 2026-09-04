@@ -26,7 +26,10 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.RAIL_SEMAPHORE_KEY
+import cz.vutbr.fit.interlockSim.testutil.RAIL_SWITCH_KEY
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.countCellTypes
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -67,6 +70,137 @@ class ComplexNetworkTest : KoinTestBase() {
 	@DisplayName("simulate complex network with multiple trains")
 	fun complexNetwork_multipleTrains_topologyValid() {
 		// Create a complex network with 4 InOut points (2 entries, 2 exits)
+		buildFourPlatformJunctionNetwork().use { editingContext ->
+			// Transform to simulation context
+			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
+				// Verify network topology is valid
+				assertThat(simContext).isNotNull()
+				assertThat(simContext.getInOuts()).hasSize(4)
+				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+
+				// Verify switch is accessible
+				val switchCell = simContext.getRailWayNetGrid().getCellAt(30, 30)
+				assertThat(switchCell).isNotNull()
+				assertThat(switchCell as Any).isInstanceOf(DynamicRailSwitch::class)
+			}
+		}
+	}
+
+	/**
+	 * Test network with potential track conflicts (crossing paths).
+	 * Verifies that track topology allows for proper conflict detection.
+	 */
+	@Test
+	@DisplayName("simulate network with track conflicts")
+	fun complexNetwork_trackConflicts_topologyValid() {
+		// Create a network with crossing tracks
+		buildCrossingTracksNetwork().use { editingContext ->
+			// Transform to simulation context
+			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
+				// Verify network has 4 InOut points
+				assertThat(simContext.getInOuts()).hasSize(4)
+
+				// Verify graph contains both tracks
+				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+
+				// Verify topology allows conflict detection (both tracks exist independently)
+				val cellH1 = simContext.getRailWayNetGrid().getCellAt(5, 25)
+				val cellH2 = simContext.getRailWayNetGrid().getCellAt(45, 25)
+				val cellV1 = simContext.getRailWayNetGrid().getCellAt(25, 5)
+				val cellV2 = simContext.getRailWayNetGrid().getCellAt(25, 45)
+
+				assertThat(cellH1).isNotNull()
+				assertThat(cellH2).isNotNull()
+				assertThat(cellV1).isNotNull()
+				assertThat(cellV2).isNotNull()
+			}
+		}
+	}
+
+	/**
+	 * Test network with varied speed limits across different sections.
+	 * Verifies that different tracks can have different speed characteristics.
+	 */
+	@Test
+	@DisplayName("simulate network with varied speed limits")
+	fun complexNetwork_variedSpeedLimits_topologyValid() {
+		// Create a network with three sections having different speed limits
+		buildVariedSpeedNetwork().use { editingContext ->
+			// Transform to simulation context
+			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
+				// Verify network topology
+				assertThat(simContext.getInOuts()).hasSize(2)
+				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+
+				// Verify all junctions exist
+				val j1 = simContext.getRailWayNetGrid().getCellAt(20, 15)
+				val j2 = simContext.getRailWayNetGrid().getCellAt(40, 15)
+				assertThat(j1).isNotNull()
+				assertThat(j2).isNotNull()
+				assertThat(j1 as Any).isInstanceOf(DynamicRailSemaphore::class)
+				assertThat(j2 as Any).isInstanceOf(DynamicRailSemaphore::class)
+			}
+		}
+	}
+
+	/**
+	 * Test network with bidirectional tracks (tracks that can be traversed
+	 * in both directions). Verifies proper track configuration.
+	 */
+	@Test
+	@DisplayName("simulate network with bidirectional tracks")
+	fun complexNetwork_bidirectionalTracks_topologyValid() {
+		// Create a bidirectional track network (loop configuration)
+		buildBidirectionalLoopNetwork().use { editingContext ->
+			// Transform to simulation context
+			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
+				// Verify loop topology
+				assertThat(simContext.getInOuts()).hasSize(2)
+				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+
+				// Verify both switches exist
+				val sw1 = simContext.getRailWayNetGrid().getCellAt(20, 15)
+				val sw2 = simContext.getRailWayNetGrid().getCellAt(30, 35)
+				assertThat(sw1).isNotNull()
+				assertThat(sw2).isNotNull()
+				assertThat(sw1 as Any).isInstanceOf(DynamicRailSwitch::class)
+				assertThat(sw2 as Any).isInstanceOf(DynamicRailSwitch::class)
+			}
+		}
+	}
+
+	/**
+	 * Test complex real-world network topology (vyhybna.xml).
+	 * Verifies that the complex network structure is correctly loaded and
+	 * maintains its integrity.
+	 */
+	@Test
+	@DisplayName("network handles train priorities correctly")
+	fun complexNetwork_trainPriorities_topologyValid() {
+		// Load complex vyhybna.xml network
+		TestFixtures.loadShuntingEditingContext(editingContextFactory).use { edContext ->
+			// Verify complex network topology
+			assertThat(edContext).isNotNull()
+			val inOuts: Collection<*> = edContext.getInOuts()
+			assertThat(inOuts).hasSize(2)
+			assertThat(edContext.getGraph().size()).isGreaterThan(0)
+
+			// Verify network has switches (for priority handling)
+			val counts = countCellTypes(edContext.getRailWayNetGrid())
+
+			// Vyhybna has multiple switches and semaphores
+			assertThat(counts.getValue(RAIL_SWITCH_KEY)).isGreaterThan(0)
+			assertThat(counts.getValue(RAIL_SEMAPHORE_KEY)).isGreaterThan(0)
+		}
+	}
+
+	/**
+	 * Build the 60x60 network of the multiple-trains test: 2 entry and 2 exit platforms
+	 * routed through the "Main_Junction" switch at (30,30).
+	 *
+	 * The caller owns the returned context and must close it (`.use`) — Issue #1035.
+	 */
+	private fun buildFourPlatformJunctionNetwork(): DefaultEditingContext {
 		val editingContext = DefaultEditingContext(60, 60)
 
 		// Create entry points
@@ -98,28 +232,16 @@ class ComplexNetworkTest : KoinTestBase() {
 		editingContext.joinCells(Point(30, 30), Point(55, 20), trackC)
 		editingContext.joinCells(Point(30, 30), Point(55, 40), trackD)
 
-		// Transform to simulation context
-		val simContext = transformer.createSimulationContext(editingContext, processFactory)
-
-		// Verify network topology is valid
-		assertThat(simContext).isNotNull()
-		assertThat(simContext.getInOuts()).hasSize(4)
-		assertThat(simContext.getGraph().size()).isGreaterThan(0)
-
-		// Verify switch is accessible
-		val switchCell = simContext.getRailWayNetGrid().getCellAt(30, 30)
-		assertThat(switchCell).isNotNull()
-		assertThat(switchCell as Any).isInstanceOf(DynamicRailSwitch::class)
+		return editingContext
 	}
 
 	/**
-	 * Test network with potential track conflicts (crossing paths).
-	 * Verifies that track topology allows for proper conflict detection.
+	 * Build the 50x50 network of the track-conflicts test: a horizontal track (5,25)-(45,25)
+	 * crossed by a vertical track (25,5)-(25,45).
+	 *
+	 * The caller owns the returned context and must close it (`.use`) — Issue #1035.
 	 */
-	@Test
-	@DisplayName("simulate network with track conflicts")
-	fun complexNetwork_trackConflicts_topologyValid() {
-		// Create a network with crossing tracks
+	private fun buildCrossingTracksNetwork(): DefaultEditingContext {
 		val editingContext = DefaultEditingContext(50, 50)
 
 		// Horizontal track
@@ -141,35 +263,16 @@ class ComplexNetworkTest : KoinTestBase() {
 		editingContext.joinCells(Point(5, 25), Point(45, 25), trackH)
 		editingContext.joinCells(Point(25, 5), Point(25, 45), trackV)
 
-		// Transform to simulation context
-		val simContext = transformer.createSimulationContext(editingContext, processFactory)
-
-		// Verify network has 4 InOut points
-		assertThat(simContext.getInOuts()).hasSize(4)
-
-		// Verify graph contains both tracks
-		assertThat(simContext.getGraph().size()).isGreaterThan(0)
-
-		// Verify topology allows conflict detection (both tracks exist independently)
-		val cellH1 = simContext.getRailWayNetGrid().getCellAt(5, 25)
-		val cellH2 = simContext.getRailWayNetGrid().getCellAt(45, 25)
-		val cellV1 = simContext.getRailWayNetGrid().getCellAt(25, 5)
-		val cellV2 = simContext.getRailWayNetGrid().getCellAt(25, 45)
-
-		assertThat(cellH1).isNotNull()
-		assertThat(cellH2).isNotNull()
-		assertThat(cellV1).isNotNull()
-		assertThat(cellV2).isNotNull()
+		return editingContext
 	}
 
 	/**
-	 * Test network with varied speed limits across different sections.
-	 * Verifies that different tracks can have different speed characteristics.
+	 * Build the 60x30 network of the varied-speed-limits test: Entry (5,15) → Junction_1
+	 * (20,15) → Junction_2 (40,15) → Exit (55,15) with 40 / 80 / 120 m/s track sections.
+	 *
+	 * The caller owns the returned context and must close it (`.use`) — Issue #1035.
 	 */
-	@Test
-	@DisplayName("simulate network with varied speed limits")
-	fun complexNetwork_variedSpeedLimits_topologyValid() {
-		// Create a network with three sections having different speed limits
+	private fun buildVariedSpeedNetwork(): DefaultEditingContext {
 		val editingContext = DefaultEditingContext(60, 30)
 
 		val entry = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
@@ -191,30 +294,16 @@ class ComplexNetworkTest : KoinTestBase() {
 		editingContext.joinCells(Point(20, 15), Point(40, 15), mediumTrack)
 		editingContext.joinCells(Point(40, 15), Point(55, 15), fastTrack)
 
-		// Transform to simulation context
-		val simContext = transformer.createSimulationContext(editingContext, processFactory)
-
-		// Verify network topology
-		assertThat(simContext.getInOuts()).hasSize(2)
-		assertThat(simContext.getGraph().size()).isGreaterThan(0)
-
-		// Verify all junctions exist
-		val j1 = simContext.getRailWayNetGrid().getCellAt(20, 15)
-		val j2 = simContext.getRailWayNetGrid().getCellAt(40, 15)
-		assertThat(j1).isNotNull()
-		assertThat(j2).isNotNull()
-		assertThat(j1 as Any).isInstanceOf(DynamicRailSemaphore::class)
-		assertThat(j2 as Any).isInstanceOf(DynamicRailSemaphore::class)
+		return editingContext
 	}
 
 	/**
-	 * Test network with bidirectional tracks (tracks that can be traversed
-	 * in both directions). Verifies proper track configuration.
+	 * Build the 50x50 network of the bidirectional-tracks test: a loop through
+	 * Platform_1 (10,25), Junction_1 (20,15), Platform_2 (40,25), and Junction_2 (30,35).
+	 *
+	 * The caller owns the returned context and must close it (`.use`) — Issue #1035.
 	 */
-	@Test
-	@DisplayName("simulate network with bidirectional tracks")
-	fun complexNetwork_bidirectionalTracks_topologyValid() {
-		// Create a bidirectional track network (loop configuration)
+	private fun buildBidirectionalLoopNetwork(): DefaultEditingContext {
 		val editingContext = DefaultEditingContext(50, 50)
 
 		// Create a loop with 4 junctions
@@ -239,59 +328,6 @@ class ComplexNetworkTest : KoinTestBase() {
 		editingContext.joinCells(Point(40, 25), Point(30, 35), track3)
 		editingContext.joinCells(Point(30, 35), Point(10, 25), track4)
 
-		// Transform to simulation context
-		val simContext = transformer.createSimulationContext(editingContext, processFactory)
-
-		// Verify loop topology
-		assertThat(simContext.getInOuts()).hasSize(2)
-		assertThat(simContext.getGraph().size()).isGreaterThan(0)
-
-		// Verify both switches exist
-		val sw1 = simContext.getRailWayNetGrid().getCellAt(20, 15)
-		val sw2 = simContext.getRailWayNetGrid().getCellAt(30, 35)
-		assertThat(sw1).isNotNull()
-		assertThat(sw2).isNotNull()
-		assertThat(sw1 as Any).isInstanceOf(DynamicRailSwitch::class)
-		assertThat(sw2 as Any).isInstanceOf(DynamicRailSwitch::class)
-	}
-
-	/**
-	 * Test complex real-world network topology (vyhybna.xml).
-	 * Verifies that the complex network structure is correctly loaded and
-	 * maintains its integrity.
-	 */
-	@Test
-	@DisplayName("network handles train priorities correctly")
-	fun complexNetwork_trainPriorities_topologyValid() {
-		// Load complex vyhybna.xml network
-		val edContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
-
-		// Verify complex network topology
-		assertThat(edContext).isNotNull()
-		val inOuts: Collection<*> = edContext.getInOuts()
-		assertThat(inOuts).hasSize(2)
-		assertThat(edContext.getGraph().size()).isGreaterThan(0)
-
-		// Verify network has switches (for priority handling)
-		var switchCount = 0
-		var semaphoreCount = 0
-
-		for (x in 0 until edContext.getRailWayNetGrid().cols) {
-			for (y in 0 until edContext.getRailWayNetGrid().rows) {
-				val cell = edContext.getRailWayNetGrid().getCellAt(x, y)
-				when (cell) {
-					is RailSwitch -> switchCount++
-					is RailSemaphore -> semaphoreCount++
-				}
-			}
-		}
-
-		// Vyhybna has multiple switches and semaphores
-		assertThat(switchCount).isGreaterThan(0)
-		assertThat(semaphoreCount).isGreaterThan(0)
-
-		// Verify InOut points are properly configured
-		val inOutsFinal: Collection<*> = edContext.getInOuts()
-		assertThat(inOutsFinal).hasSize(2)
+		return editingContext
 	}
 }

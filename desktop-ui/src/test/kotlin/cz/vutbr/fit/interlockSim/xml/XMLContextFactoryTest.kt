@@ -29,9 +29,15 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.testutil.INOUT_KEY
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.RAIL_SEMAPHORE_KEY
+import cz.vutbr.fit.interlockSim.testutil.RAIL_SWITCH_KEY
+import cz.vutbr.fit.interlockSim.testutil.assertRudyUjezdStationInOuts
+import cz.vutbr.fit.interlockSim.testutil.countCellTypes
 import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
+import cz.vutbr.fit.interlockSim.testutil.saveAndReloadThroughFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Resources
@@ -88,21 +94,21 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun createEmptyContext_always_returns100x100Grid() {
-			val context = editingContextFactory.createEmptyContext()
-
-			assertThat(context).isNotNull()
-			val grid = context.getRailWayNetGrid()
-			assertThat(grid.cols).isEqualTo(100)
-			assertThat(grid.rows).isEqualTo(100)
+			editingContextFactory.createEmptyContext().use { context ->
+				assertThat(context).isNotNull()
+				val grid = context.getRailWayNetGrid()
+				assertThat(grid.cols).isEqualTo(100)
+				assertThat(grid.rows).isEqualTo(100)
+			}
 		}
 
 		@Test
 		fun createEmptyContext_always_hasEmptyGraph() {
-			val context = editingContextFactory.createEmptyContext()
-
-			assertThat(context.getGraph().nodeSet())
-				.withMessage("Empty context should have empty graph")
-				.isEmpty()
+			editingContextFactory.createEmptyContext().use { context ->
+				assertThat(context.getGraph().nodeSet())
+					.withMessage("Empty context should have empty graph")
+					.isEmpty()
+			}
 		}
 	}
 
@@ -113,178 +119,160 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_minimalNetwork_createsTwoInOuts() {
 			val xml = getFixtureStream("minimal-network.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			assertThat(context).isNotNull()
-			val grid = context.getRailWayNetGrid()
-			val cellA = grid.getCellAt(10, 10)
-			val cellB = grid.getCellAt(20, 10)
-			assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
-			assertThat((cellA as InOut).getName()).isEqualTo("A")
-			assertThat((cellB as InOut).getName()).isEqualTo("B")
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				val grid = context.getRailWayNetGrid()
+				val cellA = grid.getCellAt(10, 10)
+				val cellB = grid.getCellAt(20, 10)
+				assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
+				assertThat((cellA as InOut).getName()).isEqualTo("A")
+				assertThat((cellB as InOut).getName()).isEqualTo("B")
+			}
 		}
 
 		@Test
 		fun parseXML_linearTrack_createsTwoConnectedInOuts() {
 			val xml = getFixtureStream("linear-track.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			assertThat(context).isNotNull()
-			val cellA = context.getRailWayNetGrid().getCellAt(10, 10)
-			val cellB = context.getRailWayNetGrid().getCellAt(20, 10)
-			assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
-			assertThat((cellA as InOut).getName()).isEqualTo("A")
-			assertThat((cellB as InOut).getName()).isEqualTo("B")
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				val cellA = context.getRailWayNetGrid().getCellAt(10, 10)
+				val cellB = context.getRailWayNetGrid().getCellAt(20, 10)
+				assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
+				assertThat((cellA as InOut).getName()).isEqualTo("A")
+				assertThat((cellB as InOut).getName()).isEqualTo("B")
+			}
 		}
 
 		@Test
 		fun parseXML_switchBasic_createsRailSwitch() {
 			val xml = getFixtureStream("switch-basic.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			assertThat(context).isNotNull()
-			val switchCell = context.getRailWayNetGrid().getCellAt(15, 10)
-			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
-			val railSwitch = switchCell as RailSwitch
-			assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				val switchCell = context.getRailWayNetGrid().getCellAt(15, 10)
+				assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
+				val railSwitch = switchCell as RailSwitch
+				assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			}
 		}
 
 		@Test
 		fun parseXML_switchBasic_createsThreeInOuts() {
 			val xml = getFixtureStream("switch-basic.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			val cellIN = context.getRailWayNetGrid().getCellAt(10, 10)
-			val cellOutPlus = context.getRailWayNetGrid().getCellAt(20, 10)
-			val cellOutMinus = context.getRailWayNetGrid().getCellAt(20, 11)
-			assertThat(cellIN).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellOutPlus).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellOutMinus).isNotNull().isInstanceOf(InOut::class)
-			assertThat((cellIN as InOut).getName()).isEqualTo("IN")
-			assertThat((cellOutPlus as InOut).getName()).isEqualTo("OUT_PLUS")
-			assertThat((cellOutMinus as InOut).getName()).isEqualTo("OUT_MINUS")
+			editingContextFactory.createContext(xml).use { context ->
+				val cellIN = context.getRailWayNetGrid().getCellAt(10, 10)
+				val cellOutPlus = context.getRailWayNetGrid().getCellAt(20, 10)
+				val cellOutMinus = context.getRailWayNetGrid().getCellAt(20, 11)
+				assertThat(cellIN).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cellOutPlus).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cellOutMinus).isNotNull().isInstanceOf(InOut::class)
+				assertThat((cellIN as InOut).getName()).isEqualTo("IN")
+				assertThat((cellOutPlus as InOut).getName()).isEqualTo("OUT_PLUS")
+				assertThat((cellOutMinus as InOut).getName()).isEqualTo("OUT_MINUS")
+			}
 		}
 
 		@Test
 		fun parseXML_semaphoreBasic_createsRailSemaphore() {
 			val xml = getFixtureStream("semaphore-basic.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			assertThat(context).isNotNull()
-			val semaphoreCell = context.getRailWayNetGrid().getCellAt(15, 10)
-			assertThat(semaphoreCell).isNotNull().isInstanceOf(RailSemaphore::class)
-			val semaphore = semaphoreCell as RailSemaphore
-			assertThat(semaphore.getOrientation()).isTrue()
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				val semaphoreCell = context.getRailWayNetGrid().getCellAt(15, 10)
+				assertThat(semaphoreCell).isNotNull().isInstanceOf(RailSemaphore::class)
+				val semaphore = semaphoreCell as RailSemaphore
+				assertThat(semaphore.getOrientation()).isTrue()
+			}
 		}
 
 		@Test
 		fun parseXML_emptyGrid_createsContextWithMinimalElements() {
 			val xml = getFixtureStream("empty-grid.xml")
 
-			val context = editingContextFactory.createContext(xml) as EditingContext
-
-			assertThat(context).isNotNull()
-			val grid = context.getRailWayNetGrid()
-			assertThat(grid.cols).isEqualTo(50)
-			assertThat(grid.rows).isEqualTo(50)
-			// Should have 2 InOut elements (minimum required)
-			assertThat(context.getInOuts()::size).isEqualTo(2)
+			(editingContextFactory.createContext(xml) as EditingContext).use { context ->
+				assertThat(context).isNotNull()
+				val grid = context.getRailWayNetGrid()
+				assertThat(grid.cols).isEqualTo(50)
+				assertThat(grid.rows).isEqualTo(50)
+				// Should have 2 InOut elements (minimum required)
+				assertThat(context.getInOuts()::size).isEqualTo(2)
+			}
 		}
 
 		@Test
 		fun parseXML_emptyGrid_hasNoTracks() {
 			val xml = getFixtureStream("empty-grid.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			// Grid has InOut nodes but no track connections
-			assertThat(context.getGraph().entrySet().size)
-				.withMessage("Empty grid should have no track connections")
-				.isEqualTo(0)
+			editingContextFactory.createContext(xml).use { context ->
+				// Grid has InOut nodes but no track connections
+				assertThat(context.getGraph().entrySet().size)
+					.withMessage("Empty grid should have no track connections")
+					.isEqualTo(0)
+			}
 		}
 
 		@Test
 		fun parseXML_twoTracksParallel_createsFourInOuts() {
 			val xml = getFixtureStream("two-tracks-parallel.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			assertThat(context).isNotNull()
-			val cellA1 = context.getRailWayNetGrid().getCellAt(10, 10)
-			val cellB1 = context.getRailWayNetGrid().getCellAt(20, 10)
-			val cellA2 = context.getRailWayNetGrid().getCellAt(10, 12)
-			val cellB2 = context.getRailWayNetGrid().getCellAt(20, 12)
-			assertThat(cellA1).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellB1).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellA2).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellB2).isNotNull().isInstanceOf(InOut::class)
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				val cellA1 = context.getRailWayNetGrid().getCellAt(10, 10)
+				val cellB1 = context.getRailWayNetGrid().getCellAt(20, 10)
+				val cellA2 = context.getRailWayNetGrid().getCellAt(10, 12)
+				val cellB2 = context.getRailWayNetGrid().getCellAt(20, 12)
+				assertThat(cellA1).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cellB1).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cellA2).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cellB2).isNotNull().isInstanceOf(InOut::class)
+			}
 		}
 
 		@Test
 		fun parseXML_rudyUjezd_createsValidContext() {
 			val xml = getFixtureStream("rudyUjezd.xml")
 
-			val context = editingContextFactory.createContext(xml) as EditingContext
+			(editingContextFactory.createContext(xml) as EditingContext).use { context ->
+				assertThat(context).isNotNull()
+				val grid = context.getRailWayNetGrid()
+				// Check grid size (from rudyUjezd.xml: X=100, Y=100)
+				assertThat(grid.cols).isEqualTo(100)
+				assertThat(grid.rows).isEqualTo(100)
+				// in-outs on the first end (f1, f2) and the second end (s1, s2) of the station
+				val (f1, f2, s1, s2) = assertRudyUjezdStationInOuts(context)
 
-			assertThat(context).isNotNull()
-			val grid = context.getRailWayNetGrid()
-			// Check grid size (from rudyUjezd.xml: X=100, Y=100)
-			assertThat(grid.cols).isEqualTo(100)
-			assertThat(grid.rows).isEqualTo(100)
-			// Check presence of at least one InOut, RailSwitch, and RailSemaphore
-			var hasInOut = false
-			var hasSwitch = false
-			var hasSemaphore = false
+				// from each end, there are switches and semaphores leading into the station area and must exist path to each InOut on the other side
+				assertThat(existPath(f1, s1, context)).isTrue()
+				assertThat(existPath(f1, s2, context)).isTrue()
+				assertThat(existPath(f2, s1, context)).isTrue()
+				assertThat(existPath(f2, s2, context)).isTrue()
+				// and back
+				assertThat(existPath(s1, f1, context)).isTrue()
+				assertThat(existPath(s1, f2, context)).isTrue()
+				assertThat(existPath(s2, f1, context)).isTrue()
+				assertThat(existPath(s2, f2, context)).isTrue()
 
-			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
-			// Cast to Cell grid to iterate without ClassCastException
-			@Suppress("UNCHECKED_CAST")
-			val cellGrid = grid as RailwayNetGrid<Cell>
-			for (entry in cellGrid) {
-				when (entry.value) {
-					is InOut -> hasInOut = true
-					is RailSwitch -> hasSwitch = true
-					is RailSemaphore -> hasSemaphore = true
-				}
+				assertGridContainsAllCellTypes(grid)
 			}
+		}
 
-			// in-outs on first end:
-			// <InOut X="37" Y="32" SpatialType="HORIZONTAL" orientation="true" name="" />
-			val f1 = context.getRailWayNetGrid().getCellAt(37, 32)
-			// <InOut X="37" Y="31" SpatialType="HORIZONTAL" orientation="true" name="" />
-			val f2 = context.getRailWayNetGrid().getCellAt(37, 31)
+		/** Check the presence of at least one InOut, RailSwitch, and RailSemaphore in [grid]. */
+		private fun assertGridContainsAllCellTypes(grid: RailwayNetGrid<Cell>) {
+			val counts = countCellTypes(grid)
 
-			// in-outs on second end:
-			// <InOut X="5" Y="31" SpatialType="HORIZONTAL" orientation="false" name="" />
-			val s1 = context.getRailWayNetGrid().getCellAt(5, 31)
-			// <InOut X="5" Y="32" SpatialType="HORIZONTAL" orientation="false" name="" />
-			val s2 = context.getRailWayNetGrid().getCellAt(5, 32)
-
-			assertThat(f1).isNotNull().isInstanceOf(InOut::class)
-			assertThat(f2).isNotNull().isInstanceOf(InOut::class)
-			assertThat(s1).isNotNull().isInstanceOf(InOut::class)
-			assertThat(s2).isNotNull().isInstanceOf(InOut::class)
-
-			// from each end, there are switches and semaphores leading into the station area and must exist path to each InOut on the other side
-			assertThat(existPath(f1 as InOut, s1 as InOut, context)).isTrue()
-			assertThat(existPath(f1, s2 as InOut, context)).isTrue()
-			assertThat(existPath(f2 as InOut, s1, context)).isTrue()
-			assertThat(existPath(f2, s2, context)).isTrue()
-			// and back
-			assertThat(existPath(s1, f1, context)).isTrue()
-			assertThat(existPath(s1, f2, context)).isTrue()
-			assertThat(existPath(s2, f1, context)).isTrue()
-			assertThat(existPath(s2, f2, context)).isTrue()
-
-			assertThat(hasInOut).withMessage("Should contain at least one InOut").isTrue()
-			assertThat(hasSwitch).withMessage("Should contain at least one RailSwitch").isTrue()
-			assertThat(hasSemaphore).withMessage("Should contain at least one RailSemaphore").isTrue()
+			assertThat(counts.getValue(INOUT_KEY))
+				.withMessage("Should contain at least one InOut")
+				.isGreaterThan(0)
+			assertThat(counts.getValue(RAIL_SWITCH_KEY))
+				.withMessage("Should contain at least one RailSwitch")
+				.isGreaterThan(0)
+			assertThat(counts.getValue(RAIL_SEMAPHORE_KEY))
+				.withMessage("Should contain at least one RailSemaphore")
+				.isGreaterThan(0)
 		}
 
 		/**
@@ -351,6 +339,9 @@ class XMLContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Error handling for invalid XML")
 	inner class InvalidXMLParsingTests {
+		// Every test below asserts that creation THROWS — the block throws before a
+		// context exists, so there is no scope to close and no `.use {}` wrapping (Issue #1035).
+
 		@Test
 		fun parseXML_missingGridSize_throwsException() {
 			val xml = getFixtureStream("invalid-missing-grid-size.xml")
@@ -446,46 +437,47 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun saveContext_minimalNetwork_createsValidFile() {
 			// Load fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val context = editingContextFactory.createContext(xml)
 
-			// Save to file
-			val saved = editingContextFactory.saveContext(context, tempFile!!)
+			editingContextFactory.createContext(xml).use { context ->
+				// Save to file
+				assertThat(
+					editingContextFactory.saveContext(context, tempFile!!),
+					name = "saveContext(file) must succeed"
+				).isTrue()
 
-			// Verify file exists and is readable
-			assertThat(tempFile!!).exists().isFile()
-			assertThat(tempFile!!.canRead()).isTrue()
-			assertThat(tempFile!!.length()).isGreaterThan(0)
+				// Verify file exists and is readable
+				assertThat(tempFile!!).exists().isFile()
+				assertThat(tempFile!!.canRead()).isTrue()
+				assertThat(tempFile!!.length()).isGreaterThan(0)
+			}
 		}
 
 		@Test
 		fun saveAndLoad_minimalNetwork_preservesStructure() {
 			// Load original fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val originalContext = editingContextFactory.createContext(xml)
 
-			// Save to file
-			editingContextFactory.saveContext(originalContext, tempFile!!)
+			editingContextFactory.createContext(xml).use { originalContext ->
+				// Save to file, load back, and verify structure is preserved
+				editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+					assertThat(loadedContext).isNotNull()
+					assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(100)
+					assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(100)
 
-			// Load from file
-			val loadedContext = editingContextFactory.createContext(tempFile!!)
-
-			// Verify structure is preserved
-			assertThat(loadedContext).isNotNull()
-			assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(100)
-			assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(100)
-
-			// Verify the InOut cell exists
-			var foundInOut = false
-			for (entry in loadedContext.getRailWayNetGrid()) {
-				if (entry.value is InOut) {
-					val inOut = entry.value as InOut
-					if ("A" == inOut.getName()) {
-						foundInOut = true
-						break
+					// Verify the InOut cell exists
+					var foundInOut = false
+					for (entry in loadedContext.getRailWayNetGrid()) {
+						if (entry.value is InOut) {
+							val inOut = entry.value as InOut
+							if ("A" == inOut.getName()) {
+								foundInOut = true
+								break
+							}
+						}
 					}
+					assertThat(foundInOut).withMessage("InOut 'A' should exist in loaded context").isTrue()
 				}
 			}
-			assertThat(foundInOut).withMessage("InOut 'A' should exist in loaded context").isTrue()
 		}
 
 		@Test
@@ -497,88 +489,96 @@ class XMLContextFactoryTest : KoinTestBase() {
 			emptyContext.putCell(Point(1, 1), InOut("ENTRY", true, Cell.SpatialType.HORIZONTAL))
 			emptyContext.putCell(Point(2, 1), InOut("EXIT", false, Cell.SpatialType.HORIZONTAL))
 
-			// Save to file
-			editingContextFactory.saveContext(emptyContext, tempFile!!)
-
-			// Verify file is valid XML by loading it
-			val loadedContext = editingContextFactory.createContext(tempFile!!)
-			assertThat(loadedContext).isNotNull()
+			emptyContext.use {
+				// Save to file and verify it is valid XML by loading it
+				editingContextFactory.saveAndReloadThroughFile(it, tempFile!!) { loadedContext ->
+					assertThat(loadedContext).isNotNull()
+				}
+			}
 		}
 
 		@Test
 		fun saveAndLoad_emptyGrid_preservesGridSize() {
 			// Load empty grid fixture
 			val xml = getFixtureStream("empty-grid.xml")
-			val originalContext = editingContextFactory.createContext(xml)
 
-			// Save to file
-			editingContextFactory.saveContext(originalContext, tempFile!!)
-
-			// Load from file
-			val loadedContext = editingContextFactory.createContext(tempFile!!)
-
-			// Verify grid size is preserved
-			val grid = loadedContext.getRailWayNetGrid()
-			assertThat(grid.cols).isEqualTo(50)
-			assertThat(grid.rows).isEqualTo(50)
+			editingContextFactory.createContext(xml).use { originalContext ->
+				// Save to file, load back, and verify grid size is preserved
+				editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+					val grid = loadedContext.getRailWayNetGrid()
+					assertThat(grid.cols).isEqualTo(50)
+					assertThat(grid.rows).isEqualTo(50)
+				}
+			}
 		}
 
 		@Test
 		fun saveAndLoad_linearTrack_preservesTrackBlocks() {
 			// Load fixture with track block
 			val xml = getFixtureStream("linear-track.xml")
-			val originalContext = editingContextFactory.createContext(xml)
 
-			// Save to file
-			editingContextFactory.saveContext(originalContext, tempFile!!)
-
-			// Load from file
-			val loadedContext = editingContextFactory.createContext(tempFile!!)
-
-			// Verify cells are preserved
-			val cellA = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
-			val cellB = loadedContext.getRailWayNetGrid().getCellAt(20, 10)
-			assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
+			editingContextFactory.createContext(xml).use { originalContext ->
+				// Save to file, load back, and verify
+				editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+					// Verify cells are preserved
+					val cellA = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
+					val cellB = loadedContext.getRailWayNetGrid().getCellAt(20, 10)
+					assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
+					assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
+				}
+			}
 		}
 
 		@Test
 		fun saveAndLoad_switchBasic_preservesSwitchType() {
 			// Load fixture with rail switch
 			val xml = getFixtureStream("switch-basic.xml")
-			val originalContext = editingContextFactory.createContext(xml)
 
-			// Save to file
-			editingContextFactory.saveContext(originalContext, tempFile!!)
-
-			// Load from file
-			val loadedContext = editingContextFactory.createContext(tempFile!!)
-
-			// Verify switch is preserved
-			val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
-			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
-			val railSwitch = switchCell as RailSwitch
-			assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			editingContextFactory.createContext(xml).use { originalContext ->
+				// Save to file, load back, and verify
+				editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+					// Verify switch is preserved
+					val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
+					assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
+					val railSwitch = switchCell as RailSwitch
+					assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+				}
+			}
 		}
 
 		@Test
 		fun saveContext_overwritesExistingFile() {
-			// Create initial context and save
-			val context1 = editingContextFactory.createEmptyContext()
-			editingContextFactory.saveContext(context1, tempFile!!)
+			// Create the initial context and save it. It needs its own two InOuts at coordinates
+			// that minimal-network.xml does not use: with 0 InOuts the save fails validation, no
+			// file is written, and the test would pass even if overwriting were broken.
+			editingContextFactory.createEmptyContext().use { context1 ->
+				context1.putCell(Point(50, 50), InOut("FIRST_A", true, Cell.SpatialType.HORIZONTAL))
+				context1.putCell(Point(60, 50), InOut("FIRST_B", false, Cell.SpatialType.HORIZONTAL))
+				assertThat(
+					editingContextFactory.saveContext(context1, tempFile!!),
+					name = "the first saveContext must succeed, otherwise nothing is overwritten"
+				).isTrue()
+			}
+			assertThat(tempFile!!.exists(), name = "the first save must write the file").isTrue()
 
-			// Load a different fixture and save to same file
+			// Load a different fixture and save to the same file
 			val xml = getFixtureStream("minimal-network.xml")
-			val context2 = editingContextFactory.createContext(xml)
-			editingContextFactory.saveContext(context2, tempFile!!)
+			editingContextFactory.createContext(xml).use { context2 ->
+				assertThat(
+					editingContextFactory.saveContext(context2, tempFile!!),
+					name = "the overwriting saveContext must succeed"
+				).isTrue()
+			}
 
 			// Verify loaded context matches context2 (not context1)
-			val loadedContext = editingContextFactory.createContext(tempFile!!)
-			val cell = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
-			assertThat(cell)
-				.isNotNull()
-				.isInstanceOf(InOut::class)
-				.withMessage("Loaded context should contain the InOut from context2, proving file was overwritten")
+			editingContextFactory.createContext(tempFile!!).use { loadedContext ->
+				val grid = loadedContext.getRailWayNetGrid()
+				assertThat(grid.getCellAt(10, 10))
+					.isNotNull()
+					.isInstanceOf(InOut::class)
+					.withMessage("Loaded context should contain the InOut from context2, proving file was overwritten")
+				assertThat(grid.getCellAt(50, 50), name = "the InOut of context1 must be gone").isEqualTo(null)
+			}
 		}
 	}
 
@@ -596,12 +596,12 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(largeGridXML.toByteArray())
 
-			val context = editingContextFactory.createContext(stream)
-
-			assertThat(context).isNotNull()
-			val grid = context.getRailWayNetGrid()
-			assertThat(grid.cols).isEqualTo(500)
-			assertThat(grid.rows).isEqualTo(500)
+			editingContextFactory.createContext(stream).use { context ->
+				assertThat(context).isNotNull()
+				val grid = context.getRailWayNetGrid()
+				assertThat(grid.cols).isEqualTo(500)
+				assertThat(grid.rows).isEqualTo(500)
+			}
 		}
 
 		@Test
@@ -615,12 +615,12 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(minimalGridXML.toByteArray())
 
-			val context = editingContextFactory.createContext(stream)
-
-			assertThat(context).isNotNull()
-			val grid = context.getRailWayNetGrid()
-			assertThat(grid.cols).isEqualTo(10)
-			assertThat(grid.rows).isEqualTo(10)
+			editingContextFactory.createContext(stream).use { context ->
+				assertThat(context).isNotNull()
+				val grid = context.getRailWayNetGrid()
+				assertThat(grid.cols).isEqualTo(10)
+				assertThat(grid.rows).isEqualTo(10)
+			}
 		}
 
 		@Test
@@ -634,12 +634,12 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(boundaryXML.toByteArray())
 
-			val context = editingContextFactory.createContext(stream)
-
-			assertThat(context).isNotNull()
-			val cell = context.getRailWayNetGrid().getCellAt(98, 98)
-			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
-			assertThat((cell as InOut).getName()).isEqualTo("CORNER")
+			editingContextFactory.createContext(stream).use { context ->
+				assertThat(context).isNotNull()
+				val cell = context.getRailWayNetGrid().getCellAt(98, 98)
+				assertThat(cell).isNotNull().isInstanceOf(InOut::class)
+				assertThat((cell as InOut).getName()).isEqualTo("CORNER")
+			}
 		}
 
 		@Test
@@ -653,14 +653,14 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(duplicateNameXML.toByteArray())
 
-			val context = editingContextFactory.createContext(stream)
-
-			assertThat(context).isNotNull()
-			// Both cells should exist at different positions
-			val cell1 = context.getRailWayNetGrid().getCellAt(10, 10)
-			val cell2 = context.getRailWayNetGrid().getCellAt(20, 10)
-			assertThat(cell1).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cell2).isNotNull().isInstanceOf(InOut::class)
+			editingContextFactory.createContext(stream).use { context ->
+				assertThat(context).isNotNull()
+				// Both cells should exist at different positions
+				val cell1 = context.getRailWayNetGrid().getCellAt(10, 10)
+				val cell2 = context.getRailWayNetGrid().getCellAt(20, 10)
+				assertThat(cell1).isNotNull().isInstanceOf(InOut::class)
+				assertThat(cell2).isNotNull().isInstanceOf(InOut::class)
+			}
 		}
 	}
 
@@ -804,27 +804,6 @@ class XMLContextFactoryTest : KoinTestBase() {
 		}
 
 		/**
-		 * Counts elements by type in the grid.
-		 */
-		private fun countElements(grid: RailwayNetGrid<Cell>): Map<String, Int> {
-			val counts = mutableMapOf<String, Int>()
-			counts["InOut"] = 0
-			counts["RailSwitch"] = 0
-			counts["RailSemaphore"] = 0
-			counts["TrackBlock"] = 0
-
-			for (entry in grid) {
-				when (entry.value) {
-					is InOut -> counts["InOut"] = counts["InOut"]!! + 1
-					is RailSwitch -> counts["RailSwitch"] = counts["RailSwitch"]!! + 1
-					is RailSemaphore -> counts["RailSemaphore"] = counts["RailSemaphore"]!! + 1
-				}
-			}
-
-			return counts
-		}
-
-		/**
 		 * Finds all signals within specified grid rectangle.
 		 */
 		private fun findSignalsInArea(
@@ -858,130 +837,137 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun testPragueContextLoading() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
 
-			val context = editingContextFactory.createContext(xml)
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				val grid = context.getRailWayNetGrid()
+				assertThat(grid.cols).isEqualTo(70)
+				assertThat(grid.rows).isEqualTo(25)
 
-			assertThat(context).isNotNull()
-			val grid = context.getRailWayNetGrid()
-			assertThat(grid.cols).isEqualTo(70)
-			assertThat(grid.rows).isEqualTo(25)
-
-			// Verify grid is not empty
-			val hasElements = grid.iterator().hasNext()
-			assertThat(hasElements).withMessage("Praha grid should contain elements").isTrue()
+				// Verify grid is not empty
+				val hasElements = grid.iterator().hasNext()
+				assertThat(hasElements).withMessage("Praha grid should contain elements").isTrue()
+			}
 		}
 
 		@Test
 		fun testPragueElementComposition() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml) as EditingContext
-			val counts = countElements(context.getRailWayNetGrid())
 
-			// Verify element counts meet thresholds (adjusted for simplified topology)
-			assertThat(counts["InOut"]!!)
-				.withMessage("Praha should have at least 6 InOut points (4 north + 6 south)")
-				.isGreaterThan(5)
-			assertThat(counts["RailSwitch"]!!)
-				.withMessage("Praha should have at least 8 switches (4 north throat + 4 south throat)")
-				.isGreaterThan(7)
-			assertThat(counts["RailSemaphore"]!!)
-				.withMessage("Praha should have at least 20 signals (entry + platform + exit)")
-				.isGreaterThan(19)
+			(editingContextFactory.createContext(xml) as EditingContext).use { context ->
+				val counts = countCellTypes(context.getRailWayNetGrid())
+
+				// Verify element counts meet thresholds (adjusted for simplified topology)
+				assertThat(counts.getValue(INOUT_KEY))
+					.withMessage("Praha should have at least 6 InOut points (4 north + 6 south)")
+					.isGreaterThan(5)
+				assertThat(counts.getValue(RAIL_SWITCH_KEY))
+					.withMessage("Praha should have at least 8 switches (4 north throat + 4 south throat)")
+					.isGreaterThan(7)
+				assertThat(counts.getValue(RAIL_SEMAPHORE_KEY))
+					.withMessage("Praha should have at least 20 signals (entry + platform + exit)")
+					.isGreaterThan(19)
+			}
 		}
 
 		@Test
 		fun testPraguePlatformConnectivity() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml) as EditingContext
 
-			// Find entry and exit InOuts by orientation
-			val entries = mutableListOf<InOut>() // orientation=false (entries from west/north)
-			val exits = mutableListOf<InOut>() // orientation=true (exits to east/south)
+			(editingContextFactory.createContext(xml) as EditingContext).use { context ->
+				// Find entry and exit InOuts by orientation
+				val entries = mutableListOf<InOut>() // orientation=false (entries from west/north)
+				val exits = mutableListOf<InOut>() // orientation=true (exits to east/south)
 
-			for (entry in context.getRailWayNetGrid()) {
-				if (entry.value is InOut) {
-					val inOut = entry.value as InOut
-					if (inOut.getOrientation()) {
-						exits.add(inOut)
-					} else {
-						entries.add(inOut)
+				for (entry in context.getRailWayNetGrid()) {
+					if (entry.value is InOut) {
+						val inOut = entry.value as InOut
+						if (inOut.getOrientation()) {
+							exits.add(inOut)
+						} else {
+							entries.add(inOut)
+						}
 					}
 				}
-			}
 
-			assertThat(entries.size)
-				.withMessage("Praha should have entry points (orientation=false)")
-				.isGreaterThan(3)
-			assertThat(exits.size)
-				.withMessage("Praha should have exit points (orientation=true)")
-				.isGreaterThan(3)
+				assertThat(entries.size)
+					.withMessage("Praha should have entry points (orientation=false)")
+					.isGreaterThan(3)
+				assertThat(exits.size)
+					.withMessage("Praha should have exit points (orientation=true)")
+					.isGreaterThan(3)
 
-			// Verify connectivity between north entry and south exit
-			if (entries.isNotEmpty() && exits.isNotEmpty()) {
-				val from = entries[0]
-				val to = exits[0]
-				assertThat(existPath(from, to, context as DefaultEditingContext))
-					.withMessage("Path should exist from north entry ${from.getName()} to south exit ${to.getName()}")
-					.isTrue()
+				// Verify connectivity between north entry and south exit
+				if (entries.isNotEmpty() && exits.isNotEmpty()) {
+					val from = entries[0]
+					val to = exits[0]
+					assertThat(existPath(from, to, context as DefaultEditingContext))
+						.withMessage("Path should exist from north entry ${from.getName()} to south exit ${to.getName()}")
+						.isTrue()
+				}
 			}
 		}
 
 		@Test
 		fun testPragueSignalPlacement() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml) as EditingContext
-			val grid = context.getRailWayNetGrid()
 
-			// Find signals in north throat area (X=1-20)
-			val northSignals = findSignalsInArea(context, 1, 20, 0, grid.rows - 1)
-			assertThat(northSignals.size)
-				.withMessage("North throat should have entry signals")
-				.isGreaterThan(3)
+			(editingContextFactory.createContext(xml) as EditingContext).use { context ->
+				val grid = context.getRailWayNetGrid()
 
-			// Find signals in south throat area (X=50-69)
-			val southSignals =
-				findSignalsInArea(context, 50, grid.cols - 1, 0, grid.rows - 1)
-			assertThat(southSignals.size)
-				.withMessage("South throat should have exit signals")
-				.isGreaterThan(3)
+				// Find signals in north throat area (X=1-20)
+				val northSignals = findSignalsInArea(context, 1, 20, 0, grid.rows - 1)
+				assertThat(northSignals.size)
+					.withMessage("North throat should have entry signals")
+					.isGreaterThan(3)
+
+				// Find signals in south throat area (X=50-69)
+				val southSignals =
+					findSignalsInArea(context, 50, grid.cols - 1, 0, grid.rows - 1)
+				assertThat(southSignals.size)
+					.withMessage("South throat should have exit signals")
+					.isGreaterThan(3)
+			}
 		}
 
 		@Test
 		fun testPragueMultipleRoutes() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml)
 
-			// Find all InOuts
-			val allInOuts = mutableListOf<InOut>()
-			for (entry in context.getRailWayNetGrid()) {
-				if (entry.value is InOut) {
-					allInOuts.add(entry.value as InOut)
+			editingContextFactory.createContext(xml).use { context ->
+				// Find all InOuts
+				val allInOuts = mutableListOf<InOut>()
+				for (entry in context.getRailWayNetGrid()) {
+					if (entry.value is InOut) {
+						allInOuts.add(entry.value as InOut)
+					}
 				}
-			}
 
-			// Verify at least 3 independent entry/exit pairs exist
-			assertThat(allInOuts.size)
-				.withMessage("Praha should support multiple routes with multiple InOuts")
-				.isGreaterThan(6)
+				// Verify at least 3 independent entry/exit pairs exist
+				assertThat(allInOuts.size)
+					.withMessage("Praha should support multiple routes with multiple InOuts")
+					.isGreaterThan(6)
+			}
 		}
 
 		@Test
 		fun testPragueBayPlatformTermination() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml)
 
-			// Bay platforms should exist (check for InOuts with "Bay" in name)
-			var foundBayPlatform = false
-			for (entry in context.getRailWayNetGrid()) {
-				val cell = entry.value
-				if (cell is InOut && cell.getName().contains("Bay")) {
-					foundBayPlatform = true
-					break
+			editingContextFactory.createContext(xml).use { context ->
+				// Bay platforms should exist (check for InOuts with "Bay" in name)
+				var foundBayPlatform = false
+				for (entry in context.getRailWayNetGrid()) {
+					val cell = entry.value
+					if (cell is InOut && cell.getName().contains("Bay")) {
+						foundBayPlatform = true
+						break
+					}
 				}
-			}
 
-			// This test is informational - bay platforms are optional
-			// Just verify we can load and parse the structure
-			assertThat(context).isNotNull()
+				// This test is informational - bay platforms are optional
+				// Just verify we can load and parse the structure
+				assertThat(context).isNotNull()
+			}
 		}
 
 		// Validation Tests
@@ -989,19 +975,20 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testSwitchSegmentConsistencyPraha() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml)
 
-			// Verify all switches are properly connected
-			for (entry in context.getRailWayNetGrid()) {
-				val cell = entry.value
-				if (cell is RailSwitch) {
-					val location = context.getRailWayNetGrid().getLocation(cell)
-					if (location != null) {
-						val edges = context.getGraph().assignedEdges(location)
-						// Switches should have at least 2 connections (input + output)
-						assertThat(edges.size)
-							.withMessage("Switch at $location should have connections")
-							.isGreaterThan(1)
+			editingContextFactory.createContext(xml).use { context ->
+				// Verify all switches are properly connected
+				for (entry in context.getRailWayNetGrid()) {
+					val cell = entry.value
+					if (cell is RailSwitch) {
+						val location = context.getRailWayNetGrid().getLocation(cell)
+						if (location != null) {
+							val edges = context.getGraph().assignedEdges(location)
+							// Switches should have at least 2 connections (input + output)
+							assertThat(edges.size)
+								.withMessage("Switch at $location should have connections")
+								.isGreaterThan(1)
+						}
 					}
 				}
 			}
@@ -1012,30 +999,28 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testPragueSaveLoad() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val originalContext = editingContextFactory.createContext(xml)
 
-			// Save to temp file
-			val tempFile = File.createTempFile("test-praha-", ".xml")
-			tempFile.deleteOnExit()
+			editingContextFactory.createContext(xml).use { originalContext ->
+				// Save to temp file
+				val tempFile = File.createTempFile("test-praha-", ".xml")
+				tempFile.deleteOnExit()
 
-			editingContextFactory.saveContext(originalContext, tempFile)
+				// Save, load back, and verify structure is preserved
+				editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile) { loadedContext ->
+					assertThat(loadedContext).isNotNull()
+					assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(70)
+					assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(25)
 
-			// Reload from file
-			val loadedContext = editingContextFactory.createContext(tempFile)
+					// Verify element counts match
+					val originalCounts = countCellTypes(originalContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
+					val loadedCounts = countCellTypes(loadedContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
+					assertThat(loadedCounts.getValue(INOUT_KEY)).isEqualTo(originalCounts.getValue(INOUT_KEY))
+					assertThat(loadedCounts.getValue(RAIL_SWITCH_KEY)).isEqualTo(originalCounts.getValue(RAIL_SWITCH_KEY))
+					assertThat(loadedCounts.getValue(RAIL_SEMAPHORE_KEY)).isEqualTo(originalCounts.getValue(RAIL_SEMAPHORE_KEY))
+				}
 
-			// Verify structure preserved
-			assertThat(loadedContext).isNotNull()
-			assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(70)
-			assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(25)
-
-			// Verify element counts match
-			val originalCounts = countElements(originalContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
-			val loadedCounts = countElements(loadedContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
-			assertThat(loadedCounts["InOut"]).isEqualTo(originalCounts["InOut"])
-			assertThat(loadedCounts["RailSwitch"]).isEqualTo(originalCounts["RailSwitch"])
-			assertThat(loadedCounts["RailSemaphore"]).isEqualTo(originalCounts["RailSemaphore"])
-
-			tempFile.delete()
+				tempFile.delete()
+			}
 		}
 
 		/**
@@ -1089,142 +1074,148 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@DisplayName("Praha XML loads with exact element counts after PR #347 additions")
 		fun testPragueExactElementCounts() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml) as EditingContext
 
-			@Suppress("UNCHECKED_CAST")
-			val cellGrid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
+			(editingContextFactory.createContext(xml) as EditingContext).use { context ->
+				@Suppress("UNCHECKED_CAST")
+				val cellGrid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
 
-			var inOutCount = 0
-			var switchCount = 0
-			var semaphoreCount = 0
-			for (entry in cellGrid) {
-				when (entry.value) {
-					is InOut -> inOutCount++
-					is RailSwitch -> switchCount++
-					is RailSemaphore -> semaphoreCount++
-				}
-			}
-
-			// Count unique track blocks via graph (SimpleTrackBlocks are graph edges, not grid cells)
-			val seenBlocks = java.util.IdentityHashMap<TrackSection, Unit>()
-			val graph = (context as DefaultEditingContext).getGraph()
-			for (node in graph.nodeSet()) {
-				for (entry in graph.assignedEdges(node).entries) {
-					val edge = entry.value
-					if (edge is TrackSection) {
-						seenBlocks[edge] = Unit
+				var inOutCount = 0
+				var switchCount = 0
+				var semaphoreCount = 0
+				for (entry in cellGrid) {
+					when (entry.value) {
+						is InOut -> inOutCount++
+						is RailSwitch -> switchCount++
+						is RailSemaphore -> semaphoreCount++
 					}
 				}
-			}
-			val trackBlockCount = seenBlocks.size
 
-			assertThat(inOutCount)
-				.withMessage("Praha should have exactly 11 InOut elements (car train terminal deferred)")
-				.isEqualTo(11)
-			assertThat(switchCount)
-				.withMessage("Praha should have exactly 50 switches")
-				.isEqualTo(50)
-			assertThat(semaphoreCount)
-				.withMessage("Praha should have exactly 37 signals")
-				.isEqualTo(37)
-			assertThat(trackBlockCount)
-				.withMessage("Praha should have exactly 117 track blocks (car train terminal deferred)")
-				.isEqualTo(117)
+				// Count unique track blocks via graph (SimpleTrackBlocks are graph edges, not grid cells)
+				val seenBlocks = java.util.IdentityHashMap<TrackSection, Unit>()
+				val graph = (context as DefaultEditingContext).getGraph()
+				for (node in graph.nodeSet()) {
+					for (entry in graph.assignedEdges(node).entries) {
+						val edge = entry.value
+						if (edge is TrackSection) {
+							seenBlocks[edge] = Unit
+						}
+					}
+				}
+				val trackBlockCount = seenBlocks.size
+
+				assertThat(inOutCount)
+					.withMessage("Praha should have exactly 11 InOut elements (car train terminal deferred)")
+					.isEqualTo(11)
+				assertThat(switchCount)
+					.withMessage("Praha should have exactly 50 switches")
+					.isEqualTo(50)
+				assertThat(semaphoreCount)
+					.withMessage("Praha should have exactly 37 signals")
+					.isEqualTo(37)
+				assertThat(trackBlockCount)
+					.withMessage("Praha should have exactly 117 track blocks (car train terminal deferred)")
+					.isEqualTo(117)
+			}
 		}
 
 		@Test
 		@DisplayName("N-Bypass InOut is present at grid (2,20) with entry orientation")
 		fun testPragueNorthBypassInOutPresent() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml)
 
-			val cell = context.getRailWayNetGrid().getCellAt(2, 20)
-			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
+			editingContextFactory.createContext(xml).use { context ->
+				val cell = context.getRailWayNetGrid().getCellAt(2, 20)
+				assertThat(cell).isNotNull().isInstanceOf(InOut::class)
 
-			val inOut = cell as InOut
-			assertThat(inOut.getName())
-				.withMessage("N-Bypass InOut should have correct name")
-				.isEqualTo("N-Bypass")
-			assertThat(inOut.getOrientation())
-				.withMessage("N-Bypass InOut should be an entry point (orientation=false)")
-				.isFalse()
+				val inOut = cell as InOut
+				assertThat(inOut.getName())
+					.withMessage("N-Bypass InOut should have correct name")
+					.isEqualTo("N-Bypass")
+				assertThat(inOut.getOrientation())
+					.withMessage("N-Bypass InOut should be an entry point (orientation=false)")
+					.isFalse()
+			}
 		}
 
 		@Test
 		@DisplayName("S-Bypass InOut is present at grid (60,20) with exit orientation")
 		fun testPragueSouthBypassInOutPresent() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml)
 
-			val cell = context.getRailWayNetGrid().getCellAt(60, 20)
-			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
+			editingContextFactory.createContext(xml).use { context ->
+				val cell = context.getRailWayNetGrid().getCellAt(60, 20)
+				assertThat(cell).isNotNull().isInstanceOf(InOut::class)
 
-			val inOut = cell as InOut
-			assertThat(inOut.getName())
-				.withMessage("S-Bypass InOut should have correct name")
-				.isEqualTo("S-Bypass")
-			assertThat(inOut.getOrientation())
-				.withMessage("S-Bypass InOut should be an exit point (orientation=true)")
-				.isTrue()
+				val inOut = cell as InOut
+				assertThat(inOut.getName())
+					.withMessage("S-Bypass InOut should have correct name")
+					.isEqualTo("S-Bypass")
+				assertThat(inOut.getOrientation())
+					.withMessage("S-Bypass InOut should be an exit point (orientation=true)")
+					.isTrue()
+			}
 		}
 
 		@Test
 		@DisplayName("Bypass route N-Bypass to S-Bypass is navigable")
 		fun testPragueBypassRouteNavigable() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml) as EditingContext
 
-			var nBypass: InOut? = null
-			var sBypass: InOut? = null
-			for (entry in context.getRailWayNetGrid()) {
-				val cell = entry.value
-				if (cell is InOut) {
-					when (cell.getName()) {
-						"N-Bypass" -> nBypass = cell
-						"S-Bypass" -> sBypass = cell
+			(editingContextFactory.createContext(xml) as EditingContext).use { context ->
+				var nBypass: InOut? = null
+				var sBypass: InOut? = null
+				for (entry in context.getRailWayNetGrid()) {
+					val cell = entry.value
+					if (cell is InOut) {
+						when (cell.getName()) {
+							"N-Bypass" -> nBypass = cell
+							"S-Bypass" -> sBypass = cell
+						}
 					}
 				}
+
+				assertThat(nBypass)
+					.withMessage("N-Bypass InOut should exist in Praha XML")
+					.isNotNull()
+				assertThat(sBypass)
+					.withMessage("S-Bypass InOut should exist in Praha XML")
+					.isNotNull()
+
+				assertThat(existPath(nBypass!!, sBypass!!, context as DefaultEditingContext))
+					.withMessage("Path should exist from N-Bypass to S-Bypass")
+					.isTrue()
 			}
-
-			assertThat(nBypass)
-				.withMessage("N-Bypass InOut should exist in Praha XML")
-				.isNotNull()
-			assertThat(sBypass)
-				.withMessage("S-Bypass InOut should exist in Praha XML")
-				.isNotNull()
-
-			assertThat(existPath(nBypass!!, sBypass!!, context as DefaultEditingContext))
-				.withMessage("Path should exist from N-Bypass to S-Bypass")
-				.isTrue()
 		}
 
 		@Test
 		@DisplayName("Bypass corridor switches at Y=20 have the orientations the bypass route requires")
 		fun testPragueBypassSwitchOrientations() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml)
-			val grid = context.getRailWayNetGrid()
 
-			// Four switches sit on the bypass corridor (Y=20). Their types are the
-			// physical orientation of the diverge — assert each one to lock the
-			// bypass topology against regression.
-			val expectedTypes =
-				mapOf(
-					(11 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
-					(15 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
-					(46 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
-					(51 to 20) to RailSwitch.Type.SIMPLE_RIGHT_FALSE
-				)
-			for ((coords, expectedType) in expectedTypes) {
-				val (x, y) = coords
-				val cell = grid.getCellAt(x, y)
-				assertThat(cell)
-					.withMessage("Cell at ($x,$y) should be a RailSwitch on the bypass corridor")
-					.isNotNull()
-					.isInstanceOf(RailSwitch::class)
-				assertThat((cell as RailSwitch).type)
-					.withMessage("Switch at ($x,$y) must be $expectedType to keep the bypass route diverging correctly")
-					.isEqualTo(expectedType)
+			editingContextFactory.createContext(xml).use { context ->
+				val grid = context.getRailWayNetGrid()
+
+				// Four switches sit on the bypass corridor (Y=20). Their types are the
+				// physical orientation of the diverge — assert each one to lock the
+				// bypass topology against regression.
+				val expectedTypes =
+					mapOf(
+						(11 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+						(15 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+						(46 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+						(51 to 20) to RailSwitch.Type.SIMPLE_RIGHT_FALSE
+					)
+				for ((coords, expectedType) in expectedTypes) {
+					val (x, y) = coords
+					val cell = grid.getCellAt(x, y)
+					assertThat(cell)
+						.withMessage("Cell at ($x,$y) should be a RailSwitch on the bypass corridor")
+						.isNotNull()
+						.isInstanceOf(RailSwitch::class)
+					assertThat((cell as RailSwitch).type)
+						.withMessage("Switch at ($x,$y) must be $expectedType to keep the bypass route diverging correctly")
+						.isEqualTo(expectedType)
+				}
 			}
 		}
 
@@ -1288,11 +1279,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val tempFile = File.createTempFile("test-semaphore-names-", ".xml")
 			tempFile.deleteOnExit()
 
-			editingContextFactory.saveContext(context, tempFile)
-			val loadedContext = editingContextFactory.createContext(tempFile)
-
-			val loadedSemaphore = loadedContext.getRailWayNetGrid().getCellAt(10, 10) as RailSemaphore
-			assertThat(loadedSemaphore.getName()).isEqualTo("signal_test_1")
+			context.use {
+				// Save, load back, and verify the semaphore name is preserved
+				editingContextFactory.saveAndReloadThroughFile(it, tempFile) { loadedContext ->
+					val loadedSemaphore = loadedContext.getRailWayNetGrid().getCellAt(10, 10) as RailSemaphore
+					assertThat(loadedSemaphore.getName()).isEqualTo("signal_test_1")
+				}
+			}
 
 			tempFile.delete()
 		}
@@ -1311,11 +1304,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val tempFile = File.createTempFile("test-switch-names-", ".xml")
 			tempFile.deleteOnExit()
 
-			editingContextFactory.saveContext(context, tempFile)
-			val loadedContext = editingContextFactory.createContext(tempFile)
-
-			val loadedSwitch = loadedContext.getRailWayNetGrid().getCellAt(10, 10) as RailSwitch
-			assertThat(loadedSwitch.getName()).isEqualTo("switch_A")
+			context.use {
+				// Save, load back, and verify the switch name is preserved
+				editingContextFactory.saveAndReloadThroughFile(it, tempFile) { loadedContext ->
+					val loadedSwitch = loadedContext.getRailWayNetGrid().getCellAt(10, 10) as RailSwitch
+					assertThat(loadedSwitch.getName()).isEqualTo("switch_A")
+				}
+			}
 
 			tempFile.delete()
 		}
@@ -1325,14 +1320,14 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_withoutNameAttributes_succeedsWithAutoNames() {
 			val xml = getFixtureStream("legacy-network-no-names.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			assertThat(context).isNotNull()
-			// Elements without names should have empty names (auto-naming happens in GUI)
-			val semaphore = context.getRailWayNetGrid().getCellAt(15, 10) as RailSemaphore
-			val railSwitch = context.getRailWayNetGrid().getCellAt(20, 10) as RailSwitch
-			assertThat(semaphore.getName()).isEmpty()
-			assertThat(railSwitch.getName()).isEmpty()
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				// Elements without names should have empty names (auto-naming happens in GUI)
+				val semaphore = context.getRailWayNetGrid().getCellAt(15, 10) as RailSemaphore
+				val railSwitch = context.getRailWayNetGrid().getCellAt(20, 10) as RailSwitch
+				assertThat(semaphore.getName()).isEmpty()
+				assertThat(railSwitch.getName()).isEmpty()
+			}
 		}
 
 		@Test
@@ -1349,13 +1344,15 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val tempFile = File.createTempFile("test-empty-names-", ".xml")
 			tempFile.deleteOnExit()
 
-			editingContextFactory.saveContext(context, tempFile)
+			context.use {
+				assertThat(editingContextFactory.saveContext(it, tempFile), name = "saveContext(file) must succeed").isTrue()
 
-			// Read XML and verify name attribute is not present
-			val xmlContent = tempFile.readText()
-			assertThat(xmlContent.contains("RailSemaphore")).isTrue()
-			// Empty name should NOT be serialized (no name="" in output)
-			assertThat(xmlContent.contains("name=\"\"")).isFalse()
+				// Read XML and verify name attribute is not present
+				val xmlContent = tempFile.readText()
+				assertThat(xmlContent.contains("RailSemaphore")).isTrue()
+				// Empty name should NOT be serialized (no name="" in output)
+				assertThat(xmlContent.contains("name=\"\"")).isFalse()
+			}
 
 			tempFile.delete()
 		}
@@ -1365,15 +1362,15 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_validSpecialChars_succeeds() {
 			val xml = getFixtureStream("valid-special-chars-names.xml")
 
-			val context = editingContextFactory.createContext(xml)
-
-			assertThat(context).isNotNull()
-			val inOut = context.getRailWayNetGrid().getCellAt(10, 10) as InOut
-			val semaphore = context.getRailWayNetGrid().getCellAt(15, 10) as RailSemaphore
-			val railSwitch = context.getRailWayNetGrid().getCellAt(20, 10) as RailSwitch
-			assertThat(inOut.getName()).isEqualTo("entry_1")
-			assertThat(semaphore.getName()).isEqualTo("signal-north-001")
-			assertThat(railSwitch.getName()).isEqualTo("switch_junction_A")
+			editingContextFactory.createContext(xml).use { context ->
+				assertThat(context).isNotNull()
+				val inOut = context.getRailWayNetGrid().getCellAt(10, 10) as InOut
+				val semaphore = context.getRailWayNetGrid().getCellAt(15, 10) as RailSemaphore
+				val railSwitch = context.getRailWayNetGrid().getCellAt(20, 10) as RailSwitch
+				assertThat(inOut.getName()).isEqualTo("entry_1")
+				assertThat(semaphore.getName()).isEqualTo("signal-north-001")
+				assertThat(railSwitch.getName()).isEqualTo("switch_junction_A")
+			}
 		}
 
 		@Test
