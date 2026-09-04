@@ -1070,7 +1070,6 @@ class XMLContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Topology / path existence: Praha improvements (PR #347)")
 	inner class PragueTopologyImprovementsTests {
-
 		@Test
 		@DisplayName("Praha XML loads with exact element counts after PR #347 additions")
 		fun testPragueExactElementCounts() {
