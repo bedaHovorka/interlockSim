@@ -29,9 +29,9 @@ import cz.vutbr.fit.interlockSim.testutil.INOUT_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SEMAPHORE_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SWITCH_KEY
 import cz.vutbr.fit.interlockSim.testutil.countCellTypes
+import cz.vutbr.fit.interlockSim.testutil.existPath
 import cz.vutbr.fit.interlockSim.testutil.saveAndReloadThroughFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
@@ -114,7 +114,7 @@ class XMLContextFactoryTopologyTest : XMLContextFactoryTestBase() {
 			if (entries.isNotEmpty() && exits.isNotEmpty()) {
 				val from = entries[0]
 				val to = exits[0]
-				assertThat(existPath(from, to, context as DefaultEditingContext))
+				assertThat(existPath(from, to, context))
 					.withMessage("Path should exist from north entry ${from.getName()} to south exit ${to.getName()}")
 					.isTrue()
 			}
@@ -350,7 +350,7 @@ class XMLContextFactoryTopologyTest : XMLContextFactoryTestBase() {
 				.withMessage("S-Bypass InOut should exist in Praha XML")
 				.isNotNull()
 
-			assertThat(existPath(nBypass!!, sBypass!!, context as DefaultEditingContext))
+			assertThat(existPath(nBypass!!, sBypass!!, context))
 				.withMessage("Path should exist from N-Bypass to S-Bypass")
 				.isTrue()
 		}
@@ -414,49 +414,5 @@ class XMLContextFactoryTopologyTest : XMLContextFactoryTestBase() {
 			}
 		}
 		return signals
-	}
-
-	/**
-	 * Path existence check: BFS over the track graph to verify that a path
-	 * exists (or can be created) between two InOuts in the railway network.
-	 */
-	private fun existPath(
-		from: InOut,
-		to: InOut,
-		context: DefaultEditingContext
-	): Boolean {
-		val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
-		val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
-		if (fromLoc == toLoc) return true
-
-		val graph = context.getGraph()
-		val visited = mutableSetOf<Point>()
-		val queue = mutableListOf(fromLoc)
-
-		while (queue.isNotEmpty()) {
-			val current = queue.removeFirst()
-			if (current in visited) continue
-			visited.add(current)
-			if (current == toLoc) return true
-
-			val edges = graph.assignedEdges(current)
-			for (entry in edges.entries) {
-				val trackBlock = entry.value
-				if (trackBlock !is TrackSection) continue
-
-				val ends = trackBlock.ends()
-				for (pathSeparator in ends) {
-					// Phase 6: Grid is now typed as NodeCell, but ends() returns PathSeparator
-					// PathSeparator instances should be NodeCell in editing context
-					if (pathSeparator !is cz.vutbr.fit.interlockSim.objects.cells.NodeCell) continue
-
-					val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator) ?: continue
-					if (endLocation != current && endLocation !in visited) {
-						queue.add(endLocation)
-					}
-				}
-			}
-		}
-		return false
 	}
 }

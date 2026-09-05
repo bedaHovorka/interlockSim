@@ -25,14 +25,13 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.INOUT_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SEMAPHORE_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SWITCH_KEY
 import cz.vutbr.fit.interlockSim.testutil.assertRudyUjezdStationInOuts
 import cz.vutbr.fit.interlockSim.testutil.countCellTypes
+import cz.vutbr.fit.interlockSim.testutil.existPath
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.io.ByteArrayInputStream
@@ -321,65 +320,5 @@ class XMLContextFactoryParseTest : XMLContextFactoryTestBase() {
 		assertThatBlock { editingContextFactory.createContext(stream) }
 			.isFailure()
 			.isInstanceOf(ContextCreationException::class)
-	}
-
-	/**
-	 * Checks if a path exists (or can be created) between two InOuts in the railway network.
-	 * Uses BFS to traverse the track graph and verify connectivity.
-	 */
-	private fun existPath(
-		from: InOut,
-		to: InOut,
-		context: EditingContext
-	): Boolean {
-		// Get grid locations for both InOuts
-		val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
-		val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
-
-		// If they're the same location, path exists trivially
-		if (fromLoc == toLoc) return true
-
-		// BFS on the track graph
-		val graph = context.getGraph()
-		val visited = mutableSetOf<Point>()
-		val queue = mutableListOf(fromLoc)
-
-		while (queue.isNotEmpty()) {
-			val current = queue.removeFirst()
-
-			// Skip if already visited
-			if (current in visited) continue
-			visited.add(current)
-
-			// Check if we reached the destination
-			if (current == toLoc) return true
-
-			// Get all track blocks connected to this location
-			val edges = graph.assignedEdges(current)
-
-			// For each track block, find the other end and add it to the queue
-			for (entry in edges.entries) {
-				val trackBlock = entry.value
-				// TrackBlocks should be TrackSections which have ends()
-				if (trackBlock !is TrackSection) continue
-
-				val ends = trackBlock.ends()
-				// Get grid locations of both ends
-				for (pathSeparator in ends) {
-					// Phase 6: Grid is now typed as NodeCell, but ends() returns PathSeparator
-					// PathSeparator instances should be NodeCell in editing context
-					if (pathSeparator !is cz.vutbr.fit.interlockSim.objects.cells.NodeCell) continue
-
-					val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator) ?: continue
-					// Add the other end (not current) to the queue
-					if (endLocation != current && endLocation !in visited) {
-						queue.add(endLocation)
-					}
-				}
-			}
-		}
-
-		// No path found
-		return false
 	}
 }
