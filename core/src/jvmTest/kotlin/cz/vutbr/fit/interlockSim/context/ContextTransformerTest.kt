@@ -349,7 +349,7 @@ class ContextTransformerTest : KoinTestBase() {
 	// - transformContext_vyhybnaXml_preservesInOutCount()
 	//
 	// Recommendation: Test XMLContextFactory directly instead of via ContextTransformer.
-	// See XMLContextFactoryTest for comprehensive XML loading tests.
+	// See the XMLContextFactory parse tests in :desktop-ui for comprehensive XML loading tests.
 	//
 	// See: https://github.com/bedaHovorka/interlockSim/issues/168
 

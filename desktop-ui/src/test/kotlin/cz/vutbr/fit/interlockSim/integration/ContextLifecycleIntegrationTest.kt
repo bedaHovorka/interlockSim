@@ -36,6 +36,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertFrozen
 import cz.vutbr.fit.interlockSim.testutil.assertMaxSpeedPropertyEventFires
 import cz.vutbr.fit.interlockSim.testutil.assertNetworkProperties
 import cz.vutbr.fit.interlockSim.testutil.buildLinearNetwork
+import cz.vutbr.fit.interlockSim.testutil.withSimulationContext
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -109,7 +110,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 			assertFrozen(editingContext, expected = false)
 
 			// Phase 2: Transform to simulation context, then verify it (phases 2-5)
-			transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+			transformer.withSimulationContext(editingContext, processFactory) { simulationContext ->
 				verifyTransformedContextPreservesStructure(simulationContext)
 			}
 		}
@@ -124,7 +125,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 	fun lifecycle_simulationContextExecutionAndTeardown() {
 		// Phase 1: Create simulation context from editing context
 		buildLinearNetwork(35, "Entry", Point(10, 10), "Exit", Point(30, 10), 200.0, 80.0).use { editingContext ->
-			transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+			transformer.withSimulationContext(editingContext, processFactory) { simulationContext ->
 				// Phase 2: Verify initialization
 				assertThat(simulationContext).isNotNull()
 				val simBase = simulationContext as BaseContext<*>
@@ -178,7 +179,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 			assertThat(xmlFile.exists()).isTrue()
 
 			// Phase 3: Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { originalContext ->
+			transformer.withSimulationContext(editingContext, processFactory) { originalContext ->
 				assertFrozen(originalContext as BaseContext<*>)
 
 				// Phase 4: Deserialize from XML, then verify the round trip (phases 5-8)

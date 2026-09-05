@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 
 /**
  * Structure check for the `rudyUjezd.xml` fixture, shared by the parse test in
- * `XMLContextFactoryTest` and the stream round trip in `XMLContextFactoryOutputStreamTest`
+ * `XMLContextFactoryParseTest` and the stream round trip in `XMLContextFactoryOutputStreamTest`
  * (Issue #1035 review round).
  *
  * Asserts that the four station InOuts of the fixture exist in [context] and returns them

@@ -18,7 +18,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
  * Shared grid-content checks (Issue #1035 review round). Four test classes each scanned the
  * grid and classified its cells by type; these two functions replace all of those copies.
  *
- * Used by XMLRoundTripTest, ComplexNetworkTest and XMLContextFactoryTest.
+ * Used by XMLRoundTripTest, ComplexNetworkTest, XMLContextFactoryParseTest and
+ * XMLContextFactoryTopologyTest.
  */
 
 /** Cell-type keys returned by [countCellTypes]. */

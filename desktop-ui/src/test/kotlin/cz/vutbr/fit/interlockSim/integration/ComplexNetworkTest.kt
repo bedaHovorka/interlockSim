@@ -29,7 +29,9 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SEMAPHORE_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SWITCH_KEY
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertNetworkTopology
 import cz.vutbr.fit.interlockSim.testutil.countCellTypes
+import cz.vutbr.fit.interlockSim.testutil.withSimulationContext
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -71,12 +73,10 @@ class ComplexNetworkTest : KoinTestBase() {
 	fun complexNetwork_multipleTrains_topologyValid() {
 		// Create a complex network with 4 InOut points (2 entries, 2 exits)
 		buildFourPlatformJunctionNetwork().use { editingContext ->
-			// Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
-				// Verify network topology is valid
+			// Transform to simulation context and verify the network topology is valid
+			transformer.withSimulationContext(editingContext, processFactory) { simContext ->
 				assertThat(simContext).isNotNull()
-				assertThat(simContext.getInOuts()).hasSize(4)
-				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+				assertNetworkTopology(simContext, 4)
 
 				// Verify switch is accessible
 				val switchCell = simContext.getRailWayNetGrid().getCellAt(30, 30)
@@ -95,13 +95,9 @@ class ComplexNetworkTest : KoinTestBase() {
 	fun complexNetwork_trackConflicts_topologyValid() {
 		// Create a network with crossing tracks
 		buildCrossingTracksNetwork().use { editingContext ->
-			// Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
-				// Verify network has 4 InOut points
-				assertThat(simContext.getInOuts()).hasSize(4)
-
-				// Verify graph contains both tracks
-				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+			// Transform to simulation context and verify the network topology
+			transformer.withSimulationContext(editingContext, processFactory) { simContext ->
+				assertNetworkTopology(simContext, 4)
 
 				// Verify topology allows conflict detection (both tracks exist independently)
 				val cellH1 = simContext.getRailWayNetGrid().getCellAt(5, 25)
@@ -126,11 +122,9 @@ class ComplexNetworkTest : KoinTestBase() {
 	fun complexNetwork_variedSpeedLimits_topologyValid() {
 		// Create a network with three sections having different speed limits
 		buildVariedSpeedNetwork().use { editingContext ->
-			// Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
-				// Verify network topology
-				assertThat(simContext.getInOuts()).hasSize(2)
-				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+			// Transform to simulation context and verify the network topology
+			transformer.withSimulationContext(editingContext, processFactory) { simContext ->
+				assertNetworkTopology(simContext, 2)
 
 				// Verify all junctions exist
 				val j1 = simContext.getRailWayNetGrid().getCellAt(20, 15)
@@ -152,11 +146,9 @@ class ComplexNetworkTest : KoinTestBase() {
 	fun complexNetwork_bidirectionalTracks_topologyValid() {
 		// Create a bidirectional track network (loop configuration)
 		buildBidirectionalLoopNetwork().use { editingContext ->
-			// Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { simContext ->
-				// Verify loop topology
-				assertThat(simContext.getInOuts()).hasSize(2)
-				assertThat(simContext.getGraph().size()).isGreaterThan(0)
+			// Transform to simulation context and verify the loop topology
+			transformer.withSimulationContext(editingContext, processFactory) { simContext ->
+				assertNetworkTopology(simContext, 2)
 
 				// Verify both switches exist
 				val sw1 = simContext.getRailWayNetGrid().getCellAt(20, 15)

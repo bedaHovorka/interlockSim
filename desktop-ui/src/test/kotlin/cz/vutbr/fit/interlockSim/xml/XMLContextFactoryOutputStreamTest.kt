@@ -29,12 +29,11 @@ import cz.vutbr.fit.interlockSim.testutil.saveAndReloadThroughStream
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Resources
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.io.TempDir
 import org.koin.test.inject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -239,9 +238,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			editingContextFactory.createContext(xml).use { originalContext ->
 				// Save to OutputStream, load back from it, and verify
 				editingContextFactory.saveAndReloadThroughStream(originalContext) { loadedContext ->
-					val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10) as RailSwitch
+					val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
 					assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
-					assertThat(switchCell.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+					val railSwitch = switchCell as RailSwitch
+					assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 				}
 			}
 		}
@@ -284,51 +284,52 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Equivalence Testing (File vs OutputStream)")
 	inner class EquivalenceTests {
-		private var tempFile: File? = null
-
-		@BeforeEach
-		fun setUpTempFile() {
-			tempFile = File.createTempFile("test-equivalence-", ".xml")
-			tempFile?.deleteOnExit()
-		}
-
-		@AfterEach
-		fun cleanUpTempFile() {
-			tempFile?.delete()
+		@Test
+		fun outputStreamAndFile_minimalNetwork_produceIdenticalXML(
+			@TempDir tempDir: File
+		) {
+			assertFileAndStreamOutputIdentical("minimal-network.xml", tempDir)
 		}
 
 		@Test
-		fun outputStreamAndFile_minimalNetwork_produceIdenticalXML() {
-			assertFileAndStreamOutputIdentical("minimal-network.xml")
+		fun outputStreamAndFile_linearTrack_produceIdenticalXML(
+			@TempDir tempDir: File
+		) {
+			assertFileAndStreamOutputIdentical("linear-track.xml", tempDir)
 		}
 
 		@Test
-		fun outputStreamAndFile_linearTrack_produceIdenticalXML() {
-			assertFileAndStreamOutputIdentical("linear-track.xml")
+		fun outputStreamAndFile_switchBasic_produceIdenticalXML(
+			@TempDir tempDir: File
+		) {
+			assertFileAndStreamOutputIdentical("switch-basic.xml", tempDir)
 		}
 
 		@Test
-		fun outputStreamAndFile_switchBasic_produceIdenticalXML() {
-			assertFileAndStreamOutputIdentical("switch-basic.xml")
+		fun outputStreamAndFile_emptyGrid_produceIdenticalXML(
+			@TempDir tempDir: File
+		) {
+			assertFileAndStreamOutputIdentical("empty-grid.xml", tempDir)
 		}
 
 		@Test
-		fun outputStreamAndFile_emptyGrid_produceIdenticalXML() {
-			assertFileAndStreamOutputIdentical("empty-grid.xml")
+		fun outputStreamAndFile_rudyUjezd_produceIdenticalXML(
+			@TempDir tempDir: File
+		) {
+			assertFileAndStreamOutputIdentical("rudyUjezd.xml", tempDir)
 		}
 
-		@Test
-		fun outputStreamAndFile_rudyUjezd_produceIdenticalXML() {
-			assertFileAndStreamOutputIdentical("rudyUjezd.xml")
-		}
-
-		/** Loads [fixtureName], saves to both the temp file and an OutputStream, and asserts the outputs are identical. */
-		private fun assertFileAndStreamOutputIdentical(fixtureName: String) {
+		/** Loads [fixtureName], saves to both [tempDir] and an OutputStream, and asserts the outputs are identical. */
+		private fun assertFileAndStreamOutputIdentical(
+			fixtureName: String,
+			tempDir: File
+		) {
+			val tempFile = File(tempDir, "equivalence.xml")
 			val xml = getFixtureStream(fixtureName)
 			editingContextFactory.createContext(xml).use { context ->
 				// Save to File
-				assertThat(editingContextFactory.saveContext(context, tempFile!!), name = "saveContext(file) must succeed").isTrue()
-				val fileContent = tempFile!!.readText()
+				assertThat(editingContextFactory.saveContext(context, tempFile), name = "saveContext(file) must succeed").isTrue()
+				val fileContent = tempFile.readText()
 
 				// Save to OutputStream
 				val outputStream = ByteArrayOutputStream()

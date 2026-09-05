@@ -28,6 +28,13 @@ The `testutil` package provides:
   returned context and must close it (`.use`)
 - **RailwayNetGridAssertions** - `gridContainsCellType<T>` and `countCellTypes`: one shared
   grid scan replacing the four private copies that classified cells by type
+- **PathExistence** - `existPath(from, to, context)`: BFS connectivity check between two
+  InOuts over the context's track graph; one shared copy replacing the three private
+  helpers of the XML factory tests (PR #1043 review round)
+- **SimulationTransform** - `withSimulationContext` (transform an editing context and
+  close the simulation context around a verify lambda, mirroring the ContextRoundTrip
+  ownership contract) and `assertNetworkTopology` (InOut count + non-empty graph
+  preamble), shared by the editing-to-simulation integration tests (PR #1043 review round)
 - **EditingContextCleanupContractTest** - Contract tests pinning the `.use {}` cleanup
   pattern: scope closed on success, on failure inside the block, on double close, for
   the loaded context of a round trip, and a round trip failing at the save step (Issue #1035)
@@ -340,4 +347,4 @@ TestTopologies.linearPathWithSemaphoreSequence(
 
 ---
 
-**Last Updated**: 2026-09-03 (Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, and cleanup contract)
+**Last Updated**: 2026-09-05 (PR #1043 review round: shared PathExistence BFS helper; Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, and cleanup contract)
