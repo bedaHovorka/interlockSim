@@ -239,9 +239,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			editingContextFactory.createContext(xml).use { originalContext ->
 				// Save to OutputStream, load back from it, and verify
 				editingContextFactory.saveAndReloadThroughStream(originalContext) { loadedContext ->
-					val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10) as RailSwitch
+					val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
 					assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
-					assertThat(switchCell.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+					val railSwitch = switchCell as RailSwitch
+					assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 				}
 			}
 		}
