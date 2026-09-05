@@ -34,6 +34,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertFrozen
 import cz.vutbr.fit.interlockSim.testutil.assertMaxSpeedPropertyEventFires
 import cz.vutbr.fit.interlockSim.testutil.assertNetworkProperties
 import cz.vutbr.fit.interlockSim.testutil.buildLinearNetwork
+import cz.vutbr.fit.interlockSim.testutil.withSimulationContext
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -86,7 +87,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 			assertThat(xmlFile.exists()).isTrue()
 
 			// Step 3: Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+			transformer.withSimulationContext(editingContext, processFactory) { simulationContext ->
 				assertThat(simulationContext).isNotNull()
 				assertThat(simulationContext).isInstanceOf<DefaultSimulationContext>()
 			}
@@ -112,7 +113,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 			editingContext.putCell(Point(15, 5), RailSemaphore("Signal_1", true, Cell.SpatialType.HORIZONTAL))
 
 			// Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+			transformer.withSimulationContext(editingContext, processFactory) { simulationContext ->
 				verifyTransformedSimulationContext(simulationContext)
 			}
 		}
@@ -165,7 +166,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 			assertThat(propertyListener.events[2].propertyName).isEqualTo("currentNameString")
 
 			// Transform to simulation context
-			transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+			transformer.withSimulationContext(editingContext, processFactory) { simulationContext ->
 				// Verify properties are copied to simulation context
 				val simBase = simulationContext as BaseContext<*>
 				assertNetworkProperties(simBase, 150.0, 200.0, "Test Railway")
