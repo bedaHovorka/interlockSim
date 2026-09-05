@@ -20,53 +20,21 @@ import org.koin.test.inject
 import java.io.File
 
 /**
- * Contract tests for the `.use {}` cleanup pattern the EditingContext leak sweep
- * (Issue #1035, PR #1037) established across the desktop-ui test suite: wrapping a
- * context in `.use {}` must close the Koin scope the context owns — on the happy
- * path, when the block fails, and when the scope is already closed. The round-trip
- * tests pin that [saveAndReloadThroughFile] closes the loaded context's scope while
- * the caller keeps the source context, and that it fails at the save step when the
- * source cannot be saved.
+ * Contract tests for [JvmEditingContextFactory.saveAndReloadThroughFile], the round-trip helper
+ * introduced by the EditingContext leak sweep (Issue #1035, PR #1037): it must close the loaded
+ * context's Koin scope while leaving the caller's source context open, and it must fail at the
+ * save step — without invoking the verify lambda or writing a file — when the source context
+ * cannot be saved.
  *
- * Uses light fixtures — the contract is about the Koin scope's lifecycle, not
- * railway content.
+ * The `.use {}` cleanup contract that this class used to duplicate (closes on the happy path,
+ * closes on failure, is safe to call twice) is pinned once by [KoinTestBaseCleanupContractTest]
+ * via the `tracked()` / `tearDownKoin()` path (Issue #1046).
+ *
+ * Uses light fixtures — the contract is about the Koin scope's lifecycle, not railway content.
  */
-@DisplayName("EditingContext .use cleanup contract (Issue #1035)")
+@DisplayName("EditingContext round-trip cleanup contract (Issue #1035)")
 class EditingContextCleanupContractTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
-
-	@Test
-	fun `use block closes the Koin scope of a factory-created editing context`() {
-		val context = editingContextFactory.createEmptyContext()
-		assertThat(context.scope.closed, name = "scope open before use").isFalse()
-
-		context.use { }
-
-		assertThat(context.scope.closed, name = "koin scope closed by .use").isTrue()
-	}
-
-	@Test
-	fun `a failure inside the use block still closes the Koin scope`() {
-		val context = editingContextFactory.createEmptyContext()
-
-		assertThrows<AssertionError> {
-			context.use {
-				throw AssertionError("deliberate failure inside the use block")
-			}
-		}
-
-		assertThat(context.scope.closed, name = "koin scope closed despite the failure").isTrue()
-	}
-
-	@Test
-	fun `closing a context twice is safe`() {
-		val context = editingContextFactory.createEmptyContext()
-
-		context.use { }
-		context.close() // Context.close() is documented idempotent — must not throw
-
-		assertThat(context.scope.closed, name = "koin scope stays closed").isTrue()
-	}
 
 	@Test
 	fun `a round trip closes the loaded scope and leaves the source scope to its caller`(
