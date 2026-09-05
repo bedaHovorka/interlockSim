@@ -1148,9 +1148,40 @@ class Train :
 		private inner class AccelerationStopCondition(
 			private val stopTest: AccelerationStopTest
 		) : Condition {
-			override fun test(): Boolean = !accelerate || stopTest.condition(targetSpeed, getVelocity())
+			override fun test(): Boolean =
+				!accelerate ||
+					stopTest.condition(targetSpeed, getVelocity()) ||
+					(stopTest == AccelerationStopTest.TO_HALF_SPEED && brakingRoomExhausted())
 
 			fun getStopTest(): AccelerationStopTest = stopTest
+		}
+
+		/**
+		 * True once the distance left to the signal is no longer enough to brake to a stand in
+		 * (Issue #1014).
+		 *
+		 * This is the second exit from [AccelerationStopTest.TO_HALF_SPEED]. Without it, phase 1
+		 * of [onWarning] ends only when the train reaches half the permitted speed. On a block too
+		 * short for that — `vyhybna.xml` has five 5.0 m blocks against a 24 m/s limit, where half
+		 * speed alone needs about 18 m — the train never reaches it, so [derivatives] eventually
+		 * clears `accelerate` when the remaining distance runs out. That satisfies the phase-1 wait
+		 * *and* fails the `accelerate &&` guard in [iteration], so the braking phase was skipped
+		 * entirely and the train arrived at the signal at line speed, to be snapped to zero by
+		 * `Front.fireStop`.
+		 *
+		 * Leaving on this condition keeps `accelerate` true, so [iteration] enters the braking
+		 * phase and the existing `a = (target² − v²) / (2s)` law takes over, bounded as always by
+		 * [MINIMAL_DECELERATION].
+		 *
+		 * The threshold is the textbook braking distance at the deceleration bound,
+		 * `v² / (2 · |MINIMAL_DECELERATION|)`. A non-positive distance or velocity means there is
+		 * nothing to decide yet, and is left to the existing exits.
+		 */
+		private fun brakingRoomExhausted(): Boolean {
+			val remaining = distanceToSemaphore()
+			val speed = getVelocity()
+			if (remaining <= 0 || speed <= 0) return false
+			return remaining <= (speed * speed) / (2.0 * -MINIMAL_DECELERATION)
 		}
 
 		override suspend fun actions() {
