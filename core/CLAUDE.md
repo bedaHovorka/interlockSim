@@ -120,7 +120,8 @@ core/src/
   a `Station` abstraction (and clean up the hardcoded assumptions on the way) —
   Goal 1B scope, see `LONG_TERM_GOALS.md` and #591.
   Minor simulation issues SIM-001 to SIM-006 are documented in code comments.
-- **DEFERRED-001:** XMLContextFactoryTest is missing exception type predicates.
+- **DEFERRED-001:** the XMLContextFactory parse tests (split out of the former
+  XMLContextFactoryTest) are missing exception type predicates.
 - Train-physics passivation fix (Issue #291) is documented in
   [../docs/TRAIN_PASSIVATION_FIX.md](../docs/TRAIN_PASSIVATION_FIX.md) — a
   `sim/` change must not regress it.

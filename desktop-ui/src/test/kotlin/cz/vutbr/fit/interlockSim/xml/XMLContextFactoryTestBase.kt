@@ -23,7 +23,8 @@ import java.io.InputStream
  * src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/.
  *
  * Abstract on purpose: JUnit never discovers it as a test class. Concrete classes
- * carry their own @Timeout — it is not inherited through the class hierarchy.
+ * declare their own @Timeout so the 10 s limit is visible in each file (@Timeout is
+ * @Inherited and would propagate anyway).
  */
 abstract class XMLContextFactoryTestBase : KoinTestBase() {
 	protected val editingContextFactory: XMLContextFactory by inject()
