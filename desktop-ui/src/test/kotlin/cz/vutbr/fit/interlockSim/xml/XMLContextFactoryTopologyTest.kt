@@ -35,6 +35,7 @@ import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -211,13 +212,13 @@ class XMLContextFactoryTopologyTest : XMLContextFactoryTestBase() {
 	// Serialization Tests
 
 	@Test
-	fun testPragueSaveLoad() {
+	fun testPragueSaveLoad(
+		@TempDir tempDir: File
+	) {
 		val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
 
 		editingContextFactory.createContext(xml).use { originalContext ->
-			// Save to temp file
-			val tempFile = File.createTempFile("test-praha-", ".xml")
-			tempFile.deleteOnExit()
+			val tempFile = File(tempDir, "praha.xml")
 
 			// Save, load back, and verify structure is preserved
 			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile) { loadedContext ->
@@ -232,8 +233,6 @@ class XMLContextFactoryTopologyTest : XMLContextFactoryTestBase() {
 				assertThat(loadedCounts.getValue(RAIL_SWITCH_KEY)).isEqualTo(originalCounts.getValue(RAIL_SWITCH_KEY))
 				assertThat(loadedCounts.getValue(RAIL_SEMAPHORE_KEY)).isEqualTo(originalCounts.getValue(RAIL_SEMAPHORE_KEY))
 			}
-
-			tempFile.delete()
 		}
 	}
 

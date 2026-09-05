@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.util.concurrent.TimeUnit
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
@@ -39,7 +40,9 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 	@Test
 	@DisplayName("save and load preserves RailSemaphore names")
-	fun saveAndLoad_preservesRailSemaphoreNames() {
+	fun saveAndLoad_preservesRailSemaphoreNames(
+		@TempDir tempDir: File
+	) {
 		val context = editingContextFactory.createEmptyContext()
 		val semaphore = RailSemaphore("signal_test_1", true, Cell.SpatialType.HORIZONTAL)
 		context.putCell(Point(10, 10), semaphore)
@@ -48,8 +51,7 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 		context.putCell(Point(5, 10), inOut1)
 		context.putCell(Point(15, 10), inOut2)
 
-		val tempFile = File.createTempFile("test-semaphore-names-", ".xml")
-		tempFile.deleteOnExit()
+		val tempFile = File(tempDir, "names.xml")
 
 		context.use {
 			// Save, load back, and verify the semaphore name is preserved
@@ -58,13 +60,13 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 				assertThat(loadedSemaphore.getName()).isEqualTo("signal_test_1")
 			}
 		}
-
-		tempFile.delete()
 	}
 
 	@Test
 	@DisplayName("save and load preserves RailSwitch names")
-	fun saveAndLoad_preservesRailSwitchNames() {
+	fun saveAndLoad_preservesRailSwitchNames(
+		@TempDir tempDir: File
+	) {
 		val context = editingContextFactory.createEmptyContext()
 		val railSwitch = RailSwitch("switch_A", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE)
 		context.putCell(Point(10, 10), railSwitch)
@@ -73,8 +75,7 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 		context.putCell(Point(5, 10), inOut1)
 		context.putCell(Point(15, 10), inOut2)
 
-		val tempFile = File.createTempFile("test-switch-names-", ".xml")
-		tempFile.deleteOnExit()
+		val tempFile = File(tempDir, "names.xml")
 
 		context.use {
 			// Save, load back, and verify the switch name is preserved
@@ -83,8 +84,6 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 				assertThat(loadedSwitch.getName()).isEqualTo("switch_A")
 			}
 		}
-
-		tempFile.delete()
 	}
 
 	@Test
@@ -104,7 +103,9 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 
 	@Test
 	@DisplayName("empty string names are omitted in serialization")
-	fun saveContext_withEmptyNames_omitsNameAttribute() {
+	fun saveContext_withEmptyNames_omitsNameAttribute(
+		@TempDir tempDir: File
+	) {
 		val context = editingContextFactory.createEmptyContext()
 		val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL) // name defaults to empty
 		context.putCell(Point(10, 10), semaphore)
@@ -113,8 +114,7 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 		context.putCell(Point(5, 10), inOut1)
 		context.putCell(Point(15, 10), inOut2)
 
-		val tempFile = File.createTempFile("test-empty-names-", ".xml")
-		tempFile.deleteOnExit()
+		val tempFile = File(tempDir, "names.xml")
 
 		context.use {
 			assertThat(editingContextFactory.saveContext(it, tempFile), name = "saveContext(file) must succeed").isTrue()
@@ -125,8 +125,6 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 			// Empty name should NOT be serialized (no name="" in output)
 			assertThat(xmlContent.contains("name=\"\"")).isFalse()
 		}
-
-		tempFile.delete()
 	}
 
 	@Test

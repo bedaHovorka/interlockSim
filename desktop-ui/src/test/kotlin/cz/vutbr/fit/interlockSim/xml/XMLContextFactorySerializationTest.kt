@@ -23,10 +23,9 @@ import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.saveAndReloadThroughFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -36,48 +35,41 @@ import java.util.concurrent.TimeUnit
  */
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
 class XMLContextFactorySerializationTest : XMLContextFactoryTestBase() {
-	private var tempFile: File? = null
-
-	@BeforeEach
-	fun setUpTempFile() {
-		tempFile = File.createTempFile("test-network-", ".xml")
-		tempFile?.deleteOnExit()
-	}
-
-	@AfterEach
-	fun cleanUpTempFile() {
-		if (tempFile != null && tempFile?.exists() == true) {
-			tempFile?.delete()
-		}
-	}
-
 	@Test
-	fun saveContext_minimalNetwork_createsValidFile() {
+	fun saveContext_minimalNetwork_createsValidFile(
+		@TempDir tempDir: File
+	) {
+		val tempFile = File(tempDir, "network.xml")
+
 		// Load fixture
 		val xml = getFixtureStream("minimal-network.xml")
 
 		editingContextFactory.createContext(xml).use { context ->
 			// Save to file
 			assertThat(
-				editingContextFactory.saveContext(context, tempFile!!),
+				editingContextFactory.saveContext(context, tempFile),
 				name = "saveContext(file) must succeed"
 			).isTrue()
 
 			// Verify file exists and is readable
-			assertThat(tempFile!!).exists().isFile()
-			assertThat(tempFile!!.canRead()).isTrue()
-			assertThat(tempFile!!.length()).isGreaterThan(0)
+			assertThat(tempFile).exists().isFile()
+			assertThat(tempFile.canRead()).isTrue()
+			assertThat(tempFile.length()).isGreaterThan(0)
 		}
 	}
 
 	@Test
-	fun saveAndLoad_minimalNetwork_preservesStructure() {
+	fun saveAndLoad_minimalNetwork_preservesStructure(
+		@TempDir tempDir: File
+	) {
+		val tempFile = File(tempDir, "network.xml")
+
 		// Load original fixture
 		val xml = getFixtureStream("minimal-network.xml")
 
 		editingContextFactory.createContext(xml).use { originalContext ->
 			// Save to file, load back, and verify structure is preserved
-			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile) { loadedContext ->
 				assertThat(loadedContext).isNotNull()
 				assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(100)
 				assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(100)
@@ -99,7 +91,11 @@ class XMLContextFactorySerializationTest : XMLContextFactoryTestBase() {
 	}
 
 	@Test
-	fun saveContext_emptyContext_createsValidXML() {
+	fun saveContext_emptyContext_createsValidXML(
+		@TempDir tempDir: File
+	) {
+		val tempFile = File(tempDir, "network.xml")
+
 		// Create empty context
 		val emptyContext = editingContextFactory.createEmptyContext()
 
@@ -109,20 +105,24 @@ class XMLContextFactorySerializationTest : XMLContextFactoryTestBase() {
 
 		emptyContext.use {
 			// Save to file and verify it is valid XML by loading it
-			editingContextFactory.saveAndReloadThroughFile(it, tempFile!!) { loadedContext ->
+			editingContextFactory.saveAndReloadThroughFile(it, tempFile) { loadedContext ->
 				assertThat(loadedContext).isNotNull()
 			}
 		}
 	}
 
 	@Test
-	fun saveAndLoad_emptyGrid_preservesGridSize() {
+	fun saveAndLoad_emptyGrid_preservesGridSize(
+		@TempDir tempDir: File
+	) {
+		val tempFile = File(tempDir, "network.xml")
+
 		// Load empty grid fixture
 		val xml = getFixtureStream("empty-grid.xml")
 
 		editingContextFactory.createContext(xml).use { originalContext ->
 			// Save to file, load back, and verify grid size is preserved
-			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile) { loadedContext ->
 				val grid = loadedContext.getRailWayNetGrid()
 				assertThat(grid.cols).isEqualTo(50)
 				assertThat(grid.rows).isEqualTo(50)
@@ -131,13 +131,17 @@ class XMLContextFactorySerializationTest : XMLContextFactoryTestBase() {
 	}
 
 	@Test
-	fun saveAndLoad_linearTrack_preservesTrackBlocks() {
+	fun saveAndLoad_linearTrack_preservesTrackBlocks(
+		@TempDir tempDir: File
+	) {
+		val tempFile = File(tempDir, "network.xml")
+
 		// Load fixture with track block
 		val xml = getFixtureStream("linear-track.xml")
 
 		editingContextFactory.createContext(xml).use { originalContext ->
 			// Save to file, load back, and verify
-			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile) { loadedContext ->
 				// Verify cells are preserved
 				val cellA = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
 				val cellB = loadedContext.getRailWayNetGrid().getCellAt(20, 10)
@@ -148,13 +152,17 @@ class XMLContextFactorySerializationTest : XMLContextFactoryTestBase() {
 	}
 
 	@Test
-	fun saveAndLoad_switchBasic_preservesSwitchType() {
+	fun saveAndLoad_switchBasic_preservesSwitchType(
+		@TempDir tempDir: File
+	) {
+		val tempFile = File(tempDir, "network.xml")
+
 		// Load fixture with rail switch
 		val xml = getFixtureStream("switch-basic.xml")
 
 		editingContextFactory.createContext(xml).use { originalContext ->
 			// Save to file, load back, and verify
-			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile!!) { loadedContext ->
+			editingContextFactory.saveAndReloadThroughFile(originalContext, tempFile) { loadedContext ->
 				// Verify switch is preserved
 				val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
 				assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
@@ -165,7 +173,11 @@ class XMLContextFactorySerializationTest : XMLContextFactoryTestBase() {
 	}
 
 	@Test
-	fun saveContext_overwritesExistingFile() {
+	fun saveContext_overwritesExistingFile(
+		@TempDir tempDir: File
+	) {
+		val tempFile = File(tempDir, "network.xml")
+
 		// Create the initial context and save it. It needs its own two InOuts at coordinates
 		// that minimal-network.xml does not use: with 0 InOuts the save fails validation, no
 		// file is written, and the test would pass even if overwriting were broken.
@@ -173,23 +185,23 @@ class XMLContextFactorySerializationTest : XMLContextFactoryTestBase() {
 			context1.putCell(Point(50, 50), InOut("FIRST_A", true, Cell.SpatialType.HORIZONTAL))
 			context1.putCell(Point(60, 50), InOut("FIRST_B", false, Cell.SpatialType.HORIZONTAL))
 			assertThat(
-				editingContextFactory.saveContext(context1, tempFile!!),
+				editingContextFactory.saveContext(context1, tempFile),
 				name = "the first saveContext must succeed, otherwise nothing is overwritten"
 			).isTrue()
 		}
-		assertThat(tempFile!!.exists(), name = "the first save must write the file").isTrue()
+		assertThat(tempFile.exists(), name = "the first save must write the file").isTrue()
 
 		// Load a different fixture and save to the same file
 		val xml = getFixtureStream("minimal-network.xml")
 		editingContextFactory.createContext(xml).use { context2 ->
 			assertThat(
-				editingContextFactory.saveContext(context2, tempFile!!),
+				editingContextFactory.saveContext(context2, tempFile),
 				name = "the overwriting saveContext must succeed"
 			).isTrue()
 		}
 
 		// Verify loaded context matches context2 (not context1)
-		editingContextFactory.createContext(tempFile!!).use { loadedContext ->
+		editingContextFactory.createContext(tempFile).use { loadedContext ->
 			val grid = loadedContext.getRailWayNetGrid()
 			assertThat(grid.getCellAt(10, 10))
 				.isNotNull()
