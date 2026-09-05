@@ -17,7 +17,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.sim.Interlocking
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -54,19 +53,10 @@ import java.util.concurrent.TimeUnit
 @DisplayName("ConflictListenerWiring: late registration after run() is silently dropped (#827)")
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 class ConflictListenerWiringTest : DispatcherKoinTestBase() {
-	private var context: DefaultSimulationContext? = null
-
-	@AfterEach
-	fun closeContext() {
-		context?.close()
-		context = null
-	}
-
 	@Test
 	@DisplayName("Listener registered after run() is not added to pendingConflictEventListeners")
 	fun listenerRegisteredAfterRunIsDropped() {
-		val ctx = TestFixtures.newShuntingSimulationContext()
-		context = ctx
+		val ctx = TestFixtures.newShuntingSimulationContext().tracked()
 
 		// Step 1: Register a listener BEFORE run()
 		val preRunEvents = mutableListOf<ConflictDetectedEvent>()
