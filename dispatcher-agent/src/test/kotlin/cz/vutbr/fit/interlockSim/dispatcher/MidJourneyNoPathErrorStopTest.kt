@@ -92,7 +92,7 @@ class MidJourneyNoPathErrorStopTest : DispatcherKoinTestBase() {
 	@Timeout(value = 120, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 	@DisplayName("a train stranded mid-journey stops the run instead of looping to the end time")
 	fun midJourneyNoTopologicalPathFiresErrorStopAfterRetries() {
-		val context = fixture.loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext().tracked()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 

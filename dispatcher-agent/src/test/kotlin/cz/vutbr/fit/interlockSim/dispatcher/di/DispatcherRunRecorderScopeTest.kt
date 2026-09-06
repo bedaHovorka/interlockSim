@@ -68,8 +68,8 @@ class DispatcherRunRecorderScopeTest : DispatcherKoinTestBase() {
 	@Test
 	@DisplayName("Two different contexts receive independent (non-identical) DispatcherRunRecorder instances")
 	fun twoContextsReceiveIndependentRecorders() {
-		val ctx1 = loadContext()
-		val ctx2 = loadContext()
+		val ctx1 = loadContext().tracked()
+		val ctx2 = loadContext().tracked()
 
 		val recorder1 = ctx1.scope.get<DispatcherRunRecorder>()
 		val recorder2 = ctx2.scope.get<DispatcherRunRecorder>()
@@ -83,8 +83,5 @@ class DispatcherRunRecorderScopeTest : DispatcherKoinTestBase() {
 		assert(recorder1.runId != recorder2.runId) {
 			"Each context must have a unique runId; got runId=${recorder1.runId} for both"
 		}
-
-		ctx1.close()
-		ctx2.close()
 	}
 }

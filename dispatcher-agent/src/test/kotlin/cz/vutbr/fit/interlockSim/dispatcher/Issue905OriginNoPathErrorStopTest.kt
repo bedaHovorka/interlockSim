@@ -68,7 +68,7 @@ class Issue905OriginNoPathErrorStopTest : DispatcherKoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 	@DisplayName("origin NoTopologicalPath fires env.errorStop after bounded retries, naming the InOut")
 	fun originNoTopologicalPathFiresErrorStopAfterRetries() {
-		val context = fixture.loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext().tracked()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 		val inOutNames = context.getInOuts().map { it.name }

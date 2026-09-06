@@ -120,7 +120,7 @@ class EntryRouteLossAccountingTest : DispatcherKoinTestBase() {
 	@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 	@DisplayName("route hidden forever at the entry InOut: zero movement, zero exits, no termination")
 	fun trainThatNeverEnteredIsNeverCountedAsExited() {
-		val context = fixture.loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext().tracked()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 

@@ -108,127 +108,129 @@ class RuleBasedDispatcherDeterminismRunner {
 		val conflictEventCount: Int
 	)
 
-	fun executeRun(endTime: Long = 300L): RunResult {
-		val context = TestFixtures.newShuntingSimulationContext(xmlContextFactory, processFactory)
-		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
-		context.getInOuts()
+	// The context is closed by the `.use {}` block even if the run fails — the runner is shared by
+	// `@RepeatedTest` suites, so a leaked scope per run would multiply tenfold per execution.
+	fun executeRun(endTime: Long = 300L): RunResult =
+		TestFixtures.newShuntingSimulationContext(xmlContextFactory, processFactory).use { context ->
+			// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
+			context.getInOuts()
 
-		val loop = ShuntingLoop(context, endTime)
+			val loop = ShuntingLoop(context, endTime)
 
-		// Track ConflictDetectedEvents: RuleBasedDispatcher must produce zero conflicts
-		// on the deterministic shunting-loop topology (SP0.12 A3 gate).
-		val conflictCount = AtomicInteger(0)
-		context.onConflictDetectedEvent { conflictCount.incrementAndGet() }
+			// Track ConflictDetectedEvents: RuleBasedDispatcher must produce zero conflicts
+			// on the deterministic shunting-loop topology (SP0.12 A3 gate).
+			val conflictCount = AtomicInteger(0)
+			context.onConflictDetectedEvent { conflictCount.incrementAndGet() }
 
-		// SP0.11: Wire the full dispatcher-agent stack.
-		val perceptionPort =
-			DefaultNetworkPerceptionPort(
-				env = context,
-				activeTrains = loop::getApprovedTrains
-			)
-		val actuatorPort = DefaultNetworkActuatorPort(env = context)
-		val queue = ActuatorCommandQueue()
-		val applier =
-			DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = actuatorPort,
-				onApproveTrain = loop::approveQueuedTrain,
-				onBlockTransition = loop::incrementBlockTransition,
-				onFailedReservation = loop::incrementFailedReservation
-			)
+			// SP0.11: Wire the full dispatcher-agent stack.
+			val perceptionPort =
+				DefaultNetworkPerceptionPort(
+					env = context,
+					activeTrains = loop::getApprovedTrains
+				)
+			val actuatorPort = DefaultNetworkActuatorPort(env = context)
+			val queue = ActuatorCommandQueue()
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = actuatorPort,
+					onApproveTrain = loop::approveQueuedTrain,
+					onBlockTransition = loop::incrementBlockTransition,
+					onFailedReservation = loop::incrementFailedReservation
+				)
 
-		// SP0.11c (Issue #746): production-style signal-based pacing — see SnapshotSignal's KDoc.
-		// DispatchTickLoop.runTick() blocks on the signal instead of the old Thread.sleep(1) poll.
-		// The simTime-equality guard from AgentLoopDriver is intentionally NOT ported (Issue #746):
-		// the signal already guarantees freshness; porting the guard would cause missed ticks.
-		val driverSignal = DefaultSnapshotSignal()
+			// SP0.11c (Issue #746): production-style signal-based pacing — see SnapshotSignal's KDoc.
+			// DispatchTickLoop.runTick() blocks on the signal instead of the old Thread.sleep(1) poll.
+			// The simTime-equality guard from AgentLoopDriver is intentionally NOT ported (Issue #746):
+			// the signal already guarantees freshness; porting the guard would cause missed ticks.
+			val driverSignal = DefaultSnapshotSignal()
 
-		// SP2c.5 (Issue #828): build the DispatchTickLoop + RuleBasedEmissionStrategy stack.
-		// The PathReservationRegistry is resolved from the context's Koin scope so the projector
-		// and the actuator port share the same registry instance — the projector sees active
-		// reservations made by the applier.
-		val dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
-		val pathReservationRegistry = context.scope.get<PathReservationRegistry>()
-		val projector =
-			DispatcherObservationProjector(
-				perceptionPort = perceptionPort,
-				dispatchLoopSensorPort = dispatchLoopSensorPort,
-				pathReservationRegistry = pathReservationRegistry,
-				environment = context
-			)
-		val validator = actionValidatorFor(context)
-		val annotator = AffordanceAnnotator(validator, ActionCandidateEnumerator())
-		val dispatcher = RuleBasedDispatcher()
-		val emission = RuleBasedEmissionStrategy(dispatcher)
-		val tickLoop =
-			DispatchTickLoop(
-				observations = projector,
-				annotator = annotator,
-				renderer = ObservationRenderer { "" },
-				emission = emission,
-				validator = validator,
-				queue = queue,
-				ring = TickRingBuffer(),
-				workingMemory = WorkingMemory.EMPTY,
-				budget = NoTimeoutBudget,
-				fallbackGuard = TerminalFallbackGuard(),
-				controller = NoOpSimulationController,
-				snapshotSignal = driverSignal
-			)
+			// SP2c.5 (Issue #828): build the DispatchTickLoop + RuleBasedEmissionStrategy stack.
+			// The PathReservationRegistry is resolved from the context's Koin scope so the projector
+			// and the actuator port share the same registry instance — the projector sees active
+			// reservations made by the applier.
+			val dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
+			val pathReservationRegistry = context.scope.get<PathReservationRegistry>()
+			val projector =
+				DispatcherObservationProjector(
+					perceptionPort = perceptionPort,
+					dispatchLoopSensorPort = dispatchLoopSensorPort,
+					pathReservationRegistry = pathReservationRegistry,
+					environment = context
+				)
+			val validator = actionValidatorFor(context)
+			val annotator = AffordanceAnnotator(validator, ActionCandidateEnumerator())
+			val dispatcher = RuleBasedDispatcher()
+			val emission = RuleBasedEmissionStrategy(dispatcher)
+			val tickLoop =
+				DispatchTickLoop(
+					observations = projector,
+					annotator = annotator,
+					renderer = ObservationRenderer { "" },
+					emission = emission,
+					validator = validator,
+					queue = queue,
+					ring = TickRingBuffer(),
+					workingMemory = WorkingMemory.EMPTY,
+					budget = NoTimeoutBudget,
+					fallbackGuard = TerminalFallbackGuard(),
+					controller = NoOpSimulationController,
+					snapshotSignal = driverSignal
+				)
 
-		// Decisions-applied barrier (independent of the #746 pacing fix above): this gate
-		// also asserts conflictEventCount == 0 (see RunResult KDoc), which — per
-		// ShuntingLoopLiftedDriverIntegrationTest's documented analysis — requires every
-		// decision to be applied (and pathAlreadyExtendedBeyond etc. updated) before the
-		// NEXT snapshot is captured, or two different trains can race for the same block.
-		// That is a separate, out-of-scope-for-#746 concern (a decide-time-vs-apply-time
-		// staleness race in the reservation layer, not a pacing race), so this minimal
-		// ordering barrier is kept even though the driver's OWN pacing no longer needs
-		// Thread.sleep or a stale-tick skip to stay correct.
-		val decisionsApplied = Semaphore(0)
+			// Decisions-applied barrier (independent of the #746 pacing fix above): this gate
+			// also asserts conflictEventCount == 0 (see RunResult KDoc), which — per
+			// ShuntingLoopLiftedDriverIntegrationTest's documented analysis — requires every
+			// decision to be applied (and pathAlreadyExtendedBeyond etc. updated) before the
+			// NEXT snapshot is captured, or two different trains can race for the same block.
+			// That is a separate, out-of-scope-for-#746 concern (a decide-time-vs-apply-time
+			// staleness race in the reservation layer, not a pacing race), so this minimal
+			// ordering barrier is kept even though the driver's OWN pacing no longer needs
+			// Thread.sleep or a stale-tick skip to stay correct.
+			val decisionsApplied = Semaphore(0)
 
-		// The composite hook: keep the perception-port snapshot fresh first, then let
-		// the projector capture on the same sim thread (same pattern as wireDispatcherAgent).
-		loop.snapshotCaptureHook = {
-			perceptionPort.captureSnapshot()
-			projector.captureOnSimThread()
-		}
-		// driverSignal.signal() fires from controlStepListener, NOT snapshotCaptureHook:
-		// ShuntingLoop.iteration() calls snapshotCaptureHook() BEFORE it publishes the
-		// per-tick TickObservation (read by dispatchLoopSensorPort above) but calls
-		// controlStepListener AFTER. Signalling any earlier lets the driver wake and read
-		// a stale TickObservation from the previous tick — reproduced as a spurious
-		// conflictEventCount during development of this fix. See the identical comment
-		// in ExampleRegistry.wireDispatcherAgent, which has the same ordering constraint.
-		loop.controlStepListener =
-			ControlStepListener {
-				driverSignal.signal()
-				decisionsApplied.acquireUninterruptibly()
-				applier.onControlStep()
+			// The composite hook: keep the perception-port snapshot fresh first, then let
+			// the projector capture on the same sim thread (same pattern as wireDispatcherAgent).
+			loop.snapshotCaptureHook = {
+				perceptionPort.captureSnapshot()
+				projector.captureOnSimThread()
 			}
-		loop.agentDriverAction = {
-			while (loop.isSimActive()) {
-				// Only release the barrier when runTick() actually did work (returned a non-null
-				// TickRecord, meaning it posted a decision batch for THIS tick's signal). Releasing
-				// unconditionally — including on a SnapshotSignal.await() timeout, where nothing
-				// was sensed, decided, or posted — lets the sim thread's acquireUninterruptibly()
-				// proceed to applier.onControlStep() before the real decision is posted, which
-				// reintroduced the decide-time-vs-apply-time staleness conflict race this barrier
-				// exists to prevent.
-				if (tickLoop.runTick() != null) {
-					decisionsApplied.release()
+			// driverSignal.signal() fires from controlStepListener, NOT snapshotCaptureHook:
+			// ShuntingLoop.iteration() calls snapshotCaptureHook() BEFORE it publishes the
+			// per-tick TickObservation (read by dispatchLoopSensorPort above) but calls
+			// controlStepListener AFTER. Signalling any earlier lets the driver wake and read
+			// a stale TickObservation from the previous tick — reproduced as a spurious
+			// conflictEventCount during development of this fix. See the identical comment
+			// in ExampleRegistry.wireDispatcherAgent, which has the same ordering constraint.
+			loop.controlStepListener =
+				ControlStepListener {
+					driverSignal.signal()
+					decisionsApplied.acquireUninterruptibly()
+					applier.onControlStep()
+				}
+			loop.agentDriverAction = {
+				while (loop.isSimActive()) {
+					// Only release the barrier when runTick() actually did work (returned a non-null
+					// TickRecord, meaning it posted a decision batch for THIS tick's signal). Releasing
+					// unconditionally — including on a SnapshotSignal.await() timeout, where nothing
+					// was sensed, decided, or posted — lets the sim thread's acquireUninterruptibly()
+					// proceed to applier.onControlStep() before the real decision is posted, which
+					// reintroduced the decide-time-vs-apply-time staleness conflict race this barrier
+					// exists to prevent.
+					if (tickLoop.runTick() != null) {
+						decisionsApplied.release()
+					}
 				}
 			}
+
+			context.setMainProcess(loop)
+			context.run()
+
+			RunResult(
+				trainsExited = loop.getTrainsExited(),
+				maxConcurrentTrains = loop.getMaxConcurrentTrains(),
+				sortedBlockTransitionCounts = loop.getAllBlockTransitions().values.sorted(),
+				conflictEventCount = conflictCount.get()
+			)
 		}
-
-		context.setMainProcess(loop)
-		context.run()
-
-		return RunResult(
-			trainsExited = loop.getTrainsExited(),
-			maxConcurrentTrains = loop.getMaxConcurrentTrains(),
-			sortedBlockTransitionCounts = loop.getAllBlockTransitions().values.sorted(),
-			conflictEventCount = conflictCount.get()
-		)
-	}
 }

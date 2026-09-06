@@ -98,7 +98,7 @@ class ShuntingLoopLiftedDriverIntegrationTest : DispatcherKoinTestBase() {
 	@Timeout(60, unit = TimeUnit.SECONDS)
 	@DisplayName("all trains exit and zero conflict events (lock-step, lifted stack)")
 	fun allTrainsExitWithNoConflictEvents() {
-		val context = fixture.loadShuntingLoopContext()
+		val context = fixture.loadShuntingLoopContext().tracked()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 

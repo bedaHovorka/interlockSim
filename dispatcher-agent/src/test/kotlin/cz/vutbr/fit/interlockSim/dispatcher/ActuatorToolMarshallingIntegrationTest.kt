@@ -59,7 +59,7 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @Timeout(30, unit = TimeUnit.SECONDS)
 class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
+	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext().tracked()
 
 	@Test
 	@DisplayName("actuator tool execute() off-thread queues a decision; onControlStep() applies it on the sim thread")

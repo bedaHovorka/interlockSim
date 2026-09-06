@@ -60,7 +60,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		context = TestFixtures.newShuntingSimulationContext()
+		context = TestFixtures.newShuntingSimulationContext().tracked()
 		zA = elementAt(14, 8)
 		doA1 = elementAt(16, 8)
 	}
