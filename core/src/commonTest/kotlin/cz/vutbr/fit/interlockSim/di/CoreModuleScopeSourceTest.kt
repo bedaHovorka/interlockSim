@@ -53,8 +53,9 @@ import kotlin.test.assertFailsWith
  * named, actionable failure instead of a confusing downstream NullPointerException.
  *
  * The real [navigationModule] is loaded on purpose. The test-fixture modules
- * (`commonCoreTestModule`, `coreTestModule`) hand-duplicate these bindings, so loading
- * one of those would exercise the copy rather than the shipped module.
+ * (`commonCoreTestModule`, `coreTestModule`) re-provide these bindings via
+ * `sharedSimulationTestScopesModule` (Issue #1029), so loading one of those would exercise
+ * that shared copy rather than the shipped module.
  *
  * Runs on both JVM and linuxX64 via commonTest.
  */

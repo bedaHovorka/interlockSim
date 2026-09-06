@@ -16,14 +16,11 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultDispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
-import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
-import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
-import org.koin.dsl.module
 
 /**
  * Verifies the SP2c.22 (#845) [DispatcherRunRecorder] scope binding in [dispatcherAgentModule].
@@ -38,20 +35,7 @@ import org.koin.dsl.module
  */
 @DisplayName("SP2c.22 DispatcherRunRecorder is scoped, not singleton (#845)")
 class DispatcherRunRecorderScopeTest : DispatcherKoinTestBase() {
-	private val collisionDetectionOnlyTestModule: Module =
-		module {
-			scope<DefaultSimulationContext> {
-				scoped<CollisionDetectionService> {
-					val context =
-						getSource<DefaultSimulationContext>()
-							?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-					DefaultCollisionDetectionService(context, context)
-				}
-			}
-		}
-
-	override fun getTestModules(): List<Module> =
-		listOf(dispatcherAgentModule, commonCoreTestModule, collisionDetectionOnlyTestModule)
+	override fun getTestModules(): List<Module> = listOf(dispatcherAgentModule, commonCoreTestModule)
 
 	private fun loadContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
