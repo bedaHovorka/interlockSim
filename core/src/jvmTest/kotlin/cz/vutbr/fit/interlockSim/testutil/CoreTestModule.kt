@@ -1,42 +1,13 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
-import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
-import cz.vutbr.fit.interlockSim.context.navigation.DefaultTrainNavigationService
-import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
-import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
-import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
-import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
-import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
-import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
-import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
-import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
-import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
-import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
-import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
-import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
-import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
-import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
-import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
-import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -83,7 +54,6 @@ private class CoreTestEditingContextFactory : JvmEditingContextFactory {
  */
 val coreTestModule: Module =
 	module {
-		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
 		single { GridTransformer }
 		single { ContextTransformer }
 		single<JvmEditingContextFactory> { CoreTestEditingContextFactory() }
@@ -95,125 +65,7 @@ val coreTestModule: Module =
 			)
 		}
 
-		// Provide a new instance of TestContextBuilder for each injection
-		factory { TestContextBuilder() }
-
-		// Define editingScope for per-context lifecycle management
-		scope<DefaultEditingContext> {
-			scoped<TopologyNavigator> {
-				val context =
-					getSource<DefaultEditingContext>()
-						?: throw IllegalStateException("DefaultEditingContext source not found in scope")
-				DefaultTopologyNavigator(context)
-			}
-
-			scoped<AutomaticPathFindingService> {
-				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
-			}
-
-			scoped<RouteFinder> {
-				DefaultRouteFinder(get<AutomaticPathFindingService>())
-			}
-		}
-
-		// Define simulationScope for per-context lifecycle management
-		scope<DefaultSimulationContext> {
-			scoped<TopologyNavigator> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultTopologyNavigator(context)
-			}
-
-			scoped<PathReservationRegistry> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				PathReservationRegistry(context)
-			}
-
-			scoped<PathInfoBuilder> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				PathInfoBuilder(context)
-			}
-
-			scoped<PathReservationService> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				val navigator: TopologyNavigator = get()
-				val registry: PathReservationRegistry = get()
-				val pathInfoBuilder: PathInfoBuilder = get()
-				val routeFinder: RouteFinder = get()
-				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder, routeFinder)
-			}
-
-			scoped<TrainNavigationService> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				val registry: PathReservationRegistry = get()
-				DefaultTrainNavigationService(context, registry)
-			}
-
-			scoped<AutomaticPathFindingService> {
-				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
-			}
-
-			scoped<RouteFinder> {
-				DefaultRouteFinder(get<AutomaticPathFindingService>())
-			}
-
-			scoped<CollisionDetectionService> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultCollisionDetectionService(context, context)
-			}
-
-			scoped<TemporalConflictDetector> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				TemporalConflictDetector(context)
-			}
-
-			scoped<ConflictResolver> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultConflictResolver.forEnvironment(
-					context,
-					preferenceStore = get<StrategyPreferenceStore>()
-				)
-			}
-
-			scoped<StrategyPreferenceStore> { StrategyPreferenceStore() }
-
-			scoped<DispatcherPreferenceStore> { DefaultDispatcherPreferenceStore() }
-
-			scoped<AutoConflictResolutionService> {
-				DefaultAutoConflictResolutionService(get<ConflictResolver>(), get<DispatcherPreferenceStore>())
-			}
-
-			scoped<MetricsCollectionService> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultMetricsCollectionService(context)
-			}
-
-			// SP3.5 (Issue #573): InterlockingFacade — same binding as production CoreModule.
-			// Required so tests that wire DefaultNetworkActuatorPort via the facade chokepoint
-			// can resolve InterlockingFacade from the context scope.
-			scoped<InterlockingFacade> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				val registry: PathReservationRegistry = get()
-				DefaultInterlockingFacade(context, registry)
-			}
-		}
+		// Bindings shared with the other test module flavor (scope bindings plus the two
+		// shared non-scope bindings) live in sharedSimulationTestScopesModule (Issue #1029).
+		includes(sharedSimulationTestScopesModule)
 	}

@@ -1,6 +1,6 @@
 # CLAUDE.md — :core-test
 
-**Last Updated:** 2026-08-28
+**Last Updated:** 2026-09-09
 
 Guidance for Claude Code when working in `:core-test`. Repo-wide rules live in
 the [root CLAUDE.md](../CLAUDE.md).
@@ -22,8 +22,9 @@ fixtures from their test scopes.
 ## Contents
 
 - `src/commonMain/kotlin/.../testutil/` — `CommonTestFixtures`, `TestTopologies`,
-  `TestContextBuilder`, `MockSimulationContext`, `CommonKoinTestBase`, `ContextTracker`,
-  `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
+  `TestContextBuilder`, `MockSimulationContext`, `CommonKoinTestBase`,
+  `SharedSimulationTestScopesModule` (shared Koin test bindings, Issue #1029),
+  `ContextTracker`, `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
   `NavigationDecoratingContext`, `ShuntingLoopLookups`).
