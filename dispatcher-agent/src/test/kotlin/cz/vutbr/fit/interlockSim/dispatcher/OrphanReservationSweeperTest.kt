@@ -568,14 +568,14 @@ class OrphanReservationSweeperTest {
 	 * concern and is covered by its own test against a real reserved path.
 	 */
 	private class RecordingPartialReleaser(
-		private val releaseResult: (List<String>) -> List<String> = { it }
+		private val releaseResult: (List<String>) -> TailRelease = { TailRelease(it) }
 	) : PartialRouteReleaser {
 		val calls = mutableListOf<Pair<String, List<String>>>()
 
 		override fun releaseUntravelledTail(
 			trainId: String,
 			blockIds: List<String>
-		): List<String> {
+		): TailRelease {
 			calls += trainId to blockIds
 			return releaseResult(blockIds)
 		}
@@ -716,7 +716,7 @@ class OrphanReservationSweeperTest {
 	@Test
 	@DisplayName("a release the releaser refuses is not counted")
 	fun refusedReleaseIsNotCounted() {
-		val releaser = RecordingPartialReleaser(releaseResult = { emptyList() })
+		val releaser = RecordingPartialReleaser(releaseResult = { TailRelease.NOTHING })
 		val held = listOf(occupied("kB", train), reserved("kA", train))
 
 		val sweeper =
@@ -732,5 +732,88 @@ class OrphanReservationSweeperTest {
 
 		assertThat(releaser.calls, "partial-release calls").hasSize(1)
 		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
+	}
+
+	/**
+	 * Approach locking (Issue #1025): a deferred release dropped the signals but kept the tail, so
+	 * the sweeper must retry on the very next sweep rather than restart its staleness clock — and
+	 * it must not count a deferral as a reclaim.
+	 */
+	@Test
+	@DisplayName("a release deferred by approach locking is retried on the next sweep, uncounted")
+	fun deferredReleaseIsRetriedOnTheNextSweep() {
+		var calls = 0
+		val releaser =
+			RecordingPartialReleaser(
+				releaseResult = { ids ->
+					calls++
+					if (calls == 1) TailRelease(emptyList(), deferred = true) else TailRelease(ids)
+				}
+			)
+		val held = listOf(occupied("kB", train), reserved("kA", train))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(0.0, held, activeTrains = listOf(train)),
+						Tick(70.0, held, activeTrains = listOf(train)),
+						Tick(72.0, held, activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").hasSize(2)
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(1)
+	}
+
+	/**
+	 * The Issue #1025 deferral endgame: the approach lock deferred the first offer, the committed
+	 * train then booked the first tail block, and the shrunken tail restarted the staleness clock
+	 * — so the REMAINING tail is re-offered only after a further full threshold, never on the very
+	 * next sweep (the deferral retry covers only an unchanged tail) and never while the freshly
+	 * booked block could be re-offered under the train.
+	 */
+	@Test
+	@DisplayName("a booked tail block restarts the clock; the remaining tail is re-offered a full threshold later")
+	fun bookedTailBlockRestartsTheClockForTheRemainingTail() {
+		val releaser =
+			RecordingPartialReleaser(
+				releaseResult = { ids ->
+					// Only the first, two-block offer is deferred; the one-block re-offer releases.
+					if (ids.size == 2) TailRelease(emptyList(), deferred = true) else TailRelease(ids)
+				}
+			)
+		val standingOnKb = listOf(occupied("kB", train), reserved("kA", train), reserved("k1", train))
+		val afterBookingKa = listOf(occupied("kB", train), occupied("kA", train), reserved("k1", train))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						// First sight of the two-block tail behind the occupied kB.
+						Tick(0.0, standingOnKb, activeTrains = listOf(train)),
+						// Threshold elapsed: the whole tail is offered — and deferred by approach locking.
+						Tick(70.0, standingOnKb, activeTrains = listOf(train)),
+						// The committed train booked kA; the shrunken tail restarts the clock — no offer.
+						Tick(72.0, afterBookingKa, activeTrains = listOf(train)),
+						// Only 28 s since the tail changed — below the threshold, no offer.
+						Tick(100.0, afterBookingKa, activeTrains = listOf(train)),
+						// A full threshold after the change: the remaining tail is offered and released.
+						Tick(132.0, afterBookingKa, activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").hasSize(2)
+		assertThat(releaser.calls[0].second, "the first offer is the whole tail, in the sweeper's sorted order")
+			.containsExactly("k1", "kA")
+		assertThat(releaser.calls[1].second, "the re-offer is only the remaining tail")
+			.containsExactly("k1")
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(1)
+		assertThat(sweeper.staleReleaseCount, "staleReleaseCount").isEqualTo(0)
+		assertThat(sweeper.phantomReleaseCount, "phantomReleaseCount").isEqualTo(0)
 	}
 }

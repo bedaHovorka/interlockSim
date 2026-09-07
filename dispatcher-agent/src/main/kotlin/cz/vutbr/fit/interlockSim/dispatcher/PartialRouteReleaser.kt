@@ -32,6 +32,16 @@ package cz.vutbr.fit.interlockSim.dispatcher
  * permissive signal. It is free to refuse — returning fewer ids than it was offered, or none — and
  * the sweeper counts only what actually came back.
  *
+ * ## Approach locking (Issue #1025)
+ *
+ * A train that has just read a proceed aspect is physically inside the next block before it
+ * books it (`Train.Front.semaphoreAction` sleeps `hold(1.0)` between the signal and
+ * `DynamicTrackBlock.enter`). Freeing that block in the same call as the signal drop kills the
+ * train at `enter` with `Wrong state: FREE , expected : RESERVED`. So when a proceed aspect
+ * stands at the boundary between the occupied head and the tail, an implementation must drop the
+ * signal to STOP and **defer** the physical release to a later call, reporting
+ * [TailRelease.deferred] so the caller retries instead of restarting its staleness clock.
+ *
  * @since Issue #847 round 4 (PR #891)
  */
 fun interface PartialRouteReleaser {
@@ -41,10 +51,27 @@ fun interface PartialRouteReleaser {
 	 * @param trainId Owner of the reservation.
 	 * @param blockIds Blocks the sweeper believes are reserved-but-un-travelled. Advisory: the
 	 *   implementation re-checks live state and may release fewer.
-	 * @return the ids actually released, in any order. Empty if nothing could be.
+	 * @return the ids actually released, and whether the release was deferred by approach locking.
 	 */
 	fun releaseUntravelledTail(
 		trainId: String,
 		blockIds: List<String>
-	): List<String>
+	): TailRelease
+}
+
+/**
+ * Outcome of one [PartialRouteReleaser.releaseUntravelledTail] call.
+ *
+ * @property released the block ids actually freed, in any order. Empty if nothing could be.
+ * @property deferred true when a proceed aspect stood at the head/tail boundary, so the signals
+ *   were dropped to STOP but no block was freed; the caller should retry on its next sweep.
+ */
+data class TailRelease(
+	val released: List<String>,
+	val deferred: Boolean = false
+) {
+	companion object {
+		/** Nothing freed, nothing pending. */
+		val NOTHING = TailRelease(emptyList())
+	}
 }

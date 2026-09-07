@@ -11,6 +11,8 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -73,19 +75,20 @@ class RegistryPartialRouteReleaser(
 	override fun releaseUntravelledTail(
 		trainId: String,
 		blockIds: List<String>
-	): List<String> {
+	): TailRelease {
 		val held = registry.getBlocks(trainId)
-		if (held.isEmpty()) return emptyList()
+		if (held.isEmpty()) return TailRelease.NOTHING
 
 		// Refuse unless the train really is standing on part of its own route. Without an occupied
 		// block this is an ordinary abandoned route, which the whole-route path handles correctly
 		// and more cheaply — and doing it here would silently bypass that path's own accounting.
-		if (held.none { it.isOccupied() }) {
+		val occupied = held.filter { it.isOccupied() }
+		if (occupied.isEmpty()) {
 			logger.debug {
 				"RegistryPartialRouteReleaser: '$trainId' occupies none of its blocks — " +
 					"not a partial-release case"
 			}
-			return emptyList()
+			return TailRelease.NOTHING
 		}
 
 		val requested = blockIds.toSet()
@@ -97,7 +100,18 @@ class RegistryPartialRouteReleaser(
 					!block.isOccupied() &&
 					block.getState() == TrackFacility.State.RESERVED
 			}
-		if (eligible.isEmpty()) return emptyList()
+		if (eligible.isEmpty()) return TailRelease.NOTHING
+
+		// Approach locking (Issue #1025): read the boundary signals BEFORE the reset below drops
+		// them. A proceed aspect standing where the occupied head meets the tail means the train
+		// may already be committed to the first tail block — Train.Front reads the aspect, moves,
+		// and books the block only after hold(1.0). Freeing that block now would kill it at enter.
+		// The deferral below protects that train for exactly ONE sweep: on the retry the boundary
+		// signals read STOP, so the tail goes. That in turn holds only while the caller's retry
+		// interval — one control step, 2.0 simulated seconds in ShuntingLoop — outlasts
+		// Train.Front's hold(1.0) booking window, so a committed train has booked the block
+		// before the retry re-offers it.
+		val standingProceed = boundarySignals(occupied, eligible).filter { it.signal.isAllowing() }
 
 		// Fail-safe BEFORE any block becomes available to anyone else, and BEFORE cancelPathSetup
 		// (below) clears each block's `reservedFrom` -- resetSemaphoresForReleasedBlocks needs that
@@ -105,11 +119,40 @@ class RegistryPartialRouteReleaser(
 		// route's far-away START rather than a separator locally adjacent to them.
 		pathReservationService.resetSemaphoresForReleasedBlocks(trainId, eligible)
 
+		if (standingProceed.isNotEmpty()) {
+			logger.info {
+				"RegistryPartialRouteReleaser: approach lock for '$trainId' — a proceed aspect stood at " +
+					"${standingProceed.joinToString(", ") { it.name }} between the occupied head and the tail; " +
+					"signals set to STOP, physical release deferred to the next sweep (Issue #1025)"
+			}
+			return TailRelease(emptyList(), deferred = true)
+		}
+
 		val released = mutableListOf<String>()
 		for (block in eligible) {
 			releaseBlock(trainId, block)?.let { released += it }
 		}
-		return released
+		return TailRelease(released)
+	}
+
+	/**
+	 * The signals a train standing on [occupied] would read to enter one of the [tail] blocks: every
+	 * semaphore (or InOut entry signal) that is an end shared by an occupied block and a tail block.
+	 */
+	private fun boundarySignals(
+		occupied: List<DynamicTrackBlock>,
+		tail: List<DynamicTrackBlock>
+	): List<DynamicRailSemaphore> {
+		val headEnds = occupied.flatMap { it.ends().asList() }.toSet()
+		return tail
+			.flatMap { block -> block.ends().filter { it in headEnds } }
+			.mapNotNull { end ->
+				when (end) {
+					is DynamicRailSemaphore -> end
+					is DynamicInOut -> end.inSemaphore
+					else -> null
+				}
+			}.distinct()
 	}
 
 	/**
