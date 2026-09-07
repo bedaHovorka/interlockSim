@@ -9,14 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
-import assertk.assertThat
-import assertk.assertions.isFalse
-import assertk.assertions.isGreaterThan
-import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.StaleTailReclaimHarness
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.assertHealthyReclaim
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
@@ -44,14 +40,7 @@ class Issue1025StaleTailReleaseHeavyTest : DispatcherKoinTestBase() {
 				staleAfterSimSeconds = Issue1025StaleTailReleaseTest.AGGRESSIVE_STALE_SECONDS
 			)
 
-		assertThat(outcome.partialReleaseCount, name = "un-travelled tails actually reclaimed")
-			.isGreaterThan(0)
-		assertThat(outcome.barrierTimedOut)
-			.withMessage("the sim thread must never wait out the driver barrier")
-			.isFalse()
-		assertThat(outcome.driverFailure)
-			.withMessage("the driver thread must complete every cycle without throwing")
-			.isNull()
+		outcome.assertHealthyReclaim()
 	}
 
 	private companion object {

@@ -9,14 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
-import assertk.assertThat
-import assertk.assertions.isFalse
-import assertk.assertions.isGreaterThan
-import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.StaleTailReclaimHarness
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.assertHealthyReclaim
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -37,7 +33,8 @@ import java.util.concurrent.TimeUnit
  *
  * The concern behind #1025 is that a train could therefore still be routed into a block that was
  * freed under it, and `DynamicTrackBlock.enter` asserts RESERVED → OCCUPIED. Entering a FREE block
- * raises `SimulationException[FATAL]` on the kDisco simulation thread, which no caller catches.
+ * raises `SimulationException[FATAL]` inside the train's process; the process dies, the run goes
+ * on without it, and the train stands still for the rest of the run.
  *
  * ## Why the threshold is 2 s and not the shipped 60 s
  *
@@ -66,8 +63,9 @@ class Issue1025StaleTailReleaseTest : DispatcherKoinTestBase() {
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.MINUTES)
 	fun `a reclaimed stale tail leaves the simulation thread alive`() {
-		// The run itself is the assertion for thread survival: a FATAL on the simulation thread
-		// propagates out of run() and fails the test.
+		// A FATAL inside a train process does not propagate out of run(): the process dies and the
+		// run goes on. The harness records such exceptions; assertHealthyReclaim's first assertion
+		// is the survival check.
 		val outcome =
 			StaleTailReclaimHarness.run(
 				context = TestFixtures.newShuntingSimulationContext().tracked(),
@@ -75,14 +73,7 @@ class Issue1025StaleTailReleaseTest : DispatcherKoinTestBase() {
 				staleAfterSimSeconds = AGGRESSIVE_STALE_SECONDS
 			)
 
-		assertThat(outcome.partialReleaseCount, name = "un-travelled tails actually reclaimed")
-			.isGreaterThan(0)
-		assertThat(outcome.barrierTimedOut)
-			.withMessage("the sim thread must never wait out the driver barrier")
-			.isFalse()
-		assertThat(outcome.driverFailure)
-			.withMessage("the driver thread must complete every cycle without throwing")
-			.isNull()
+		outcome.assertHealthyReclaim()
 	}
 
 	companion object {
