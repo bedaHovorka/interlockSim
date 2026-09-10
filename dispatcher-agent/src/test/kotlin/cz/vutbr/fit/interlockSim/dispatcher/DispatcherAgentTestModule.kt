@@ -21,8 +21,6 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
-import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
-import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -32,13 +30,12 @@ import org.koin.dsl.module
  *
  * Extends [commonCoreTestModule] with JVM-specific scoped services that
  * [DefaultSimulationContext.run] requires but [commonCoreTestModule] does not provide:
- * - [CollisionDetectionService] — scoped to [DefaultSimulationContext]
  * - [NetworkPerceptionPort] — scoped to [DefaultSimulationContext] (SP1.4)
  * - [NetworkActuatorPort] — scoped to [DefaultSimulationContext] (SP1.4)
  *
- * Note: [commonCoreTestModule] omits [CollisionDetectionService] because it is a
- * JVM-only concern (it depends on Swing pause dialog in production). The test-safe
- * [DefaultCollisionDetectionService] does not show dialogs and is safe to use here.
+ * `CollisionDetectionService` comes from [commonCoreTestModule], via
+ * `sharedSimulationTestScopesModule` (Issue #1029) — the test-safe
+ * `DefaultCollisionDetectionService`, which never shows a Swing pause dialog.
  *
  * The perception and actuator ports are test doubles that provide simulation-backed
  * implementations for integration testing the dispatcher agent (SP1.4).
@@ -75,20 +72,12 @@ val dispatcherAgentTestModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				// SP3.5 (Issue #573): wire InterlockingFacade as the single chokepoint.
-				// The facade is scoped by CoreModule (same scope) so it is guaranteed to exist here.
+				// The facade is scoped by sharedSimulationTestScopesModule (same binding as
+				// production CoreModule) so it is guaranteed to exist here.
 				DefaultNetworkActuatorPort(
 					env = context,
 					interlockingFacade = context.scope.get<InterlockingFacade>()
 				)
-			}
-
-			// SP0.1+: CollisionDetectionService — scoped to context
-			// Missing from commonCoreTestModule but required by DefaultSimulationContext.run().
-			scoped<CollisionDetectionService> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultCollisionDetectionService(context, context)
 			}
 
 			// SP4.2 (Issue #564): Late-bound pacing controller — kept in sync with

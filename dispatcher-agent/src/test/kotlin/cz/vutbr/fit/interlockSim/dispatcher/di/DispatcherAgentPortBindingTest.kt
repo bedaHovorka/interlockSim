@@ -36,8 +36,6 @@ import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
-import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -49,7 +47,6 @@ import org.junit.jupiter.api.assertThrows
 import org.koin.core.error.InstanceCreationException
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
-import org.koin.dsl.module
 import org.koin.mp.KoinPlatformTools
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -68,36 +65,18 @@ import java.util.concurrent.atomic.AtomicReference
  * the context's own Koin scope.
  *
  * Loads [dispatcherAgentModule] (the production SP1.4 bindings) together with
- * [commonCoreTestModule] (which supplies [cz.vutbr.fit.interlockSim.context.SimulationProcessFactory]
- * for context construction but, unlike [cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule],
- * does not re-declare the port bindings, so there is no duplicate-definition conflict).
+ * [commonCoreTestModule], which supplies [cz.vutbr.fit.interlockSim.context.SimulationProcessFactory]
+ * for context construction and (via the shared scope bindings extracted for Issue #1029)
+ * the scoped [cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService] that
+ * [DefaultSimulationContext.run] requires — but, unlike
+ * [cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule], it does not re-declare
+ * the port bindings, so there is no duplicate-definition conflict.
  *
  * @since Issue #549 (SP1.4 — Goal 10)
  */
 @DisplayName("SP1.4 port bindings resolve from a DefaultSimulationContext Koin scope (#549)")
 class DispatcherAgentPortBindingTest : DispatcherKoinTestBase() {
-	/**
-	 * Supplies only [CollisionDetectionService], which [dispatcherAgentModule] does not bind
-	 * (that binding lives in [cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule])
-	 * but [DefaultSimulationContext.run] requires. Kept separate from
-	 * [cz.vutbr.fit.interlockSim.dispatcher.dispatcherAgentTestModule] itself because that
-	 * module re-declares [NetworkPerceptionPort]/[NetworkActuatorPort], which would conflict
-	 * with [dispatcherAgentModule] — the module actually under test here.
-	 */
-	private val collisionDetectionOnlyTestModule: Module =
-		module {
-			scope<DefaultSimulationContext> {
-				scoped<CollisionDetectionService> {
-					val context =
-						getSource<DefaultSimulationContext>()
-							?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-					DefaultCollisionDetectionService(context, context)
-				}
-			}
-		}
-
-	override fun getTestModules(): List<Module> =
-		listOf(dispatcherAgentModule, commonCoreTestModule, collisionDetectionOnlyTestModule)
+	override fun getTestModules(): List<Module> = listOf(dispatcherAgentModule, commonCoreTestModule)
 
 	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
