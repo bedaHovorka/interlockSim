@@ -50,6 +50,15 @@
 	<logger name="cz.vutbr.fit.interlockSim.sim.PathCommandTranslator" level="DEBUG"/>
 	<logger name="cz.vutbr.fit.interlockSim.sim.PathCommandTranslatorKt" level="DEBUG"/>
 
+	<!--
+		DefaultPathReservationService logs its reservation/rollback bookkeeping at DEBUG (the
+		routine rollback line was INFO before the Issue #1025 review round demoted it). Same
+		rationale as PathCommandTranslator above: with the package pinned at WARN, those lambda
+		bodies never evaluate during tests, so a broken string interpolation in a rollback message
+		hides behind a disabled log level. The appenders filter at WARN, so nothing extra prints.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService" level="DEBUG"/>
+
 	<!-- kDisco statistics suppressed during tests -->
 	<logger name="kDisco.statistics" level="ERROR"/>
 

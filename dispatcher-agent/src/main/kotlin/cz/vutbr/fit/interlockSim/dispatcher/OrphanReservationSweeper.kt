@@ -292,6 +292,11 @@ class OrphanReservationSweeper(
 	 * With no [partialReleaser] wired this is exactly round 3's behaviour — forget the holding and
 	 * do nothing — because the only alternative available then was a whole-route release that would
 	 * have freed the block the train is standing on.
+	 *
+	 * An approach-lock deferral (Issue #1025) keeps the existing holding so an unchanged tail is
+	 * retried on the next sweep. If the committed train books the first tail block before that retry,
+	 * the changed tail restarts the clock and postpones reclaiming the remaining tail by a full
+	 * [staleAfterSimSeconds] threshold. This prevents the freshly booked block from being re-offered.
 	 */
 	private fun evaluateOccupyingTrain(
 		owner: String,
@@ -328,7 +333,19 @@ class OrphanReservationSweeper(
 				"${staleAfterSimSeconds}s) while the train stands on the rest of its route. " +
 				"Tail: ${tailIds.joinToString(", ")}"
 		}
-		val released = releaser.releaseUntravelledTail(owner, tailIds)
+		val outcome = releaser.releaseUntravelledTail(owner, tailIds)
+		if (outcome.deferred) {
+			// Approach lock (Issue #1025): the signals are now at STOP but the tail is still held.
+			// Keep the holding so the next sweep retries at once instead of waiting another
+			// threshold; if the train was committed it will have booked the block by then and the
+			// tail will have changed, which restarts the clock above.
+			logger.info {
+				"OrphanReservationSweeper: tail release of '$owner' deferred by approach locking; " +
+					"retrying on the next sweep"
+			}
+			return
+		}
+		val released = outcome.released
 		if (released.isNotEmpty()) {
 			partialReleaseCount++
 			logger.warn {

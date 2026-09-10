@@ -35,6 +35,17 @@
 	<!-- Suppress verbose dispatcher-agent drive-loop logging during tests (SP0.10/SP0.11) -->
 	<logger name="cz.vutbr.fit.interlockSim.dispatcher" level="WARN"/>
 
+	<!--
+		The approach-lock and tail-deferral INFO messages (Issue #1025) are the only in-run signal
+		that a partial release was deferred rather than refused. Enabling INFO for these two
+		classes makes the lambda bodies evaluate during tests, so a broken string interpolation in
+		them fails the build instead of hiding behind a disabled log level (same rationale as
+		PathCommandTranslator in :core's logback-test.xml). The appenders filter at WARN, so
+		nothing extra prints.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper" level="INFO"/>
+	<logger name="cz.vutbr.fit.interlockSim.dispatcher.RegistryPartialRouteReleaser" level="INFO"/>
+
 	<!-- kDisco statistics suppressed during tests -->
 	<logger name="kDisco.statistics" level="ERROR"/>
 

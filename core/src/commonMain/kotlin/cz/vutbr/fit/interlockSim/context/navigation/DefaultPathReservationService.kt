@@ -497,7 +497,8 @@ class DefaultPathReservationService(
 	 * - Start not contiguous with the train's footprint → return NonContiguousStart
 	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
-	 * - IllegalStateException from registry → return Conflict result
+	 * - Registry conflict → roll back only the forward blocks THIS call reserved (never the
+	 *   blocks the train already held, Issue #1025) and return Conflict result
 	 * - Empty paths list → return NoPathExists
 	 * - All paths blocked → return AllPathsBlocked
 	 */
@@ -770,9 +771,20 @@ class DefaultPathReservationService(
 				is PathReservationRegistry.RegistrationResult.Conflict -> {
 					// Registry conflict - rollback block reservations
 					logger.warn {
-						"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}"
+						"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}; " +
+							"rolling back ${forwardBlocks.size} forward block(s) for $trainId " +
+							"(${blocks.size - forwardBlocks.size} already-held block(s) untouched)"
 					}
-					rollbackReservation(start, blocks)
+					// Issue #1025: roll back only the blocks THIS call physically reserved (Step 2c),
+					// which are exactly `forwardBlocks`. `blocks` also holds the train's already-owned
+					// blocks (excluded at Step 2a.5); when those were reserved from this same `start`
+					// on an earlier route, cancelling them drove them RESERVED -> FREE while the
+					// registry and the PathInfo still named this train. Navigation trusts the registry
+					// only, so the train was later routed into the FREE block and
+					// DynamicTrackBlock.enter threw "Wrong state: FREE , expected : RESERVED".
+					// Nothing was registered (registerAtomic is all-or-nothing), so no registry
+					// cleanup is needed.
+					rollbackReservation(start, forwardBlocks)
 					val simTime = currentSimulationTime()
 					emitCustom(
 						BlockEvent.ReservationConflictDetected(
@@ -2410,10 +2422,37 @@ class DefaultPathReservationService(
 			try {
 				// Only rollback if block was actually reserved from this separator
 				if (block.reservedFrom === separator) {
+					logRollbackOfBlock(block, separator)
 					block.cancelPathSetup(separator)
 				}
 			} catch (e: Exception) {
 				logger.warn(e) { "rollbackBlocks: Failed to rollback block $block" }
+			}
+		}
+	}
+
+	/**
+	 * Issue #1025 diagnostics: a rollback that cancels a block the registry still attributes to a
+	 * train leaves the registry and the physical block state divergent. Navigation trusts the
+	 * registry only, so such a train is later routed into a FREE block and
+	 * [DynamicTrackBlock.enter] throws `Wrong state: FREE, expected: RESERVED`. Log that case at
+	 * WARN so a run log names the block, the separator and the train it was taken from.
+	 */
+	private fun logRollbackOfBlock(
+		block: DynamicTrackBlock,
+		separator: PathSeparator
+	) {
+		val registryOwner = registry.getOwner(block)
+		if (registryOwner != null && registryOwner == block.trainName) {
+			logger.warn {
+				"rollbackBlocks: cancelling block $block reserved from $separator while the registry still " +
+					"attributes it to '$registryOwner' (state=${block.getState()}); " +
+					"the registry and the physical state now diverge (Issue #1025)"
+			}
+		} else {
+			logger.debug {
+				"rollbackBlocks: cancelling block $block reserved from $separator " +
+					"(trainName=${block.trainName}, registry owner=${registryOwner ?: "none"})"
 			}
 		}
 	}

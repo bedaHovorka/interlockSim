@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
@@ -147,7 +148,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		val registry = registry()
 		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
 
-		val released = releaser().releaseUntravelledTail(trainId, tailIds)
+		val released = releaser().releaseUntravelledTail(trainId, tailIds).released
 
 		assertThat(released, "released ids").isNotEmpty()
 		val stillHeld = heldBlocks().map { BlockIdentity.stableBlockId(it) }.toSet()
@@ -172,7 +173,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		val (_, tail) = reserveAndOccupyHead()
 		val entrySignals = tail.mapNotNull { it.reservedFrom as? DynamicRailSemaphore }
 
-		val released = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) })
+		val released = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) }).released
 
 		assertThat(released, "released ids").isNotEmpty()
 		entrySignals.forEach { semaphore ->
@@ -203,11 +204,23 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		// Guard: if nothing was lit inside the tail, the loop below would pass vacuously.
 		assertThat(litInsideTail, "semaphores lit inside the tail before release").isNotEmpty()
 
-		val released = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) })
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
 
-		assertThat(released, "released ids").isNotEmpty()
+		// Approach lock (Issue #1025): the head's exit signal shows proceed toward the tail, so the
+		// first call drops every governing signal and defers the physical release.
+		val first = releaser().releaseUntravelledTail(trainId, tailIds)
+		assertThat(first.deferred, "first call deferred by the standing proceed aspect").isTrue()
+		assertThat(first.released, "released ids on the deferred call").isEmpty()
 		litInsideTail.forEach { semaphore ->
 			assertThat(semaphore.signal.name, "aspect of intermediate semaphore ${semaphore.name} after release")
+				.isEqualTo("STOP")
+		}
+
+		// With the signals at STOP the next call releases the tail, and nothing is lit again.
+		val second = releaser().releaseUntravelledTail(trainId, tailIds)
+		assertThat(second.released, "released ids on the second call").isNotEmpty()
+		litInsideTail.forEach { semaphore ->
+			assertThat(semaphore.signal.name, "aspect of intermediate semaphore ${semaphore.name} after the release")
 				.isEqualTo("STOP")
 		}
 	}
@@ -226,11 +239,23 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		val (_, tail) = reserveAndOccupyLongRoute()
 		assertThat(inOutA.inSemaphore.signal.isAllowing(), "InOut A's inSemaphore lit before release").isTrue()
 
-		val released = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) })
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
 
-		assertThat(released, "released ids").isNotEmpty()
+		// Approach lock (Issue #1025): the head's exit signal zA shows proceed toward the tail, so
+		// the first call only drops the signals and defers the physical release.
+		val first = releaser().releaseUntravelledTail(trainId, tailIds)
+		assertThat(first.deferred, "first call deferred by the standing proceed aspect").isTrue()
+		assertThat(first.released, "released ids on the deferred call").isEmpty()
 		assertThat(inOutA.inSemaphore.signal.name, "aspect of InOut A's inSemaphore after tail release")
 			.isEqualTo("STOP")
+		tail.forEach { block ->
+			assertThat(block.getState(), "state of a deferred tail block").isEqualTo(TrackFacility.State.RESERVED)
+		}
+
+		// With every boundary signal at STOP the next call releases the tail.
+		val second = releaser().releaseUntravelledTail(trainId, tailIds)
+		assertThat(second.deferred, "second call deferred").isFalse()
+		assertThat(second.released, "released ids on the second call").isNotEmpty()
 	}
 
 	/**
@@ -243,7 +268,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, doA1)
 		val tailIds = heldBlocks().map { BlockIdentity.stableBlockId(it) }
 
-		val released = releaser().releaseUntravelledTail(trainId, tailIds)
+		val released = releaser().releaseUntravelledTail(trainId, tailIds).released
 
 		assertThat(released, "released ids").isEmpty()
 		assertThat(heldBlocks(), "blocks still held").isNotEmpty()
@@ -252,7 +277,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	@Test
 	@DisplayName("a train holding nothing releases nothing")
 	fun unknownTrainReleasesNothing() {
-		assertThat(releaser().releaseUntravelledTail("Ghost", listOf("kA")), "released ids").isEmpty()
+		assertThat(releaser().releaseUntravelledTail("Ghost", listOf("kA")).released, "released ids").isEmpty()
 	}
 
 	/**
@@ -264,7 +289,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	fun onlyOfferedBlocksAreReleased() {
 		val (_, tail) = reserveAndOccupyHead()
 
-		val released = releaser().releaseUntravelledTail(trainId, emptyList())
+		val released = releaser().releaseUntravelledTail(trainId, emptyList()).released
 
 		assertThat(released, "released ids").isEmpty()
 		tail.forEach { block ->

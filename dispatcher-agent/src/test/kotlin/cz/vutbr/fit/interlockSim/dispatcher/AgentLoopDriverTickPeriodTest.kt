@@ -82,14 +82,18 @@ class AgentLoopDriverTickPeriodTest {
 
 		val elapsedMs =
 			runBlocking {
-				driver.runCycle() // first cycle establishes the baseline; nothing to space against
+				// The stopwatch starts BEFORE the baseline cycle. The driver takes its own first
+				// end-of-cycle mark inside that cycle, so a stopwatch started after it returned
+				// would be a few ms later than the mark and under-measure the two periods
+				// (CI saw 237 ms against a 240 ms bound).
 				val start = System.nanoTime()
+				driver.runCycle() // first cycle establishes the baseline; nothing to space against
 				driver.runCycle()
 				driver.runCycle()
 				(System.nanoTime() - start) / 1_000_000L
 			}
 
-		// Two spaced cycles after the baseline.
+		// Two spaced cycles after the baseline. Scheduling delay can only make this larger.
 		assertThat(elapsedMs).isGreaterThanOrEqualTo(2 * period)
 	}
 
