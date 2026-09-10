@@ -293,11 +293,10 @@ class OrphanReservationSweeper(
 	 * do nothing — because the only alternative available then was a whole-route release that would
 	 * have freed the block the train is standing on.
 	 *
-	 * A deferral caused by approach locking (Issue #1025) postpones the REMAINING tail's reclaim by
-	 * a further full [staleAfterSimSeconds] threshold, not by one sweep: the committed train books
-	 * the first tail block, the tail shrinks, and the changed tail restarts the clock below. That
-	 * is intended — the freshly booked block must not be re-offered while the train still stands
-	 * on the rest of its route.
+	 * An approach-lock deferral (Issue #1025) keeps the existing holding so an unchanged tail is
+	 * retried on the next sweep. If the committed train books the first tail block before that retry,
+	 * the changed tail restarts the clock and postpones reclaiming the remaining tail by a full
+	 * [staleAfterSimSeconds] threshold. This prevents the freshly booked block from being re-offered.
 	 */
 	private fun evaluateOccupyingTrain(
 		owner: String,
