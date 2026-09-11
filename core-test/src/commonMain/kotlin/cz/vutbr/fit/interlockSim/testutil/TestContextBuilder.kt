@@ -176,8 +176,9 @@ fun buildLinearTrack(): DefaultSimulationContext {
 	editingContext.putCell(pB, outB)
 	editingContext.joinCells(pA, pB, trackBlock)
 
-	// Convert to simulation context
-	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	// Convert to simulation context; the editing context owns its own Koin scope and must
+	// not outlive the conversion.
+	return editingContext.use { DefaultSimulationContext.fromEditingContext(it, processFactory) }
 }
 
 fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
@@ -215,8 +216,9 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 	editingContext.joinCells(r1, pB, trackBlock)
 	editingContext.joinCells(pA, r1, trackBlock)
 
-	// Convert to simulation context
-	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	// Convert to simulation context; the editing context owns its own Koin scope and must
+	// not outlive the conversion.
+	return editingContext.use { DefaultSimulationContext.fromEditingContext(it, processFactory) }
 }
 
 fun buildMinimalSimulation(): DefaultSimulationContext =
