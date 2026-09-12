@@ -146,6 +146,12 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		 * 0.01 m/s; a run-through arrives at about 12.6 m/s.
 		 */
 		const val RUN_THROUGH_SPEED_MPS = 5.0
+
+		/**
+		 * Distance at which rung 3b flips the aspect: past the ~12.4 m braking-room crossing on
+		 * [SHORT_APPROACH], so the flip lands inside phase 2 rather than phase 1.
+		 */
+		const val PHASE_TWO_FLIP_DISTANCE = 20.0
 	}
 
 	// ── Rung 1 ────────────────────────────────────────────────────────────────────
@@ -212,6 +218,61 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		logger.info { "R3: flipped=${flip.fired} at the separator $atSeparator" }
 
 		assertThat(flip.fired, name = "the aspect was cleared during the approach").isTrue()
+		assertThat(atSeparator.velocity, name = "speed passing the cleared signal")
+			.isGreaterThan(RUN_THROUGH_SPEED_MPS)
+		assertThat(run.process.getTrainsExited(), name = "trains exited").isGreaterThan(0)
+	}
+
+	// ── Rung 3b ───────────────────────────────────────────────────────────────────
+
+	/**
+	 * [aspectClearingDuringTheApproachIsRunThroughNotBrakedTo]'s counterpart once the train has
+	 * already crossed into phase 2: the aspect clears at 20 m, past the ~12.4 m braking-room
+	 * crossing, while `targetSpeed` is already latched at zero.
+	 *
+	 * [Motor.approachMargin]'s own KDoc promises "the approach behaves exactly as it did before
+	 * this rule: the train runs on" for an aspect that clears mid-phase — but that promise is
+	 * built into the phase-1 wait condition only. Once phase 2 starts, nothing re-opens
+	 * `targetSpeed`: [Motor.derivatives] re-reads [Motor.semaphoreToStopShortOf] every step through
+	 * [Motor.brakingTargetDistance], so the aim point does snap back from the clearance line to the
+	 * signal once the aspect clears, but the train still brakes all the way to that point because
+	 * `targetSpeed` stays `0.0`. Red on this commit: the train crawls past the separator instead of
+	 * running through it.
+	 */
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@DisplayName("an aspect clearing after the braking-room crossing is still run through")
+	fun aspectClearingAfterTheBrakingRoomCrossingIsStillRunThrough() {
+		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
+		val ctx = network.context.tracked()
+		val samples = mutableListOf<TrainKinematicSample>()
+		// Past the ~12.4 m braking-room crossing on this approach, so the flip lands inside phase 2.
+		val flip =
+			AspectFlipOnce(
+				network.semaphore,
+				Signal.FREE,
+				trigger = { it.totalDistance > PHASE_TWO_FLIP_DISTANCE }
+			)
+		val run =
+			runClearanceStopScenario(
+				ctx,
+				semaphores = listOf(network.semaphore),
+				endTime = RUNNING_END_TIME,
+				initialAspect = Signal.STOP,
+				trainLength = SHORT_TRAIN_LENGTH,
+				samplePeriod = SAMPLE_PERIOD,
+				onSample = { _, sample ->
+					samples += sample
+					flip.onSample(sample)
+				}
+			)
+		val atSeparator =
+			requireNotNull(samples.minByOrNull { abs(it.totalDistance - SHORT_APPROACH) }) {
+				"no samples were taken"
+			}
+		logger.info { "R3b: flipped=${flip.fired} at the separator $atSeparator" }
+
+		assertThat(flip.fired, name = "the aspect was cleared after the braking-room crossing").isTrue()
 		assertThat(atSeparator.velocity, name = "speed passing the cleared signal")
 			.isGreaterThan(RUN_THROUGH_SPEED_MPS)
 		assertThat(run.process.getTrainsExited(), name = "trains exited").isGreaterThan(0)
