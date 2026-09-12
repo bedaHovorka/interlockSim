@@ -1583,7 +1583,22 @@ class Train :
 				// as if it were still accelerating (Issue #1014).
 				val braking = AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
 				currentCondition = braking
-				waitUntil(braking)
+				// [approachMargin]'s KDoc promises a train runs on when the aspect clears mid-phase,
+				// but that promise is wired into the phase-1 wait only. Without this second disjunct
+				// the aspect clearing here would still finish braking to a stand — [derivatives]
+				// re-reads [semaphoreToStopShortOf] every step and does snap the aim point back to
+				// the signal, but `targetSpeed` stays latched at zero (PR #1033 review, Train.kt:1586).
+				waitUntil(Condition { braking.test() || semaphoreToStopShortOf() == null })
+				if (!terminate && accelerate && semaphoreToStopShortOf() == null) {
+					// The aspect cleared before the train came to a stand: resume the run instead of
+					// finishing the brake, the same recovery [Front.waiveClearanceStop] issues for a
+					// train already stopped.
+					logger.trace { "Train $number motor: aspect cleared mid-brake, resuming to $currentSpeedLimitMps" }
+					targetSpeed = currentSpeedLimitMps
+					val resuming = AccelerationStopCondition(AccelerationStopTest.ACCELERATION_ENDED)
+					currentCondition = resuming
+					waitUntil(resuming)
+				}
 			}
 
 			accelerate = false
