@@ -1592,10 +1592,27 @@ class Train :
 				if (!terminate && accelerate && semaphoreToStopShortOf() == null) {
 					// The aspect cleared before the train came to a stand: resume the run instead of
 					// finishing the brake, the same recovery [Front.waiveClearanceStop] issues for a
-					// train already stopped.
-					logger.trace { "Train $number motor: aspect cleared mid-brake, resuming to $currentSpeedLimitMps" }
-					targetSpeed = currentSpeedLimitMps
-					val resuming = AccelerationStopCondition(AccelerationStopTest.ACCELERATION_ENDED)
+					// train already stopped. Capped by the live aspect exactly as [fireResume] caps
+					// it — [currentSpeedLimitMps] is deliberately aspect-independent (the physical
+					// track constraint only), so using it alone would let the train pass a
+					// restrictive-but-allowing aspect (S30/S40) above its permitted speed.
+					val aspect =
+						requireSimulationNotNull(signalAheadAspect) {
+							"Train $number: no signal aspect ahead when resuming mid-brake"
+						}
+					val resumeSpeed = minOf(currentSpeedLimitMps, aspect.allowedSpeed())
+					logger.trace { "Train $number motor: aspect cleared mid-brake, resuming to $resumeSpeed" }
+					targetSpeed = resumeSpeed
+					// Same stop-test choice [accelerateTo] makes: a capped target below the current
+					// velocity must decelerate to it, not complete immediately.
+					val resuming =
+						AccelerationStopCondition(
+							if (resumeSpeed > getVelocity()) {
+								AccelerationStopTest.ACCELERATION_ENDED
+							} else {
+								AccelerationStopTest.DECELERATION_ENDED
+							}
+						)
 					currentCondition = resuming
 					waitUntil(resuming)
 				}

@@ -148,10 +148,17 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		const val RUN_THROUGH_SPEED_MPS = 5.0
 
 		/**
-		 * Distance at which rung 3b flips the aspect: past the ~12.4 m braking-room crossing on
-		 * [SHORT_APPROACH], so the flip lands inside phase 2 rather than phase 1.
+		 * Distance at which rungs 3b and 3c flip the aspect: past the ~12.4 m braking-room
+		 * crossing on [SHORT_APPROACH], so the flip lands inside phase 2 rather than phase 1.
 		 */
 		const val PHASE_TWO_FLIP_DISTANCE = 20.0
+
+		/**
+		 * Headroom allowed on top of the aspect's own permitted speed in rung 3c, for the same
+		 * reason as [DECELERATION_HEADROOM]: the resumed run approaches its capped target
+		 * asymptotically and a sample can land a hair below or, on numerical noise, above it.
+		 */
+		const val SPEED_CAP_HEADROOM = 0.1
 	}
 
 	// ── Rung 1 ────────────────────────────────────────────────────────────────────
@@ -231,12 +238,12 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * crossing, while `targetSpeed` is already latched at zero.
 	 *
 	 * [Motor.approachMargin]'s own KDoc promises "the approach behaves exactly as it did before
-	 * this rule: the train runs on" for an aspect that clears mid-phase — but that promise is
-	 * built into the phase-1 wait condition only. Once phase 2 starts, nothing re-opens
-	 * `targetSpeed`: [Motor.derivatives] re-reads [Motor.semaphoreToStopShortOf] every step through
-	 * [Motor.brakingTargetDistance], so the aim point does snap back from the clearance line to the
-	 * signal once the aspect clears, but the train still brakes all the way to that point because
-	 * `targetSpeed` stays `0.0`. Red on this commit: the train crawls past the separator instead of
+	 * this rule: the train runs on" for an aspect that clears mid-phase — but that promise was
+	 * built into the phase-1 wait condition only. Before the phase-2 fix, nothing re-opened
+	 * `targetSpeed`: [Motor.derivatives] re-reads [Train.semaphoreToStopShortOf] every step through
+	 * [Motor.brakingTargetDistance], so the aim point did snap back from the clearance line to the
+	 * signal once the aspect cleared, but the train still braked all the way to that point because
+	 * `targetSpeed` stayed `0.0`. Pre-fix behaviour: the train crawled past the separator instead of
 	 * running through it.
 	 */
 	@Test
@@ -275,6 +282,60 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		assertThat(flip.fired, name = "the aspect was cleared after the braking-room crossing").isTrue()
 		assertThat(atSeparator.velocity, name = "speed passing the cleared signal")
 			.isGreaterThan(RUN_THROUGH_SPEED_MPS)
+		assertThat(run.process.getTrainsExited(), name = "trains exited").isGreaterThan(0)
+	}
+
+	// ── Rung 3c ───────────────────────────────────────────────────────────────────
+
+	/**
+	 * [aspectClearingAfterTheBrakingRoomCrossingIsStillRunThrough] flips to [Signal.FREE], whose
+	 * permitted speed is at or above the track limit, so it never exercises a cap. This rung
+	 * flips to [Signal.S30] instead — a restrictive-but-allowing aspect — so the resume target is
+	 * the signal's own permitted speed, not the physical track limit alone.
+	 *
+	 * [Train.currentSpeedLimitMps] is deliberately aspect-independent (the physical track
+	 * constraint only, see its KDoc); [Train.Front.fireResume] and [Train.Front.accelerateToSignal]
+	 * both cap it with the live aspect's [Signal.allowedSpeed] before commanding the motor. Without
+	 * the same cap here, the resumed run would target the track limit and pass the signal above the
+	 * speed it actually permits.
+	 */
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@DisplayName("an aspect clearing to a restrictive-but-allowing aspect resumes at its speed cap")
+	fun aspectClearingToARestrictiveButAllowingAspectRespectsItsSpeedCap() {
+		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
+		val ctx = network.context.tracked()
+		val samples = mutableListOf<TrainKinematicSample>()
+		val flip =
+			AspectFlipOnce(
+				network.semaphore,
+				Signal.S30,
+				trigger = { it.totalDistance > PHASE_TWO_FLIP_DISTANCE }
+			)
+		val run =
+			runClearanceStopScenario(
+				ctx,
+				semaphores = listOf(network.semaphore),
+				endTime = RUNNING_END_TIME,
+				initialAspect = Signal.STOP,
+				trainLength = SHORT_TRAIN_LENGTH,
+				samplePeriod = SAMPLE_PERIOD,
+				onSample = { _, sample ->
+					samples += sample
+					flip.onSample(sample)
+				}
+			)
+		val atSeparator =
+			requireNotNull(samples.minByOrNull { abs(it.totalDistance - SHORT_APPROACH) }) {
+				"no samples were taken"
+			}
+		logger.info { "R3c: flipped=${flip.fired} at the separator $atSeparator" }
+
+		assertThat(flip.fired, name = "the aspect was cleared to S30 after the braking-room crossing").isTrue()
+		assertThat(atSeparator.velocity, name = "speed passing the S30 signal")
+			.isGreaterThan(RUN_THROUGH_SPEED_MPS)
+		assertThat(atSeparator.velocity, name = "speed passing the S30 signal")
+			.isLessThanOrEqualTo(Signal.S30.allowedSpeed() + SPEED_CAP_HEADROOM)
 		assertThat(run.process.getTrainsExited(), name = "trains exited").isGreaterThan(0)
 	}
 
