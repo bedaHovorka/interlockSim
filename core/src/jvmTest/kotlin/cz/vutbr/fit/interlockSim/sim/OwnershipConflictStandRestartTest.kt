@@ -5,8 +5,8 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * A route that ends at a rear-facing signal: the stand at the last facing signal and the
- * restart once the route is extended.
+ * A train that navigation holds at a separator with an ownership conflict: the stand at the
+ * separator and the restart once navigation lets it go.
  */
 package cz.vutbr.fit.interlockSim.sim
 
@@ -20,13 +20,18 @@ import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSample
 import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSampler
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.motorOf
 import cz.vutbr.fit.interlockSim.testutil.runSimpleLinearTrackScenario
 import org.junit.jupiter.api.DisplayName
@@ -35,39 +40,42 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
 /**
- * The stop a dispatcher produces by granting a route that ends at a **rear-facing** signal, and
- * what the train does at that stop.
+ * The stop a train makes when navigation answers its query at a separator with an **ownership
+ * conflict** — "wait for the route to be extended" (PR #940) — and what the train does at that stop.
  *
- * ## The scenario
+ * ## History
  *
- * On `vyhybna.xml` a train running B → A meets `zB` and `doA1` facing it; `doB1` and `zA` face
- * the other way. The route granted here is `B → doB1`: three blocks, the last of which ends at a
- * signal the train can never be held at. Navigation reports the train's leg from `zB` as an
- * ownership conflict — "wait for the route to be extended" (PR #940) — so `Site.actions()` stops
- * the train at the separator and waits. From the outside the train stands at a green `zB` and
- * does nothing, which is what a `shuntingLoopAI` run showed on 2026-09-13 (Train #3, run.log):
- * the LLM had granted `B → doB1` and neither it nor the rule-based fallback extended the route.
+ * This class was `RearFacingRouteTerminusRestartTest`. It reproduced the stand with the grant a
+ * `shuntingLoopAI` run showed on 2026-09-13 (Train #3, run.log): the LLM granted `B → doB1`, a route
+ * whose end faces away from a B → A train, so navigation answered its leg from `zB` with an ownership
+ * conflict and the train stood at a green `zB`. G8 (Issue #1064) now refuses that grant, so the
+ * scenario can no longer be built that way.
  *
- * Nothing in that stop is the motor's doing. The two rungs pin the stop and the recovery:
+ * The stand itself did not go away with the grant. `Site.actions()` stops the train at the
+ * separator on every ownership-conflict answer, and navigation still gives that answer whenever the
+ * stored route does not reach the next facing separator yet — a route extension the dispatcher has
+ * not made, or a PathInfo that stops short of the train's next signal. This test therefore forces
+ * the answer: the train runs a legal `B → A` route, navigation reports an ownership conflict at `zB`
+ * until the test lifts it, and the two rungs pin the same behaviour as before:
  *
- * - [theTrainStandsAtTheGreenSignalWhereItsRouteStopsServingIt] — the stand itself: at the
- *   separator, not a clearance short of it, with the aspect still allowing, and the motor idle
- *   (zero acceleration, passivated). Documents the pre-existing behaviour, so the next reader
- *   does not chase it into the braking code.
- * - [theTrainRestartsOnceTheRouteIsExtended] — extending the route to `doA1` and on to `A`
- *   wakes the wait, the separator restarts the train, and it completes the journey.
+ * - [theTrainStandsAtTheGreenSignalWhereNavigationHoldsIt] — the stand: at the separator, not a
+ *   clearance short of it, with the aspect still allowing, and the motor idle (zero acceleration,
+ *   passivated).
+ * - [theTrainRestartsOnceNavigationLetsItGo] — lifting the conflict wakes the wait, the separator
+ *   restarts the train, and it completes the journey.
  *
- * The motor's idleness at this stand is a rounding coin flip on the unfixed code: the stop's
- * cancel wakes the motor twice only when the last integration step ends on the near side of the
- * signal. `MotorBareCancelTest` pins that defect deterministically; the assertion here is the
- * invariant, kept because this is the stop the measured run showed.
+ * The motor's idleness at this stand is a rounding coin flip on code without the `commandPending`
+ * guard: the stop's cancel wakes the motor twice only when the last integration step ends on the
+ * near side of the signal. `MotorBareCancelTest` pins that defect deterministically; the assertion
+ * here is the invariant at the stop a real run showed.
  */
 @Tag("integration-test")
-@DisplayName("A route ending at a rear-facing signal: the stand at zB and the restart")
-class RearFacingRouteTerminusRestartTest : KoinTestBase() {
+@DisplayName("A train held at a separator by an ownership conflict: the stand at zB and the restart")
+class OwnershipConflictStandRestartTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
@@ -88,7 +96,7 @@ class RearFacingRouteTerminusRestartTest : KoinTestBase() {
 		const val SAMPLE_PERIOD = 0.05
 
 		/**
-		 * How long the train is left standing before the route is extended. Well inside the
+		 * How long the train is held before navigation lets it go. Well inside the
 		 * ownership-conflict WARN horizon, and long enough for every wake-up of the stop to be
 		 * delivered and settle before the motor is inspected.
 		 */
@@ -99,6 +107,9 @@ class RearFacingRouteTerminusRestartTest : KoinTestBase() {
 		 * with. The measured stand is `dtMin` short of the separator.
 		 */
 		const val POSITION_TOLERANCE = 1e-2
+
+		/** The separator navigation holds the train at. */
+		const val HOLD_SIGNAL = "zB"
 	}
 
 	/** Everything one run of the scenario produces for assertion. */
@@ -106,32 +117,32 @@ class RearFacingRouteTerminusRestartTest : KoinTestBase() {
 		val standDistance: Double,
 		val aspectAllowingAtStand: Boolean,
 		val peakAccelerationWhileStanding: Double,
-		val motorPassivatedBeforeExtension: Boolean,
-		val extendedAt: Double,
+		val motorPassivatedBeforeRelease: Boolean,
+		val releasedAt: Double,
 		val trainsExited: Int,
 		val finalDistance: Double
 	)
 
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@DisplayName("the train stands at the green signal where its reserved route stops serving it")
-	fun theTrainStandsAtTheGreenSignalWhereItsRouteStopsServingIt() {
+	@DisplayName("the train stands at the green signal where navigation holds it")
+	fun theTrainStandsAtTheGreenSignalWhereNavigationHoldsIt() {
 		val outcome = runScenario()
 
 		assertThat(outcome.standDistance, name = "distance travelled at the stand")
 			.isBetween(DISTANCE_TO_ZB - POSITION_TOLERANCE, DISTANCE_TO_ZB + POSITION_TOLERANCE)
 		assertThat(outcome.aspectAllowingAtStand, name = "zB allowing at the stand").isTrue()
 		assertThat(outcome.peakAccelerationWhileStanding, name = "acceleration reported while standing").isZero()
-		assertThat(outcome.motorPassivatedBeforeExtension, name = "motor passivated at the stand").isTrue()
+		assertThat(outcome.motorPassivatedBeforeRelease, name = "motor passivated at the stand").isTrue()
 	}
 
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@DisplayName("the train restarts once the route is extended past the rear-facing signal")
-	fun theTrainRestartsOnceTheRouteIsExtended() {
+	@DisplayName("the train restarts once navigation lets it go")
+	fun theTrainRestartsOnceNavigationLetsItGo() {
 		val outcome = runScenario()
 
-		assertThat(outcome.extendedAt, name = "time the route was extended").isGreaterThan(0.0)
+		assertThat(outcome.releasedAt, name = "time navigation let the train go").isGreaterThan(0.0)
 		assertThat(outcome.trainsExited, name = "trains exited").isEqualTo(1)
 		assertThat(outcome.finalDistance, name = "distance travelled").isGreaterThan(ROUTE_LENGTH - 5.0)
 	}
@@ -139,28 +150,38 @@ class RearFacingRouteTerminusRestartTest : KoinTestBase() {
 	// ── Shared ────────────────────────────────────────────────────────────────────
 
 	/**
-	 * One run of the scenario: one train B → A over `vyhybna.xml`, its route reserved only as
-	 * far as `doB1`, sampled throughout. The sampler's callback is the scenario driver — it runs
-	 * on the simulation thread, the only thread allowed to read the train and reserve routes:
-	 * it records the stand, watches the motor while the train stands, and after
-	 * [STAND_HOLD_SECONDS] extends the route to `doA1` and on to `A`.
+	 * One run of the scenario: one train B → A over `vyhybna.xml` with its whole route reserved,
+	 * sampled throughout. Navigation answers the train's query at `zB` with an ownership conflict
+	 * until the sampler lifts it. The sampler's callback is the scenario driver — it runs on the
+	 * simulation thread, the only thread allowed to read the train: it records the stand, watches
+	 * the motor while the train stands, and after [STAND_HOLD_SECONDS] lets the train go.
 	 */
 	private fun runScenario(): Outcome {
 		val context = loadVyhybnaContext().tracked()
 		val inOuts = context.getInOuts().toList()
 		val a = inOuts.single { it.name == "A" }
 		val b = inOuts.single { it.name == "B" }
-		val zB = context.cellsOfType<DynamicRailSemaphore>().single { it.name == "zB" }
-		val doB1 = context.cellsOfType<DynamicRailSemaphore>().single { it.name == "doB1" }
-		val doA1 = context.cellsOfType<DynamicRailSemaphore>().single { it.name == "doA1" }
+		val zB = context.cellsOfType<DynamicRailSemaphore>().single { it.name == HOLD_SIGNAL }
 		val reservationService = context.getRoutingServices().getPathReservationService()
+		val realNav = context.getRoutingServices().getTrainNavigationService()
+
+		val holding = AtomicBoolean(true)
+		val holdingNav =
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+				if (holding.get() && isHoldSignal(separator)) {
+					PathResult.OwnershipConflict
+				} else {
+					realNav.findReservedPathForTrain(trainId, separator)
+				}
+			}
+		val env = NavigationDecoratingContext(context, holdingNav)
 
 		var standTime = -1.0
 		var standDistance = -1.0
 		var aspectAllowingAtStand = false
 		var peakAccelerationWhileStanding = 0.0
-		var motorPassivatedBeforeExtension = false
-		var extendedAt = -1.0
+		var motorPassivatedBeforeRelease = false
+		var releasedAt = -1.0
 
 		val run =
 			runSimpleLinearTrackScenario(
@@ -175,9 +196,10 @@ class RearFacingRouteTerminusRestartTest : KoinTestBase() {
 							outTime = END_TIME.toDouble(),
 							length = TRAIN_LENGTH
 						)
-					)
+					),
+				env = env
 			) { train ->
-				assertReservationSuccess(reservationService.reservePath(train.name, b, doB1))
+				assertReservationSuccess(reservationService.reservePath(train.name, b, a))
 				Process.activate(
 					TrainKinematicSampler(train, END_TIME.toDouble(), SAMPLE_PERIOD) { sample ->
 						if (standTime < 0.0 && isStandingPastHalfway(sample)) {
@@ -185,13 +207,12 @@ class RearFacingRouteTerminusRestartTest : KoinTestBase() {
 							standDistance = sample.totalDistance
 							aspectAllowingAtStand = zB.signal.isAllowing()
 						}
-						if (standTime >= 0.0 && extendedAt < 0.0) {
+						if (standTime >= 0.0 && releasedAt < 0.0) {
 							peakAccelerationWhileStanding = maxOf(peakAccelerationWhileStanding, abs(train.getAcceleration()))
 							if (sample.time >= standTime + STAND_HOLD_SECONDS) {
-								motorPassivatedBeforeExtension = motorOf(train).isPassivated()
-								assertReservationSuccess(reservationService.reservePath(train.name, zB, doA1))
-								assertReservationSuccess(reservationService.reservePath(train.name, doA1, a))
-								extendedAt = sample.time
+								motorPassivatedBeforeRelease = motorOf(train).isPassivated()
+								holding.set(false)
+								releasedAt = sample.time
 							}
 						}
 					}
@@ -201,12 +222,20 @@ class RearFacingRouteTerminusRestartTest : KoinTestBase() {
 			standDistance = standDistance,
 			aspectAllowingAtStand = aspectAllowingAtStand,
 			peakAccelerationWhileStanding = peakAccelerationWhileStanding,
-			motorPassivatedBeforeExtension = motorPassivatedBeforeExtension,
-			extendedAt = extendedAt,
+			motorPassivatedBeforeRelease = motorPassivatedBeforeRelease,
+			releasedAt = releasedAt,
 			trainsExited = run.process.getTrainsExited(),
 			finalDistance = run.train.totalDistance
 		)
 	}
+
+	/** Whether [separator] — static or dynamic — is the signal navigation holds the train at. */
+	private fun isHoldSignal(separator: PathSeparator): Boolean =
+		when (separator) {
+			is DynamicRailSemaphore -> separator.name == HOLD_SIGNAL
+			is RailSemaphore -> separator.getName() == HOLD_SIGNAL
+			else -> false
+		}
 
 	/** The stand at zB, told apart from the stand at the origin before the train is admitted. */
 	private fun isStandingPastHalfway(sample: TrainKinematicSample): Boolean =

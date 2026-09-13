@@ -125,14 +125,18 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		// set: a mid-journey train can hold a live reservation while a further hop is attempted and
 		// rolled back. Dropping that reservation's aspect to STOP would strand a train already
 		// running against it.
-		val entry = inOutNamed("A")
+		// Westbound (Issue #1064): a first hop must end at a signal facing the train. sem1 faces west,
+		// so a train from B can be routed to it; a train from A could not (G8 refuses A -> sem1).
+		// The bypass shape is the mirror image of the eastbound tests above: the block on sem1's far
+		// side, towards swA, is taken, and the route must go round the loop through sem2 instead.
+		val entry = inOutNamed("B")
 		val firstHop = service.reservePath("train1", entry, semaphoreNamed("sem1"))
 		assertThat(firstHop).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		firstHop as PathReservationService.ReservationResult.Success
 		val litAfterFirstHop = litSemaphoreNames()
 
 		val sem1 = semaphoreNamed("sem1")
-		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swA")
 		requiredNext.setUpPath(sem1, "other-train")
 
 		service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
@@ -179,7 +183,11 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 	@DisplayName("the rollback restores the pre-attempt PathInfo and switch registrations exactly")
 	fun bypassRollbackRestoresPathInfoAndSwitchesToTheirPreAttemptSnapshots() {
 		val registry: PathReservationRegistry = context.scope.get()
-		val entry = inOutNamed("A")
+		// Westbound (Issue #1064): a first hop must end at a signal facing the train. sem1 faces west,
+		// so a train from B can be routed to it; a train from A could not (G8 refuses A -> sem1).
+		// The bypass shape is the mirror image of the eastbound tests above: the block on sem1's far
+		// side, towards swA, is taken, and the route must go round the loop through sem2 instead.
+		val entry = inOutNamed("B")
 		val firstHop = service.reservePath("train1", entry, semaphoreNamed("sem1"))
 		assertThat(firstHop).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		val pathInfoBefore = requireNotNull(registry.getPathInfo("train1"))
@@ -187,7 +195,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		val lockedBefore = switches().associate { it.name to it.locked }
 
 		val sem1 = semaphoreNamed("sem1")
-		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swA")
 		requiredNext.setUpPath(sem1, "other-train")
 		service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
 
