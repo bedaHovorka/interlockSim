@@ -1669,18 +1669,19 @@ class PathReservationServiceTest : KoinTestBase() {
 		 */
 		@Test
 		fun `resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone, and a later releasePath does too`() {
-			// t1 reserves the only path from zA to zB: zA (start) and doB1 (an internal boundary
-			// between two blocks t1 owns) both end up cleared; zB (the destination) stays at STOP.
+			// t1 reserves the direct path from zA to B: zA (start) and doB1 (an internal boundary
+			// between two blocks t1 owns) both end up cleared; zB, passed from behind, stays at STOP.
+			// (Not zA -> zB: zB faces B->A, so G8 refuses a route ending there, Issue #1064.)
 			val zA = findSemaphoreByName("zA")
 			val doB1 = findSemaphoreByName("doB1")
-			val zB = findSemaphoreByName("zB")
-			val result = service.reservePath("t1", zA, zB)
+			val inOutB = simulationContext.getInOuts().single { it.name == "B" }
+			val result = service.reservePath("t1", zA, inOutB)
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val blocks = service.getReservedBlocks("t1")
 
 			// Guard: doB1 must actually be lit for t1 before testing that resetting it works at all.
 			assertThat(doB1.signal.isAllowing())
-				.withMessage("doB1 must be an internal boundary of the zA->zB route, lit for t1")
+				.withMessage("doB1 must be an internal boundary of the zA->B route, lit for t1")
 				.isTrue()
 
 			// The un-travelled tail: every block from doB1 onward. The block just before doB1 stays
@@ -1705,7 +1706,7 @@ class PathReservationServiceTest : KoinTestBase() {
 				.isTrue()
 
 			// A second train reserves the freed track from doB1 onward, re-clearing doB1 for itself.
-			val secondResult = service.reservePath("t2", doB1, zB)
+			val secondResult = service.reservePath("t2", doB1, inOutB)
 			assertThat(secondResult).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			assertThat(doB1.signal.isAllowing())
 				.withMessage("doB1 must be lit for t2 after its own reservation")
@@ -1812,7 +1813,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		fun `unregisterBlock never drops the signal ahead of the train (forward-invariant guard, purge check)`() {
 			val zA = findSemaphoreByName("zA")
 			val doB1 = findSemaphoreByName("doB1")
-			val result = service.reservePath("t1", zA, findSemaphoreByName("zB"))
+			val result = service.reservePath("t1", zA, simulationContext.getInOuts().single { it.name == "B" })
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val blocks = assertReservationSuccess(result).reservedBlocks
 			val firstBlock = blocks.first()
@@ -1921,38 +1922,37 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `extending a route never re-lights semaphores between blocks the train already owns`() {
-			// Step 1: reserve a partial route from zA to zB. This is the only topological path
-			// between these two separators (zA -> vA -> doA1 -> doB1 -> vB -> zB), so it
-			// deterministically owns doB1 as an INTERNAL boundary (both its neighbouring blocks,
-			// doA1-doB1 and doB1-vB, are part of this same reservation) rather than as the route's
-			// start or target. doB1 faces the direction of travel (unlike doA1 -- see "reservePath
-			// never clears a semaphore the route passes from behind" above) so it gets lit here.
-			val zA = findSemaphoreByName("zA")
-			val doB1 = findSemaphoreByName("doB1")
-			val partial = service.reservePath("t1", zA, findSemaphoreByName("zB"))
+			// Step 1: reserve a partial westbound route from B to doA1 (B -> zB -> vB -> doB1 -> doA1).
+			// It owns zB as an INTERNAL boundary -- both its neighbouring blocks, zB-B and zB-vB, are
+			// part of this same reservation -- rather than as the route's start or target. zB faces the
+			// direction of travel (B -> A), so it gets lit here. The route ends at doA1, which faces the
+			// train too: a route ending at a signal facing the other way (the earlier zA -> zB fixture)
+			// is refused by G8 (Issue #1064).
+			val zB = findSemaphoreByName("zB")
+			val partial = service.reservePath("t1", inOutNamed("B"), findSemaphoreByName("doA1"))
 			val partialSuccess = assertReservationSuccess(partial)
 
 			val clearedByPartial =
 				semaphoresBounding(partialSuccess.reservedBlocks).filter { it.signal.isAllowing() }
 			// Guard: if nothing was cleared, the "stays at STOP" assertion below would pass vacuously.
 			assertThat(clearedByPartial).isNotEmpty()
-			assertThat(clearedByPartial.map { it.name }).contains(doB1.name)
+			assertThat(clearedByPartial.map { it.name }).contains(zB.name)
 
 			// Step 2: simulate head passage -- exactly what Train.semaphoreAction does when a
 			// train passes a facing semaphore: hold(1.0); semaphore.signal = Signal.STOP.
 			clearedByPartial.forEach { it.signal = Signal.STOP }
 
-			// Step 3: extend the SAME route all the way to B, reusing the original start. The
-			// recomputed candidate spans the blocks t1 already owns (zA..zB) plus one new block
-			// (zB..B). The service is expected to filter the already-owned blocks into
+			// Step 3: extend the SAME route all the way to A, reusing the original start. The
+			// recomputed candidate spans the blocks t1 already owns (B..doA1) plus the new blocks
+			// (doA1..A). The service is expected to filter the already-owned blocks into
 			// forwardBlocks internally and only configure signals for the new portion.
-			val extended = service.reservePath("t1", zA, inOutNamed("B"))
+			val extended = service.reservePath("t1", inOutNamed("B"), inOutNamed("A"))
 			assertThat(extended).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 			// Assert: every semaphore strictly between two blocks the train already owned --
-			// doB1 in particular, sitting between the doA1-doB1 block and the doB1-vB block,
-			// both already owned before the extension -- must still be at STOP. The route
-			// extension must not re-light a semaphore behind the train's head.
+			// zB in particular, sitting between the zB-B block and the zB-vB block, both already
+			// owned before the extension -- must still be at STOP. The route extension must not
+			// re-light a semaphore behind the train's head.
 			clearedByPartial.forEach { semaphore ->
 				assertThat(semaphore.signal)
 					.withMessage(
@@ -2042,8 +2042,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		@Test
 		fun `resetSemaphoresForReleasedBlocks purges a semaphore from the ledger even when its ownership already moved on`() {
 			val zA = findSemaphoreByName("zA")
-			val zB = findSemaphoreByName("zB")
-			val result = service.reservePath("t1", zA, zB)
+			val result = service.reservePath("t1", zA, simulationContext.getInOuts().single { it.name == "B" })
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val reservedBlocks = service.getReservedBlocks("t1")
 
@@ -3010,13 +3009,12 @@ class PathReservationServiceTest : KoinTestBase() {
 		fun `reservePath from a boundary of a block the train already holds succeeds`() {
 			val zA = findSemaphoreByName("zA")
 			val doB1 = findSemaphoreByName("doB1")
-			val zB = findSemaphoreByName("zB")
 
 			val initial = service.reservePath("t1", zA, doB1)
 			assertThat(initial).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 			// doB1 bounds the last block reserved above, so extending from it is contiguous.
-			val extension = service.reservePath("t1", doB1, zB)
+			val extension = service.reservePath("t1", doB1, simulationContext.getInOuts().single { it.name == "B" })
 
 			assertThat(extension).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		}
@@ -3059,7 +3057,7 @@ class PathReservationServiceTest : KoinTestBase() {
 				.withMessage("this test only exercises the occupancy arm if the registry is empty")
 				.isEmpty()
 
-			val result = service.reservePath("T-17", findSemaphoreByName("zB"), findSemaphoreByName("doB1"))
+			val result = service.reservePath("T-17", findSemaphoreByName("zB"), findSemaphoreByName("doA1"))
 
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		}
@@ -3084,15 +3082,17 @@ class PathReservationServiceTest : KoinTestBase() {
 		 * Pins ruling P4(ii): a train with no footprint anywhere passes vacuously, whatever
 		 * its start. Tightening this arm would break every train-entry caller.
 		 *
-		 * Uses doA1 -> zA rather than doA1 -> doB1: doA1 faces B->A (see
+		 * Uses doA1 -> A rather than doA1 -> doB1: doA1 faces B->A (see
 		 * [SignalReleaseTests] / [StartDirectionTests]), so a doA1 -> doB1 request is rejected
 		 * by the unrelated G4 rear-facing-START guard (Issue #893 task A1) regardless of
-		 * contiguity, which would confound this test's own concern.
+		 * contiguity, which would confound this test's own concern. It does not use doA1 -> zA
+		 * either: zA faces A->B, so that request is refused by the G8 rear-facing-END guard
+		 * (Issue #1064).
 		 */
 		@Test
 		fun `a train with no footprint at all passes vacuously`() {
-			val result =
-				service.reservePath("phantom-train", findSemaphoreByName("doA1"), findSemaphoreByName("zA"))
+			val inOutA = simulationContext.getInOuts().single { it.name == "A" }
+			val result = service.reservePath("phantom-train", findSemaphoreByName("doA1"), inOutA)
 
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		}
@@ -3218,9 +3218,9 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Liveness twin (anti-#566): the SAME semaphore, used in the direction it
 			// actually faces (B->A, towards zA/A), must still succeed and light up.
 			val doA1 = findSemaphoreByName("doA1")
-			val zA = findSemaphoreByName("zA")
 
-			val result = service.reservePath("liveTrain", doA1, zA)
+			// Ends at InOut A, not at zA: zA faces A->B, so G8 refuses a route ending there (Issue #1064).
+			val result = service.reservePath("liveTrain", doA1, inOutNamed("A"))
 
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			assertThat(doA1.signal.isAllowing())
@@ -3550,25 +3550,29 @@ class PathReservationServiceTest : KoinTestBase() {
 		 */
 		@Test
 		fun `PathInfo start is not a switch when trim-point separator is a switch (issue 938)`() {
-			// Given: the branch exit past vB: doB2 → junction → vB → vB_zB → zB
+			// Given: the branch exit past vB: doB2 → junction → vB → vB_zB → zB → kB → B
 			val doB2 = findSemaphoreByName("doB2")
-			val zB = findSemaphoreByName("zB")
+			val inOutB = simulationContext.getInOuts().single { it.name == "B" }
 			// The block that comes AFTER the switch vB — its reservedFrom will equal doB2
 			// (tryAtomicReservation calls block.setUpPath(start=doB2, …) for all new blocks).
 			val vBzBBlock = blockBetween("vB", "zB")
+			val kBBlock = blockBetween("zB", "B")
 
-			// Reserve from doB2 to zB — both blocks (junction, vB_zB) are new.
-			val result1 = service.reservePath("train1", doB2, zB)
+			// Reserve from doB2 to B — all blocks (junction, vB_zB, kB) are new. (Not doB2 to zB: zB faces
+			// B->A, so G8 refuses a route ending there, Issue #1064.)
+			val result1 = service.reservePath("train1", doB2, inOutB)
 			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			// Surgically free only vB_zB_block so that the SECOND reservation finds the junction
-			// block already owned but vB_zB new (the trim-point will be vB, a switch).
+			// Surgically free vB_zB_block and kB so that the SECOND reservation finds the junction
+			// block already owned but vB_zB and kB new (the trim-point will be vB, a switch).
 			// Both blocks are reserved from doB2 (tryAtomicReservation uses start as the from-sep).
 			vBzBBlock.cancelPathSetup(doB2)
 			registry.unregisterBlock("train1", vBzBBlock)
+			kBBlock.cancelPathSetup(doB2)
+			registry.unregisterBlock("train1", kBBlock)
 
 			// Clear the stored PathInfo so registering the second hop does not attempt a merge
-			// (the first PathInfo ended at zB; we want to see forwardOnlyPathInfo's result
+			// (the first PathInfo ended at B; we want to see forwardOnlyPathInfo's result
 			// in isolation, stored fresh as the only entry).
 			registry.restorePathInfo("train1", null)
 
@@ -3577,7 +3581,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// finds vB_zB (new) at trim-point vB.
 			// Before fix: returned PathInfo(start=vB) — switch-start defect.
 			// After fix:  returns PathInfo(start=doB2) — semaphore-bounded, correct.
-			val result2 = service.reservePath("train1", doB2, zB)
+			val result2 = service.reservePath("train1", doB2, inOutB)
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 			// Then: PathInfo.start must be the bounding semaphore doB2, never the switch vB.

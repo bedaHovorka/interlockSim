@@ -84,10 +84,11 @@ import org.koin.test.inject
  *                          └──────── doA2(17,9) ──────── doB2(24,9) ────┘
  * ```
  *
- * `zA → doA1` spans two blocks (zA–vA, vA–doA1); `zA → doB1` extends that by one more
- * (doA1–doB1). Both routes start at `zA`, so `rejectNonContiguousStart` (Step 0, footprint-based)
+ * `zA → doB1` spans three blocks (zA–vA, vA–doA1, doA1–doB1); `zA → B` extends that by the blocks
+ * beyond doB1. Both routes start at `zA`, so `rejectNonContiguousStart` (Step 0, footprint-based)
  * passes for the second request while the *PathInfo* merge is still non-contiguous — which is
- * precisely the shape that reaches the merge abort.
+ * precisely the shape that reaches the merge abort. (The fixture used to be `zA → doA1` and
+ * `zA → doB1`; `doA1` faces away from an A → B train, so G8, Issue #1064, now refuses that route.)
  */
 @DisplayName("reservePath survives an aborted PathInfo merge at both registerPathInfo call sites")
 @Tag("integration-test")
@@ -100,9 +101,9 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 	private lateinit var service: PathReservationService
 
 	private lateinit var zA: DynamicPathSeparator
-	private lateinit var doA1: DynamicPathSeparator
 	private lateinit var doB1: DynamicPathSeparator
 	private lateinit var inOutA: DynamicPathSeparator
+	private lateinit var inOutB: DynamicPathSeparator
 
 	private val trainId = "Train #1"
 
@@ -115,9 +116,9 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 		service = simulationContext.getRoutingServices().getPathReservationService()
 
 		zA = simulationContext.separatorAt(14, 8)
-		doA1 = simulationContext.separatorAt(16, 8)
 		doB1 = simulationContext.separatorAt(25, 8)
 		inOutA = simulationContext.separatorAt(11, 8)
+		inOutB = simulationContext.separatorAt(30, 8)
 	}
 
 	/** Canonical dynamic wrapper for the grid cell at ([x], [y]) — the identity the registry keys on. */
@@ -126,27 +127,32 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 		target: DynamicPathSeparator
 	): PathReservationService.ReservationResult = service.reservePath(trainId, start, target)
 
+	/*
+	 * Issue #1064 (G8): every route below ends at a signal facing the train or at an InOut. The
+	 * earlier fixture used `zA -> doA1`, whose end faces away from an A -> B train and is now refused
+	 * before any merge happens; `zA -> doB1` and `zA -> B` exercise the same merge shapes one signal
+	 * further on.
+	 */
+
 	@Test
 	@DisplayName("Step 2i: a route extension reusing its original start now MERGES instead of aborting (Issue #904)")
 	fun step2iMergeAbortDoesNotThrow() {
-		// Given: the train holds zA → doA1
-		assertThat(reserve(zA, doA1))
+		// Given: the train holds zA → doB1
+		assertThat(reserve(zA, doB1))
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		val storedBefore = registry.getPathInfo(trainId)
 		assertThat(storedBefore).isNotNull()
-		assertThat(storedBefore!!.target).isEqualTo(doA1)
+		assertThat(storedBefore!!.target).isEqualTo(doB1)
 
-		// When: it requests zA → doB1, reusing the ORIGINAL start zA (not the current front
-		// doA1) -- exactly the route-extension shape Issue #911 already established happens in
-		// production. Step 0 passes (zA still bounds a held block); the extra block doA1–doB1 is
-		// genuinely new.
-		val result = reserve(zA, doB1)
+		// When: it requests zA → B, reusing the ORIGINAL start zA (not the current front doB1) --
+		// exactly the route-extension shape Issue #911 already established happens in production.
+		// Step 0 passes (zA still bounds a held block); the blocks beyond doB1 are genuinely new.
+		val result = reserve(zA, inOutB)
 
-		// Then (Issue #904 root-cause fix): reservePath now builds the Step 2i merge candidate
-		// from the FORWARD-ONLY segment (starting at doA1, where the new block actually begins),
-		// not from the caller-supplied zA -- so new.start (doA1) equals old.target (doA1) and the
-		// merge SUCCEEDS, properly extending PathInfo, instead of spuriously aborting on every
-		// such extension. This is a real, correct extension, not an orphaned tail.
+		// Then (Issue #904 root-cause fix): reservePath builds the Step 2i merge candidate from the
+		// FORWARD-ONLY segment (starting at doB1, where the new blocks actually begin), not from the
+		// caller-supplied zA -- so new.start (doB1) equals old.target (doB1) and the merge SUCCEEDS,
+		// properly extending PathInfo, instead of spuriously aborting on every such extension.
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		val held = registry.getBlocks(trainId)
@@ -159,43 +165,43 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 			).isTrue()
 		}
 
-		// The PathInfo genuinely advanced: front moved from doA1 to doB1, tail stayed at zA.
+		// The PathInfo genuinely advanced: front moved from doB1 to B, tail stayed at zA.
 		val merged = registry.getPathInfo(trainId)
 		assertThat(merged).isNotNull()
 		assertThat(merged!!.start).isEqualTo(zA)
-		assertThat(merged.target).isEqualTo(doB1)
+		assertThat(merged.target).isEqualTo(inOutB)
 		assertThat(merged !== storedBefore).isTrue()
 	}
 
 	@Test
 	@DisplayName("already-owned early return: a non-contiguous merge aborts, reservePath still returns Success")
 	fun alreadyOwnedMergeAbortDoesNotThrow() {
-		// Given: the train holds the LONGER route zA → doB1, which subsumes zA → doA1.
-		assertThat(reserve(zA, doB1))
+		// Given: the train holds the LONGER route zA → B, which subsumes zA → doB1.
+		assertThat(reserve(zA, inOutB))
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		val storedBefore = registry.getPathInfo(trainId)
 		assertThat(storedBefore).isNotNull()
-		assertThat(storedBefore!!.target).isEqualTo(doB1)
+		assertThat(storedBefore!!.target).isEqualTo(inOutB)
 
-		// Precondition for the branch under test: every block of the shorter zA → doA1 candidate
+		// Precondition for the branch under test: every block of the shorter zA → doB1 candidate
 		// must already be owned, otherwise the request would take the Step 2i path instead and
 		// this test would silently stop covering the early return.
 		val heldEnds = registry.getBlocks(trainId).flatMap { it.ends().toList() }.toSet()
-		assertThat(heldEnds.contains(doA1)).isTrue()
+		assertThat(heldEnds.contains(doB1)).isTrue()
 
-		// When: it re-requests the shorter zA → doA1. All blocks are already owned, so
+		// When: it re-requests the shorter zA → doB1. All blocks are already owned, so
 		// forwardBlocks is empty and control reaches the already-owned early return — after
-		// configureAlreadyOwnedStartSignal has already lit zA. The requested target (doA1)
-		// differs from the held target (doB1), so the no-op short circuit does not apply and
+		// configureAlreadyOwnedStartSignal has already lit zA. The requested target (doB1)
+		// differs from the held target (B), so the no-op short circuit does not apply and
 		// registerPathInfo is called with a non-contiguous new.start.
-		val result = reserve(zA, doA1)
+		val result = reserve(zA, doB1)
 
 		// Then: no exception escaped, Success is still reported.
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		// The longer route's PathInfo is untouched — in particular it was NOT shortened to doA1,
-		// which would have stranded the train's already-reserved doA1–doB1 block.
-		assertThat(registry.getPathInfo(trainId)!!.target).isEqualTo(doB1)
+		// The longer route's PathInfo is untouched — in particular it was NOT shortened to doB1,
+		// which would have stranded the train's already-reserved blocks beyond doB1.
+		assertThat(registry.getPathInfo(trainId)!!.target).isEqualTo(inOutB)
 		assertThat(registry.getPathInfo(trainId) === storedBefore).isTrue()
 
 		val held = registry.getBlocks(trainId)
@@ -213,13 +219,13 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 		val lengthBefore = registry.getPathInfo(trainId)!!.reservedPath.size
 
 		// zA IS the current front, so this extension is contiguous and must merge normally.
-		assertThat(reserve(zA, doA1))
+		assertThat(reserve(zA, doB1))
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		val merged = registry.getPathInfo(trainId)
 		assertThat(merged).isNotNull()
 		assertThat(merged!!.start).isEqualTo(inOutA) // tail preserved
-		assertThat(merged.target).isEqualTo(doA1) // front advanced
+		assertThat(merged.target).isEqualTo(doB1) // front advanced
 		assertThat(merged.reservedPath.size > lengthBefore).isTrue()
 	}
 }

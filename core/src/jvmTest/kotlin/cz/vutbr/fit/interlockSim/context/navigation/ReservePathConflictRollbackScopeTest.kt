@@ -68,7 +68,7 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 	private lateinit var registry: PathReservationRegistry
 	private lateinit var inA: DynamicPathSeparator
 	private lateinit var doB1: DynamicPathSeparator
-	private lateinit var zB: DynamicPathSeparator
+	private lateinit var inB: DynamicPathSeparator
 
 	@BeforeEach
 	fun setUp() {
@@ -77,7 +77,7 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 		registry = context.scope.get<PathReservationRegistry>()
 		inA = context.separatorAt(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y)
 		doB1 = context.separatorAt(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y)
-		zB = context.separatorAt(ShuntingLoop.COORD_SEM_ZB_X, ShuntingLoop.COORD_SEM_ZB_Y)
+		inB = context.separatorAt(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y)
 	}
 
 	@Test
@@ -100,16 +100,16 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 			.withMessage("the first route must be one navigation accepts, or the final check is vacuous")
 			.isInstanceOf<PathResult.Available>()
 
-		// And: the next block of the extension A → zB is physically FREE but the registry still
+		// And: the next block of the extension A → B is physically FREE but the registry still
 		// attributes it to another train — the registry-only divergence that makes
 		// registerAtomic answer Conflict after the free-check passed.
-		val contested = firstForwardBlockOf(inA, zB, excluding = held)
+		val contested = firstForwardBlockOf(inA, inB, excluding = held)
 		assertThat(contested.getState()).isEqualTo(TrackFacility.State.FREE)
 		assertThat(registry.registerAtomic(other, listOf(contested)))
 			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
 
 		// When: the same train re-requests from the same start with the longer target.
-		val second = service.reservePath(train, inA, zB)
+		val second = service.reservePath(train, inA, inB)
 		assertThat(second)
 			.withMessage("the arrangement must hit the registry-conflict arm, or the test is vacuous")
 			.isInstanceOf<PathReservationService.ReservationResult.Conflict>()
@@ -169,10 +169,10 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 		val train = "Train #1025"
 		val other = "Train #other"
 
-		// Given: two blocks of the A → zB route, both physically FREE, pre-registered in the
+		// Given: two blocks of the A → B route, both physically FREE, pre-registered in the
 		// registry — the first to THIS train (the ghost own), the second to another train.
-		val route = routeBlocksOf(inA, zB)
-		assertThat(route.size, "the arrangement needs two blocks on the A → zB route")
+		val route = routeBlocksOf(inA, inB)
+		assertThat(route.size, "the arrangement needs two blocks on the A → B route")
 			.isGreaterThanOrEqualTo(2)
 		val ghost = route.first()
 		val contested = route[1]
@@ -184,7 +184,7 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
 
 		// When: the train requests the route; the registry conflicts on the other train's block.
-		val result = service.reservePath(train, inA, zB)
+		val result = service.reservePath(train, inA, inB)
 		assertThat(result)
 			.withMessage("the arrangement must hit the registry-conflict arm, or the test is vacuous")
 			.isInstanceOf<PathReservationService.ReservationResult.Conflict>()

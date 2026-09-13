@@ -151,14 +151,14 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 	@Test
 	fun `rollback resets a partially-written START aspect after a signal-config failure`() {
 		val doA1 = findSemaphoreByName("doA1")
-		val zA = findSemaphoreByName("zA")
 		assertThat(doA1.signal).isEqualTo(Signal.STOP)
 
 		val faultyEnvironment = PartialWriteFaultEnvironment(realEnvironment, faultOn = doA1)
 		val service =
 			DefaultPathReservationService(navigator, faultyEnvironment, registry, pathInfoBuilder, routeFinder)
 
-		// maxDepth = 3 restricts the topological search to the single direct doA1 -> zA route,
+		// maxDepth = 4 restricts the topological search to the single direct doA1 -> A route (doA1 -> vA ->
+		// zA -> A, three sections; not doA1 -> zA, whose end faces away from the train, Issue #1064),
 		// the same technique the MergeAbortResourceRelease sibling test (PathReservationServiceTest)
 		// and StartDirectionTests use to exclude vyhybna's longer sibling-branch alternate --
 		// otherwise an unconfigurable switch on that alternate candidate would surface as a
@@ -168,7 +168,7 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 		// ConfigFailed) would classify as AllPathsBlocked rather than GeometricallyImpossible, but
 		// the masking effect is the same, so excluding the alternate keeps this test on the direct
 		// candidate's behaviour alone.
-		val result = service.reservePath("faultTrain", doA1, zA, maxDepth = 3)
+		val result = service.reservePath("faultTrain", doA1, inOutNamed("A"), maxDepth = 4)
 
 		// With only the direct candidate, the injected ConfigFailed is ordinary contention (no
 		// geometric rejection is reached), so the exhausted-attempt classifier returns
@@ -179,7 +179,7 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 			.withMessage("a signal-config failure must fail the reservation as AllPathsBlocked")
 			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 		assertThat((result as PathReservationService.ReservationResult.AllPathsBlocked).attemptedPaths)
-			.withMessage("maxDepth=3 yields exactly the one direct candidate")
+			.withMessage("maxDepth=4 yields exactly the one direct candidate")
 			.isEqualTo(1)
 
 		assertThat(registry.getBlocks("faultTrain"))
@@ -198,70 +198,66 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 	 * ORIGINAL start must not have that start's still-governing signal reset just because THIS
 	 * attempt's own re-configuration of it failed.
 	 *
-	 * `doA1` is legitimately cleared and recorded for `extendTrain` by a first, genuinely
-	 * successful `reservePath` call. A second call from the SAME train and the SAME start
-	 * (`doA1`) extends the route further in the same direction; the injected fault fires on
-	 * THIS attempt's own re-config of `doA1` (a route extension always re-invokes
+	 * `zA` is legitimately cleared and recorded for `extendTrain` by a first, genuinely
+	 * successful `reservePath` call (`zA -> doB1`). A second call from the SAME train and the SAME
+	 * start (`zA`) extends the route further in the same direction (`zA -> B`); the injected fault
+	 * fires on THIS attempt's own re-config of `zA` (a route extension always re-invokes
 	 * `configureStartSignal` on the original start, even though it was already cleared -- see
 	 * [DefaultPathReservationService.configureStartSignal]). Before the fix,
 	 * `resetUnrecordedStartSignal` could not tell "written by an earlier, still-valid
-	 * reservation" apart from "written by this failed attempt" and reset `doA1` regardless,
+	 * reservation" apart from "written by this failed attempt" and reset the start regardless,
 	 * stranding the train behind its own signal while its earlier blocks stayed registered.
+	 *
+	 * The scenario used to run westbound (`doA1 -> zA`, extended to `doA1 -> A`). G8 (Issue #1064)
+	 * refuses a route ending at `zA` for a train travelling towards A, and there is no other signal
+	 * facing that train between `doA1` and A, so the scenario now runs eastbound.
 	 */
 	@Test
 	fun `a failed extension does not reset the START signal cleared by an earlier successful reservation`() {
-		val doA1 = findSemaphoreByName("doA1")
 		val zA = findSemaphoreByName("zA")
-		val inOutA = inOutNamed("A")
+		val doB1 = findSemaphoreByName("doB1")
+		val inOutB = inOutNamed("B")
 
 		// armed=false: the FIRST call below must succeed for real, exactly like the liveness
-		// twin, so doA1 ends up genuinely cleared and recorded for extendTrain.
-		val faultyEnvironment = PartialWriteFaultEnvironment(realEnvironment, faultOn = doA1, armed = false)
+		// twin, so zA ends up genuinely cleared and recorded for extendTrain.
+		val faultyEnvironment = PartialWriteFaultEnvironment(realEnvironment, faultOn = zA, armed = false)
 		val service =
 			DefaultPathReservationService(navigator, faultyEnvironment, registry, pathInfoBuilder, routeFinder)
 
-		val initial = service.reservePath("extendTrain", doA1, zA, maxDepth = 3)
+		val initial = service.reservePath("extendTrain", zA, doB1)
 		assertThat(initial)
-			.withMessage("the setup reservation must succeed so doA1 is legitimately cleared first")
+			.withMessage("the setup reservation must succeed so zA is legitimately cleared first")
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
-		assertThat(doA1.signal.isAllowing())
+		assertThat(zA.signal.isAllowing())
 			.withMessage("the earlier reservation must have cleared the START")
 			.isTrue()
 		val blocksBefore = registry.getBlocks("extendTrain").toSet()
 		assertThat(blocksBefore).isNotEmpty()
 
-		// Re-arm: only THIS second attempt's own re-config of doA1 must fail.
+		// Re-arm: only THIS second attempt's own re-config of zA must fail.
 		faultyEnvironment.armed = true
-		// maxDepth = 4 restricts the extension's topological search to the single direct
-		// doA1 -> A route (doA1 -> vA -> zA -> A, three sections), excluding vyhybna's longer
-		// sibling-branch alternate whose unconfigurable switch would otherwise be classified
-		// GeometricallyImpossible (Issue #903) and mask this test's actual concern: the
-		// START-aspect rollback after the injected ConfigFailed on doA1's re-config.
-		val extension = service.reservePath("extendTrain", doA1, inOutA, maxDepth = 4)
+		// zA -> B has two candidates of equal length on the passing loop (over k1 and over k2). Both end
+		// at InOut B, so G8 keeps both, and the fault fires on the START re-config of each. Neither
+		// failure is geometric, so the attempt is ordinary contention: AllPathsBlocked.
+		val extension = service.reservePath("extendTrain", zA, inOutB)
 
-		// With only the direct candidate, the injected ConfigFailed is ordinary contention, so
-		// the exhausted-attempt classifier returns AllPathsBlocked(1) -- NOT GeometricallyImpossible
-		// (which would come from the excluded alternate and is decoupled from this test's purpose).
 		assertThat(extension)
 			.withMessage("the injected fault must fail the extension attempt as AllPathsBlocked")
 			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
-		assertThat((extension as PathReservationService.ReservationResult.AllPathsBlocked).attemptedPaths)
-			.withMessage("maxDepth=4 yields exactly the one direct candidate")
-			.isEqualTo(1)
 		assertThat(registry.getBlocks("extendTrain").toSet())
 			.withMessage("a failed extension must not touch the train's earlier, still-valid blocks")
 			.isEqualTo(blocksBefore)
-		assertThat(doA1.signal.isAllowing())
+		assertThat(zA.signal.isAllowing())
 			.withMessage(
 				"a failed EXTENSION must not strand the train behind its own still-governing START -- " +
-					"doA1 was cleared by an EARLIER successful reservation, not written by this failed attempt"
+					"zA was cleared by an EARLIER successful reservation, not written by this failed attempt"
 			).isTrue()
 
 		// The bookkeeping must have survived intact too, not just the physical aspect: releasePath
-		// is the only thing allowed to reset doA1 now, proving it is still correctly recorded.
+		// is the only thing allowed to reset zA now, proving it is still correctly recorded.
 		service.releasePath("extendTrain")
-		assertThat(doA1.signal)
-			.withMessage("releasePath must still find and reset doA1 -- the bookkeeping was never purged")
+		assertThat(zA.signal)
+			.withMessage("releasePath must still find and reset zA -- the bookkeeping was never purged")
 			.isEqualTo(Signal.STOP)
 	}
 
@@ -273,12 +269,11 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 	@Test
 	fun `liveness twin - the same route succeeds and lights the START without fault injection`() {
 		val doA1 = findSemaphoreByName("doA1")
-		val zA = findSemaphoreByName("zA")
 
 		val service =
 			DefaultPathReservationService(navigator, realEnvironment, registry, pathInfoBuilder, routeFinder)
 
-		val result = service.reservePath("liveTrain", doA1, zA)
+		val result = service.reservePath("liveTrain", doA1, inOutNamed("A"))
 
 		assertThat(result)
 			.withMessage("without fault injection the route must succeed")
