@@ -41,6 +41,8 @@ import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 
 /**
  * Safety tests for [RegistryPartialRouteReleaser] against a **real** reserved path on
@@ -494,53 +496,30 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	}
 
 	/**
-	 * Issue #1067 gap 1, the owner's literal case: a block fails on one sweep and frees on a later one.
-	 * `cancelPathSetup` has already made the block FREE when `unregisterBlock` throws, so the train
-	 * holds a FREE block. The next sweep must still finish that release and then trim the PathInfo —
-	 * otherwise the held FREE block blocks the trim forever.
+	 * Issue #1067 gap 1, the owner's literal case: one block's unregister throws. `cancelPathSetup` has
+	 * already made that block FREE, and a FREE block reads as owner-less, so the sweeper would never
+	 * offer it again and the trim would never run (PR #1068 review). The releaser therefore drops the
+	 * block from the registry itself in the same sweep — its signals are already at STOP — and trims.
 	 */
-	@Test
-	@DisplayName("a block whose unregister throws on one sweep is released and trimmed on the next")
-	fun blockFailingOnOneSweepIsReleasedAndTrimmedOnTheNext() {
+	@ParameterizedTest(name = "service unregister {0}")
+	@EnumSource(UnregisterFailure::class)
+	@DisplayName("a block whose service unregister fails is still unregistered and the PathInfo trimmed")
+	fun blockWhoseUnregisterFailsIsStillReleasedAndTrimmed(failure: UnregisterFailure) {
 		val (_, tail) = reserveAndOccupyLongRoute()
 		val otherEnd = otherTrackEnd(tail)
 		val far = tail.last()
-		val farId = listOf(BlockIdentity.stableBlockId(far))
-		val flaky = releaserFailingOnceFor(far)
+		val flaky = releaserFailingOnceFor(far, failure)
 		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
 		assertThat(flaky.releaseUntravelledTail(trainId, tailIds).deferred, "first call deferred").isTrue()
 
 		val second = flaky.releaseUntravelledTail(trainId, tailIds)
 
-		assertThat(second.released, "released ids when one unregister throws").isEqualTo(tailIds - farId.toSet())
+		assertThat(second.released, "released ids").isEqualTo(tailIds)
 		assertThat(far.getState(), "failed block state").isEqualTo(TrackFacility.State.FREE)
-		assertThat(heldBlocks(), "blocks still held").contains(far)
-		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target while a block is held")
-			.isEqualTo(inOutNamed("B"))
-
-		val third = flaky.releaseUntravelledTail(trainId, farId)
-
-		assertThat(third.released, "released ids on the retry").isEqualTo(farId)
-		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target after the retry").isEqualTo(zA)
+		assertThat(registry().getOwner(far), "failed block owner").isEqualTo(null)
+		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)
 		val result = context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, otherEnd)
 		assertThat(result, "re-request from zA").isInstanceOf<PathReservationService.ReservationResult.Success>()
-	}
-
-	/**
-	 * A trim skipped on an earlier sweep (here: the tail freed outside the releaser, with no trim) is
-	 * done by the next sweep, even one that has nothing left to release.
-	 */
-	@Test
-	@DisplayName("a sweep with nothing to release still trims a PathInfo left untrimmed")
-	fun sweepWithNothingToReleaseRetriesTheTrim() {
-		val (_, tail) = reserveAndOccupyLongRoute()
-		freeAndUnregister(tail)
-		assertThat(registry().isPathExtendedBeyond(trainId, zA), "untrimmed path extends beyond zA").isTrue()
-
-		val result = releaser().releaseUntravelledTail(trainId, emptyList())
-
-		assertThat(result.released, "released ids").isEmpty()
-		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target after the retry").isEqualTo(zA)
 	}
 
 	/** A refused trim after a release is logged, and the release itself is still reported. */
@@ -644,8 +623,23 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		assertThat(signals.map { it.signal.name }, "aspects").isEqualTo(aspectsBefore)
 	}
 
-	/** A releaser whose service throws once from `unregisterBlock` for [failing], then behaves normally. */
-	private fun releaserFailingOnceFor(failing: DynamicTrackBlock): RegistryPartialRouteReleaser {
+	/** How the service's `unregisterBlock` fails once, after `cancelPathSetup` has made the block FREE. */
+	enum class UnregisterFailure {
+		/** Throws before unregistering: the block stays owned. */
+		THROWS,
+
+		/** Returns `false`: the block stays owned. */
+		REFUSES,
+
+		/** Unregisters the block, then throws (for example from an event listener). */
+		THROWS_AFTER_UNREGISTERING
+	}
+
+	/** A releaser whose service fails `unregisterBlock` once for [failing] as [failure] says, then behaves normally. */
+	private fun releaserFailingOnceFor(
+		failing: DynamicTrackBlock,
+		failure: UnregisterFailure
+	): RegistryPartialRouteReleaser {
 		val real = context.getRoutingServices().getPathReservationService()
 		var failed = false
 		val flaky =
@@ -654,11 +648,16 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 					trainId: String,
 					block: DynamicTrackBlock
 				): Boolean {
-					if (block == failing && !failed) {
-						failed = true
-						error("simulated unregister failure")
+					if (block != failing || failed) return real.unregisterBlock(trainId, block)
+					failed = true
+					return when (failure) {
+						UnregisterFailure.THROWS -> error("simulated unregister failure")
+						UnregisterFailure.REFUSES -> false
+						UnregisterFailure.THROWS_AFTER_UNREGISTERING -> {
+							real.unregisterBlock(trainId, block)
+							error("simulated failure after unregistering")
+						}
 					}
-					return real.unregisterBlock(trainId, block)
 				}
 			}
 		return RegistryPartialRouteReleaser(registry(), flaky)

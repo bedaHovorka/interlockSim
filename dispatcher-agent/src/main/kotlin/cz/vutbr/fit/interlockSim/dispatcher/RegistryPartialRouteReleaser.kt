@@ -58,7 +58,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   railway-domain question round 3 raised, and it means a reclaimed tail may not be immediately
  *   re-routable — a traffic-simulation-expert ruling could relax it later.
  * - **Per-block failure is contained.** A block that throws is logged and skipped; the rest of the
- *   tail is still attempted, and only ids that actually came free are returned.
+ *   tail is still attempted, and only ids that actually came free are returned. A block that is
+ *   already FREE when its unregister fails is dropped from the registry directly, so it can never
+ *   stay owned but invisible to the sweeper (Issue #1067).
  *
  * Runs on the simulation thread, from `ShuntingLoop`'s control-step listener.
  *
@@ -70,9 +72,6 @@ class RegistryPartialRouteReleaser(
 ) : PartialRouteReleaser {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		/** States of a held, unoccupied block the releaser may free: RESERVED, or FREE but still owned. */
-		private val RELEASABLE_STATES = setOf(TrackFacility.State.RESERVED, TrackFacility.State.FREE)
 	}
 
 	override fun releaseUntravelledTail(
@@ -96,20 +95,14 @@ class RegistryPartialRouteReleaser(
 
 		val requested = blockIds.toSet()
 		// Re-checked against live state, not trusted from the caller's snapshot: the sweeper's
-		// reading is one control step old and the train may have entered a block since. A FREE block
-		// the train still holds is one an earlier sweep freed but could not unregister (Issue #1067
-		// gap 1); it is offered again so that sweep's work can finish.
+		// reading is one control step old and the train may have entered a block since.
 		val eligible =
 			held.filter { block ->
 				BlockIdentity.stableBlockId(block) in requested &&
 					!block.isOccupied() &&
-					block.getState() in RELEASABLE_STATES
+					block.getState() == TrackFacility.State.RESERVED
 			}
-		if (eligible.isEmpty()) {
-			// A trim skipped on an earlier sweep is retried here; on a trimmed PathInfo it changes nothing.
-			trimIfOnlyHeadIsHeld(trainId, occupied)
-			return TailRelease.NOTHING
-		}
+		if (eligible.isEmpty()) return TailRelease.NOTHING
 
 		// Issue #1063 / #1067 gap 2: release and PathInfo trim succeed or fail together. The trim will
 		// cut the PathInfo right after the occupied head, so check THAT end — not the ends of the
@@ -213,25 +206,44 @@ class RegistryPartialRouteReleaser(
 		block: DynamicTrackBlock
 	): String? {
 		val id = BlockIdentity.stableBlockId(block)
-		return try {
-			// A FREE block was freed by an earlier sweep that could not unregister it; only that is left.
-			if (block.getState() != TrackFacility.State.FREE) block.cancelPathSetup(block.reservedFrom ?: return null)
-			if (pathReservationService.unregisterBlock(trainId, block)) {
-				id
-			} else {
-				logger.warn {
-					"RegistryPartialRouteReleaser: freed block '$id' but the registry refused to " +
-						"unregister it for '$trainId'; leaving ownership in place"
+		val reservedFrom = block.reservedFrom ?: return null
+		val unregistered =
+			try {
+				block.cancelPathSetup(reservedFrom)
+				pathReservationService.unregisterBlock(trainId, block)
+			} catch (e: Exception) {
+				logger.warn(e) {
+					"RegistryPartialRouteReleaser: could not release block '$id' of '$trainId'; " +
+						"continuing with the rest of the tail"
 				}
-				null
+				false
 			}
-		} catch (e: Exception) {
-			logger.warn(e) {
-				"RegistryPartialRouteReleaser: could not release block '$id' of '$trainId'; " +
-					"skipping it and continuing with the rest of the tail"
-			}
+		return if (unregistered || (block.getState() == TrackFacility.State.FREE && dropFreedBlock(trainId, block, id))) {
+			id
+		} else {
 			null
 		}
+	}
+
+	/**
+	 * Issue #1067 gap 1 (PR #1068 review): [block] is FREE, but the service did not finish unregistering
+	 * it. Left owned, it reads as owner-less to the sweeper — a FREE reading carries no train — so no
+	 * sweep offers it again and the PathInfo is never trimmed: the #1031 stall. Its signals were set to
+	 * STOP before the release, so the registry drops it directly (unless the service had already done
+	 * so before it failed). The service's release event for this one block may be missing.
+	 *
+	 * @return `true` when [trainId] no longer owns [block]
+	 */
+	private fun dropFreedBlock(
+		trainId: String,
+		block: DynamicTrackBlock,
+		id: String
+	): Boolean {
+		logger.warn {
+			"RegistryPartialRouteReleaser: the service did not unregister freed block '$id' of '$trainId'; " +
+				"dropping it from the registry directly"
+		}
+		return registry.getOwner(block) != trainId || registry.unregisterBlock(trainId, block)
 	}
 
 	private fun DynamicTrackBlock.isOccupied(): Boolean = occupant != null || getState() == TrackFacility.State.OCCUPIED
