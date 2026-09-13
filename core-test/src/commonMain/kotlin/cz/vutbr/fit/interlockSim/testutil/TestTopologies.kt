@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -20,7 +20,24 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
-import org.koin.mp.KoinPlatformTools
+
+/**
+ * A built linear topology together with the dynamic wrappers of its semaphores, in travel
+ * order (`A → Sem1 → … → B`).
+ *
+ * [TestTopologies] also returns bare contexts from its older fixtures; the Issue #989
+ * clearance-stop scenarios additionally need the intermediate semaphores' wrappers to flip
+ * their aspects, which those fixtures never exposed. This holder carries both, so the
+ * hand-built networks in those tests could be retired.
+ */
+class LinearSemaphoreTopology(
+	val context: DefaultSimulationContext,
+	val semaphores: List<DynamicRailSemaphore>
+) {
+	/** The single intermediate semaphore; for the one-semaphore topologies only. */
+	val semaphore: DynamicRailSemaphore
+		get() = semaphores.single()
+}
 
 /**
  * Common network topology fixtures for testing (core module version).
@@ -36,14 +53,49 @@ object TestTopologies {
 			.withConnection(1, 1, 5, 5, 100.0, 80.0)
 			.buildEditingContext()
 
-	fun linearPathWithSemaphore(semaphoreAllowing: Boolean = false): EditingContext =
+	/**
+	 * Grid cell of the single-semaphore family's semaphore. [withSemaphore] places it there
+	 * and [TestContextBuilder.semaphoreAt] must read back the same cell, so both share this
+	 * one position instead of a `(3, 3)` literal each.
+	 */
+	private val SEMAPHORE_POINT = Point(3, 3)
+
+	/**
+	 * The builder chain behind the single-semaphore linear family:
+	 * `A —[approachLength]— Sem —100 m— B`, all blocks at 80 m/s.
+	 */
+	private fun linearPathWithSemaphoreBuilder(
+		approachLength: Double = 100.0,
+		semaphoreAllowing: Boolean = false
+	): TestContextBuilder =
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)
-			.withSemaphore(3, 3, semaphoreAllowing)
+			.withSemaphore(SEMAPHORE_POINT.x, SEMAPHORE_POINT.y, semaphoreAllowing)
 			.withInOut("B", 5, 5, false)
-			.withConnection(1, 1, 3, 3, 100.0, 80.0)
+			.withConnection(1, 1, 3, 3, approachLength, 80.0)
 			.withConnection(3, 3, 5, 5, 100.0, 80.0)
-			.buildEditingContext()
+
+	fun linearPathWithSemaphore(semaphoreAllowing: Boolean = false): EditingContext =
+		linearPathWithSemaphoreBuilder(semaphoreAllowing = semaphoreAllowing).buildEditingContext()
+
+	/**
+	 * `A —[approachLength]— Sem —100 m— B` (see [linearPathWithSemaphoreBuilder]) plus the
+	 * dynamic wrapper of the intermediate semaphore, for scenarios that must flip its aspect.
+	 */
+	fun linearPathWithSemaphoreNetwork(
+		approachLength: Double = 100.0,
+		semaphoreAllowing: Boolean = false
+	): LinearSemaphoreTopology {
+		val builder = linearPathWithSemaphoreBuilder(approachLength, semaphoreAllowing)
+		val staticSemaphore = builder.semaphoreAt(SEMAPHORE_POINT.x, SEMAPHORE_POINT.y)
+		// The editing context is closed as soon as its data is copied across: it owns a Koin
+		// scope of its own, and only the simulation context is handed to the caller to close.
+		val context = builder.buildEditingContext().use { toSimulationContext(it) }
+		return LinearSemaphoreTopology(
+			context,
+			listOf(context.toDynamic(staticSemaphore) as DynamicRailSemaphore)
+		)
+	}
 
 	fun yJunctionWithSwitch(): EditingContext {
 		val context = DefaultEditingContext(60, 50)
@@ -184,26 +236,44 @@ object TestTopologies {
 		return context
 	}
 
-	fun linearPathWithSemaphoreSequence(
-		semaphoreCount: Int = 3,
-		semaphoresAllowing: Boolean = false
-	): EditingContext {
+	/** [buildLinearSemaphoreSequence]'s editing context plus the semaphores it placed. */
+	private class SequenceBuild(
+		val editing: EditingContext,
+		val semaphores: List<RailSemaphore>
+	)
+
+	/**
+	 * The builder body behind the sequence family (see [linearPathWithSemaphoreSequence] for the
+	 * layout), also collecting the placed static semaphores so the [LinearSemaphoreTopology]
+	 * variants can map them to their dynamic wrappers.
+	 */
+	private fun buildLinearSemaphoreSequence(
+		semaphoreCount: Int,
+		semaphoresAllowing: Boolean
+	): SequenceBuild {
 		require(semaphoreCount >= 1) { "semaphoreCount must be at least 1, got $semaphoreCount" }
 
 		val gridSize = (semaphoreCount + 2) * 5 + 10
 		val context = DefaultEditingContext(gridSize, gridSize)
 
-		val inA = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+		// InOut.direction() = spatialType.segments[if (orientation) 1 else 0]; for HORIZONTAL,
+		// segments = [F (east), A (west)]. "A" sits at the west end of the network and must
+		// point east (F) to join the first semaphore, so orientation = false here (mirrors
+		// [branchySwitchChain] and [linearPathWithAsymmetricSpeeds]). Before this fix both
+		// InOuts faced away from the network, so a train could never enter at "A".
+		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		context.putCell(Point(1, 5), inA)
 
 		var previousX = 1
 		var previousElement: NodeCell = inA
+		val semaphores = mutableListOf<RailSemaphore>()
 
 		for (i in 1..semaphoreCount) {
 			val semaphore = RailSemaphore("Sem$i", semaphoresAllowing, Cell.SpatialType.HORIZONTAL)
 
 			val currentX = 1 + (i * 5)
 			context.putCell(Point(currentX, 5), semaphore)
+			semaphores += semaphore
 
 			val track = SimpleTrackBlock(previousElement, semaphore, 100.0, 80.0)
 			context.joinCells(Point(previousX, 5), Point(currentX, 5), track)
@@ -213,13 +283,39 @@ object TestTopologies {
 		}
 
 		val exitX = 1 + ((semaphoreCount + 1) * 5)
-		val outB = InOut("B", false, Cell.SpatialType.HORIZONTAL)
+		// "B" sits at the east end of the network and must point west (A) to join the last
+		// semaphore, so orientation = true here (the exit mirrors the entry above).
+		val outB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 		context.putCell(Point(exitX, 5), outB)
 
 		val finalTrack = SimpleTrackBlock(previousElement, outB, 100.0, 80.0)
 		context.joinCells(Point(previousX, 5), Point(exitX, 5), finalTrack)
 
-		return context
+		return SequenceBuild(context, semaphores)
+	}
+
+	fun linearPathWithSemaphoreSequence(
+		semaphoreCount: Int = 3,
+		semaphoresAllowing: Boolean = false
+	): EditingContext = buildLinearSemaphoreSequence(semaphoreCount, semaphoresAllowing).editing
+
+	/**
+	 * The sequence layout (see [linearPathWithSemaphoreSequence]) plus the dynamic wrappers of
+	 * its semaphores in travel order, for scenarios that must flip each aspect as its stop line
+	 * is reached.
+	 */
+	fun linearPathWithSemaphoreSequenceNetwork(
+		semaphoreCount: Int = 3,
+		semaphoresAllowing: Boolean = false
+	): LinearSemaphoreTopology {
+		val build = buildLinearSemaphoreSequence(semaphoreCount, semaphoresAllowing)
+		// Closed on the spot, as in [linearPathWithSemaphoreNetwork]: the editing context's own
+		// Koin scope must not outlive the conversion.
+		val context = build.editing.use { toSimulationContext(it) }
+		return LinearSemaphoreTopology(
+			context,
+			build.semaphores.map { context.toDynamic(it) as DynamicRailSemaphore }
+		)
 	}
 
 	/**
@@ -271,28 +367,16 @@ object TestTopologies {
 			.buildSimulationContext()
 
 	fun linearPathWithSemaphoreSimulation(semaphoreAllowing: Boolean = false): DefaultSimulationContext =
-		TestContextBuilder()
-			.withInOut("A", 1, 1, true)
-			.withSemaphore(3, 3, semaphoreAllowing)
-			.withInOut("B", 5, 5, false)
-			.withConnection(1, 1, 3, 3, 100.0, 80.0)
-			.withConnection(3, 3, 5, 5, 100.0, 80.0)
-			.buildSimulationContext()
+		linearPathWithSemaphoreBuilder(semaphoreAllowing = semaphoreAllowing).buildSimulationContext()
 
-	fun yJunctionWithSwitchSimulation(): DefaultSimulationContext {
-		val editingContext = yJunctionWithSwitch()
-		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
+	fun yJunctionWithSwitchSimulation(): DefaultSimulationContext =
+		yJunctionWithSwitch().use { toSimulationContext(it) }
 
 	fun linearPathWithSemaphoreSequenceSimulation(
 		semaphoreCount: Int = 3,
 		semaphoresAllowing: Boolean = false
-	): DefaultSimulationContext {
-		val editingContext = linearPathWithSemaphoreSequence(semaphoreCount, semaphoresAllowing)
-		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
+	): DefaultSimulationContext =
+		linearPathWithSemaphoreSequence(semaphoreCount, semaphoresAllowing).use { toSimulationContext(it) }
 
 	fun deadEndSingleInOutSimulation(): DefaultSimulationContext =
 		TestContextBuilder()

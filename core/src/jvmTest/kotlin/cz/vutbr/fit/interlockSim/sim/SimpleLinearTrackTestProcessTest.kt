@@ -20,6 +20,8 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.runSimpleLinearTrackScenario
+import cz.vutbr.fit.interlockSim.testutil.trainSpecAB
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
@@ -57,19 +59,6 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		return ctx
 	}
 
-	private fun specAB(
-		inTime: Double = 1.0,
-		outTime: Double = 15.0,
-		length: Double = 20.0
-	): SimpleLinearTrackTestProcess.TrainSpec =
-		SimpleLinearTrackTestProcess.TrainSpec(
-			inName = "A",
-			outName = "B",
-			inTime = inTime,
-			outTime = outTime,
-			length = length
-		)
-
 	/** Scenario 1: train follows a pre-reserved path A→B and makes genuine forward progress. */
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
@@ -80,33 +69,23 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		val b = inOuts.single { it.name == "B" }
 		val reservationService = ctx.getRoutingServices().getPathReservationService()
 
-		var capturedTrain: Train? = null
-		val process =
-			SimpleLinearTrackTestProcess(
-				ctx,
-				endTime = 50L,
-				trainSpecs = listOf(specAB()),
-				onTrainCreated = { train ->
-					capturedTrain = train
-					val res = reservationService.reservePath(train.name, a, b)
-					assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
-				}
-			)
-		ctx.setMainProcess(process)
-		ctx.run()
+		val run =
+			runSimpleLinearTrackScenario(ctx, endTime = 50L, trainSpecs = listOf(trainSpecAB(outTime = 15.0))) { train ->
+				val res = reservationService.reservePath(train.name, a, b)
+				assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			}
 
 		logger.info {
-			"Scenario 1 metrics: entered=${process.getTrainsEntered()} " +
-				"exited=${process.getTrainsExited()} " +
-				"maxConc=${process.getMaxConcurrentTrains()} " +
-				"blocks=${process.getAllBlockTransitions()}"
+			"Scenario 1 metrics: entered=${run.process.getTrainsEntered()} " +
+				"exited=${run.process.getTrainsExited()} " +
+				"maxConc=${run.process.getMaxConcurrentTrains()} " +
+				"blocks=${run.process.getAllBlockTransitions()}"
 		}
-		val train = requireNotNull(capturedTrain) { "onTrainCreated was never called" }
-		assertThat(process.getTrainsEntered()).isEqualTo(1)
-		assertThat(process.getMaxConcurrentTrains()).isEqualTo(1)
+		assertThat(run.process.getTrainsEntered()).isEqualTo(1)
+		assertThat(run.process.getMaxConcurrentTrains()).isEqualTo(1)
 		// Strong motion proof: train advanced along the reserved path.
-		assertThat(train.totalDistance).isGreaterThan(0.0)
-		assertThat(process.getBlockTransitions(train.name)).isGreaterThan(0)
+		assertThat(run.train.totalDistance).isGreaterThan(0.0)
+		assertThat(run.process.getBlockTransitions(run.train.name)).isGreaterThan(0)
 	}
 
 	/** Scenario 2: train halts at semaphore when path is not reserved. */
@@ -115,23 +94,16 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 	fun `train halts at semaphore when path not reserved`() {
 		val ctx = loadLinearContext()
 		// No reservation — train should enter but not exit.
-		val process =
-			SimpleLinearTrackTestProcess(
-				ctx,
-				endTime = 20L,
-				trainSpecs = listOf(specAB())
-			)
-		ctx.setMainProcess(process)
-		ctx.run()
+		val run = runSimpleLinearTrackScenario(ctx, endTime = 20L, trainSpecs = listOf(trainSpecAB(outTime = 15.0)))
 
 		logger.info {
-			"Scenario 2 metrics: entered=${process.getTrainsEntered()} " +
-				"exited=${process.getTrainsExited()} " +
-				"blocks=${process.getAllBlockTransitions()}"
+			"Scenario 2 metrics: entered=${run.process.getTrainsEntered()} " +
+				"exited=${run.process.getTrainsExited()} " +
+				"blocks=${run.process.getAllBlockTransitions()}"
 		}
-		assertThat(process.getTrainsEntered()).isEqualTo(1)
+		assertThat(run.process.getTrainsEntered()).isEqualTo(1)
 		// No reservation was made — the train cannot complete its journey.
-		assertThat(process.getTrainsExited()).isEqualTo(0)
+		assertThat(run.process.getTrainsExited()).isEqualTo(0)
 	}
 
 	/** Scenario 3: second train waits while first holds a conflicting reservation. */
@@ -146,43 +118,40 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 		// Reserve A→B for the FIRST train created; the second cannot claim it.
 		var firstReserved = false
-		val process =
-			SimpleLinearTrackTestProcess(
+		val run =
+			runSimpleLinearTrackScenario(
 				ctx,
 				endTime = 30L,
 				trainSpecs =
 					listOf(
-						specAB(inTime = 1.0, outTime = 15.0),
-						specAB(inTime = 2.0, outTime = 20.0)
-					),
-				onTrainCreated = { train ->
-					if (!firstReserved) {
-						val res = reservationService.reservePath(train.name, a, b)
-						assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
-						firstReserved = true
-					} else {
-						// Train 1 holds A→B: attempting to reserve for train 2 must fail
-						// with AllPathsBlocked, directly exercising the conflict code path.
-						val conflict = reservationService.reservePath(train.name, a, b)
-						assertThat(conflict).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
-					}
+						trainSpecAB(inTime = 1.0, outTime = 15.0),
+						trainSpecAB(inTime = 2.0, outTime = 20.0)
+					)
+			) { train ->
+				if (!firstReserved) {
+					val res = reservationService.reservePath(train.name, a, b)
+					assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
+					firstReserved = true
+				} else {
+					// Train 1 holds A→B: attempting to reserve for train 2 must fail
+					// with AllPathsBlocked, directly exercising the conflict code path.
+					val conflict = reservationService.reservePath(train.name, a, b)
+					assertThat(conflict).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 				}
-			)
-		ctx.setMainProcess(process)
-		ctx.run()
+			}
 
 		logger.info {
-			"Scenario 3 metrics: entered=${process.getTrainsEntered()} " +
-				"exited=${process.getTrainsExited()} " +
-				"maxConc=${process.getMaxConcurrentTrains()} " +
-				"blocks=${process.getAllBlockTransitions()}"
+			"Scenario 3 metrics: entered=${run.process.getTrainsEntered()} " +
+				"exited=${run.process.getTrainsExited()} " +
+				"maxConc=${run.process.getMaxConcurrentTrains()} " +
+				"blocks=${run.process.getAllBlockTransitions()}"
 		}
 		// Both trains are queued and become approved (MAX_TRAINS=2).
-		assertThat(process.getTrainsEntered()).isEqualTo(2)
-		assertThat(process.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
-		assertThat(process.getMaxConcurrentTrains()).isLessThanOrEqualTo(SimpleLinearTrackTestProcess.MAX_TRAINS)
+		assertThat(run.process.getTrainsEntered()).isEqualTo(2)
+		assertThat(run.process.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
+		assertThat(run.process.getMaxConcurrentTrains()).isLessThanOrEqualTo(SimpleLinearTrackTestProcess.MAX_TRAINS)
 		// Second train cannot exit while blocks are held by Train #1's reservation.
-		assertThat(process.getTrainsExited()).isLessThanOrEqualTo(1)
+		assertThat(run.process.getTrainsExited()).isLessThanOrEqualTo(1)
 	}
 
 	/** Scenario 4: blocked train resumes after reservation is released. */
@@ -199,49 +168,39 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		val reserved = reservationService.reservePath("Phantom", a, b)
 		assertThat(reserved).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		var capturedTrain: Train? = null
 		var distanceBeforeRelease = 0.0
-		val process =
-			SimpleLinearTrackTestProcess(
-				ctx,
-				endTime = 60L,
-				trainSpecs = listOf(specAB()),
-				onTrainCreated = { train ->
-					capturedTrain = train
-					// Schedule a helper process that waits before releasing the blocked
-					// path and reassigning it to the real train.  This ensures there is
-					// a genuine "blocked" period: the train is activated and attempts to
-					// proceed, but the path is still held by Phantom.  Only after the
-					// helper fires does the train receive the reservation and resume.
-					val releaseHelper =
-						object : Process() {
-							override suspend fun actions() {
-								hold(10.0) // 10-second blocking window
-								// Train has been active for ~10 sim-seconds but Phantom still
-								// holds the path — it must not have completed its journey yet.
-								assertThat(train.terminated()).isEqualTo(false)
-								distanceBeforeRelease = train.totalDistance
-								reservationService.releasePath("Phantom")
-								val res = reservationService.reservePath(train.name, a, b)
-								assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
-							}
+		val run =
+			runSimpleLinearTrackScenario(ctx, endTime = 60L, trainSpecs = listOf(trainSpecAB(outTime = 15.0))) { train ->
+				// Schedule a helper process that waits before releasing the blocked
+				// path and reassigning it to the real train.  This ensures there is
+				// a genuine "blocked" period: the train is activated and attempts to
+				// proceed, but the path is still held by Phantom.  Only after the
+				// helper fires does the train receive the reservation and resume.
+				val releaseHelper =
+					object : Process() {
+						override suspend fun actions() {
+							hold(10.0) // 10-second blocking window
+							// Train has been active for ~10 sim-seconds but Phantom still
+							// holds the path — it must not have completed its journey yet.
+							assertThat(train.terminated()).isEqualTo(false)
+							distanceBeforeRelease = train.totalDistance
+							reservationService.releasePath("Phantom")
+							val res = reservationService.reservePath(train.name, a, b)
+							assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
 						}
-					Process.activate(releaseHelper)
-				}
-			)
-		ctx.setMainProcess(process)
-		ctx.run()
+					}
+				Process.activate(releaseHelper)
+			}
 
 		logger.info {
-			"Scenario 4 metrics: entered=${process.getTrainsEntered()} " +
-				"exited=${process.getTrainsExited()} " +
-				"blocks=${process.getAllBlockTransitions()}"
+			"Scenario 4 metrics: entered=${run.process.getTrainsEntered()} " +
+				"exited=${run.process.getTrainsExited()} " +
+				"blocks=${run.process.getAllBlockTransitions()}"
 		}
-		val train = requireNotNull(capturedTrain) { "onTrainCreated was never called" }
-		assertThat(process.getTrainsEntered()).isEqualTo(1)
+		assertThat(run.process.getTrainsEntered()).isEqualTo(1)
 		// Train must have moved AFTER the path was released — not merely before blocking.
-		assertThat(train.totalDistance).isGreaterThan(distanceBeforeRelease)
-		assertThat(process.getBlockTransitions(train.name)).isGreaterThan(0)
+		assertThat(run.train.totalDistance).isGreaterThan(distanceBeforeRelease)
+		assertThat(run.process.getBlockTransitions(run.train.name)).isGreaterThan(0)
 	}
 
 	/**
@@ -260,27 +219,17 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		val b = inOuts.single { it.name == "B" }
 		val reservationService = ctx.getRoutingServices().getPathReservationService()
 
-		var capturedTrain: Train? = null
-		val process =
-			SimpleLinearTrackTestProcess(
-				ctx,
-				endTime = 50L,
-				trainSpecs = listOf(specAB()),
-				onTrainCreated = { train ->
-					capturedTrain = train
-					val res = reservationService.reservePath(train.name, a, b)
-					assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
-				}
-			)
-		ctx.setMainProcess(process)
-		ctx.run()
+		val run =
+			runSimpleLinearTrackScenario(ctx, endTime = 50L, trainSpecs = listOf(trainSpecAB(outTime = 15.0))) { train ->
+				val res = reservationService.reservePath(train.name, a, b)
+				assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			}
 
-		val train = requireNotNull(capturedTrain) { "onTrainCreated was never called" }
 		// Reaching B proves both waitCrossing block-boundary calls (A->Sem, Sem->B) fired.
-		assertThat(process.getTrainsExited()).isEqualTo(1)
+		assertThat(run.process.getTrainsExited()).isEqualTo(1)
 		// Exceeding the first block's length (100.0m) is direct evidence the A->Sem
 		// waitCrossing call actually located that boundary rather than stalling on it.
-		assertThat(train.totalDistance).isGreaterThan(100.0)
+		assertThat(run.train.totalDistance).isGreaterThan(100.0)
 	}
 
 	// Note: the tail-entry "already satisfied" branch (Train.kt:1072, `if (front.getTotalDistance()

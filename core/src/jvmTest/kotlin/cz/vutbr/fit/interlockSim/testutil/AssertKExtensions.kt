@@ -15,6 +15,7 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import assertk.Assert
 import assertk.assertThat
+import assertk.assertions.isBetween
 import assertk.assertions.isEqualTo
 import assertk.assertions.support.expected
 import assertk.assertions.support.show
@@ -22,6 +23,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.Train
 import java.io.File
 import kotlin.reflect.KProperty0
 
@@ -292,4 +294,30 @@ fun assertReservedBlocks(
 		assertThat(block.reservedFrom, "reservedFrom of ${block.name}").isEqualTo(reservedFrom)
 		assertThat(block.trainName, "trainName of ${block.name}").isEqualTo(trainName)
 	}
+}
+
+/**
+ * Position tolerance for the stand-position assertions: the `maxAbsError = 1e-2` the scenarios'
+ * generators are configured with (`Generator.startAction`).
+ */
+private const val CLEARANCE_STOP_POSITION_TOLERANCE = 1e-2
+
+/**
+ * Asserts that [travelled] sits at the clearance stop line that ends [signalDistance] — one
+ * [Train.SEMAPHORE_STOP_CLEARANCE_METERS] short of the signal, within the generator's
+ * `maxAbsError`.
+ *
+ * The Issue #989 scenarios each asserted this stand-position pair; one shared form stops the
+ * classes measuring the same stand differently after a stand-semantics change. Scenarios whose
+ * centre is *not* a clearance stop line — the separator stand, or a restrictive flip that lands
+ * inside the clearance and stops best-effort past the line — keep their inline bounds.
+ */
+fun assertStoodAtClearanceStopLine(
+	travelled: Double,
+	signalDistance: Double,
+	name: String = "final distance travelled"
+) {
+	val stopLine = signalDistance - Train.SEMAPHORE_STOP_CLEARANCE_METERS
+	assertThat(travelled, name = name)
+		.isBetween(stopLine - CLEARANCE_STOP_POSITION_TOLERANCE, stopLine + CLEARANCE_STOP_POSITION_TOLERANCE)
 }
