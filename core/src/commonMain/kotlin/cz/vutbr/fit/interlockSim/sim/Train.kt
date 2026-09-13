@@ -1517,9 +1517,9 @@ class Train :
 		 * phase one metre short of the room it needs and force a deceleration past the bound.
 		 *
 		 * The braking-room term is armed only while the train really does stop short of a
-		 * restrictive signal. If the aspect clears mid-phase (or the clearance is waived), only the
-		 * half-speed term is left and the approach behaves exactly as it did before this rule: the
-		 * train runs on and is re-commanded at the separator.
+		 * restrictive signal. If the aspect clears during phase 1, [iteration] exits the phase
+		 * immediately and resumes at the live aspect's speed cap. If the clearance is waived,
+		 * [Front.waiveClearanceStop] cancels this wait and issues the replacement command.
 		 *
 		 * `-1.0` while `accelerate` is false ends the wait on a cancel or a re-command;
 		 * `Front.fireStop` zeroes the velocity, which the half-speed term alone would never see.
