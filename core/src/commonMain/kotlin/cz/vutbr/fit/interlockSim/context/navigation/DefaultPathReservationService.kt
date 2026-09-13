@@ -3365,11 +3365,7 @@ class DefaultPathReservationService(
 		val context =
 			environment as? cz.vutbr.fit.interlockSim.context.SimulationContext
 				?: return true
-		// getSegment(separator, X, Y) is the separator's segment on X's side, so this is the
-		// segment the train is heading TOWARDS -- the same value configureSemaphoreSignal
-		// passes as `to` when it clears the aspect.
-		val towards = context.getSegment(semaphore, nextBlock, null) ?: return true
-		return towards == semaphore.direction()
+		return semaphoreFacesNextBlock(context, semaphore, nextBlock)
 	}
 
 	/**
