@@ -339,6 +339,59 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		assertThat(run.process.getTrainsExited(), name = "trains exited").isGreaterThan(0)
 	}
 
+	// ── Rung 3d ───────────────────────────────────────────────────────────────────
+
+	/**
+	 * Rung 3c's counterpart during phase 1 instead of phase 2: the aspect clears to [Signal.S30]
+	 * at 6 m, the same early trigger rung 3 uses, well before the ~12.4 m braking-room crossing.
+	 *
+	 * [Motor.approachMargin]'s half-speed term is `targetSpeed / 2 - velocity`, where `targetSpeed`
+	 * is the `normalSpeed` [Train.Front.accelerateToSignal] passed to [Motor.onWarning] before the
+	 * aspect changed. [Train.semaphoreToStopShortOf] only distinguishes allowing from non-allowing —
+	 * S30 and [Signal.FREE] look identical to it — so phase 1 kept running toward half of the
+	 * *original* commanded speed, not the newly-capped one. On this fixture that is half of
+	 * 27.78 m/s (13.89 m/s), well above S30's 8.33 m/s permitted speed.
+	 */
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@DisplayName("an aspect clearing to a restrictive-but-allowing aspect during phase 1 respects its speed cap")
+	fun aspectClearingToARestrictiveButAllowingAspectDuringPhaseOneRespectsItsSpeedCap() {
+		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
+		val ctx = network.context.tracked()
+		val samples = mutableListOf<TrainKinematicSample>()
+		val flip =
+			AspectFlipOnce(
+				network.semaphore,
+				Signal.S30,
+				trigger = { it.totalDistance > SHORT_APPROACH / 5.0 }
+			)
+		val run =
+			runClearanceStopScenario(
+				ctx,
+				semaphores = listOf(network.semaphore),
+				endTime = RUNNING_END_TIME,
+				initialAspect = Signal.STOP,
+				trainLength = SHORT_TRAIN_LENGTH,
+				samplePeriod = SAMPLE_PERIOD,
+				onSample = { _, sample ->
+					samples += sample
+					flip.onSample(sample)
+				}
+			)
+		val atSeparator =
+			requireNotNull(samples.minByOrNull { abs(it.totalDistance - SHORT_APPROACH) }) {
+				"no samples were taken"
+			}
+		logger.info { "R3d: flipped=${flip.fired} at the separator $atSeparator" }
+
+		assertThat(flip.fired, name = "the aspect was cleared to S30 during phase 1").isTrue()
+		assertThat(atSeparator.velocity, name = "speed passing the S30 signal")
+			.isGreaterThan(RUN_THROUGH_SPEED_MPS)
+		assertThat(atSeparator.velocity, name = "speed passing the S30 signal")
+			.isLessThanOrEqualTo(Signal.S30.allowedSpeed() + SPEED_CAP_HEADROOM)
+		assertThat(run.process.getTrainsExited(), name = "trains exited").isGreaterThan(0)
+	}
+
 	// ── Rung 4 ────────────────────────────────────────────────────────────────────
 
 	/**

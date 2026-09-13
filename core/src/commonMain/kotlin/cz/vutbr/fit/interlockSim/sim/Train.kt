@@ -1567,7 +1567,22 @@ class Train :
 			// One of the two turns returns from the wait and the other survives to the passivate,
 			// which is where a re-command's iteration comes from.
 			if (cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
-				waitUntilCrossing { approachMargin() }
+				// The second term ends phase 1 the instant the signal this phase started short of
+				// itself turns allowing, rather than only letting a clear relax the braking-room
+				// term (Copilot review, PR #1033, Train.kt:1533): [semaphoreToStopShortOf] only
+				// distinguishes allowing from non-allowing, so a clear to a restrictive-but-allowing
+				// aspect (S30/S40) looked identical to a clear to FREE — phase 1 kept running toward
+				// half of the pre-clear `targetSpeed`, which can be well above the new aspect's own
+				// permitted speed by the time the train reaches it.
+				//
+				// Deliberately [restrictiveSignalCleared], not `semaphoreToStopShortOf() == null`:
+				// the latter also goes null when [clearanceStopWaived] is set for an unrelated
+				// reason (the route past the signal was lost), which [Front.waiveClearanceStop]
+				// already re-commands externally via `cancelAccelerating()` — reacting to it here
+				// too raced that path and broke the Issue #989 clearance-stop and mid-journey
+				// no-path tests. Reading the captured semaphore's own aspect sidesteps the waiver
+				// entirely: it is unaffected by [clearanceStopWaived].
+				waitUntilCrossing { minOf(approachMargin(), if (restrictiveSignalCleared()) -1.0 else 1.0) }
 			} else {
 				waitUntil(cond)
 			}
@@ -1576,51 +1591,83 @@ class Train :
 			// rather than activates): without it a motor torn down mid-approach would answer by
 			// entering the braking phase and parking again instead of leaving the loop.
 			if (!terminate && accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
-				targetSpeed = 0.0
-				logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
-				// Published so [derivatives] sees a decelerating phase and applies the
-				// MINIMAL_DECELERATION bound to it; an inline condition left it clamping this phase
-				// as if it were still accelerating (Issue #1014).
-				val braking = AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
-				currentCondition = braking
-				// [approachMargin]'s KDoc promises a train runs on when the aspect clears mid-phase,
-				// but that promise is wired into the phase-1 wait only. Without this second disjunct
-				// the aspect clearing here would still finish braking to a stand — [derivatives]
-				// re-reads [semaphoreToStopShortOf] every step and does snap the aim point back to
-				// the signal, but `targetSpeed` stays latched at zero (PR #1033 review, Train.kt:1586).
-				waitUntil(Condition { braking.test() || semaphoreToStopShortOf() == null })
-				if (!terminate && accelerate && semaphoreToStopShortOf() == null) {
-					// The aspect cleared before the train came to a stand: resume the run instead of
-					// finishing the brake, the same recovery [Front.waiveClearanceStop] issues for a
-					// train already stopped. Capped by the live aspect exactly as [fireResume] caps
-					// it — [currentSpeedLimitMps] is deliberately aspect-independent (the physical
-					// track constraint only), so using it alone would let the train pass a
-					// restrictive-but-allowing aspect (S30/S40) above its permitted speed.
-					val aspect =
-						requireSimulationNotNull(signalAheadAspect) {
-							"Train $number: no signal aspect ahead when resuming mid-brake"
-						}
-					val resumeSpeed = minOf(currentSpeedLimitMps, aspect.allowedSpeed())
-					logger.trace { "Train $number motor: aspect cleared mid-brake, resuming to $resumeSpeed" }
-					targetSpeed = resumeSpeed
-					// Same stop-test choice [accelerateTo] makes: a capped target below the current
-					// velocity must decelerate to it, not complete immediately.
-					val resuming =
-						AccelerationStopCondition(
-							if (resumeSpeed > getVelocity()) {
-								AccelerationStopTest.ACCELERATION_ENDED
-							} else {
-								AccelerationStopTest.DECELERATION_ENDED
-							}
-						)
-					currentCondition = resuming
-					waitUntil(resuming)
+				if (restrictiveSignalCleared()) {
+					// The signal cleared before phase 1 reached its half-speed hand-over: resume
+					// immediately at the live aspect's cap instead of continuing toward half of the
+					// pre-clear target and only re-commanding at the separator.
+					resumeAtAspectCap()
+				} else {
+					targetSpeed = 0.0
+					logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
+					// Published so [derivatives] sees a decelerating phase and applies the
+					// MINIMAL_DECELERATION bound to it; an inline condition left it clamping this
+					// phase as if it were still accelerating (Issue #1014).
+					val braking = AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
+					currentCondition = braking
+					// [approachMargin]'s KDoc promises a train runs on when the aspect clears
+					// mid-phase, but that promise was wired into the phase-1 wait only. Without this
+					// second disjunct the aspect clearing here would still finish braking to a stand
+					// — [derivatives] re-reads [semaphoreToStopShortOf] every step and does snap the
+					// aim point back to the signal, but `targetSpeed` stays latched at zero (PR #1033
+					// review, Train.kt:1586).
+					waitUntil(Condition { braking.test() || semaphoreToStopShortOf() == null })
+					if (!terminate && accelerate && semaphoreToStopShortOf() == null) {
+						// The aspect cleared before the train came to a stand: resume the run
+						// instead of finishing the brake, the same recovery
+						// [Front.waiveClearanceStop] issues for a train already stopped.
+						resumeAtAspectCap()
+					}
 				}
 			}
 
 			accelerate = false
 			stop()
 			acceleration.state = 0.0
+		}
+
+		/**
+		 * Whether the signal phase 1 started short of has itself turned allowing.
+		 *
+		 * `onWarning` is only ever commanded when [nextSemaphore] is non-allowing (the `else`
+		 * branch of [accelerateToSignal]), so this starts `false` and can only become `true` by
+		 * that same semaphore's own aspect changing — unlike [semaphoreToStopShortOf], which also
+		 * goes `null` when [clearanceStopWaived] is set for the unrelated route-lost reason
+		 * [Front.waiveClearanceStop] already re-commands externally.
+		 */
+		private fun restrictiveSignalCleared(): Boolean =
+			(nextSemaphore() as? DynamicRailSemaphore)?.signal?.isAllowing() == true
+
+		/**
+		 * Resumes the run at the live aspect's permitted speed, capped against
+		 * [currentSpeedLimitMps] exactly as [Front.fireResume]/[Front.accelerateToSignal] cap it
+		 * before commanding the motor — [currentSpeedLimitMps] is deliberately aspect-independent
+		 * (the physical track constraint only, see its own KDoc), so using it alone would let the
+		 * train pass a restrictive-but-allowing aspect (S30/S40) above its permitted speed.
+		 *
+		 * Called only once the signal ahead is known to be showing something allowing — either
+		 * [restrictiveSignalCleared] or `semaphoreToStopShortOf() == null` in the caller — so
+		 * [signalAheadAspect] must not be `null` here.
+		 */
+		private suspend fun resumeAtAspectCap() {
+			val aspect =
+				requireSimulationNotNull(signalAheadAspect) {
+					"Train $number: no signal aspect ahead when resuming"
+				}
+			val resumeSpeed = minOf(currentSpeedLimitMps, aspect.allowedSpeed())
+			logger.trace { "Train $number motor: aspect cleared, resuming to $resumeSpeed" }
+			targetSpeed = resumeSpeed
+			// Same stop-test choice [accelerateTo] makes: a capped target below the current
+			// velocity must decelerate to it, not complete immediately.
+			val resuming =
+				AccelerationStopCondition(
+					if (resumeSpeed > getVelocity()) {
+						AccelerationStopTest.ACCELERATION_ENDED
+					} else {
+						AccelerationStopTest.DECELERATION_ENDED
+					}
+				)
+			currentCondition = resuming
+			waitUntil(resuming)
 		}
 
 		private fun privateAccelerateTo(
