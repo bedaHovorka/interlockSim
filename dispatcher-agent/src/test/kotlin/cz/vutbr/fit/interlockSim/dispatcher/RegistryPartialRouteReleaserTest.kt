@@ -146,11 +146,12 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	@Test
 	@DisplayName("every released block ends up FREE, unowned, and out of the registry")
 	fun releasedBlocksAreFreeAndUnowned() {
-		val (_, tail) = reserveAndOccupyHead()
+		// The long route: its head meets the tail at the signal zA. The short zA -> doB1 route meets it
+		// at the switch vA, where a release is refused (Issue #1063).
+		val (_, tail) = reserveAndOccupyLongRoute()
 		val registry = registry()
-		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
 
-		val released = releaser().releaseUntravelledTail(trainId, tailIds).released
+		val released = releaseLongRouteTailFully(tail).released
 
 		assertThat(released, "released ids").isNotEmpty()
 		val stillHeld = heldBlocks().map { BlockIdentity.stableBlockId(it) }.toSet()
@@ -172,10 +173,18 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	@Test
 	@DisplayName("no released block is left reachable through a permissive signal")
 	fun releasedBlocksAreNotSignalledInto() {
-		val (_, tail) = reserveAndOccupyHead()
-		val entrySignals = tail.mapNotNull { it.reservedFrom as? DynamicRailSemaphore }
+		// The long route: its head meets the tail at the signal zA, so the tail can be released.
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val entrySignals =
+			tail
+				.flatMap { it.ends().toList() }
+				.filterIsInstance<DynamicRailSemaphore>()
+				.distinct()
+				.filter { it.signal.isAllowing() }
+		// Guard: if no signal guarded the tail, the loop below would pass vacuously.
+		assertThat(entrySignals, "signals guarding the tail before release").isNotEmpty()
 
-		val released = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) }).released
+		val released = releaseLongRouteTailFully(tail).released
 
 		assertThat(released, "released ids").isNotEmpty()
 		entrySignals.forEach { semaphore ->
@@ -364,6 +373,33 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 
 		assertThat(second.released, "released ids").isEqualTo(nearestId)
 		assertThat(registry().getPathInfo(trainId), "PathInfo after a partial release").isEqualTo(before)
+	}
+
+	/**
+	 * Issue #1063 (PR #1067 review): a train standing on `zA-vA` meets its tail at the switch `vA`.
+	 * A PathInfo cannot end at a switch, so a release there would leave a PathInfo describing free
+	 * track — the #1031 stall. The release must be refused before any block or signal changes.
+	 */
+	@Test
+	@DisplayName("a tail that meets the occupied head at a switch is not released")
+	fun tailBeyondASwitchBoundaryIsNotReleased() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val secondHead = tail.first { block -> zA in block.ends() }
+		secondHead.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId })
+		val beyondSwitch = tail - secondHead
+		val heldBefore = heldBlocks()
+		val pathInfoBefore = registry().getPathInfo(trainId)
+		val zAAspectBefore = zA.signal.name
+
+		val result = releaser().releaseUntravelledTail(trainId, beyondSwitch.map { BlockIdentity.stableBlockId(it) })
+
+		assertThat(result.released, "released ids").isEmpty()
+		assertThat(result.deferred, "deferred").isFalse()
+		assertThat(heldBlocks(), "blocks still held").isEqualTo(heldBefore)
+		assertThat(beyondSwitch.map { it.getState() }.toSet(), "tail states")
+			.isEqualTo(setOf(TrackFacility.State.RESERVED))
+		assertThat(registry().getPathInfo(trainId), "PathInfo").isEqualTo(pathInfoBefore)
+		assertThat(zA.signal.name, "zA aspect").isEqualTo(zAAspectBefore)
 	}
 
 	@Test
