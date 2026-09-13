@@ -13,11 +13,15 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
@@ -26,6 +30,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -44,12 +50,13 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 	private lateinit var registry: PathReservationRegistry
 	private lateinit var blocks: List<DynamicTrackBlock>
+	private lateinit var simulationContext: DefaultSimulationContext
 
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml to get real DynamicTrackBlock instances
-		val simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
+		simulationContext =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
 		// Get registry from context's scope (Issue #296 Phase 8: now requires context)
 		registry = simulationContext.scope.get()
@@ -462,6 +469,113 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(first.events).containsExactly(event)
 			assertThat(second.events).containsExactly(event)
 			assertThat(first.events[0]).isSameInstanceAs(second.events[0])
+		}
+	}
+
+	/**
+	 * Issue #1063: a partial tail release must be able to cut the stored PathInfo back to the
+	 * separator where the occupied head meets the released tail. Otherwise `isPathExtendedBeyond`
+	 * keeps reporting a route the train no longer holds and both dispatchers stay silent.
+	 */
+	@Nested
+	inner class TrimPathInfoTo {
+		private val trainId = "trimTrain"
+
+		private fun separatorAt(
+			x: Int,
+			y: Int
+		): DynamicPathSeparator {
+			val cell = simulationContext.getRailWayNetGrid()[Point(x, y)] ?: error("No cell at ($x, $y)")
+			return Util.assertInstanceOf<DynamicPathSeparator>(cell)
+		}
+
+		private fun zA(): DynamicPathSeparator = separatorAt(14, 8)
+
+		/** Reserves InOut A -> InOut B and returns the reserved blocks, head (kA) first. */
+		private fun reserveLongRoute(): List<DynamicTrackBlock> {
+			val inOuts = simulationContext.getInOuts()
+			val result =
+				simulationContext.getRoutingServices().getPathReservationService().reservePath(
+					trainId,
+					inOuts.single { it.name == "A" },
+					inOuts.single { it.name == "B" }
+				)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			return registry.getBlocks(trainId)
+		}
+
+		@Test
+		fun `trims the PathInfo to the boundary once every block beyond it is released`() {
+			val held = reserveLongRoute()
+			val head = held.first { block -> zA() in block.ends() && block.ends().none { it is DynamicRailSwitch } }
+			// Release the tail the way RegistryPartialRouteReleaser does: free each block first, because
+			// unregisterBlock only accepts a FREE block.
+			held.filter { it != head }.forEach { block ->
+				block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+				assertThat(registry.unregisterBlock(trainId, block)).isTrue()
+			}
+
+			val trimmed = registry.trimPathInfoTo(trainId, zA())
+
+			assertThat(trimmed).isTrue()
+			val pathInfo = registry.getPathInfo(trainId)!!
+			assertThat(pathInfo.target).isEqualTo(zA())
+			assertThat(pathInfo.reservedPath.last()).isEqualTo(zA())
+			assertThat(pathInfo.entryDirections.keys.toList()).containsExactly(head)
+			assertThat(registry.isPathExtendedBeyond(trainId, zA())).isFalse()
+		}
+
+		@Test
+		fun `refuses to trim while a held block still lies beyond the boundary`() {
+			reserveLongRoute()
+			val before = registry.getPathInfo(trainId)
+
+			val trimmed = registry.trimPathInfoTo(trainId, zA())
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		@Test
+		fun `refuses to trim to a separator the stored path does not pass`() {
+			reserveLongRoute()
+			val before = registry.getPathInfo(trainId)!!
+			val doA1 = separatorAt(16, 8)
+			val notOnPath = if (before.reservedPath.contains(doA1)) separatorAt(17, 9) else doA1
+
+			val trimmed = registry.trimPathInfoTo(trainId, notOnPath)
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		/**
+		 * A route runs signal to signal; a switch is interior, never an end (Issue #938). A train whose
+		 * occupied head is the short block between `zA` and `vA` meets its released tail at the switch
+		 * `vA`. Trimming there would store a PathInfo that ends at a switch, and every later extension
+		 * would fail the merge against it, so the trim is refused and the PathInfo is kept.
+		 */
+		@Test
+		fun `refuses to trim to a switch`() {
+			val held = reserveLongRoute()
+			val vA = separatorAt(15, 8)
+			// Keep kA and the short zA-vA block; release everything beyond the switch vA.
+			val kept = held.filter { block -> zA() in block.ends() }
+			held.filter { it !in kept }.forEach { block ->
+				block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+				assertThat(registry.unregisterBlock(trainId, block)).isTrue()
+			}
+			val before = registry.getPathInfo(trainId)
+
+			val trimmed = registry.trimPathInfoTo(trainId, vA)
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		@Test
+		fun `a train without a PathInfo has nothing to trim`() {
+			assertThat(registry.trimPathInfoTo("ghost", zA())).isFalse()
 		}
 	}
 

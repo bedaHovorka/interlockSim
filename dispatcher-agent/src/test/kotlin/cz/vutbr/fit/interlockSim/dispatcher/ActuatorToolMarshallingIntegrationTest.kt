@@ -103,7 +103,7 @@ class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
 					queue.postAll(decisions)
 				}
 			)
-		val tools = ToolGroupRegistry().assembleAllTools(setOf("zA", "doA1"), sinkHolder)
+		val tools = ToolGroupRegistry().assembleAllTools(setOf("zA", "doB1"), sinkHolder)
 		val requestRouteTool = tools.first { it.name == "request_route" }
 
 		val trainId = "T1"
@@ -117,7 +117,7 @@ class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
 					.submit<cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult> {
 						runBlocking {
 							requestRouteTool.execute(
-								mapOf("trainName" to trainId, "fromEndpointName" to "zA", "toEndpointName" to "doA1")
+								mapOf("trainName" to trainId, "fromEndpointName" to "zA", "toEndpointName" to "doB1")
 							)
 						}
 					}.get(5, TimeUnit.SECONDS)
