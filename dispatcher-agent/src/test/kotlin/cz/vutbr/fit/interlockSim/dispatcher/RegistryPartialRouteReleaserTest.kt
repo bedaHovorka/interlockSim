@@ -57,7 +57,7 @@ import org.junit.jupiter.api.Test
 class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	private lateinit var context: DefaultSimulationContext
 	private lateinit var zA: DynamicRailSemaphore
-	private lateinit var doA1: DynamicRailSemaphore
+	private lateinit var doB1: DynamicRailSemaphore
 
 	private val trainId = "Train #1"
 
@@ -65,7 +65,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	fun setUp() {
 		context = TestFixtures.newShuntingSimulationContext().tracked()
 		zA = elementAt(14, 8)
-		doA1 = elementAt(16, 8)
+		doB1 = elementAt(25, 8)
 	}
 
 	private fun registry(): PathReservationRegistry = context.scope.get<PathReservationRegistry>()
@@ -93,7 +93,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	 * @return the occupied block and the un-travelled tail.
 	 */
 	private fun reserveAndOccupyHead(): Pair<DynamicTrackBlock, List<DynamicTrackBlock>> {
-		val result = context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, doA1)
+		val result = context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, doB1)
 		assertThat(result, "reservePath result").isNotNull()
 		val blocks = heldBlocks()
 		assertThat(blocks, "blocks reserved").isNotEmpty()
@@ -111,7 +111,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	 * Reserves a LONGER real route (InOut A -> InOut B, spanning at least one intermediate
 	 * semaphore) and marks its first block occupied, mirroring [reserveAndOccupyHead] but long
 	 * enough to exercise the intermediate-semaphore and InOut-inSemaphore reset paths a single
-	 * zA->doA1 hop cannot reach: that route never passes through a shared boundary separator, and
+	 * zA->doB1 route cannot reach: that route lights no intermediate signal, and
 	 * never starts at an InOut.
 	 *
 	 * @return the occupied block and the un-travelled tail.
@@ -267,7 +267,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	@Test
 	@DisplayName("a train occupying none of its route is refused — that is the whole-route case")
 	fun refusesWhenNothingIsOccupied() {
-		context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, doA1)
+		context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, doB1)
 		val tailIds = heldBlocks().map { BlockIdentity.stableBlockId(it) }
 
 		val released = releaser().releaseUntravelledTail(trainId, tailIds).released

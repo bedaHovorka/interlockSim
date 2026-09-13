@@ -61,11 +61,10 @@ class SwitchConfigurationTest : KoinTestBase() {
 	private lateinit var vA: DynamicRailSwitch // at (15,8)
 	private lateinit var vB: DynamicRailSwitch // at (26,8)
 	private lateinit var zA: DynamicRailSemaphore // at (14,8)
-	private lateinit var doA1: DynamicRailSemaphore // at (16,8) - main route from vA
-	private lateinit var doA2: DynamicRailSemaphore // at (17,9) - branch route from vA
 	private lateinit var doB1: DynamicRailSemaphore // at (25,8) - main route to vB
 	private lateinit var doB2: DynamicRailSemaphore // at (24,9) - branch route to vB
 	private lateinit var zB: DynamicRailSemaphore // at (27,8)
+	private lateinit var inOutB: cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut // at (30,8)
 
 	@BeforeEach
 	fun setUp() {
@@ -76,11 +75,10 @@ class SwitchConfigurationTest : KoinTestBase() {
 		vA = elementAt<DynamicRailSwitch>(context, 15, 8)
 		vB = elementAt<DynamicRailSwitch>(context, 26, 8)
 		zA = elementAt<DynamicRailSemaphore>(context, 14, 8)
-		doA1 = elementAt<DynamicRailSemaphore>(context, 16, 8)
-		doA2 = elementAt<DynamicRailSemaphore>(context, 17, 9)
 		doB1 = elementAt<DynamicRailSemaphore>(context, 25, 8)
 		doB2 = elementAt<DynamicRailSemaphore>(context, 24, 9)
 		zB = elementAt<DynamicRailSemaphore>(context, 27, 8)
+		inOutB = context.getInOuts().single { it.name == "B" }
 	}
 
 	/**
@@ -103,15 +101,17 @@ class SwitchConfigurationTest : KoinTestBase() {
 	/**
 	 * Test that switch is configured to MAIN when train takes main route.
 	 *
-	 * Main route: zA → vA(MAIN) → doA1
+	 * Main route: zA → vA(MAIN) → doA1 → k1 → doB1. Every route in this class ends at a signal
+	 * facing the train or at an InOut: G8 (Issue #1064) refuses a route ending at doA1, doA2 or zB
+	 * for an A → B train.
 	 */
 	@Test
 	fun testSwitchConfiguredToMain() {
 		// Get PathReservationService
 		val pathService = context.getRoutingServices().getPathReservationService()
 
-		// Reserve path: zA → vA → doA1 (main route)
-		val result = pathService.reservePath("train1", zA, doA1)
+		// Reserve path: zA → vA → doA1 → doB1 (main route)
+		val result = pathService.reservePath("train1", zA, doB1)
 
 		// Verify reservation succeeded
 		assertThat(result).isNotNull()
@@ -123,15 +123,15 @@ class SwitchConfigurationTest : KoinTestBase() {
 	/**
 	 * Test that switch is configured to BRANCH when train takes branch route.
 	 *
-	 * Branch route: zA → vA(BRANCH) → doA2
+	 * Branch route: zA → vA(BRANCH) → doA2 → k2 → doB2
 	 */
 	@Test
 	fun testSwitchConfiguredToBranch() {
 		// Get PathReservationService
 		val pathService = context.getRoutingServices().getPathReservationService()
 
-		// Reserve path: zA → vA → doA2 (branch route)
-		val result = pathService.reservePath("train1", zA, doA2)
+		// Reserve path: zA → vA → doA2 → doB2 (branch route)
+		val result = pathService.reservePath("train1", zA, doB2)
 
 		// Verify reservation succeeded
 		assertThat(result).isNotNull()
@@ -165,8 +165,8 @@ class SwitchConfigurationTest : KoinTestBase() {
 		// Get PathReservationService
 		val pathService = context.getRoutingServices().getPathReservationService()
 
-		// Reserve path: zA → vA → doA2 (branch route)
-		val result = pathService.reservePath("train1", zA, doA2)
+		// Reserve path: zA → vA → doA2 → doB2 (branch route)
+		val result = pathService.reservePath("train1", zA, doB2)
 
 		// Verify reservation succeeded
 		assertThat(result).isNotNull()
@@ -187,8 +187,8 @@ class SwitchConfigurationTest : KoinTestBase() {
 		// Get PathReservationService
 		val pathService = context.getRoutingServices().getPathReservationService()
 
-		// Reserve path: zA → vA → doA1
-		val result = pathService.reservePath("train1", zA, doA1)
+		// Reserve path: zA → vA → doA1 → doB1
+		val result = pathService.reservePath("train1", zA, doB1)
 
 		// Verify reservation succeeded
 		assertThat(result).isNotNull()
@@ -200,19 +200,19 @@ class SwitchConfigurationTest : KoinTestBase() {
 	/**
 	 * Test that multiple switches in a path are configured independently.
 	 *
-	 * Path with 2 switches: zA → vA(BRANCH) → doA2 → ... → doB2 → vB(BRANCH) → zB
+	 * Path with 2 switches: zA → vA(BRANCH) → doA2 → ... → doB2 → vB(BRANCH) → zB → B
 	 */
 	@Test
 	fun testMultipleSwitchesConfiguredIndependently() {
 		// Get PathReservationService
 		val pathService = context.getRoutingServices().getPathReservationService()
 
-		// Reserve path: zA → vA → doA2 (switch vA to BRANCH)
-		val result1 = pathService.reservePath("train1", zA, doA2)
+		// Reserve path: zA → vA → doA2 → doB2 (switch vA to BRANCH)
+		val result1 = pathService.reservePath("train1", zA, doB2)
 		assertThat(result1).isNotNull()
 
-		// Reserve path: doB2 → vB → zB (switch vB to BRANCH)
-		val result2 = pathService.reservePath("train2", doB2, zB)
+		// Reserve path: doB2 → vB → zB → B (switch vB to BRANCH)
+		val result2 = pathService.reservePath("train2", doB2, inOutB)
 		assertThat(result2).isNotNull()
 
 		// Verify switch vA is configured to BRANCH
@@ -245,8 +245,8 @@ class SwitchConfigurationTest : KoinTestBase() {
 		// Get PathReservationService
 		val pathService = context.getRoutingServices().getPathReservationService()
 
-		// Reserve path: zA → vA → doA2 (branch route)
-		val result = pathService.reservePath("train1", zA, doA2)
+		// Reserve path: zA → vA → doA2 → doB2 (branch route)
+		val result = pathService.reservePath("train1", zA, doB2)
 
 		// Verify reservation succeeded
 		assertThat(result).isNotNull()
@@ -271,9 +271,9 @@ class SwitchConfigurationTest : KoinTestBase() {
 	@Tag("integration-test")
 	@Test
 	fun `second train can reconfigure switch after first train completes`() {
-		// First train: zA -> vA(BRANCH) -> doA2
+		// First train: zA -> vA(BRANCH) -> doA2 -> doB2
 		val pathService = context.getRoutingServices().getPathReservationService()
-		val result1 = pathService.reservePath("train1", zA, doA2)
+		val result1 = pathService.reservePath("train1", zA, doB2)
 		assertThat(result1).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 		assertThat(vA.conf).isEqualTo(RailSwitch.Conf.BRANCH)
 		assertThat(vA.locked).isTrue()
@@ -289,8 +289,8 @@ class SwitchConfigurationTest : KoinTestBase() {
 		pathService.unregister("train1")
 		assertThat(vA.locked).isFalse()
 
-		// Second train: zA -> vA(MAIN) -> doA1 (opposite configuration)
-		val result2 = pathService.reservePath("train2", zA, doA1)
+		// Second train: zA -> vA(MAIN) -> doA1 -> doB1 (opposite configuration)
+		val result2 = pathService.reservePath("train2", zA, doB1)
 		assertThat(result2).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 		assertThat(vA.conf).isEqualTo(RailSwitch.Conf.MAIN)
 		assertThat(vA.locked).isTrue()

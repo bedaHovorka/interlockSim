@@ -253,7 +253,7 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	fun mergeAbortedReservePathLeavesNoOrphanedTail() {
 		val trainId = "Train #904 probe"
 		val zA = separatorAt(14, 8)
-		val doA1 = separatorAt(16, 8)
+		val doB1 = separatorAt(25, 8)
 		val zB = separatorAt(27, 8)
 
 		// Given: a PathInfo with NO real reservation behind it -- the FIRST-ever
@@ -272,7 +272,9 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 		// the original start" pattern (Issue #911's shape), which now merges cleanly instead of
 		// aborting, so the corruption must be set up this way rather than via two real
 		// `reservePath` calls on the same train.
-		service().reservePath(trainId, zA, doA1)
+		// zA -> doB1, not zA -> doA1: doA1 faces away from a train leaving zA eastward, so G8 (Issue
+		// #1064) would refuse that request before it reserves anything, and no merge would run.
+		service().reservePath(trainId, zA, doB1)
 		assertThat(warningsContaining(NON_CONTIGUOUS_WARN)).isNotEmpty()
 		assertThat(registry().getPathInfo(trainId)!!.target).isEqualTo(zB) // PathInfo untouched
 
