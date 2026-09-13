@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSample
 import cz.vutbr.fit.interlockSim.testutil.assertStoodAtClearanceStopLine
+import cz.vutbr.fit.interlockSim.testutil.motorOf
 import cz.vutbr.fit.interlockSim.testutil.runClearanceStopScenario
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -490,19 +491,6 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	}
 
 	// ── Shared ────────────────────────────────────────────────────────────────────
-
-	/**
-	 * The train's [Motor], reached by reflection.
-	 *
-	 * `Motor` is a private inner class with no public accessor, and it must stay that way — this
-	 * rung must not push a lifecycle hook into `sim/` production code just to be observable. The
-	 * same reflection idiom is used by the other `Train` tests in this package.
-	 */
-	private fun motorOf(train: Train): Process {
-		val field = Train::class.java.getDeclaredField("motor")
-		field.isAccessible = true
-		return field.get(train) as Process
-	}
 
 	/**
 	 * One approach to a signal at danger over an [approach] metre block, sampled throughout.
