@@ -1247,46 +1247,63 @@ class PathReservationRegistry(
 		boundary: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 	): Boolean {
 		val pathInfo = trainToPathInfo[trainId] ?: return false
-		if (boundary is DynamicRailSwitch) {
-			logger.warn {
-				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to the switch $boundary — a route " +
-					"never ends at a switch, so the PathInfo is kept (path ${pathInfo.start}→${pathInfo.target})"
-			}
-			return false
-		}
-		val held = getBlocks(trainId).toSet()
 		val elements = pathInfo.reservedPath.toList()
-		val lastHeldIndex = elements.indexOfLast { element -> blockOf(element)?.let { it in held } == true }
-		val boundaryIndex =
-			if (lastHeldIndex < 0) {
-				-1
-			} else {
-				(lastHeldIndex + 1 until elements.size).firstOrNull { elements[it] == boundary } ?: -1
-			}
-		if (boundaryIndex < 0) {
-			logger.warn {
-				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — the separator does " +
-					"not follow the last block the train still holds " +
-					"(path ${pathInfo.start}→${pathInfo.target}, ${held.size} block(s) held)"
-			}
-			return false
-		}
+		val boundaryIndex = trimBoundaryIndex(trainId, pathInfo, elements, boundary) ?: return false
 		if (boundaryIndex == elements.lastIndex) return true
 
-		val kept = elements.subList(0, boundaryIndex + 1)
-		val trimmedPath = ArrayPath(context).apply { kept.forEach { add(it) } }
-		val keptBlocks = kept.mapNotNull(::blockOf).toSet()
-		trainToPathInfo[trainId] =
-			pathInfo.copy(
-				target = boundary,
-				reservedPath = trimmedPath,
-				entryDirections = pathInfo.entryDirections.filterKeys { it in keptBlocks }
-			)
+		trainToPathInfo[trainId] = pathInfo.truncatedAt(elements, boundaryIndex, boundary, context)
 		logger.info {
 			"trimPathInfoTo: trimmed the PathInfo of '$trainId' from ${pathInfo.start}→${pathInfo.target} " +
 				"to ${pathInfo.start}→$boundary after its tail beyond $boundary was released"
 		}
 		return true
+	}
+
+	/**
+	 * Whether [separator] may be the end of a stored PathInfo. A route runs signal to signal and a
+	 * switch is never its end (Issue #938), so a PathInfo ending at one would make every later
+	 * extension fail the merge. [trimPathInfoTo] refuses such an end; a caller that must not change
+	 * anything unless the trim will follow checks it first.
+	 *
+	 * @since Issue #1063
+	 */
+	fun isValidPathInfoEnd(separator: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator): Boolean =
+		separator !is DynamicRailSwitch
+
+	/**
+	 * The index of [boundary] in [elements] that [trimPathInfoTo] may cut at, or `null` (with a WARN)
+	 * when the trim is refused: [boundary] is not a valid PathInfo end, or it does not follow the last
+	 * block the train still holds.
+	 */
+	private fun trimBoundaryIndex(
+		trainId: String,
+		pathInfo: PathInfo,
+		elements: List<cz.vutbr.fit.interlockSim.objects.core.PathElement>,
+		boundary: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+	): Int? {
+		if (!isValidPathInfoEnd(boundary)) {
+			logger.warn {
+				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to the switch $boundary — a route " +
+					"never ends at a switch, so the PathInfo is kept (path ${pathInfo.start}→${pathInfo.target})"
+			}
+			return null
+		}
+		val held = getBlocks(trainId).toSet()
+		val lastHeldIndex = elements.indexOfLast { element -> blockOf(element)?.let { it in held } == true }
+		val boundaryIndex =
+			if (lastHeldIndex < 0) {
+				null
+			} else {
+				(lastHeldIndex + 1 until elements.size).firstOrNull { elements[it] == boundary }
+			}
+		if (boundaryIndex == null) {
+			logger.warn {
+				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — the separator does " +
+					"not follow the last block the train still holds " +
+					"(path ${pathInfo.start}→${pathInfo.target}, ${held.size} block(s) held)"
+			}
+		}
+		return boundaryIndex
 	}
 
 	/**
@@ -1321,3 +1338,23 @@ class PathReservationRegistry(
 /** The block a [PathInfo.reservedPath] element belongs to, or `null` when the element is a separator. */
 private fun blockOf(element: cz.vutbr.fit.interlockSim.objects.core.PathElement): DynamicTrackBlock? =
 	(element as? TrackSection)?.getTrackBlock() as? DynamicTrackBlock
+
+/**
+ * A copy of this PathInfo that ends at [boundary], the element at [boundaryIndex] of [elements] (this
+ * PathInfo's reserved path). It keeps [PathInfo.start] and only the entry directions of blocks that
+ * stay on the shorter path.
+ */
+private fun PathInfo.truncatedAt(
+	elements: List<cz.vutbr.fit.interlockSim.objects.core.PathElement>,
+	boundaryIndex: Int,
+	boundary: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator,
+	context: SimulationContext
+): PathInfo {
+	val kept = elements.subList(0, boundaryIndex + 1)
+	val keptBlocks = kept.mapNotNull(::blockOf).toSet()
+	return copy(
+		target = boundary,
+		reservedPath = ArrayPath(context).apply { kept.forEach { add(it) } },
+		entryDirections = entryDirections.filterKeys { it in keptBlocks }
+	)
+}
