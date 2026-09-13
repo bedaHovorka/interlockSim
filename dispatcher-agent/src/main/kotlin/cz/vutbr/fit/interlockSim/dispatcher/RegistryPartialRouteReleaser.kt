@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -132,7 +133,36 @@ class RegistryPartialRouteReleaser(
 		for (block in eligible) {
 			releaseBlock(trainId, block)?.let { released += it }
 		}
+		// Issue #1063: only a complete release may move the PathInfo's end. A block that could not be
+		// released is still held beyond the boundary, and the PathInfo must keep describing it.
+		if (released.size == eligible.size) {
+			trimPathInfoToHead(trainId, occupied, eligible)
+		}
 		return TailRelease(released)
+	}
+
+	/**
+	 * Cuts the train's stored PathInfo back to the separator where its occupied head meets the
+	 * released tail. Without this the PathInfo still describes the released track, so
+	 * `isPathExtendedBeyond` keeps saying the route goes on, both dispatchers leave the train alone,
+	 * and a new route from that separator fails the merge — the permanent stall of Issue #1031.
+	 */
+	private fun trimPathInfoToHead(
+		trainId: String,
+		occupied: List<DynamicTrackBlock>,
+		released: List<DynamicTrackBlock>
+	) {
+		val headEnds = occupied.flatMap { it.ends().asList() }.toSet()
+		val boundaries = released.flatMap { block -> block.ends().filter { it in headEnds } }.distinct()
+		val boundary = boundaries.singleOrNull() as? DynamicPathSeparator
+		if (boundary == null) {
+			logger.warn {
+				"RegistryPartialRouteReleaser: not trimming the PathInfo of '$trainId' — expected exactly one " +
+					"separator between the occupied head and the released tail, found ${boundaries.size}"
+			}
+			return
+		}
+		registry.trimPathInfoTo(trainId, boundary)
 	}
 
 	/**

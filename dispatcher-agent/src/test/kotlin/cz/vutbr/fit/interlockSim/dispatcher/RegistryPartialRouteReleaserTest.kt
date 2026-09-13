@@ -14,11 +14,13 @@ import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -272,6 +274,96 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 
 		assertThat(released, "released ids").isEmpty()
 		assertThat(heldBlocks(), "blocks still held").isNotEmpty()
+	}
+
+	/**
+	 * Releases the whole un-travelled tail of the long `A -> B` route. The first call is deferred by
+	 * the approach lock (Issue #1025, the head's exit signal `zA` shows proceed), the second one
+	 * physically releases the tail.
+	 */
+	private fun releaseLongRouteTailFully(tail: List<DynamicTrackBlock>): TailRelease {
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
+		val first = releaser().releaseUntravelledTail(trainId, tailIds)
+		assertThat(first.deferred, "first call deferred by the standing proceed aspect").isTrue()
+		return releaser().releaseUntravelledTail(trainId, tailIds)
+	}
+
+	/** The loop track the `A -> B` route did NOT take, named by its B-side facing signal. */
+	private fun otherTrackEnd(tail: List<DynamicTrackBlock>): DynamicRailSemaphore {
+		val usesTrack1 = tail.any { BlockIdentity.stableBlockId(it) == "k1" }
+		return if (usesTrack1) elementAt(24, 9) else elementAt(25, 8)
+	}
+
+	/**
+	 * Issue #1063 (the permanent stall of #1031): after the tail is reclaimed the stored PathInfo
+	 * must end where the occupied head meets the released tail. An untrimmed PathInfo keeps
+	 * `isPathExtendedBeyond` true for that signal, so the rule engine skips the train and the LLM
+	 * is told "route already set" for the rest of the run.
+	 */
+	@Test
+	@DisplayName("a fully released tail trims the stored PathInfo back to the head's exit signal")
+	fun fullTailReleaseTrimsPathInfoToTheBoundary() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+
+		val released = releaseLongRouteTailFully(tail).released
+
+		assertThat(released.size, "released block count").isEqualTo(tail.size)
+		val pathInfo = registry().getPathInfo(trainId)
+		assertThat(pathInfo, "PathInfo after the tail release").isNotNull()
+		assertThat(pathInfo!!.target, "PathInfo target after the tail release").isEqualTo(zA)
+		assertThat(pathInfo.start, "PathInfo start after the tail release").isEqualTo(inOutNamed("A"))
+		assertThat(registry().isPathExtendedBeyond(trainId, zA), "path still extends beyond zA").isFalse()
+	}
+
+	/**
+	 * The #1031 shape: the train stands at the boundary and the dispatcher asks for a route onto the
+	 * other loop track. Before the trim this aborted in `mergePathInfo` Step 0a (the new path starts
+	 * at zA, the stored one still ends at B) and was denied as `AllPathsBlocked` forever.
+	 */
+	@Test
+	@DisplayName("after the tail release a new route from the head's exit signal is granted")
+	fun routeFromTheBoundaryIsGrantedAfterTheTailRelease() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val otherEnd = otherTrackEnd(tail)
+		releaseLongRouteTailFully(tail)
+
+		val result = context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, otherEnd)
+
+		assertThat(result, "re-request from zA to ${otherEnd.name}")
+			.isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target after the new grant")
+			.isEqualTo(otherEnd)
+	}
+
+	@Test
+	@DisplayName("a release deferred by the approach lock leaves the PathInfo untouched")
+	fun deferredReleaseDoesNotTrimPathInfo() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val before = registry().getPathInfo(trainId)
+
+		val first = releaser().releaseUntravelledTail(trainId, tail.map { BlockIdentity.stableBlockId(it) })
+
+		assertThat(first.deferred, "first call deferred").isTrue()
+		assertThat(registry().getPathInfo(trainId), "PathInfo after a deferred release").isEqualTo(before)
+	}
+
+	/**
+	 * Releasing only the block next to the head would leave still-held blocks beyond the boundary;
+	 * trimming there would drop blocks the train still owns out of its PathInfo.
+	 */
+	@Test
+	@DisplayName("a release that leaves held blocks beyond the boundary does not trim the PathInfo")
+	fun partialTailReleaseDoesNotTrimPathInfo() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val nearest = tail.first { block -> zA in block.ends() }
+		val nearestId = listOf(BlockIdentity.stableBlockId(nearest))
+		releaser().releaseUntravelledTail(trainId, nearestId)
+		val before = registry().getPathInfo(trainId)
+
+		val second = releaser().releaseUntravelledTail(trainId, nearestId)
+
+		assertThat(second.released, "released ids").isEqualTo(nearestId)
+		assertThat(registry().getPathInfo(trainId), "PathInfo after a partial release").isEqualTo(before)
 	}
 
 	@Test
