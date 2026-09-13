@@ -64,7 +64,8 @@ class RouteEndDirectionTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
+		simulationContext =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 		service = simulationContext.getRoutingServices().getPathReservationService()
 		registry = simulationContext.scope.get()
 	}

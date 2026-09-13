@@ -56,7 +56,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 	fun setUp() {
 		// Load vyhybna.xml to get real DynamicTrackBlock instances
 		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
 		// Get registry from context's scope (Issue #296 Phase 8: now requires context)
 		registry = simulationContext.scope.get()
