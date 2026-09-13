@@ -1485,6 +1485,21 @@ class Train :
 		private var accelerate: Boolean = false
 		private var terminate = false
 
+		/**
+		 * Set by [privateAccelerateTo] for the command it has just issued; consumed by [actions]
+		 * when that command's iteration starts.
+		 *
+		 * A wake-up with no command pending is a surplus turn and must only passivate again. kDisco
+		 * keeps `activate` and wait-notice wake-ups on separate channels (kdisco#73/#74), so a
+		 * [cancelAccelerating] aimed at a motor parked in its wait resumes it twice: through the
+		 * activate it issues and through the notice its `accelerate = false` satisfies. Without
+		 * this flag the second turn re-ran [iteration] with the stale [currentCondition] — the motor
+		 * started integrating towards its old target on a train whose velocity integration had been
+		 * stopped, and stood there reporting a non-zero acceleration until the next real command
+		 * (measured: 2.469 m/s² at a stand for an ownership conflict, `shuntingLoopAI`, 2026-09-13).
+		 */
+		private var commandPending = false
+
 		private inner class AccelerationStopCondition(
 			private val stopTest: AccelerationStopTest
 		) : Condition {
@@ -1493,11 +1508,59 @@ class Train :
 			fun getStopTest(): AccelerationStopTest = stopTest
 		}
 
+		/**
+		 * How much room phase 1 of [onWarning] still has, as a single margin that goes
+		 * non-positive exactly when the phase must end (Issue #1014).
+		 *
+		 * Phase 1 runs the train up towards half the permitted speed; phase 2 then brakes it to
+		 * a standstill. The margin is the smaller of two distances to that hand-over:
+		 *
+		 * - **half speed** — `targetSpeed / 2 - velocity`, the margin form of
+		 *   [AccelerationStopTest.TO_HALF_SPEED]'s own condition;
+		 * - **braking room** — what is left of the distance to the stop line after the textbook
+		 *   braking distance at the deceleration bound, `v^2 / (2 * |MINIMAL_DECELERATION|)`.
+		 *
+		 * The braking-room term is what #1014 was missing. On a block too short for the ramp the
+		 * train never reaches half speed, so [derivatives] eventually cleared `accelerate` when the
+		 * remaining distance ran out. That ended the phase-1 wait *and* failed the `accelerate &&`
+		 * guard in [iteration], so the braking phase was skipped and the train arrived at the signal
+		 * at line speed, to be snapped to zero by `Front.fireStop`. Ending on the margin instead
+		 * keeps `accelerate` true, so [iteration] enters phase 2 with the room it still needs.
+		 *
+		 * It aims at [clearanceStopLineDistance], the point phase 2 really brakes to (Issue #989) —
+		 * the same rule [brakingTargetDistance] uses. Aiming at the signal itself would leave the
+		 * phase one metre short of the room it needs and force a deceleration past the bound.
+		 *
+		 * The braking-room term is armed only while the train really does stop short of a
+		 * restrictive signal. If the aspect clears during phase 1, [iteration] exits the phase
+		 * immediately and resumes at the live aspect's speed cap, and brakes to the stop line again
+		 * if the aspect turns restrictive before the resumed speed is reached. If the clearance is waived,
+		 * [Front.waiveClearanceStop] cancels this wait and issues the replacement command.
+		 *
+		 * `-1.0` while `accelerate` is false ends the wait on a cancel or a re-command;
+		 * `Front.fireStop` zeroes the velocity, which the half-speed term alone would never see.
+		 *
+		 * A non-positive remaining distance or velocity leaves the braking-room term out: those
+		 * corners belong to the existing exits ([derivatives]' `s <= 0` branch).
+		 */
+		private fun approachMargin(): Double {
+			if (!accelerate) return -1.0
+			val halfSpeedMargin = targetSpeed / 2.0 - getVelocity()
+			if (semaphoreToStopShortOf() == null) return halfSpeedMargin
+			val remaining = clearanceStopLineDistance()
+			val speed = getVelocity()
+			if (remaining <= 0 || speed <= 0) return halfSpeedMargin
+			return minOf(halfSpeedMargin, remaining - (speed * speed) / (2.0 * -MINIMAL_DECELERATION))
+		}
+
 		override suspend fun actions() {
 			while (true) {
 				if (terminate) break
-				iteration()
-				if (terminate) break
+				if (commandPending) {
+					commandPending = false
+					iteration()
+					if (terminate) break
+				}
 				passivate()
 			}
 		}
@@ -1510,17 +1573,142 @@ class Train :
 					"current velocity ${getVelocity()}"
 			}
 			start()
-			waitUntil(cond)
 
-			if (accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
-				targetSpeed = 0.0
-				logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
-				waitUntil(AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED))
+			// The approach is the one wait located by root-finding: its exit is a threshold the
+			// train crosses while accelerating, so a whole-step overshoot costs braking room the
+			// short block does not have (Issue #1014; Issue #760 tracks the rest). The remaining
+			// arms keep `waitUntil`: they end at a velocity target, where one step of lateness is
+			// immaterial, and converting them would move the shunting-loop baselines.
+			//
+			// Cancellation composes the same way it does for `waitUntil`. [cancelAccelerating]
+			// clears `accelerate` and activates; kDisco checks level crossings straight after that
+			// event, so [approachMargin] is already -1.0 and the wait ends at the same instant.
+			// One of the two turns returns from the wait; a re-command's iteration then starts
+			// from [commandPending] in [actions], and the other turn only passivates again.
+			if (cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
+				// The second term ends phase 1 the instant the signal this phase started short of
+				// itself turns allowing, rather than only letting a clear relax the braking-room
+				// term (Copilot review, PR #1033, Train.kt:1533): [semaphoreToStopShortOf] only
+				// distinguishes allowing from non-allowing, so a clear to a restrictive-but-allowing
+				// aspect (S30/S40) looked identical to a clear to FREE — phase 1 kept running toward
+				// half of the pre-clear `targetSpeed`, which can be well above the new aspect's own
+				// permitted speed by the time the train reaches it.
+				//
+				// Deliberately [restrictiveSignalCleared], not `semaphoreToStopShortOf() == null`:
+				// the latter also goes null when [clearanceStopWaived] is set for an unrelated
+				// reason (the route past the signal was lost), which [Front.waiveClearanceStop]
+				// already re-commands externally via `cancelAccelerating()` — reacting to it here
+				// too raced that path and broke the Issue #989 clearance-stop and mid-journey
+				// no-path tests. Reading the captured semaphore's own aspect sidesteps the waiver
+				// entirely: it is unaffected by [clearanceStopWaived].
+				waitUntilCrossing { minOf(approachMargin(), if (restrictiveSignalCleared()) -1.0 else 1.0) }
+			} else {
+				waitUntil(cond)
+			}
+
+			// `!terminate` because [terminate] now really does end the wait above (it reactivates
+			// rather than activates): without it a motor torn down mid-approach would answer by
+			// entering the braking phase and parking again instead of leaving the loop.
+			if (!terminate && accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
+				// From here to the end of the leg the aspect may change any number of times, and each
+				// change hands the motor over: a clear resumes the run at the live aspect's cap, a
+				// return to a restrictive aspect brakes to the stop line again. Phase 1 may already
+				// have seen a clear, hence the starting state — resuming immediately instead of
+				// continuing toward half of the pre-clear target. Resuming without watching for the
+				// return let a train accelerate into a signal back at danger and be snapped to zero
+				// at the clearance line from 34 m/s (PR #1033 review, Train.kt:1688).
+				var runningOn = restrictiveSignalCleared()
+				while (true) {
+					val aspectChanged = if (runningOn) resumeAtAspectCap() else brakeToStopLine()
+					if (!aspectChanged) break
+					runningOn = !runningOn
+				}
 			}
 
 			accelerate = false
 			stop()
 			acceleration.state = 0.0
+		}
+
+		/**
+		 * Whether the signal phase 1 started short of has itself turned allowing.
+		 *
+		 * `onWarning` is only ever commanded when [nextSemaphore] is non-allowing (the `else`
+		 * branch of [accelerateToSignal]), so this starts `false` and can only become `true` by
+		 * that same semaphore's own aspect changing — unlike [semaphoreToStopShortOf], which also
+		 * goes `null` when [clearanceStopWaived] is set for the unrelated route-lost reason
+		 * [Front.waiveClearanceStop] already re-commands externally.
+		 */
+		private fun restrictiveSignalCleared(): Boolean =
+			(nextSemaphore() as? DynamicRailSemaphore)?.signal?.isAllowing() == true
+
+		/**
+		 * Resumes the run at the live aspect's permitted speed, capped against
+		 * [currentSpeedLimitMps] exactly as [Front.fireResume]/[Front.accelerateToSignal] cap it
+		 * before commanding the motor — [currentSpeedLimitMps] is deliberately aspect-independent
+		 * (the physical track constraint only, see its own KDoc), so using it alone would let the
+		 * train pass a restrictive-but-allowing aspect (S30/S40) above its permitted speed.
+		 *
+		 * Called only once the signal ahead is known to be showing something allowing — either
+		 * [restrictiveSignalCleared] or `semaphoreToStopShortOf() == null` in the caller — so
+		 * [signalAheadAspect] must not be `null` here.
+		 *
+		 * The wait also ends when the aspect turns restrictive again before the resumed speed is
+		 * reached. Waiting for the speed alone kept `targetSpeed` positive, so the train accelerated
+		 * towards a signal back at danger and the front gate snapped it to zero at the clearance line
+		 * (PR #1033 review, Train.kt:1688). Once the resumed speed is reached the motor goes idle as
+		 * after any `accelerateTo`, and a restrictive flip after that is the general mid-leg case of
+		 * Issue #1057.
+		 *
+		 * @return `true` when the aspect turned restrictive again while this leg is still the motor's
+		 *   command — the caller then brakes to the stop line
+		 */
+		private suspend fun resumeAtAspectCap(): Boolean {
+			val aspect =
+				requireSimulationNotNull(signalAheadAspect) {
+					"Train $number: no signal aspect ahead when resuming"
+				}
+			val resumeSpeed = minOf(currentSpeedLimitMps, aspect.allowedSpeed())
+			logger.trace { "Train $number motor: aspect cleared, resuming to $resumeSpeed" }
+			targetSpeed = resumeSpeed
+			// Same stop-test choice [accelerateTo] makes: a capped target below the current
+			// velocity must decelerate to it, not complete immediately.
+			val resuming =
+				AccelerationStopCondition(
+					if (resumeSpeed > getVelocity()) {
+						AccelerationStopTest.ACCELERATION_ENDED
+					} else {
+						AccelerationStopTest.DECELERATION_ENDED
+					}
+				)
+			currentCondition = resuming
+			waitUntil(Condition { resuming.test() || semaphoreToStopShortOf() != null })
+			return !terminate && accelerate && semaphoreToStopShortOf() != null
+		}
+
+		/**
+		 * Phase 2 of [onWarning]: brakes the train to a stand at the clearance stop line.
+		 *
+		 * The condition is published so [derivatives] sees a decelerating phase and applies the
+		 * MINIMAL_DECELERATION bound to it; an inline condition left it clamping this phase as if it
+		 * were still accelerating (Issue #1014).
+		 *
+		 * The wait also ends when the aspect clears before the stand. [derivatives] re-reads
+		 * [semaphoreToStopShortOf] every step and does move the aim point back to the signal, but
+		 * `targetSpeed` would stay latched at zero and the train would still brake to a crawl in front
+		 * of a signal showing proceed (PR #1033 review, Train.kt:1586).
+		 *
+		 * @return `true` when the aspect cleared before the stand while this leg is still the motor's
+		 *   command — the caller then resumes the run, the same recovery [Front.waiveClearanceStop]
+		 *   issues for a train already stopped
+		 */
+		private suspend fun brakeToStopLine(): Boolean {
+			targetSpeed = 0.0
+			logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
+			val braking = AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
+			currentCondition = braking
+			waitUntil(Condition { braking.test() || semaphoreToStopShortOf() == null })
+			return !terminate && accelerate && semaphoreToStopShortOf() == null
 		}
 
 		private fun privateAccelerateTo(
@@ -1530,6 +1718,7 @@ class Train :
 			requireSimulation(speed >= 0) { "Speed must be non-negative: $speed" }
 			targetSpeed = speed
 			currentCondition = AccelerationStopCondition(test)
+			commandPending = true
 			cancelAccelerating()
 			Process.activate(this)
 		}
@@ -1577,9 +1766,17 @@ class Train :
 			}
 		}
 
+		/**
+		 * Reactivates rather than activates: kDisco absorbs a `Process.activate` aimed at a
+		 * process parked in a crossing wait, so the phase-1 wait would survive teardown and its
+		 * guard would keep being evaluated — on a train whose reservations are already released —
+		 * for the rest of the run. `Process.reactivate` drops the pending notice and resumes now,
+		 * and the resumed loop leaves through the existing `terminate` checks. Not a new activate
+		 * call site (kdisco#73): the one that was here is replaced.
+		 */
 		override fun terminate() {
 			terminate = true
-			if (!terminated()) Process.activate(this)
+			if (!terminated()) Process.reactivate(this)
 		}
 
 		override fun start(): Continuous = if (accelerate) super.start() else this
@@ -1610,8 +1807,25 @@ class Train :
 			val distance = distanceToSemaphore()
 			if (targetSpeed > 0.0) return distance
 			if (semaphoreToStopShortOf() == null) return distance
-			return maxOf(0.0, distance - SEMAPHORE_STOP_CLEARANCE_METERS)
+			return clearanceStopLineDistance()
 		}
+
+		/**
+		 * Distance the front still has to run before the clearance stop line — the one place the
+		 * motor decides where "a clearance short of the signal" is.
+		 *
+		 * [brakingTargetDistance] aims the braking law at it and [approachMargin] measures the
+		 * braking room against it, so the guard that ends phase 1 and the target phase 2 brakes to
+		 * are the same point by construction (Issue #1014; the invariant [semaphoreToStopShortOf]
+		 * documents).
+		 *
+		 * Clamped at zero: once the front is inside the clearance a negative distance would flip the
+		 * sign of the deceleration and make the train accelerate into the signal.
+		 *
+		 * Distinct from `Front.distanceToClearanceStopLine`, which subtracts a further `dtMin` of
+		 * slack because its gate must be seen to go non-positive by an asymptotic approach.
+		 */
+		private fun clearanceStopLineDistance(): Double = maxOf(0.0, distanceToSemaphore() - SEMAPHORE_STOP_CLEARANCE_METERS)
 
 		override fun derivatives() {
 			// minmax zpomaleni
