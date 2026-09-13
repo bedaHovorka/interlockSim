@@ -1485,6 +1485,21 @@ class Train :
 		private var accelerate: Boolean = false
 		private var terminate = false
 
+		/**
+		 * Set by [privateAccelerateTo] for the command it has just issued; consumed by [actions]
+		 * when that command's iteration starts.
+		 *
+		 * A wake-up with no command pending is a surplus turn and must only passivate again. kDisco
+		 * keeps `activate` and wait-notice wake-ups on separate channels (kdisco#73/#74), so a
+		 * [cancelAccelerating] aimed at a motor parked in its wait resumes it twice: through the
+		 * activate it issues and through the notice its `accelerate = false` satisfies. Without
+		 * this flag the second turn re-ran [iteration] with the stale [currentCondition] — the motor
+		 * started integrating towards its old target on a train whose velocity integration had been
+		 * stopped, and stood there reporting a non-zero acceleration until the next real command
+		 * (measured: 2.469 m/s² at a stand for an ownership conflict, `shuntingLoopAI`, 2026-09-13).
+		 */
+		private var commandPending = false
+
 		private inner class AccelerationStopCondition(
 			private val stopTest: AccelerationStopTest
 		) : Condition {
@@ -1540,8 +1555,11 @@ class Train :
 		override suspend fun actions() {
 			while (true) {
 				if (terminate) break
-				iteration()
-				if (terminate) break
+				if (commandPending) {
+					commandPending = false
+					iteration()
+					if (terminate) break
+				}
 				passivate()
 			}
 		}
@@ -1564,8 +1582,8 @@ class Train :
 			// Cancellation composes the same way it does for `waitUntil`. [cancelAccelerating]
 			// clears `accelerate` and activates; kDisco checks level crossings straight after that
 			// event, so [approachMargin] is already -1.0 and the wait ends at the same instant.
-			// One of the two turns returns from the wait and the other survives to the passivate,
-			// which is where a re-command's iteration comes from.
+			// One of the two turns returns from the wait; a re-command's iteration then starts
+			// from [commandPending] in [actions], and the other turn only passivates again.
 			if (cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				// The second term ends phase 1 the instant the signal this phase started short of
 				// itself turns allowing, rather than only letting a clear relax the braking-room
@@ -1677,6 +1695,7 @@ class Train :
 			requireSimulation(speed >= 0) { "Speed must be non-negative: $speed" }
 			targetSpeed = speed
 			currentCondition = AccelerationStopCondition(test)
+			commandPending = true
 			cancelAccelerating()
 			Process.activate(this)
 		}
