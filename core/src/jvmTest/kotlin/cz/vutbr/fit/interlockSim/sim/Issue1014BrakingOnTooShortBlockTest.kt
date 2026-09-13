@@ -160,6 +160,21 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		 * asymptotically and a sample can land a hair below or, on numerical noise, above it.
 		 */
 		const val SPEED_CAP_HEADROOM = 0.1
+
+		/**
+		 * Block length for rung 3e: long enough that a train resumed after a clear still has the
+		 * braking room to stop at the clearance line when the aspect turns restrictive again.
+		 */
+		const val RE_RESTRICTION_APPROACH = 150.0
+
+		/** Distance at which rung 3e clears the aspect: inside phase 1 on [RE_RESTRICTION_APPROACH]. */
+		const val RE_RESTRICTION_CLEAR_DISTANCE = 10.0
+
+		/**
+		 * Distance at which rung 3e turns the aspect restrictive again: while the resumed run is
+		 * still ramping up (about 17 m/s there, needing about 49 m of the 109 m left to brake).
+		 */
+		const val RE_RESTRICTION_DISTANCE = 40.0
 	}
 
 	// ── Rung 1 ────────────────────────────────────────────────────────────────────
@@ -391,6 +406,70 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		assertThat(atSeparator.velocity, name = "speed passing the S30 signal")
 			.isLessThanOrEqualTo(Signal.S30.allowedSpeed() + SPEED_CAP_HEADROOM)
 		assertThat(run.process.getTrainsExited(), name = "trains exited").isGreaterThan(0)
+	}
+
+	// ── Rung 3e ───────────────────────────────────────────────────────────────────
+
+	/**
+	 * STOP → clear → STOP within one leg: the aspect that let rungs 3 to 3d run on turns
+	 * restrictive again before the separator (Copilot review, PR #1033, Train.kt:1688).
+	 *
+	 * Once the aspect cleared, [Motor.resumeAtAspectCap] waited only for the resumed speed and
+	 * stopped observing the signal. A return to STOP left `targetSpeed` positive, so the train kept
+	 * accelerating towards a signal at danger and the front gate snapped it to zero at the
+	 * clearance line — measured at 34.09 m/s, with 109 m of room where 49 m of braking would have
+	 * done. That is the snap this PR exists to remove, reintroduced by the resume. Before the
+	 * resume existed the same sequence braked to the stop line, because a cleared aspect was
+	 * ignored for the rest of the leg.
+	 *
+	 * The flip-back is placed where braking room exists, which the rung asserts first: a train
+	 * that genuinely cannot stop in the distance left is still stopped at the line from whatever
+	 * speed it has, and that is not what this rung is about.
+	 */
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@DisplayName("an aspect turning restrictive again after a clear is braked to the stop line, not snapped")
+	fun aspectTurningRestrictiveAgainAfterAClearIsBrakedNotSnapped() {
+		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = RE_RESTRICTION_APPROACH)
+		val ctx = network.context.tracked()
+		val samples = mutableListOf<TrainKinematicSample>()
+		val clear =
+			AspectFlipOnce(
+				network.semaphore,
+				Signal.FREE,
+				trigger = { it.totalDistance >= RE_RESTRICTION_CLEAR_DISTANCE }
+			)
+		var reRestrictedAt: TrainKinematicSample? = null
+		val reRestrict =
+			AspectFlipOnce(
+				network.semaphore,
+				Signal.STOP,
+				trigger = { clear.fired && it.totalDistance >= RE_RESTRICTION_DISTANCE },
+				onFlip = { reRestrictedAt = it }
+			)
+		runClearanceStopScenario(
+			ctx,
+			semaphores = listOf(network.semaphore),
+			endTime = HELD_END_TIME,
+			initialAspect = Signal.STOP,
+			samplePeriod = SAMPLE_PERIOD,
+			onSample = { _, sample ->
+				samples += sample
+				clear.onSample(sample)
+				reRestrict.onSample(sample)
+			}
+		)
+		val flipBack = requireNotNull(reRestrictedAt) { "the aspect never turned restrictive again" }
+		val afterFlipBack = samples.filter { it.time >= flipBack.time }
+		logger.info { "R3e: re-restricted at $flipBack, final ${samples.last()}" }
+
+		assertThat(clear.fired, name = "the aspect was cleared during the approach").isTrue()
+		val stopLine = RE_RESTRICTION_APPROACH - Train.SEMAPHORE_STOP_CLEARANCE_METERS
+		assertThat(
+			flipBack.velocity * flipBack.velocity / (2 * DECELERATION_BOUND),
+			name = "braking distance needed at the flip-back"
+		).isLessThan(stopLine - flipBack.totalDistance)
+		assertBrakedToTheStopLine(afterFlipBack, RE_RESTRICTION_APPROACH)
 	}
 
 	// ── Rung 4 ────────────────────────────────────────────────────────────────────
