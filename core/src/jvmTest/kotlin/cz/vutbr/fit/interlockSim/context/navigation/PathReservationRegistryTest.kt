@@ -573,9 +573,84 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
 		}
 
+		/**
+		 * Issue #1067 gap 2: `doA1` faces WEST on the `A -> B` direction — Issue #566's rear-facing
+		 * rule deliberately leaves it at STOP even on a granted route that runs past it. A trim that
+		 * accepted it as the new PathInfo end would store an end no future route can start from: G4
+		 * refuses every route starting at a rear-facing signal, reproducing the stall this trim
+		 * exists to prevent.
+		 */
+		@Test
+		fun `refuses to trim to a signal facing away from the train`() {
+			val held = reserveLongRoute()
+			val vA = separatorAt(15, 8)
+			val doA1 = separatorAt(16, 8)
+			// Keep only the short vA-doA1 block; release everything beyond doA1.
+			val head = held.first { block -> vA in block.ends() && doA1 in block.ends() }
+			held.filter { it != head }.forEach { block ->
+				block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+				assertThat(registry.unregisterBlock(trainId, block)).isTrue()
+			}
+			val before = registry.getPathInfo(trainId)
+
+			val trimmed = registry.trimPathInfoTo(trainId, doA1)
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
 		@Test
 		fun `a train without a PathInfo has nothing to trim`() {
 			assertThat(registry.trimPathInfoTo("ghost", zA())).isFalse()
+		}
+	}
+
+	/** @since Issue #1067 gap 1 */
+	@Nested
+	inner class TrimPathInfoToHeldBlocks {
+		private val trainId = "trimHeldBlocksTrain"
+
+		private fun separatorAt(
+			x: Int,
+			y: Int
+		): DynamicPathSeparator {
+			val cell = simulationContext.getRailWayNetGrid()[Point(x, y)] ?: error("No cell at ($x, $y)")
+			return Util.assertInstanceOf<DynamicPathSeparator>(cell)
+		}
+
+		private fun zA(): DynamicPathSeparator = separatorAt(14, 8)
+
+		private fun reserveLongRoute(): List<DynamicTrackBlock> {
+			val inOuts = simulationContext.getInOuts()
+			val result =
+				simulationContext.getRoutingServices().getPathReservationService().reservePath(
+					trainId,
+					inOuts.single { it.name == "A" },
+					inOuts.single { it.name == "B" }
+				)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			return registry.getBlocks(trainId)
+		}
+
+		@Test
+		fun `finds the boundary itself and trims to it`() {
+			val held = reserveLongRoute()
+			val head = held.first { block -> zA() in block.ends() && block.ends().none { it is DynamicRailSwitch } }
+			held.filter { it != head }.forEach { block ->
+				block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+				assertThat(registry.unregisterBlock(trainId, block)).isTrue()
+			}
+
+			val trimmed = registry.trimPathInfoToHeldBlocks(trainId)
+
+			assertThat(trimmed).isTrue()
+			assertThat(registry.getPathInfo(trainId)!!.target).isEqualTo(zA())
+			assertThat(registry.isPathExtendedBeyond(trainId, zA())).isFalse()
+		}
+
+		@Test
+		fun `a train without a PathInfo has nothing to trim`() {
+			assertThat(registry.trimPathInfoToHeldBlocks("ghost")).isFalse()
 		}
 	}
 

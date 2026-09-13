@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -69,8 +70,9 @@ private val logger = KotlinLogging.logger {}
  * ## Size
  *
  * The registry is the single owner of the train -> blocks / switches / PathInfo state, so every
- * operation on that state lives here. `trimPathInfoTo` (Issue #1063) is the 25th public function,
- * which reaches detekt's `TooManyFunctions` limit; splitting the registry is out of scope for that fix.
+ * operation on that state lives here. `trimPathInfoTo` (Issue #1063) was the 25th public function,
+ * reaching detekt's `TooManyFunctions` limit; `trimPathInfoToHeldBlocks` (Issue #1067) is the 26th.
+ * Splitting the registry is out of scope for either fix.
  *
  * @param context Simulation context (needed for PathInfo merging with ArrayPath)
  * @since Issue #294 (Phase 2 of Issue #292)
@@ -413,8 +415,9 @@ class PathReservationRegistry(
 	 * - `clear()` - clear all registrations
 	 *
 	 * This method never shortens the PathInfo. A caller that releases the un-travelled tail of a
-	 * route in front of a train must call [trimPathInfoTo] afterwards (Issue #1063); otherwise the
-	 * PathInfo keeps describing the released track and [isPathExtendedBeyond] stays `true`.
+	 * route in front of a train must call [trimPathInfoToHeldBlocks] afterwards (Issue #1063,
+	 * #1067); otherwise the PathInfo keeps describing the released track and [isPathExtendedBeyond]
+	 * stays `true`.
 	 *
 	 * ## Use Case
 	 *
@@ -1235,7 +1238,11 @@ class PathReservationRegistry(
 	 * PathInfo, holds no block on it, or [boundary] does not follow its last held block — trimming
 	 * there would drop track the train still owns. It is also refused when [boundary] is a switch:
 	 * a route runs signal to signal and a switch is never its end (Issue #938), so a PathInfo ending
-	 * at one would make every later extension fail the merge.
+	 * at one would make every later extension fail the merge. It is likewise refused when [boundary]
+	 * is a semaphore facing away from the train's direction of travel (Issue #1067 gap 2): the
+	 * trimmed PathInfo's end is about to become the START of the train's next route request, and G4
+	 * ([DefaultPathReservationService.startFacesTravelDirection]) refuses every route starting at a
+	 * rear-facing signal, which would strand the train exactly like the untrimmed PathInfo did.
 	 *
 	 * @param trainId The train identifier
 	 * @param boundary The separator where the train's held track now ends
@@ -1250,6 +1257,16 @@ class PathReservationRegistry(
 		val elements = pathInfo.reservedPath.toList()
 		val boundaryIndex = trimBoundaryIndex(trainId, pathInfo, elements, boundary) ?: return false
 		if (boundaryIndex == elements.lastIndex) return true
+
+		val nextBlock = elements.getOrNull(boundaryIndex + 1)?.let(::blockOf)
+		if (boundary is DynamicRailSemaphore && nextBlock != null && !facesDirectionOfTravel(boundary, nextBlock)) {
+			logger.warn {
+				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — it faces away from " +
+					"the train's direction of travel, so a future route starting there would be refused " +
+					"(path ${pathInfo.start}→${pathInfo.target})"
+			}
+			return false
+		}
 
 		trainToPathInfo[trainId] = pathInfo.truncatedAt(elements, boundaryIndex, boundary, context)
 		logger.info {
@@ -1304,6 +1321,66 @@ class PathReservationRegistry(
 			}
 		}
 		return boundaryIndex
+	}
+
+	/**
+	 * [trimPathInfoTo], but finds the boundary itself: the separator immediately following the
+	 * last block the train still holds in the stored PathInfo.
+	 *
+	 * ## Why (Issue #1067 gap 1)
+	 *
+	 * [RegistryPartialRouteReleaser] used to derive the boundary from the ends shared by the
+	 * occupied head and the blocks it released **in that one call**. A tail released over two
+	 * sweeps — one block refused or throwing on the first sweep, freed on a later retry — then
+	 * finds no boundary on the sweep that finally frees it: that block is no longer adjacent to
+	 * the occupied head, only to the block released earlier. The trim was skipped with a warning
+	 * and never retried, reproducing the permanent stall [trimPathInfoTo] exists to prevent.
+	 * Deriving the boundary from the blocks the train currently holds — rather than from what
+	 * changed in the current call — makes the operation idempotent: whichever sweep frees the
+	 * last remaining tail block computes the same boundary and the trim goes through.
+	 *
+	 * @param trainId The train identifier
+	 * @return `true` if the stored PathInfo now ends at the boundary, `false` if there was nothing
+	 *   to trim (no PathInfo, no separator follows the last held block) or [trimPathInfoTo]
+	 *   refused it (switch boundary, or a boundary facing away from the train)
+	 * @since Issue #1067
+	 */
+	fun trimPathInfoToHeldBlocks(trainId: String): Boolean {
+		val pathInfo = trainToPathInfo[trainId] ?: return false
+		val held = getBlocks(trainId).toSet()
+		val elements = pathInfo.reservedPath.toList()
+		val lastHeldIndex = elements.indexOfLast { element -> blockOf(element)?.let { it in held } == true }
+		val boundary =
+			elements.getOrNull(lastHeldIndex + 1) as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		if (boundary == null) {
+			logger.debug {
+				"trimPathInfoToHeldBlocks: nothing to trim for '$trainId' — no separator follows the last " +
+					"held block in the stored PathInfo (path ${pathInfo.start}→${pathInfo.target})"
+			}
+			return false
+		}
+		return trimPathInfoTo(trainId, boundary)
+	}
+
+	/**
+	 * `true` when a train continuing past [semaphore] into [nextBlock] would find it facing the
+	 * direction of travel, `false` when the train would pass it from behind.
+	 *
+	 * Duplicates [DefaultPathReservationService.facesDirectionOfTravel] rather than reusing it:
+	 * that check is `private` to the reservation service, which the registry has no reference to
+	 * (it is built from [context] alone, precisely so [PathReservationService] can be built from
+	 * the registry rather than the other way around). Both read the same
+	 * [SimulationContext.getSegment] primitive and share its fail-open contract: a separator this
+	 * cannot resolve is treated as facing the travel direction rather than stranding the trim.
+	 *
+	 * @since Issue #1067 gap 2
+	 */
+	private fun facesDirectionOfTravel(
+		semaphore: DynamicRailSemaphore,
+		nextBlock: DynamicTrackBlock
+	): Boolean {
+		val towards = context.getSegment(semaphore, nextBlock, null) ?: return true
+		return towards == semaphore.direction()
 	}
 
 	/**

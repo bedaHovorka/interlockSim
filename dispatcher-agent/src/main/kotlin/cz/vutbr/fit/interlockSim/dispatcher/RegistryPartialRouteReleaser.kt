@@ -107,8 +107,7 @@ class RegistryPartialRouteReleaser(
 		// at a switch (a train standing on zA-vA with its tail beyond vA) cannot have its PathInfo cut
 		// there, so releasing would leave a PathInfo describing free track — the #1031 stall. Refuse
 		// BEFORE any signal or block changes; the train keeps its reservation.
-		val boundaries = headBoundaries(occupied, eligible)
-		val boundary = boundaries.singleOrNull()
+		val boundary = headBoundaries(occupied, eligible).singleOrNull()
 		if (boundary != null && !registry.isValidPathInfoEnd(boundary)) {
 			logger.info {
 				"RegistryPartialRouteReleaser: not releasing the tail of '$trainId' — the occupied head meets " +
@@ -147,10 +146,15 @@ class RegistryPartialRouteReleaser(
 		for (block in eligible) {
 			releaseBlock(trainId, block)?.let { released += it }
 		}
-		// Issue #1063: only a complete release may move the PathInfo's end. A block that could not be
-		// released is still held beyond the boundary, and the PathInfo must keep describing it.
-		if (released.size == eligible.size) {
-			trimPathInfoToHead(trainId, boundary, boundaries.size)
+		// Issue #1063 / #1067 (gap 1): trim once nothing beyond the occupied head remains held.
+		// Checking the CURRENT held set — rather than "released in this call" — makes this
+		// idempotent across a tail released over several retried sweeps: a block refused (or
+		// throwing) on one sweep and freed on a later one no longer touches the occupied head by
+		// then, so deriving the boundary from what changed in that later call alone would find
+		// none. `PathReservationRegistry.trimPathInfoToHeldBlocks` instead derives the boundary
+		// from the stored PathInfo and the blocks the train still holds, whichever sweep that is.
+		if (registry.getBlocks(trainId).all { it in occupied }) {
+			registry.trimPathInfoToHeldBlocks(trainId)
 		}
 		return TailRelease(released)
 	}
@@ -165,32 +169,6 @@ class RegistryPartialRouteReleaser(
 			.flatMap { block -> block.ends().filter { it in headEnds } }
 			.filterIsInstance<DynamicPathSeparator>()
 			.distinct()
-	}
-
-	/**
-	 * Cuts the train's stored PathInfo back to [boundary], the separator where its occupied head meets
-	 * the released tail. Without this the PathInfo still describes the released track, so
-	 * `isPathExtendedBeyond` keeps saying the route goes on, both dispatchers leave the train alone,
-	 * and a new route from that separator fails the merge — the permanent stall of Issue #1031.
-	 */
-	private fun trimPathInfoToHead(
-		trainId: String,
-		boundary: DynamicPathSeparator?,
-		boundaryCount: Int
-	) {
-		if (boundary == null) {
-			logger.warn {
-				"RegistryPartialRouteReleaser: not trimming the PathInfo of '$trainId' — expected exactly one " +
-					"separator between the occupied head and the released tail, found $boundaryCount"
-			}
-			return
-		}
-		if (!registry.trimPathInfoTo(trainId, boundary)) {
-			logger.warn {
-				"RegistryPartialRouteReleaser: the PathInfo of '$trainId' was left unchanged after its tail " +
-					"beyond $boundary was released (see the trimPathInfoTo warning)"
-			}
-		}
 	}
 
 	/**
