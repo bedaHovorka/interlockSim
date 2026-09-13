@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -21,7 +20,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
-import org.koin.mp.KoinPlatformTools
 
 /**
  * A built linear topology together with the dynamic wrappers of its semaphores, in travel
@@ -371,20 +369,14 @@ object TestTopologies {
 	fun linearPathWithSemaphoreSimulation(semaphoreAllowing: Boolean = false): DefaultSimulationContext =
 		linearPathWithSemaphoreBuilder(semaphoreAllowing = semaphoreAllowing).buildSimulationContext()
 
-	fun yJunctionWithSwitchSimulation(): DefaultSimulationContext {
-		val editingContext = yJunctionWithSwitch()
-		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
+	fun yJunctionWithSwitchSimulation(): DefaultSimulationContext =
+		yJunctionWithSwitch().use { toSimulationContext(it) }
 
 	fun linearPathWithSemaphoreSequenceSimulation(
 		semaphoreCount: Int = 3,
 		semaphoresAllowing: Boolean = false
-	): DefaultSimulationContext {
-		val editingContext = linearPathWithSemaphoreSequence(semaphoreCount, semaphoresAllowing)
-		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
+	): DefaultSimulationContext =
+		linearPathWithSemaphoreSequence(semaphoreCount, semaphoresAllowing).use { toSimulationContext(it) }
 
 	fun deadEndSingleInOutSimulation(): DefaultSimulationContext =
 		TestContextBuilder()
