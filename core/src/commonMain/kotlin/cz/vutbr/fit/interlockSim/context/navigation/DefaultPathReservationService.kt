@@ -951,7 +951,7 @@ class DefaultPathReservationService(
 		val unresolved = blockedSince.keys.toList()
 		blockedSince.clear()
 		return unresolved.mapNotNull { (trainId, block) ->
-			val owner = registry.getOwner(block) ?: block.trainName ?: return@mapNotNull null
+			val owner = ownerOf(block) ?: return@mapNotNull null
 			BlockEvent.ReservationConflictDetected(
 				block = block,
 				trainId = trainId,
@@ -991,9 +991,12 @@ class DefaultPathReservationService(
 			blocks.firstOrNull { block ->
 				block.getState() != TrackFacility.State.FREE && block.trainName != trainId
 			} ?: return null
-		val owner = registry.getOwner(blockedBlock) ?: blockedBlock.trainName ?: return null
+		val owner = ownerOf(blockedBlock) ?: return null
 		return Pair(blockedBlock, owner)
 	}
+
+	/** The train that owns [block]: the registry's record first, the block's own `trainName` as fallback. */
+	private fun ownerOf(block: DynamicTrackBlock): String? = registry.getOwner(block) ?: block.trainName
 
 	/**
 	 * Release all blocks reserved by a train.
