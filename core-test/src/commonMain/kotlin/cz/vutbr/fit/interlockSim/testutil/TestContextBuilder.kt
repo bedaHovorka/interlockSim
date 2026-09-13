@@ -123,8 +123,11 @@ class TestContextBuilder {
 	 * [DefaultSimulationContext.fromEditingContext] via GridTransformer, which is equivalent
 	 * to the ContextTransformer.createSimulationContext() path used in JVM production code.
 	 * [DefaultSimulationContext.run] also calls initializeDynamicMapping() internally.
+	 *
+	 * The editing context is closed as soon as its data is copied across: it owns a Koin
+	 * scope of its own, and only the simulation context is handed back to the caller to close.
 	 */
-	fun buildSimulationContext(): DefaultSimulationContext = toSimulationContext(editingContext)
+	fun buildSimulationContext(): DefaultSimulationContext = editingContext.use { toSimulationContext(it) }
 
 	/**
 	 * Returns the editing context that has been built up through the fluent API.
@@ -173,8 +176,9 @@ fun buildLinearTrack(): DefaultSimulationContext {
 	editingContext.putCell(pB, outB)
 	editingContext.joinCells(pA, pB, trackBlock)
 
-	// Convert to simulation context
-	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	// Convert to simulation context; the editing context owns its own Koin scope and must
+	// not outlive the conversion.
+	return editingContext.use { DefaultSimulationContext.fromEditingContext(it, processFactory) }
 }
 
 fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
@@ -212,8 +216,9 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 	editingContext.joinCells(r1, pB, trackBlock)
 	editingContext.joinCells(pA, r1, trackBlock)
 
-	// Convert to simulation context
-	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	// Convert to simulation context; the editing context owns its own Koin scope and must
+	// not outlive the conversion.
+	return editingContext.use { DefaultSimulationContext.fromEditingContext(it, processFactory) }
 }
 
 fun buildMinimalSimulation(): DefaultSimulationContext =
