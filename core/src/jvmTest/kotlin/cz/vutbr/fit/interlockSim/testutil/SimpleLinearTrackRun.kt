@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.sim.SimpleLinearTrackTestProcess
 import cz.vutbr.fit.interlockSim.sim.Train
 
@@ -34,17 +35,22 @@ class SimpleLinearTrackRun(
  * The process itself reserves nothing — a scenario that needs a reserved route does it in
  * [onTrainCreated], exactly as the process's KDoc prescribes. Context lifetime stays with the
  * caller: register it with `KoinTestBase.tracked()` or close it in an `@AfterEach`, as before.
+ *
+ * [env] is the environment the process and its trains run against; it defaults to [context]. A
+ * test that injects a navigation answer passes a decorating wrapper here, the same seam
+ * `runShuntingLoop` offers.
  */
 fun runSimpleLinearTrackScenario(
 	context: DefaultSimulationContext,
 	endTime: Long,
 	trainSpecs: List<SimpleLinearTrackTestProcess.TrainSpec>,
+	env: SimulationContext = context,
 	onTrainCreated: (Train) -> Unit = {}
 ): SimpleLinearTrackRun {
 	val trains = mutableListOf<Train>()
 	val process =
 		SimpleLinearTrackTestProcess(
-			context,
+			env,
 			endTime = endTime,
 			trainSpecs = trainSpecs,
 			onTrainCreated = { train ->

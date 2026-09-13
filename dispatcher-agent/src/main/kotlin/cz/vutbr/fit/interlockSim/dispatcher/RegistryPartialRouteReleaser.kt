@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -102,6 +103,20 @@ class RegistryPartialRouteReleaser(
 			}
 		if (eligible.isEmpty()) return TailRelease.NOTHING
 
+		// Issue #1063: release and PathInfo trim succeed or fail together. A head that meets the tail
+		// at a switch (a train standing on zA-vA with its tail beyond vA) cannot have its PathInfo cut
+		// there, so releasing would leave a PathInfo describing free track — the #1031 stall. Refuse
+		// BEFORE any signal or block changes; the train keeps its reservation.
+		val boundaries = headBoundaries(occupied, eligible)
+		val boundary = boundaries.singleOrNull()
+		if (boundary != null && !registry.isValidPathInfoEnd(boundary)) {
+			logger.info {
+				"RegistryPartialRouteReleaser: not releasing the tail of '$trainId' — the occupied head meets " +
+					"it at the switch $boundary, where its PathInfo cannot end (Issue #1063)"
+			}
+			return TailRelease.NOTHING
+		}
+
 		// Approach locking (Issue #1025): read the boundary signals BEFORE the reset below drops
 		// them. A proceed aspect standing where the occupied head meets the tail means the train
 		// may already be committed to the first tail block — Train.Front reads the aspect, moves,
@@ -132,7 +147,50 @@ class RegistryPartialRouteReleaser(
 		for (block in eligible) {
 			releaseBlock(trainId, block)?.let { released += it }
 		}
+		// Issue #1063: only a complete release may move the PathInfo's end. A block that could not be
+		// released is still held beyond the boundary, and the PathInfo must keep describing it.
+		if (released.size == eligible.size) {
+			trimPathInfoToHead(trainId, boundary, boundaries.size)
+		}
 		return TailRelease(released)
+	}
+
+	/** The distinct ends shared by an [occupied] head block and a [tail] block. */
+	private fun headBoundaries(
+		occupied: List<DynamicTrackBlock>,
+		tail: List<DynamicTrackBlock>
+	): List<DynamicPathSeparator> {
+		val headEnds = occupied.flatMap { it.ends().asList() }.toSet()
+		return tail
+			.flatMap { block -> block.ends().filter { it in headEnds } }
+			.filterIsInstance<DynamicPathSeparator>()
+			.distinct()
+	}
+
+	/**
+	 * Cuts the train's stored PathInfo back to [boundary], the separator where its occupied head meets
+	 * the released tail. Without this the PathInfo still describes the released track, so
+	 * `isPathExtendedBeyond` keeps saying the route goes on, both dispatchers leave the train alone,
+	 * and a new route from that separator fails the merge — the permanent stall of Issue #1031.
+	 */
+	private fun trimPathInfoToHead(
+		trainId: String,
+		boundary: DynamicPathSeparator?,
+		boundaryCount: Int
+	) {
+		if (boundary == null) {
+			logger.warn {
+				"RegistryPartialRouteReleaser: not trimming the PathInfo of '$trainId' — expected exactly one " +
+					"separator between the occupied head and the released tail, found $boundaryCount"
+			}
+			return
+		}
+		if (!registry.trimPathInfoTo(trainId, boundary)) {
+			logger.warn {
+				"RegistryPartialRouteReleaser: the PathInfo of '$trainId' was left unchanged after its tail " +
+					"beyond $boundary was released (see the trimPathInfoTo warning)"
+			}
+		}
 	}
 
 	/**
