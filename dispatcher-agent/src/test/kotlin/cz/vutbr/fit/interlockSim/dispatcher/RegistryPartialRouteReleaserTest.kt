@@ -565,6 +565,83 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		assertThat(result, "re-request from zA").isInstanceOf<PathReservationService.ReservationResult.Success>()
 	}
 
+	/**
+	 * PR #1068 review: the fallback publishes the release event synchronously, and a listener may throw.
+	 * That failure must stay with its block — the FIRST tail block here — so the blocks after it are still
+	 * released in the same sweep.
+	 */
+	@ParameterizedTest(name = "dropFreedBlock {0}")
+	@EnumSource(DropFailure::class)
+	@DisplayName("a failing fallback on one block does not stop the release of the rest of the tail")
+	fun failingFallbackDoesNotStopTheRestOfTheTail(failure: DropFailure) {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val first = tail.first()
+		val flaky = releaserWithFailingFallbackFor(first, failure)
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
+		assertThat(flaky.releaseUntravelledTail(trainId, tailIds).deferred, "first call deferred").isTrue()
+		val targetBefore = registry().getPathInfo(trainId)!!.target
+
+		val second = flaky.releaseUntravelledTail(trainId, tailIds)
+
+		tail.drop(1).forEach { block ->
+			assertThat(registry().getOwner(block), "owner of later block ${BlockIdentity.stableBlockId(block)}")
+				.isEqualTo(null)
+		}
+		when (failure) {
+			DropFailure.THROWS_AFTER_UNREGISTERING -> {
+				assertThat(second.released, "released ids").isEqualTo(tailIds)
+				assertThat(registry().getOwner(first), "failed block owner").isEqualTo(null)
+				assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)
+			}
+			DropFailure.THROWS -> {
+				assertThat(second.released, "released ids").isEqualTo(tailIds.drop(1))
+				assertThat(registry().getOwner(first), "failed block owner").isEqualTo(trainId)
+				assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(targetBefore)
+			}
+		}
+	}
+
+	enum class DropFailure {
+		/** Throws before unregistering: the block stays owned. */
+		THROWS,
+
+		/** Unregisters the block, then throws (as a throwing release-event listener does). */
+		THROWS_AFTER_UNREGISTERING
+	}
+
+	/**
+	 * A releaser whose service refuses `unregisterBlock` once for [failing], so the releaser falls back to
+	 * `dropFreedBlock`, which then fails as [failure] says.
+	 */
+	private fun releaserWithFailingFallbackFor(
+		failing: DynamicTrackBlock,
+		failure: DropFailure
+	): RegistryPartialRouteReleaser {
+		val real = context.getRoutingServices().getPathReservationService()
+		var refused = false
+		val flaky =
+			object : PathReservationService by real {
+				override fun unregisterBlock(
+					trainId: String,
+					block: DynamicTrackBlock
+				): Boolean {
+					if (block != failing || refused) return real.unregisterBlock(trainId, block)
+					refused = true
+					return false
+				}
+
+				override fun dropFreedBlock(
+					trainId: String,
+					block: DynamicTrackBlock
+				): Boolean {
+					if (block != failing) return real.dropFreedBlock(trainId, block)
+					if (failure == DropFailure.THROWS_AFTER_UNREGISTERING) real.dropFreedBlock(trainId, block)
+					error("simulated release-event failure")
+				}
+			}
+		return RegistryPartialRouteReleaser(registry(), flaky)
+	}
+
 	/** A refused trim after a release is logged, and the release itself is still reported. */
 	@Test
 	@DisplayName("a trim refused after a full release still reports the released blocks")

@@ -252,7 +252,18 @@ class RegistryPartialRouteReleaser(
 			"RegistryPartialRouteReleaser: the service did not unregister freed block '$id' of '$trainId'; " +
 				"finishing the release without a second signal reset"
 		}
-		return pathReservationService.dropFreedBlock(trainId, block)
+		// PR #1068 review: the release event is published synchronously and a listener may throw. The
+		// failure stays with this block, so the rest of the tail is still released.
+		return try {
+			pathReservationService.dropFreedBlock(trainId, block)
+		} catch (e: Exception) {
+			val dropped = registry.getOwner(block) != trainId
+			logger.warn(e) {
+				"RegistryPartialRouteReleaser: finishing the release of freed block '$id' of '$trainId' failed; " +
+					if (dropped) "the block is unregistered, only its release event failed" else "the block stays registered"
+			}
+			dropped
+		}
 	}
 
 	private fun DynamicTrackBlock.isOccupied(): Boolean = occupant != null || getState() == TrackFacility.State.OCCUPIED
