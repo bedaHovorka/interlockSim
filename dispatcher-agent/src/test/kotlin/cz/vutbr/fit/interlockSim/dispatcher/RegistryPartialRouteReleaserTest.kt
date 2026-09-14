@@ -579,30 +579,20 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		val flaky = releaserWithFailingFallbackFor(first, failure)
 		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
 		assertThat(flaky.releaseUntravelledTail(trainId, tailIds).deferred, "first call deferred").isTrue()
-		val targetBefore = registry().getPathInfo(trainId)!!.target
 
 		val second = flaky.releaseUntravelledTail(trainId, tailIds)
 
-		tail.drop(1).forEach { block ->
-			assertThat(registry().getOwner(block), "owner of later block ${BlockIdentity.stableBlockId(block)}")
+		// Either way no FREE block stays owned — the sweeper would never offer it again (PR #1068 review).
+		assertThat(second.released, "released ids").isEqualTo(tailIds)
+		tail.forEach { block ->
+			assertThat(registry().getOwner(block), "owner of tail block ${BlockIdentity.stableBlockId(block)}")
 				.isEqualTo(null)
 		}
-		when (failure) {
-			DropFailure.THROWS_AFTER_UNREGISTERING -> {
-				assertThat(second.released, "released ids").isEqualTo(tailIds)
-				assertThat(registry().getOwner(first), "failed block owner").isEqualTo(null)
-				assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)
-			}
-			DropFailure.THROWS -> {
-				assertThat(second.released, "released ids").isEqualTo(tailIds.drop(1))
-				assertThat(registry().getOwner(first), "failed block owner").isEqualTo(trainId)
-				assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(targetBefore)
-			}
-		}
+		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)
 	}
 
 	enum class DropFailure {
-		/** Throws before unregistering: the block stays owned. */
+		/** Throws before unregistering: the releaser must drop the block from the registry itself. */
 		THROWS,
 
 		/** Unregisters the block, then throws (as a throwing release-event listener does). */

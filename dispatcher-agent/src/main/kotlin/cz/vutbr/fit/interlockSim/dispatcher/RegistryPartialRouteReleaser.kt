@@ -257,12 +257,13 @@ class RegistryPartialRouteReleaser(
 		return try {
 			pathReservationService.dropFreedBlock(trainId, block)
 		} catch (e: Exception) {
-			val dropped = registry.getOwner(block) != trainId
 			logger.warn(e) {
-				"RegistryPartialRouteReleaser: finishing the release of freed block '$id' of '$trainId' failed; " +
-					if (dropped) "the block is unregistered, only its release event failed" else "the block stays registered"
+				"RegistryPartialRouteReleaser: finishing the release of freed block '$id' of '$trainId' failed"
 			}
-			dropped
+			// A FREE block left owned is never offered again, so the PathInfo would never be trimmed (the
+			// #1031 stall). If the service failed before unregistering it, drop it from the registry here;
+			// only its release event is then missing.
+			registry.getOwner(block) != trainId || registry.unregisterBlock(trainId, block)
 		}
 	}
 
