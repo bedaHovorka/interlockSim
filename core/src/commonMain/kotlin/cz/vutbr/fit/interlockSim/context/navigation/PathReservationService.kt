@@ -666,7 +666,8 @@ interface PathReservationService {
 	 * `semaphoreClearedFor` bookkeeping, and cannot reach a governing semaphore the front never
 	 * read. Safe by construction for this per-block call site: every boundary of a released block
 	 * is behind the train's head by definition, so the reset can never drop a signal the train
-	 * still needs ahead of it.
+	 * still needs ahead of it. A refused release (block not owned by [trainId], or not FREE) returns
+	 * `false` before the reset and changes no signal.
 	 *
 	 * ## Use Case
 	 *
@@ -682,6 +683,24 @@ interface PathReservationService {
 	 * @since Issue #893 (phase alpha, task A4) -- added the [resetSemaphoresForReleasedBlocks] call
 	 */
 	fun unregisterBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean
+
+	/**
+	 * [unregisterBlock] without its signal reset: removes a FREE [block] from [trainId]'s registration
+	 * and publishes the same release event, so every event-driven count (metrics, temporal conflict
+	 * and collision detection) drops the block too.
+	 *
+	 * For a caller that has already set the block's governing signals to STOP itself and must finish a
+	 * release whose [unregisterBlock] failed after the block became FREE — the partial tail release
+	 * (Issue #1067, PR #1068 review). Leaving such a block registered would hide it from the dispatcher
+	 * and keep the train's route from being trimmed.
+	 *
+	 * @return true if the block was unregistered, false if it is still occupied, not FREE, or not owned
+	 * @since Issue #1067
+	 */
+	fun dropFreedBlock(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean
