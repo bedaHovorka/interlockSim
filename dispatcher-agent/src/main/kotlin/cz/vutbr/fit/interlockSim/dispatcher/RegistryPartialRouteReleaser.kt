@@ -229,8 +229,10 @@ class RegistryPartialRouteReleaser(
 	 * Issue #1067 gap 1 (PR #1068 review): [block] is FREE, but the service did not finish unregistering
 	 * it. Left owned, it reads as owner-less to the sweeper — a FREE reading carries no train — so no
 	 * sweep offers it again and the PathInfo is never trimmed: the #1031 stall. Its signals were set to
-	 * STOP before the release, so the registry drops it directly (unless the service had already done
-	 * so before it failed). The service's release event for this one block may be missing.
+	 * STOP before the release, so [PathReservationService.dropFreedBlock] finishes the release without a
+	 * second reset, and still publishes the release event the metrics and conflict detectors count. If
+	 * the service had already unregistered it before it failed, nothing more is done, so the event is
+	 * never published twice.
 	 *
 	 * @return `true` when [trainId] no longer owns [block]
 	 */
@@ -241,9 +243,9 @@ class RegistryPartialRouteReleaser(
 	): Boolean {
 		logger.warn {
 			"RegistryPartialRouteReleaser: the service did not unregister freed block '$id' of '$trainId'; " +
-				"dropping it from the registry directly"
+				"finishing the release without a second signal reset"
 		}
-		return registry.getOwner(block) != trainId || registry.unregisterBlock(trainId, block)
+		return registry.getOwner(block) != trainId || pathReservationService.dropFreedBlock(trainId, block)
 	}
 
 	private fun DynamicTrackBlock.isOccupied(): Boolean = occupant != null || getState() == TrackFacility.State.OCCUPIED

@@ -1349,7 +1349,7 @@ class PathReservationRegistry(
 		if (boundaryIndex == null) {
 			logger.warn {
 				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — the separator does " +
-					"not follow the last block the train still holds " +
+					"not follow the last block the train still holds, or the path passes one of those blocks twice " +
 					"(path ${pathInfo.start}→${pathInfo.target}, ${held.size} block(s) held)"
 			}
 		}
@@ -1423,13 +1423,31 @@ class PathReservationRegistry(
 private fun blockOf(element: cz.vutbr.fit.interlockSim.objects.core.PathElement): DynamicTrackBlock? =
 	(element as? TrackSection)?.getTrackBlock() as? DynamicTrackBlock
 
-/** The index of the last element of [elements] whose block is in [blocks], or `-1` when there is none. */
+/**
+ * The index of the last element of [elements] whose block is in [blocks], or `-1` when there is none.
+ *
+ * Also `-1` when a block of [blocks] appears in two separate places (a merged circular route may pass a
+ * block twice). "The last occurrence" is then ambiguous — it can lie ahead of the train rather than
+ * under it — and a trim there would drop track the train still holds (PR #1068 review), so the caller
+ * finds no boundary and refuses.
+ */
 private fun lastIndexOfBlockIn(
 	elements: List<PathElement>,
 	blocks: Collection<DynamicTrackBlock>
 ): Int {
 	val blockSet = blocks.toSet()
-	return elements.indexOfLast { element -> blockOf(element)?.let { it in blockSet } == true }
+	val seen = mutableSetOf<DynamicTrackBlock>()
+	var previous: DynamicTrackBlock? = null
+	var lastIndex = -1
+	elements.forEachIndexed { index, element ->
+		val block = blockOf(element) ?: return@forEachIndexed
+		if (block in blockSet) {
+			if (block != previous && !seen.add(block)) return -1
+			lastIndex = index
+		}
+		previous = block
+	}
+	return lastIndex
 }
 
 /**

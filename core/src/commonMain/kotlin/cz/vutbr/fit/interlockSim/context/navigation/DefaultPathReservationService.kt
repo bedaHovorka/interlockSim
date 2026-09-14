@@ -3218,6 +3218,13 @@ class DefaultPathReservationService(
 		// the worst case is a stall, never an unprotected movement. Emission stays last, so a
 		// subscriber still never observes a FREE block whose signal shows proceed.
 		resetSemaphoresForReleasedBlocks(trainId, listOf(block))
+		return dropFreedBlock(trainId, block)
+	}
+
+	override fun dropFreedBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			emitBlockReleased(block, trainId, currentSimulationTime())

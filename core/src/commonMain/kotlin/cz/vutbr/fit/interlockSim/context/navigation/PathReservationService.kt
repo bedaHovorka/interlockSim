@@ -687,6 +687,24 @@ interface PathReservationService {
 	): Boolean
 
 	/**
+	 * [unregisterBlock] without its signal reset: removes a FREE [block] from [trainId]'s registration
+	 * and publishes the same release event, so every event-driven count (metrics, temporal conflict
+	 * and collision detection) drops the block too.
+	 *
+	 * For a caller that has already set the block's governing signals to STOP itself and must finish a
+	 * release whose [unregisterBlock] failed after the block became FREE — the partial tail release
+	 * (Issue #1067, PR #1068 review). Leaving such a block registered would hide it from the dispatcher
+	 * and keep the train's route from being trimmed.
+	 *
+	 * @return true if the block was unregistered, false if it is still occupied, not FREE, or not owned
+	 * @since Issue #1067
+	 */
+	fun dropFreedBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean
+
+	/**
 	 * Reset (to [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP]) every semaphore this service
 	 * recorded as cleared for [trainId] that governs one of [blocks]: a semaphore that is an
 	 * `ends()` member of the block, the block's `reservedFrom` when that is itself a semaphore, or

@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -511,10 +512,16 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		val flaky = releaserFailingOnceFor(far, failure)
 		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
 		assertThat(flaky.releaseUntravelledTail(trainId, tailIds).deferred, "first call deferred").isTrue()
+		val releaseEvents = mutableListOf<DynamicTrackBlock>()
+		pathReservationService().addBlockOccupancyListener { event ->
+			if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) releaseEvents += event.block
+		}
 
 		val second = flaky.releaseUntravelledTail(trainId, tailIds)
 
 		assertThat(second.released, "released ids").isEqualTo(tailIds)
+		// Exactly one: the metrics and conflict detectors count this event, and none may be lost or doubled.
+		assertThat(releaseEvents.count { it == far }, "release events for the failed block").isEqualTo(1)
 		assertThat(far.getState(), "failed block state").isEqualTo(TrackFacility.State.FREE)
 		assertThat(registry().getOwner(far), "failed block owner").isEqualTo(null)
 		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)

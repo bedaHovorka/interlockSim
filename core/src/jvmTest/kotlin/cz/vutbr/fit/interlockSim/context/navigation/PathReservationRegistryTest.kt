@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
@@ -25,10 +26,12 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -672,6 +675,26 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 			assertThat(end!!.boundary).isEqualTo(registry.getPathInfo(trainId)!!.target)
 			assertThat(end.nextBlock).isNull()
+		}
+
+		/**
+		 * PR #1068 review: a merged circular route may pass a block twice. The last occurrence can then be
+		 * ahead of the train, and a trim there would drop track it still holds, so there is no end.
+		 */
+		@Test
+		fun `no end when a kept block appears twice on the PathInfo`() {
+			val held = reserveLongRoute(trainId)
+			val stored = requireNotNull(registry.getPathInfo(trainId))
+			val head = held.first()
+			val revisiting = ArrayPath(simulationContext)
+			stored.reservedPath.forEach { revisiting.add(it) }
+			stored.reservedPath
+				.filter { element -> (element as? TrackSection)?.getTrackBlock() == head }
+				.forEach { revisiting.add(it) }
+			registry.registerPathInfo("revisitingTrain", stored.copy(reservedPath = revisiting))
+
+			assertThat(registry.pathInfoEndAfter("revisitingTrain", listOf(head))).isNull()
+			assertThat(registry.pathInfoEndAfter(trainId, listOf(head))).isNotNull()
 		}
 
 		@Test
