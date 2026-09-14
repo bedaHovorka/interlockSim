@@ -666,7 +666,8 @@ interface PathReservationService {
 	 * `semaphoreClearedFor` bookkeeping, and cannot reach a governing semaphore the front never
 	 * read. Safe by construction for this per-block call site: every boundary of a released block
 	 * is behind the train's head by definition, so the reset can never drop a signal the train
-	 * still needs ahead of it.
+	 * still needs ahead of it. A refused release (block not owned by [trainId], or not FREE) returns
+	 * `false` before the reset and changes no signal.
 	 *
 	 * ## Use Case
 	 *

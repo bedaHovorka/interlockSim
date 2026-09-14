@@ -14,6 +14,7 @@ import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
@@ -335,6 +336,41 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		assertThat(pathInfo!!.target, "PathInfo target after the tail release").isEqualTo(zA)
 		assertThat(pathInfo.start, "PathInfo start after the tail release").isEqualTo(inOutNamed("A"))
 		assertThat(registry().isPathExtendedBeyond(trainId, zA), "path still extends beyond zA").isFalse()
+	}
+
+	/**
+	 * PR #1068 review: a train that stands on several blocks of its route passes all of them as
+	 * occupied. Once the tail beyond them is released the train holds only occupied blocks, and that is
+	 * exactly when the PathInfo must be trimmed — to the signal after the LAST occupied block.
+	 */
+	@Test
+	@DisplayName("a train standing on several blocks has its PathInfo trimmed after the last of them")
+	fun pathInfoIsTrimmedWhenTheTrainSpansSeveralOccupiedBlocks() {
+		val blocks = reserveLongRoute()
+		// The B-side signal of the loop track the route takes (doB1 or doB2); it faces the train.
+		val trackEnd =
+			blocks
+				.flatMap { it.ends().asList() }
+				.filterIsInstance<DynamicRailSemaphore>()
+				.first { it.name.startsWith("doB") }
+		val occupiedCount = blocks.indexOfFirst { trackEnd in it.ends() } + 1
+		assertThat(occupiedCount, "blocks up to ${trackEnd.name} in ${blocks.map(BlockIdentity::stableBlockId)}")
+			.isGreaterThan(1)
+		val occupied = blocks.take(occupiedCount)
+		occupied.forEach { it.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId }) }
+		val tailIds = blocks.drop(occupiedCount).map { BlockIdentity.stableBlockId(it) }
+		assertThat(tailIds, "tail beyond the loop track").isNotEmpty()
+
+		// The first call can be deferred by the approach lock (Issue #1025); the second one releases.
+		val first = releaser().releaseUntravelledTail(trainId, tailIds)
+		val release = if (first.deferred) releaser().releaseUntravelledTail(trainId, tailIds) else first
+
+		assertThat(release.released.size, "released block count").isEqualTo(tailIds.size)
+		assertThat(heldBlocks().toSet(), "blocks still held").isEqualTo(occupied.toSet())
+		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target after the tail release")
+			.isEqualTo(trackEnd)
+		assertThat(registry().isPathExtendedBeyond(trainId, trackEnd), "path still extends beyond $trackEnd")
+			.isFalse()
 	}
 
 	/**

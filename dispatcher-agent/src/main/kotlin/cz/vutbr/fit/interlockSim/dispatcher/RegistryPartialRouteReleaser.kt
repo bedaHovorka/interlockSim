@@ -241,11 +241,18 @@ class RegistryPartialRouteReleaser(
 		block: DynamicTrackBlock,
 		id: String
 	): Boolean {
+		if (registry.getOwner(block) != trainId) {
+			logger.info {
+				"RegistryPartialRouteReleaser: the service unregistered freed block '$id' of '$trainId' " +
+					"before it failed; nothing more to do"
+			}
+			return true
+		}
 		logger.warn {
 			"RegistryPartialRouteReleaser: the service did not unregister freed block '$id' of '$trainId'; " +
 				"finishing the release without a second signal reset"
 		}
-		return registry.getOwner(block) != trainId || pathReservationService.dropFreedBlock(trainId, block)
+		return pathReservationService.dropFreedBlock(trainId, block)
 	}
 
 	private fun DynamicTrackBlock.isOccupied(): Boolean = occupant != null || getState() == TrackFacility.State.OCCUPIED

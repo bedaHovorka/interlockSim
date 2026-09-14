@@ -3210,13 +3210,24 @@ class DefaultPathReservationService(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean {
+		// PR #1068 review: check the release preconditions BEFORE the reset. A block that is not
+		// owned by this train, or not FREE, is not released, so its boundaries are not known to be
+		// behind the train's head — resetting there could drop a proceed aspect the train still
+		// needs and stall it.
+		val releasable =
+			registry.getOwner(block) == trainId && block.occupant == null && block.getState() == TrackFacility.State.FREE
+		if (!releasable) {
+			logger.debug {
+				"unregisterBlock: not releasing $block for '$trainId' (owner='${registry.getOwner(block)}', " +
+					"occupant=${block.occupant}, state=${block.getState()}); signals left as they are"
+			}
+			return false
+		}
 		// Signals first, then registry: reset the governing semaphore to STOP BEFORE the block
 		// leaves the registry, so there is no instant where a block is owner-less-and-FREE while
 		// its authorising signal still shows proceed. Matches releasePath's invariant (:897-900).
-		// On the released==false path the reset is fail-safe: resetSemaphoreSet only touches
-		// semaphores LAST recorded for this train, and STOP authorises nothing —
-		// the worst case is a stall, never an unprotected movement. Emission stays last, so a
-		// subscriber still never observes a FREE block whose signal shows proceed.
+		// Emission stays last, so a subscriber still never observes a FREE block whose signal
+		// shows proceed.
 		resetSemaphoresForReleasedBlocks(trainId, listOf(block))
 		return dropFreedBlock(trainId, block)
 	}

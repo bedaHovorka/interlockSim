@@ -2866,6 +2866,49 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertThat(registry.getOwner(firstBlock)).isNull()
 		}
 
+		/** The signals that authorise entry into [block] and show proceed now. */
+		private fun proceedSignalsInto(block: DynamicTrackBlock): List<DynamicRailSemaphore> =
+			block
+				.ends()
+				.mapNotNull { end ->
+					when (end) {
+						is DynamicRailSemaphore -> end
+						is DynamicInOut -> end.inSemaphore
+						else -> null
+					}
+				}.filter { it.signal.isAllowing() }
+
+		/**
+		 * PR #1068 review: a refused [PathReservationService.unregisterBlock] must not reset the train's
+		 * signals. The block is not released, so its boundaries are not known to be behind the head.
+		 */
+		@Test
+		fun `unregisterBlock refuses a block that is not FREE and leaves its signals as they are`() {
+			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
+			val firstBlock = success.reservedBlocks.first()
+			val proceed = proceedSignalsInto(firstBlock)
+			assertThat(proceed, "proceed signals into the reserved block").isNotEmpty()
+
+			assertThat(service.unregisterBlock("train1", firstBlock)).isFalse()
+
+			assertThat(proceedSignalsInto(firstBlock), "proceed signals after the refused release").isEqualTo(proceed)
+			assertThat(registry.getOwner(firstBlock)).isEqualTo("train1")
+		}
+
+		@Test
+		fun `unregisterBlock refuses a block the train no longer owns and leaves its signals as they are`() {
+			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
+			val firstBlock = success.reservedBlocks.first()
+			firstBlock.cancelPathSetup(inOut1)
+			assertThat(service.dropFreedBlock("train1", firstBlock)).isTrue()
+			val proceed = proceedSignalsInto(firstBlock)
+			assertThat(proceed, "proceed signals into the dropped block").isNotEmpty()
+
+			assertThat(service.unregisterBlock("train1", firstBlock)).isFalse()
+
+			assertThat(proceedSignalsInto(firstBlock), "proceed signals after the refused release").isEqualTo(proceed)
+		}
+
 		@Test
 		fun `dropFreedBlock refuses a block the train does not own and publishes nothing`() {
 			val listener = RecordingListener()
