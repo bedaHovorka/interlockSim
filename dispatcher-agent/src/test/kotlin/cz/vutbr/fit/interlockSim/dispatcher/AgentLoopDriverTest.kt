@@ -655,6 +655,52 @@ class AgentLoopDriverTest {
 		}
 	}
 
+	// ── Simulation stopping while a cycle is in flight (Issue #1032) ───────────
+
+	@Nested
+	@DisplayName("Simulation stops while plan() is in flight")
+	inner class SimStoppedMidCycle {
+		/**
+		 * Reproduces the #1032 timeline: a cycle's `plan()` call is still running when the
+		 * simulation stops (e.g. natural completion, or a deadlock resolution elsewhere).
+		 * Once `plan()` finally returns — however late — the cycle must not act as if the
+		 * run were still live: no decision may be posted, and PACE must not run [SimulationController.awaitIfPaused]/
+		 * [SimulationController.throttle] against a controller that may itself be pacing a dead run.
+		 */
+		@Test
+		@DisplayName("discards the decision and skips ACT/PACE when isSimActive() went false during plan()")
+		fun discardsDecisionWhenSimStoppedMidCycle() {
+			var simActive = true
+			coEvery { planner.plan(any()) } answers {
+				// Simulate the simulation stopping while this cycle's plan() call was in flight.
+				simActive = false
+				listOf(DispatchDecision.ApproveTrain("T1"))
+			}
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, isSimActive = { simActive })
+
+			val processed = runBlocking { driver.runCycle() }
+
+			assertThat(processed).isFalse()
+			assertThat(commandQueue.drain()).isEmpty()
+			assertThat(controller.awaitCalls).isEqualTo(0)
+			assertThat(controller.throttleCalls).isEqualTo(0)
+		}
+
+		@Test
+		@DisplayName("isSimActive defaults to always-true, so existing callers are unaffected")
+		fun defaultIsSimActiveDoesNotAffectNormalCycle() {
+			coEvery { planner.plan(any()) } returns listOf(DispatchDecision.ApproveTrain("T1"))
+			val driver = makeDriver()
+
+			val processed = runBlocking { driver.runCycle() }
+
+			assertThat(processed).isTrue()
+			assertThat(commandQueue.drain()).containsExactly(DispatchDecision.ApproveTrain("T1"))
+			assertThat(controller.awaitCalls).isEqualTo(1)
+			assertThat(controller.throttleCalls).isEqualTo(1)
+		}
+	}
+
 	// ── Helper: RecordingSimulationController ──────────────────────────────────
 
 	/**

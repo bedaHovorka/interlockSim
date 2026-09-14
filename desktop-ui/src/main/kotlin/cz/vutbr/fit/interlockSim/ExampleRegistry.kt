@@ -689,7 +689,11 @@ class ExampleRegistry {
 				onTickRecord = runRecorder?.let { it::onTick },
 				// Issue #847 (SP2c.24): the grid's tickPeriodMs axis. Zero by default, so a run
 				// that does not set the property paces exactly as it did before.
-				tickPeriodMs = context.scope.get<DispatcherRunConfig>().tickPeriodMs
+				tickPeriodMs = context.scope.get<DispatcherRunConfig>().tickPeriodMs,
+				// Issue #1032: same liveness predicate passed to AgentDriverLoop below — lets a
+				// cycle whose plan() call outlived the simulation discard its stale decision
+				// instead of posting it and pacing against a controller for a dead run.
+				isSimActive = loop::isSimActive
 			)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot

@@ -159,7 +159,17 @@ class AgentLoopDriver(
 	 * See [awaitMinimumCyclePeriod] for why this is a wall-clock floor rather than the
 	 * simulated-time period #822 §5.5 describes.
 	 */
-	private val tickPeriodMs: Long = DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS
+	private val tickPeriodMs: Long = DispatcherRunConfig.DEFAULT_TICK_PERIOD_MS,
+	/**
+	 * Polled once, right after [DispatcherPlanner.plan] returns, to catch a cycle that was
+	 * still in flight when the simulation stopped (Issue #1032). [AgentDriverLoop]'s own
+	 * `isActive` check only runs *between* cycles, so a cycle whose `plan()` call is blocked
+	 * for up to the LLM inference timeout can otherwise return long after the simulation has
+	 * already finished and still unconditionally post a stale decision and pace against a
+	 * controller/consumer that no longer belongs to a live run. Defaults to always-`true` so
+	 * every caller that doesn't pass it (including every existing test) is unaffected.
+	 */
+	private val isSimActive: () -> Boolean = { true }
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -276,7 +286,10 @@ class AgentLoopDriver(
 	 *    picture of the current network state.
 	 * 2. **DECIDE** — the [planner] is called with an observation built from the
 	 *    snapshot; [DispatchObservation.unapprovedTrains] and block-input lists come
-	 *    from one atomic [DispatchLoopSensorPort.snapshot] read (SP4.1/SP4.2).
+	 *    from one atomic [DispatchLoopSensorPort.snapshot] read (SP4.1/SP4.2). Immediately
+	 *    after this suspending call returns, [isSimActive] is re-checked (Issue #1032): if the
+	 *    simulation stopped while `plan()` was in flight, the decision is discarded and the
+	 *    cycle short-circuits here, skipping ACT and PACE entirely — see [isSimActive]'s KDoc.
 	 * 3. **ACT** — all returned decisions are posted to [commandQueue] in a single
 	 *    atomic [ActuatorCommandQueue.postAll] call.  The sim-thread
 	 *    [DispatchDecisionApplier] applies them; no simulation state is mutated on
@@ -339,6 +352,19 @@ class AgentLoopDriver(
 		val decisions = planner.plan(observation)
 		val planWallElapsed = planStart.elapsedNow()
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
+
+		// #1032: plan() may have blocked (up to the LLM inference timeout) long enough for the
+		// simulation to stop while this cycle was still in flight. Acting on a stale decision now —
+		// posting it, or pacing PACE's awaitIfPaused/throttle against a controller no longer tied to
+		// a live run — is exactly the "timeout after deadlock" hang: discard it and stop here instead.
+		if (!isSimActive()) {
+			logger.info {
+				"AgentLoopDriver: simulation already stopped while this cycle was in flight " +
+					"(simTime=${snapshot.simTime}) — discarding ${decisions.size} decision(s), " +
+					"skipping ACT and PACE"
+			}
+			return false
+		}
 
 		// Attribute this cycle's decisions correctly instead of silently defaulting to
 		// ActionAuthor.LLM (postAll's pre-fix default) regardless of which planner
