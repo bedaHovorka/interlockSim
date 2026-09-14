@@ -11,7 +11,10 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
@@ -69,8 +72,8 @@ private val logger = KotlinLogging.logger {}
  * ## Size
  *
  * The registry is the single owner of the train -> blocks / switches / PathInfo state, so every
- * operation on that state lives here. `trimPathInfoTo` (Issue #1063) is the 25th public function,
- * which reaches detekt's `TooManyFunctions` limit; splitting the registry is out of scope for that fix.
+ * operation on that state lives here. It exceeds detekt's `TooManyFunctions` limit (Issues #1063,
+ * #1067); splitting the registry is out of scope for those fixes.
  *
  * @param context Simulation context (needed for PathInfo merging with ArrayPath)
  * @since Issue #294 (Phase 2 of Issue #292)
@@ -413,8 +416,9 @@ class PathReservationRegistry(
 	 * - `clear()` - clear all registrations
 	 *
 	 * This method never shortens the PathInfo. A caller that releases the un-travelled tail of a
-	 * route in front of a train must call [trimPathInfoTo] afterwards (Issue #1063); otherwise the
-	 * PathInfo keeps describing the released track and [isPathExtendedBeyond] stays `true`.
+	 * route in front of a train must call [trimPathInfoToHeldBlocks] afterwards (Issue #1063,
+	 * #1067); otherwise the PathInfo keeps describing the released track and [isPathExtendedBeyond]
+	 * stays `true`.
 	 *
 	 * ## Use Case
 	 *
@@ -1235,7 +1239,11 @@ class PathReservationRegistry(
 	 * PathInfo, holds no block on it, or [boundary] does not follow its last held block — trimming
 	 * there would drop track the train still owns. It is also refused when [boundary] is a switch:
 	 * a route runs signal to signal and a switch is never its end (Issue #938), so a PathInfo ending
-	 * at one would make every later extension fail the merge.
+	 * at one would make every later extension fail the merge. It is likewise refused when [boundary]
+	 * is a semaphore facing away from the train's direction of travel (Issue #1067 gap 2): the
+	 * trimmed PathInfo's end is about to become the START of the train's next route request, and G4
+	 * ([DefaultPathReservationService.startFacesTravelDirection]) refuses every route starting at a
+	 * rear-facing signal, which would strand the train exactly like the untrimmed PathInfo did.
 	 *
 	 * @param trainId The train identifier
 	 * @param boundary The separator where the train's held track now ends
@@ -1244,11 +1252,19 @@ class PathReservationRegistry(
 	 */
 	fun trimPathInfoTo(
 		trainId: String,
-		boundary: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		boundary: DynamicPathSeparator
 	): Boolean {
 		val pathInfo = trainToPathInfo[trainId] ?: return false
 		val elements = pathInfo.reservedPath.toList()
 		val boundaryIndex = trimBoundaryIndex(trainId, pathInfo, elements, boundary) ?: return false
+		if (!isValidPathInfoEnd(boundary, elements.getOrNull(boundaryIndex + 1)?.let(::blockOf))) {
+			logger.warn {
+				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — a route cannot end " +
+					"there (a switch, or a signal facing away from the train), so the PathInfo is kept " +
+					"(path ${pathInfo.start}→${pathInfo.target})"
+			}
+			return false
+		}
 		if (boundaryIndex == elements.lastIndex) return true
 
 		trainToPathInfo[trainId] = pathInfo.truncatedAt(elements, boundaryIndex, boundary, context)
@@ -1260,36 +1276,70 @@ class PathReservationRegistry(
 	}
 
 	/**
-	 * Whether [separator] may be the end of a stored PathInfo. A route runs signal to signal and a
-	 * switch is never its end (Issue #938), so a PathInfo ending at one would make every later
-	 * extension fail the merge. [trimPathInfoTo] refuses such an end; a caller that must not change
-	 * anything unless the trim will follow checks it first.
+	 * Whether [separator] may be the end of a stored PathInfo, the separator a train's next route
+	 * request starts from.
+	 *
+	 * - A switch never may: a route runs signal to signal and a switch is never its end (Issue #938),
+	 *   so a PathInfo ending at one would make every later extension fail the merge.
+	 * - A semaphore facing away from [nextBlock] (the block the train would enter past it) never may
+	 *   (Issue #1067 gap 2): G4 refuses every route starting at a rear-facing signal, so the train
+	 *   would stand exactly as with an untrimmed PathInfo. Without a [nextBlock] the direction is
+	 *   unknown and only the switch rule applies.
+	 *
+	 * [trimPathInfoTo] refuses such an end. A caller that must not change anything unless the trim
+	 * will follow checks it first, with the end from [pathInfoEndAfter].
 	 *
 	 * @since Issue #1063
 	 */
-	fun isValidPathInfoEnd(separator: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator): Boolean =
-		separator !is DynamicRailSwitch
+	fun isValidPathInfoEnd(
+		separator: DynamicPathSeparator,
+		nextBlock: DynamicTrackBlock? = null
+	): Boolean =
+		when {
+			separator is DynamicRailSwitch -> false
+			separator is DynamicRailSemaphore && nextBlock != null ->
+				semaphoreFacesNextBlock(context, separator, nextBlock)
+			else -> true
+		}
+
+	/**
+	 * Where the stored PathInfo of [trainId] would end if the train kept only [kept]: the separator
+	 * right after the last element of the path whose block is in [kept], and the block after that
+	 * separator (`null` when the separator is the path's target). Pure query.
+	 *
+	 * @return `null` when the train has no PathInfo, no block of [kept] lies on it, or no separator
+	 *   follows the last kept block
+	 * @since Issue #1067
+	 */
+	fun pathInfoEndAfter(
+		trainId: String,
+		kept: Collection<DynamicTrackBlock>
+	): PathInfoEnd? {
+		val elements = trainToPathInfo[trainId]?.reservedPath?.toList() ?: return null
+		val lastKeptIndex = lastIndexOfBlockIn(elements, kept)
+		if (lastKeptIndex < 0) return null
+		val boundary = elements.getOrNull(lastKeptIndex + 1) as? DynamicPathSeparator ?: return null
+		return PathInfoEnd(boundary, elements.getOrNull(lastKeptIndex + 2)?.let(::blockOf))
+	}
+
+	/** The end [pathInfoEndAfter] finds. @since Issue #1067 */
+	data class PathInfoEnd(
+		val boundary: DynamicPathSeparator,
+		val nextBlock: DynamicTrackBlock?
+	)
 
 	/**
 	 * The index of [boundary] in [elements] that [trimPathInfoTo] may cut at, or `null` (with a WARN)
-	 * when the trim is refused: [boundary] is not a valid PathInfo end, or it does not follow the last
-	 * block the train still holds.
+	 * when [boundary] does not follow the last block the train still holds.
 	 */
 	private fun trimBoundaryIndex(
 		trainId: String,
 		pathInfo: PathInfo,
-		elements: List<cz.vutbr.fit.interlockSim.objects.core.PathElement>,
-		boundary: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		elements: List<PathElement>,
+		boundary: DynamicPathSeparator
 	): Int? {
-		if (!isValidPathInfoEnd(boundary)) {
-			logger.warn {
-				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to the switch $boundary — a route " +
-					"never ends at a switch, so the PathInfo is kept (path ${pathInfo.start}→${pathInfo.target})"
-			}
-			return null
-		}
-		val held = getBlocks(trainId).toSet()
-		val lastHeldIndex = elements.indexOfLast { element -> blockOf(element)?.let { it in held } == true }
+		val held = getBlocks(trainId)
+		val lastHeldIndex = lastIndexOfBlockIn(elements, held)
 		val boundaryIndex =
 			if (lastHeldIndex < 0) {
 				null
@@ -1299,11 +1349,45 @@ class PathReservationRegistry(
 		if (boundaryIndex == null) {
 			logger.warn {
 				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — the separator does " +
-					"not follow the last block the train still holds " +
+					"not follow the last block the train still holds, or the path passes one of those blocks twice " +
 					"(path ${pathInfo.start}→${pathInfo.target}, ${held.size} block(s) held)"
 			}
 		}
 		return boundaryIndex
+	}
+
+	/**
+	 * [trimPathInfoTo], but finds the boundary itself: the separator immediately following the
+	 * last block the train still holds in the stored PathInfo.
+	 *
+	 * ## Why (Issue #1067 gap 1)
+	 *
+	 * [RegistryPartialRouteReleaser] used to derive the boundary from the ends shared by the
+	 * occupied head and the blocks it released **in that one call**. A tail released over two
+	 * sweeps — one block refused or throwing on the first sweep, freed on a later retry — then
+	 * finds no boundary on the sweep that finally frees it: that block is no longer adjacent to
+	 * the occupied head, only to the block released earlier. The trim was skipped with a warning
+	 * and never retried, reproducing the permanent stall [trimPathInfoTo] exists to prevent.
+	 * Deriving the boundary from the blocks the train currently holds — rather than from what
+	 * changed in the current call — makes the operation idempotent: whichever sweep frees the
+	 * last remaining tail block computes the same boundary and the trim goes through.
+	 *
+	 * @param trainId The train identifier
+	 * @return `true` if the stored PathInfo now ends at the boundary, `false` if there was nothing
+	 *   to trim ([pathInfoEndAfter] found no end: no PathInfo, or no held block on it) or
+	 *   [trimPathInfoTo] refused it (see [isValidPathInfoEnd])
+	 * @since Issue #1067
+	 */
+	fun trimPathInfoToHeldBlocks(trainId: String): Boolean {
+		val end = pathInfoEndAfter(trainId, getBlocks(trainId))
+		if (end == null) {
+			logger.debug {
+				"trimPathInfoToHeldBlocks: nothing to trim for '$trainId' — it has no PathInfo, or holds no " +
+					"block on it"
+			}
+			return false
+		}
+		return trimPathInfoTo(trainId, end.boundary)
 	}
 
 	/**
@@ -1338,6 +1422,39 @@ class PathReservationRegistry(
 /** The block a [PathInfo.reservedPath] element belongs to, or `null` when the element is a separator. */
 private fun blockOf(element: cz.vutbr.fit.interlockSim.objects.core.PathElement): DynamicTrackBlock? =
 	(element as? TrackSection)?.getTrackBlock() as? DynamicTrackBlock
+
+/**
+ * The index of the last element of [elements] whose block is in [blocks], or `-1` when there is none.
+ *
+ * Also `-1` when a block of [blocks] appears in two separate places (a merged circular route may pass a
+ * block twice). "The last occurrence" is then ambiguous — it can lie ahead of the train rather than
+ * under it — and a trim there would drop track the train still holds (PR #1068 review), so the caller
+ * finds no boundary and refuses.
+ */
+private fun lastIndexOfBlockIn(
+	elements: List<PathElement>,
+	blocks: Collection<DynamicTrackBlock>
+): Int {
+	val blockSet = blocks.toSet()
+	val seen = mutableSetOf<DynamicTrackBlock>()
+	var previous: DynamicTrackBlock? = null
+	var lastIndex = -1
+	elements.forEachIndexed { index, element ->
+		val block = blockOf(element)
+		if (block == null) {
+			// A separator ends a place: a block right after it again (a route that turns back into
+			// the block it came from) is a second place, not a continuation (PR #1068 review).
+			if (element is DynamicPathSeparator) previous = null
+			return@forEachIndexed
+		}
+		if (block in blockSet) {
+			if (block != previous && !seen.add(block)) return -1
+			lastIndex = index
+		}
+		previous = block
+	}
+	return lastIndex
+}
 
 /**
  * A copy of this PathInfo that ends at [boundary], the element at [boundaryIndex] of [elements] (this

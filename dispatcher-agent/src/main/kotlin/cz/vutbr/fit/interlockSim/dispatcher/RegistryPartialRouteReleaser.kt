@@ -13,7 +13,6 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -59,7 +58,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   railway-domain question round 3 raised, and it means a reclaimed tail may not be immediately
  *   re-routable — a traffic-simulation-expert ruling could relax it later.
  * - **Per-block failure is contained.** A block that throws is logged and skipped; the rest of the
- *   tail is still attempted, and only ids that actually came free are returned.
+ *   tail is still attempted, and only ids that actually came free are returned. A block that is
+ *   already FREE when its unregister fails is dropped from the registry directly, so it can never
+ *   stay owned but invisible to the sweeper (Issue #1067).
  *
  * Runs on the simulation thread, from `ShuntingLoop`'s control-step listener.
  *
@@ -103,16 +104,20 @@ class RegistryPartialRouteReleaser(
 			}
 		if (eligible.isEmpty()) return TailRelease.NOTHING
 
-		// Issue #1063: release and PathInfo trim succeed or fail together. A head that meets the tail
-		// at a switch (a train standing on zA-vA with its tail beyond vA) cannot have its PathInfo cut
-		// there, so releasing would leave a PathInfo describing free track — the #1031 stall. Refuse
+		// Issue #1063 / #1067 gap 2: release and PathInfo trim succeed or fail together. The trim will
+		// cut the PathInfo right after the occupied head, so check THAT end — not the ends of the
+		// blocks offered in this call, which a sweep offering far blocks first would miss. A switch
+		// (a train on zA-vA) or a signal facing away from the train (a train on vA-doA1) cannot end a
+		// PathInfo, so releasing would leave one describing free track — the #1031 stall. Refuse
 		// BEFORE any signal or block changes; the train keeps its reservation.
-		val boundaries = headBoundaries(occupied, eligible)
-		val boundary = boundaries.singleOrNull()
-		if (boundary != null && !registry.isValidPathInfoEnd(boundary)) {
+		val end = registry.pathInfoEndAfter(trainId, occupied)
+		val validEnd = end?.let { registry.isValidPathInfoEnd(it.boundary, it.nextBlock) } == true
+		// No PathInfo means nothing to trim, so the release may go; a PathInfo without a valid end may not.
+		if (registry.getPathInfo(trainId) != null && !validEnd) {
 			logger.info {
-				"RegistryPartialRouteReleaser: not releasing the tail of '$trainId' — the occupied head meets " +
-					"it at the switch $boundary, where its PathInfo cannot end (Issue #1063)"
+				"RegistryPartialRouteReleaser: not releasing the tail of '$trainId' — its PathInfo cannot end " +
+					"after the occupied head (at ${end?.boundary ?: "no separator on the PathInfo"}: a switch, " +
+					"or a signal facing away from the train) (Issue #1063, #1067)"
 			}
 			return TailRelease.NOTHING
 		}
@@ -147,50 +152,28 @@ class RegistryPartialRouteReleaser(
 		for (block in eligible) {
 			releaseBlock(trainId, block)?.let { released += it }
 		}
-		// Issue #1063: only a complete release may move the PathInfo's end. A block that could not be
-		// released is still held beyond the boundary, and the PathInfo must keep describing it.
-		if (released.size == eligible.size) {
-			trimPathInfoToHead(trainId, boundary, boundaries.size)
+		if (!trimIfOnlyHeadIsHeld(trainId, occupied)) {
+			logger.warn {
+				"RegistryPartialRouteReleaser: released the tail of '$trainId' but its PathInfo was not trimmed, " +
+					"although the end was checked before the release (see the trimPathInfoTo log)"
+			}
 		}
 		return TailRelease(released)
 	}
 
-	/** The distinct ends shared by an [occupied] head block and a [tail] block. */
-	private fun headBoundaries(
-		occupied: List<DynamicTrackBlock>,
-		tail: List<DynamicTrackBlock>
-	): List<DynamicPathSeparator> {
-		val headEnds = occupied.flatMap { it.ends().asList() }.toSet()
-		return tail
-			.flatMap { block -> block.ends().filter { it in headEnds } }
-			.filterIsInstance<DynamicPathSeparator>()
-			.distinct()
-	}
-
 	/**
-	 * Cuts the train's stored PathInfo back to [boundary], the separator where its occupied head meets
-	 * the released tail. Without this the PathInfo still describes the released track, so
-	 * `isPathExtendedBeyond` keeps saying the route goes on, both dispatchers leave the train alone,
-	 * and a new route from that separator fails the merge — the permanent stall of Issue #1031.
+	 * Issue #1063 / #1067 gap 1: trims the PathInfo once the train holds nothing beyond its [occupied]
+	 * head. It reads the CURRENT held set, not what one call released, so whichever sweep frees the
+	 * last tail block does the trim, and the registry finds the boundary from the stored PathInfo.
+	 *
+	 * @return `false` only when a trim was due and the registry refused it
 	 */
-	private fun trimPathInfoToHead(
+	private fun trimIfOnlyHeadIsHeld(
 		trainId: String,
-		boundary: DynamicPathSeparator?,
-		boundaryCount: Int
-	) {
-		if (boundary == null) {
-			logger.warn {
-				"RegistryPartialRouteReleaser: not trimming the PathInfo of '$trainId' — expected exactly one " +
-					"separator between the occupied head and the released tail, found $boundaryCount"
-			}
-			return
-		}
-		if (!registry.trimPathInfoTo(trainId, boundary)) {
-			logger.warn {
-				"RegistryPartialRouteReleaser: the PathInfo of '$trainId' was left unchanged after its tail " +
-					"beyond $boundary was released (see the trimPathInfoTo warning)"
-			}
-		}
+		occupied: List<DynamicTrackBlock>
+	): Boolean {
+		if (registry.getPathInfo(trainId) == null || !registry.getBlocks(trainId).all { it in occupied }) return true
+		return registry.trimPathInfoToHeldBlocks(trainId)
 	}
 
 	/**
@@ -224,23 +207,63 @@ class RegistryPartialRouteReleaser(
 	): String? {
 		val id = BlockIdentity.stableBlockId(block)
 		val reservedFrom = block.reservedFrom ?: return null
-		return try {
-			block.cancelPathSetup(reservedFrom)
-			if (pathReservationService.unregisterBlock(trainId, block)) {
-				id
-			} else {
-				logger.warn {
-					"RegistryPartialRouteReleaser: freed block '$id' but the registry refused to " +
-						"unregister it for '$trainId'; leaving ownership in place"
+		val unregistered =
+			try {
+				block.cancelPathSetup(reservedFrom)
+				pathReservationService.unregisterBlock(trainId, block)
+			} catch (e: Exception) {
+				logger.warn(e) {
+					"RegistryPartialRouteReleaser: could not release block '$id' of '$trainId'; " +
+						"continuing with the rest of the tail"
 				}
-				null
+				false
 			}
+		return if (unregistered || (block.getState() == TrackFacility.State.FREE && dropFreedBlock(trainId, block, id))) {
+			id
+		} else {
+			null
+		}
+	}
+
+	/**
+	 * Issue #1067 gap 1 (PR #1068 review): [block] is FREE, but the service did not finish unregistering
+	 * it. Left owned, it reads as owner-less to the sweeper — a FREE reading carries no train — so no
+	 * sweep offers it again and the PathInfo is never trimmed: the #1031 stall. Its signals were set to
+	 * STOP before the release, so [PathReservationService.dropFreedBlock] finishes the release without a
+	 * second reset, and still publishes the release event the metrics and conflict detectors count. If
+	 * the service had already unregistered it before it failed, nothing more is done, so the event is
+	 * never published twice.
+	 *
+	 * @return `true` when [trainId] no longer owns [block]
+	 */
+	private fun dropFreedBlock(
+		trainId: String,
+		block: DynamicTrackBlock,
+		id: String
+	): Boolean {
+		if (registry.getOwner(block) != trainId) {
+			logger.info {
+				"RegistryPartialRouteReleaser: the service unregistered freed block '$id' of '$trainId' " +
+					"before it failed; nothing more to do"
+			}
+			return true
+		}
+		logger.warn {
+			"RegistryPartialRouteReleaser: the service did not unregister freed block '$id' of '$trainId'; " +
+				"finishing the release without a second signal reset"
+		}
+		// PR #1068 review: the release event is published synchronously and a listener may throw. The
+		// failure stays with this block, so the rest of the tail is still released.
+		return try {
+			pathReservationService.dropFreedBlock(trainId, block)
 		} catch (e: Exception) {
 			logger.warn(e) {
-				"RegistryPartialRouteReleaser: could not release block '$id' of '$trainId'; " +
-					"skipping it and continuing with the rest of the tail"
+				"RegistryPartialRouteReleaser: finishing the release of freed block '$id' of '$trainId' failed"
 			}
-			null
+			// A FREE block left owned is never offered again, so the PathInfo would never be trimmed (the
+			// #1031 stall). If the service failed before unregistering it, drop it from the registry here;
+			// only its release event is then missing.
+			registry.getOwner(block) != trainId || registry.unregisterBlock(trainId, block)
 		}
 	}
 
