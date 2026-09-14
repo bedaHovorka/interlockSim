@@ -697,6 +697,32 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(registry.pathInfoEndAfter(trainId, listOf(head))).isNotNull()
 		}
 
+		/**
+		 * PR #1068 review: a route that turns back at a separator re-enters the block it came from right
+		 * after that separator. The two passes are separate places, so there is no end either.
+		 */
+		@Test
+		fun `no end when a kept block appears again right after a separator`() {
+			val held = reserveLongRoute(trainId)
+			val stored = requireNotNull(registry.getPathInfo(trainId))
+			val head = held.first()
+			val elements = stored.reservedPath.toList()
+			val headSections = elements.filter { element -> (element as? TrackSection)?.getTrackBlock() == head }
+			val separatorBeforeHead = elements[elements.indexOf(headSections.first()) - 1]
+			val separatorAfterHead = elements[elements.indexOf(headSections.last()) + 1]
+			// separatorBeforeHead, head, separatorAfterHead, head again, separatorBeforeHead: the second
+			// pass is followed by a separator, so "the last occurrence" would give an end.
+			val turningBack = ArrayPath(simulationContext)
+			turningBack.add(separatorBeforeHead)
+			headSections.forEach { turningBack.add(it) }
+			turningBack.add(separatorAfterHead)
+			headSections.reversed().forEach { turningBack.add(it) }
+			turningBack.add(separatorBeforeHead)
+			registry.registerPathInfo("turningTrain", stored.copy(reservedPath = turningBack))
+
+			assertThat(registry.pathInfoEndAfter("turningTrain", listOf(head))).isNull()
+		}
+
 		@Test
 		fun `no end when no kept block lies on the PathInfo or there is no PathInfo`() {
 			reserveLongRoute(trainId)

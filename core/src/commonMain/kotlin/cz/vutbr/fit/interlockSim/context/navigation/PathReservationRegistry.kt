@@ -1440,7 +1440,13 @@ private fun lastIndexOfBlockIn(
 	var previous: DynamicTrackBlock? = null
 	var lastIndex = -1
 	elements.forEachIndexed { index, element ->
-		val block = blockOf(element) ?: return@forEachIndexed
+		val block = blockOf(element)
+		if (block == null) {
+			// A separator ends a place: a block right after it again (a route that turns back into
+			// the block it came from) is a second place, not a continuation (PR #1068 review).
+			if (element is DynamicPathSeparator) previous = null
+			return@forEachIndexed
+		}
 		if (block in blockSet) {
 			if (block != previous && !seen.add(block)) return -1
 			lastIndex = index
