@@ -16,6 +16,7 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.util.Point
 import org.koin.mp.KoinPlatformTools
@@ -96,6 +97,23 @@ class TestContextBuilder {
 	}
 
 	/**
+	 * The [RailSemaphore] previously placed at ([x], [y]) with [withSemaphore].
+	 *
+	 * [withSemaphore] places an unnamed cell and returns this builder, so a topology that needs
+	 * the static cell back (to map it to its dynamic wrapper after the build) has no other
+	 * handle. Semantics mirror [withConnection]'s cell lookup.
+	 *
+	 * @throws IllegalArgumentException when that position holds no rail semaphore
+	 */
+	fun semaphoreAt(
+		x: Int,
+		y: Int
+	): cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore =
+		editingContext.getRailWayNetGrid().getCellAt(x, y)
+			as? cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+			?: throw IllegalArgumentException("Grid position ($x, $y) holds no rail semaphore")
+
+	/**
 	 * Build a fully-constructed DefaultSimulationContext from the accumulated editing state.
 	 *
 	 * Requires a [SimulationProcessFactory] Koin binding (provided by [commonCoreTestModule]
@@ -105,17 +123,30 @@ class TestContextBuilder {
 	 * [DefaultSimulationContext.fromEditingContext] via GridTransformer, which is equivalent
 	 * to the ContextTransformer.createSimulationContext() path used in JVM production code.
 	 * [DefaultSimulationContext.run] also calls initializeDynamicMapping() internally.
+	 *
+	 * The editing context is closed as soon as its data is copied across: it owns a Koin
+	 * scope of its own, and only the simulation context is handed back to the caller to close.
 	 */
-	fun buildSimulationContext(): DefaultSimulationContext {
-		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
+	fun buildSimulationContext(): DefaultSimulationContext = editingContext.use { toSimulationContext(it) }
 
 	/**
 	 * Returns the editing context that has been built up through the fluent API.
 	 * This is the primary accessor for the underlying context under test.
 	 */
 	fun buildEditingContext(): DefaultEditingContext = editingContext
+}
+
+/**
+ * Converts [editing] into a [DefaultSimulationContext] — the one editing-to-simulation
+ * conversion every programmatic fixture shares: resolve the [SimulationProcessFactory] from
+ * Koin, then let [DefaultSimulationContext.fromEditingContext] establish the dynamic-wrapper
+ * mapping (see [TestContextBuilder.buildSimulationContext] for what that transformation
+ * establishes). Fixture builders that construct their [EditingContext] by hand call this
+ * instead of repeating the two-liner.
+ */
+fun toSimulationContext(editing: EditingContext): DefaultSimulationContext {
+	val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
+	return DefaultSimulationContext.fromEditingContext(editing, processFactory)
 }
 
 fun buildLinearTrack(): DefaultSimulationContext {
@@ -145,8 +176,9 @@ fun buildLinearTrack(): DefaultSimulationContext {
 	editingContext.putCell(pB, outB)
 	editingContext.joinCells(pA, pB, trackBlock)
 
-	// Convert to simulation context
-	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	// Convert to simulation context; the editing context owns its own Koin scope and must
+	// not outlive the conversion.
+	return editingContext.use { DefaultSimulationContext.fromEditingContext(it, processFactory) }
 }
 
 fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
@@ -184,8 +216,9 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 	editingContext.joinCells(r1, pB, trackBlock)
 	editingContext.joinCells(pA, r1, trackBlock)
 
-	// Convert to simulation context
-	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	// Convert to simulation context; the editing context owns its own Koin scope and must
+	// not outlive the conversion.
+	return editingContext.use { DefaultSimulationContext.fromEditingContext(it, processFactory) }
 }
 
 fun buildMinimalSimulation(): DefaultSimulationContext =

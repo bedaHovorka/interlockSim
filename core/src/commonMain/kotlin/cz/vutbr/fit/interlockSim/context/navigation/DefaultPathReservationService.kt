@@ -525,14 +525,21 @@ class DefaultPathReservationService(
 		// Used to emit ReservationConflictDetected when AllPathsBlocked is about to be returned.
 		var firstBlockedConflict: Pair<DynamicTrackBlock, String>? = null
 
-		// Issue #903/#937: the permanent geometric impossibilities (rear-facing START or
+		// Issue #903/#937: the permanent geometric impossibilities (rear-facing START or END, or
 		// unconfigurable switch) seen across candidates — first reason kept for reporting, count
 		// kept so classifyExhaustedAttempt can tell "every candidate is impossible" (permanent)
 		// from "one is, another is merely busy" (retryable).
-		var geometricFailures = GeometricFailures()
+		//
+		// Step 1.5 (Issue #1064, G8): a route must END at a signal facing the train. Screened before
+		// the loop — so before the already-owned early return and before any block, switch or signal
+		// is touched — which leaves a refused candidate nothing to roll back. Screened-out candidates
+		// are recorded like G4, so a request whose every candidate ends rear-facing is reported as a
+		// permanent GeometricallyImpossible.
+		val (rearFacingEnds, usableCandidates) = screenRearFacingEnds(start, target, candidatePaths)
+		var geometricFailures = rearFacingEnds
 
 		// Step 2: Try each candidate path until we find a free one
-		for ((index, path) in candidatePaths.withIndex()) {
+		for ((index, path) in usableCandidates) {
 			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
 			val blocks = extractUniqueBlocks(path)
 			logger.trace { "reservePath: Path has ${blocks.size} unique block(s)" }
@@ -944,7 +951,7 @@ class DefaultPathReservationService(
 		val unresolved = blockedSince.keys.toList()
 		blockedSince.clear()
 		return unresolved.mapNotNull { (trainId, block) ->
-			val owner = registry.getOwner(block) ?: block.trainName ?: return@mapNotNull null
+			val owner = ownerOf(block) ?: return@mapNotNull null
 			BlockEvent.ReservationConflictDetected(
 				block = block,
 				trainId = trainId,
@@ -984,9 +991,12 @@ class DefaultPathReservationService(
 			blocks.firstOrNull { block ->
 				block.getState() != TrackFacility.State.FREE && block.trainName != trainId
 			} ?: return null
-		val owner = registry.getOwner(blockedBlock) ?: blockedBlock.trainName ?: return null
+		val owner = ownerOf(blockedBlock) ?: return null
 		return Pair(blockedBlock, owner)
 	}
+
+	/** The train that owns [block]: the registry's record first, the block's own `trainName` as fallback. */
+	private fun ownerOf(block: DynamicTrackBlock): String? = registry.getOwner(block) ?: block.trainName
 
 	/**
 	 * Release all blocks reserved by a train.
@@ -2557,6 +2567,85 @@ class DefaultPathReservationService(
 	): GeometricFailures = GeometricFailures(current.reason ?: reason, current.count + 1)
 
 	/**
+	 * G8 screening of [candidatePaths] (Issue #1064): splits off every candidate whose end faces away
+	 * from the train ([rearFacingEndReason]) and records each one as a geometric failure. Extracted so
+	 * the screening adds no branch to [reservePath]'s own cyclomatic complexity.
+	 *
+	 * @return the geometric failures of the screened-out candidates, and the remaining candidates
+	 *   with their original index, which later denial reasons use to name a candidate
+	 */
+	private fun screenRearFacingEnds(
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		candidatePaths: List<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>
+	): Pair<GeometricFailures, List<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>> {
+		var failures = GeometricFailures()
+		val usable = mutableListOf<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>()
+		for (candidate in candidatePaths.withIndex()) {
+			val reason = rearFacingEndReason(start, target, candidate.value, candidate.index)
+			if (reason == null) {
+				usable += candidate
+			} else {
+				failures = recordGeometricFailureOnce(failures, reason)
+			}
+		}
+		return failures to usable
+	}
+
+	/**
+	 * G8 (Issue #1064): the END-side twin of G4. A route whose target signal faces away from the
+	 * direction the train arrives in gives the train nothing it can use: navigation cannot build a
+	 * leg past the last signal facing it, so the train stops there holding track it cannot leave and
+	 * waits for an extension (Issue #1031, Issue #1060). The rule-based path never asks for such a
+	 * route — [findNextSemaphoresVia] skips backward-facing signals — so only a free-form
+	 * `request_route(from, to)` reaches this.
+	 *
+	 * The direction is taken per candidate at the target's own cell: the segment through which
+	 * [path]'s last section enters the target, reversed, is the direction of travel there. A loop-
+	 * around candidate therefore arrives from the other side and is judged on its own.
+	 *
+	 * @return the English denial reason when [target] faces away from the train at the end of
+	 *   [path]; `null` when the end is usable — an InOut (bidirectional), a separator without an
+	 *   orientation, or a signal facing the direction of travel.
+	 */
+	private fun rearFacingEndReason(
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		path: List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>,
+		candidateIndex: Int
+	): String? {
+		if (target is DynamicInOut || target !is OrientedPathSeparator || path.isEmpty()) return null
+		val arrival = arrivalSegmentAt(target, path.last()) ?: return null
+		if (target.direction() ==
+			cz.vutbr.fit.interlockSim.objects.core
+				.anti(arrival)
+		) {
+			return null
+		}
+		val facingEnds =
+			runCatching { findNextSemaphoresVia(start, path.first()) }
+				.getOrDefault(emptyList())
+				.joinToString(", ") { separatorLabel(it) }
+		return "Route end '${separatorLabel(target)}' faces away from the direction of travel on candidate " +
+			"$candidateIndex; a route must end at a signal facing the train. The next signals facing the " +
+			"train from '${separatorLabel(start)}' are: $facingEnds."
+	}
+
+	/** The segment of [target]'s cell through which [lastSection] reaches it, or `null` if they are not adjacent. */
+	private fun arrivalSegmentAt(
+		target: PathSeparator,
+		lastSection: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+	): cz.vutbr.fit.interlockSim.objects.core.Cell.Segment? {
+		val location = environment.getRailWayNetGrid().getLocation(target) ?: return null
+		return environment
+			.getGraph()
+			.assignedEdges(location)
+			.entries
+			.firstOrNull { (_, section) -> section == lastSection }
+			?.key
+	}
+
+	/**
 	 * Issue #904 root-cause fix (traffic-simulation-expert ruling): builds the PathInfo passed to
 	 * [PathReservationRegistry.registerPathInfo] using the FORWARD-ONLY segment of [path] --
 	 * starting where [forwardBlocks] actually begins, not at [start].
@@ -3121,14 +3210,32 @@ class DefaultPathReservationService(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean {
+		// PR #1068 review: check the release preconditions BEFORE the reset. A block that is not
+		// owned by this train, or not FREE, is not released, so its boundaries are not known to be
+		// behind the train's head — resetting there could drop a proceed aspect the train still
+		// needs and stall it.
+		val releasable =
+			registry.getOwner(block) == trainId && block.occupant == null && block.getState() == TrackFacility.State.FREE
+		if (!releasable) {
+			logger.debug {
+				"unregisterBlock: not releasing $block for '$trainId' (owner='${registry.getOwner(block)}', " +
+					"occupant=${block.occupant}, state=${block.getState()}); signals left as they are"
+			}
+			return false
+		}
 		// Signals first, then registry: reset the governing semaphore to STOP BEFORE the block
 		// leaves the registry, so there is no instant where a block is owner-less-and-FREE while
 		// its authorising signal still shows proceed. Matches releasePath's invariant (:897-900).
-		// On the released==false path the reset is fail-safe: resetSemaphoreSet only touches
-		// semaphores LAST recorded for this train, and STOP authorises nothing —
-		// the worst case is a stall, never an unprotected movement. Emission stays last, so a
-		// subscriber still never observes a FREE block whose signal shows proceed.
+		// Emission stays last, so a subscriber still never observes a FREE block whose signal
+		// shows proceed.
 		resetSemaphoresForReleasedBlocks(trainId, listOf(block))
+		return dropFreedBlock(trainId, block)
+	}
+
+	override fun dropFreedBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			emitBlockReleased(block, trainId, currentSimulationTime())
@@ -3276,11 +3383,7 @@ class DefaultPathReservationService(
 		val context =
 			environment as? cz.vutbr.fit.interlockSim.context.SimulationContext
 				?: return true
-		// getSegment(separator, X, Y) is the separator's segment on X's side, so this is the
-		// segment the train is heading TOWARDS -- the same value configureSemaphoreSignal
-		// passes as `to` when it clears the aspect.
-		val towards = context.getSegment(semaphore, nextBlock, null) ?: return true
-		return towards == semaphore.direction()
+		return semaphoreFacesNextBlock(context, semaphore, nextBlock)
 	}
 
 	/**

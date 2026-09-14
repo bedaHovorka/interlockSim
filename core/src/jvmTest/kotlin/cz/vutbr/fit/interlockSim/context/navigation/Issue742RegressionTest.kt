@@ -224,17 +224,19 @@ class Issue742RegressionTest : KoinTestBase() {
 	fun unconfigurableSwitchRollbackCleansUpLocks() {
 		val trainId = "train_742_rollback_test"
 
-		// Train enters via k1: zA → doA1
-		val entry = service.reservePath(trainId, semaphoreZA, semaphoreDoA1)
+		// Train enters via k1: zA → doB1
+		val entry = service.reservePath(trainId, semaphoreZA, semaphoreDoB1)
 		assertThat(entry).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		// Snapshot initial state
 		val blocksBeforeAttempt = registry.getBlocks(trainId).toSet()
 		val switchesBeforeAttempt = registry.getSwitches(trainId).toSet()
 
-		// Attempt impossible diversion that would lock switchVB in configureSwitchesInPath
-		// (but fail after setting up the lock, then rollback)
-		val impossible = service.reservePath(trainId, semaphoreDoA1, semaphoreDoB2)
+		// Attempt the impossible diversion doB1 → doB2.
+		// Issue #1064 (G8): doB2 faces away from a train leaving doB1 eastward, so G8 refuses the direct
+		// candidate before any block or switch is touched, and the loop-around candidate fails G4. The
+		// assertions below still pin that the refused diversion leaves nothing behind.
+		val impossible = service.reservePath(trainId, semaphoreDoB1, semaphoreDoB2)
 
 		// Must fail cleanly. Issue #903: an unconfigurable switch is a permanent geometric
 		// impossibility, not ordinary contention -- it must not be reported as AllPathsBlocked.
@@ -326,20 +328,20 @@ class Issue742RegressionTest : KoinTestBase() {
 	fun blockUnregisterRollbackCancelsAllForwardBlocks() {
 		val trainId = "train_742_block_unregister"
 
-		// Reserve initial path: zA → doA1 to establish baseline
-		val initial = service.reservePath(trainId, semaphoreZA, semaphoreDoA1)
+		// Reserve initial path: zA → doB1 to establish baseline
+		val initial = service.reservePath(trainId, semaphoreZA, semaphoreDoB1)
 		assertThat(initial).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		val initialBlocks = registry.getBlocks(trainId).toSet()
 		assertThat(initialBlocks.size).isGreaterThanOrEqualTo(1)
 
-		// Attempt impossible extension: doA1 → doB2
-		// This triggers reservation of forwardBlocks, then rollback when switch cannot
-		// be configured. rollbackUnconfigurableCandidate must cancel each block before
-		// unregistering it (line 1950: block.cancelPathSetup(reservedFrom))
+		// Attempt the impossible extension doB1 → doB2.
+		// Issue #1064 (G8): doB2 faces away from a train leaving doB1 eastward, so G8 refuses the direct
+		// candidate before any block or switch is touched, and the loop-around candidate fails G4. The
+		// assertions below still pin that the refused diversion leaves nothing behind.
 		// Issue #903: an unconfigurable switch is a permanent geometric impossibility, not
 		// ordinary contention -- it must not be reported as AllPathsBlocked.
-		val impossible = service.reservePath(trainId, semaphoreDoA1, semaphoreDoB2)
+		val impossible = service.reservePath(trainId, semaphoreDoB1, semaphoreDoB2)
 		assertThat(impossible)
 			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
