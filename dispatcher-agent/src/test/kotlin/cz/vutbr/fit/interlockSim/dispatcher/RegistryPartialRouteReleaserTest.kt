@@ -14,9 +14,11 @@ import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
@@ -24,9 +26,11 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -34,9 +38,13 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
+import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 
 /**
  * Safety tests for [RegistryPartialRouteReleaser] against a **real** reserved path on
@@ -117,14 +125,20 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	 * @return the occupied block and the un-travelled tail.
 	 */
 	private fun reserveAndOccupyLongRoute(): Pair<DynamicTrackBlock, List<DynamicTrackBlock>> {
-		val pathReservationService = context.getRoutingServices().getPathReservationService()
-		val result = pathReservationService.reservePath(trainId, inOutNamed("A"), inOutNamed("B"))
-		assertThat(result, "reservePath result").isNotNull()
-		val blocks = heldBlocks()
-		assertThat(blocks, "blocks reserved").isNotEmpty()
+		val blocks = reserveLongRoute()
 		val head = blocks.first()
 		head.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId })
 		return head to blocks.drop(1)
+	}
+
+	/** Reserves InOut A -> InOut B and returns the reserved blocks, head first. */
+	private fun reserveLongRoute(): List<DynamicTrackBlock> {
+		val result =
+			context.getRoutingServices().getPathReservationService().reservePath(trainId, inOutNamed("A"), inOutNamed("B"))
+		assertThat(result, "reservePath result").isInstanceOf<PathReservationService.ReservationResult.Success>()
+		val blocks = heldBlocks()
+		assertThat(blocks, "blocks reserved").isNotEmpty()
+		return blocks
 	}
 
 	@Test
@@ -325,6 +339,41 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	}
 
 	/**
+	 * PR #1068 review: a train that stands on several blocks of its route passes all of them as
+	 * occupied. Once the tail beyond them is released the train holds only occupied blocks, and that is
+	 * exactly when the PathInfo must be trimmed — to the signal after the LAST occupied block.
+	 */
+	@Test
+	@DisplayName("a train standing on several blocks has its PathInfo trimmed after the last of them")
+	fun pathInfoIsTrimmedWhenTheTrainSpansSeveralOccupiedBlocks() {
+		val blocks = reserveLongRoute()
+		// The B-side signal of the loop track the route takes (doB1 or doB2); it faces the train.
+		val trackEnd =
+			blocks
+				.flatMap { it.ends().asList() }
+				.filterIsInstance<DynamicRailSemaphore>()
+				.first { it.name.startsWith("doB") }
+		val occupiedCount = blocks.indexOfFirst { trackEnd in it.ends() } + 1
+		assertThat(occupiedCount, "blocks up to ${trackEnd.name} in ${blocks.map(BlockIdentity::stableBlockId)}")
+			.isGreaterThan(1)
+		val occupied = blocks.take(occupiedCount)
+		occupied.forEach { it.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId }) }
+		val tailIds = blocks.drop(occupiedCount).map { BlockIdentity.stableBlockId(it) }
+		assertThat(tailIds, "tail beyond the loop track").isNotEmpty()
+
+		// The first call can be deferred by the approach lock (Issue #1025); the second one releases.
+		val first = releaser().releaseUntravelledTail(trainId, tailIds)
+		val release = if (first.deferred) releaser().releaseUntravelledTail(trainId, tailIds) else first
+
+		assertThat(release.released.size, "released block count").isEqualTo(tailIds.size)
+		assertThat(heldBlocks().toSet(), "blocks still held").isEqualTo(occupied.toSet())
+		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target after the tail release")
+			.isEqualTo(trackEnd)
+		assertThat(registry().isPathExtendedBeyond(trainId, trackEnd), "path still extends beyond $trackEnd")
+			.isFalse()
+	}
+
+	/**
 	 * The #1031 shape: the train stands at the boundary and the dispatcher asks for a route onto the
 	 * other loop track. Before the trim this aborted in `mergePathInfo` Step 0a (the new path starts
 	 * at zA, the stored one still ends at B) and was denied as `AllPathsBlocked` forever.
@@ -406,6 +455,322 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	@DisplayName("a train holding nothing releases nothing")
 	fun unknownTrainReleasesNothing() {
 		assertThat(releaser().releaseUntravelledTail("Ghost", listOf("kA")).released, "released ids").isEmpty()
+	}
+
+	/**
+	 * Issue #1067 gap 1: the sweeper does not always offer the whole tail in one call, and a block
+	 * next to the head may release before one further out does. The final block to come free is not
+	 * itself adjacent to the occupied head — it is adjacent to a block already released earlier —
+	 * so a boundary computed only from "what this call released" finds nothing there and used to
+	 * skip the trim. It must still happen once no held block remains beyond the head, no matter
+	 * which sweep frees the last one.
+	 */
+	@Test
+	@DisplayName("a tail released over two sweeps still trims the PathInfo once the last block frees")
+	fun tailReleasedOverTwoSweepsStillTrimsPathInfo() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val nearest = tail.first { block -> zA in block.ends() }
+		val rest = tail.filter { it != nearest }
+
+		val before = registry().getPathInfo(trainId)
+		// Sweep 1 (deferred by the approach lock) + sweep 2 release only the block next to the head.
+		releaseLongRouteTailFully(listOf(nearest))
+		assertThat(registry().getPathInfo(trainId), "PathInfo with the far tail still held").isSameInstanceAs(before)
+
+		// Sweep 3 releases the remainder, none of which touches the occupied head directly.
+		val third = releaser().releaseUntravelledTail(trainId, rest.map { BlockIdentity.stableBlockId(it) })
+
+		assertThat(third.released, "released ids on the final sweep")
+			.isEqualTo(rest.map { BlockIdentity.stableBlockId(it) })
+		val pathInfo = registry().getPathInfo(trainId)
+		assertThat(pathInfo!!.target, "PathInfo target once the whole tail is gone").isEqualTo(zA)
+		assertThat(registry().isPathExtendedBeyond(trainId, zA), "path still extends beyond zA").isFalse()
+
+		// A later sweep with nothing left to release changes nothing.
+		releaser().releaseUntravelledTail(trainId, rest.map { BlockIdentity.stableBlockId(it) })
+		assertThat(registry().getPathInfo(trainId), "PathInfo after a no-op sweep").isSameInstanceAs(pathInfo)
+	}
+
+	/**
+	 * Issue #1067 gap 2: on `vyhybna.xml`'s `A -> B` direction the intermediate signal `doA1` faces
+	 * WEST, away from the train. A train standing on the short `vA`-`doA1` block meets its tail at
+	 * `doA1`. A PathInfo ending there is the start of the train's next route request, and G4 refuses
+	 * every route starting at a rear-facing signal — so a release there would leave a PathInfo
+	 * describing free track, the #1031 stall. The release must be refused before any block or signal
+	 * changes, exactly like the switch case.
+	 */
+	@Test
+	@DisplayName("a tail that meets the occupied head at a signal facing away from the train is not released")
+	fun tailBeyondARearFacingBoundaryIsNotReleased() {
+		val tail = reserveLongRouteAndStandOnVaDoA1()
+
+		assertRefusedWithoutChange(tail)
+	}
+
+	/**
+	 * Issue #1067 review: the check before any change used to look only at the ends of the blocks
+	 * offered in the call. A sweep that offers only blocks further out than the one touching the head
+	 * found no boundary, skipped the check, and freed them around the switch `vA`.
+	 */
+	@Test
+	@DisplayName("far tail blocks beyond a switch boundary are not released either")
+	fun farBlocksBeyondASwitchBoundaryAreNotReleased() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val secondHead = tail.first { block -> zA in block.ends() }
+		secondHead.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId })
+		val vA = elementAt<DynamicRailSwitch>(15, 8)
+
+		assertRefusedWithoutChange((tail - secondHead).filter { block -> vA !in block.ends() })
+	}
+
+	@Test
+	@DisplayName("far tail blocks beyond a rear-facing signal boundary are not released either")
+	fun farBlocksBeyondARearFacingBoundaryAreNotReleased() {
+		val tail = reserveLongRouteAndStandOnVaDoA1()
+		val doA1 = elementAt<DynamicRailSemaphore>(16, 8)
+
+		assertRefusedWithoutChange(tail.filter { block -> doA1 !in block.ends() })
+	}
+
+	/**
+	 * Issue #1067 gap 1, the owner's literal case: one block's unregister throws. `cancelPathSetup` has
+	 * already made that block FREE, and a FREE block reads as owner-less, so the sweeper would never
+	 * offer it again and the trim would never run (PR #1068 review). The releaser therefore drops the
+	 * block from the registry itself in the same sweep — its signals are already at STOP — and trims.
+	 */
+	@ParameterizedTest(name = "service unregister {0}")
+	@EnumSource(UnregisterFailure::class)
+	@DisplayName("a block whose service unregister fails is still unregistered and the PathInfo trimmed")
+	fun blockWhoseUnregisterFailsIsStillReleasedAndTrimmed(failure: UnregisterFailure) {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val otherEnd = otherTrackEnd(tail)
+		val far = tail.last()
+		val flaky = releaserFailingOnceFor(far, failure)
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
+		assertThat(flaky.releaseUntravelledTail(trainId, tailIds).deferred, "first call deferred").isTrue()
+		val releaseEvents = mutableListOf<DynamicTrackBlock>()
+		pathReservationService().addBlockOccupancyListener { event ->
+			if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) releaseEvents += event.block
+		}
+
+		val second = flaky.releaseUntravelledTail(trainId, tailIds)
+
+		assertThat(second.released, "released ids").isEqualTo(tailIds)
+		// Exactly one: the metrics and conflict detectors count this event, and none may be lost or doubled.
+		assertThat(releaseEvents.count { it == far }, "release events for the failed block").isEqualTo(1)
+		assertThat(far.getState(), "failed block state").isEqualTo(TrackFacility.State.FREE)
+		assertThat(registry().getOwner(far), "failed block owner").isEqualTo(null)
+		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)
+		val result = context.getRoutingServices().getPathReservationService().reservePath(trainId, zA, otherEnd)
+		assertThat(result, "re-request from zA").isInstanceOf<PathReservationService.ReservationResult.Success>()
+	}
+
+	/**
+	 * PR #1068 review: the fallback publishes the release event synchronously, and a listener may throw.
+	 * That failure must stay with its block — the FIRST tail block here — so the blocks after it are still
+	 * released in the same sweep.
+	 */
+	@ParameterizedTest(name = "dropFreedBlock {0}")
+	@EnumSource(DropFailure::class)
+	@DisplayName("a failing fallback on one block does not stop the release of the rest of the tail")
+	fun failingFallbackDoesNotStopTheRestOfTheTail(failure: DropFailure) {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val first = tail.first()
+		val flaky = releaserWithFailingFallbackFor(first, failure)
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
+		assertThat(flaky.releaseUntravelledTail(trainId, tailIds).deferred, "first call deferred").isTrue()
+
+		val second = flaky.releaseUntravelledTail(trainId, tailIds)
+
+		// Either way no FREE block stays owned — the sweeper would never offer it again (PR #1068 review).
+		assertThat(second.released, "released ids").isEqualTo(tailIds)
+		tail.forEach { block ->
+			assertThat(registry().getOwner(block), "owner of tail block ${BlockIdentity.stableBlockId(block)}")
+				.isEqualTo(null)
+		}
+		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)
+	}
+
+	enum class DropFailure {
+		/** Throws before unregistering: the releaser must drop the block from the registry itself. */
+		THROWS,
+
+		/** Unregisters the block, then throws (as a throwing release-event listener does). */
+		THROWS_AFTER_UNREGISTERING
+	}
+
+	/**
+	 * A releaser whose service refuses `unregisterBlock` once for [failing], so the releaser falls back to
+	 * `dropFreedBlock`, which then fails as [failure] says.
+	 */
+	private fun releaserWithFailingFallbackFor(
+		failing: DynamicTrackBlock,
+		failure: DropFailure
+	): RegistryPartialRouteReleaser {
+		val real = context.getRoutingServices().getPathReservationService()
+		var refused = false
+		val flaky =
+			object : PathReservationService by real {
+				override fun unregisterBlock(
+					trainId: String,
+					block: DynamicTrackBlock
+				): Boolean {
+					if (block != failing || refused) return real.unregisterBlock(trainId, block)
+					refused = true
+					return false
+				}
+
+				override fun dropFreedBlock(
+					trainId: String,
+					block: DynamicTrackBlock
+				): Boolean {
+					if (block != failing) return real.dropFreedBlock(trainId, block)
+					if (failure == DropFailure.THROWS_AFTER_UNREGISTERING) real.dropFreedBlock(trainId, block)
+					error("simulated release-event failure")
+				}
+			}
+		return RegistryPartialRouteReleaser(registry(), flaky)
+	}
+
+	/** A refused trim after a release is logged, and the release itself is still reported. */
+	@Test
+	@DisplayName("a trim refused after a full release still reports the released blocks")
+	fun refusedTrimAfterAFullReleaseStillReportsTheRelease() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val refusingRegistry = spyk(registry())
+		every { refusingRegistry.trimPathInfoToHeldBlocks(trainId) } returns false
+		val refusing =
+			RegistryPartialRouteReleaser(refusingRegistry, context.getRoutingServices().getPathReservationService())
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
+		refusing.releaseUntravelledTail(trainId, tailIds)
+
+		val second = refusing.releaseUntravelledTail(trainId, tailIds)
+
+		assertThat(second.released, "released ids").isEqualTo(tailIds)
+		verify(exactly = 1) { refusingRegistry.trimPathInfoToHeldBlocks(trainId) }
+	}
+
+	/**
+	 * Reserves `A -> B`, frees the blocks behind the short `vA`-`doA1` block (as `Train.Tail` does once
+	 * the train has left them) and occupies that block.
+	 *
+	 * @return the un-travelled tail beyond `doA1`.
+	 */
+	private fun reserveLongRouteAndStandOnVaDoA1(): List<DynamicTrackBlock> {
+		val vA = elementAt<DynamicRailSwitch>(15, 8)
+		val doA1 = elementAt<DynamicRailSemaphore>(16, 8)
+		val blocks = reserveLongRoute()
+		val head = blocks.first { block -> vA in block.ends() && doA1 in block.ends() }
+		freeAndUnregister(blocks.takeWhile { it != head })
+		head.enter(mockk<TrackOccupant>(relaxed = true) { every { name } returns trainId })
+		return heldBlocks().filter { it != head }
+	}
+
+	/** Frees [blocks] and unregisters them the way the releaser does, but without the releaser's trim. */
+	private fun freeAndUnregister(blocks: List<DynamicTrackBlock>) {
+		val pathReservationService = context.getRoutingServices().getPathReservationService()
+		blocks.forEach { block ->
+			block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+			assertThat(
+				pathReservationService.unregisterBlock(trainId, block),
+				"unregister ${BlockIdentity.stableBlockId(block)}"
+			).isTrue()
+		}
+	}
+
+	/**
+	 * A PathInfo whose path does not pass the occupied head gives no end to trim to, so a release would
+	 * leave the PathInfo describing free track: refused before any change, like an invalid end.
+	 */
+	@Test
+	@DisplayName("a tail is not released when the occupied head is not on the PathInfo")
+	fun tailIsNotReleasedWhenTheHeadIsNotOnThePathInfo() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val noEndRegistry = spyk(registry())
+		every { noEndRegistry.pathInfoEndAfter(trainId, any()) } returns null
+
+		assertRefusedWithoutChange(tail, RegistryPartialRouteReleaser(noEndRegistry, pathReservationService()))
+	}
+
+	/** Without a PathInfo there is nothing that could go stale, so the tail is released and nothing is trimmed. */
+	@Test
+	@DisplayName("a train without a PathInfo has its tail released and no trim is attempted")
+	fun trainWithoutAPathInfoIsReleasedWithoutATrim() {
+		val (_, tail) = reserveAndOccupyLongRoute()
+		val noPathInfoRegistry = spyk(registry())
+		every { noPathInfoRegistry.getPathInfo(trainId) } returns null
+		val noPathInfo = RegistryPartialRouteReleaser(noPathInfoRegistry, pathReservationService())
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
+		noPathInfo.releaseUntravelledTail(trainId, tailIds)
+
+		val second = noPathInfo.releaseUntravelledTail(trainId, tailIds)
+
+		assertThat(second.released, "released ids").isEqualTo(tailIds)
+		verify(exactly = 0) { noPathInfoRegistry.trimPathInfoToHeldBlocks(any()) }
+	}
+
+	private fun pathReservationService(): PathReservationService = context.getRoutingServices().getPathReservationService()
+
+	/** Offers [offered] to [releaser] and asserts that nothing at all changed. */
+	private fun assertRefusedWithoutChange(
+		offered: List<DynamicTrackBlock>,
+		releaser: RegistryPartialRouteReleaser = releaser()
+	) {
+		assertThat(offered, "offered blocks").isNotEmpty()
+		val heldBefore = heldBlocks()
+		val statesBefore = heldBefore.map { it.getState() }
+		val pathInfoBefore = registry().getPathInfo(trainId)
+		val signals = heldBefore.flatMap { it.ends().asList() }.filterIsInstance<DynamicRailSemaphore>().distinct()
+		val aspectsBefore = signals.map { it.signal.name }
+
+		val result = releaser.releaseUntravelledTail(trainId, offered.map { BlockIdentity.stableBlockId(it) })
+
+		assertThat(result.released, "released ids").isEmpty()
+		assertThat(result.deferred, "deferred").isFalse()
+		assertThat(heldBlocks(), "blocks still held").isEqualTo(heldBefore)
+		assertThat(heldBefore.map { it.getState() }, "block states").isEqualTo(statesBefore)
+		assertThat(registry().getPathInfo(trainId), "PathInfo").isSameInstanceAs(pathInfoBefore)
+		assertThat(signals.map { it.signal.name }, "aspects").isEqualTo(aspectsBefore)
+	}
+
+	/** How the service's `unregisterBlock` fails once, after `cancelPathSetup` has made the block FREE. */
+	enum class UnregisterFailure {
+		/** Throws before unregistering: the block stays owned. */
+		THROWS,
+
+		/** Returns `false`: the block stays owned. */
+		REFUSES,
+
+		/** Unregisters the block, then throws (for example from an event listener). */
+		THROWS_AFTER_UNREGISTERING
+	}
+
+	/** A releaser whose service fails `unregisterBlock` once for [failing] as [failure] says, then behaves normally. */
+	private fun releaserFailingOnceFor(
+		failing: DynamicTrackBlock,
+		failure: UnregisterFailure
+	): RegistryPartialRouteReleaser {
+		val real = context.getRoutingServices().getPathReservationService()
+		var failed = false
+		val flaky =
+			object : PathReservationService by real {
+				override fun unregisterBlock(
+					trainId: String,
+					block: DynamicTrackBlock
+				): Boolean {
+					if (block != failing || failed) return real.unregisterBlock(trainId, block)
+					failed = true
+					return when (failure) {
+						UnregisterFailure.THROWS -> error("simulated unregister failure")
+						UnregisterFailure.REFUSES -> false
+						UnregisterFailure.THROWS_AFTER_UNREGISTERING -> {
+							real.unregisterBlock(trainId, block)
+							error("simulated failure after unregistering")
+						}
+					}
+				}
+			}
+		return RegistryPartialRouteReleaser(registry(), flaky)
 	}
 
 	/**
