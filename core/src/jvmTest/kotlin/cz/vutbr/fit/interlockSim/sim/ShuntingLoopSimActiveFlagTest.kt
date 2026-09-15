@@ -101,4 +101,26 @@ class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
 
 		assertThat(shuntingLoop.isSimActive()).isFalse()
 	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `errorStop clears the flag through DefaultSimulationContext's core stop lifecycle`() {
+		// Mirrors the production InOutWorker/Train path (InOutWorker.kt:60,177): a fatal error
+		// during simulation calls env.errorStop(e), which never reached ShuntingLoop.signalStopped
+		// before this fix — leaving the flag stuck true forever after any core-level fatal error,
+		// not only after a GUI manual stop (#1032 review follow-up, PR #1071).
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		val shuntingLoop = ShuntingLoop(context, endTime = 1_000_000L)
+		context.setMainProcess(shuntingLoop)
+		shuntingLoop.controlStepListener =
+			ControlStepListener {
+				context.errorStop(RuntimeException("simulated fatal error (#1032 core-stop test)"))
+			}
+
+		context.run()
+
+		assertThat(shuntingLoop.isSimActive()).isFalse()
+	}
 }

@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 
 @Tag("integration-test")
@@ -177,6 +178,44 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 				// The interrupt in stop() never reaches interLoopSleep's end-time branch,
 				// so without the explicit clear this flag would stay true forever and the
 				// dispatcher-agent driver would outlive the run (Issue #1032).
+				assertThat(loop.isSimActive()).isFalse()
+			} finally {
+				controller.stop()
+			}
+		}
+	}
+
+	@Test
+	@DisplayName(
+		"an unrelated Throwable escaping the sim thread still clears the ShuntingLoop " +
+			"liveness flag (#1032 PR #1071 review follow-up)"
+	)
+	fun exceptionalExitClearsShuntingLoopLivenessFlag() {
+		val context = buildContext()
+		context.use {
+			val loop = requireNotNull(it.mainProcess) as ShuntingLoop
+			val flagWasObservedActive = AtomicBoolean(false)
+			// Simulate a component other than InOutWorker/Train (e.g. DispatchDecisionApplier)
+			// letting an unexpected failure terminate the run without ever calling
+			// context.errorStop(). onSimulationEvent listeners run directly in kDisco's
+			// scheduler loop (SimulationContext.emit — not per-process-supervised, unlike a
+			// ControlStepListener throw, which kDisco isolates to that one process), so this
+			// throw escapes context.run() entirely — the exact gap SimulationRunner.kt's thread
+			// body left open: its `catch (t: Throwable)` only logged such a failure, so
+			// `signalStopped()` was never reached and the flag stayed `true` forever.
+			it.onSimulationEvent { _ ->
+				if (loop.isSimActive()) {
+					flagWasObservedActive.set(true)
+					throw IllegalStateException("simulated unrelated dispatcher failure")
+				}
+			}
+			val controller = SimulationController()
+			try {
+				controller.start(it)
+
+				awaitMonitorDetach(controller)
+
+				assertThat(flagWasObservedActive.get()).isTrue()
 				assertThat(loop.isSimActive()).isFalse()
 			} finally {
 				controller.stop()
