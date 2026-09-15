@@ -41,7 +41,7 @@ class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
+		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
