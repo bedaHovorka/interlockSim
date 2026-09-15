@@ -135,7 +135,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("the driver's post-plan liveness probe is the loop's own flag (#1032)")
 	fun driverLivenessProbeIsWiredToTheLoop() {
-		val context = createShuntingLoopAIContext()
+		val context = createShuntingLoopAIContext().tracked()
 		val driver = checkNotNull(context.scope.getOrNull<AgentLoopDriver>())
 
 		val probeField = AgentLoopDriver::class.java.getDeclaredField("isSimActive")
