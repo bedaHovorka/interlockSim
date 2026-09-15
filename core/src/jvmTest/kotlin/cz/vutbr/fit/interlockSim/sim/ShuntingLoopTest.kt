@@ -538,7 +538,7 @@ class ShuntingLoopTest : KoinTestBase() {
 	@DisplayName("Simulation liveness flag (Issue #1032)")
 	inner class SimActiveFlagTests {
 		private fun newLoop(): ShuntingLoop {
-			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml()).tracked()
 			return ShuntingLoop(simContext, 60L)
 		}
 
