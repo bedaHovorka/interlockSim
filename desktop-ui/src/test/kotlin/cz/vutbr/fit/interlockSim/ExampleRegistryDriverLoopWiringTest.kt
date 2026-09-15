@@ -17,6 +17,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
+import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -51,6 +52,9 @@ import java.util.concurrent.TimeUnit
  * constructed in production, and round 1's entire defect was a `ThrottlingSimulationController`
  * built but never reached. A unit test proving [AgentDriverLoop] behaves correctly proves nothing
  * about whether the run uses it.
+ *
+ * Since Issue #1032 this file also pins the driver's post-plan liveness wiring: [AgentLoopDriver]
+ * must poll the loop's own `isSimActive` flag, not its `always-active` constructor default.
  *
  * Builds the example reflectively, as [ExampleRegistryOrphanSweeperWiringTest] does. No Ollama is
  * required: `KoogAgentPlanAdapter` construction performs no network I/O and this test never runs the
@@ -115,5 +119,31 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 		assertThat(driverLoop.cycleCount, "cycleCount").isEqualTo(0L)
 		assertThat(driverLoop.failureCount, "failureCount").isEqualTo(0)
 		assertThat(driverLoop.stoppedByFailures, "stoppedByFailures").isFalse()
+	}
+
+	/**
+	 * Issue #1032: the driver's post-plan guard only works if the predicate passed at the
+	 * construction site is the loop's real flag. The predicate is private, so read it the way
+	 * this file family already reaches private wiring (same Java-reflection idiom as
+	 * [createExampleContext]).
+	 *
+	 * Before the first run the loop's flag is `false`, so a correctly wired probe answers
+	 * `false`. The constructor default is `{ true }`: dropping `isSimActive = loop::isSimActive`
+	 * in `ExampleRegistry` reverts to that default and flips this test red.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("the driver's post-plan liveness probe is the loop's own flag (#1032)")
+	fun driverLivenessProbeIsWiredToTheLoop() {
+		val context = createShuntingLoopAIContext()
+		val driver = checkNotNull(context.scope.getOrNull<AgentLoopDriver>())
+
+		val probeField = AgentLoopDriver::class.java.getDeclaredField("isSimActive")
+		probeField.isAccessible = true
+
+		@Suppress("UNCHECKED_CAST")
+		val probe = probeField.get(driver) as () -> Boolean
+
+		assertThat(probe(), "driver isSimActive probe before the first run").isFalse()
 	}
 }

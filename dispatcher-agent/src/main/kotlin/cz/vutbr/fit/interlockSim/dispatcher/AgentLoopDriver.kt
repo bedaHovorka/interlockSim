@@ -168,6 +168,15 @@ class AgentLoopDriver(
 	 * already finished and still unconditionally post a stale decision and pace against a
 	 * controller/consumer that no longer belongs to a live run. Defaults to always-`true` so
 	 * every caller that doesn't pass it (including every existing test) is unaffected.
+	 *
+	 * The predicate must flip to `false` on **every** run-end path, not only natural
+	 * completion: in production it is wired to `ShuntingLoop::isSimActive`, whose flag the
+	 * natural-end branch of `interLoopSleep` clears and whose
+	 * [signalStopped][cz.vutbr.fit.interlockSim.sim.ShuntingLoop.signalStopped] clears on
+	 * the GUI manual-stop path (the runner's interrupt never reaches the end-time branch).
+	 * The resulting discard covers the cycle's returned batch and the PACE step; on the Koog
+	 * tool-calling path, decisions the LLM emitted via actuator tools inside `plan()` are not
+	 * retracted — see the guard comment in [runCycle] for why that is safe.
 	 */
 	private val isSimActive: () -> Boolean = { true }
 ) {
@@ -320,12 +329,15 @@ class AgentLoopDriver(
 	 *
 	 * @return `true` if a full cycle actually ran (a decision batch — possibly empty —
 	 *   was computed and posted, and [SimulationController.throttle] was called);
-	 *   `false` if this call was a no-op short-circuit (nothing sensed, decided, posted,
-	 *   or throttled) — an [SimulationSnapshot.EMPTY] / stale-tick / signal-timeout
-	 *   case. Callers that need to know whether a cycle's decisions were actually
-	 *   posted before proceeding (e.g. a caller enforcing strict per-tick ordering
-	 *   against the sim thread) must gate on this return value rather than assume
-	 *   every call did real work — see
+	 *   `false` if no decision batch was posted: either a no-op short-circuit before
+	 *   DECIDE (an [SimulationSnapshot.EMPTY] / stale-tick / signal-timeout case —
+	 *   nothing sensed, decided, posted, or throttled), or the Issue #1032 discard —
+	 *   the cycle sensed and decided, but [isSimActive] reported the simulation
+	 *   stopped while `plan()` was in flight, so the stale decision was dropped
+	 *   before ACT/PACE. Callers that need to know whether a cycle's decisions were
+	 *   actually posted before proceeding (e.g. a caller enforcing strict per-tick
+	 *   ordering against the sim thread) must gate on this return value rather than
+	 *   assume every call did real work — see
 	 *   [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedDispatcherDeterminismTest] for
 	 *   why: releasing such a barrier unconditionally after a no-op call lets the sim
 	 *   thread proceed before the corresponding decision is actually posted.
@@ -356,7 +368,12 @@ class AgentLoopDriver(
 		// #1032: plan() may have blocked (up to the LLM inference timeout) long enough for the
 		// simulation to stop while this cycle was still in flight. Acting on a stale decision now —
 		// posting it, or pacing PACE's awaitIfPaused/throttle against a controller no longer tied to
-		// a live run — is exactly the "timeout after deadlock" hang: discard it and stop here instead.
+		// a live run — is the "timeout after deadlock" hang: discard it and stop here instead.
+		// The discard covers this cycle's returned batch and the PACE step. On the Koog tool-calling
+		// path, decisions the LLM emitted via actuator tools are posted inside plan() itself and are
+		// NOT retracted here — that is deliberate: after the simulation stops, the command queue is
+		// never drained again (its only drain site runs from the dead sim thread) and the queue is
+		// scoped to the run's Koin context, so a stale emission is inert and cannot reach a later run.
 		if (!isSimActive()) {
 			logger.info {
 				"AgentLoopDriver: simulation already stopped while this cycle was in flight " +

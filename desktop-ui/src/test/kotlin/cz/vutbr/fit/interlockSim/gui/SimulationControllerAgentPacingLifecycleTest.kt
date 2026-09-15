@@ -15,9 +15,11 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.isFalse
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -58,6 +60,18 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 			Thread.sleep(20L)
 		}
 		assertThat(controller.runner).isNull()
+	}
+
+	/** Polls until the run's liveness flag flips (startAction runs on the sim thread). */
+	private fun awaitLoopActive(
+		loop: ShuntingLoop,
+		timeoutMs: Long = 5000L
+	) {
+		val deadline = System.currentTimeMillis() + timeoutMs
+		while (!loop.isSimActive() && System.currentTimeMillis() < deadline) {
+			Thread.sleep(20L)
+		}
+		assertThat(loop.isSimActive()).isTrue()
 	}
 
 	@Test
@@ -144,6 +158,29 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 			controller.stop()
 			ctxA.close()
 			ctxB.close()
+		}
+	}
+
+	@Test
+	@DisplayName("stop() clears the ShuntingLoop liveness flag the dispatcher driver polls (#1032)")
+	fun stopClearsShuntingLoopLivenessFlag() {
+		val context = buildContext()
+		context.use {
+			val loop = requireNotNull(it.mainProcess) as ShuntingLoop
+			val controller = SimulationController()
+			try {
+				controller.start(it)
+				awaitLoopActive(loop)
+
+				controller.stop()
+
+				// The interrupt in stop() never reaches interLoopSleep's end-time branch,
+				// so without the explicit clear this flag would stay true forever and the
+				// dispatcher-agent driver would outlive the run (Issue #1032).
+				assertThat(loop.isSimActive()).isFalse()
+			} finally {
+				controller.stop()
+			}
 		}
 	}
 }

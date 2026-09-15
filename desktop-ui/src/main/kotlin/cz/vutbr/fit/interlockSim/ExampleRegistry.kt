@@ -695,6 +695,11 @@ class ExampleRegistry {
 				// instead of posting it and pacing against a controller for a dead run.
 				isSimActive = loop::isSimActive
 			)
+		// Issue #1032: declared in scope so ExampleRegistryDriverLoopWiringTest can pin the
+		// wiring above — drop `isSimActive = loop::isSimActive` and the driver reverts to its
+		// `{ true }` default, which flips that test red instead of silently disabling the
+		// discard guard in production.
+		context.scope.declare(driver)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
 		// The signal fires from controlStepListener — NOT from snapshotCaptureHook — because
