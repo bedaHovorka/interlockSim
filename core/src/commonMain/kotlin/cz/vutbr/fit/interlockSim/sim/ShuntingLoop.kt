@@ -571,7 +571,10 @@ class ShuntingLoop(
 	 */
 	override fun getApprovedTrains(): List<Train> = approwedTrains
 
-	/** Returns `true` while the simulation is active (between [startAction] and [interLoopSleep] end, or until [signalStopped]). */
+	/**
+	 * Returns `true` from [startAction] until [interLoopSleep] ends the simulation or
+	 * [signalStopped] is called.
+	 */
 	fun isSimActive(): Boolean = simActive
 
 	/**
