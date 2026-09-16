@@ -66,6 +66,11 @@ class DispatcherRunConfigTest {
 		// Issue #893 iteration 2: production default stays 30s — only the grid may raise it.
 		assertThat(config.inferenceTimeoutSeconds).isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
 		assertThat(config.inferenceTimeoutSeconds).isEqualTo(30L)
+		// Issue #1058
+		assertThat(config.circuitBreakerFailureThreshold)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD)
+		assertThat(config.circuitBreakerCooldownSeconds)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
 	}
 
 	@Test
@@ -79,7 +84,9 @@ class DispatcherRunConfigTest {
 				DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK to "1",
 				DispatcherRunConfig.PROP_RUN_ID to "sweep-cell-r01",
 				DispatcherRunConfig.PROP_RUNS_ROOT to "build/reports/dispatcher-sweep",
-				DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "90"
+				DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "90",
+				DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD to "5",
+				DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS to "120"
 			)
 
 		assertThat(config.model).isEqualTo("llama3.1:8b")
@@ -90,6 +97,8 @@ class DispatcherRunConfigTest {
 		assertThat(config.runId).isEqualTo("sweep-cell-r01")
 		assertThat(config.runsRoot).isEqualTo("build/reports/dispatcher-sweep")
 		assertThat(config.inferenceTimeoutSeconds).isEqualTo(90L)
+		assertThat(config.circuitBreakerFailureThreshold).isEqualTo(5)
+		assertThat(config.circuitBreakerCooldownSeconds).isEqualTo(120.0)
 	}
 
 	@Test
@@ -121,6 +130,65 @@ class DispatcherRunConfigTest {
 			.isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
 		assertThat(configOf(DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS to "-5").inferenceTimeoutSeconds)
 			.isEqualTo(DispatcherRunConfig.DEFAULT_INFERENCE_TIMEOUT_SECONDS)
+	}
+
+	@Test
+	@DisplayName("Issue #1058: a non-positive circuitBreakerFailureThreshold is rejected as a value")
+	fun nonPositiveCircuitBreakerFailureThresholdRejected() {
+		assertThat(configOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD to "0").circuitBreakerFailureThreshold)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD)
+		assertThat(
+			configOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD to "-1").circuitBreakerFailureThreshold
+		).isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD)
+	}
+
+	@Test
+	@DisplayName("Issue #1058: a non-positive circuitBreakerCooldownSeconds is rejected as a value")
+	fun nonPositiveCircuitBreakerCooldownRejected() {
+		assertThat(configOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS to "0").circuitBreakerCooldownSeconds)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+		assertThat(configOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS to "-30").circuitBreakerCooldownSeconds)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+	}
+
+	@Test
+	@DisplayName("Issue #1058: an unparseable circuit-breaker value falls back to the default instead of failing the run")
+	fun unparseableCircuitBreakerValuesFallBack() {
+		val config =
+			configOf(
+				DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD to "soon",
+				DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS to "warm"
+			)
+
+		assertThat(config.circuitBreakerFailureThreshold)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD)
+		assertThat(config.circuitBreakerCooldownSeconds)
+			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+	}
+
+	@Test
+	@DisplayName("Issue #1058: circuit-breaker knobs resolve system property > committed file > code constant")
+	fun circuitBreakerKnobsFollowThePrecedenceChain() {
+		val fromProperty =
+			configOf(
+				mapOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD to "2"),
+				DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD to "4"
+			)
+		val fromFile = configOf(mapOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD to "4"))
+
+		assertThat(fromProperty.circuitBreakerFailureThreshold).isEqualTo(4)
+		assertThat(fromFile.circuitBreakerFailureThreshold).isEqualTo(4)
+	}
+
+	@Test
+	@DisplayName("Issue #1058: circuit-breaker knobs are recognized keys of the committed defaults resource")
+	fun circuitBreakerKnobsAreRecognizedFileKeys() {
+		assertThat(
+			DispatcherDefaultsResource.RECOGNIZED_KEYS.contains(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD)
+		).isEqualTo(true)
+		assertThat(
+			DispatcherDefaultsResource.RECOGNIZED_KEYS.contains(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+		).isEqualTo(true)
 	}
 
 	@Test
@@ -271,5 +339,7 @@ class DispatcherRunConfigTest {
 		assertThat(config.historyN).isEqualTo(0)
 		assertThat(config.maxActionsPerTick).isEqualTo(3)
 		assertThat(config.inferenceTimeoutSeconds).isEqualTo(30L)
+		assertThat(config.circuitBreakerFailureThreshold).isEqualTo(3)
+		assertThat(config.circuitBreakerCooldownSeconds).isEqualTo(60.0)
 	}
 }

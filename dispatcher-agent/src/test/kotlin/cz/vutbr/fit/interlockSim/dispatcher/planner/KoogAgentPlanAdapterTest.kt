@@ -69,7 +69,8 @@ class KoogAgentPlanAdapterTest {
 		fallback: Dispatcher,
 		inferenceTimeout: Duration = Duration.ofSeconds(30),
 		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue(),
-		sinkHolder: SinkHolder = SinkHolder()
+		sinkHolder: SinkHolder = SinkHolder(),
+		circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
 	): KoogAgentPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
 		coEvery { agentFactory.createAgent(any()) } returns koogAgent
@@ -80,9 +81,18 @@ class KoogAgentPlanAdapterTest {
 			fallback,
 			inferenceTimeout,
 			commandQueue,
-			sinkHolder
+			sinkHolder,
+			circuitBreaker = circuitBreaker
 		)
 	}
+
+	private fun observationAt(simTime: Double): DispatchObservation =
+		DispatchObservation(
+			snapshot = SimulationSnapshot.EMPTY.copy(simTime = simTime),
+			unapprovedTrains = emptyList(),
+			innerBlockInputs = emptyList(),
+			outerBlockInputs = emptyList()
+		)
 
 	private fun observationWithQueue(
 		unapprovedTrains: List<QueuedTrainObservation>,
@@ -655,6 +665,134 @@ class KoogAgentPlanAdapterTest {
 		assertThat(result, "decisions returned").isEqualTo(fallbackDecisions)
 		assertThat(recorded, "tick records").hasSize(1)
 		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+	}
+
+	// ── Bounded retry and circuit breaker (Issue #1058) ────────────────────────
+
+	@Test
+	@DisplayName(
+		"a plain exception is retried once within the same cycle and a succeeding retry returns the LLM's decisions"
+	)
+	fun `a plain exception is retried once and a succeeding retry returns LLM decisions`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } throws
+			RuntimeException("transient") andThen
+			listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+
+		val result = runBlocking { adapter(koogAgent, fallback).plan(observation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		coVerify(exactly = 2) { koogAgent.decideAsync(any()) }
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("a plain exception that fails again on retry falls back and reports the tick once")
+	fun `a plain exception failing again on retry falls back and reports the tick once`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } throws RuntimeException("boom")
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
+
+		val result = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		coVerify(exactly = 2) { koogAgent.decideAsync(any()) }
+		coVerify(exactly = 1) { fallback.decide(any()) }
+		assertThat(recorded).hasSize(1)
+	}
+
+	@Test
+	@DisplayName("a timeout is never retried within one plan() call")
+	fun `a timeout is never retried within one plan call`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			delay(500)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+
+		runBlocking { adapter(koogAgent, fallback, Duration.ofMillis(50)).plan(observation) }
+
+		coVerify(exactly = 1) { koogAgent.decideAsync(any()) }
+	}
+
+	@Test
+	@DisplayName("sustained timeouts open the breaker after failureThreshold cycles, then the LLM is skipped entirely")
+	fun `sustained timeouts open the breaker and further cycles skip the LLM`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			delay(500)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val breaker = LlmCircuitBreaker(failureThreshold = 2, cooldownSeconds = 60.0)
+		val planAdapter = adapter(koogAgent, fallback, Duration.ofMillis(50), circuitBreaker = breaker)
+
+		runBlocking {
+			planAdapter.plan(observationAt(0.0))
+			planAdapter.plan(observationAt(1.0))
+		}
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+		coVerify(exactly = 2) { koogAgent.decideAsync(any()) }
+
+		// Breaker is now OPEN and the cooldown (60s) has not elapsed — this cycle must not call the
+		// LLM at all, going straight to the fallback.
+		val result = runBlocking { planAdapter.plan(observationAt(2.0)) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		coVerify(exactly = 2) { koogAgent.decideAsync(any()) }
+		coVerify(exactly = 3) { fallback.decide(any()) }
+	}
+
+	@Test
+	@DisplayName("a threshold of 1 opens the breaker after a single failure (configurable)")
+	fun `a threshold of 1 opens the breaker after a single failure`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } throws RuntimeException("boom")
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		val planAdapter = adapter(koogAgent, fallback, circuitBreaker = breaker)
+
+		runBlocking { planAdapter.plan(observationAt(0.0)) }
+
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+	}
+
+	@Test
+	@DisplayName("once the cooldown elapses, the breaker probes once and a successful probe closes it")
+	fun `after the cooldown elapses a successful probe closes the breaker`() {
+		// Calls 1 and 2 are cycle 1's initial attempt and its bounded retry (both must fail to
+		// open a failureThreshold=1 breaker as a single cycle-level failure); call 3 is cycle 2's
+		// HALF_OPEN probe, which must succeed.
+		var callCount = 0
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			callCount++
+			if (callCount <= 2) throw RuntimeException("boom") else listOf(DispatchDecision.NoAction)
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		val planAdapter = adapter(koogAgent, fallback, circuitBreaker = breaker)
+
+		runBlocking { planAdapter.plan(observationAt(0.0)) }
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+
+		// Cycle 2, well past the 60s cooldown: the probe attempt reaches decideAsync (call 3, a
+		// successful cycle returning a real decision).
+		val result = runBlocking { planAdapter.plan(observationAt(100.0)) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.CLOSED)
+		coVerify(exactly = 3) { koogAgent.decideAsync(any()) }
 	}
 
 	/**

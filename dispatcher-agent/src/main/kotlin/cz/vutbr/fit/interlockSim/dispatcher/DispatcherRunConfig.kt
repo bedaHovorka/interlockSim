@@ -95,10 +95,18 @@ private val logger = KotlinLogging.logger {}
  *   it is handled exactly like an unparseable number — WARN, then the default — because losing an
  *   unattended sweep to a typo would cost far more than the one mis-labelled measurement that a
  *   hard failure would prevent.
+ * @property circuitBreakerFailureThreshold Consecutive LLM cycle failures (timeout or exception,
+ *   after any retry) before [cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker] opens
+ *   and further cycles skip the LLM entirely until [circuitBreakerCooldownSeconds] of simulation
+ *   time have passed (Issue #1058 — sustained overload). Defaults to
+ *   [cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker.DEFAULT_FAILURE_THRESHOLD].
+ * @property circuitBreakerCooldownSeconds Simulation-time cooldown a breaker OPEN by
+ *   [circuitBreakerFailureThreshold] must wait before probing recovery with one HALF_OPEN cycle.
+ *   Defaults to [cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS].
  *
  * @since Issue #847 (SP2c.24 — headless N-run sweep driver and parameter grid);
  *   `inferenceTimeoutSeconds` added in Issue #893 iteration 2; `promptVariant` added in Issue #834
- *   (SP2c.11)
+ *   (SP2c.11); `circuitBreakerFailureThreshold`/`circuitBreakerCooldownSeconds` added in Issue #1058
  */
 data class DispatcherRunConfig(
 	val model: String? = null,
@@ -109,7 +117,9 @@ data class DispatcherRunConfig(
 	val runId: String? = null,
 	val runsRoot: String? = null,
 	val inferenceTimeoutSeconds: Long = DEFAULT_INFERENCE_TIMEOUT_SECONDS,
-	val promptVariant: PromptVariant = DEFAULT_PROMPT_VARIANT
+	val promptVariant: PromptVariant = DEFAULT_PROMPT_VARIANT,
+	val circuitBreakerFailureThreshold: Int = DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+	val circuitBreakerCooldownSeconds: Double = DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS
 ) {
 	init {
 		require(tickPeriodMs >= 0) { "tickPeriodMs must be >= 0, was $tickPeriodMs" }
@@ -117,6 +127,12 @@ data class DispatcherRunConfig(
 		require(maxActionsPerTick >= 1) { "maxActionsPerTick must be >= 1, was $maxActionsPerTick" }
 		require(inferenceTimeoutSeconds >= 1) {
 			"inferenceTimeoutSeconds must be >= 1, was $inferenceTimeoutSeconds"
+		}
+		require(circuitBreakerFailureThreshold >= 1) {
+			"circuitBreakerFailureThreshold must be >= 1, was $circuitBreakerFailureThreshold"
+		}
+		require(circuitBreakerCooldownSeconds > 0) {
+			"circuitBreakerCooldownSeconds must be > 0, was $circuitBreakerCooldownSeconds"
 		}
 	}
 
@@ -133,6 +149,8 @@ data class DispatcherRunConfig(
 		const val PROP_RUNS_ROOT: String = "${PREFIX}runsRoot"
 		const val PROP_INFERENCE_TIMEOUT_SECONDS: String = "${PREFIX}inferenceTimeoutSeconds"
 		const val PROP_PROMPT_VARIANT: String = "${PREFIX}promptVariant"
+		const val PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD: String = "${PREFIX}circuitBreakerFailureThreshold"
+		const val PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS: String = "${PREFIX}circuitBreakerCooldownSeconds"
 
 		/**
 		 * No enforced spacing. The snapshot signal already paces the driver at one cycle per
@@ -160,6 +178,14 @@ data class DispatcherRunConfig(
 		 * constant's KDoc for why flipping it is a measurement decision.
 		 */
 		val DEFAULT_PROMPT_VARIANT: PromptVariant = PromptVariant.DEFAULT
+
+		/** Matches [cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker.DEFAULT_FAILURE_THRESHOLD]. */
+		const val DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD: Int =
+			cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker.DEFAULT_FAILURE_THRESHOLD
+
+		/** Matches [cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS]. */
+		const val DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS: Double =
+			cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS
 
 		/**
 		 * Reads the configuration from JVM system properties, falling back to the committed
@@ -212,7 +238,19 @@ data class DispatcherRunConfig(
 						PROP_PROMPT_VARIANT,
 						DEFAULT_PROMPT_VARIANT,
 						PromptVariant::parse
-					)
+					),
+				circuitBreakerFailureThreshold =
+					parseOrDefault(
+						resolveRaw(PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD, properties, fileProperties),
+						PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+						DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD
+					) { it.toIntOrNull()?.takeIf { parsed -> parsed >= 1 } },
+				circuitBreakerCooldownSeconds =
+					parseOrDefault(
+						resolveRaw(PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS, properties, fileProperties),
+						PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
+						DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS
+					) { it.toDoubleOrNull()?.takeIf { parsed -> parsed > 0 } }
 			)
 
 		/**

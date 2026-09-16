@@ -329,9 +329,11 @@ class MeasuringPlanAdapterTest {
 			coEvery { agent.decideAsync(any()) } coAnswers {
 				callCount++
 				when (callCount) {
-					1 -> emptyList() // silent cycle -> LLM_SILENT_NONACTIONABLE
-					2 -> throw RuntimeException("boom") // LLM exception -> RULE_FALLBACK
-					else -> listOf(DispatchDecision.NoAction)
+					1 -> emptyList() // cycle 1, silent cycle -> LLM_SILENT_NONACTIONABLE
+					// cycle 2's initial attempt AND its bounded retry (Issue #1058) both fail, so the
+					// cycle as a whole still ends in RULE_FALLBACK rather than the retry masking it.
+					2, 3 -> throw RuntimeException("boom")
+					else -> listOf(DispatchDecision.NoAction) // cycle 3's initial attempt -> LLM_ACTIONS
 				}
 			}
 			val fallback = mockk<Dispatcher>()

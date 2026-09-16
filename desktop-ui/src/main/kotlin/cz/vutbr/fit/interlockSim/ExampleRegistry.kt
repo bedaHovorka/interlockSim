@@ -39,6 +39,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
@@ -369,7 +370,15 @@ class ExampleRegistry {
 					sinkHolder = scope.get<SinkHolder>(),
 					// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
 					// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
-					cycleHistory = scope.get<CycleHistory>()
+					cycleHistory = scope.get<CycleHistory>(),
+					// Issue #1058: guards against sustained LLM overload — see KoogAgentPlanAdapter's
+					// "Overload handling" KDoc. Threshold/cooldown come from DispatcherRunConfig so
+					// the same -D/committed-file/code-constant precedence applies as every other knob.
+					circuitBreaker =
+						LlmCircuitBreaker(
+							failureThreshold = scope.get<DispatcherRunConfig>().circuitBreakerFailureThreshold,
+							cooldownSeconds = scope.get<DispatcherRunConfig>().circuitBreakerCooldownSeconds
+						)
 				)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory can retrieve it after the run
@@ -488,7 +497,15 @@ class ExampleRegistry {
 					sinkHolder = scope.get<SinkHolder>(),
 					// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
 					// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
-					cycleHistory = scope.get<CycleHistory>()
+					cycleHistory = scope.get<CycleHistory>(),
+					// Issue #1058: guards against sustained LLM overload — see KoogAgentPlanAdapter's
+					// "Overload handling" KDoc. Threshold/cooldown come from DispatcherRunConfig so
+					// the same -D/committed-file/code-constant precedence applies as every other knob.
+					circuitBreaker =
+						LlmCircuitBreaker(
+							failureThreshold = scope.get<DispatcherRunConfig>().circuitBreakerFailureThreshold,
+							cooldownSeconds = scope.get<DispatcherRunConfig>().circuitBreakerCooldownSeconds
+						)
 				)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory (e.g. Frame's
