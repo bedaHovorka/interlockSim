@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.SpeedControllable
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
@@ -245,6 +246,12 @@ internal class SimulationController(
 	fun stop() {
 		val r = runner ?: return
 		cleanupSpeedListener(r)
+		// Issue #1032: flip the run's liveness flag before the interrupt. The interrupt in
+		// r.stop() never reaches ShuntingLoop.interLoopSleep's end-time branch, so without
+		// this the flag stays true and the dispatcher-agent driver outlives the run: an
+		// in-flight cycle still posts its stale decision and the daemon loop never exits.
+		// Safe casts keep this a no-op for non-ShuntingLoop runs (e.g. MultiTrainLoop).
+		((r.simulationContext as? DefaultSimulationContext)?.mainProcess as? ShuntingLoop)?.signalStopped()
 		r.stop()
 		runner = null
 		speedControllable = null
