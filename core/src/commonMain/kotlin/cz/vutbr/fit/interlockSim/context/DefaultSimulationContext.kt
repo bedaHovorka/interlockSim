@@ -46,6 +46,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
@@ -1493,6 +1494,13 @@ open class DefaultSimulationContext(
 	override fun stop() {
 		simulation?.stop() // Signal kdisco-engine event loop to exit
 		requireSimulationNotNull(mainProcess) { "Main process must be initialized before stopping simulation" }
+		// Issue #1032 review follow-up (PR #1071): clear the dispatcher-agent liveness flag
+		// here too, not only from the GUI's manual-stop path. This covers errorStop() (called
+		// by InOutWorker/Train on a fatal simulation error) as well as any other caller of
+		// stop() — both terminate mainProcess without ever reaching ShuntingLoop.interLoopSleep's
+		// end-time branch, so without this the flag would stay true forever after such a stop.
+		// Safe cast keeps this a no-op for non-ShuntingLoop main processes (e.g. MultiTrainLoop).
+		(mainProcess as? ShuntingLoop)?.signalStopped()
 		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
 
 		val exceptions = mutableListOf<Throwable>()
