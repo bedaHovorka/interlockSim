@@ -375,9 +375,12 @@ class KoogAgentPlanAdapter(
 
 		if (!circuitBreaker.shouldAttempt(observation.snapshot.simTime)) {
 			// Sustained overload (Issue #1058): the breaker is OPEN and the cooldown has not
-			// elapsed yet. Skip the LLM call entirely — no correlation-cycle advance, no
-			// withTimeout stall — and go straight to the fallback. latencyMs is null: no
-			// inference was attempted this cycle, exactly like the getOrCreateAgent-failure case.
+			// elapsed yet. Skip the LLM call entirely — no withTimeout stall — but still advance
+			// the correlation cycle so AgentLoopDriver's postAll and Sp2c21MetricsRecorder's
+			// tickIndex stay aligned across consecutive OPEN-window skips (#1073 review round).
+			// latencyMs is null: no inference was attempted this cycle, exactly like the
+			// getOrCreateAgent-failure case.
+			commandQueue.advanceCorrelationCycle()
 			return runFallback(
 				observation = observation,
 				latencyMs = null,

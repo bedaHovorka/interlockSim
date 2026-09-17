@@ -17,10 +17,12 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
@@ -797,6 +799,34 @@ class KoogAgentPlanAdapterTest {
 		assertThat(result).containsExactly(DispatchDecision.NoAction)
 		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.CLOSED)
 		coVerify(exactly = 3) { koogAgent.decideAsync(any()) }
+	}
+
+	@Test
+	@DisplayName(
+		"consecutive OPEN-window breaker skips still advance the correlation cycle (#1073 review round)"
+	)
+	fun `consecutive breaker skips advance the correlation cycle`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		val correlationMap = CommandCorrelationMap()
+		val commandQueue = ActuatorCommandQueue(correlationMap = correlationMap)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		breaker.recordFailure(0.0)
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+		val planAdapter = adapter(koogAgent, fallback, commandQueue = commandQueue, circuitBreaker = breaker)
+
+		val result1 = runBlocking { planAdapter.plan(observationAt(1.0)) }
+		commandQueue.postAll(result1)
+		val tick1 = correlationMap.correlate(result1.single())?.tickIndex
+
+		val result2 = runBlocking { planAdapter.plan(observationAt(2.0)) }
+		commandQueue.postAll(result2)
+		val tick2 = correlationMap.correlate(result2.single())?.tickIndex
+
+		assertThat(tick1).isNotNull()
+		assertThat(tick2).isNotNull()
+		assertThat(tick2).isNotEqualTo(tick1)
 	}
 
 	// ── Review round of Issue #1058: partial-emission safety and accounting ────
