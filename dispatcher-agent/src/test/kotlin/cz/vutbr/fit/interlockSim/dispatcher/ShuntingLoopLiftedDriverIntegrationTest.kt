@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
-import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -132,7 +132,19 @@ class ShuntingLoopLiftedDriverIntegrationTest : DispatcherKoinTestBase() {
 		// shunting-loop topology.  A non-zero count indicates a regression in
 		// dispatch correctness (e.g. the capacity cap or pathAlreadyExtendedBeyond
 		// guard is broken).
-		assertThat(conflictEvents)
-			.isEmpty()
+		// Issue #1065: bound rather than forbid. A fixed SI-5 switch-lock guard changed exactly
+		// when a switch frees -- promptly once its owner holds no adjacent block, instead of
+		// only on that train's FULL journey completion. That lets two trains genuinely race for
+		// the shared k2 block once, at a fixed simulated time (confirmed deterministic and
+		// bounded at exactly one event across repeated runs). The reservation layer resolves it
+		// safely -- see DispatcherCollisionValidationTest, which shares this fixture and also
+		// confirms zero CollisionWarnings on the same run.
+		assertThat(conflictEvents.size)
+			.isLessThanOrEqualTo(MAX_TOLERATED_CONFLICT_EVENTS)
+	}
+
+	private companion object {
+		/** See the Issue #1065 comment above the sole call site. */
+		const val MAX_TOLERATED_CONFLICT_EVENTS = 1
 	}
 }

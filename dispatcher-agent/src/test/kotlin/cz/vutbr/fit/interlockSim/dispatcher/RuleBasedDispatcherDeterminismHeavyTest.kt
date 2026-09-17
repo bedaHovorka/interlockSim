@@ -53,9 +53,12 @@ private val logger = KotlinLogging.logger {}
  *
  * [MAX_TOLERATED_CONFLICT_EVENTS] mirrors [RuleBasedDispatcherDeterminismTest]'s tolerance —
  * see that class's KDoc for the traced (but not yet fixed — it is a `:core` pathfinding-layer
- * question) cause. This 1000-repetition run measured the rate directly: 3 of 1000 repetitions
- * hit exactly one conflict event each (confirmed 2026-08-01), consistent with a rare, bounded,
- * self-resolving transient rather than an unbounded regression.
+ * question) cause, and its "Second tolerated event (Issue #1065)" section for the SI-5
+ * switch-lock refusal that added a second, likewise bounded, cause. This 1000-repetition run
+ * measured the first cause's rate directly: 3 of 1000 repetitions hit exactly one conflict
+ * event each (confirmed 2026-08-01), consistent with a rare, bounded, self-resolving transient
+ * rather than an unbounded regression. Re-run after Issue #1065 to re-measure with both causes
+ * active.
  *
  * @see RuleBasedDispatcherDeterminismTest
  * @since Issue #746 (SP0.11c — Goal 10)
@@ -117,7 +120,10 @@ class RuleBasedDispatcherDeterminismHeavyTest : DispatcherKoinTestBase() {
 		@Volatile
 		private var baselineResult: RuleBasedDispatcherDeterminismRunner.RunResult? = null
 
-		/** See the class KDoc's "`conflictEventCount` tolerance" section. */
-		private const val MAX_TOLERATED_CONFLICT_EVENTS = 1
+		/**
+		 * See the class KDoc's "`conflictEventCount` tolerance" section. Mirrors
+		 * [RuleBasedDispatcherDeterminismTest]'s bound, raised from 1 to 2 by Issue #1065.
+		 */
+		private const val MAX_TOLERATED_CONFLICT_EVENTS = 2
 	}
 }

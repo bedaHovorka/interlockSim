@@ -55,8 +55,15 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   the released tail rather than the retained head, and `unregisterSwitch` on a switch the train
  *   still needs would unlock a route under a standing train. An over-locked switch merely blocks
  *   movement; an under-locked one is a safety failure. This is the conservative half of the
- *   railway-domain question round 3 raised, and it means a reclaimed tail may not be immediately
- *   re-routable — a traffic-simulation-expert ruling could relax it later.
+ *   railway-domain question round 3 raised.
+ *   **Superseded by Issue #1065:** the ruling this KDoc asked for has a mechanism, not a policy
+ *   change here. `DefaultPathReservationService.dropFreedBlock` -- the funnel every released
+ *   block (including this class's `releaseBlock`) passes through -- now reclaims a switch's
+ *   lock once its owner holds no block adjacent to it, regardless of which release path freed
+ *   that block. So a switch left locked here by this class IS reclaimed, just not by this
+ *   class: by the next block release (from here or anywhere else) that leaves it with no
+ *   adjacent block. This class's own conservatism above is unchanged and still correct; it no
+ *   longer needs to be, because it is no longer the last word on the switch's fate.
  * - **Per-block failure is contained.** A block that throws is logged and skipped; the rest of the
  *   tail is still attempted, and only ids that actually came free are returned. A block that is
  *   already FREE when its unregister fails is dropped from the registry directly, so it can never

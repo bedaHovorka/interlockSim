@@ -302,6 +302,10 @@ class Issue742RegressionTest : KoinTestBase() {
 		val switchesAfterPhase1 = registry.getSwitches(trainId).toSet()
 		// Verify vA (or some switch) is now registered
 		assertThat(switchesAfterPhase1.size).isGreaterThanOrEqualTo(1)
+		// Issue #1065: snapshot vA's position too, not just registry membership -- a rollback
+		// that merely leaves the switch registered but silently repositioned would pass the
+		// set-equality check below and still be wrong.
+		val confsAfterPhase1 = switchesAfterPhase1.associateWith { it.conf }
 
 		// Snapshot phase1 blocks
 		val blocksPhase1 = registry.getBlocks(trainId).toSet()
@@ -317,6 +321,12 @@ class Issue742RegressionTest : KoinTestBase() {
 		// After rollback, Phase 1 switches must still be registered (not double-unlocked)
 		val switchesAfterPhase2 = registry.getSwitches(trainId).toSet()
 		assertThat(switchesAfterPhase2).isEqualTo(switchesAfterPhase1)
+
+		// Issue #1065: and still in the SAME position -- vB (the #742 candidate) never joins
+		// vA's segments, so this phase-2 candidate should never have touched vA's conf at all.
+		switchesAfterPhase2.forEach { switch ->
+			assertThat(switch.conf).isEqualTo(confsAfterPhase1.getValue(switch))
+		}
 
 		// After rollback, Phase 1 blocks must be preserved (no corruption)
 		assertThat(registry.getBlocks(trainId).toSet()).isEqualTo(blocksPhase1)

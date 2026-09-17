@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.SwitchLockedException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -39,7 +40,10 @@ private val logger = KotlinLogging.logger {}
  * **Property change events:**
  * - "conf" property: Fired when configuration changes (MAIN ↔ BRANCH)
  *   - `changeConf()`: Always fires event (always toggles position)
- *   - `setUpPath()`: Fires event only if new configuration differs from current
+ *   - `setUpPath()`: Fires event only if new configuration differs from current -- but never
+ *     when the switch is locked in the OTHER position (Issue #1065, safety property SI-5):
+ *     that case throws [cz.vutbr.fit.interlockSim.exceptions.SwitchLockedException] before
+ *     writing anything, so no event fires and `conf`/`locked` stay exactly as they were.
  * - "locked" property: Fired when lock state changes
  *   - `lock()`/`unlock()`: Fire event only if state actually changes
  *
@@ -127,6 +131,22 @@ class DynamicRailSwitch(
 	) {
 		val oldConf = conf
 		val newConf = getPathConfWithException(from, to)
+		// Safety property SI-5 (Issue #1065): a locked switch must not be re-thrown to the OTHER
+		// position -- that would move track out from under a live route without the interlocking
+		// ever refusing it. A locked switch may be idempotently re-set to the position it already
+		// holds (a route re-reservation over the same hop); only a genuine position change is
+		// refused. Computed and thrown BEFORE any write below, so a caller that catches this can
+		// rely on `conf`, `locked` and the listeners being completely untouched.
+		if (locked && newConf != oldConf) {
+			throw SwitchLockedException(
+				"Cannot set up a path through switch ${staticRef.getName()}: it is locked in " +
+					"$oldConf but the route needs $newConf (safety SI-5: switch cannot toggle " +
+					"during train movement)",
+				this,
+				heldConf = oldConf,
+				requiredConf = newConf
+			)
+		}
 		logger.info {
 			"${Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, " +
 				"conf=$newConf, allowedSpeed=$allowedSpeed"
@@ -142,6 +162,22 @@ class DynamicRailSwitch(
 		}
 	}
 
+	/**
+	 * Non-throwing lookup of the [Conf] a path between [from] and [to] would require.
+	 *
+	 * @return the required configuration, or `null` if either segment is missing or no
+	 *   configuration joins them (mirrors [getPathConfWithException]'s two failure cases
+	 *   without the exception, so a caller can pre-check before calling [setUpPath] --
+	 *   Issue #1065).
+	 */
+	fun pathConf(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): Conf? {
+		if (from == null || to == null) return null
+		return staticRef.confs[from, to]
+	}
+
 	private fun getPathConfWithException(
 		from: Cell.Segment?,
 		to: Cell.Segment?
@@ -150,7 +186,7 @@ class DynamicRailSwitch(
 		if (from == null || to == null) {
 			throw PathSeparatorChangeException("switch segments cannot be null", this)
 		}
-		return staticRef.confs[from, to] ?: throw PathSeparatorChangeException(
+		return pathConf(from, to) ?: throw PathSeparatorChangeException(
 			"switch doesn't join this segments",
 			this
 		)
