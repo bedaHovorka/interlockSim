@@ -184,6 +184,11 @@ class MeasuringPlanAdapter(
 	 * is `0.0` in that case. Read-only: does not mutate any counters, so it is safe to
 	 * call more than once (e.g. defensively from multiple call sites).
 	 *
+	 * Also logs the wrapped adapter's circuit-breaker status line
+	 * ([KoogAgentPlanAdapter.circuitBreakerSummaryLine], Issue #1058 review round) after the
+	 * metrics summary — a run that spent its lifetime skipping the LLM behind an OPEN breaker
+	 * looks otherwise identical in the log to one whose LLM answered every cycle.
+	 *
 	 * A cycle still in flight on the `dispatcher-agent-driver` thread at the moment of the
 	 * call (e.g. immediately after a manual Stop, mid-LLM-inference) is not yet counted —
 	 * this reports state at the moment of the call, not a strict post-mortem of every cycle
@@ -214,6 +219,10 @@ class MeasuringPlanAdapter(
 			}
 		}
 		logger.info { formatSummaryLine("final summary", getMetricsSnapshot()) }
+		// Issue #1058 review round: the metrics above cannot show that the breaker skipped the
+		// LLM for most of the run (skips are scored as ordinary fallback cycles) — the breaker's
+		// own line can, so it belongs in the same end-of-run picture.
+		logger.info { inner.circuitBreakerSummaryLine() }
 		// Issue #834 review finding #6, extended by Issue #713 Task 10: successRate here is not
 		// comparable to a pre-#834 run's — #834 reclassified idle ticks (former RULE_FALLBACK) to
 		// LLM_NO_OP, and REVISED's cap-full no_op converts former fallback ticks into LLM

@@ -155,6 +155,21 @@ data class SweepCell(
 	 * disagree about which arm a run belongs to.
 	 */
 	fun runParameters(): RunParameters {
+		// Resolve the file-tier DispatcherRunConfig once for BOTH arms (Issue #1058 review round:
+		// the breaker knobs have no grid axis, so even the rule-based arm records the values the
+		// forked child's own DispatcherRunConfig resolves — matching what the live recording path
+		// copies from that config, for any future committed default).
+		//
+		// The system-property tier is deliberately skipped here: this abort snapshot is recorded by
+		// the *parent* sweep driver, but a completed run of the same cell is recorded by the *forked
+		// child*, which receives only this cell's -D flags (ProcessBuilder passes no parent -D
+		// inheritance — AiSweepDriver builds the java command from exactly systemProperties()). For
+		// an omitted axis the child has no -D flag, so its own fromProperties() resolves file > code.
+		// Reading System.getProperty here would let a parent launched with
+		// -Dinterlocksim.dispatcher.* diverge from its own completed children — the exact
+		// mis-grouping finding #7 exists to prevent. fromProperties(properties = { null }) resolves
+		// file > code, matching the child for an omitted axis regardless of parent -D.
+		val runConfigDefault = DispatcherRunConfig.fromProperties(properties = { null })
 		// The rule-based arm never assembles a prompt or contacts Ollama, so its omitted axes are
 		// the empty/zero sentinel, never the file-tier LLM values.
 		if (arm == DispatcherArm.RULE_BASED) {
@@ -166,25 +181,21 @@ data class SweepCell(
 				model = model ?: "",
 				seed = null,
 				inferenceTimeoutSeconds = inferenceTimeoutSeconds ?: KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
-				promptVariant = ""
+				promptVariant = "",
+				// The breaker knobs have no grid axis, so the rule-based arm records the same
+				// file-tier values the live recording path copies from the forked child's own
+				// DispatcherRunConfig (Issue #1058 review round) — a code constant would agree
+				// only while the committed file pins no breaker default, and the first committed
+				// default would silently split aborted runs out of their report cell.
+				circuitBreakerFailureThreshold = runConfigDefault.circuitBreakerFailureThreshold,
+				circuitBreakerCooldownSeconds = runConfigDefault.circuitBreakerCooldownSeconds
 			)
 		}
 		// LLM arm: resolve omitted model/temperature/promptVariant/inferenceTimeoutSeconds through
 		// the same file-tier resolution the live path (DispatcherAgentModule's
 		// runConfig ?: OllamaExecutorConfig.default()) uses, then override with this cell's pinned
 		// values.
-		//
-		// The system-property tier is deliberately skipped here: this abort snapshot is recorded by
-		// the *parent* sweep driver, but a completed run of the same cell is recorded by the *forked
-		// child*, which receives only this cell's -D flags (ProcessBuilder passes no parent -D
-		// inheritance — AiSweepDriver builds the java command from exactly systemProperties()). For
-		// an omitted axis the child has no -D flag, so its own fromProperties() resolves file > code.
-		// Reading System.getProperty here would let a parent launched with
-		// -Dinterlocksim.dispatcher.* diverge from its own completed children — the exact
-		// mis-grouping finding #7 exists to prevent. fromProperties(properties = { null }) resolves
-		// file > code, matching the child for an omitted axis regardless of parent -D.
 		val executorDefault = OllamaExecutorConfig.default()
-		val runConfigDefault = DispatcherRunConfig.fromProperties(properties = { null })
 		return RunParameters(
 			tickPeriodMs = tickPeriodMs,
 			historyN = historyN,
@@ -194,7 +205,11 @@ data class SweepCell(
 			seed = null,
 			inferenceTimeoutSeconds =
 				inferenceTimeoutSeconds ?: runConfigDefault.inferenceTimeoutSeconds,
-			promptVariant = (promptVariant ?: runConfigDefault.promptVariant).name
+			promptVariant = (promptVariant ?: runConfigDefault.promptVariant).name,
+			// No breaker axis exists on the grid (Issue #1058): both knobs take the file-tier
+			// resolution above, exactly like an omitted-axis run of the forked child.
+			circuitBreakerFailureThreshold = runConfigDefault.circuitBreakerFailureThreshold,
+			circuitBreakerCooldownSeconds = runConfigDefault.circuitBreakerCooldownSeconds
 		)
 	}
 

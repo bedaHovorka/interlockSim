@@ -49,6 +49,28 @@ class ExampleRegistryLlmRunParametersTest {
 	}
 
 	/**
+	 * Issue #1058: the breaker knobs are part of the run's identity the same way
+	 * [ExampleRegistry.llmRunParameters]' other copied fields are — a run whose breaker opened
+	 * after 2 failures is a different experiment from one that opened after 8, and a report
+	 * must be able to tell them apart from the run JSON alone.
+	 */
+	@Test
+	@DisplayName("circuit-breaker knobs are carried through from DispatcherRunConfig (#1058)")
+	fun carriesCircuitBreakerKnobsFromRunConfig() {
+		val params =
+			registry.llmRunParameters(
+				OllamaExecutorConfig(),
+				DispatcherRunConfig(
+					circuitBreakerFailureThreshold = 5,
+					circuitBreakerCooldownSeconds = 120.0
+				)
+			)
+
+		assertThat(params.circuitBreakerFailureThreshold).isEqualTo(5)
+		assertThat(params.circuitBreakerCooldownSeconds).isEqualTo(120.0)
+	}
+
+	/**
 	 * Task 11 (#834) replaced the untracked-variant placeholder with the real seam: an LLM run
 	 * now records the name of the [PromptVariant] its `KoogAgentFactory` was actually built
 	 * with. An unconfigured run gets [PromptVariant.DEFAULT], which is BASELINE — so the JSON

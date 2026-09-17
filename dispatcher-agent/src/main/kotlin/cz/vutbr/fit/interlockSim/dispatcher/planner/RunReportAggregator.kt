@@ -114,10 +114,10 @@ class RunReportAggregator(
 		const val MIN_TRAINS_EXITED: Long = 6
 
 		/** Column count of the Parameter Sweep "Decision Hygiene" table (for its separator row). */
-		private const val HYGIENE_TABLE_COLUMNS = 22
+		private const val HYGIENE_TABLE_COLUMNS = 24
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
-		private const val OUTCOMES_TABLE_COLUMNS = 17
+		private const val OUTCOMES_TABLE_COLUMNS = 19
 
 		/**
 		 * Column headers of the "Arm Comparison" table — the single source for both its header row
@@ -631,6 +631,7 @@ class RunReportAggregator(
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
+				"Breaker Threshold | Breaker Cooldown s | " +
 				"Runs | Passing | Gate | LLM Success | Invalid-action rate | No-op rate | " +
 				"Repair-success rate † | validAt1 | correctAt1 | p50 latency ms | p95 latency ms | " +
 				"C7 clean | RULE_FALLBACK ticks |"
@@ -671,6 +672,7 @@ class RunReportAggregator(
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
+				"Breaker Threshold | Breaker Cooldown s | " +
 				"Runs | Journeys completed | Trains entered | Trains exited (authoritative) | Max concurrent | " +
 				"Block transitions | Conflicts | Failed reservations |"
 		)
@@ -819,7 +821,9 @@ class RunReportAggregator(
 			"| ${p.maxActionsPerTick} " +
 			"| ${p.seed ?: "unset"} " +
 			"| ${p.inferenceTimeoutSeconds} " +
-			"| ${p.promptVariant} "
+			"| ${p.promptVariant} " +
+			"| ${p.circuitBreakerFailureThreshold} " +
+			"| ${p.circuitBreakerCooldownSeconds} "
 	}
 
 	// ── Statistics helpers ────────────────────────────────────────────────────
