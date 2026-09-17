@@ -463,7 +463,7 @@ class RunReportAggregatorTest {
 
 		assertThat(md).transform("Arm Comparison shows correctAt1") { md.contains("| 0.750 |") }.isTrue()
 		val hygieneCells = tableRowCells(hygieneSection(md), DispatcherArm.RULE_BASED.name)
-		assertThat(hygieneCells[17]).isEqualTo("0.750")
+		assertThat(hygieneCells[19]).isEqualTo("0.750")
 	}
 
 	@Test
@@ -592,6 +592,8 @@ class RunReportAggregatorTest {
 				ruleFallbackTicks = 2L,
 				inferenceTimeoutSeconds = 90L,
 				promptVariant = "v2",
+				circuitBreakerFailureThreshold = 5,
+				circuitBreakerCooldownSeconds = 45.0,
 				railwayOutcome =
 					RailwayOutcome(
 						journeysCompleted = 5L,
@@ -609,24 +611,26 @@ class RunReportAggregatorTest {
 		val hygieneCells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
 		assertThat(hygieneCells[7]).isEqualTo("90")
 		assertThat(hygieneCells[8]).isEqualTo("v2")
-		assertThat(hygieneCells[12]).isEqualTo("0.750")
+		assertThat(hygieneCells[9]).isEqualTo("5")
+		assertThat(hygieneCells[10]).isEqualTo("45.0")
+		assertThat(hygieneCells[14]).isEqualTo("0.750")
 		// Invalid-action rate = 3 rejected / 10 emitted actions = 0.300 (action-scoped, not tick-scoped).
-		assertThat(hygieneCells[13]).isEqualTo("0.300")
-		assertThat(hygieneCells[14]).isEqualTo("0.200")
-		assertThat(hygieneCells[15]).isEqualTo("0.100")
-		assertThat(hygieneCells[18]).isEqualTo("150")
-		assertThat(hygieneCells[19]).isEqualTo("250")
-		assertThat(hygieneCells[20]).isEqualTo("yes")
-		assertThat(hygieneCells[21]).isEqualTo("2")
+		assertThat(hygieneCells[15]).isEqualTo("0.300")
+		assertThat(hygieneCells[16]).isEqualTo("0.200")
+		assertThat(hygieneCells[17]).isEqualTo("0.100")
+		assertThat(hygieneCells[20]).isEqualTo("150")
+		assertThat(hygieneCells[21]).isEqualTo("250")
+		assertThat(hygieneCells[22]).isEqualTo("yes")
+		assertThat(hygieneCells[23]).isEqualTo("2")
 
 		val outcomeCells = tableRowCells(outcomesSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		assertThat(outcomeCells[10]).isEqualTo("5")
-		assertThat(outcomeCells[11]).isEqualTo("6")
-		assertThat(outcomeCells[12]).isEqualTo("4")
-		assertThat(outcomeCells[13]).isEqualTo("3")
-		assertThat(outcomeCells[14]).isEqualTo("20")
-		assertThat(outcomeCells[15]).isEqualTo("1")
-		assertThat(outcomeCells[16]).isEqualTo("2")
+		assertThat(outcomeCells[12]).isEqualTo("5")
+		assertThat(outcomeCells[13]).isEqualTo("6")
+		assertThat(outcomeCells[14]).isEqualTo("4")
+		assertThat(outcomeCells[15]).isEqualTo("3")
+		assertThat(outcomeCells[16]).isEqualTo("20")
+		assertThat(outcomeCells[17]).isEqualTo("1")
+		assertThat(outcomeCells[18]).isEqualTo("2")
 	}
 
 	@Test
@@ -646,7 +650,7 @@ class RunReportAggregatorTest {
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val cells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		assertThat(cells[13]).isEqualTo("0.250")
+		assertThat(cells[15]).isEqualTo("0.250")
 	}
 
 	@Test
@@ -656,7 +660,7 @@ class RunReportAggregatorTest {
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val cells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		assertThat(cells[13]).isEqualTo("n/a")
+		assertThat(cells[15]).isEqualTo("n/a")
 	}
 
 	@Test
@@ -686,15 +690,45 @@ class RunReportAggregatorTest {
 	}
 
 	@Test
+	fun `cells differing only in circuitBreakerFailureThreshold render as separate rows`() {
+		val low =
+			snapshot(runId = "low", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerFailureThreshold = 2)
+		val high =
+			snapshot(runId = "high", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerFailureThreshold = 8)
+		val report = aggregator.aggregate(listOf(low, high))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val rows = hygieneSection(md).lines().filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+		assertThat(rows.size).isEqualTo(2)
+		assertThat(rows.any { it.contains("| 2 |") }).isTrue()
+		assertThat(rows.any { it.contains("| 8 |") }).isTrue()
+	}
+
+	@Test
+	fun `cells differing only in circuitBreakerCooldownSeconds render as separate rows`() {
+		val short =
+			snapshot(runId = "short-cooldown", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerCooldownSeconds = 15.0)
+		val long =
+			snapshot(runId = "long-cooldown", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerCooldownSeconds = 90.0)
+		val report = aggregator.aggregate(listOf(short, long))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val rows = hygieneSection(md).lines().filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING}") }
+		assertThat(rows.size).isEqualTo(2)
+		assertThat(rows.any { it.contains("| 15.0 |") }).isTrue()
+		assertThat(rows.any { it.contains("| 90.0 |") }).isTrue()
+	}
+
+	@Test
 	fun `railway outcome figures render as n slash a, not zero, when never measured`() {
 		val snap = snapshot(runId = "unmeasured", arm = DispatcherArm.LLM_TOOL_CALLING)
 		val report = aggregator.aggregate(listOf(snap))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val cells = tableRowCells(outcomesSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		// Indices 10..16: journeysCompleted, trainsEntered, trainsExited, maxConcurrentTrains,
+		// Indices 12..18: journeysCompleted, trainsEntered, trainsExited, maxConcurrentTrains,
 		// blockTransitions, conflicts, failedReservations — RailwayOutcome.UNMEASURED, all null.
-		(10..16).forEach { idx -> assertThat(cells[idx]).isEqualTo("n/a") }
+		(12..18).forEach { idx -> assertThat(cells[idx]).isEqualTo("n/a") }
 	}
 
 	// ── Logged FATAL simulation exceptions (measurement-integrity fix for #834's C2 condition, renamed #913) ──
@@ -834,6 +868,8 @@ class RunReportAggregatorTest {
 		temperature: Double = 0.0,
 		inferenceTimeoutSeconds: Long = KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
 		promptVariant: String = RunParameters.DEFAULT_PROMPT_VARIANT,
+		circuitBreakerFailureThreshold: Int = LlmCircuitBreaker.DEFAULT_FAILURE_THRESHOLD,
+		circuitBreakerCooldownSeconds: Double = LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS,
 		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
 		ruleFallbackTicks: Long = 0L,
 		loggedFatalSimExceptionCount: Long? = null,
@@ -855,7 +891,9 @@ class RunReportAggregatorTest {
 					model = model,
 					seed = seed,
 					inferenceTimeoutSeconds = inferenceTimeoutSeconds,
-					promptVariant = promptVariant
+					promptVariant = promptVariant,
+					circuitBreakerFailureThreshold = circuitBreakerFailureThreshold,
+					circuitBreakerCooldownSeconds = circuitBreakerCooldownSeconds
 				),
 			totalTicks = 1L + ruleFallbackTicks,
 			ticksByOutcome = outcomes,

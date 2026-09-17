@@ -40,6 +40,17 @@ import kotlinx.serialization.Serializable
  *   [DEFAULT_PROMPT_VARIANT] ("has a prompt, but which variant produced it was never tracked") for
  *   every LLM-arm run until Task 11 lands — kept a different string than the rule-based `""` on
  *   purpose, so a report can never conflate "no prompt" with "prompt, untracked variant".
+ * @property circuitBreakerFailureThreshold Consecutive LLM cycle failures that opened this run's
+ *   [LlmCircuitBreaker] (Issue #1058). A run whose breaker opened after 2 failures behaves
+ *   differently from one that opened after 8, so [RunReportAggregator.appendParameterSweep]'s
+ *   grouping must be able to tell the two apart — same reasoning as [inferenceTimeoutSeconds].
+ *   Defaults to [LlmCircuitBreaker.DEFAULT_FAILURE_THRESHOLD], the threshold every run used before
+ *   this field existed, so decoding a run JSON that predates the field records the value that
+ *   actually applied rather than an unknown one.
+ * @property circuitBreakerCooldownSeconds Simulation-time cooldown this run's [LlmCircuitBreaker]
+ *   waited before probing LLM recovery (Issue #1058). Defaults to
+ *   [LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS] for the same pre-field-JSON reason as
+ *   [circuitBreakerFailureThreshold] above.
  *
  * ## No defaults on the original six fields — and the hazard that creates
  *
@@ -52,10 +63,12 @@ import kotlinx.serialization.Serializable
  * than a crash — so such files are silently dropped from every aggregate instead of failing
  * loudly. [inferenceTimeoutSeconds] and [promptVariant] avoid that hazard by being defaulted, for
  * exactly this reason; any further field added to this class should keep doing the same unless
- * that field's absence genuinely needs to be caught immediately rather than tolerated.
+ * that field's absence genuinely needs to be caught immediately rather than tolerated. The
+ * circuit-breaker fields keep doing the same.
  *
  * @since Issue #845 (SP2c.22 — run identity and per-run JSON persistence);
- *   [inferenceTimeoutSeconds] and [promptVariant] added in Issue #834 (SP2c.11)
+ *   [inferenceTimeoutSeconds] and [promptVariant] added in Issue #834 (SP2c.11);
+ *   [circuitBreakerFailureThreshold] and [circuitBreakerCooldownSeconds] added in Issue #1058
  */
 @Serializable
 data class RunParameters(
@@ -66,7 +79,9 @@ data class RunParameters(
 	val model: String,
 	val seed: Long?,
 	val inferenceTimeoutSeconds: Long = KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
-	val promptVariant: String = DEFAULT_PROMPT_VARIANT
+	val promptVariant: String = DEFAULT_PROMPT_VARIANT,
+	val circuitBreakerFailureThreshold: Int = LlmCircuitBreaker.DEFAULT_FAILURE_THRESHOLD,
+	val circuitBreakerCooldownSeconds: Double = LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS
 ) {
 	companion object {
 		/**

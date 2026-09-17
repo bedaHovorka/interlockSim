@@ -97,5 +97,8 @@ class DispatcherDefaultsResourceTest {
 		assertThat(shipped.lookup(DispatcherRunConfig.PROP_TEMPERATURE)).isEqualTo("0.28")
 		// Sweep A/B: journeys median 8.0 vs 6.0, one-sided permutation p = 0.0215.
 		assertThat(shipped.lookup(DispatcherRunConfig.PROP_PROMPT_VARIANT)).isEqualTo("REVISED")
+		// Issue #1058: reproduces the compiled LlmCircuitBreaker defaults, not a sweep-chosen value.
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD)).isEqualTo("3")
+		assertThat(shipped.lookup(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS)).isEqualTo("60")
 	}
 }
