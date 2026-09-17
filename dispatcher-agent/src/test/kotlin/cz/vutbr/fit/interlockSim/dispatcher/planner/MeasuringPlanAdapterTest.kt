@@ -74,7 +74,8 @@ class MeasuringPlanAdapterTest {
 		koogAgent: KoogDispatchAgent,
 		fallback: Dispatcher,
 		inferenceTimeout: Duration = Duration.ofSeconds(30),
-		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue()
+		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue(),
+		circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
 	): MeasuringPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
 		coEvery { agentFactory.createAgent(any()) } returns koogAgent
@@ -86,7 +87,8 @@ class MeasuringPlanAdapterTest {
 				fallbackDispatcher = fallback,
 				inferenceTimeout = inferenceTimeout,
 				commandQueue = commandQueue,
-				sinkHolder = SinkHolder()
+				sinkHolder = SinkHolder(),
+				circuitBreaker = circuitBreaker
 			)
 		return MeasuringPlanAdapter(inner)
 	}
@@ -329,9 +331,11 @@ class MeasuringPlanAdapterTest {
 			coEvery { agent.decideAsync(any()) } coAnswers {
 				callCount++
 				when (callCount) {
-					1 -> emptyList() // silent cycle -> LLM_SILENT_NONACTIONABLE
-					2 -> throw RuntimeException("boom") // LLM exception -> RULE_FALLBACK
-					else -> listOf(DispatchDecision.NoAction)
+					1 -> emptyList() // cycle 1, silent cycle -> LLM_SILENT_NONACTIONABLE
+					// cycle 2's initial attempt AND its bounded retry (Issue #1058) both fail, so the
+					// cycle as a whole still ends in RULE_FALLBACK rather than the retry masking it.
+					2, 3 -> throw RuntimeException("boom")
+					else -> listOf(DispatchDecision.NoAction) // cycle 3's initial attempt -> LLM_ACTIONS
 				}
 			}
 			val fallback = mockk<Dispatcher>()
@@ -585,6 +589,39 @@ class MeasuringPlanAdapterTest {
 			adapter.logFinalSummary(runOutcome = RunOutcome.Running)
 
 			assertThat(failureBannerEvents()).isEqualTo(emptyList<ILoggingEvent>())
+		}
+
+		/**
+		 * R3 (review round of #1058): the end-of-run summary must also surface the circuit
+		 * breaker's state, or a run that spent most of its lifetime skipping the LLM looks
+		 * identical in the log to one whose LLM answered every cycle. [LlmCircuitBreaker] owns
+		 * the line ([LlmCircuitBreaker.summaryLine]); this adapter owns the moment it is logged.
+		 */
+		@Test
+		fun `logFinalSummary emits the circuit-breaker summary line`() {
+			val agent = mockk<KoogDispatchAgent>()
+			coEvery { agent.decideAsync(any()) } coAnswers {
+				delay(500)
+				emptyList()
+			}
+			val fallback = mockk<Dispatcher>()
+			every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+			// failureThreshold = 1: a single timed-out cycle opens the breaker, so the summary
+			// line reports a non-trivial state rather than an always-CLOSED one.
+			val adapter =
+				measuring(
+					agent,
+					fallback,
+					Duration.ofMillis(50),
+					circuitBreaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+				)
+
+			runBlocking { adapter.plan(observation) }
+			adapter.logFinalSummary()
+
+			val breakerLines = appender.list.map { it.formattedMessage }.filter { it.contains("[LlmCircuitBreaker]") }
+			assertThat(breakerLines).isNotEmpty()
+			assertThat(breakerLines.first()).contains("state=OPEN")
 		}
 	}
 
