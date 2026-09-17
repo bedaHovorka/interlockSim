@@ -74,9 +74,14 @@ private fun Scope.requireContextSource(): DefaultSimulationContext =
  * `temperature`/`model`/`promptVariant` stay at their "no prompt" values (`0.0`/`""`/`""`)
  * because a rule-based run has no prompt at all — see [RunParameters.model]'s and
  * [RunParameters.promptVariant]'s own KDoc for why the report's "rule-based" label depends on
- * exactly these sentinels rather than the LLM-arm defaults.
+ * exactly these sentinels rather than the LLM-arm defaults. The circuit-breaker knobs are copied
+ * from [runConfig] exactly like [DispatcherRunConfig.inferenceTimeoutSeconds]: a rule-based run
+ * never contacts the LLM so its breaker never engages, but the run JSON still records the
+ * configuration the run held (Issue #1058), keeping aborted and completed runs of the same cell
+ * in one report group.
  *
- * @since Issue #834 (SP2c.11 — inferenceTimeoutSeconds/promptVariant threading)
+ * @since Issue #834 (SP2c.11 — inferenceTimeoutSeconds/promptVariant threading);
+ *   circuit-breaker knobs copied in Issue #1058
  */
 internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParameters =
 	RunParameters(
@@ -87,7 +92,9 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
 		model = "",
 		seed = null,
 		inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds,
-		promptVariant = ""
+		promptVariant = "",
+		circuitBreakerFailureThreshold = runConfig.circuitBreakerFailureThreshold,
+		circuitBreakerCooldownSeconds = runConfig.circuitBreakerCooldownSeconds
 	)
 
 /**

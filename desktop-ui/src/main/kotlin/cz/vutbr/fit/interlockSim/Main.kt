@@ -34,6 +34,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.mp.KoinPlatform.getKoin
+import org.slf4j.LoggerFactory
 import java.io.File
 import kotlin.system.exitProcess
 
@@ -503,9 +504,30 @@ internal fun parseMode(args: Array<String>): String? {
 private val VALID_MODES = setOf("sim", "simgui", "edit", "example", "exampleGui", "aiSweep")
 
 /**
+ * Silences Koog's own internal error-level logging of a timed-out/cancelled LLM run (Issue #1058).
+ *
+ * `ai.koog.agents.core.agent.AIAgentRunSessionImpl` logs `"Execution exception reported by
+ * server!"` at ERROR with the full stack trace whenever the agent's run coroutine is cancelled —
+ * including every ordinary [KoogAgentPlanAdapter][cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]
+ * inference timeout, which `KoogAgentPlanAdapter` already handles and logs concisely at `warn`.
+ * Under sustained LLM slowness this floods the log with a duplicate full trace on every tick.
+ *
+ * This is Koog's own logger, not our code, so it cannot be caught in a `try`/`catch` — only
+ * silencing the logger itself works. `ERROR` is the highest ordinary Logback level, so only `OFF`
+ * suppresses it; this also silences any other error Koog logs from that package, which is the
+ * accepted tradeoff (our own adapter still logs every fallback it takes).
+ */
+private fun silenceKoogInternalErrorLogging() {
+	(LoggerFactory.getLogger("ai.koog.agents.core.agent") as? ch.qos.logback.classic.Logger)
+		?.level = ch.qos.logback.classic.Level.OFF
+}
+
+/**
  * @param args
  */
 fun main(args: Array<String>) {
+	silenceKoogInternalErrorLogging()
+
 	// Initialize Koin dependency injection framework with interlockSim module
 	startKoin {
 		modules(interlockSimModule)
