@@ -9,8 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import org.junit.jupiter.api.DisplayName
@@ -164,6 +166,32 @@ class DispatcherRunConfigTest {
 			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD)
 		assertThat(config.circuitBreakerCooldownSeconds)
 			.isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+	}
+
+	@Test
+	@DisplayName("Issue #1058: a non-finite circuitBreakerCooldownSeconds string falls back to the default")
+	fun nonFiniteCircuitBreakerCooldownFallsBack() {
+		// "Infinity" parses via toDoubleOrNull and passes `> 0`, so without the finiteness guard it
+		// would be accepted — and an infinite cooldown wedges the breaker OPEN forever, the same
+		// never-probe-again outcome a negative value gives. Same treatment as any malformed -D:
+		// WARN, then the default, never a lost unattended sweep. "-Infinity" and NaN fail the
+		// range check anyway; pinned here so the guard's intent cannot silently regress.
+		assertThat(
+			configOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS to "Infinity").circuitBreakerCooldownSeconds
+		).isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+		assertThat(
+			configOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS to "-Infinity").circuitBreakerCooldownSeconds
+		).isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+		assertThat(
+			configOf(DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS to "NaN").circuitBreakerCooldownSeconds
+		).isEqualTo(DispatcherRunConfig.DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)
+	}
+
+	@Test
+	@DisplayName("Issue #1058: direct construction rejects a non-finite circuitBreakerCooldownSeconds")
+	fun directConstructionRejectsNonFiniteCircuitBreakerCooldown() {
+		assertFailure { DispatcherRunConfig(circuitBreakerCooldownSeconds = Double.POSITIVE_INFINITY) }
+			.isInstanceOf<IllegalArgumentException>()
 	}
 
 	@Test

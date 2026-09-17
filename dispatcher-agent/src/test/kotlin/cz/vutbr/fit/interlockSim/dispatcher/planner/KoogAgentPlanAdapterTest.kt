@@ -18,9 +18,11 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
@@ -70,6 +72,7 @@ class KoogAgentPlanAdapterTest {
 		inferenceTimeout: Duration = Duration.ofSeconds(30),
 		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue(),
 		sinkHolder: SinkHolder = SinkHolder(),
+		cycleHistory: CycleHistory = CycleHistory(capacity = 0),
 		circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
 	): KoogAgentPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
@@ -82,6 +85,7 @@ class KoogAgentPlanAdapterTest {
 			inferenceTimeout,
 			commandQueue,
 			sinkHolder,
+			cycleHistory,
 			circuitBreaker = circuitBreaker
 		)
 	}
@@ -793,6 +797,222 @@ class KoogAgentPlanAdapterTest {
 		assertThat(result).containsExactly(DispatchDecision.NoAction)
 		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.CLOSED)
 		coVerify(exactly = 3) { koogAgent.decideAsync(any()) }
+	}
+
+	// ── Review round of Issue #1058: partial-emission safety and accounting ────
+
+	/**
+	 * F3 (review round of #1058): a cycle that already emitted an actuator action must not be
+	 * retried and must not be layered with a fallback. The emission is already posted to the
+	 * queue — a retry could double-dispatch a second action for the same train, and the fallback
+	 * would double-dispatch its own independently-decided one on top (the exact regression the
+	 * "Fallback priority" KDoc's double-dispatch guard exists to prevent, now extended from the
+	 * success path to the failure paths).
+	 *
+	 * [runPartialEmissionCycleAndAssertSuppressed] holds the shared scenario and assertions; the
+	 * two tests differ only in HOW the cycle fails after its emission.
+	 */
+	@Test
+	@DisplayName("a throw after a partial emission keeps the emissions: no retry, no fallback")
+	fun `a throw after a partial emission skips retry and fallback`() {
+		runPartialEmissionCycleAndAssertSuppressed { throw RuntimeException("transient") }
+	}
+
+	@Test
+	@DisplayName("a timeout after a partial emission also suppresses the fallback for that cycle")
+	fun `a timeout after a partial emission skips fallback`() {
+		runPartialEmissionCycleAndAssertSuppressed(
+			afterEmission = { delay(500) },
+			inferenceTimeout = Duration.ofMillis(50)
+		)
+	}
+
+	/**
+	 * Runs one cycle whose mocked agent emits an [DispatchAction.ApproveTrain] and then fails the
+	 * way [afterEmission] says (throws immediately, or stalls past [inferenceTimeout]), and
+	 * asserts the shared partial-emission contract: the failure reaches the breaker as a health
+	 * signal, but the cycle is accounted through the emission classification (an ApproveTrain
+	 * was emitted → [TickOutcome.LLM_ACTIONS]), the already-posted emissions are the cycle's
+	 * whole result, and neither a retry nor the fallback may run on top of them.
+	 */
+	private fun runPartialEmissionCycleAndAssertSuppressed(
+		inferenceTimeout: Duration = Duration.ofSeconds(30),
+		afterEmission: suspend () -> Unit
+	) {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			// The LLM approved a train via its actuator tools, then the cycle failed — a real
+			// pattern under overload, where a tool call lands just before a network fault.
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			afterEmission()
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val breaker = LlmCircuitBreaker(failureThreshold = 5, cooldownSeconds = 60.0)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter =
+			adapter(
+				koogAgent,
+				fallback,
+				inferenceTimeout,
+				sinkHolder = sinkHolder,
+				circuitBreaker = breaker
+			)
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
+
+		val result = runBlocking { planAdapter.plan(observation) }
+
+		assertThat(result).isEmpty()
+		coVerify(exactly = 1) { koogAgent.decideAsync(any()) }
+		coVerify(exactly = 0) { fallback.decide(any()) }
+		assertThat(breaker.consecutiveFailures).isEqualTo(1)
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
+	}
+
+	@Test
+	@DisplayName("a failure after a no_op-only emission reports LLM_NO_OP, not LLM_ACTIONS")
+	fun `a failure after a no-op-only emission reports LLM_NO_OP`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.NoOp)
+			throw RuntimeException("transient")
+		}
+		val fallback = mockk<Dispatcher>()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback, sinkHolder = sinkHolder)
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
+
+		runBlocking { planAdapter.plan(observation) }
+
+		// Same classification split as the success path (#834 required change 2): a cycle whose
+		// only emission was an explicit no_op is a no-op tick even when it ended in a failure.
+		coVerify(exactly = 0) { fallback.decide(any()) }
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.LLM_NO_OP)
+	}
+
+	/**
+	 * F4 (review round of #1058): a HALF_OPEN probe whose coroutine is cancelled mid-inference
+	 * never reaches recordSuccess/recordFailure. plan()'s try/finally must release the probe so
+	 * the next cycle can probe again — otherwise the breaker grants no probe ever again and the
+	 * run silently goes rule-based for the rest of its lifetime.
+	 */
+	@Test
+	@DisplayName("a cancelled HALF_OPEN probe does not wedge the breaker")
+	fun `a cancelled probe does not wedge the breaker`() {
+		var call = 0
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			call++
+			when (call) {
+				// Cycle 1: initial attempt and its bounded retry, both failing — opens a
+				// failureThreshold=1 breaker as one cycle-level failure.
+				1, 2 -> throw RuntimeException("boom")
+				// Cycle 2: the HALF_OPEN probe, cancelled from the outside mid-inference.
+				3 -> throw CancellationException("parent cancelled mid-probe")
+				// Cycle 3: the probe re-granted after abandonProbe, this time completing.
+				else -> listOf(DispatchDecision.NoAction)
+			}
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		val planAdapter = adapter(koogAgent, fallback, circuitBreaker = breaker)
+
+		runBlocking { planAdapter.plan(observationAt(0.0)) }
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+
+		assertFailure { runBlocking { planAdapter.plan(observationAt(100.0)) } }
+			.isInstanceOf<CancellationException>()
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.HALF_OPEN)
+
+		val result = runBlocking { planAdapter.plan(observationAt(101.0)) }
+
+		assertThat(result).containsExactly(DispatchDecision.NoAction)
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.CLOSED)
+		coVerify(exactly = 4) { koogAgent.decideAsync(any()) }
+	}
+
+	/**
+	 * R1 (review round of #1058): the #1058 restructure of plan() left the silent-cycle oracle
+	 * path with no exception handler at all — a throwing fallback there dropped the cycle from
+	 * tick accounting entirely (the pre-#1058 code reported it once; before this fix, zero
+	 * times). The #927/#999 invariant is that every cycle is accounted exactly once: the tick
+	 * is reported as a degraded RULE_FALLBACK before the exception propagates.
+	 */
+	@Test
+	@DisplayName("a throwing fallback on the silent-cycle oracle path still records the tick before propagating")
+	fun `a throwing oracle fallback records the tick once and propagates`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } throws IllegalStateException("rule engine broken")
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
+
+		// A silent LLM cycle on a NON-idle station consults the fallback as an oracle (#927).
+		val nonIdleObservation = observationWithQueue(unapprovedTrains = emptyList(), approvedTrainCount = 1)
+
+		assertFailure { runBlocking { planAdapter.plan(nonIdleObservation) } }
+			.isInstanceOf<IllegalStateException>()
+
+		assertThat(recorded).hasSize(1)
+		assertThat(recorded.first().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	/**
+	 * R2 (review round of #1058): a breaker-skip cycle goes straight to the fallback, so the only
+	 * emission-counter reset it gets is the one at the top of plan(). The stale counter from the
+	 * previous cycle must be cleared there — otherwise the skip cycle's history entry (and its
+	 * tick accounting) records the *previous* cycle's actions as if this cycle had acted.
+	 */
+	@Test
+	@DisplayName("a breaker-skip cycle reports RULE_FALLBACK with null latency and no stale emissions")
+	fun `a breaker-skip cycle reports null latency and no stale emissions`() {
+		val sinkHolder = SinkHolder()
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			sinkHolder.emit(DispatchAction.ApproveTrain("T-1"))
+			delay(500)
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		val history = CycleHistory(capacity = 10)
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter =
+			adapter(
+				koogAgent,
+				fallback,
+				Duration.ofMillis(50),
+				sinkHolder = sinkHolder,
+				circuitBreaker = breaker,
+				cycleHistory = history
+			)
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
+
+		// Cycle 1 emits a partial action and times out: the breaker (threshold 1) opens, and
+		// the emission counter still holds that action when the cycle ends.
+		runBlocking { planAdapter.plan(observationAt(0.0)) }
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+
+		// Cycle 2 hits the OPEN window: the LLM is skipped entirely. No inference was
+		// attempted, so the tick's latency is null (the getOrCreateAgent-failure convention),
+		// and the history entry for this cycle must carry no actions of its own.
+		runBlocking { planAdapter.plan(observationAt(1.0)) }
+
+		assertThat(recorded).hasSize(2)
+		val skipRecord = recorded.last()
+		assertThat(skipRecord.outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(skipRecord.latencyMs).isNull()
+		assertThat(history.snapshot().last().outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		assertThat(history.snapshot().last().actions).isEmpty()
 	}
 
 	/**

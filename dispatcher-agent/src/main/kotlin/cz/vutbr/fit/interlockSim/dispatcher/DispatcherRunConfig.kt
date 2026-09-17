@@ -103,6 +103,9 @@ private val logger = KotlinLogging.logger {}
  * @property circuitBreakerCooldownSeconds Simulation-time cooldown a breaker OPEN by
  *   [circuitBreakerFailureThreshold] must wait before probing recovery with one HALF_OPEN cycle.
  *   Defaults to [cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS].
+ *   A non-finite value (`Infinity` via a -D flag parses but passes the range check) is rejected like
+ *   any malformed value — WARN and the default — because an infinite cooldown would wedge the
+ *   breaker OPEN with no probe, ever.
  *
  * @since Issue #847 (SP2c.24 — headless N-run sweep driver and parameter grid);
  *   `inferenceTimeoutSeconds` added in Issue #893 iteration 2; `promptVariant` added in Issue #834
@@ -131,8 +134,8 @@ data class DispatcherRunConfig(
 		require(circuitBreakerFailureThreshold >= 1) {
 			"circuitBreakerFailureThreshold must be >= 1, was $circuitBreakerFailureThreshold"
 		}
-		require(circuitBreakerCooldownSeconds > 0) {
-			"circuitBreakerCooldownSeconds must be > 0, was $circuitBreakerCooldownSeconds"
+		require(circuitBreakerCooldownSeconds > 0 && circuitBreakerCooldownSeconds.isFinite()) {
+			"circuitBreakerCooldownSeconds must be > 0 and finite, was $circuitBreakerCooldownSeconds"
 		}
 	}
 
@@ -250,7 +253,7 @@ data class DispatcherRunConfig(
 						resolveRaw(PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS, properties, fileProperties),
 						PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
 						DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS
-					) { it.toDoubleOrNull()?.takeIf { parsed -> parsed > 0 } }
+					) { it.toDoubleOrNull()?.takeIf { parsed -> parsed > 0 && parsed.isFinite() } }
 			)
 
 		/**

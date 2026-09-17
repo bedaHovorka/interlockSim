@@ -32,9 +32,20 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * - **HALF_OPEN**: the next attempt is a probe. [recordSuccess] closes the breaker; [recordFailure]
  *   re-opens it (restarting the cooldown from the probe's `simTime`).
  *
- * Not thread-safe beyond [Synchronized] on the two mutating methods — cheap insurance against the
- * same concurrent-`plan()` scenario [KoogAgentPlanAdapter]'s own agent-init `Mutex` guards against,
- * even though production call patterns serialize `plan()` per adapter in practice.
+ * ## Single-probe guard
+ *
+ * A HALF_OPEN window grants exactly one in-flight probe: [shouldAttempt] sets [probeInFlight] when
+ * it grants a probe, and only [recordSuccess], [recordFailure] or [abandonProbe] clears it. While
+ * the flag is set, further [shouldAttempt] calls return `false` (counted in [totalSkips]) — two
+ * concurrent probes would race their verdicts against each other, the later one overwriting the
+ * earlier's. A probe caller cancelled before it can record either verdict must call
+ * [abandonProbe] (KoogAgentPlanAdapter does this in a `try/finally`), or the breaker grants no
+ * probe ever again while stuck in HALF_OPEN.
+ *
+ * Not thread-safe beyond [Synchronized] on the mutating methods ([shouldAttempt], [recordSuccess],
+ * [recordFailure], [abandonProbe]) — cheap insurance against the same concurrent-`plan()`
+ * scenario [KoogAgentPlanAdapter]'s own agent-init `Mutex` guards against, even though production
+ * call patterns serialize `plan()` per adapter in practice.
  */
 class LlmCircuitBreaker(
 	private val failureThreshold: Int = DEFAULT_FAILURE_THRESHOLD,
@@ -42,7 +53,12 @@ class LlmCircuitBreaker(
 ) {
 	init {
 		require(failureThreshold > 0) { "failureThreshold must be positive, was $failureThreshold" }
-		require(cooldownSeconds > 0) { "cooldownSeconds must be positive, was $cooldownSeconds" }
+		// isFinite rejects +Inf (which passes `> 0`) — an infinite cooldown would mean the breaker
+		// never probes recovery again — and NaN (which fails `> 0` anyway, pinned here so the
+		// guard's intent cannot silently regress).
+		require(cooldownSeconds > 0 && cooldownSeconds.isFinite()) {
+			"cooldownSeconds must be positive and finite, was $cooldownSeconds"
+		}
 	}
 
 	enum class State { CLOSED, OPEN, HALF_OPEN }
@@ -74,19 +90,36 @@ class LlmCircuitBreaker(
 	private var openedAtSimTime: Double = 0.0
 
 	/**
+	 * `true` while a granted HALF_OPEN probe has not yet reached a [recordSuccess]/[recordFailure]
+	 * verdict. Guarded by this class's monitor like every private field — unlike the four public
+	 * counters above, it has no reader outside [shouldAttempt]/[recordSuccess]/[recordFailure]/
+	 * [abandonProbe], so it needs no `@Volatile`.
+	 */
+	private var probeInFlight = false
+
+	/**
 	 * `true` if this cycle should call the LLM: always when CLOSED, once per cooldown window when
 	 * OPEN (the HALF_OPEN probe), never otherwise. Calling this and then NOT attempting the LLM
 	 * (e.g. the caller decides not to for an unrelated reason) would incorrectly consume the probe;
-	 * callers must attempt the LLM whenever this returns `true`.
+	 * callers must attempt the LLM whenever this returns `true`. A caller that cannot reach either
+	 * record method afterwards (e.g. its coroutine was cancelled mid-probe) must call [abandonProbe].
 	 */
 	@Synchronized
 	fun shouldAttempt(simTime: Double): Boolean =
 		when (state) {
 			State.CLOSED -> true
-			State.HALF_OPEN -> true
+			State.HALF_OPEN ->
+				if (probeInFlight) {
+					totalSkips++
+					false
+				} else {
+					probeInFlight = true
+					true
+				}
 			State.OPEN -> {
 				if (simTime - openedAtSimTime >= cooldownSeconds) {
 					state = State.HALF_OPEN
+					probeInFlight = true
 					true
 				} else {
 					totalSkips++
@@ -95,18 +128,19 @@ class LlmCircuitBreaker(
 			}
 		}
 
-	/** Records a successful LLM cycle: closes the breaker and resets the failure count. */
+	/** Records a successful LLM cycle: closes the breaker, resets the failure count, releases the probe. */
 	@Synchronized
 	fun recordSuccess() {
 		consecutiveFailures = 0
 		state = State.CLOSED
+		probeInFlight = false
 	}
 
 	/**
 	 * Records a failed LLM cycle (timeout or exception, after any retry already happened). Opens
 	 * the breaker once [failureThreshold] failures have accumulated in a row — including a single
 	 * HALF_OPEN probe failure re-opening it immediately, since a probe failing means the outage has
-	 * not ended.
+	 * not ended. Releases the probe claim either way.
 	 */
 	@Synchronized
 	fun recordFailure(simTime: Double) {
@@ -116,6 +150,17 @@ class LlmCircuitBreaker(
 			openedAtSimTime = simTime
 			openCount++
 		}
+		probeInFlight = false
+	}
+
+	/**
+	 * Releases the probe claim without recording a verdict — for a probe caller that was cancelled
+	 * before it could attempt (or finish attempting) the LLM, so the next cycle can probe instead
+	 * of the breaker granting no probe ever again. No-op when no probe is in flight.
+	 */
+	@Synchronized
+	fun abandonProbe() {
+		probeInFlight = false
 	}
 
 	/** One-line end-of-run summary, mirroring [cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop.summaryLine]. */

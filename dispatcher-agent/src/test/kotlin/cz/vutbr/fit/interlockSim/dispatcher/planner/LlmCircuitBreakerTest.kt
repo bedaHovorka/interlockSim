@@ -137,4 +137,57 @@ class LlmCircuitBreakerTest {
 		assertFailure { LlmCircuitBreaker(cooldownSeconds = 0.0) }
 			.isInstanceOf<IllegalArgumentException>()
 	}
+
+	@Test
+	fun `rejects a non-finite cooldownSeconds`() {
+		// +Inf parses as a Double and passes `> 0`, so a plain range check would accept it — but
+		// an infinite cooldown means the breaker never probes recovery again, the exact "wedged
+		// OPEN" state the check exists to prevent. NaN is non-finite too (and fails `> 0` anyway).
+		assertFailure { LlmCircuitBreaker(cooldownSeconds = Double.POSITIVE_INFINITY) }
+			.isInstanceOf<IllegalArgumentException>()
+		assertFailure { LlmCircuitBreaker(cooldownSeconds = Double.NaN) }
+			.isInstanceOf<IllegalArgumentException>()
+	}
+
+	@Test
+	fun `HALF_OPEN grants exactly one probe at a time`() {
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		breaker.recordFailure(simTime = 0.0)
+
+		// Cooldown elapsed: caller 1 is granted the probe.
+		assertThat(breaker.shouldAttempt(simTime = 60.0)).isTrue()
+
+		// Caller 2 arrives while that probe is still in flight (concurrent plan() calls). Both
+		// reaching the LLM would race their breaker verdicts against each other, so the second
+		// caller is told to skip instead — counted like any other OPEN-window skip.
+		assertThat(breaker.shouldAttempt(simTime = 61.0)).isFalse()
+		assertThat(breaker.totalSkips).isEqualTo(1L)
+	}
+
+	@Test
+	fun `a failed probe re-arms the single-probe guard for the next cooldown window`() {
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		breaker.recordFailure(simTime = 0.0)
+		breaker.shouldAttempt(simTime = 60.0)
+		breaker.recordFailure(simTime = 60.0)
+
+		assertThat(breaker.shouldAttempt(simTime = 121.0)).isTrue()
+		assertThat(breaker.shouldAttempt(simTime = 122.0)).isFalse()
+	}
+
+	@Test
+	fun `an abandoned probe can be attempted again`() {
+		// A probe coroutine cancelled mid-inference never reaches recordSuccess/recordFailure.
+		// plan()'s try/finally calls abandonProbe() so the in-flight flag is released — without
+		// it the breaker would grant no probe ever again while stuck in HALF_OPEN.
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		breaker.recordFailure(simTime = 0.0)
+		assertThat(breaker.shouldAttempt(simTime = 60.0)).isTrue()
+		assertThat(breaker.shouldAttempt(simTime = 61.0)).isFalse()
+
+		breaker.abandonProbe()
+
+		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.HALF_OPEN)
+		assertThat(breaker.shouldAttempt(simTime = 61.0)).isTrue()
+	}
 }
