@@ -187,7 +187,7 @@ class DynamicRailSwitch(
 			throw PathSeparatorChangeException("switch segments cannot be null", this)
 		}
 		return pathConf(from, to) ?: throw PathSeparatorChangeException(
-			"switch doesn't join this segments",
+			"switch doesn't join these segments",
 			this
 		)
 	}
