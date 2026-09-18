@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -46,9 +47,9 @@ import java.util.concurrent.TimeUnit
  * `vA.setUpPath(...)`, which silently overwrote `conf` to MAIN and re-locked -- with no check
  * that `vA` was already locked, in a DIFFERENT position, by the train's own live route. The
  * Step 2i merge then aborted (the candidate does not extend the train's registered `PathInfo`
- * contiguously), and the rollback released only the candidate's OWN switches
- * (`priorSwitches.filterNot`), so `vA` stayed at MAIN -- wrong for the surviving route, which
- * still needs BRANCH.
+ * contiguously), and the rollback released only the candidate's switches
+ * (`switches.filterNot { it in priorSwitches }`), so `vA` stayed at MAIN -- wrong for the
+ * surviving route, which still needs BRANCH.
  *
  * ## Fix (Issue #1065)
  *
@@ -147,16 +148,12 @@ class Issue1065RegressionTest : KoinTestBase() {
 		assertThat(blocksNearVA.size).isEqualTo(2) // vA sits between exactly two blocks
 		assertThat(blocksFarFromVA).isNotEmpty() // the train still holds track further on
 
-		// When: train 1's tail clears the FIRST block adjacent to vA (physical passage:
-		// enter() then leave(), then the production per-block release path
-		// unregisterBlock -> dropFreedBlock). Train 1 still holds the OTHER block touching vA,
-		// so vA's lock must survive this first release.
-		val occupant = FakeTrackOccupant(trainId1)
+		// When: train 1's tail clears the FIRST block adjacent to vA (passAndRelease drives
+		// the production per-block release path unregisterBlock -> dropFreedBlock). Train 1
+		// still holds the OTHER block touching vA, so vA's lock must survive this first
+		// release.
 		val firstNearVA = blocksNearVA[0]
-		firstNearVA.enter(occupant)
-		firstNearVA.leave(occupant)
-		val firstReleased = service.unregisterBlock(trainId1, firstNearVA)
-		assertThat(firstReleased).isTrue()
+		assertThat(passAndRelease(trainId1, firstNearVA)).isTrue()
 		// vA must stay locked -- train 1 still holds the other block adjacent to it.
 		assertThat(switchVA.locked).isTrue()
 
@@ -165,10 +162,7 @@ class Issue1065RegressionTest : KoinTestBase() {
 		// held) -- unlike unregister()'s unconditional unlock on FULL completion, this is the
 		// mid-journey case unregister() never reaches.
 		val secondNearVA = blocksNearVA[1]
-		secondNearVA.enter(occupant)
-		secondNearVA.leave(occupant)
-		val secondReleased = service.unregisterBlock(trainId1, secondNearVA)
-		assertThat(secondReleased).isTrue()
+		assertThat(passAndRelease(trainId1, secondNearVA)).isTrue()
 
 		// Then: vA is reclaimed -- unlocked and unowned -- even though train 1's journey is not
 		// complete (it still holds blocksFarFromVA). This is the #1065 assertion: vA must be
@@ -183,5 +177,71 @@ class Issue1065RegressionTest : KoinTestBase() {
 		assertThat(phase2).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(switchVA.conf).isEqualTo(Conf.BRANCH)
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(trainId2)
+	}
+
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("a refused candidate's rollback does not unlock a switch owned by ANOTHER train")
+	fun refusedCandidateDoesNotUnlockAnotherTrainsSwitch() {
+		val trainId1 = "train_1065_foreign_owner"
+		val trainId2 = "train_1065_candidate"
+
+		// Given: train 1 holds zA -> doB1 (vA locked MAIN, the k1 leg) and has physically
+		// passed the stem block zA--vA, so vA's lock survives only through train 1's k1-side
+		// block -- a live, registered lock protecting track another candidate must not touch.
+		val phase1 = service.reservePath(trainId1, semaphoreZA, semaphoreDoB1)
+		assertThat(phase1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(switchVA.conf).isEqualTo(Conf.MAIN)
+		assertThat(switchVA.locked).isTrue()
+
+		val blocksNearVA = registry.getBlocks(trainId1).filter { switchVA in it.ends() }
+		assertThat(blocksNearVA.size).isEqualTo(2) // vA sits between exactly two blocks
+		val stemBlock = blocksNearVA.first { semaphoreZA in it.ends() }
+		assertThat(passAndRelease(trainId1, stemBlock)).isTrue()
+		// vA must stay locked -- train 1 still holds the k1-side block bounded by it.
+		assertThat(switchVA.locked).isTrue()
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(trainId1)
+
+		// When: a DIFFERENT train asks for zA -> doB2. Its candidate needs only the (now
+		// FREE) stem block and k2-side blocks, so it reaches switch configuration -- but it
+		// needs vA in BRANCH, the OTHER position from train 1's live lock, and is refused as
+		// transient Locked contention. vA is IN the refused candidate's switch list, yet it
+		// is owned by train 1 -- the rollback must not release it (Issue #1065 review).
+		val phase2 = service.reservePath(trainId2, semaphoreZA, semaphoreDoB2)
+		assertThat(phase2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+
+		// Then: train 1's lock is completely intact -- physically locked, MAIN, still
+		// registered to train 1. Before the review fix, the rollback's fallback unlock
+		// stripped the physical lock here while the registry still recorded train 1.
+		assertThat(switchVA.locked).isTrue()
+		assertThat(switchVA.conf).isEqualTo(Conf.MAIN)
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(trainId1)
+
+		// And: the corruption does not reappear on a retry. On the unfixed code the now
+		// unlocked vA let this candidate reposition it to BRANCH under train 1's live route
+		// -- the exact #1065 symptom -- and the reservation SUCCEEDED.
+		val phase3 = service.reservePath(trainId2, semaphoreZA, semaphoreDoB2)
+		assertThat(phase3).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		assertThat(switchVA.conf).isEqualTo(Conf.MAIN)
+		assertThat(switchVA.locked).isTrue()
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(trainId1)
+	}
+
+	/**
+	 * Drive [block] through the production per-block release path: a [FakeTrackOccupant]
+	 * physically passes it (enter() then leave()), then
+	 * [PathReservationService.unregisterBlock] clears it -- funnelling through dropFreedBlock
+	 * and its Issue #1065 stale-lock reclamation.
+	 *
+	 * @return the result of [PathReservationService.unregisterBlock]
+	 */
+	private fun passAndRelease(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
+		val occupant = FakeTrackOccupant(trainId)
+		block.enter(occupant)
+		block.leave(occupant)
+		return service.unregisterBlock(trainId, block)
 	}
 }

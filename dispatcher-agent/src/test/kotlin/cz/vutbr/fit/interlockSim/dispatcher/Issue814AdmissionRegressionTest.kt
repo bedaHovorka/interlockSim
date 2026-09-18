@@ -36,6 +36,21 @@ import java.util.concurrent.atomic.AtomicLong
 private val logger = KotlinLogging.logger {}
 
 /**
+ * Maximum [ConflictDetectedEvent] count tolerated by [Issue814AdmissionRegressionTest.Baseline]
+ * and [Issue814AdmissionRegressionTest.RedundantRouteRequests]'s zero-conflict assertions.
+ *
+ * Issue #1065: a fixed SI-5 switch-lock guard changed exactly when a switch frees --
+ * promptly once its owner holds no adjacent block, instead of only on that train's FULL
+ * journey completion. On these runs, that lets two trains genuinely race for the shared
+ * `k2` block once, at a fixed simulated time (confirmed deterministic and bounded at
+ * exactly one event across repeated runs, matching the shape
+ * `RuleBasedDispatcherDeterminismTest` already tolerates for a different chokepoint).
+ * The reservation layer resolves it safely -- it is not the #814 corruption symptom this
+ * class exists to catch, which showed up as an UNBOUNDED, repeating conflict.
+ */
+private const val MAX_TOLERATED_CONFLICT_EVENTS = 1
+
+/**
  * Deterministic regression coverage for Issue #814 — the SP2b.9 follow-up whose verification list
  * has never been executed end to end.
  *
@@ -457,7 +472,7 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 				runWith({ queue, net -> RedundantRouteRequestPlanner(queue, net) }, withSafetyNet = true)
 
 			assertThat(outcome.staleReRequests).isGreaterThanOrEqualTo(1)
-			// Issue #1065: bound rather than forbid -- see the class-level companion constant's
+			// Issue #1065: bound rather than forbid -- see MAX_TOLERATED_CONFLICT_EVENTS's
 			// KDoc for why a run may now show one conflict event that is not a #814 regression.
 			assertThat(outcome.conflictEvents.size).isLessThanOrEqualTo(MAX_TOLERATED_CONFLICT_EVENTS)
 		}
@@ -504,26 +519,9 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 				"#814 baseline: exited=${run.trainsExited()} conflicts=${conflictEvents.size}"
 			}
 			assertThat(run.trainsExited()).isGreaterThanOrEqualTo(4)
-			// Issue #1065: see the class-level companion constant's KDoc.
+			// Issue #1065: see MAX_TOLERATED_CONFLICT_EVENTS's KDoc.
 			assertThat(conflictEvents.size).isLessThanOrEqualTo(MAX_TOLERATED_CONFLICT_EVENTS)
 			assertThat(run.driverCycleCount.get() > 0).isTrue()
 		}
-	}
-
-	private companion object {
-		/**
-		 * Maximum [ConflictDetectedEvent] count tolerated by [Baseline] and
-		 * [RedundantRouteRequests]'s zero-conflict assertions.
-		 *
-		 * Issue #1065: a fixed SI-5 switch-lock guard changed exactly when a switch frees --
-		 * promptly once its owner holds no adjacent block, instead of only on that train's FULL
-		 * journey completion. On these runs, that lets two trains genuinely race for the shared
-		 * `k2` block once, at a fixed simulated time (confirmed deterministic and bounded at
-		 * exactly one event across repeated runs, matching the shape
-		 * `RuleBasedDispatcherDeterminismTest` already tolerates for a different chokepoint).
-		 * The reservation layer resolves it safely -- it is not the #814 corruption symptom this
-		 * class exists to catch, which showed up as an UNBOUNDED, repeating conflict.
-		 */
-		const val MAX_TOLERATED_CONFLICT_EVENTS = 1
 	}
 }

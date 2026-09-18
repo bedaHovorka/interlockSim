@@ -28,6 +28,9 @@ import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
 
+/** See the Issue #1065 comment above the sole call site. */
+private const val MAX_TOLERATED_CONFLICT_EVENTS = 1
+
 /**
  * SP2b.7 validation gate — dispatcher routing against Goal 3 collision detection.
  *
@@ -150,10 +153,5 @@ class DispatcherCollisionValidationTest : DispatcherKoinTestBase() {
 		// stayed empty -- so this is the same shape RuleBasedDispatcherDeterminismTest already
 		// tolerates for a different chokepoint, not a new safety issue. Bound rather than forbid.
 		assertThat(conflictEvents.size).isLessThanOrEqualTo(MAX_TOLERATED_CONFLICT_EVENTS)
-	}
-
-	private companion object {
-		/** See the Issue #1065 comment above the sole call site. */
-		const val MAX_TOLERATED_CONFLICT_EVENTS = 1
 	}
 }

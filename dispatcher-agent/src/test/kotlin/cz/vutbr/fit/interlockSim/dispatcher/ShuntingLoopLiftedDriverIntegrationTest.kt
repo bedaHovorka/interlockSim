@@ -24,6 +24,9 @@ import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
 
+/** See the Issue #1065 comment above the sole call site. */
+private const val MAX_TOLERATED_CONFLICT_EVENTS = 1
+
 /**
  * SP0.12 integration gate — shunting-loop end-to-end via the lifted dispatcher-agent stack.
  *
@@ -141,10 +144,5 @@ class ShuntingLoopLiftedDriverIntegrationTest : DispatcherKoinTestBase() {
 		// confirms zero CollisionWarnings on the same run.
 		assertThat(conflictEvents.size)
 			.isLessThanOrEqualTo(MAX_TOLERATED_CONFLICT_EVENTS)
-	}
-
-	private companion object {
-		/** See the Issue #1065 comment above the sole call site. */
-		const val MAX_TOLERATED_CONFLICT_EVENTS = 1
 	}
 }

@@ -642,10 +642,11 @@ class DefaultPathReservationService(
 					// Step 2e.5: Release any ORPHAN lock among this candidate's switches --
 					// locked by a stray setUpPath call that never reached
 					// registry.registerSwitches (Issue #1065; see releaseOrphanSwitchLocks).
-					// Must run BEFORE the priorSwitches snapshot below: an orphan released here
-					// is correctly treated as a candidate-fresh switch by
-					// rollbackUnconfigurableCandidate if this candidate is later rolled back --
-					// taking the snapshot first would put it in priorSwitches and skip it there.
+					// Must run BEFORE configureSwitchesInPath below: a stale orphan lock would
+					// otherwise masquerade as transient Locked contention and refuse an
+					// otherwise valid candidate. Ordering relative to the priorSwitches snapshot
+					// is irrelevant -- an orphan has no registered owner, so it can never appear
+					// in registry.getSwitches(trainId) in the first place.
 					releaseOrphanSwitchLocks(extractUniqueSwitches(pathInfo))
 
 					// Step 2f: Configure and register switches (Issue #300, #291, #742).
@@ -3189,7 +3190,9 @@ class DefaultPathReservationService(
 	 *   earlier hops stay locked and registered). [PathReservationRegistry.unregisterSwitch]
 	 *   is a no-op for switches not registered to the train, so this is safe whether or not
 	 *   [PathReservationRegistry.registerSwitches] has run yet (switch-config failure runs
-	 *   before registration; signal-config failure runs after it).
+	 *   before registration; signal-config failure runs after it). A switch registered to
+	 *   ANOTHER train is never released either (Issue #1065 review — see
+	 *   [releaseCandidateSwitches]).
 	 *
 	 * PathInfo needs no rollback: Issue #742 moved [PathReservationRegistry.registerPathInfo]
 	 * after switch and signal configuration, so nothing has been registered yet.
@@ -3236,6 +3239,13 @@ class DefaultPathReservationService(
 	 * yet registered (switch-config-failure path, before registration), unregisterSwitch is a no-op —
 	 * so fall back to an explicit unlock to release the physical lock.
 	 *
+	 * The fallback is restricted to switches with NO registered owner (Issue #1065 review): a
+	 * candidate can traverse a switch owned by ANOTHER train and still fail later, and while
+	 * [PathReservationRegistry.unregisterSwitch] correctly refuses to release it, an unconditional
+	 * explicit unlock would strip that train's physical lock while the registry still records it as
+	 * the holder — reopening exactly the #1065 corruption under the foreign route. A switch
+	 * registered to another train is left completely untouched here.
+	 *
 	 * @param trainId The train identifier
 	 * @param candidateSwitches Only the switches newly locked/registered by the rolled-back
 	 *   candidate — callers must have already excluded the train's pre-existing switches
@@ -3247,7 +3257,19 @@ class DefaultPathReservationService(
 		candidateSwitches.forEach { switch ->
 			try {
 				if (!registry.unregisterSwitch(trainId, switch) && switch.locked) {
-					switch.unlock()
+					// Only an OWNERLESS lock can belong to this candidate (locked by its
+					// setUpPath, never registered). A registered switch that refused
+					// unregisterSwitch belongs to another train and must keep both its lock
+					// and its registry entry (Issue #1065 review).
+					if (registry.getSwitchOwner(switch) == null) {
+						switch.unlock()
+					} else {
+						logger.debug {
+							"releaseCandidateSwitches: Switch ${switch.staticRef.getName()} is owned " +
+								"by '${registry.getSwitchOwner(switch)}' - left locked and registered " +
+								"(not $trainId's to release)"
+						}
+					}
 				}
 			} catch (e: Exception) {
 				logger.warn(e) { "releaseCandidateSwitches: Failed to release switch $switch for $trainId" }
@@ -3378,11 +3400,15 @@ class DefaultPathReservationService(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			emitBlockReleased(block, trainId, currentSimulationTime())
-			// Issue #1065: this is the single funnel every block release passes through --
-			// Train.Tail's per-block clearance (via unregisterBlock above) and
-			// RegistryPartialRouteReleaser's tail release both end up here -- so reclaiming a
-			// now-stale switch lock here keeps the invariant continuously true, rather than
-			// discovering it lazily the next time a train asks for the switch.
+			// Issue #1065: every PRODUCTION block release passes through here -- Train.Tail's
+			// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
+			// tail release -- so reclaiming a now-stale switch lock here keeps the invariant
+			// continuously true on those paths, rather than discovering it lazily the next time
+			// a train asks for the switch. The scoped rollback paths
+			// (rollbackUnconfigurableCandidate, releaseBypassRollbackBlocks) call
+			// registry.unregisterBlock directly and bypass this; there a stale lock survives at
+			// worst until the next adjacent-block release or journey end -- bounded
+			// over-locking, not a safety issue.
 			reclaimStaleSwitchLocks(block)
 		}
 		return released
@@ -3395,7 +3421,7 @@ class DefaultPathReservationService(
 	 * locked by [DynamicRailSwitch.setUpPath] but never reaching
 	 * [PathReservationRegistry.registerSwitches], so no granted route protects it. Reachable
 	 * only in the narrow window of a single [configureSwitchesInPath] call where a switch is
-	 * locked and a LATER switch in the same candidate throws (a non-[cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException]
+	 * locked and a LATER switch in the same candidate throws (a non-[PathSeparatorChangeException]
 	 * exception escapes with no rollback -- a known, separately tracked gap). An unowned lock
 	 * protects nothing, so it is always safe to clear.
 	 *
