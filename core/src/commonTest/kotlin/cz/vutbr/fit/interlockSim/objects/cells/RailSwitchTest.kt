@@ -18,12 +18,15 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED
 import cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED
+import cz.vutbr.fit.interlockSim.exceptions.SwitchLockedException
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -124,6 +127,42 @@ class RailSwitchTest {
 		assertThat(message).contains("locked")
 	}
 
+	// ===== Issue #1065: safety property SI-5 also applies to setUpPath =====
+
+	@Test
+	fun `setUpPath refuses to reposition a switch locked in a different position`() {
+		// Given: locked in MAIN via (A,F) -- see RailSwitch's SIMPLE_RIGHT_FALSE HORIZONTAL
+		// topology: merging=A, mainDir=F -> MAIN; branch=G -> BRANCH.
+		switch.setUpPath(Segment.A, Segment.F, COMMON_MAIN_SPEED.toDouble(), stubTrackOccupant())
+		assertThat(switch.conf).isEqualTo(Conf.MAIN)
+		assertThat(switch.locked).isTrue()
+		propertyListener.events.clear()
+
+		// When: a second candidate needs BRANCH (A,G) while still locked in MAIN
+		val exception =
+			assertFailsWith<SwitchLockedException> {
+				switch.setUpPath(Segment.A, Segment.G, COMMON_BRANCH_SPEED.toDouble(), stubTrackOccupant())
+			}
+
+		// Then: the switch is completely untouched -- still MAIN, still locked, no event fired.
+		assertThat(switch.conf).isEqualTo(Conf.MAIN)
+		assertThat(switch.locked).isTrue()
+		assertThat(propertyListener.events).isEmpty()
+		assertThat(exception.heldConf).isEqualTo(Conf.MAIN)
+		assertThat(exception.requiredConf).isEqualTo(Conf.BRANCH)
+	}
+
+	@Test
+	fun `setUpPath is idempotent when the switch is already locked in the required position`() {
+		switch.setUpPath(Segment.A, Segment.F, COMMON_MAIN_SPEED.toDouble(), stubTrackOccupant())
+		assertThat(switch.conf).isEqualTo(Conf.MAIN)
+
+		// A route re-reservation over the same hop must keep working.
+		switch.setUpPath(Segment.A, Segment.F, COMMON_MAIN_SPEED.toDouble(), stubTrackOccupant())
+		assertThat(switch.conf).isEqualTo(Conf.MAIN)
+		assertThat(switch.locked).isTrue()
+	}
+
 	// ========== Track Routing ==========
 
 	@Test
@@ -187,4 +226,13 @@ class RailSwitchTest {
 			events.add(event)
 		}
 	}
+
+	private fun stubTrackOccupant(): TrackOccupant =
+		object : TrackOccupant {
+			override val name = "StubTrain"
+
+			override fun distanceToSemaphore() = 0.0
+
+			override fun nextSemaphore(): OrientedPathSeparator? = null
+		}
 }

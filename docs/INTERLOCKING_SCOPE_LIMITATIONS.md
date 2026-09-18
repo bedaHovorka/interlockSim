@@ -55,8 +55,9 @@ What it *does* cost is a permanent stall: the train holds its admission slot and
 
 `PathReservationService` locks **only on-route (running) switches**, NOT flank-protection (*odvratné*) switches/derailers:
 
-- `extractUniqueSwitches` (`DefaultPathReservationService.kt:1996-2008`) derives switches solely from `pathInfo.reservedPath` — the running path.
-- `configureAndRegisterSwitches` (`:2493-2512`) → `registry.registerSwitches` (`:2507`) locks each on-route switch. No flank switches are provisioned or locked.
+- `extractUniqueSwitches` (`DefaultPathReservationService.kt:2171`) derives switches solely from `pathInfo.reservedPath` — the running path.
+- `configureAndRegisterSwitches` (`:3143`) → `registry.registerSwitches` (`:3158`) locks each on-route switch. No flank switches are provisioned or locked.
+- Since Issue #1065, that lock is now HONOURED by the reservation path itself, not only by the legacy facade below: `DynamicRailSwitch.setUpPath` refuses to move a switch a live route already holds locked in a different position (safety property SI-5, `changeConf` already honoured it; `setUpPath` did not). Before #1065, `configureSwitchesInPath` silently re-threw an on-route switch already locked for a DIFFERENT train's live route.
 
 Flank protection is a concept of the **legacy `InterlockingFacade` path only**:
 
@@ -65,6 +66,8 @@ Flank protection is a concept of the **legacy `InterlockingFacade` path only**:
 - `DefaultInterlockingFacade.kt:150` (condition-2 check), `:181` (lock count), `:326` (condition-2 method), `:340` (`for (switchSetting in route.flank)`), `:374` (`route.running + route.flank` locked).
 
 **Known scope limitation:** the reservation-service path does not provision flank protection. It relies on the route's running switches being sufficient, or on the facade path for flank-sensitive layouts. A topology that requires flank-protection switches to be locked for safety, accessed only through the reservation-service path, would not have them locked.
+
+**Consequence for Issue #1065's stale-lock reclamation:** `DefaultPathReservationService.reclaimStaleSwitchLocks` releases a switch's lock once its owner holds no BLOCK adjacent to it. That predicate assumes a switch protects only the route(s) it is physically adjacent to -- true today, because flank protection is not provisioned. If F4 above is ever closed and a flank switch starts protecting a route it is not adjacent to, this predicate becomes unsound for that switch and must be extended to check flank assignments too.
 
 ---
 
