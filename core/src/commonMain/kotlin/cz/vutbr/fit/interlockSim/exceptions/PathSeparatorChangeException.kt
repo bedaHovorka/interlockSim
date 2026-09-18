@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  * @author beda
  *
  */
-class PathSeparatorChangeException : SimulationException {
+open class PathSeparatorChangeException : SimulationException {
 	/**
 	 * @param object
 	 */

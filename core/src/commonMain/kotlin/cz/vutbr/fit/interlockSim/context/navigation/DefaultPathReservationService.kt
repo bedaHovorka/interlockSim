@@ -15,10 +15,12 @@ import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.SwitchLockedException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -637,6 +639,16 @@ class DefaultPathReservationService(
 							trackSections = path // path is List<TrackSection> here
 						)
 
+					// Step 2e.5: Release any ORPHAN lock among this candidate's switches --
+					// locked by a stray setUpPath call that never reached
+					// registry.registerSwitches (Issue #1065; see releaseOrphanSwitchLocks).
+					// Must run BEFORE configureSwitchesInPath below: a stale orphan lock would
+					// otherwise masquerade as transient Locked contention and refuse an
+					// otherwise valid candidate. Ordering relative to the priorSwitches snapshot
+					// is irrelevant -- an orphan has no registered owner, so it can never appear
+					// in registry.getSwitches(trainId) in the first place.
+					releaseOrphanSwitchLocks(extractUniqueSwitches(pathInfo))
+
 					// Step 2f: Configure and register switches (Issue #300, #291, #742).
 					// A candidate whose switches cannot be configured is physically impossible
 					// and must fail the reservation — see configureAndRegisterSwitches.
@@ -649,20 +661,19 @@ class DefaultPathReservationService(
 					// steps (including Step 2i's merge-abort rollback, Issue #904) can reset
 					// exactly what THIS candidate cleared (Issue #893 task A5).
 					val clearedBeforeCandidate = snapshotClearedSemaphores(trainId)
-					if (!configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)) {
-						// Unconfigurable switch makes THIS candidate physically impossible. The
-						// candidate has already been rolled back inside configureAndRegisterSwitches,
-						// so try the remaining candidate paths like the other failure modes
-						// (blocks-not-free, atomic-reservation-fail) rather than giving up early —
-						// SP0.11 review follow-up (was `return AllPathsBlocked(1)`).
-						// Issue #903: this is a PERMANENT impossibility, not ordinary contention --
-						// record it (first-hit-wins) so the fallthrough return can classify it
-						// correctly instead of reporting AllPathsBlocked.
+					val switchOutcome = configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)
+					// The candidate has already been rolled back inside configureAndRegisterSwitches
+					// for either failure kind, so try the remaining candidate paths like the other
+					// failure modes (blocks-not-free, atomic-reservation-fail) rather than giving up
+					// early -- SP0.11 review follow-up (was `return AllPathsBlocked(1)`).
+					// recordSwitchConfigFailureIfGeometric only touches geometricFailures for
+					// Unconfigurable (Issue #903: a permanent impossibility, first-hit-wins) -- a
+					// Locked outcome (Issue #1065: SI-5, transient) must fall through to ordinary
+					// contention instead, extracted to keep this branch out of reservePath's own
+					// cyclomatic complexity count.
+					if (switchOutcome != SwitchConfigOutcome.Configured) {
 						geometricFailures =
-							recordGeometricFailureOnce(
-								geometricFailures,
-								"Switch along candidate $index could not be configured for the requested route"
-							)
+							recordSwitchConfigFailureIfGeometric(switchOutcome, geometricFailures, trainId, index)
 						continue
 					}
 
@@ -2173,6 +2184,40 @@ class DefaultPathReservationService(
 	}
 
 	/**
+	 * Outcome of [configureSwitchesInPath] / [configureAndRegisterSwitches], distinguishing a
+	 * permanent geometric impossibility (Issue #742: no [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf]
+	 * joins the route's segments) from a transient SI-5 refusal (Issue #1065: the switch is
+	 * locked in a different position by a live route) so the caller records only the former as
+	 * a geometric failure. Folding the latter into [PathReservationService.ReservationResult.GeometricallyImpossible]
+	 * makes [cz.vutbr.fit.interlockSim.sim.InOutWorker] throw instead of letting the train wait
+	 * for the switch to free -- the exact regression this distinction prevents.
+	 *
+	 * @since Issue #1065; widened from `Boolean`
+	 */
+	private sealed interface SwitchConfigOutcome {
+		/** Every genuinely traversed switch was configured. */
+		data object Configured : SwitchConfigOutcome
+
+		/**
+		 * Issue #742: a genuinely traversed switch has NO configuration joining its segments --
+		 * physically impossible, permanent.
+		 */
+		data object Unconfigurable : SwitchConfigOutcome
+
+		/**
+		 * Issue #1065: a genuinely traversed switch IS locked, in a different position, by
+		 * [holder] (`null` if the lock is an orphan -- see [PathReservationRegistry.getSwitchOwner]).
+		 * Transient: resolves once [holder]'s route releases the switch.
+		 */
+		data class Locked(
+			val switch: DynamicRailSwitch,
+			val holder: String?,
+			val held: RailSwitch.Conf,
+			val required: RailSwitch.Conf
+		) : SwitchConfigOutcome
+	}
+
+	/**
 	 * Configure switches in the reserved path based on topology.
 	 *
 	 * For each switch in the path, determines the correct configuration (MAIN or BRANCH)
@@ -2213,16 +2258,28 @@ class DefaultPathReservationService(
 	 *   untraversable routes and permanently stalled trains (captured in failing
 	 *   `RuleBasedDispatcherDeterminismTest` runs).
 	 *
+	 * ## Error Handling (Issue #1065)
+	 *
+	 * A third failure class, distinct from both above: a switch the path genuinely traverses
+	 * that IS locked, in the OTHER position, by a live route (this train's own earlier hop, or
+	 * another train's). Unlike the #742 case this is TRANSIENT contention -- the switch frees
+	 * once that route releases it -- so it is reported separately
+	 * ([SwitchConfigOutcome.Locked]) and must never be folded into a permanent geometric
+	 * impossibility (that regression is exactly what corrupted a surviving route's switch
+	 * position in Issue #1031).
+	 *
 	 * @param trainId Train identifier for logging and occupant creation
 	 * @param pathInfo PathInfo containing the reserved path with switches
-	 * @return `true` when every genuinely traversed switch was configured, `false` when the
-	 *   route is impossible and the caller must roll the candidate back (Issue #742)
-	 * @since Issue #300 Fix switch animation regression
+	 * @return [SwitchConfigOutcome.Configured] when every genuinely traversed switch was
+	 *   configured; a failure variant otherwise, in which case the caller must roll the
+	 *   candidate back
+	 * @since Issue #300 Fix switch animation regression; widened from `Boolean` to
+	 *   [SwitchConfigOutcome] by Issue #1065
 	 */
 	private fun configureSwitchesInPath(
 		trainId: String,
 		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo
-	): Boolean {
+	): SwitchConfigOutcome {
 		// Convert Path to list for indexed access
 		val pathElements = pathInfo.reservedPath.toList()
 
@@ -2237,6 +2294,15 @@ class DefaultPathReservationService(
 
 		// Track count of successfully configured switches
 		var configuredCount = 0
+
+		// Issue #1065: a Locked switch does NOT bail out of the loop -- unlike Unconfigurable
+		// (permanent, so no later switch's classification can matter), a Locked switch is only
+		// TRANSIENT contention, and a LATER switch further along the SAME candidate might be
+		// genuinely Unconfigurable (#742, permanent). Bailing on the first Locked hit would let
+		// it mask that more severe, more informative classification for as long as the lock
+		// holds -- first-hit-wins, kept as the first one seen, but Unconfigurable always wins
+		// over it once found.
+		var pendingLocked: SwitchConfigOutcome.Locked? = null
 
 		// Iterate through path elements with index for neighbor access
 		pathElements.forEachIndexed { index, element ->
@@ -2286,6 +2352,26 @@ class DefaultPathReservationService(
 					return@forEachIndexed
 				}
 
+				// Issue #1065: pre-check (non-throwing) whether this candidate needs a switch
+				// already locked, by ANY train (including this one), in the OTHER position --
+				// the exact shape that silently corrupted a surviving route's switch position
+				// in Issue #1031. Reported as transient contention, never as a permanent
+				// geometric impossibility.
+				val requiredConf = element.pathConf(from, to)
+				if (element.locked && requiredConf != null && requiredConf != element.conf) {
+					val holder = registry.getSwitchOwner(element)
+					logger.warn {
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} is locked " +
+							"in ${element.conf} by '$holder' but train $trainId's candidate needs " +
+							"$requiredConf -- transient contention, continuing to check the rest of " +
+							"the candidate for a permanent impossibility (safety SI-5, Issue #1065)"
+					}
+					if (pendingLocked == null) {
+						pendingLocked = SwitchConfigOutcome.Locked(element, holder, element.conf, requiredConf)
+					}
+					return@forEachIndexed
+				}
+
 				try {
 					// Get allowed speed for this switch
 					val allowedSpeed = element.allowedSpeed()
@@ -2305,6 +2391,20 @@ class DefaultPathReservationService(
 							"configured to ${element.conf} for train $trainId " +
 							"(from=${from.hashCode()}, to=${to.hashCode()})"
 					}
+				} catch (e: SwitchLockedException) {
+					// Issue #1065: defence-in-depth. The pre-check above should always catch this
+					// first; this only fires if the switch's lock state changed between the
+					// pre-check and this call (not possible in the current single-threaded kDisco
+					// context, but the guard in DynamicRailSwitch.setUpPath is authoritative, so
+					// this call site must not silently mis-classify its refusal as #742).
+					logger.warn {
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} refused a " +
+							"reposition while locked for train $trainId (Issue #1065): ${e.message}"
+					}
+					if (pendingLocked == null) {
+						pendingLocked =
+							SwitchConfigOutcome.Locked(element, registry.getSwitchOwner(element), e.heldConf, e.requiredConf)
+					}
 				} catch (e: PathSeparatorChangeException) {
 					// Issue #742: the route genuinely traverses this switch (both segments known)
 					// but NO switch configuration joins them — the candidate route is physically
@@ -2317,7 +2417,7 @@ class DefaultPathReservationService(
 							"(from=${from.hashCode()}, to=${to.hashCode()}, Issue #742)"
 					}
 					logger.debug(e) { "Exception details: ${e.message}" }
-					return false
+					return SwitchConfigOutcome.Unconfigurable
 				}
 			}
 		}
@@ -2325,7 +2425,7 @@ class DefaultPathReservationService(
 		logger.debug {
 			"configureSwitchesInPath: Configured $configuredCount switch(es) for train $trainId"
 		}
-		return true
+		return pendingLocked ?: SwitchConfigOutcome.Configured
 	}
 
 	/**
@@ -2565,6 +2665,44 @@ class DefaultPathReservationService(
 		current: GeometricFailures,
 		reason: String
 	): GeometricFailures = GeometricFailures(current.reason ?: reason, current.count + 1)
+
+	/**
+	 * Step 2f's post-[configureAndRegisterSwitches] classification (Issue #1065): a failed
+	 * [SwitchConfigOutcome] is recorded as a permanent geometric impossibility only for
+	 * [SwitchConfigOutcome.Unconfigurable] (Issue #742/#903) via [recordGeometricFailureOnce].
+	 * [SwitchConfigOutcome.Locked] (Issue #1065, safety property SI-5) is TRANSIENT contention --
+	 * the switch frees once its holder's route releases it -- so it must fall through to ordinary
+	 * contention (`AllPathsBlocked`) instead: recording it as geometric would make
+	 * [cz.vutbr.fit.interlockSim.sim.InOutWorker] throw instead of letting the train wait.
+	 * [SwitchConfigOutcome.Configured] never reaches here (the caller only calls this for a
+	 * failed outcome), so it is a no-op passthrough for exhaustiveness.
+	 *
+	 * Extracted so this classification adds no branch to [reservePath]'s own cyclomatic
+	 * complexity -- the caller's single `if (switchOutcome != Configured)` covers both failure
+	 * kinds, differing only in what this helper does with [geometricFailures].
+	 */
+	private fun recordSwitchConfigFailureIfGeometric(
+		switchOutcome: SwitchConfigOutcome,
+		geometricFailures: GeometricFailures,
+		trainId: String,
+		index: Int
+	): GeometricFailures =
+		when (switchOutcome) {
+			is SwitchConfigOutcome.Unconfigurable ->
+				recordGeometricFailureOnce(
+					geometricFailures,
+					"Switch along candidate $index could not be configured for the requested route"
+				)
+			is SwitchConfigOutcome.Locked -> {
+				logger.debug {
+					"reservePath: candidate $index needs switch ${switchOutcome.switch.staticRef.getName()} " +
+						"held ${switchOutcome.held} by '${switchOutcome.holder}' (train $trainId needs " +
+						"${switchOutcome.required}) -- ordinary contention, not geometric (Issue #1065)"
+				}
+				geometricFailures
+			}
+			SwitchConfigOutcome.Configured -> geometricFailures
+		}
 
 	/**
 	 * G8 screening of [candidatePaths] (Issue #1064): splits off every candidate whose end faces away
@@ -3008,29 +3146,31 @@ class DefaultPathReservationService(
 	 * @param priorSwitches Switches the train already owned before this candidate (snapshot
 	 *   by the caller before this step), forwarded to [rollbackUnconfigurableCandidate] so
 	 *   only this candidate's new switches are released on failure
-	 * @return `true` when the candidate's switches are configured and registered (or the
-	 *   path has none), `false` when the candidate was rolled back and the reservation
-	 *   must fail
+	 * @return [SwitchConfigOutcome.Configured] when the candidate's switches are configured
+	 *   and registered (or the path has none); a failure variant when the candidate was rolled
+	 *   back and the reservation must fail -- the rollback is identical for both failure
+	 *   variants, only the caller's classification of the result differs (Issue #1065)
 	 */
 	private fun configureAndRegisterSwitches(
 		trainId: String,
 		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo,
 		forwardBlocks: List<DynamicTrackBlock>,
 		priorSwitches: Set<DynamicRailSwitch>
-	): Boolean {
+	): SwitchConfigOutcome {
 		val switches = extractUniqueSwitches(pathInfo)
 		if (switches.isEmpty()) {
-			return true
+			return SwitchConfigOutcome.Configured
 		}
-		if (!configureSwitchesInPath(trainId, pathInfo)) {
+		val outcome = configureSwitchesInPath(trainId, pathInfo)
+		if (outcome != SwitchConfigOutcome.Configured) {
 			rollbackUnconfigurableCandidate(trainId, forwardBlocks, switches, priorSwitches)
-			return false
+			return outcome
 		}
 		registry.registerSwitches(trainId, switches)
 		logger.debug {
 			"reservePath: Registered ${switches.size} switches for $trainId"
 		}
-		return true
+		return SwitchConfigOutcome.Configured
 	}
 
 	/**
@@ -3050,7 +3190,9 @@ class DefaultPathReservationService(
 	 *   earlier hops stay locked and registered). [PathReservationRegistry.unregisterSwitch]
 	 *   is a no-op for switches not registered to the train, so this is safe whether or not
 	 *   [PathReservationRegistry.registerSwitches] has run yet (switch-config failure runs
-	 *   before registration; signal-config failure runs after it).
+	 *   before registration; signal-config failure runs after it). A switch registered to
+	 *   ANOTHER train is never released either (Issue #1065 review — see
+	 *   [releaseCandidateSwitches]).
 	 *
 	 * PathInfo needs no rollback: Issue #742 moved [PathReservationRegistry.registerPathInfo]
 	 * after switch and signal configuration, so nothing has been registered yet.
@@ -3097,6 +3239,13 @@ class DefaultPathReservationService(
 	 * yet registered (switch-config-failure path, before registration), unregisterSwitch is a no-op —
 	 * so fall back to an explicit unlock to release the physical lock.
 	 *
+	 * The fallback is restricted to switches with NO registered owner (Issue #1065 review): a
+	 * candidate can traverse a switch owned by ANOTHER train and still fail later, and while
+	 * [PathReservationRegistry.unregisterSwitch] correctly refuses to release it, an unconditional
+	 * explicit unlock would strip that train's physical lock while the registry still records it as
+	 * the holder — reopening exactly the #1065 corruption under the foreign route. A switch
+	 * registered to another train is left completely untouched here.
+	 *
 	 * @param trainId The train identifier
 	 * @param candidateSwitches Only the switches newly locked/registered by the rolled-back
 	 *   candidate — callers must have already excluded the train's pre-existing switches
@@ -3108,7 +3257,19 @@ class DefaultPathReservationService(
 		candidateSwitches.forEach { switch ->
 			try {
 				if (!registry.unregisterSwitch(trainId, switch) && switch.locked) {
-					switch.unlock()
+					// Only an OWNERLESS lock can belong to this candidate (locked by its
+					// setUpPath, never registered). A registered switch that refused
+					// unregisterSwitch belongs to another train and must keep both its lock
+					// and its registry entry (Issue #1065 review).
+					if (registry.getSwitchOwner(switch) == null) {
+						switch.unlock()
+					} else {
+						logger.debug {
+							"releaseCandidateSwitches: Switch ${switch.staticRef.getName()} is owned " +
+								"by '${registry.getSwitchOwner(switch)}' - left locked and registered " +
+								"(not $trainId's to release)"
+						}
+					}
 				}
 			} catch (e: Exception) {
 				logger.warn(e) { "releaseCandidateSwitches: Failed to release switch $switch for $trainId" }
@@ -3239,8 +3400,83 @@ class DefaultPathReservationService(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			emitBlockReleased(block, trainId, currentSimulationTime())
+			// Issue #1065: every PRODUCTION block release passes through here -- Train.Tail's
+			// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
+			// tail release -- so reclaiming a now-stale switch lock here keeps the invariant
+			// continuously true on those paths, rather than discovering it lazily the next time
+			// a train asks for the switch. The scoped rollback paths
+			// (rollbackUnconfigurableCandidate, releaseBypassRollbackBlocks) call
+			// registry.unregisterBlock directly and bypass this; there a stale lock survives at
+			// worst until the next adjacent-block release or journey end -- bounded
+			// over-locking, not a safety issue.
+			reclaimStaleSwitchLocks(block)
 		}
 		return released
+	}
+
+	/**
+	 * Issue #1065: release any ORPHAN lock among [switches] before a candidate touches them.
+	 *
+	 * An orphan is `switch.locked == true` with `registry.getSwitchOwner(switch) == null` --
+	 * locked by [DynamicRailSwitch.setUpPath] but never reaching
+	 * [PathReservationRegistry.registerSwitches], so no granted route protects it. Reachable
+	 * only in the narrow window of a single [configureSwitchesInPath] call where a switch is
+	 * locked and a LATER switch in the same candidate throws (a non-[PathSeparatorChangeException]
+	 * exception escapes with no rollback -- a known, separately tracked gap). An unowned lock
+	 * protects nothing, so it is always safe to clear.
+	 *
+	 * @since Issue #1065
+	 */
+	private fun releaseOrphanSwitchLocks(switches: List<DynamicRailSwitch>) {
+		switches.forEach { switch ->
+			if (switch.locked && registry.getSwitchOwner(switch) == null) {
+				switch.unlock()
+				logger.warn {
+					"releaseOrphanSwitchLocks: unlocked orphan switch ${switch.staticRef.getName()} " +
+						"(locked, but owned by no train -- Issue #1065)"
+				}
+			}
+		}
+	}
+
+	/**
+	 * Issue #1065: once [block] leaves the registry, release any switch lock at its ends that no
+	 * longer protects a live route.
+	 *
+	 * A lock on switch `S` held by train `T` is stale iff `T` holds no OTHER block bounded by
+	 * `S` -- a route never ends AT a switch ([PathReservationRegistry.isValidPathInfoEnd], Issue
+	 * #938), so any switch on a live route always has at least one held adjacent block, and a
+	 * train straddling the switch holds both. So "no held adjacent block" means no train has
+	 * authority over any track the switch connects, and releasing it cannot move a switch under
+	 * a train or contradict a granted route.
+	 *
+	 * This is the mechanism that makes the SI-5 guard in [DynamicRailSwitch.setUpPath] livable:
+	 * without it, a train that has passed a switch keeps it locked until its FULL journey
+	 * completes ([unregister]'s unconditional unlock), and the next train needing the other
+	 * position would be refused forever instead of merely waiting -- confirmed to happen on
+	 * EVERY repetition of the vyhybna shunting loop (a train exits, the next one needs the
+	 * opposite position for the same switch), so this is load-bearing, not defensive polish.
+	 *
+	 * Assumes flank protection is not modelled (true today, see
+	 * `docs/INTERLOCKING_SCOPE_LIMITATIONS.md` §B2) -- a flank switch protecting a route it is
+	 * not adjacent to would make this predicate unsound.
+	 *
+	 * @since Issue #1065
+	 */
+	private fun reclaimStaleSwitchLocks(block: DynamicTrackBlock) {
+		block.ends().filterIsInstance<DynamicRailSwitch>().forEach { switch ->
+			if (!switch.locked) return@forEach
+			val owner = registry.getSwitchOwner(switch) ?: return@forEach
+			val stillProtected = registry.getBlocks(owner).any { switch in it.ends() }
+			if (!stillProtected) {
+				registry.unregisterSwitch(owner, switch)
+				logger.info {
+					"reclaimStaleSwitchLocks: released stale lock on switch " +
+						"${switch.staticRef.getName()} -- owner '$owner' holds no block bounded " +
+						"by it after $block was freed (Issue #1065)"
+				}
+			}
+		}
 	}
 
 	/**
