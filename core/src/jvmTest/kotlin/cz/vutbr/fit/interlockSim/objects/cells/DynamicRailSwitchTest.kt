@@ -24,6 +24,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.assertions.message
+import cz.vutbr.fit.interlockSim.exceptions.SwitchLockedException
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -604,6 +605,49 @@ class DynamicRailSwitchTest {
 			assertThat(lockedEvents).hasSize(1)
 			assertThat(lockedEvents[0].oldValue).isEqualTo(true)
 			assertThat(lockedEvents[0].newValue).isEqualTo(false)
+		}
+
+		// ===== Issue #1065: safety property SI-5 also applies to setUpPath =====
+
+		@Test
+		fun `setUpPath on a switch locked in the SAME position is idempotent`() {
+			// Given: locked in MAIN via (A,F)
+			dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.F, 8.0, mockOccupant)
+			assertThat(dynamicSwitch1.conf).isEqualTo(Conf.MAIN)
+			assertThat(dynamicSwitch1.locked).isTrue()
+
+			// When: setUpPath is called again with the SAME segments (still MAIN)
+			dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.F, 8.0, mockOccupant)
+
+			// Then: no throw, stays MAIN and locked -- a route re-reservation over the same hop
+			// must keep working.
+			assertThat(dynamicSwitch1.conf).isEqualTo(Conf.MAIN)
+			assertThat(dynamicSwitch1.locked).isTrue()
+		}
+
+		@Test
+		fun `setUpPath on a switch locked in a DIFFERENT position throws and writes nothing`() {
+			// Given: locked in MAIN via (A,F) by one route
+			dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.F, 8.0, mockOccupant)
+			assertThat(dynamicSwitch1.conf).isEqualTo(Conf.MAIN)
+			assertThat(dynamicSwitch1.locked).isTrue()
+
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// When: a second candidate needs BRANCH (A,E) while still locked in MAIN
+			val exception =
+				assertFailure {
+					dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.E, 8.0, mockOccupant)
+				}.isInstanceOf(SwitchLockedException::class)
+
+			// Then: the switch is completely untouched -- still MAIN, still locked, no event
+			// fired -- and the exception carries both positions for the caller to report.
+			assertThat(dynamicSwitch1.conf).isEqualTo(Conf.MAIN)
+			assertThat(dynamicSwitch1.locked).isTrue()
+			assertThat(capturedEvents).isEmpty()
+			exception.transform { it.heldConf }.isEqualTo(Conf.MAIN)
+			exception.transform { it.requiredConf }.isEqualTo(Conf.BRANCH)
 		}
 	}
 }

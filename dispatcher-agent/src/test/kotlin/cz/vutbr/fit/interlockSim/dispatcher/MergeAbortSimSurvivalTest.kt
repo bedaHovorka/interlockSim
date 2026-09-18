@@ -15,8 +15,10 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
@@ -26,6 +28,8 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
@@ -79,6 +83,14 @@ import java.util.concurrent.atomic.AtomicInteger
  *   rely on the sweeper" trade-off no longer applies to this exit.
  * - [cleanBaselineRunLogsNoMergeAbortWarning] is the inertness gate: a plain `vyhybna` run must
  *   never trip either new WARN.
+ * - [aLiveRoutesSwitchIsNeverRethrownByAConflictingCandidate] pins Issue #1065: a candidate
+ *   needing a switch the SAME train already holds locked for a live route, in the OTHER
+ *   position, must be refused (as ordinary contention) rather than silently re-thrown. Unlike
+ *   the other tests here, its train has a NON-empty `priorSwitches` footprint -- the shape that
+ *   corrupted `vA`'s position in the original Issue #1031 run. With the fix, this candidate is
+ *   caught at Step 2f (`DynamicRailSwitch.setUpPath`'s SI-5 guard), before Step 2i's merge
+ *   machinery ever runs, so the non-contiguous-merge WARN this class otherwise tracks does not
+ *   fire for it at all.
  *
  * Logback's [ListAppender] is used for the WARN assertions because `:core`'s test source set has
  * logback only as a `runtimeOnly` dependency; `dispatcher-agent`'s has it on the compile
@@ -302,5 +314,51 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 
 		assertThat(warningsContaining(DUPLICATED_START_WARN)).isEmpty()
 		assertThat(warningsContaining(NON_CONTIGUOUS_WARN)).isEmpty()
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName(
+		"a candidate needing a live route's switch in the OTHER position is refused, " +
+			"never silently re-thrown (Issue #1065)"
+	)
+	fun aLiveRoutesSwitchIsNeverRethrownByAConflictingCandidate() {
+		val trainId = "Train #1065 probe"
+		val zA = separatorAt(14, 8)
+		val doB1 = separatorAt(25, 8)
+		val doB2 = separatorAt(24, 9)
+		val vA =
+			context.getRailWayNetGrid()[Point(15, 8)] as? DynamicRailSwitch
+				?: error("Switch 'vA' not found at (15, 8)")
+
+		// Given: the train holds a REAL route zA -> doB2 (via k2), locking vA in BRANCH. This is
+		// a non-empty priorSwitches footprint -- unlike mergeAbortedReservePathLeavesNoOrphanedTail
+		// above, whose probe train deliberately has none.
+		val phase1 = service().reservePath(trainId, zA, doB2)
+		assertThat(phase1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(vA.conf).isEqualTo(RailSwitch.Conf.BRANCH)
+		assertThat(vA.locked).isTrue()
+
+		// When: the dispatcher asks for zA -> doB1 -- the exact Issue #1031 shape. This
+		// candidate needs vA in MAIN, but the train's OWN live route already holds it locked in
+		// BRANCH. Before the fix, DynamicRailSwitch.setUpPath silently rewrote vA to MAIN here
+		// (configureSwitchesInPath logged "Switch vA configured to MAIN"), the Step 2i merge
+		// then aborted as non-contiguous (new.start == old.start == zA, not old.target doB2),
+		// and rollbackUnconfigurableCandidate left vA at MAIN because it only skips UNLOCKING a
+		// prior switch, never restores its position -- corrupting the surviving route.
+		val phase2 = service().reservePath(trainId, zA, doB1)
+
+		// Then: refused as ordinary contention -- the SI-5 guard in DynamicRailSwitch.setUpPath
+		// now catches this at Step 2f, before the merge machinery at Step 2i ever runs, so no
+		// "non-contiguous merge" WARN fires for this candidate at all.
+		assertThat(phase2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+
+		// And: vA is untouched -- still BRANCH, still locked, still owned by this train's
+		// surviving route. This is the #1065 assertion the issue asked for.
+		assertThat(vA.conf).isEqualTo(RailSwitch.Conf.BRANCH)
+		assertThat(vA.locked).isTrue()
+		assertThat(registry().getSwitchOwner(vA)).isEqualTo(trainId)
+		assertThat(registry().getSwitches(trainId)).isEqualTo(listOf(vA))
+		assertThat(registry().getPathInfo(trainId)!!.target).isEqualTo(doB2)
 	}
 }

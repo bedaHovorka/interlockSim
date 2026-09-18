@@ -506,7 +506,7 @@ Based on interlocking principles, the following safety invariants must hold:
 | SI-2 | Signal protection | Train stops at red signal | `Train.semaphoreAction()` |
 | SI-3 | Route locking | Reserved path cannot be modified | `DynamicTrack.state == RESERVED` |
 | SI-4 | Flank protection | No conflicting switch positions | `DynamicRailSwitch.setUpPath()` |
-| SI-5 | Switch locking | Switch cannot toggle during train movement | `DynamicRailSwitch.lock()` |
+| SI-5 | Switch locking | Switch cannot toggle during train movement | `DynamicRailSwitch.lock()`, `changeConf()`, and `setUpPath()` (Issue #1065 -- see below) |
 
 ### 6.2 Safety Invariant Preservation During Transformation
 
@@ -555,6 +555,22 @@ fun changeConf() {
         throw IllegalStateException("Cannot change while locked (SI-5)")
     }
     // ...
+}
+```
+
+Until Issue #1065, `setUpPath()` -- the ONLY path a route reservation actually uses to
+configure a switch -- did NOT check `locked`, so `changeConf()`'s guard alone did not cover
+the case that mattered in practice: a candidate route silently re-throwing a switch a live
+route already held locked in the other position. Fixed by making `setUpPath()` check `locked`
+too, throwing `SwitchLockedException` before writing anything:
+```kotlin
+// DynamicRailSwitch.setUpPath() -- the reservation-path enforcement point (Issue #1065)
+override fun setUpPath(from: Cell.Segment?, to: Cell.Segment?, ...) {
+    val newConf = getPathConfWithException(from, to)
+    if (locked && newConf != conf) {
+        throw SwitchLockedException("... safety SI-5 ...", this, heldConf = conf, requiredConf = newConf)
+    }
+    // ... only now does conf get written and the switch (re-)lock
 }
 ```
 
