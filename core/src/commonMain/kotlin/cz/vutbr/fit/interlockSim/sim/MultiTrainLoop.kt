@@ -389,6 +389,13 @@ open class MultiTrainLoop(
 							"MultiTrainLoop: geometrically impossible route for ${train.name}: ${result.reason}"
 						}
 					}
+					is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
+						// Issue #1066: not expected here -- the train has no stored route yet, so
+						// nothing can diverge. Logged at WARN, the outer loop moves on.
+						logger.warn {
+							"MultiTrainLoop: route diverges from the held route for ${train.name}: ${result.reason}"
+						}
+					}
 				}
 			} finally {
 				for (resource in acquired) {

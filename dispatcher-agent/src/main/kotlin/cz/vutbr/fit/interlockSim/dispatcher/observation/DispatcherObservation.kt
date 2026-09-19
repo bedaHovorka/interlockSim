@@ -293,6 +293,26 @@ sealed interface AppliedOutcome {
 	) : AppliedOutcome
 
 	/**
+	 * `request_route` failed because every candidate diverges from the route the train already
+	 * holds: the stored route ends at [heldTarget] and the requested route would start elsewhere.
+	 * No block was busy and nothing was reserved, thrown or cleared.
+	 *
+	 * Unlike [Blocked], retrying the identical request is futile: the agent has to extend from
+	 * [heldTarget] or `cancel_route` first (Issue #1066).
+	 */
+	data class DivergesFromHeldRoute(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		/** Name of the stored route's target separator. */
+		val heldTarget: String,
+		/** English explanation from the reservation kernel. */
+		val reason: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/**
 	 * `cancel_route` completed; [anyReleased] is `true` if at least one block was released.
 	 *
 	 * [deferredBlockIds] lists blocks approach locking kept reserved because a proceed aspect stood

@@ -394,6 +394,40 @@ class RequestRouteApplyFailureCodeTest {
 		assertThat(decisionAppliedCount).isEqualTo(1)
 	}
 
+	/**
+	 * Issue #1066: a candidate that diverges from the route the train already holds must reach the
+	 * applier as its own [ApplyFailureCode], not as ordinary contention ([ApplyFailureCode.ALL_PATHS_BLOCKED])
+	 * -- otherwise the dispatcher is told to retry a request that can never succeed.
+	 */
+	@Test
+	@DisplayName(
+		"DivergesFromHeldRoute -> APPLIED_THEN_FAILED, applyFailure DIVERGES_FROM_HELD_ROUTE, onDecisionApplied fires"
+	)
+	fun divergesFromHeldRouteIsAppliedThenFailed() {
+		val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
+		every { networkActuator.requestRoute(any(), any(), any()) } returns
+			RouteRequestResult.DivergesFromHeldRoute("doB2", "new path starts at zA but the stored path ends at doB2")
+		val outcomes = mutableListOf<ActionOutcome>()
+		var decisionAppliedCount = 0
+		val queue = ActuatorCommandQueue()
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = networkActuator,
+				onApproveTrain = {},
+				onDecisionApplied = { decisionAppliedCount++ },
+				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
+			)
+
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doB1")))
+		applier.onControlStep()
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().phase).isEqualTo(ActionPhase.APPLIED_THEN_FAILED)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE)
+		assertThat(decisionAppliedCount).isEqualTo(1)
+	}
+
 	// ── Issue #834 task alpha-7a: every denial cause survives the facade branch ─────
 
 	/**
