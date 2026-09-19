@@ -70,6 +70,18 @@ private val logger = KotlinLogging.logger {}
  * so [MAX_TOLERATED_CONFLICT_EVENTS] tolerates it rather than blocking on an unrelated,
  * deeper investigation.
  *
+ * ## Second tolerated event (Issue #1065)
+ *
+ * `DynamicRailSwitch.setUpPath` now refuses to re-throw a switch locked in a different
+ * position by a live route (safety property SI-5) instead of silently stealing it. On
+ * `vyhybna.xml`, that refusal changes exactly WHEN the chokepoint contention above resolves
+ * (a train that previously stole the switch now waits), and repetition 2 deterministically
+ * gains one further `ConflictDetectedEvent` at the same `doB1`-`vB` chokepoint as a result
+ * (confirmed reproducible, stable at 2, never higher, across repeated runs on 2026-09-17).
+ * Both events remain genuinely transient and self-resolving -- `trainsExited` and the
+ * transition counts are unaffected -- so the bound moves from 1 to 2 rather than absorbing
+ * the shift silently.
+ *
  * The `vyhybna.xml` + dispatcher-agent-stack wiring itself lives in
  * [RuleBasedDispatcherDeterminismRunner], shared with
  * [RuleBasedDispatcherDeterminismHeavyTest] (the 1000-repetition manual-only
@@ -152,9 +164,10 @@ class RuleBasedDispatcherDeterminismTest : DispatcherKoinTestBase() {
 
 		/**
 		 * Maximum [RuleBasedDispatcherDeterminismRunner.RunResult.conflictEventCount] tolerated
-		 * per run. See the class KDoc's "`conflictEventCount` tolerance" section for the traced
-		 * `:core` pathfinding-layer cause this bounds rather than forbids.
+		 * per run. See the class KDoc's "`conflictEventCount` tolerance" and "Second tolerated
+		 * event (Issue #1065)" sections for the two traced, transient causes this bounds rather
+		 * than forbids.
 		 */
-		private const val MAX_TOLERATED_CONFLICT_EVENTS = 1
+		private const val MAX_TOLERATED_CONFLICT_EVENTS = 2
 	}
 }

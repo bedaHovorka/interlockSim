@@ -39,6 +39,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
@@ -279,6 +280,12 @@ class ExampleRegistry {
 	 * existed. The `.name` (rather than the enum) keeps [RunParameters] decoupled from this enum,
 	 * exactly as that field's KDoc requires.
 	 *
+	 * The circuit-breaker knobs (`circuitBreakerFailureThreshold`/`circuitBreakerCooldownSeconds`,
+	 * Issue #1058) are copied from the same [DispatcherRunConfig] that builds this run's
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker] — so the run JSON records
+	 * the breaker the run actually ran with, keeping a report able to tell a 2-failure breaker
+	 * apart from an 8-failure one.
+	 *
 	 * `internal` rather than `private` so tests can call it directly with a plain (non-Koin)
 	 * [OllamaExecutorConfig]/[DispatcherRunConfig] pair — the same testability reasoning as
 	 * `ruleBasedRunParameters` in `DispatcherAgentModule`.
@@ -295,7 +302,9 @@ class ExampleRegistry {
 			model = config.modelName,
 			seed = null,
 			inferenceTimeoutSeconds = runConfig.inferenceTimeoutSeconds,
-			promptVariant = runConfig.promptVariant.name
+			promptVariant = runConfig.promptVariant.name,
+			circuitBreakerFailureThreshold = runConfig.circuitBreakerFailureThreshold,
+			circuitBreakerCooldownSeconds = runConfig.circuitBreakerCooldownSeconds
 		)
 
 	/**
@@ -354,23 +363,12 @@ class ExampleRegistry {
 			// Headless: no real-time sync for the ShuntingLoop itself — the simulation
 			// runs at full speed. Pacing only applies to the agent-driver loop below.
 			val loop = ShuntingLoop(this, endTime)
-			// Issue #873 (R8 resolution): build the LLM-backed planner with rule-based fallback.
-			// KoogAgentPlanAdapter is async (isAsynchronous=true); ThrottlingSimulationController
-			// provides the required pacing for assertPlannerPacingCompatible without `:desktop-ui`.
+			// Issue #873 (R8 resolution): KoogAgentPlanAdapter is async (isAsynchronous=true);
+			// ThrottlingSimulationController provides the required pacing for
+			// assertPlannerPacingCompatible without `:desktop-ui`.
 			// Capped at AGENT_MAX_SPEED_MULTIPLIER so the agent driver has sufficient wall-clock
 			// time to produce decisions before the simulation advances past the relevant state.
-			val koogAdapter =
-				KoogAgentPlanAdapter(
-					agentFactory = scope.get<KoogAgentFactory>(),
-					context = this,
-					fallbackDispatcher = RuleBasedDispatcher(),
-					inferenceTimeout = Duration.ofSeconds(scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
-					commandQueue = scope.get<ActuatorCommandQueue>(),
-					sinkHolder = scope.get<SinkHolder>(),
-					// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
-					// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
-					cycleHistory = scope.get<CycleHistory>()
-				)
+			val koogAdapter = createLlmPlanner(this)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory can retrieve it after the run
 			// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
@@ -474,22 +472,11 @@ class ExampleRegistry {
 		return withExampleContext(factory) {
 			// Enable real-time synchronization for GUI mode with 1x speed multiplier
 			val loop = ShuntingLoop(this, endTime, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
-			// SP2b.9 (Issue #566): build the LLM-backed planner with rule-based fallback.
-			// KoogAgentPlanAdapter is async (isAsynchronous=true); DelegatingSimulationController
-			// provides the required pacing for assertPlannerPacingCompatible.
+			// SP2b.9 (Issue #566): KoogAgentPlanAdapter is async (isAsynchronous=true);
+			// DelegatingSimulationController provides the required pacing for
+			// assertPlannerPacingCompatible.
 			// Issue #817: wrap with MeasuringPlanAdapter to log and measure fallback vs LLM success rate.
-			val koogAdapter =
-				KoogAgentPlanAdapter(
-					agentFactory = scope.get<KoogAgentFactory>(),
-					context = this,
-					fallbackDispatcher = RuleBasedDispatcher(),
-					inferenceTimeout = Duration.ofSeconds(scope.get<DispatcherRunConfig>().inferenceTimeoutSeconds),
-					commandQueue = scope.get<ActuatorCommandQueue>(),
-					sinkHolder = scope.get<SinkHolder>(),
-					// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
-					// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
-					cycleHistory = scope.get<CycleHistory>()
-				)
+			val koogAdapter = createLlmPlanner(this)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory (e.g. Frame's
 			// SimulationController.STOPPED handler) can retrieve it after the run ends
@@ -511,6 +498,47 @@ class ExampleRegistry {
 			)
 			setMainProcess(loop)
 		}
+	}
+
+	/**
+	 * The LLM-backed planner both AI examples build the same way.
+	 *
+	 * Extracted in the Issue #1058 review round from [createShuntingLoopAIExample] and
+	 * [createShuntingLoopAIGuiExample]: the two construction blocks had become byte-identical
+	 * copies (the #847/#928 recorder comments at each call site tell how that drift-prone
+	 * pattern bit before), so the next copy would have been free to drift alone.
+	 *
+	 * Every collaborator except the fallback comes from [DefaultSimulationContext.scope], so
+	 * the planner shares the per-context instances (agent factory, command queue, SinkHolder,
+	 * CycleHistory) with the Koin-bound tools. The single [DispatcherRunConfig] read feeds the
+	 * inference timeout and both circuit-breaker knobs, so the usual
+	 * system-property > committed-file > code-constant precedence applies to all of them alike.
+	 *
+	 * @return a fresh [KoogAgentPlanAdapter] with a [RuleBasedDispatcher] fallback and an
+	 *   [LlmCircuitBreaker] (Issue #1058) built from the context's configuration
+	 */
+	private fun createLlmPlanner(context: DefaultSimulationContext): KoogAgentPlanAdapter {
+		val scope = context.scope
+		val runConfig = scope.get<DispatcherRunConfig>()
+		return KoogAgentPlanAdapter(
+			agentFactory = scope.get<KoogAgentFactory>(),
+			context = context,
+			fallbackDispatcher = RuleBasedDispatcher(),
+			inferenceTimeout = Duration.ofSeconds(runConfig.inferenceTimeoutSeconds),
+			commandQueue = scope.get<ActuatorCommandQueue>(),
+			sinkHolder = scope.get<SinkHolder>(),
+			// Issue #847 (SP2c.24): the same per-context CycleHistory the agent renders
+			// from. Capacity comes from DispatcherRunConfig.historyN; 0 disables it.
+			cycleHistory = scope.get<CycleHistory>(),
+			// Issue #1058: guards against sustained LLM overload — see KoogAgentPlanAdapter's
+			// "Overload handling" KDoc. Threshold/cooldown come from DispatcherRunConfig so
+			// the same -D/committed-file/code-constant precedence applies as every other knob.
+			circuitBreaker =
+				LlmCircuitBreaker(
+					failureThreshold = runConfig.circuitBreakerFailureThreshold,
+					cooldownSeconds = runConfig.circuitBreakerCooldownSeconds
+				)
+		)
 	}
 
 	/**
@@ -689,8 +717,17 @@ class ExampleRegistry {
 				onTickRecord = runRecorder?.let { it::onTick },
 				// Issue #847 (SP2c.24): the grid's tickPeriodMs axis. Zero by default, so a run
 				// that does not set the property paces exactly as it did before.
-				tickPeriodMs = context.scope.get<DispatcherRunConfig>().tickPeriodMs
+				tickPeriodMs = context.scope.get<DispatcherRunConfig>().tickPeriodMs,
+				// Issue #1032: same liveness predicate passed to AgentDriverLoop below — lets a
+				// cycle whose plan() call outlived the simulation discard its stale decision
+				// instead of posting it and pacing against a controller for a dead run.
+				isSimActive = loop::isSimActive
 			)
+		// Issue #1032: declared in scope so ExampleRegistryDriverLoopWiringTest can pin the
+		// wiring above — drop `isSimActive = loop::isSimActive` and the driver reverts to its
+		// `{ true }` default, which flips that test red instead of silently disabling the
+		// discard guard in production.
+		context.scope.declare(driver)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
 		// The signal fires from controlStepListener — NOT from snapshotCaptureHook — because

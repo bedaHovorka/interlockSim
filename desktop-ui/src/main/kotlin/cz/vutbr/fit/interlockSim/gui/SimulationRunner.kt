@@ -9,9 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationPacing
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -248,6 +250,17 @@ class SimulationRunner(
 						} catch (t: Throwable) {
 							logger.error(t) { "Simulation thread terminated unexpectedly" }
 						} finally {
+							// Issue #1032 review follow-up (PR #1071): clear the dispatcher-agent
+							// liveness flag from this shared exit point too. It runs for every way
+							// the simulation thread can end — natural completion, an interrupt, or
+							// an unrelated Throwable escaping context.run() without ever calling
+							// stop()/errorStop() (e.g. a bug in a dispatcher component) — so it
+							// covers exits that reach neither ShuntingLoop.interLoopSleep's
+							// end-time branch nor DefaultSimulationContext.stop(). Safe casts make
+							// this a no-op for non-ShuntingLoop runs; idempotent with the GUI's
+							// own pre-interrupt clear in SimulationController.stop().
+							val mainProcess = (context as? DefaultSimulationContext)?.mainProcess
+							(mainProcess as? ShuntingLoop)?.signalStopped()
 							synchronized(lifecycleLock) {
 								if (simThread === Thread.currentThread()) {
 									simThread = null

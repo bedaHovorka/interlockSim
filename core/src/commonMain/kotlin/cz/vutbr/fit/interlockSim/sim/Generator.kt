@@ -33,11 +33,13 @@ open class Generator(
 		dtMin = 1e-6
 		// Block-boundary and tail-entry events are now located by kDisco root-finding
 		// (`Process.waitCrossing`, see Train.kt) rather than by step granularity, so `dtMax` no
-		// longer has to be tiny to keep *those* events' overshoot negligible. Motor's
-		// AccelerationStopCondition (velocity-target detection, Train.kt) is NOT yet converted —
-		// it still relies on step granularity via plain `waitUntil` — so `dtMax` is deliberately
-		// left unchanged here rather than raised further; converting Motor and re-tuning dtMax
-		// is tracked separately (Issue #760, follow-up to #750).
+		// longer has to be tiny to keep *those* events' overshoot negligible. Motor's approach
+		// phase joined them in Issue #1014 (`Process.waitUntilCrossing` on the approach margin),
+		// but its remaining velocity-target waits — the `accelerateTo` arms — are NOT converted
+		// and still rely on step granularity via plain `waitUntil`. So `dtMax` is deliberately
+		// left unchanged here rather than raised further: raising it needs those arms converted
+		// too, plus the deliberate golden re-baselining that implies. Both are tracked
+		// separately (Issue #760, follow-up to #750).
 		dtMax = 1e-3
 		maxRelError = 1e-2
 		maxAbsError = 1e-2

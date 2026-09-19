@@ -80,7 +80,9 @@ class DispatcherDefaultsResource private constructor(
 				DispatcherRunConfig.PROP_HISTORY_N,
 				DispatcherRunConfig.PROP_MAX_ACTIONS_PER_TICK,
 				DispatcherRunConfig.PROP_INFERENCE_TIMEOUT_SECONDS,
-				DispatcherRunConfig.PROP_PROMPT_VARIANT
+				DispatcherRunConfig.PROP_PROMPT_VARIANT,
+				DispatcherRunConfig.PROP_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+				DispatcherRunConfig.PROP_CIRCUIT_BREAKER_COOLDOWN_SECONDS
 			)
 
 		/**

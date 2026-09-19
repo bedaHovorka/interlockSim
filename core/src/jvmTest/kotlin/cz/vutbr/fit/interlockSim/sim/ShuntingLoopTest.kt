@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -530,6 +531,35 @@ class ShuntingLoopTest : KoinTestBase() {
 			// instance is a new HashMap either way.
 			assertThat(snapshot).isEmpty()
 			assertThat(loop.getAllBlockTransitions()).isEmpty()
+		}
+	}
+
+	@Nested
+	@DisplayName("Simulation liveness flag (Issue #1032)")
+	inner class SimActiveFlagTests {
+		private fun newLoop(): ShuntingLoop {
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml()).tracked()
+			return ShuntingLoop(simContext, 60L)
+		}
+
+		@Test
+		fun `isSimActive is false before any run`() {
+			assertThat(newLoop().isSimActive()).isFalse()
+		}
+
+		@Test
+		fun `signalStopped before any run is a harmless no-op`() {
+			val loop = newLoop()
+			loop.signalStopped()
+			assertThat(loop.isSimActive()).isFalse()
+		}
+
+		@Test
+		fun `signalStopped is idempotent when no run re-arms the flag`() {
+			val loop = newLoop()
+			loop.signalStopped()
+			loop.signalStopped()
+			assertThat(loop.isSimActive()).isFalse()
 		}
 	}
 

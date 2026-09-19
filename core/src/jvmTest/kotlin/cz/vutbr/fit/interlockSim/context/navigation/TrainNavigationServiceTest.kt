@@ -449,6 +449,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		 * Measured: with the extension arriving 3 s later the train sailed through; at 39 s it
 		 * stalled for 50 s; in a run where it never arrived the train spun 48 times to the end of
 		 * the run, holding `kA` and blocking everything behind it.
+		 *
+		 * Since Issue #1064 the interlocking refuses that grant (G8: a route must end at a signal facing
+		 * the train), so the test seeds the reservation state the grant used to leave behind. The
+		 * classification still matters for any PathInfo that stops short of a facing separator,
+		 * whatever produced it.
 		 */
 		@Test
 		fun `findReservedPathForTrain reports a rear-facing terminus as a temporary conflict`() {
@@ -464,10 +469,24 @@ class TrainNavigationServiceTest : KoinTestBase() {
 						val doA1 = grid.getCellAt(16, 8) as DynamicRailSemaphore
 						val zA = grid.getCellAt(14, 8) as DynamicRailSemaphore
 
-						// The grant the dispatcher actually made, for an eastbound train.
-						val reservation = pathService.reservePath("train1", inOutA, doA1)
-						assertThat(reservation)
-							.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+						// The grant the dispatcher once made for an eastbound train is refused now (G8).
+						assertThat(pathService.reservePath("train1", inOutA, doA1))
+							.isInstanceOf(PathReservationService.ReservationResult.GeometricallyImpossible::class)
+
+						// Seed the state that grant left behind: A -> doA1 physically reserved, registered,
+						// and described by a PathInfo ending at the rear-facing doA1.
+						val sections =
+							context
+								.getRoutingServices()
+								.getTopologyNavigator()
+								.findAllTopologicalPaths(inOutA, doA1)
+								.minBy { it.size }
+						val blocks = sections.map { it.getTrackBlock() }.filterIsInstance<DynamicTrackBlock>().distinct()
+						blocks.forEach { it.setUpPath(inOutA, "train1") }
+						val registry = context.scope.get<PathReservationRegistry>()
+						registry.registerAtomic("train1", blocks)
+						val pathInfoBuilder = context.scope.get<cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder>()
+						registry.registerPathInfo("train1", pathInfoBuilder.buildPathInfo(inOutA, doA1, sections))
 
 						// The query the train makes on arriving at zA.
 						val result = service.findReservedPathForTrain("train1", zA)

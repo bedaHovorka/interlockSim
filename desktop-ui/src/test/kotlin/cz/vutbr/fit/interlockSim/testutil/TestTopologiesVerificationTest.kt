@@ -88,8 +88,11 @@ class TestTopologiesVerificationTest : KoinTestBase() {
 		TestTopologies.linearPathWithSemaphoreSequenceSimulation(semaphoreCount = 2).use { context ->
 			// Assert - Verify it's a simulation context with correct structure
 			assertThat(context.getInOuts()).hasSize(2)
-			// Graph represents track connections - linear path has bidirectional edges
-			assertThat(context.getGraph().size()).isEqualTo(1) // 1 edge for bidirectional SimpleTrackBlock
+			// Graph size equals the track-block count (see the Y-junction test above).
+			// With semaphoreCount = 2 the route A–Sem1–Sem2–B has 3 blocks, so 3 edges.
+			// The old expected value 1 pinned the broken rear-facing InOuts: their
+			// joins silently failed in findTrackLineParts, leaving only Sem1–Sem2.
+			assertThat(context.getGraph().size()).isEqualTo(3)
 		}
 	}
 }

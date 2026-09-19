@@ -226,7 +226,10 @@ class ShuntingLoop(
 	 */
 	var agentDriverAction: (suspend () -> Unit)? = null
 
-	/** `true` from [startAction] to the moment [interLoopSleep] detects the end condition. */
+	/**
+	 * `true` from [startAction] to the moment [interLoopSleep] detects the end condition,
+	 * or until [signalStopped] is called from the GUI manual-stop path (Issue #1032).
+	 */
 	@kotlin.concurrent.Volatile
 	private var simActive: Boolean = false
 
@@ -568,8 +571,32 @@ class ShuntingLoop(
 	 */
 	override fun getApprovedTrains(): List<Train> = approwedTrains
 
-	/** Returns `true` while the simulation is active (between [startAction] and [interLoopSleep] end). */
+	/**
+	 * Returns `true` from [startAction] until [interLoopSleep] ends the simulation or
+	 * [signalStopped] is called.
+	 */
 	fun isSimActive(): Boolean = simActive
+
+	/**
+	 * Clears the [simActive] liveness flag without touching the kDisco kernel (Issue #1032).
+	 *
+	 * The GUI manual-stop path never reaches [interLoopSleep]'s end-time branch — the runner
+	 * interrupts the simulation thread instead — so the flag would otherwise stay `true`
+	 * forever after a manual stop: an in-flight driver cycle would still post its stale
+	 * decision and the dispatcher-agent daemon loop would spin no-op cycles on the bounded
+	 * SnapshotSignal timeout until JVM exit. Clearing the flag is the designed shutdown
+	 * mechanism for that companion thread (see DelegatingSimulationController's note on the
+	 * driver loop exiting via its own `isSimActive()` check).
+	 *
+	 * Deliberately does NOT terminate [generator] or stop the env: kernel teardown belongs to
+	 * the natural-end branch and to the interrupted thread's own unwinding. Safe to call
+	 * from any thread (single @Volatile write); idempotent; a no-op before [startAction]
+	 * and after a natural end. [startAction] re-arms the flag, so a stop/start cycle on the
+	 * same context works unchanged.
+	 */
+	fun signalStopped() {
+		simActive = false
+	}
 
 	/**
 	 * Public entry point for the SP0.9 applier to approve a queued train.

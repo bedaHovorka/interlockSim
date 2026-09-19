@@ -13,19 +13,29 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -44,12 +54,13 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 	private lateinit var registry: PathReservationRegistry
 	private lateinit var blocks: List<DynamicTrackBlock>
+	private lateinit var simulationContext: DefaultSimulationContext
 
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml to get real DynamicTrackBlock instances
-		val simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
+		simulationContext =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
 		// Get registry from context's scope (Issue #296 Phase 8: now requires context)
 		registry = simulationContext.scope.get()
@@ -462,6 +473,324 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(first.events).containsExactly(event)
 			assertThat(second.events).containsExactly(event)
 			assertThat(first.events[0]).isSameInstanceAs(second.events[0])
+		}
+	}
+
+	/**
+	 * Issue #1063: a partial tail release must be able to cut the stored PathInfo back to the
+	 * separator where the occupied head meets the released tail. Otherwise `isPathExtendedBeyond`
+	 * keeps reporting a route the train no longer holds and both dispatchers stay silent.
+	 */
+	@Nested
+	inner class TrimPathInfoTo {
+		private val trainId = "trimTrain"
+
+		@Test
+		fun `trims the PathInfo to the boundary once every block beyond it is released`() {
+			val held = reserveLongRoute(trainId)
+			val head = held.first { block -> zA() in block.ends() && block.ends().none { it is DynamicRailSwitch } }
+			// Release the tail the way RegistryPartialRouteReleaser does: free each block first, because
+			// unregisterBlock only accepts a FREE block.
+			held.filter { it != head }.forEach { block ->
+				block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+				assertThat(registry.unregisterBlock(trainId, block)).isTrue()
+			}
+
+			val trimmed = registry.trimPathInfoTo(trainId, zA())
+
+			assertThat(trimmed).isTrue()
+			val pathInfo = registry.getPathInfo(trainId)!!
+			assertThat(pathInfo.target).isEqualTo(zA())
+			assertThat(pathInfo.reservedPath.last()).isEqualTo(zA())
+			assertThat(pathInfo.entryDirections.keys.toList()).containsExactly(head)
+			assertThat(registry.isPathExtendedBeyond(trainId, zA())).isFalse()
+		}
+
+		@Test
+		fun `refuses to trim while a held block still lies beyond the boundary`() {
+			reserveLongRoute(trainId)
+			val before = registry.getPathInfo(trainId)
+
+			val trimmed = registry.trimPathInfoTo(trainId, zA())
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		@Test
+		fun `refuses to trim to a separator the stored path does not pass`() {
+			reserveLongRoute(trainId)
+			val before = registry.getPathInfo(trainId)!!
+			val doA1 = separatorAt(16, 8)
+			val notOnPath = if (before.reservedPath.contains(doA1)) separatorAt(17, 9) else doA1
+
+			val trimmed = registry.trimPathInfoTo(trainId, notOnPath)
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		/**
+		 * A route runs signal to signal; a switch is interior, never an end (Issue #938). A train whose
+		 * occupied head is the short block between `zA` and `vA` meets its released tail at the switch
+		 * `vA`. Trimming there would store a PathInfo that ends at a switch, and every later extension
+		 * would fail the merge against it, so the trim is refused and the PathInfo is kept.
+		 */
+		@Test
+		fun `refuses to trim to a switch`() {
+			val held = reserveLongRoute(trainId)
+			val vA = separatorAt(15, 8)
+			// Keep kA and the short zA-vA block; release everything beyond the switch vA.
+			val kept = held.filter { block -> zA() in block.ends() }
+			held.filter { it !in kept }.forEach { block ->
+				block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+				assertThat(registry.unregisterBlock(trainId, block)).isTrue()
+			}
+			val before = registry.getPathInfo(trainId)
+
+			val trimmed = registry.trimPathInfoTo(trainId, vA)
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		/**
+		 * Issue #1067 gap 2: `doA1` faces WEST on the `A -> B` direction — Issue #566's rear-facing
+		 * rule deliberately leaves it at STOP even on a granted route that runs past it. A trim that
+		 * accepted it as the new PathInfo end would store an end no future route can start from: G4
+		 * refuses every route starting at a rear-facing signal, reproducing the stall this trim
+		 * exists to prevent.
+		 */
+		@Test
+		fun `refuses to trim to a signal facing away from the train`() {
+			val held = reserveLongRoute(trainId)
+			val vA = separatorAt(15, 8)
+			val doA1 = separatorAt(16, 8)
+			// Keep only the short vA-doA1 block; release everything beyond doA1.
+			val head = held.first { block -> vA in block.ends() && doA1 in block.ends() }
+			held.filter { it != head }.forEach { block ->
+				block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+				assertThat(registry.unregisterBlock(trainId, block)).isTrue()
+			}
+			val before = registry.getPathInfo(trainId)
+
+			val trimmed = registry.trimPathInfoTo(trainId, doA1)
+
+			assertThat(trimmed).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		@Test
+		fun `a train without a PathInfo has nothing to trim`() {
+			assertThat(registry.trimPathInfoTo("ghost", zA())).isFalse()
+		}
+	}
+
+	/** @since Issue #1067 gap 1 */
+	@Nested
+	inner class TrimPathInfoToHeldBlocks {
+		private val trainId = "trimHeldBlocksTrain"
+
+		@Test
+		fun `finds the boundary itself and trims to it`() {
+			val held = reserveLongRoute(trainId)
+			releaseAllBut(trainId, held, keptHead(held))
+
+			val trimmed = registry.trimPathInfoToHeldBlocks(trainId)
+
+			assertThat(trimmed).isTrue()
+			assertThat(registry.getPathInfo(trainId)!!.target).isEqualTo(zA())
+			assertThat(registry.isPathExtendedBeyond(trainId, zA())).isFalse()
+		}
+
+		@Test
+		fun `a second call changes nothing`() {
+			val held = reserveLongRoute(trainId)
+			releaseAllBut(trainId, held, keptHead(held))
+			registry.trimPathInfoToHeldBlocks(trainId)
+			val trimmed = registry.getPathInfo(trainId)
+
+			assertThat(registry.trimPathInfoToHeldBlocks(trainId)).isTrue()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(trimmed)
+		}
+
+		@Test
+		fun `a fully held route is left as it is`() {
+			reserveLongRoute(trainId)
+			val before = registry.getPathInfo(trainId)
+
+			assertThat(registry.trimPathInfoToHeldBlocks(trainId)).isTrue()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		@Test
+		fun `refuses when the held blocks end at a switch`() {
+			val held = reserveLongRoute(trainId)
+			releaseAllBut(trainId, held, held.filter { block -> zA() in block.ends() })
+			val before = registry.getPathInfo(trainId)
+
+			assertThat(registry.trimPathInfoToHeldBlocks(trainId)).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		@Test
+		fun `a train holding no block on its PathInfo has nothing to trim`() {
+			val held = reserveLongRoute(trainId)
+			releaseAllBut(trainId, held, emptyList())
+			val before = registry.getPathInfo(trainId)
+
+			assertThat(registry.trimPathInfoToHeldBlocks(trainId)).isFalse()
+			assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(before)
+		}
+
+		@Test
+		fun `a train without a PathInfo has nothing to trim`() {
+			assertThat(registry.trimPathInfoToHeldBlocks("ghost")).isFalse()
+		}
+	}
+
+	/** @since Issue #1067 */
+	@Nested
+	inner class PathInfoEnds {
+		private val trainId = "pathInfoEndTrain"
+
+		@Test
+		fun `the end after the head is its exit signal and the block beyond it`() {
+			val held = reserveLongRoute(trainId)
+
+			val end = registry.pathInfoEndAfter(trainId, listOf(held.first()))
+
+			assertThat(end!!.boundary).isEqualTo(zA())
+			val nextBlock = requireNotNull(end.nextBlock) { "a block follows zA on the A -> B route" }
+			assertThat(nextBlock).isNotEqualTo(held.first())
+			assertThat(zA() in nextBlock.ends()).isTrue()
+			assertThat(registry.isValidPathInfoEnd(end.boundary, nextBlock)).isTrue()
+		}
+
+		@Test
+		fun `the end after the last block is the target with no block beyond it`() {
+			val held = reserveLongRoute(trainId)
+
+			val end = registry.pathInfoEndAfter(trainId, listOf(held.last()))
+
+			assertThat(end!!.boundary).isEqualTo(registry.getPathInfo(trainId)!!.target)
+			assertThat(end.nextBlock).isNull()
+		}
+
+		/**
+		 * PR #1068 review: a merged circular route may pass a block twice. The last occurrence can then be
+		 * ahead of the train, and a trim there would drop track it still holds, so there is no end.
+		 */
+		@Test
+		fun `no end when a kept block appears twice on the PathInfo`() {
+			val held = reserveLongRoute(trainId)
+			val stored = requireNotNull(registry.getPathInfo(trainId))
+			val head = held.first()
+			val revisiting = ArrayPath(simulationContext)
+			stored.reservedPath.forEach { revisiting.add(it) }
+			stored.reservedPath
+				.filter { element -> (element as? TrackSection)?.getTrackBlock() == head }
+				.forEach { revisiting.add(it) }
+			registry.registerPathInfo("revisitingTrain", stored.copy(reservedPath = revisiting))
+
+			assertThat(registry.pathInfoEndAfter("revisitingTrain", listOf(head))).isNull()
+			assertThat(registry.pathInfoEndAfter(trainId, listOf(head))).isNotNull()
+		}
+
+		/**
+		 * PR #1068 review: a route that turns back at a separator re-enters the block it came from right
+		 * after that separator. The two passes are separate places, so there is no end either.
+		 */
+		@Test
+		fun `no end when a kept block appears again right after a separator`() {
+			val held = reserveLongRoute(trainId)
+			val stored = requireNotNull(registry.getPathInfo(trainId))
+			val head = held.first()
+			val elements = stored.reservedPath.toList()
+			val headSections = elements.filter { element -> (element as? TrackSection)?.getTrackBlock() == head }
+			val separatorBeforeHead = elements[elements.indexOf(headSections.first()) - 1]
+			val separatorAfterHead = elements[elements.indexOf(headSections.last()) + 1]
+			// separatorBeforeHead, head, separatorAfterHead, head again, separatorBeforeHead: the second
+			// pass is followed by a separator, so "the last occurrence" would give an end.
+			val turningBack = ArrayPath(simulationContext)
+			turningBack.add(separatorBeforeHead)
+			headSections.forEach { turningBack.add(it) }
+			turningBack.add(separatorAfterHead)
+			headSections.reversed().forEach { turningBack.add(it) }
+			turningBack.add(separatorBeforeHead)
+			registry.registerPathInfo("turningTrain", stored.copy(reservedPath = turningBack))
+
+			assertThat(registry.pathInfoEndAfter("turningTrain", listOf(head))).isNull()
+		}
+
+		@Test
+		fun `no end when no kept block lies on the PathInfo or there is no PathInfo`() {
+			reserveLongRoute(trainId)
+
+			assertThat(registry.pathInfoEndAfter(trainId, emptyList())).isNull()
+			assertThat(registry.pathInfoEndAfter("ghost", blocks)).isNull()
+		}
+
+		/** `doA1` faces WEST, away from an `A -> B` train: valid only when the direction is unknown. */
+		@Test
+		fun `a signal facing away from the next block is not a valid end`() {
+			val held = reserveLongRoute(trainId)
+			val doA1 = separatorAt(16, 8)
+			val head = held.first { block -> separatorAt(15, 8) in block.ends() && doA1 in block.ends() }
+
+			val end = registry.pathInfoEndAfter(trainId, listOf(head))
+
+			assertThat(end!!.boundary).isEqualTo(doA1)
+			assertThat(registry.isValidPathInfoEnd(doA1, end.nextBlock)).isFalse()
+			assertThat(registry.isValidPathInfoEnd(doA1)).isTrue()
+		}
+
+		@Test
+		fun `a switch is never a valid end and an InOut always is`() {
+			val held = reserveLongRoute(trainId)
+			val inOutA = simulationContext.getInOuts().single { it.name == "A" }
+
+			assertThat(registry.isValidPathInfoEnd(separatorAt(15, 8), held[1])).isFalse()
+			assertThat(registry.isValidPathInfoEnd(inOutA, held.first())).isTrue()
+		}
+	}
+
+	private fun separatorAt(
+		x: Int,
+		y: Int
+	): DynamicPathSeparator = simulationContext.separatorAt(x, y)
+
+	private fun zA(): DynamicPathSeparator = separatorAt(14, 8)
+
+	/** Reserves InOut A -> InOut B for [trainId] and returns the reserved blocks, head (kA) first. */
+	private fun reserveLongRoute(trainId: String): List<DynamicTrackBlock> {
+		val inOuts = simulationContext.getInOuts()
+		val result =
+			simulationContext.getRoutingServices().getPathReservationService().reservePath(
+				trainId,
+				inOuts.single { it.name == "A" },
+				inOuts.single { it.name == "B" }
+			)
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		return registry.getBlocks(trainId)
+	}
+
+	/** The head block `kA`: it touches `zA` and no switch. */
+	private fun keptHead(held: List<DynamicTrackBlock>): List<DynamicTrackBlock> =
+		listOf(held.first { block -> zA() in block.ends() && block.ends().none { it is DynamicRailSwitch } })
+
+	/**
+	 * Releases every block of [held] not in [kept] the way `RegistryPartialRouteReleaser` does: free the
+	 * block first, because `unregisterBlock` only accepts a FREE block.
+	 */
+	private fun releaseAllBut(
+		trainId: String,
+		held: List<DynamicTrackBlock>,
+		kept: List<DynamicTrackBlock>
+	) {
+		held.filter { it !in kept }.forEach { block ->
+			block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
+			assertThat(registry.unregisterBlock(trainId, block)).isTrue()
 		}
 	}
 
