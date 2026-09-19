@@ -148,6 +148,10 @@ fun DispatchDecision.applyToolDrivenToActuator(
 					toolDrivenLogger.warn {
 						"$logPrefix: RequestRoute geometrically impossible for $trainName — ${result.reason}"
 					}
+				is RouteRequestResult.DivergesFromHeldRoute ->
+					toolDrivenLogger.warn {
+						"$logPrefix: RequestRoute diverges from the held route for $trainName — ${result.reason}"
+					}
 			}
 		}
 		DispatchDecision.NoAction,

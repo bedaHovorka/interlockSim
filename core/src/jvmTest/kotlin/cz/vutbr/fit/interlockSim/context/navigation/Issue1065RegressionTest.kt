@@ -114,9 +114,11 @@ class Issue1065RegressionTest : KoinTestBase() {
 		// old.target), so Step 2i's merge would abort even if the switch write had succeeded.
 		val phase2 = service.reservePath(trainId, semaphoreZA, semaphoreDoB1)
 
-		// Then: refused as ordinary, transient contention -- NEVER as a permanent geometric
-		// impossibility (that would make InOutWorker throw instead of letting the train wait).
-		assertThat(phase2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		// Then: refused before it can touch anything (Issue #1066: the merge precondition runs
+		// ahead of the switch write, so the candidate is now skipped as DivergesFromHeldRoute
+		// instead of being refused at the switch lock and reported as AllPathsBlocked). Never a
+		// GeometricallyImpossible, which would make InOutWorker throw.
+		assertThat(phase2).isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
 
 		// And: vA is untouched -- still BRANCH, still locked, still owned by this train. This is
 		// the #1065 assertion: before the fix, vA ended up at MAIN here.

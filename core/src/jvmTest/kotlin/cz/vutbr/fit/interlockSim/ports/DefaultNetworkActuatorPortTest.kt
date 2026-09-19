@@ -993,6 +993,10 @@ class DefaultNetworkActuatorPortTest {
 				),
 				PathReservationService.ReservationResult.GeometricallyImpossible(
 					reason = "START semaphore for candidate 0 faces away from the requested direction of travel"
+				),
+				PathReservationService.ReservationResult.DivergesFromHeldRoute(
+					heldTarget = "doB2",
+					reason = "non-contiguous merge: new path starts at zA but the stored path ends at doB2"
 				)
 			)
 		}

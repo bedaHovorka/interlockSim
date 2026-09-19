@@ -167,6 +167,18 @@ class InOutWorker(
 						logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
 						throw SimulationException(errorMsg)
 					}
+					is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
+						// Issue #1066. Unreachable by construction, like NonContiguousStart above: a
+						// train at the head of this InOut's admission queue has no stored PathInfo, so
+						// there is no held route a candidate could diverge from. Failing loudly beats
+						// `continue`, which would re-attempt the same refused request without
+						// advancing simulation time.
+						val errorMsg =
+							"InOut ${inOut.name} - Route diverges from the route already held by " +
+								"train $trainId: ${result.reason}"
+						logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
+						throw SimulationException(errorMsg)
+					}
 				}
 			} catch (e: Exception) {
 				logger.warn {
