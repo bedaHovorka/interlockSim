@@ -1090,10 +1090,10 @@ class Train :
 		 * Called on every release of the gate and stands down immediately unless it was
 		 * [boundaryGuard]'s clearance term that bound — that is, unless the front is a clearance
 		 * short of the separator and, because [Motor] aims at the same point, already braked to
-		 * walking pace. (That braking happens when the aspect stood restrictive as the leg was
-		 * commanded; a restrictive flip arriving mid-leg re-commands nothing, so that stand
-		 * still snaps to zero from line speed — one metre earlier than the separator always
-		 * did.) The wait is the same level-triggered form [semaphoreAction] uses at the
+		 * walking pace. (The motor brakes for a restrictive aspect whether it stood so as the leg
+		 * was commanded or turned so mid-leg — see [Motor]'s late-aspect watch, Issue #1057. Only
+		 * a flip that leaves less room than the deceleration bound needs still snaps to zero
+		 * here, as it always did.) The wait is the same level-triggered form [semaphoreAction] uses at the
 		 * separator; the train resumes the instant the aspect clears, or rolls on to the
 		 * separator when the route is released, and the front is still on the *approach* side of
 		 * the sensor point while it waits, which is the whole point of the clearance.
@@ -1546,11 +1546,7 @@ class Train :
 		private fun approachMargin(): Double {
 			if (!accelerate) return -1.0
 			val halfSpeedMargin = targetSpeed / 2.0 - getVelocity()
-			if (semaphoreToStopShortOf() == null) return halfSpeedMargin
-			val remaining = clearanceStopLineDistance()
-			val speed = getVelocity()
-			if (remaining <= 0 || speed <= 0) return halfSpeedMargin
-			return minOf(halfSpeedMargin, remaining - (speed * speed) / (2.0 * -MINIMAL_DECELERATION))
+			return minOf(halfSpeedMargin, brakingRoomMargin())
 		}
 
 		override suspend fun actions() {
@@ -1603,12 +1599,22 @@ class Train :
 				// entirely: it is unaffected by [clearanceStopWaived].
 				waitUntilCrossing { minOf(approachMargin(), if (restrictiveSignalCleared()) -1.0 else 1.0) }
 			} else {
-				waitUntil(cond)
+				// Also ends when a restrictive aspect has left no braking room (Issue #1057): the leg
+				// was commanded while the signal allowed, so nothing else would ever brake it.
+				waitUntil(Condition { cond.test() || brakingRoomGone() })
 			}
 
 			// `!terminate` because [terminate] now really does end the wait above (it reactivates
 			// rather than activates): without it a motor torn down mid-approach would answer by
 			// entering the braking phase and parking again instead of leaving the loop.
+			val cruiseLeg = cond.getStopTest() != AccelerationStopTest.TO_HALF_SPEED && targetSpeed > 0.0
+			if (!terminate && accelerate && cruiseLeg && nextSemaphore() is DynamicRailSemaphore) {
+				// The leg has reached its speed and would now go idle, deaf to an aspect that turns
+				// restrictive while the train coasts at line speed (Issue #1057).
+				if (watchForLateRestrictiveAspect()) {
+					runApproachLoop(runningOn = false)
+				}
+			}
 			if (!terminate && accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				// From here to the end of the leg the aspect may change any number of times, and each
 				// change hands the motor over: a clear resumes the run at the live aspect's cap, a
@@ -1617,17 +1623,77 @@ class Train :
 				// continuing toward half of the pre-clear target. Resuming without watching for the
 				// return let a train accelerate into a signal back at danger and be snapped to zero
 				// at the clearance line from 34 m/s (PR #1033 review, Train.kt:1688).
-				var runningOn = restrictiveSignalCleared()
-				while (true) {
-					val aspectChanged = if (runningOn) resumeAtAspectCap() else brakeToStopLine()
-					if (!aspectChanged) break
-					runningOn = !runningOn
-				}
+				runApproachLoop(runningOn = restrictiveSignalCleared())
 			}
 
 			accelerate = false
 			stop()
 			acceleration.state = 0.0
+		}
+
+		/**
+		 * Hands the motor over on each aspect change until the leg ends: a clear resumes the run at
+		 * the live aspect's cap, a return to a restrictive aspect brakes to the stop line.
+		 *
+		 * @param runningOn whether the leg starts in the resumed state (the aspect already allows)
+		 */
+		private suspend fun runApproachLoop(runningOn: Boolean) {
+			var running = runningOn
+			while (true) {
+				val aspectChanged = if (running) resumeAtAspectCap() else brakeToStopLine()
+				if (!aspectChanged) break
+				running = !running
+			}
+		}
+
+		/**
+		 * Whether a restrictive aspect ahead has left no more braking room than the deceleration bound
+		 * needs to reach the clearance stop line (Issue #1057) — the same rule [approachMargin] applies
+		 * to a leg commanded at danger, here for every other leg.
+		 */
+		private fun brakingRoomGone(): Boolean = accelerate && targetSpeed > 0.0 && brakingRoomMargin() <= 0.0
+
+		/**
+		 * Keeps a finished leg listening for a restrictive aspect (Issue #1057).
+		 *
+		 * The motor commanded for a leg goes idle once the leg's speed is reached, and an idle
+		 * motor evaluates no [derivatives]: a signal turning restrictive while the train coasts at
+		 * line speed would be met at the clearance line by `Front.fireStop` snapping it to zero.
+		 * The braking law itself needs no command — [brakingTargetDistance] already aims it at the
+		 * stop line for a stand at a restrictive signal — only something to start it at the right
+		 * moment. That is this wait, on the same [brakingRoomMargin] the two-phase approach uses; it is
+		 * the motor's *own* process resuming, not a second command, so it cannot be the kdisco#73
+		 * double command. `accelerate` stays true throughout so a real command ends the wait through
+		 * [cancelAccelerating], exactly as it ends the approach wait.
+		 *
+		 * @return `true` when the braking room is gone and the motor is running again, ready to brake
+		 */
+		private suspend fun watchForLateRestrictiveAspect(): Boolean {
+			if (!brakingRoomGone()) {
+				stop()
+				acceleration.state = 0.0
+				waitUntilCrossing { if (accelerate) minOf(brakingRoomMargin(), 1.0) else -1.0 }
+				if (terminate || !accelerate) return false
+				start()
+			}
+			return !terminate && brakingRoomGone()
+		}
+
+		/**
+		 * Room left to the clearance stop line after the textbook braking distance at the
+		 * deceleration bound, `distance - v^2 / (2 * |MINIMAL_DECELERATION|)`; non-positive exactly
+		 * when the train must start braking now to stand there (Issues #1014, #1057).
+		 *
+		 * [Double.POSITIVE_INFINITY] while it is not armed: no restrictive signal to stop short of, or a
+		 * non-positive remaining distance or velocity — those corners belong to the existing exits
+		 * ([derivatives]' `s <= 0` branch and the front's clearance gate).
+		 */
+		private fun brakingRoomMargin(): Double {
+			if (semaphoreToStopShortOf() == null) return Double.POSITIVE_INFINITY
+			val remaining = clearanceStopLineDistance()
+			val speed = getVelocity()
+			if (remaining <= 0 || speed <= 0) return Double.POSITIVE_INFINITY
+			return remaining - (speed * speed) / (2.0 * -MINIMAL_DECELERATION)
 		}
 
 		/**
@@ -1657,8 +1723,8 @@ class Train :
 		 * reached. Waiting for the speed alone kept `targetSpeed` positive, so the train accelerated
 		 * towards a signal back at danger and the front gate snapped it to zero at the clearance line
 		 * (PR #1033 review, Train.kt:1688). Once the resumed speed is reached the motor goes idle as
-		 * after any `accelerateTo`, and a restrictive flip after that is the general mid-leg case of
-		 * Issue #1057.
+		 * after any `accelerateTo`, and a restrictive flip after that is not watched for (the
+		 * late-aspect watch of Issue #1057 covers legs commanded by `accelerateTo`, not this resume).
 		 *
 		 * @return `true` when the aspect turned restrictive again while this leg is still the motor's
 		 *   command — the caller then brakes to the stop line
