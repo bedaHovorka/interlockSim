@@ -1312,20 +1312,27 @@ class DefaultPathReservationService(
 		// bypassing the occupied block in front of it (e.g. reaching doB1 via the free k2 + a vB
 		// reversal while k1 is occupied), producing a false positive that steers
 		// findNextReservationTarget onto the blocked track and deadlocks opposing trains.
+		return isPathAvailableFor(start, target, maxDepth, ownerTrainId = null)
+	}
+
+	/**
+	 * [isPathAvailable] for a train that already owns blocks on the way (Issue #1060): a block owned
+	 * by [ownerTrainId] counts as available, exactly as [reservePath] treats it, so that an
+	 * extension of the train's own route is not judged blocked by the route itself. With a `null`
+	 * [ownerTrainId] only FREE blocks count.
+	 */
+	private fun isPathAvailableFor(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int,
+		ownerTrainId: String?
+	): Boolean {
 		val candidatePaths = navigator.findAllSwitchConstrainedPaths(start, target, maxDepth)
 
-		if (candidatePaths.isEmpty()) {
-			return false
-		}
-
-		for (path in candidatePaths) {
+		return candidatePaths.any { path ->
 			val blocks = extractUniqueBlocks(path)
-			if (blocks.areAllFree()) {
-				return true
-			}
+			blocks.areAllFree() || (ownerTrainId != null && blocks.areAllFreeOrOwnedBy(ownerTrainId))
 		}
-
-		return false
 	}
 
 	override fun reservePathToAnyNextSemaphore(
@@ -1620,7 +1627,10 @@ class DefaultPathReservationService(
 		return reservePathToAnyNextSemaphore(trainId, dynamicStart, next)
 	}
 
-	override fun findNextReservationTarget(start: OrientedPathSeparator): DynamicPathSeparator? {
+	override fun findNextReservationTarget(
+		start: OrientedPathSeparator,
+		ownerTrainId: String?
+	): DynamicPathSeparator? {
 		logger.debug {
 			"findNextReservationTarget: Finding next FREE target from oriented separator $start"
 		}
@@ -1651,7 +1661,8 @@ class DefaultPathReservationService(
 			logger.debug { "findNextReservationTarget: No separators found from $start via $next" }
 			return null
 		}
-		val firstFree = targets.firstOrNull { isPathAvailable(dynamicStart, it) }
+		val firstFree =
+			targets.firstOrNull { isPathAvailableFor(dynamicStart, it, DEFAULT_MAX_PATH_DEPTH, ownerTrainId) }
 		logger.debug {
 			"findNextReservationTarget: ${targets.size} target(s) from $start via $next, " +
 				"first FREE = $firstFree"
@@ -3948,3 +3959,6 @@ class DefaultPathReservationService(
 		}
 	}
 }
+
+/** Path-search depth bound shared with the interface defaults of [PathReservationService]. */
+private const val DEFAULT_MAX_PATH_DEPTH = 100

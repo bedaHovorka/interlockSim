@@ -82,6 +82,7 @@ class RuleBasedDispatcherTest {
 		isApproachingThisInput: Boolean = false,
 		pathSetUpTowardThisInput: Boolean = false,
 		pathAlreadyExtendedBeyond: Boolean = false,
+		awaitingRouteExtension: Boolean = false,
 		blockId: String = "block"
 	): BlockInputObservation =
 		BlockInputObservation(
@@ -92,7 +93,8 @@ class RuleBasedDispatcherTest {
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
-			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
+			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
+			awaitingRouteExtension = awaitingRouteExtension
 		)
 
 	// ── Admission ────────────────────────────────────────────────────────────
@@ -204,6 +206,31 @@ class RuleBasedDispatcherTest {
 		val decisions = dispatcher.decide(observed)
 
 		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
+	}
+
+	@Test
+	@DisplayName("OCCUPIED input, approaching, extended but awaiting an extension: reserves (Issue #1060)")
+	fun occupiedApproachingExtendedButAwaitingExtensionReserves() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "zB",
+							toSeparatorName = "doA1",
+							ownerTrainId = "T1",
+							isApproachingThisInput = true,
+							pathAlreadyExtendedBeyond = true,
+							awaitingRouteExtension = true
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "zB", "doA1"))
 	}
 
 	@Test
