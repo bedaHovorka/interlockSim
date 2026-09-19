@@ -132,6 +132,23 @@ class DefaultInterlockingFacade(
 		val retryable: Boolean
 	)
 
+	/** `lockRouteAtomic`'s outcome: either everything is locked, or nothing is left locked. */
+	private sealed interface RouteLockOutcome {
+		/**
+		 * The locks one successful `lockRouteAtomic` acquired — exactly what a LATER failed
+		 * condition must undo.
+		 */
+		data class Locked(
+			val blocks: List<DynamicTrackBlock>,
+			val switches: List<DynamicRailSwitch>,
+			val fromSeparator: DynamicPathSeparator?
+		) : RouteLockOutcome
+
+		data class Denied(
+			val denial: ConditionDenial
+		) : RouteLockOutcome
+	}
+
 	override fun requestRoute(
 		trainId: String,
 		entrySignal: SignalId,
@@ -185,21 +202,26 @@ class DefaultInterlockingFacade(
 		}
 
 		// Conditions 3 & 4: Lock the route atomically (blocks via registry, switches via lock())
-		lockRouteAtomic(trainId, route)?.let { denial ->
-			logger.info { "Route denied for trainId=$trainId: ${denial.reason}" }
-			return InterlockingFacade.RouteResponse.Denied(
-				denial.reason,
-				InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = denial.retryable)
-			)
-		}
+		val locks =
+			when (val outcome = lockRouteAtomic(trainId, route)) {
+				is RouteLockOutcome.Denied -> {
+					logger.info { "Route denied for trainId=$trainId: ${outcome.denial.reason}" }
+					return InterlockingFacade.RouteResponse.Denied(
+						outcome.denial.reason,
+						InterlockingFacade.RouteResponse.DenialCause.ConditionFailed(retryable = outcome.denial.retryable)
+					)
+				}
+				is RouteLockOutcome.Locked -> outcome
+			}
 
 		// C2: never return Granted unless the signal actually shows clearedAspect. If the signal
 		// is unknown or the aspect is unmappable, clearSignal returns null and we roll back the
-		// locks just acquired so no state leaks. Both sub-cases are permanent (output/map defect),
-		// not contention.
+		// locks just acquired — only THIS call's locks, never the train's earlier routes (Issue
+		// #1051: a whole-train releasePath here would also drop a live route the train stands on)
+		// — so no state leaks. Both sub-cases are permanent (output/map defect), not contention.
 		val clearedSemaphore = clearSignal(entrySignal, clearedAspect, trainId)
 		if (clearedSemaphore == null) {
-			env.getRoutingServices().getPathReservationService().releasePath(trainId)
+			rollbackRouteLocks(trainId, locks)
 			logger.info { "Route denied for trainId=$trainId: signal ${entrySignal.name} cannot be cleared" }
 			return InterlockingFacade.RouteResponse.Denied(
 				"Signal ${entrySignal.name} cannot be cleared (unknown signal or invalid signal aspect)",
@@ -442,7 +464,8 @@ class DefaultInterlockingFacade(
 	 * [DynamicTrackBlock.setUpPath]. Switches are locked via [PathReservationRegistry.registerSwitches]
 	 * once verified free. Any failure rolls back everything acquired so far.
 	 *
-	 * @return null if all locks acquired successfully, otherwise a [ConditionDenial]. An *unknown*
+	 * @return [RouteLockOutcome.Locked] carrying everything acquired on success, otherwise
+	 *   [RouteLockOutcome.Denied] with a [ConditionDenial] (nothing left locked). An *unknown*
 	 *   entry-signal name is a permanent output defect (`retryable = false`); a registration
 	 *   conflict, a low-level lock failure, or a switch locked by another train are all transient
 	 *   contention (`retryable = true`).
@@ -450,25 +473,27 @@ class DefaultInterlockingFacade(
 	private fun lockRouteAtomic(
 		trainId: String,
 		route: TrainRoute
-	): ConditionDenial? {
+	): RouteLockOutcome {
 		val blocks = route.blocks.map { blockByName.getValue(it.name) }
 		val switches = (route.running + route.flank).map { switchByName.getValue(it.switch.name) }
 
 		val fromSeparator = if (blocks.isEmpty()) null else semaphoreByName[route.from.name]
 		if (blocks.isNotEmpty() && fromSeparator == null) {
-			return ConditionDenial("Unknown signal ${route.from.name}", retryable = false)
+			return RouteLockOutcome.Denied(ConditionDenial("Unknown signal ${route.from.name}", retryable = false))
 		}
 
 		if (fromSeparator != null) {
-			registerBlocks(trainId, blocks, fromSeparator)?.let { return it }
+			registerBlocks(trainId, blocks, fromSeparator)?.let { return RouteLockOutcome.Denied(it) }
 		}
 
 		lockSwitches(trainId, switches)?.let { switchDenial ->
-			if (fromSeparator != null) rollbackBlocks(trainId, blocks, fromSeparator)
-			return switchDenial
+			if (fromSeparator != null) {
+				rollbackBlocks(trainId, reserved = blocks, registered = blocks, fromSeparator = fromSeparator)
+			}
+			return RouteLockOutcome.Denied(switchDenial)
 		}
 
-		return null // All locks acquired successfully
+		return RouteLockOutcome.Locked(blocks, switches, fromSeparator)
 	}
 
 	/**
@@ -499,20 +524,69 @@ class DefaultInterlockingFacade(
 			}
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to reserve blocks for trainId=$trainId: ${e.message}" }
-			reservedSoFar.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
-			registry.unregister(trainId)
+			rollbackBlocks(trainId, reserved = reservedSoFar, registered = blocks, fromSeparator = fromSeparator)
 			return ConditionDenial("Track section cannot be locked", retryable = true)
 		}
 		return null
 	}
 
+	/**
+	 * Undoes what a failed [registerBlocks] / [lockSwitches] round acquired, and nothing else.
+	 *
+	 * Physically cancels only the [reserved] blocks, then drops the registry entry of every block in
+	 * [registered] one by one. The train's other registry entries, the blocks it already holds from an
+	 * earlier route, and its `PathInfo` are left alone: `PathReservationRegistry.unregister` would
+	 * drop all of them while the blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
+	 *
+	 * The physical cancel runs first because `unregisterBlock` only releases a FREE block.
+	 */
 	private fun rollbackBlocks(
 		trainId: String,
-		blocks: List<DynamicTrackBlock>,
+		reserved: List<DynamicTrackBlock>,
+		registered: List<DynamicTrackBlock>,
 		fromSeparator: DynamicPathSeparator
 	) {
-		blocks.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
-		registry.unregister(trainId)
+		reserved.forEach { block ->
+			runCatching { block.cancelPathSetup(fromSeparator) }
+				.onFailure { e ->
+					logger.warn(e) {
+						"Rollback could not cancel the path setup of block ${block.name ?: "?"} " +
+							"for trainId=$trainId; its registry entry survives until the train's next release reclaims it"
+					}
+				}
+		}
+		registered.forEach { registry.unregisterBlock(trainId, it) }
+	}
+
+	/**
+	 * Undoes a successful `lockRouteAtomic` when a LATER condition fails (an un-clearable signal),
+	 * and nothing else: unlocks and unregisters only this call's switches
+	 * ([PathReservationRegistry.unregisterSwitch]), then physically cancels and unregisters only
+	 * this call's blocks via [rollbackBlocks]. The train's other registry entries — earlier routes
+	 * it is standing on — and its `PathInfo` are left alone: the whole-train
+	 * `PathReservationService.releasePath` this arm used before would drop all of them while the
+	 * blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
+	 *
+	 * Known corner: a switch the train's EARLIER route flank-locked that a later failing route
+	 * lists again is admitted by `lockSwitches` (same owner) but released outright here — the
+	 * registry has no per-route count for switches, so this rollback can drop that earlier flank
+	 * lock. Not a regression: the old whole-train release dropped ALL of the train's switches.
+	 */
+	private fun rollbackRouteLocks(
+		trainId: String,
+		locks: RouteLockOutcome.Locked
+	) {
+		locks.switches.forEach { registry.unregisterSwitch(trainId, it) }
+		// `fromSeparator` is null only when `blocks` is empty (lockRouteAtomic's own denial),
+		// so a null guard here would guard a no-op rollback.
+		locks.fromSeparator?.let { fromSeparator ->
+			rollbackBlocks(
+				trainId,
+				reserved = locks.blocks,
+				registered = locks.blocks,
+				fromSeparator = fromSeparator
+			)
+		}
 	}
 
 	/**
