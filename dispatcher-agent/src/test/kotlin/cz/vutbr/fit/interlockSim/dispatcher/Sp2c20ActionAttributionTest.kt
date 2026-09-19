@@ -620,7 +620,10 @@ class Sp2c20ActionAttributionTest {
 					"DROPPED_INVALID",
 					// Issue #903: permanent geometric impossibility (rear-facing START or
 					// unconfigurable switch), excluded from ALL_PATHS_BLOCKED's contention bucket.
-					"GEOMETRICALLY_IMPOSSIBLE"
+					"GEOMETRICALLY_IMPOSSIBLE",
+					// Issue #1066: candidate does not continue the route the train already holds;
+					// not contention, so excluded from ALL_PATHS_BLOCKED.
+					"DIVERGES_FROM_HELD_ROUTE"
 				)
 			)
 		}

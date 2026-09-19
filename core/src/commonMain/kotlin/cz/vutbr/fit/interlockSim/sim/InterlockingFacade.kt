@@ -176,6 +176,25 @@ interface InterlockingFacade {
 			) : DenialCause
 
 			/**
+			 * Every candidate was refused because it does not continue the route the train already
+			 * holds (its PathInfo would start somewhere other than the stored target). Maps from
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.DivergesFromHeldRoute].
+			 *
+			 * Deliberately distinct from [AllPathsBlocked]: no block was busy, so retrying the same
+			 * request cannot succeed while the stored route ends at the same target. The caller has
+			 * to extend from the held target or cancel the route first. Nothing was reserved,
+			 * thrown or cleared. Must never be re-sorted into [AllPathsBlocked] (Issue #1066).
+			 *
+			 * @property heldTarget Name of the stored route's target separator.
+			 * @property reason English explanation of the divergence.
+			 * @since Issue #1066
+			 */
+			data class DivergesFromHeldRoute(
+				val heldTarget: String,
+				val reason: String
+			) : DenialCause
+
+			/**
 			 * One of the four ESA-11 route conditions ([requestRoute]) failed. Distinct from
 			 * [Other] (the endpoint-resolution residual): this cause has a four-condition denial
 			 * behind it, not an unresolvable endpoint, and it carries a [retryable] flag so a

@@ -721,6 +721,14 @@ class DispatchDecisionApplier(
 				}
 				onFailedReservation()
 			}
+			is RouteRequestResult.DivergesFromHeldRoute -> {
+				logger.warn {
+					"ReservePath: route diverges from the held route for ${decision.trainId} " +
+						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}, " +
+						"held target ${result.heldTarget}): ${result.reason}"
+				}
+				onFailedReservation()
+			}
 		}
 	}
 
@@ -867,6 +875,10 @@ class DispatchDecisionApplier(
 				handleRequestRouteGeometricallyImpossible(decision, result, correlation)
 				ApplyFailureCode.GEOMETRICALLY_IMPOSSIBLE
 			}
+			is RouteRequestResult.DivergesFromHeldRoute -> {
+				handleRequestRouteDivergesFromHeldRoute(decision, result, correlation)
+				ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE
+			}
 		}
 	}
 
@@ -958,6 +970,38 @@ class DispatchDecisionApplier(
 				trainId = decision.trainName,
 				fromEndpointName = decision.fromEndpointName,
 				toEndpointName = decision.toEndpointName,
+				reason = result.reason,
+				id = it.id,
+				tickIndex = it.tickIndex
+			)
+		}
+	}
+
+	/**
+	 * Handles the [RouteRequestResult.DivergesFromHeldRoute] branch of [applyRequestRoute] —
+	 * extracted for the same reason as [handleRequestRouteGeometricallyImpossible] (detekt
+	 * LongMethod budget).
+	 *
+	 * Publishes [AppliedOutcome.DivergesFromHeldRoute] so the agent learns the route cannot be
+	 * granted while its held route ends at the same target, instead of being told to retry.
+	 *
+	 * @since Issue #1066
+	 */
+	private fun handleRequestRouteDivergesFromHeldRoute(
+		decision: DispatchDecision.RequestRoute,
+		result: RouteRequestResult.DivergesFromHeldRoute,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.warn {
+			"DispatchDecisionApplier: RequestRoute diverges from the held route for " +
+				"${decision.trainName} (held target ${result.heldTarget}): ${result.reason}"
+		}
+		publishOutcome(correlation) {
+			AppliedOutcome.DivergesFromHeldRoute(
+				trainId = decision.trainName,
+				fromEndpointName = decision.fromEndpointName,
+				toEndpointName = decision.toEndpointName,
+				heldTarget = result.heldTarget,
 				reason = result.reason,
 				id = it.id,
 				tickIndex = it.tickIndex

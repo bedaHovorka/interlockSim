@@ -186,8 +186,12 @@ class RouteEndDirectionTest : KoinTestBase() {
 
 		val result = service.reservePath(trainId, separatorNamed("zA"), separatorNamed(ownTrackEnd))
 
+		// Issue #1066: of the two candidates, one ends rear-facing (G8, screened) and the other does
+		// not continue the held A -> B route, so it is skipped before it touches anything. The
+		// request is refused as DivergesFromHeldRoute (previously GeometricallyImpossible, because
+		// the second candidate was only rejected later, after it had reserved and thrown switches).
 		assertThat(result, "result of zA -> $ownTrackEnd for a train holding A -> B")
-			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+			.isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
 		assertThat(registry.getBlocks(trainId), "blocks held after the refusal").isEqualTo(heldBefore)
 	}
 
