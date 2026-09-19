@@ -464,7 +464,7 @@ class DefaultInterlockingFacade(
 		}
 
 		lockSwitches(trainId, switches)?.let { switchDenial ->
-			if (fromSeparator != null) rollbackBlocks(trainId, blocks, fromSeparator)
+			if (fromSeparator != null) rollbackBlocks(trainId, blocks, blocks, fromSeparator)
 			return switchDenial
 		}
 
@@ -499,20 +499,30 @@ class DefaultInterlockingFacade(
 			}
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to reserve blocks for trainId=$trainId: ${e.message}" }
-			reservedSoFar.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
-			registry.unregister(trainId)
+			rollbackBlocks(trainId, reservedSoFar, blocks, fromSeparator)
 			return ConditionDenial("Track section cannot be locked", retryable = true)
 		}
 		return null
 	}
 
+	/**
+	 * Undoes what a failed [registerBlocks] / [lockSwitches] round acquired, and nothing else.
+	 *
+	 * Physically cancels only the [reserved] blocks, then drops the registry entry of every block in
+	 * [registered] one by one. The train's other registry entries, the blocks it already holds from an
+	 * earlier route, and its `PathInfo` are left alone: `PathReservationRegistry.unregister` would
+	 * drop all of them while the blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
+	 *
+	 * The physical cancel runs first because `unregisterBlock` only releases a FREE block.
+	 */
 	private fun rollbackBlocks(
 		trainId: String,
-		blocks: List<DynamicTrackBlock>,
+		reserved: List<DynamicTrackBlock>,
+		registered: List<DynamicTrackBlock>,
 		fromSeparator: DynamicPathSeparator
 	) {
-		blocks.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
-		registry.unregister(trainId)
+		reserved.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
+		registered.forEach { registry.unregisterBlock(trainId, it) }
 	}
 
 	/**
