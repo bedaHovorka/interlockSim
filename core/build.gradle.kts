@@ -193,7 +193,7 @@ kotlin {
                 runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
                 runtimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
                 runtimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
-                runtimeOnly("ch.qos.logback:logback-classic:$logbackVersion")
+                implementation("ch.qos.logback:logback-classic:$logbackVersion")
             }
         }
     }

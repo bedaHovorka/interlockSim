@@ -680,7 +680,7 @@ class DefaultPathReservationService(
 					// Step 2g: Configure semaphore signal after successful reservation
 					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
 					if (forwardBlocks.isNotEmpty()) {
-						val signalResult = configureStartSignal(trainId, start, forwardBlocks)
+						val signalResult = configureStartSignal(trainId, start, forwardBlocks, blocks.first())
 
 						// Rollback reservation if signal configuration failed
 						// This prevents trains from waiting indefinitely at STOP signals.
@@ -2970,7 +2970,10 @@ class DefaultPathReservationService(
 	 * variant otherwise — in which case the caller rolls the candidate back via
 	 * [rollbackUnconfigurableCandidate] and continues to the next candidate.
 	 *
-	 * - START is a [DynamicRailSemaphore]: configure it for the first forward block.
+	 * - START is a [DynamicRailSemaphore]: configure it for [startBlock], the path's first block --
+	 *   the one the semaphore actually bounds. The first *forward* block is not that block on a route
+	 *   extension (every block next to the start is already owned), and the block rejects a
+	 *   separator it does not end, which left the start at STOP (Issue #1062).
 	 * - START is a [DynamicInOut]: configure its embedded `inSemaphore` (train entering from
 	 *   the external network). `inSemaphore.direction() == anti(InOut.direction())` per
 	 *   `InOut.kt`, so `from = InOut.direction()` and `to = anti(InOut.direction())`.
@@ -2978,8 +2981,10 @@ class DefaultPathReservationService(
 	 *   the candidate back).
 	 *
 	 * @param start The candidate's start separator (semaphore or InOut).
-	 * @param forwardBlocks The blocks just reserved for this candidate (first one drives the
-	 *   signal's allowed speed).
+	 * @param forwardBlocks The blocks just reserved for this candidate (first one drives an
+	 *   InOut START's allowed speed).
+	 * @param startBlock The first block of the whole candidate path, adjacent to [start]; drives a
+	 *   semaphore START's direction check and allowed speed.
 	 * @return [StartSignalResult.Configured] on success; a failure variant otherwise.
 	 * @since Issue #742 SP0.11 review follow-up (extracted from reservePath Step 2g); return
 	 *   type widened from `Boolean` to [StartSignalResult] by Issue #903.
@@ -2987,7 +2992,8 @@ class DefaultPathReservationService(
 	private fun configureStartSignal(
 		trainId: String,
 		start: DynamicPathSeparator,
-		forwardBlocks: List<DynamicTrackBlock>
+		forwardBlocks: List<DynamicTrackBlock>,
+		startBlock: DynamicTrackBlock
 	): StartSignalResult =
 		when {
 			// Case 1: START is a semaphore -> configure it (train departing from semaphore)
@@ -2999,15 +3005,15 @@ class DefaultPathReservationService(
 				// is authority-defining: granting the route anyway would strand the train with
 				// no signal it is entitled to obey, a #566-class stall. Reject before
 				// configuring/recording anything, so the caller's rollback has nothing to undo.
-				if (!startFacesTravelDirection(start, forwardBlocks.first())) {
+				if (!startFacesTravelDirection(start, startBlock)) {
 					logger.debug {
 						"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
-							"away from the requested direction of travel toward ${forwardBlocks.first()}"
+							"away from the requested direction of travel toward $startBlock"
 					}
 					StartSignalResult.RejectedG4
 				} else {
 					try {
-						environment.configureSemaphoreSignal(start, forwardBlocks.first())
+						environment.configureSemaphoreSignal(start, startBlock)
 						recordClearedSemaphore(trainId, start)
 						logger.debug {
 							"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
