@@ -66,7 +66,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
  * @see PathReservationRegistry
  * @since Issue #294 (Phase 2 of Issue #292)
  */
-interface PathReservationService {
+interface PathReservationService : ApproachLockedPathRelease {
 	/**
 	 * Result of a path reservation attempt.
 	 *

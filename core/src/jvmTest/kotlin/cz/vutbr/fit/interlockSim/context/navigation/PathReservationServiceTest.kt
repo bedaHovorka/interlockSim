@@ -400,6 +400,50 @@ class PathReservationServiceTest : KoinTestBase() {
 	}
 
 	@Nested
+	inner class ApproachLockedRelease {
+		@Test
+		fun `a proceed aspect at a reserved block defers its release and the retry frees it (Issue 1050)`() {
+			val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+			// reservePath cleared the entry signal: the train waiting at the start may be committed to the
+			// first block, and to no other (the rest are not adjacent to it).
+			val start = blocks.first().reservedFrom
+			val entry = (start as DynamicInOut).inSemaphore
+			entry.signal = Signal.FREE
+			val locked = blocks.filter { block -> block.ends().any { it === start } }
+			require(locked.isNotEmpty()) { "Test requires a block governed by the entry signal" }
+
+			val first = service.releasePathDetailed("train1")
+
+			assertThat(first.deferred.toSet()).isEqualTo(locked.toSet())
+			assertThat(first.released.toSet()).isEqualTo((blocks - locked.toSet()).toSet())
+			assertThat(entry.signal).isEqualTo(Signal.STOP)
+			locked.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(registry.getOwner(block)).isEqualTo("train1")
+			}
+			blocks.filter { it !in locked }.forEach { assertThat(registry.getOwner(it)).isNull() }
+
+			val retry = service.releasePathDetailed("train1")
+
+			assertThat(retry.deferred).isEmpty()
+			assertThat(retry.released.toSet()).isEqualTo(locked.toSet())
+			locked.forEach { assertThat(it.getState()).isEqualTo(TrackFacility.State.FREE) }
+			assertThat(service.getReservedBlocks("train1")).isEmpty()
+		}
+
+		@Test
+		fun `releasePath frees everything when no proceed aspect stands at a reserved block`() {
+			val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+			((blocks.first().reservedFrom) as DynamicInOut).inSemaphore.signal = Signal.STOP
+
+			val release = service.releasePathDetailed("train1")
+
+			assertThat(release.deferred).isEmpty()
+			assertThat(release.released.toSet()).isEqualTo(blocks.toSet())
+		}
+	}
+
+	@Nested
 	inner class ReservationAfterRelease {
 		@Test
 		fun `path can be re-reserved after release`() {

@@ -361,7 +361,11 @@ class KoogDispatchAgentImpl(
 					(if (outcome.retryable) " (retry later)" else " (fix the request)")
 
 			is AppliedOutcome.Released ->
-				if (outcome.anyReleased) {
+				if (outcome.deferredBlockIds.isNotEmpty()) {
+					"cancel_route for \"${outcome.trainId}\": partly applied — a train may be committed to " +
+						"${outcome.deferredBlockIds.joinToString(", ")}, so those blocks stay reserved; " +
+						"repeat cancel_route to release them."
+				} else if (outcome.anyReleased) {
 					"cancel_route for \"${outcome.trainId}\": applied."
 				} else {
 					"cancel_route for \"${outcome.trainId}\": applied — no reservation was held."
