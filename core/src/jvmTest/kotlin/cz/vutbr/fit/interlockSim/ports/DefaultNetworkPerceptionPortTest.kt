@@ -129,6 +129,7 @@ class DefaultNetworkPerceptionPortTest {
 			every { it.nextSemaphore() } returns nextSemaphore
 			every { it.secondSemaphoreAhead(any()) } returns secondSemaphore
 			every { it.distanceToSemaphore() } returns distanceToSemaphore
+			every { it.distanceToSignalAhead() } returns distanceToSemaphore
 			every { it.currentSpeedLimitMps } returns speedLimitMps
 			every { it.isDwelling } returns dwelling
 			// SP2a.3 (Issue #554): commanded station dwell, narrower than isDwelling

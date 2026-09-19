@@ -2015,6 +2015,17 @@ class Train :
 	override fun distanceToSemaphore(): Double =
 		if (pathToSemaphore == null) 0.0 else pathToSemaphore!!.length() - front.getPosition()
 
+	/**
+	 * Distance to the signal ahead as published to perception (Issue #1061). Equals
+	 * [distanceToSemaphore] except when the front has already reached the end of the reserved leg
+	 * (the separator it last crossed is that leg's last) and no new leg has been commanded, as
+	 * while an ownership conflict holds the train at the separator: the front has been rebased
+	 * past the section end, so `length - position` would read a whole leg too much. The train
+	 * stands at that separator, so the distance is zero. Read-only; braking keeps using
+	 * [distanceToSemaphore].
+	 */
+	fun distanceToSignalAhead(): Double = if (nextSemaphore() == entrySeparator) 0.0 else distanceToSemaphore()
+
 	override suspend fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
 		val inout = timetable.getIn()
