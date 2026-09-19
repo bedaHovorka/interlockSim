@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.WorkingMemory
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.RouteRelease
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
@@ -341,7 +342,7 @@ class AppliedOutcomeChannelSp2c17Test {
 		@Test
 		@DisplayName("cancel_route that returns true renders as RELEASED")
 		fun releaseRouteReleasedRendered() {
-			every { networkActuator.releaseRoute("T-087") } returns true
+			every { networkActuator.releaseRouteDetailed("T-087") } returns RouteRelease(true, emptyList())
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
@@ -358,9 +359,27 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 
 		@Test
+		@DisplayName("a deferred cancel_route (approach lock) renders as PARTIAL and lists the kept blocks (Issue #1050)")
+		fun releaseRouteDeferredRenderedPartial() {
+			every { networkActuator.releaseRouteDetailed("T-087") } returns RouteRelease(true, listOf("k1"))
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")))
+			applier.onControlStep()
+
+			val outcomes = outcomeSink.drainSince(0L)
+			val outcome = outcomes.single() as AppliedOutcome.Released
+			assertThat(outcome.deferredBlockIds).isEqualTo(listOf("k1"))
+			val rendered =
+				CompactTextRenderer().render(buildRenderContext(DispatcherObservation.EMPTY.copy(appliedOutcomes = outcomes)))
+			assertThat(rendered).contains("cancel_route T-087 : PARTIAL")
+		}
+
+		@Test
 		@DisplayName("cancel_route that returns false renders as NO_RESERVATION, never as the retired release_route")
 		fun releaseRouteNoReservationRendered() {
-			every { networkActuator.releaseRoute("T-087") } returns false
+			every { networkActuator.releaseRouteDetailed("T-087") } returns RouteRelease(false, emptyList())
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
@@ -385,7 +404,7 @@ class AppliedOutcomeChannelSp2c17Test {
 			// that still mapped ReleaseRoute -> "release_route", leaking the retired tool name
 			// to the LLM. The final-review F1 fix (a10c2ded) covered the Released renderer
 			// branches but missed this dynamic commandType path.
-			every { networkActuator.releaseRoute("T-087") } throws IllegalArgumentException("no such train: T-087")
+			every { networkActuator.releaseRouteDetailed("T-087") } throws IllegalArgumentException("no such train: T-087")
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
