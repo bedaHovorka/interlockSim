@@ -94,7 +94,14 @@ fun DispatchDecision.applyToolDrivenToActuator(
 				"$logPrefix: applying ReleaseRoute trainName=$trainName" +
 					rationale.toRationaleLogSuffix()
 			}
-			val released = actuator.releaseRoute(trainName)
+			val release = actuator.releaseRouteDetailed(trainName)
+			val released = release.anyReleased
+			if (release.deferred) {
+				toolDrivenLogger.info {
+					"$logPrefix: ReleaseRoute train '$trainName' only partly released -- approach locking kept " +
+						"${release.deferredBlockIds.joinToString(", ")} reserved (Issue #1050)"
+				}
+			}
 			if (!released) {
 				toolDrivenLogger.debug {
 					"$logPrefix: ReleaseRoute train '$trainName' held no reservation (no-op)"

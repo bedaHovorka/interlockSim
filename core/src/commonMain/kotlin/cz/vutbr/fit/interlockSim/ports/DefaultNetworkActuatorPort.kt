@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
+import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -295,12 +296,14 @@ class DefaultNetworkActuatorPort(
 			}
 		}
 
-	override fun releaseRoute(trainName: String): Boolean {
+	override fun releaseRoute(trainName: String): Boolean = releaseRouteDetailed(trainName).anyReleased
+
+	override fun releaseRouteDetailed(trainName: String): RouteRelease {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }
 		// Issue #893 task A7: read BEFORE releasePath, which purges this bookkeeping as a side
 		// effect of resetting the signals it recorded -- see PathReservationService.hasClearedSignals.
 		val hadClearedSignals = pathReservationService.hasClearedSignals(trainName)
-		val releasedBlocks = pathReservationService.releasePath(trainName)
+		val release = pathReservationService.releasePathDetailed(trainName)
 		// Truthful per the traffic-simulation-expert R5 ruling: "the train's route state is now
 		// clear" is true whenever EITHER blocks or signals were actually released. Before this fix,
 		// a train holding cleared signals but zero blocks (reachable after a partial release
@@ -312,7 +315,11 @@ class DefaultNetworkActuatorPort(
 		// dispatcher as a distinct NO_RESERVATION outcome (AppliedOutcomeChannel) -- collapsing it
 		// into the same `true` as a genuine release would erase that diagnostic signal for no gain,
 		// since OrphanReservationSweeper never calls this method for a train with zero footprint.
-		return releasedBlocks.isNotEmpty() || hadClearedSignals
+		// A deferred block keeps its reservation but its signal was reset: the state did change.
+		return RouteRelease(
+			anyReleased = release.released.isNotEmpty() || release.deferred.isNotEmpty() || hadClearedSignals,
+			deferredBlockIds = release.deferred.map { BlockIdentity.stableBlockId(it) }
+		)
 	}
 
 	override fun setSwitchPosition(

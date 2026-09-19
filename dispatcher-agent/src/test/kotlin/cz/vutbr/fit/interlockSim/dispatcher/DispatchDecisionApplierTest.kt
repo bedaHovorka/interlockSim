@@ -20,6 +20,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.RouteRelease
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
@@ -693,20 +694,20 @@ class DispatchDecisionApplierTest {
 		@Test
 		@DisplayName("ReleaseRoute is routed to NetworkActuatorPort.releaseRoute")
 		fun releaseRoute_routedToActuatorPort() {
-			every { networkActuator.releaseRoute(any()) } returns true
+			every { networkActuator.releaseRouteDetailed(any()) } returns RouteRelease(true, emptyList())
 			val (queue, applier) = makeApplier()
 			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #1")))
 
 			applier.onControlStep()
 
-			verify(exactly = 1) { networkActuator.releaseRoute("Train #1") }
+			verify(exactly = 1) { networkActuator.releaseRouteDetailed("Train #1") }
 			assertThat(approvedTrains).isEmpty()
 		}
 
 		@Test
 		@DisplayName("ReleaseRoute false result (train held no reservation) does not throw")
 		fun releaseRoute_falseResult_doesNotThrow() {
-			every { networkActuator.releaseRoute(any()) } returns false
+			every { networkActuator.releaseRouteDetailed(any()) } returns RouteRelease(false, emptyList())
 			val (queue, applier) = makeApplier()
 			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #2")))
 
@@ -767,7 +768,7 @@ class DispatchDecisionApplierTest {
 		fun allFourToolDecisions_appliedInSingleDrain() {
 			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
 			every { networkActuator.setSwitchPosition(any(), any()) } returns true
-			every { networkActuator.releaseRoute(any()) } returns true
+			every { networkActuator.releaseRouteDetailed(any()) } returns RouteRelease(true, emptyList())
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.Reserved("Train #1", 2)
 			val (queue, applier) = makeApplier()
@@ -784,7 +785,7 @@ class DispatchDecisionApplierTest {
 
 			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE, null) }
 			verify(exactly = 1) { networkActuator.setSwitchPosition("v1", RailSwitch.Conf.BRANCH) }
-			verify(exactly = 1) { networkActuator.releaseRoute("Train #1") }
+			verify(exactly = 1) { networkActuator.releaseRouteDetailed("Train #1") }
 			verify(exactly = 1) { networkActuator.requestRoute("Train #1", "A", "B") }
 		}
 

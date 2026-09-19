@@ -1021,33 +1021,93 @@ class DefaultPathReservationService(
 	 * This operation is idempotent - safe to call multiple times.
 	 * Registry cleanup is guaranteed even if block release fails (try-finally).
 	 */
-	override fun releasePath(trainId: String): List<DynamicTrackBlock> {
+	override fun releasePath(trainId: String): List<DynamicTrackBlock> = release(trainId, approachLock = false).released
+
+	/**
+	 * Issue #1050: [releasePath] with approach locking, the counterpart of the rule
+	 * `RegistryPartialRouteReleaser` applies to a tail (Issue #1025). A RESERVED, unoccupied block
+	 * the train may be entering across a proceed aspect -- `Train.Front` books the block only after
+	 * `hold(1.0)` -- is kept reserved and registered, and the caller retries; on the retry every
+	 * signal reads STOP and the block goes. This is the release the production callers use
+	 * (`NetworkActuatorPort.releaseRoute`: `cancel_route` and the orphan sweeper); plain
+	 * [releasePath] stays unconditional for teardown and tests.
+	 */
+	override fun releasePathDetailed(trainId: String): PathRelease = release(trainId, approachLock = true)
+
+	private fun release(
+		trainId: String,
+		approachLock: Boolean
+	): PathRelease {
+		// Read BEFORE the signal reset below, which would erase the evidence.
+		val approachLocked = if (approachLock) approachLockedBlocks(registry.getBlocks(trainId)) else emptyList()
 		// Signals first, blocks second: a block must never become available to another train
 		// while the semaphore that authorises entry to it still shows proceed. Runs before the
 		// early return below because a train can hold cleared signals without holding blocks
-		// (e.g. after a partial release reclaimed its un-travelled tail).
+		// (e.g. after a partial release reclaimed its un-travelled tail). The first call also
+		// covers a governing signal of a kept block that this ledger never recorded.
+		resetSemaphoresForReleasedBlocks(trainId, approachLocked)
 		resetClearedSemaphores(trainId)
 
 		val blocks = registry.getBlocks(trainId)
 		if (blocks.isEmpty()) {
-			return emptyList()
+			return PathRelease(emptyList(), emptyList())
 		}
+		if (approachLocked.isNotEmpty()) {
+			return releaseAllBut(trainId, blocks, approachLocked)
+		}
+		return PathRelease(releaseAllBlocks(trainId, blocks), emptyList())
+	}
 
+	/**
+	 * The blocks of [held] a train may be committed to (Issue #1050): RESERVED, unoccupied, and
+	 * entered across a boundary that shows a proceed aspect.
+	 *
+	 * Only blocks the train can be entering next qualify, which is what keeps a fresh reservation far
+	 * from the train releasable: the boundary is an end shared with an occupied block of the train, or
+	 * -- when it occupies nothing yet -- the route's start separator (a train waiting at the entry).
+	 * Every other reserved block is not adjacent to the train, however many signals stand at proceed
+	 * along the route.
+	 */
+	private fun approachLockedBlocks(held: List<DynamicTrackBlock>): List<DynamicTrackBlock> {
+		val occupied = held.filter { it.occupant != null || it.getState() == TrackFacility.State.OCCUPIED }
+		val headEnds = occupied.flatMap { it.ends().asList() }
+		return held.filter { block ->
+			block.occupant == null &&
+				block.getState() == TrackFacility.State.RESERVED &&
+				boundarySemaphores(block, occupied.isNotEmpty(), headEnds).any { it.signal.isAllowing() }
+		}
+	}
+
+	/** The semaphores a train reads to enter [block]: see [approachLockedBlocks]. */
+	private fun boundarySemaphores(
+		block: DynamicTrackBlock,
+		trainOccupiesBlocks: Boolean,
+		headEnds: List<Any>
+	): List<DynamicRailSemaphore> {
+		val start = block.reservedFrom
+		return block
+			.ends()
+			.filter { end -> if (trainOccupiesBlocks) headEnds.any { it === end } else end === start }
+			.mapNotNull { end ->
+				when (end) {
+					is DynamicRailSemaphore -> end
+					is DynamicInOut -> end.inSemaphore
+					else -> null
+				}
+			}
+	}
+
+	/** The whole-route release: every block cancelled, the train unregistered entirely. */
+	private fun releaseAllBlocks(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>
+	): List<DynamicTrackBlock> {
 		try {
 			// Cancel path setup for all blocks
 			// Note: We don't know which separator was used for reservation,
 			// but cancelPathSetup validates it matches the reservedFrom,
 			// so we need to get it from the block itself
-			blocks.forEach { block ->
-				val reservedFrom = block.reservedFrom
-				if (reservedFrom != null) {
-					try {
-						block.cancelPathSetup(reservedFrom)
-					} catch (e: Exception) {
-						logger.warn(e) { "releasePath: Failed to release block $block" }
-					}
-				}
-			}
+			blocks.forEach { cancelBlock(it) }
 
 			// Tier 2: Unlock switches atomically with blocks (Issue #291)
 			val switches = registry.getSwitches(trainId)
@@ -1073,6 +1133,49 @@ class DefaultPathReservationService(
 			}
 			// Train is done contending for any block it may have been blocked on.
 			clearBlockedTracking(trainId)
+		}
+	}
+
+	/**
+	 * Issue #1050: releases every block of [trainId] except [kept], which stay RESERVED and
+	 * registered. Each freed block leaves the registry through [dropFreedBlock] -- never
+	 * `registry.unregister(trainId)`, which would drop the kept entries too and leave the registry
+	 * saying "free" for a block that is physically reserved (the Issue #1051 divergence). Switches
+	 * are not unlocked wholesale: [dropFreedBlock] reclaims exactly those no held block still needs.
+	 */
+	private fun releaseAllBut(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>,
+		kept: List<DynamicTrackBlock>
+	): PathRelease {
+		val toRelease = blocks.filter { it !in kept }
+		toRelease.forEach { cancelBlock(it) }
+		val released =
+			toRelease.filter { block ->
+				try {
+					dropFreedBlock(trainId, block)
+				} catch (e: Exception) {
+					logger.warn(e) { "releasePath: Failed to drop released block $block" }
+					false
+				}
+			}
+		// The PathInfo still describes the freed blocks; cut it to what the train holds. Best effort:
+		// the registry refuses a cut that would leave a PathInfo ending at a switch.
+		registry.trimPathInfoToHeldBlocks(trainId)
+		logger.info {
+			"releasePath: approach lock for '$trainId' -- a proceed aspect stood at " +
+				"${kept.size} reserved block(s); signals set to STOP, physical release of them deferred " +
+				"to the next call (Issue #1050)"
+		}
+		return PathRelease(released, kept)
+	}
+
+	private fun cancelBlock(block: DynamicTrackBlock) {
+		val reservedFrom = block.reservedFrom ?: return
+		try {
+			block.cancelPathSetup(reservedFrom)
+		} catch (e: Exception) {
+			logger.warn(e) { "releasePath: Failed to release block $block" }
 		}
 	}
 
