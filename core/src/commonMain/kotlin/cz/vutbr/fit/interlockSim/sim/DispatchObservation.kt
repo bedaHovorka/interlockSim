@@ -93,7 +93,7 @@ data class QueuedTrainObservation(
  *
  *   **Populated only where a forward reservation is possible** (Issue #749). The shell
  *   resolves it exclusively for inputs satisfying
- *   `!pathAlreadyExtendedBeyond && (isApproachingThisInput || pathSetUpTowardThisInput)`;
+ *   `(!pathAlreadyExtendedBeyond || awaitingRouteExtension) && (isApproachingThisInput || pathSetUpTowardThisInput)`;
  *   for every other input — FREE, not approaching this input, or already extended beyond
  *   it — this is `null` **without the search having been run**. Resolving it means a BFS
  *   plus a per-candidate topological-path enumeration
@@ -117,6 +117,13 @@ data class QueuedTrainObservation(
  * @property pathAlreadyExtendedBeyond `true` when [ownerTrainId]'s reserved path
  *   already extends beyond this input — a further reservation attempt would be a
  *   no-op.
+ * @property awaitingRouteExtension `true` when [ownerTrainId] stands at this input's signal
+ *   although [pathAlreadyExtendedBeyond]: its stored route runs past the signal but ends at a
+ *   separator facing away from the train, so navigation cannot build a leg out of it and holds
+ *   the train until the route is extended to the next signal facing it (Issue #1060). The
+ *   route is extended beyond the input, yet a further reservation is NOT a no-op, so a
+ *   dispatcher treats the input like one that is not extended
+ *   ([toSeparatorName] is resolved for it). Defaults to `false`.
  */
 data class BlockInputObservation(
 	val blockId: String,
@@ -126,5 +133,6 @@ data class BlockInputObservation(
 	val ownerTrainId: String?,
 	val isApproachingThisInput: Boolean,
 	val pathSetUpTowardThisInput: Boolean,
-	val pathAlreadyExtendedBeyond: Boolean
+	val pathAlreadyExtendedBeyond: Boolean,
+	val awaitingRouteExtension: Boolean = false
 )
