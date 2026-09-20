@@ -2100,24 +2100,62 @@ class Train :
 		if (pathToSemaphore == null) 0.0 else pathToSemaphore!!.length() - front.getPosition()
 
 	/**
+	 * Sum of the [pathToSemaphore] track lengths strictly after [separator], or `null` when
+	 * [pathToSemaphore] is unset or does not contain [separator] at all.
+	 *
+	 * [distanceToSignalAhead] uses this to recover the correct remaining distance whenever the
+	 * front has been rebased past a separator that [pathToSemaphore] itself could not be
+	 * advanced past — the suspension window an [PathResult.OwnershipConflict] answer opens
+	 * (Issue #1061, and the mid-leg follow-up Issue #1084): [Front.separatorAction]
+	 * only trims [pathToSemaphore] on a successful path query, so a conflict answered right after
+	 * the front crosses a mid-leg switch leaves [pathToSemaphore] holding sections the front has
+	 * already left behind.
+	 *
+	 * In the steady state (no suspension) [separator] is [pathToSemaphore]'s first element, so
+	 * the sum equals [pathToSemaphore]'s own length and [distanceToSignalAhead] reads exactly
+	 * [distanceToSemaphore] — this helper does not change that case.
+	 */
+	private fun remainingLegLengthFrom(separator: DynamicPathSeparator?): Double? {
+		val path = pathToSemaphore ?: return null
+		if (separator == null) return null
+		var seen = false
+		var sum = 0.0
+		for (element in path) {
+			if (seen) {
+				sum += element.contributeToPathLength()
+			} else if (element == separator) {
+				seen = true
+			}
+		}
+		return if (seen) sum else null
+	}
+
+	/**
 	 * Distance to the signal ahead as published to perception (Issue #1061). Equals
-	 * [distanceToSemaphore] except when the front has already reached the end of the reserved leg
-	 * (the separator it last crossed is that leg's last) and no new leg has been commanded, as
-	 * while an ownership conflict holds the train at the separator: the front has been rebased
-	 * past the section end, so `length - position` would read a whole leg too much. The train
-	 * stands at that separator, so the distance is zero. Read-only; braking keeps using
-	 * [distanceToSemaphore].
+	 * [distanceToSemaphore] except while an ownership conflict holds the train at a separator it
+	 * has already been rebased past, be it the reserved leg's last separator (Issue #1061) or a
+	 * mid-leg switch (Issue #1084): in both cases `pathToSemaphore.length() - position` reads too
+	 * much — a whole leg, or the section(s) already behind the front — because
+	 * [Front.separatorAction] never trimmed [pathToSemaphore] for the crossing
+	 * that stalled. [remainingLegLengthFrom] recovers the correct remaining length by measuring
+	 * from the separator the front actually stands at, rather than trusting [pathToSemaphore] to
+	 * start there. Read-only; braking keeps using [distanceToSemaphore].
 	 *
 	 * [firstSep] defaults to [nextSemaphore] for the no-argument reading; the live perception
 	 * port passes the already-computed immediate separator so a capture still makes at most one
-	 * `nextSemaphore()` call in total (M1), like [secondSemaphoreAhead].
+	 * `nextSemaphore()` call in total (M1), like [secondSemaphoreAhead]. Kept as a fast path here:
+	 * when it equals [entrySeparator] the train stands at the leg's own end and the distance is
+	 * zero without walking [pathToSemaphore].
 	 *
 	 * Deliberately not on [TrackOccupant]: only [Train] publishes a perception reading, and
 	 * forcing the other occupants (the reservation service's anonymous occupant, test doubles)
 	 * to carry it would spread a perception-only concept for no caller.
 	 */
-	internal fun distanceToSignalAhead(firstSep: OrientedPathSeparator? = nextSemaphore()): Double =
-		if (firstSep == entrySeparator) 0.0 else distanceToSemaphore()
+	internal fun distanceToSignalAhead(firstSep: OrientedPathSeparator? = nextSemaphore()): Double {
+		if (firstSep == entrySeparator) return 0.0
+		val remaining = remainingLegLengthFrom(entrySeparator) ?: return distanceToSemaphore()
+		return maxOf(0.0, remaining - front.getPosition())
+	}
 
 	override suspend fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
