@@ -2105,7 +2105,7 @@ class Train :
 	 *
 	 * [distanceToSignalAhead] uses this to recover the correct remaining distance whenever the
 	 * front has been rebased past a separator that [pathToSemaphore] itself could not be
-	 * advanced past — the suspension window an [PathResult.OwnershipConflict] answer opens
+	 * advanced past — the suspension window a [PathResult.OwnershipConflict] answer opens
 	 * (Issue #1061, and the mid-leg follow-up Issue #1084): [Front.separatorAction]
 	 * only trims [pathToSemaphore] on a successful path query, so a conflict answered right after
 	 * the front crosses a mid-leg switch leaves [pathToSemaphore] holding sections the front has
@@ -2113,21 +2113,19 @@ class Train :
 	 *
 	 * In the steady state (no suspension) [separator] is [pathToSemaphore]'s first element, so
 	 * the sum equals [pathToSemaphore]'s own length and [distanceToSignalAhead] reads exactly
-	 * [distanceToSemaphore] — this helper does not change that case.
+	 * [distanceToSemaphore] — this helper does not change that case. If [separator] occurs more
+	 * than once (a loop topology can revisit a separator), the first occurrence wins: the front
+	 * stands at that one, not at a later pass.
 	 */
 	private fun remainingLegLengthFrom(separator: DynamicPathSeparator?): Double? {
 		val path = pathToSemaphore ?: return null
 		if (separator == null) return null
-		var seen = false
-		var sum = 0.0
-		for (element in path) {
-			if (seen) {
-				sum += element.contributeToPathLength()
-			} else if (element == separator) {
-				seen = true
-			}
+		val index = path.indexOf(separator)
+		return if (index < 0) {
+			null
+		} else {
+			path.drop(index + 1).sumOf { it.contributeToPathLength() }
 		}
-		return if (seen) sum else null
 	}
 
 	/**

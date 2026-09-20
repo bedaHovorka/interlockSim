@@ -5,8 +5,8 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * The distance to the signal ahead that a train standing at a mid-leg switch reports, after a
- * partial rollback leaves it there (Issue #1084, follow-up of Issue #1061 / #1078).
+ * The distance to the signal ahead that a train standing at a mid-leg switch reports while an
+ * ownership conflict holds it there (Issue #1084, follow-up of Issue #1061 / #1078).
  */
 package cz.vutbr.fit.interlockSim.sim
 
@@ -42,12 +42,26 @@ import java.util.concurrent.TimeUnit
  * unconsumed for that crossing — the same suspension window as
  * [StandingAtSeparatorPerceptionTest], but opened mid-leg rather than at the leg's own end.
  *
+ * The conflict answer is injected through the navigation seam: the decorator returns exactly the
+ * [PathResult.OwnershipConflict] that `findReservedPathForTrain` yields when the section ahead
+ * is owned by another train. It does not drive the partial-release mechanism, which today
+ * cannot produce this state — `RegistryPartialRouteReleaser` refuses a release whose trimmed
+ * path would end at a switch (Issues #1031, #1063, #1067). Whether any production path can
+ * reach the mid-leg trigger stays the open question recorded in #1084; this test pins the
+ * defensive handling of the #1061 window class, not its reachability.
+ *
  * The reserved leg runs `zB`—`vB`—`doB1`—`doA1` (5 m + 5 m + 100 m), so the signal ahead is
  * `doA1`. The pre-fix code published `distanceToSemaphore()`, the whole leg length minus the
  * rebased position, over-reading by the `zB`—`vB` section (5 m) already behind the front. The
  * train coasts a few metres past `vB` before it stops, so the absolute value depends on the
  * braking; the invariant is that the published distance is `distanceToSemaphore()` minus that
  * 5 m section — and not zero, since the train is still short of `doA1`.
+ *
+ * Branch note: this scenario exercises the mid-path measurement of `remainingLegLengthFrom`;
+ * the leg-end fast path stays covered by [StandingAtSeparatorPerceptionTest]. The `null`
+ * fallback to [Train.distanceToSemaphore] and the `maxOf` clamp are not reachable here — no
+ * state in this scenario lacks the entry separator on `pathToSemaphore` or leaves a negative
+ * remainder.
  */
 @Tag("integration-test")
 @DisplayName("Distance to the signal ahead while standing at a mid-leg switch")
@@ -65,6 +79,8 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 
 		/** Held long enough for the wait to have settled; the reading is taken after this. */
 		const val STAND_HOLD_SECONDS = 2.0
+
+		const val SAMPLE_PERIOD = 0.05
 
 		/** The unfixed code over-reads by the whole 5 m section, so this is tight enough. */
 		const val TOLERANCE = 1e-2
@@ -134,7 +150,7 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 			assertReservationSuccess(reservationService.reservePath(train.name, b, a))
 			val port = DefaultNetworkPerceptionPort(context, activeTrains = { listOf(train) })
 			Process.activate(
-				TrainKinematicSampler(train, END_TIME.toDouble(), 0.05) { sample ->
+				TrainKinematicSampler(train, END_TIME.toDouble(), SAMPLE_PERIOD) { sample ->
 					if (standTime < 0.0 && sample.velocity == 0.0 && sample.totalDistance > 100.0) {
 						standTime = sample.time
 					}
