@@ -36,16 +36,18 @@ import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
- * On the B→A route of `vyhybna.xml`, the `zB`→`doB1` leg has a mid-leg switch, `vB`, five metres
- * from each end (Issue #1084). A train whose front crosses into `vB` and is then answered with an
+ * On the B→A route of `vyhybna.xml`, the `zB`→`doA1` leg has a mid-leg switch, `vB`, five metres
+ * past `zB` (Issue #1084). A train whose front crosses into `vB` and is then answered with an
  * [PathResult.OwnershipConflict] for the query from `vB` stands there with `pathToSemaphore`
  * unconsumed for that crossing — the same suspension window as
  * [StandingAtSeparatorPerceptionTest], but opened mid-leg rather than at the leg's own end.
  *
- * The pre-fix code published `distanceToSemaphore()`, the *whole* `zB`—`doB1` leg length (10 m)
- * minus the rebased ~0 position, over-reading by the `zB`—`vB` section (5 m) already behind the
- * front. The correct value is the remaining `vB`—`doB1` section (5 m) — not zero, since the train
- * is one section short of `doB1`.
+ * The reserved leg runs `zB`—`vB`—`doB1`—`doA1` (5 m + 5 m + 100 m), so the signal ahead is
+ * `doA1`. The pre-fix code published `distanceToSemaphore()`, the whole leg length minus the
+ * rebased position, over-reading by the `zB`—`vB` section (5 m) already behind the front. The
+ * train coasts a few metres past `vB` before it stops, so the absolute value depends on the
+ * braking; the invariant is that the published distance is `distanceToSemaphore()` minus that
+ * 5 m section — and not zero, since the train is still short of `doA1`.
  */
 @Tag("integration-test")
 @DisplayName("Distance to the signal ahead while standing at a mid-leg switch")
@@ -55,16 +57,16 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 
 	private companion object {
 		const val HOLD_SIGNAL = "vB"
-		const val NEXT_SIGNAL = "doB1"
+		const val NEXT_SIGNAL = "doA1"
 		const val END_TIME = 90L
 
-		/** `vB`—`doB1` block length in `vyhybna.xml`: the correct standing distance. */
-		const val EXPECTED_REMAINING_DISTANCE = 5.0
+		/** `zB`—`vB` block length in `vyhybna.xml`: the section behind the front that the old code counted. */
+		const val SECTION_BEHIND_FRONT = 5.0
 
 		/** Held long enough for the wait to have settled; the reading is taken after this. */
 		const val STAND_HOLD_SECONDS = 2.0
 
-		/** The unfixed code publishes the whole `zB`—`doB1` leg (10 m) instead of 5 m. */
+		/** The unfixed code over-reads by the whole 5 m section, so this is tight enough. */
 		const val TOLERANCE = 1e-2
 
 		const val TRAIN_LENGTH = 20.0
@@ -72,20 +74,22 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 
 	private class Outcome(
 		val trainDistance: Double,
+		val wholeLegDistance: Double,
 		val perceivedDistance: Double,
 		val perceivedName: String?
 	)
 
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@DisplayName("Perception reports the remaining section, not the whole leg, while standing at vB")
+	@DisplayName("Perception excludes the section behind the front while standing at vB")
 	fun standingTrainAtMidLegSwitchReportsRemainingSectionDistance() {
 		val outcome = runScenario()
 
+		val expected = outcome.wholeLegDistance - SECTION_BEHIND_FRONT
 		assertThat(outcome.trainDistance, name = "Train.distanceToSignalAhead()")
-			.isBetween(EXPECTED_REMAINING_DISTANCE - TOLERANCE, EXPECTED_REMAINING_DISTANCE + TOLERANCE)
+			.isBetween(expected - TOLERANCE, expected + TOLERANCE)
 		assertThat(outcome.perceivedDistance, name = "distanceToSignalAheadMetres")
-			.isBetween(EXPECTED_REMAINING_DISTANCE - TOLERANCE, EXPECTED_REMAINING_DISTANCE + TOLERANCE)
+			.isBetween(expected - TOLERANCE, expected + TOLERANCE)
 		assertThat(outcome.perceivedName, name = "signalAheadName").isNotNull().isEqualTo(NEXT_SIGNAL)
 	}
 
@@ -108,6 +112,7 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 
 		var standTime = -1.0
 		var trainDistance = Double.NaN
+		var wholeLegDistance = Double.NaN
 		var perceivedDistance = Double.NaN
 		var perceivedName: String? = null
 
@@ -135,6 +140,7 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 					}
 					if (standTime >= 0.0 && perceivedName == null && sample.time >= standTime + STAND_HOLD_SECONDS) {
 						trainDistance = train.distanceToSignalAhead()
+						wholeLegDistance = train.distanceToSemaphore()
 						val reading = port.trainPerception(train.name)
 						perceivedDistance = reading?.distanceToSignalAheadMetres ?: Double.NaN
 						perceivedName = reading?.signalAheadName
@@ -142,7 +148,7 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 				}
 			)
 		}
-		return Outcome(trainDistance, perceivedDistance, perceivedName)
+		return Outcome(trainDistance, wholeLegDistance, perceivedDistance, perceivedName)
 	}
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext =
