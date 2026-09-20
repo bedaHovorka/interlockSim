@@ -677,10 +677,11 @@ class DefaultPathReservationService(
 						continue
 					}
 
-					// Step 2g: Configure semaphore signal after successful reservation
-					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
+					// Step 2g: Configure semaphore signal after successful reservation.
+					// A semaphore START is configured for blocks.first() (the block next to it, also on a
+					// route extension, Issue #1062); forwardBlocks (just reserved) only drive an InOut START.
 					if (forwardBlocks.isNotEmpty()) {
-						val signalResult = configureStartSignal(trainId, start, forwardBlocks)
+						val signalResult = configureStartSignal(trainId, start, forwardBlocks, blocks.first())
 
 						// Rollback reservation if signal configuration failed
 						// This prevents trains from waiting indefinitely at STOP signals.
@@ -2966,11 +2967,14 @@ class DefaultPathReservationService(
 	 *
 	 * Extracted from [reservePath] so the candidate-loop body stays under the cyclomatic
 	 * complexity threshold. Returns [StartSignalResult.Configured] when the start
-	 * signal/inSemaphore was configured for the reserved [forwardBlocks], and a specific failure
+	 * signal/inSemaphore was configured for the reserved candidate, and a specific failure
 	 * variant otherwise — in which case the caller rolls the candidate back via
 	 * [rollbackUnconfigurableCandidate] and continues to the next candidate.
 	 *
-	 * - START is a [DynamicRailSemaphore]: configure it for the first forward block.
+	 * - START is a [DynamicRailSemaphore]: configure it for [startBlock], the path's first block --
+	 *   the one the semaphore actually bounds. The first *forward* block is not that block on a route
+	 *   extension (every block next to the start is already owned), and the block rejects a
+	 *   separator it does not end, which left the start at STOP (Issue #1062).
 	 * - START is a [DynamicInOut]: configure its embedded `inSemaphore` (train entering from
 	 *   the external network). `inSemaphore.direction() == anti(InOut.direction())` per
 	 *   `InOut.kt`, so `from = InOut.direction()` and `to = anti(InOut.direction())`.
@@ -2978,8 +2982,10 @@ class DefaultPathReservationService(
 	 *   the candidate back).
 	 *
 	 * @param start The candidate's start separator (semaphore or InOut).
-	 * @param forwardBlocks The blocks just reserved for this candidate (first one drives the
-	 *   signal's allowed speed).
+	 * @param forwardBlocks The blocks just reserved for this candidate (first one drives an
+	 *   InOut START's allowed speed).
+	 * @param startBlock The first block of the whole candidate path, adjacent to [start]; drives a
+	 *   semaphore START's direction check and allowed speed.
 	 * @return [StartSignalResult.Configured] on success; a failure variant otherwise.
 	 * @since Issue #742 SP0.11 review follow-up (extracted from reservePath Step 2g); return
 	 *   type widened from `Boolean` to [StartSignalResult] by Issue #903.
@@ -2987,7 +2993,8 @@ class DefaultPathReservationService(
 	private fun configureStartSignal(
 		trainId: String,
 		start: DynamicPathSeparator,
-		forwardBlocks: List<DynamicTrackBlock>
+		forwardBlocks: List<DynamicTrackBlock>,
+		startBlock: DynamicTrackBlock
 	): StartSignalResult =
 		when {
 			// Case 1: START is a semaphore -> configure it (train departing from semaphore)
@@ -2999,15 +3006,15 @@ class DefaultPathReservationService(
 				// is authority-defining: granting the route anyway would strand the train with
 				// no signal it is entitled to obey, a #566-class stall. Reject before
 				// configuring/recording anything, so the caller's rollback has nothing to undo.
-				if (!startFacesTravelDirection(start, forwardBlocks.first())) {
+				if (!startFacesTravelDirection(start, startBlock)) {
 					logger.debug {
 						"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
-							"away from the requested direction of travel toward ${forwardBlocks.first()}"
+							"away from the requested direction of travel toward $startBlock"
 					}
 					StartSignalResult.RejectedG4
 				} else {
 					try {
-						environment.configureSemaphoreSignal(start, forwardBlocks.first())
+						environment.configureSemaphoreSignal(start, startBlock)
 						recordClearedSemaphore(trainId, start)
 						logger.debug {
 							"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
@@ -3623,35 +3630,24 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * [facesDirectionOfTravel], tolerant of [nextBlock] not being structurally adjacent to
-	 * [semaphore] (Issue #893 task A1).
+	 * [facesDirectionOfTravel], tolerant of a [nextBlock] that cannot be resolved (Issue #893
+	 * task A1, Issue #1062).
 	 *
-	 * The START-signal call sites ([configureStartSignal] and the already-owned early-return
-	 * branch of [reservePath]) can be handed a `nextBlock` that is several hops away from
-	 * [semaphore]: a route **extension** re-invokes `reservePath` with the ORIGINAL start
-	 * separator, and once every block immediately adjacent to that start is already owned, the
-	 * remaining `forwardBlocks`/`blocks.first()` is the first genuinely NEW block further down
-	 * the path -- not [semaphore]'s own neighbour. [DefaultSimulationContext.getSegment] is only
-	 * defined for a block actually bounded by the separator; for a non-adjacent pair it throws
-	 * `SimulationException[FATAL]` instead of returning `null`, so [facesDirectionOfTravel]'s own
-	 * `?: return true` fallback never gets a chance to run.
+	 * Both START-signal call sites ([configureStartSignal] and the already-owned early-return
+	 * branch of [reservePath]) hand this the FIRST block of the whole requested path, which is the
+	 * block next to [semaphore]. That holds on a route **extension** too: the extension re-invokes
+	 * `reservePath` with the ORIGINAL start separator and every block next to it is already owned,
+	 * but the path's first block is still the one the separator bounds. So the direction check runs
+	 * on extensions and a rear-facing START is rejected there (G4), like on a fresh route. (Before
+	 * Issue #1062 the call sites passed the first *forward* block, which is not next to the start on
+	 * an extension; [DefaultSimulationContext.getSegment] threw for it and this guard fell open.)
 	 *
-	 * This wrapper extends the exact same fail-open philosophy ("cannot resolve -> proceed,
-	 * never strand the route") to that thrown case, without changing
+	 * The `catch` stays as a fail-open safety net ("cannot resolve -> proceed, never strand the
+	 * route") for a pair that is unexpectedly not adjacent, without changing
 	 * [facesDirectionOfTravel]'s contract or its callers within [configureIntermediateSemaphores]
-	 * (which only ever passes a genuinely adjacent pair and so never hits this branch).
-	 *
-	 * ## Limitation: inactive by design on route extensions
-	 *
-	 * On the extension shape described above, this guard does not actually evaluate direction --
-	 * it catches the thrown exception and falls open every time, because
-	 * [DefaultSimulationContext.getSegment] has no defined answer for a non-adjacent
-	 * start/first-forward-block pair. Direction correctness for an extension's origin is therefore
-	 * NOT enforced here; it is instead the job of the A-R1 contiguity predicate
-	 * ([rejectNonContiguousStart]), which runs earlier in [reservePath] and rejects any `start` that
-	 * does not bound one of the requesting train's current footprint blocks. Making this wrapper
-	 * fail CLOSED instead would reject every legitimate extension outright, since the extension
-	 * shape is exactly what always lands in the thrown-exception branch.
+	 * (which only ever pass a genuinely adjacent pair). A START that does not touch the requesting
+	 * train's footprint at all is refused earlier by the A-R1 contiguity predicate
+	 * ([rejectNonContiguousStart]).
 	 */
 	private fun startFacesTravelDirection(
 		semaphore: DynamicRailSemaphore,
@@ -3662,7 +3658,7 @@ class DefaultPathReservationService(
 		} catch (e: Exception) {
 			logger.debug(e) {
 				"reservePath: Could not resolve whether START semaphore ${semaphore.name} faces " +
-					"$nextBlock (likely non-adjacent, e.g. a route extension); treating as facing " +
+					"$nextBlock (unexpectedly not adjacent); treating as facing " +
 					"the travel direction"
 			}
 			true
