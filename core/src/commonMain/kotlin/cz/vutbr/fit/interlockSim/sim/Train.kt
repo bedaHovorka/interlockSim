@@ -1090,10 +1090,11 @@ class Train :
 		 * Called on every release of the gate and stands down immediately unless it was
 		 * [boundaryGuard]'s clearance term that bound — that is, unless the front is a clearance
 		 * short of the separator and, because [Motor] aims at the same point, already braked to
-		 * walking pace. (The motor brakes for a restrictive aspect whether it stood so as the leg
-		 * was commanded or turned so mid-leg — see [Motor]'s late-aspect watch, Issue #1057. Only
-		 * a flip that leaves less room than the deceleration bound needs still snaps to zero
-		 * here, as it always did.) The wait is the same level-triggered form [semaphoreAction] uses at the
+		 * walking pace. (The motor brakes for a restrictive aspect that stood so as the leg was
+		 * commanded or turned so mid-leg — see [Motor]'s late-aspect watch, Issue #1057 — except a
+		 * leg resumed from this clearance hold, which that watch does not cover. Only a flip that
+		 * leaves less room than the deceleration bound needs still snaps to zero here, as it
+		 * always did.) The wait is the same level-triggered form [semaphoreAction] uses at the
 		 * separator; the train resumes the instant the aspect clears, or rolls on to the
 		 * separator when the route is released, and the front is still on the *approach* side of
 		 * the sensor point while it waits, which is the whole point of the clearance.
@@ -1572,16 +1573,22 @@ class Train :
 
 			// The approach is the one wait located by root-finding: its exit is a threshold the
 			// train crosses while accelerating, so a whole-step overshoot costs braking room the
-			// short block does not have (Issue #1014; Issue #760 tracks the rest). The remaining
-			// arms keep `waitUntil`: they end at a velocity target, where one step of lateness is
-			// immaterial, and converting them would move the shunting-loop baselines.
+			// short block does not have (Issue #1014; Issue #760 tracks the rest).
+			//
+			// The remaining arms keep `waitUntil`: their primary exits are velocity targets, where
+			// one step of lateness is immaterial, and converting them would move the shunting-loop
+			// baselines. The else-arm's second exit, [brakingRoomGone] (Issue #1057), is a distance
+			// threshold, but a plain wait wakes at most one accepted step (kDisco `dtMax` = 1 ms)
+			// late: a residual of well under 1 m/s at the worst line speed, inside the best-effort
+			// clearance doctrine and far below the line-speed snap this fixes.
 			//
 			// Cancellation composes the same way it does for `waitUntil`. [cancelAccelerating]
 			// clears `accelerate` and activates; kDisco checks level crossings straight after that
 			// event, so [approachMargin] is already -1.0 and the wait ends at the same instant.
 			// One of the two turns returns from the wait; a re-command's iteration then starts
 			// from [commandPending] in [actions], and the other turn only passivates again.
-			if (cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
+			val isHalfSpeedLeg = cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED
+			if (isHalfSpeedLeg) {
 				// The second term ends phase 1 the instant the signal this phase started short of
 				// itself turns allowing, rather than only letting a clear relax the braking-room
 				// term (Copilot review, PR #1033, Train.kt:1533): [semaphoreToStopShortOf] only
@@ -1607,15 +1614,19 @@ class Train :
 			// `!terminate` because [terminate] now really does end the wait above (it reactivates
 			// rather than activates): without it a motor torn down mid-approach would answer by
 			// entering the braking phase and parking again instead of leaving the loop.
-			val cruiseLeg = cond.getStopTest() != AccelerationStopTest.TO_HALF_SPEED && targetSpeed > 0.0
-			if (!terminate && accelerate && cruiseLeg && nextSemaphore() is DynamicRailSemaphore) {
-				// The leg has reached its speed and would now go idle, deaf to an aspect that turns
-				// restrictive while the train coasts at line speed (Issue #1057).
-				if (watchForLateRestrictiveAspect()) {
-					runApproachLoop(runningOn = false)
-				}
+			// The cruise leg has reached its speed and would now go idle, deaf to an aspect that
+			// turns restrictive while the train coasts at line speed (Issue #1057).
+			if (
+				!terminate &&
+				accelerate &&
+				!isHalfSpeedLeg &&
+				targetSpeed > 0.0 &&
+				nextSemaphore() is DynamicRailSemaphore &&
+				watchForLateRestrictiveAspect()
+			) {
+				runApproachLoop(runningOn = false)
 			}
-			if (!terminate && accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
+			if (!terminate && accelerate && isHalfSpeedLeg) {
 				// From here to the end of the leg the aspect may change any number of times, and each
 				// change hands the motor over: a clear resumes the run at the live aspect's cap, a
 				// return to a restrictive aspect brakes to the stop line again. Phase 1 may already
@@ -1672,11 +1683,17 @@ class Train :
 			if (!brakingRoomGone()) {
 				stop()
 				acceleration.state = 0.0
+				// `minOf(..., 1.0)` bounds the guard: an unarmed [brakingRoomMargin] is +∞, and
+				// +∞ must never reach the root finder as a crossing value.
 				waitUntilCrossing { if (accelerate) minOf(brakingRoomMargin(), 1.0) else -1.0 }
 				if (terminate || !accelerate) return false
 				start()
 			}
-			return !terminate && brakingRoomGone()
+			// The crossing above is the only wake reason left, but kDisco's root finder may land
+			// up to its tolerance on the positive side: re-testing [brakingRoomGone] here could
+			// read a margin in (0, ~1e-9] as "room left", idle the motor, and let the train coast
+			// into the very snap this watch exists to prevent (Issue #1057 review).
+			return !terminate
 		}
 
 		/**
