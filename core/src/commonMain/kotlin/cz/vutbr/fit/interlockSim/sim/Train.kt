@@ -1800,8 +1800,9 @@ class Train :
 		 * train *accelerate* into the signal; zero instead takes [derivatives]' existing
 		 * "stop accelerating" branch.
 		 *
-		 * [distanceToSemaphore] itself is left alone on purpose: it is published to agents as
-		 * `distanceToSignalAheadMetres` and must keep meaning "distance to the signal".
+		 * [distanceToSemaphore] itself is left alone on purpose: braking must keep measuring to
+		 * the signal, while the port publishes [Train.distanceToSignalAhead] as
+		 * `distanceToSignalAheadMetres` (Issue #1061).
 		 */
 		private fun brakingTargetDistance(): Double {
 			val distance = distanceToSemaphore()
@@ -2014,6 +2015,26 @@ class Train :
 
 	override fun distanceToSemaphore(): Double =
 		if (pathToSemaphore == null) 0.0 else pathToSemaphore!!.length() - front.getPosition()
+
+	/**
+	 * Distance to the signal ahead as published to perception (Issue #1061). Equals
+	 * [distanceToSemaphore] except when the front has already reached the end of the reserved leg
+	 * (the separator it last crossed is that leg's last) and no new leg has been commanded, as
+	 * while an ownership conflict holds the train at the separator: the front has been rebased
+	 * past the section end, so `length - position` would read a whole leg too much. The train
+	 * stands at that separator, so the distance is zero. Read-only; braking keeps using
+	 * [distanceToSemaphore].
+	 *
+	 * [firstSep] defaults to [nextSemaphore] for the no-argument reading; the live perception
+	 * port passes the already-computed immediate separator so a capture still makes at most one
+	 * `nextSemaphore()` call in total (M1), like [secondSemaphoreAhead].
+	 *
+	 * Deliberately not on [TrackOccupant]: only [Train] publishes a perception reading, and
+	 * forcing the other occupants (the reservation service's anonymous occupant, test doubles)
+	 * to carry it would spread a perception-only concept for no caller.
+	 */
+	internal fun distanceToSignalAhead(firstSep: OrientedPathSeparator? = nextSemaphore()): Double =
+		if (firstSep == entrySeparator) 0.0 else distanceToSemaphore()
 
 	override suspend fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
