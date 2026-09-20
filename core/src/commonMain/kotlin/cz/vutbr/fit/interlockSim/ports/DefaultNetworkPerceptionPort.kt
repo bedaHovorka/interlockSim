@@ -269,7 +269,7 @@ class DefaultNetworkPerceptionPort(
 			trainId = name,
 			signalAheadName = separatorName(firstSep),
 			signalAheadAspect = separatorAspect(firstSep),
-			distanceToSignalAheadMetres = distanceToSemaphore(),
+			distanceToSignalAheadMetres = distanceToSignalAhead(firstSep),
 			currentSpeedLimitMps = currentSpeedLimitMps,
 			velocity = getVelocity(),
 			acceleration = getAcceleration(),
