@@ -85,6 +85,7 @@ class StartSignalOfRouteFromSignalTest : KoinTestBase() {
 			.withMessage("the route zB -> doA1 must be granted")
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(zB.signal.isAllowing()).withMessage("the start signal zB must turn proceed").isTrue()
+		assertThat(configWarnings()).isEmpty()
 	}
 
 	@Test
@@ -102,16 +103,6 @@ class StartSignalOfRouteFromSignalTest : KoinTestBase() {
 			.withMessage("the extension zA -> B must be granted")
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(zA.signal.isAllowing()).withMessage("the start signal zA must turn proceed").isTrue()
-		assertThat(configWarnings()).isEmpty()
-	}
-
-	@Test
-	fun `no configuration warning is logged for a valid start-signal route`() {
-		context
-			.getRoutingServices()
-			.getPathReservationService()
-			.reservePath("warnTrain", semaphore("zB"), semaphore("doA1"))
-
 		assertThat(configWarnings()).isEmpty()
 	}
 }

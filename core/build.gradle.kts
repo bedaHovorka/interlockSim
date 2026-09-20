@@ -190,10 +190,10 @@ kotlin {
                 implementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion")
                 implementation("io.mockk:mockk:$mockkVersion")
                 implementation("io.insert-koin:koin-test-junit5:$koinVersion")
+                implementation("ch.qos.logback:logback-classic:$logbackVersion")
                 runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
                 runtimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
                 runtimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
-                implementation("ch.qos.logback:logback-classic:$logbackVersion")
             }
         }
     }
