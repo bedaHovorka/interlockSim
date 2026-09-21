@@ -14,9 +14,14 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 /**
  * Outcome of [ApproachLockedPathRelease.releasePathDetailed].
  *
- * @property released blocks that were freed and dropped from the registry
- * @property deferred blocks kept RESERVED and registered by approach locking; non-empty means
- *   the release is partial and must be retried
+ * @property released blocks that were freed and dropped from the registry. In the partial
+ *   branch these are only the blocks whose registry drop succeeded; a block whose
+ *   `cancelPathSetup` or drop failed is reported neither here nor in [deferred] -- the
+ *   sweeper re-detects it on the next sweep with a fresh clock. The unconditional branch
+ *   reports every block of the route, successes and failures alike.
+ * @property deferred blocks kept RESERVED and registered -- by approach locking, because the
+ *   train occupies them, or because the deferral window is still open; non-empty means the
+ *   release is partial and must be retried
  * @since Issue #1050
  */
 data class PathRelease(
@@ -30,7 +35,7 @@ data class PathRelease(
  *
  * @since Issue #1050
  */
-interface ApproachLockedPathRelease {
+fun interface ApproachLockedPathRelease {
 	/**
 	 * `PathReservationService.releasePath` with approach locking, reporting what it kept back (Issue #1050). Plain
 	 * `releasePath` stays unconditional (teardown, tests); the production release goes through here.
@@ -39,8 +44,21 @@ interface ApproachLockedPathRelease {
 	 * committed to it: `Train.Front` reads the aspect, moves, and books the block only after
 	 * `hold(1.0)`. Freeing it inside that second kills the train's process at `enter`. Such a
 	 * block is therefore **kept reserved and registered** (its signals drop to STOP) and reported
-	 * in [PathRelease.deferred]; the caller retries, and the retry frees it because the signal now
-	 * shows STOP -- or the train has booked it, which makes it occupied and never released.
+	 * in [PathRelease.deferred]. The caller retries: the retry frees the block once the booking
+	 * window (`hold(1.0)`) has certainly closed -- the train has either booked it, in which case
+	 * it stays occupied and registered until the train leaves, or lost interest, the signal
+	 * reading STOP. A deferral is therefore time-based as well as signal-based, so no caller
+	 * cadence (a second `cancel_route` in the same emission batch, whose sim clock never
+	 * advanced) can free a block mid-booking.
+	 *
+	 * Once the deferred train books its block it occupies track again, so any later partial
+	 * release of that route goes through the occupying-train arm of the sweeper (the Issue
+	 * #1025 approach lock on tail releases) -- the two mechanisms hand over exactly there.
+	 *
+	 * Caveat: only signals recorded in the reservation service's cleared-signal ledger are
+	 * reset to STOP. A proceed aspect that reached the boundary semaphore outside the ledger
+	 * keeps authorising entry, so every retry defers again until some other cause clears it.
+	 * Every aspect writer in production records into the ledger today.
 	 *
 	 * @since Issue #1050
 	 */

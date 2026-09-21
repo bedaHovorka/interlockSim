@@ -804,6 +804,65 @@ class DefaultNetworkActuatorPortTest {
 
 			assertThat(p.releaseRoute("T52")).isFalse()
 		}
+
+		@Test
+		@DisplayName("releaseRouteDetailed reports deferred blocks under their stable ids (Issue #1050)")
+		fun releaseRouteDetailedReportsDeferredBlocks() {
+			val kept = mockk<DynamicTrackBlock>(relaxed = true)
+			every { kept.name } returns "k1"
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePathDetailed("T1") } returns PathRelease(emptyList(), listOf(kept))
+			every { svc.hasClearedSignals("T1") } returns false
+
+			val p = port(reservationService = svc)
+
+			val release = p.releaseRouteDetailed("T1")
+			assertThat(release.anyReleased, "a deferred release still changed the route state").isTrue()
+			assertThat(release.deferredBlockIds, "the kept block's stable id").isEqualTo(listOf("k1"))
+			assertThat(release.deferred).isTrue()
+		}
+
+		@Test
+		@DisplayName("releaseRouteDetailed reports a fully freed route with nothing deferred (Issue #1050)")
+		fun releaseRouteDetailedReportsAFullRelease() {
+			val released = listOf(mockk<DynamicTrackBlock>(relaxed = true))
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePathDetailed("T1") } returns PathRelease(released, emptyList())
+			every { svc.hasClearedSignals("T1") } returns false
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRouteDetailed("T1")).isEqualTo(RouteRelease(anyReleased = true, deferredBlockIds = emptyList()))
+		}
+	}
+
+	@Nested
+	@DisplayName("releaseRouteDetailed() interface default")
+	inner class ReleaseRouteDetailedDefault {
+		/** A port that overrides only the abstract contract methods, so the interface default runs. */
+		private fun portWithoutDetailedOverride(released: Boolean): NetworkActuatorPort =
+			object : NetworkActuatorPort {
+				override fun requestRoute(
+					trainName: String,
+					fromEndpointName: String,
+					toEndpointName: String
+				): RouteRequestResult = TODO("requestRoute is not exercised by this test")
+
+				override fun releaseRoute(trainName: String): Boolean = released
+
+				override fun setSwitchPosition(switchName: String, position: RailSwitch.Conf): Boolean = false
+
+				override fun setSignalAspect(semaphoreName: String, signal: Signal, trainName: String?): Boolean = false
+			}
+
+		@Test
+		@DisplayName("the default delegates to releaseRoute and reports nothing deferred (Issue #1050)")
+		fun defaultDelegatesToReleaseRouteAndReportsNothingDeferred() {
+			assertThat(portWithoutDetailedOverride(released = true).releaseRouteDetailed("T1"))
+				.isEqualTo(RouteRelease(anyReleased = true, deferredBlockIds = emptyList()))
+			assertThat(portWithoutDetailedOverride(released = false).releaseRouteDetailed("T1").anyReleased).isFalse()
+			assertThat(portWithoutDetailedOverride(released = true).releaseRouteDetailed("T1").deferred).isFalse()
+		}
 	}
 
 	// ── setSwitchPosition ───────────────────────────────────────────────────

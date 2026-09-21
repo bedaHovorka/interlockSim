@@ -25,9 +25,13 @@ import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+// Aliased: `PathRelease` is the name of a `@Nested` test group in this class.
+import cz.vutbr.fit.interlockSim.context.navigation.PathRelease as ReleaseOutcome
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -53,6 +57,7 @@ import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -402,34 +407,83 @@ class PathReservationServiceTest : KoinTestBase() {
 	@Nested
 	inner class ApproachLockedRelease {
 		@Test
-		fun `a proceed aspect at a reserved block defers its release and the retry frees it (Issue 1050)`() {
+		fun `a kept head whose trim boundary is a switch defers the whole route and frees nothing (Issue 1050)`() {
 			val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
-			// reservePath cleared the entry signal: the train waiting at the start may be committed to the
-			// first block, and to no other (the rest are not adjacent to it).
-			val start = blocks.first().reservedFrom
-			val entry = (start as DynamicInOut).inSemaphore
-			entry.signal = Signal.FREE
-			val locked = blocks.filter { block -> block.ends().any { it === start } }
-			require(locked.isNotEmpty()) { "Test requires a block governed by the entry signal" }
+			// A train standing across the first two blocks: its kept head ends at the switch vA,
+			// and a PathInfo never ends at a switch (isValidPathInfoEnd). Freeing the tail now
+			// would leave a stale PathInfo the registry cannot trim, which later stalls the train
+			// with OwnershipConflict.
+			val occupant = FakeTrackOccupant("train1")
+			blocks[0].enter(occupant)
+			blocks[1].enter(occupant)
 
 			val first = service.releasePathDetailed("train1")
 
-			assertThat(first.deferred.toSet()).isEqualTo(locked.toSet())
-			assertThat(first.released.toSet()).isEqualTo((blocks - locked.toSet()).toSet())
-			assertThat(entry.signal).isEqualTo(Signal.STOP)
-			locked.forEach { block ->
+			// The preflight refuses the trim, so the release frees NOTHING and reports the whole
+			// route as deferred (Issue #1050 review round). The sweeper retries with a fresh
+			// clock; the topology becomes trimmable once the train moves on.
+			assertThat(first.deferred.toSet()).isEqualTo(blocks.toSet())
+			assertThat(first.released).isEmpty()
+			blocks.take(2).forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.OCCUPIED)
+				assertThat(registry.getOwner(block)).isEqualTo("train1")
+			}
+			blocks.drop(2).forEach { block ->
 				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
 				assertThat(registry.getOwner(block)).isEqualTo("train1")
 			}
-			blocks.filter { it !in locked }.forEach { assertThat(registry.getOwner(it)).isNull() }
 
-			val retry = service.releasePathDetailed("train1")
+			val immediateRetry = service.releasePathDetailed("train1")
 
-			assertThat(retry.deferred).isEmpty()
-			assertThat(retry.released.toSet()).isEqualTo(locked.toSet())
-			locked.forEach { assertThat(it.getState()).isEqualTo(TrackFacility.State.FREE) }
-			assertThat(service.getReservedBlocks("train1")).isEmpty()
+			// An immediate repeat changes nothing: the switch boundary is still untrimmable and
+			// the occupied blocks are kept on every call.
+			assertThat(immediateRetry.deferred.toSet()).isEqualTo(blocks.toSet())
+			assertThat(immediateRetry.released).isEmpty()
+			blocks.forEach { block -> assertThat(registry.getOwner(block)).isEqualTo("train1") }
 		}
+
+		@Test
+		fun `a repeat after the booking window frees what approach locking kept (Issue 1050)`() =
+			runBlocking {
+				val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+				val start = blocks.first().reservedFrom
+				val entry = (start as DynamicInOut).inSemaphore
+				entry.signal = Signal.FREE
+				val outcomes = mutableListOf<ReleaseOutcome>()
+
+				Simulation
+					.create {
+						Process.activate(
+							object : Process() {
+								override suspend fun actions() {
+									outcomes += service.releasePathDetailed("train1")
+									hold(0.5)
+									outcomes += service.releasePathDetailed("train1")
+									hold(1.0)
+									outcomes += service.releasePathDetailed("train1")
+								}
+							}
+						)
+					}.run(10.0)
+
+				// t=0.0: the proceed aspect at the entry defers the head; the tail is trimmed at
+				// the semaphore zA (a valid PathInfo end) and freed.
+				assertThat(outcomes[0].deferred.toSet()).isEqualTo(setOf(blocks.first()))
+				assertThat(outcomes[0].released.toSet()).isEqualTo(blocks.drop(1).toSet())
+				// t=0.5: still inside the booking window (1.0 s) armed at t=0.0 -- the head stays
+				// deferred even though its signal now reads STOP.
+				assertThat(outcomes[1].deferred.toSet()).isEqualTo(setOf(blocks.first()))
+				assertThat(outcomes[1].released).isEmpty()
+				// t=1.5: the window closed at t=1.0 and no train booked anything -- the deferral
+				// expired, the signals read STOP, and the wholesale release takes the head.
+				assertThat(outcomes[2].deferred).isEmpty()
+				assertThat(outcomes[2].released.toSet()).isEqualTo(setOf(blocks.first()))
+				blocks.forEach { block ->
+					assertThat(block.getState()).isEqualTo(TrackFacility.State.FREE)
+					assertThat(registry.getOwner(block)).isNull()
+				}
+				assertThat(service.getReservedBlocks("train1")).isEmpty()
+			}
 
 		@Test
 		fun `releasePath frees everything when no proceed aspect stands at a reserved block`() {
