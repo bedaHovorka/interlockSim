@@ -2463,15 +2463,27 @@ class Train :
 	 * Returns [ABSOLUTE_MAX_SPEED] when no path is currently set for this train (the
 	 * interlocking has not yet reserved a route; no physical constraint is known).
 	 *
+	 * **Bugfix (Issue #1088, follow-up of #1061/#1084):** during the same ownership-conflict
+	 * suspension window documented at [distanceToSignalAhead] — the front rebased past a
+	 * separator while [Front.separatorAction] left [pathToSemaphore] untrimmed because the
+	 * path re-query has not succeeded yet — folding from [Path.getFirst] would still include
+	 * the section(s) already behind the front, capping this reading with a limit the train has
+	 * already left. [remainingLegLengthFrom]'s `indexOf`-based lookup of [entrySeparator]
+	 * locates where the front actually stands (first occurrence, mirroring that helper's loop
+	 * note); the fold starts strictly after it, seeded from [entrySeparator] as `prevSep`. In
+	 * the steady state (no suspension, or [entrySeparator] not found on [pathToSemaphore])
+	 * this is [Path.getFirst] again, so the fold is unchanged from before this fix.
+	 *
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
 	val currentSpeedLimitMps: Double
 		get() =
 			pathToSemaphore?.let { path ->
 				var min = ABSOLUTE_MAX_SPEED
-				var prevSep: PathSeparator? = path.getFirst()
-				for (element in path) {
-					if (element == path.getFirst() || element == path.getLast()) continue
+				val entryIndex = entrySeparator?.let { path.indexOf(it) }?.takeIf { it >= 0 } ?: 0
+				var prevSep: PathSeparator? = if (entryIndex == 0) path.getFirst() else entrySeparator
+				for ((index, element) in path.withIndex()) {
+					if (index <= entryIndex || element == path.getLast()) continue
 					val contribution = element.contributeToPathMaxSpeed(prevSep, min)
 					min = contribution.minSpeed
 					prevSep = contribution.updatedPreviousSeparator
