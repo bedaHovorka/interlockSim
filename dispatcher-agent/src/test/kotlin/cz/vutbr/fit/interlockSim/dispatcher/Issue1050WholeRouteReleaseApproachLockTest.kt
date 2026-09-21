@@ -17,7 +17,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent as NavigationBlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.UncaughtSimulationExceptions
@@ -37,6 +36,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent as NavigationBlockEvent
 
 /**
  * Issue #1050: the whole-route release (`releaseRoute`, the LLM's `cancel_route`) has the same

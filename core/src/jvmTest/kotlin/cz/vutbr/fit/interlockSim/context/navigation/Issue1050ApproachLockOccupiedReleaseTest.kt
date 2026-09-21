@@ -56,7 +56,15 @@ class Issue1050ApproachLockOccupiedReleaseTest : KoinTestBase() {
 		val context = network.context.tracked()
 		val reservation = reserve(network, context)
 		val releasedEvents = mutableListOf<BlockOccupancyEvent>()
-		context.addBlockOccupancyListener(BlockOccupancyListener { event -> if (event.type == BLOCK_RELEASED) releasedEvents += event })
+		context.addBlockOccupancyListener(
+			BlockOccupancyListener { event ->
+				if (event.type ==
+					BLOCK_RELEASED
+				) {
+					releasedEvents += event
+				}
+			}
+		)
 
 		val head = reservation.blocks.first()
 		head.enter(FakeTrackOccupant(reservation.trainId))
@@ -82,7 +90,15 @@ class Issue1050ApproachLockOccupiedReleaseTest : KoinTestBase() {
 		val context = network.context.tracked()
 		val reservation = reserve(network, context)
 		val releasedEvents = mutableListOf<BlockOccupancyEvent>()
-		context.addBlockOccupancyListener(BlockOccupancyListener { event -> if (event.type == BLOCK_RELEASED) releasedEvents += event })
+		context.addBlockOccupancyListener(
+			BlockOccupancyListener { event ->
+				if (event.type ==
+					BLOCK_RELEASED
+				) {
+					releasedEvents += event
+				}
+			}
+		)
 
 		// The reservation lit the start signal (the intermediate semaphore stays STOP), so a
 		// train waiting at A is committed to the head block only: the release defers the head

@@ -850,9 +850,16 @@ class DefaultNetworkActuatorPortTest {
 
 				override fun releaseRoute(trainName: String): Boolean = released
 
-				override fun setSwitchPosition(switchName: String, position: RailSwitch.Conf): Boolean = false
+				override fun setSwitchPosition(
+					switchName: String,
+					position: RailSwitch.Conf
+				): Boolean = false
 
-				override fun setSignalAspect(semaphoreName: String, signal: Signal, trainName: String?): Boolean = false
+				override fun setSignalAspect(
+					semaphoreName: String,
+					signal: Signal,
+					trainName: String?
+				): Boolean = false
 			}
 
 		@Test

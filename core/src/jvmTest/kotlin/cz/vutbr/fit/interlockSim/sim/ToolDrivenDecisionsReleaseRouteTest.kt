@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
