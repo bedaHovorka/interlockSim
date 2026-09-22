@@ -375,6 +375,8 @@ class AppliedOutcomeChannelSp2c17Test {
 			// WARN: raise the applier's level and capture its output for the duration of the test.
 			val applierLogger = LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier") as Logger
 			val appender = ListAppender<ILoggingEvent>().also { it.start() }
+			// Restore this saved level, not a fixed one: a fixed level leaks into later test classes.
+			val originalLevel = applierLogger.level
 			applierLogger.level = Level.INFO
 			applierLogger.addAppender(appender)
 			try {
@@ -393,7 +395,7 @@ class AppliedOutcomeChannelSp2c17Test {
 				assertThat(deferredLog).contains("k1")
 			} finally {
 				applierLogger.detachAppender(appender)
-				applierLogger.level = Level.WARN
+				applierLogger.level = originalLevel
 			}
 		}
 

@@ -40,9 +40,13 @@ class ToolDrivenDecisionsReleaseRouteTest {
 	private val logger: Logger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger
 	private lateinit var appender: ListAppender<ILoggingEvent>
 
+	// Restored in tearDown: a fixed level would leak into later test classes in the same JVM.
+	private var originalLevel: Level? = null
+
 	@BeforeEach
 	fun setUp() {
 		appender = ListAppender<ILoggingEvent>().also { it.start() }
+		originalLevel = logger.level
 		logger.level = Level.DEBUG
 		logger.addAppender(appender)
 	}
@@ -50,7 +54,7 @@ class ToolDrivenDecisionsReleaseRouteTest {
 	@AfterEach
 	fun tearDown() {
 		logger.detachAppender(appender)
-		logger.level = Level.WARN
+		logger.level = originalLevel
 	}
 
 	private fun actuatorReturning(release: RouteRelease): NetworkActuatorPort =
