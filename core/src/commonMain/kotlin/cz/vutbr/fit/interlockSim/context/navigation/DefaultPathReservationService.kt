@@ -1132,7 +1132,7 @@ class DefaultPathReservationService(
 	 */
 	private fun approachLockedBlocks(held: List<DynamicTrackBlock>): List<DynamicTrackBlock> {
 		val occupied = held.filter(::isOccupied)
-		val headEnds = occupied.flatMapTo(mutableSetOf()) { it.ends().asList() }
+		val headEnds = occupied.flatMap { it.ends().asList() }.toSet()
 		return held.filter { block ->
 			block.occupant == null &&
 				block.getState() == TrackFacility.State.RESERVED &&
