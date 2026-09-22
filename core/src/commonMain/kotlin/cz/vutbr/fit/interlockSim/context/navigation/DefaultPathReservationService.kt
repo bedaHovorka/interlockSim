@@ -1117,7 +1117,14 @@ class DefaultPathReservationService(
 		now: Double
 	): List<DynamicTrackBlock> =
 		blocks.filter { block ->
-			block in approachLocked || isOccupied(block) || approachLockDeferredUntil[block]?.let { it > now } == true
+			block in approachLocked ||
+				isOccupied(block) ||
+				// Kept through the expiry instant itself (Issue #1050 review round): Train.Front
+				// resumes from hold(1.0) and books the block AT the expiry timestamp, before
+				// next.enter() runs. A retry scheduled first at that same simulation time must
+				// still see the block as deferred -- only a strictly later `now` proves the
+				// booking window has fully closed.
+				approachLockDeferredUntil[block]?.let { it >= now } == true
 		}
 
 	/**
@@ -3525,6 +3532,10 @@ class DefaultPathReservationService(
 
 		val releasedBlocks = registry.unregister(trainId)
 		registry.unregisterSwitches(trainId)
+		// Whatever deferral window was still open for these blocks is over: the train's whole
+		// footprint is gone (Issue #1050 review round; unregister() is the other wholesale-release
+		// path releaseAllBlocks already covers).
+		releasedBlocks.forEach { approachLockDeferredUntil.remove(it) }
 
 		logger.info {
 			"unregister: Released ${releasedBlocks.size} blocks for train '$trainId': " +
