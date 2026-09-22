@@ -86,39 +86,7 @@ class Issue1050WholeRouteReleaseApproachLockTest : DispatcherKoinTestBase() {
 		val injection = AtomicReference<Injection?>(null)
 		val watch = watchBookedBlock(context, injection)
 		val repeat = AtomicReference<Repeat?>(null)
-		val injector =
-			object : Process() {
-				override suspend fun actions() {
-					while (injection.get() == null) {
-						hold(Issue1025CommittedTrainReleaseScenario.POLL_PERIOD_SECONDS)
-						val (trainId, block) =
-							Issue1025CommittedTrainReleaseScenario.committedFront(perception, registry) ?: continue
-						val outcome = actuator.releaseRouteDetailed(trainId)
-						injection.set(
-							Injection(
-								trainId,
-								block,
-								BlockIdentity.stableBlockId(block),
-								time(),
-								outcome,
-								registry.getOwner(block),
-								block.getState()
-							)
-						)
-					}
-
-					// Review round (Issue #1050): the train books the deferred block; the repeat
-					// release must keep the now-OCCUPIED block registered, not unregister the
-					// train wholesale. This is the exact retry the PARTIAL outcome message tells
-					// the dispatcher to make.
-					while (watch.bookedAt.get() == null) {
-						hold(Issue1025CommittedTrainReleaseScenario.POLL_PERIOD_SECONDS)
-					}
-					val done = injection.get()!!
-					val outcome = actuator.releaseRouteDetailed(done.trainId)
-					repeat.set(Repeat(outcome, registry.getOwner(done.block), done.block.getState()))
-				}
-			}
+		val injector = releaseInjector(actuator, perception, registry, injection, watch, repeat)
 		Issue1025CommittedTrainReleaseScenario.installInjectorActivation(loop, injector)
 
 		val run = UncaughtSimulationExceptions.record { context.run() }
@@ -126,7 +94,60 @@ class Issue1050WholeRouteReleaseApproachLockTest : DispatcherKoinTestBase() {
 		assertThat(run.uncaught, "exceptions that escaped a train process (the #1025/#1050 FATAL)").isEmpty()
 		val done = injection.get()
 		assertThat(done, "injection (null means no train was caught at a proceed aspect: vacuous)").isNotNull()
-		assertThat(done!!.outcome.deferred, "the caller learns the release was partial").isTrue()
+		assertDeferredAtRelease(done!!, watch)
+		assertRepeatKeepsBlockOccupied(done, repeat.get())
+		assertNoReleaseBeforeTrainLeft(watch)
+	}
+
+	/**
+	 * The process that catches a train at a proceed aspect, releases its route there, and after the
+	 * train books the deferred block repeats the release (the retry the PARTIAL outcome message asks for).
+	 */
+	private fun releaseInjector(
+		actuator: DefaultNetworkActuatorPort,
+		perception: DefaultNetworkPerceptionPort,
+		registry: PathReservationRegistry,
+		injection: AtomicReference<Injection?>,
+		watch: BookedBlockWatch,
+		repeat: AtomicReference<Repeat?>
+	): Process =
+		object : Process() {
+			override suspend fun actions() {
+				while (injection.get() == null) {
+					hold(Issue1025CommittedTrainReleaseScenario.POLL_PERIOD_SECONDS)
+					val (trainId, block) =
+						Issue1025CommittedTrainReleaseScenario.committedFront(perception, registry) ?: continue
+					val outcome = actuator.releaseRouteDetailed(trainId)
+					injection.set(
+						Injection(
+							trainId,
+							block,
+							BlockIdentity.stableBlockId(block),
+							time(),
+							outcome,
+							registry.getOwner(block),
+							block.getState()
+						)
+					)
+				}
+
+				// Review round (Issue #1050): the train books the deferred block; the repeat
+				// release must keep the now-OCCUPIED block registered, not unregister the
+				// train wholesale.
+				while (watch.bookedAt.get() == null) {
+					hold(Issue1025CommittedTrainReleaseScenario.POLL_PERIOD_SECONDS)
+				}
+				val done = injection.get()!!
+				val outcome = actuator.releaseRouteDetailed(done.trainId)
+				repeat.set(Repeat(outcome, registry.getOwner(done.block), done.block.getState()))
+			}
+		}
+
+	private fun assertDeferredAtRelease(
+		done: Injection,
+		watch: BookedBlockWatch
+	) {
+		assertThat(done.outcome.deferred, "the caller learns the release was partial").isTrue()
 		assertThat(done.outcome.deferredBlockIds, "deferred blocks").contains(done.blockId)
 		assertThat(done.stateAfter, "state of the committed block right after the release")
 			.isEqualTo(TrackFacility.State.RESERVED)
@@ -135,8 +156,12 @@ class Issue1050WholeRouteReleaseApproachLockTest : DispatcherKoinTestBase() {
 		val bookedAt = watch.bookedAt.get()
 		assertThat(bookedAt, "sim time at which the committed train booked the block").isNotNull()
 		assertThat(bookedAt!! > done.simTime, "booking ($bookedAt) after the release call (${done.simTime})").isTrue()
+	}
 
-		val afterBooking = repeat.get()
+	private fun assertRepeatKeepsBlockOccupied(
+		done: Injection,
+		afterBooking: Repeat?
+	) {
 		assertThat(afterBooking, "the repeat release after the booking (null means phase 2 never ran)").isNotNull()
 		assertThat(
 			afterBooking!!.outcome.deferred,
@@ -146,19 +171,22 @@ class Issue1050WholeRouteReleaseApproachLockTest : DispatcherKoinTestBase() {
 		assertThat(afterBooking.stateAfter, "the booked block stays OCCUPIED through the repeat release")
 			.isEqualTo(TrackFacility.State.OCCUPIED)
 		assertThat(afterBooking.ownerAfter, "the booked block stays registered to its train").isEqualTo(done.trainId)
-		// A BlockReleased for the block while the train stands on it is the registry-vs-physical
-		// divergence; a later one, after the train left, is a legitimate reclaim.
-		val firstReleasedAt = watch.firstReleasedAt.get()
-		if (firstReleasedAt != null) {
-			val clearedAt = watch.clearedAt.get()
-			assertThat(clearedAt, "sim time at which the train left the block before it was released").isNotNull()
-			// Same-instant clear-then-release is the normal hand-off as the train moves on;
-			// a release BEFORE the clear is the divergence.
-			assertThat(
-				firstReleasedAt >= clearedAt!!,
-				"BlockReleased ($firstReleasedAt) not before the train left the block ($clearedAt)"
-			).isTrue()
-		}
+	}
+
+	/**
+	 * A BlockReleased for the block while the train stands on it is the registry-vs-physical
+	 * divergence; a later one, after the train left, is a legitimate reclaim.
+	 */
+	private fun assertNoReleaseBeforeTrainLeft(watch: BookedBlockWatch) {
+		val firstReleasedAt = watch.firstReleasedAt.get() ?: return
+		val clearedAt = watch.clearedAt.get()
+		assertThat(clearedAt, "sim time at which the train left the block before it was released").isNotNull()
+		// Same-instant clear-then-release is the normal hand-off as the train moves on;
+		// a release BEFORE the clear is the divergence.
+		assertThat(
+			firstReleasedAt >= clearedAt!!,
+			"BlockReleased ($firstReleasedAt) not before the train left the block ($clearedAt)"
+		).isTrue()
 	}
 
 	/**
