@@ -846,7 +846,7 @@ class DefaultNetworkActuatorPortTest {
 					trainName: String,
 					fromEndpointName: String,
 					toEndpointName: String
-				): RouteRequestResult = TODO("requestRoute is not exercised by this test")
+				): RouteRequestResult = throw UnsupportedOperationException("requestRoute is not exercised by this test")
 
 				override fun releaseRoute(trainName: String): Boolean = released
 

@@ -30,8 +30,6 @@ import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-// Aliased: `PathRelease` is the name of a `@Nested` test group in this class.
-import cz.vutbr.fit.interlockSim.context.navigation.PathRelease as ReleaseOutcome
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -65,6 +63,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.context.navigation.PathRelease as ReleaseOutcome
 
 /**
  * Comprehensive test suite for PathReservationService.
