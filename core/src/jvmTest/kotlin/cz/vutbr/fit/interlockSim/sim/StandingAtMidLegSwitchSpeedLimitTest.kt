@@ -14,8 +14,6 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import cz.ksimulantenbande.kdisco.Process
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
@@ -28,7 +26,6 @@ import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.runSimpleLinearTrackScenario
 import cz.vutbr.fit.interlockSim.testutil.separatorLabel
-import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -108,7 +105,10 @@ class StandingAtMidLegSwitchSpeedLimitTest : KoinTestBase() {
 	}
 
 	private fun runScenario(): Outcome {
-		val context = loadSwitchBetweenSemaphoresContext().tracked()
+		val context =
+			TestFixtures
+				.loadSwitchBetweenSemaphoresSimulationContext(simulationContextFactory, editingContextFactory)
+				.tracked()
 		val inOuts = context.getInOuts().toList()
 		val a = inOuts.single { it.name == "A" }
 		val c = inOuts.single { it.name == "C" }
@@ -162,19 +162,4 @@ class StandingAtMidLegSwitchSpeedLimitTest : KoinTestBase() {
 		}
 		return Outcome(trainSpeedLimit, perceivedSpeedLimit, perceivedName)
 	}
-
-	/**
-	 * Loads `switch-between-semaphores.xml` the same way [TestFixtures.loadShuntingSimulationContext]
-	 * loads `vyhybna.xml` — through the Koin-injected factories, so the context is wired exactly
-	 * as this test module configures them. There is no named helper for this fixture, so the
-	 * chain is spelled out here once.
-	 */
-	private fun loadSwitchBetweenSemaphoresContext(): DefaultSimulationContext =
-		TestFixtures.loadSwitchBetweenSemaphoresXml().use { xmlStream ->
-			val editingContext =
-				Util.assertInstanceOf<EditingContext>(editingContextFactory.createContext(xmlStream))
-			editingContext.use {
-				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(it))
-			}
-		}
 }

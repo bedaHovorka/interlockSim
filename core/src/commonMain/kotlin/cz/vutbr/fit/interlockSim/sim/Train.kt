@@ -1982,6 +1982,15 @@ class Train :
 	 * crossed out of its section with nothing to enter, this separator is that section's *exit*
 	 * end. [trainEntrySeparator] publishes the coherent value — see [Site.publishedEntrySeparator]
 	 * (Issue #788).
+	 *
+	 * **Ownership-conflict suspension window** (Issue #1061, mid-leg follow-up #1084, speed-limit
+	 * follow-up #1088): [Front.separatorAction] only trims [pathToSemaphore] on a successful path
+	 * query, so when a [PathResult.OwnershipConflict] answers the query made right after the front
+	 * crosses a separator — the reserved leg's own end, or a mid-leg switch — [pathToSemaphore] is
+	 * left holding sections the front has already left behind, while [entrySeparator] still points
+	 * at where the front actually stands. Perception getters that measure or fold [pathToSemaphore]
+	 * ([remainingLegLengthFrom], [currentSpeedLimitMps]) must start from [entrySeparator] rather
+	 * than from [pathToSemaphore]'s own head, or they read a value already behind the front.
 	 */
 	private var entrySeparator: DynamicPathSeparator? = null
 
@@ -2103,13 +2112,8 @@ class Train :
 	 * Sum of the [pathToSemaphore] track lengths strictly after [separator], or `null` when
 	 * [pathToSemaphore] is unset or does not contain [separator] at all.
 	 *
-	 * [distanceToSignalAhead] uses this to recover the correct remaining distance whenever the
-	 * front has been rebased past a separator that [pathToSemaphore] itself could not be
-	 * advanced past — the suspension window a [PathResult.OwnershipConflict] answer opens
-	 * (Issue #1061, and the mid-leg follow-up Issue #1084): [Front.separatorAction]
-	 * only trims [pathToSemaphore] on a successful path query, so a conflict answered right after
-	 * the front crosses a mid-leg switch leaves [pathToSemaphore] holding sections the front has
-	 * already left behind.
+	 * [distanceToSignalAhead] uses this to recover the correct remaining distance during the
+	 * ownership-conflict suspension window documented at [entrySeparator].
 	 *
 	 * In the steady state (no suspension) [separator] is [pathToSemaphore]'s first element, so
 	 * the sum equals [pathToSemaphore]'s own length and [distanceToSignalAhead] reads exactly
@@ -2130,12 +2134,9 @@ class Train :
 
 	/**
 	 * Distance to the signal ahead as published to perception (Issue #1061). Equals
-	 * [distanceToSemaphore] except while an ownership conflict holds the train at a separator it
-	 * has already been rebased past, be it the reserved leg's last separator (Issue #1061) or a
-	 * mid-leg switch (Issue #1084): in both cases `pathToSemaphore.length() - position` reads too
-	 * much — a whole leg, or the section(s) already behind the front — because
-	 * [Front.separatorAction] never trimmed [pathToSemaphore] for the crossing
-	 * that stalled. [remainingLegLengthFrom] recovers the correct remaining length by measuring
+	 * [distanceToSemaphore] except during the ownership-conflict suspension window documented at
+	 * [entrySeparator], be it the reserved leg's last separator (Issue #1061) or a mid-leg switch
+	 * (Issue #1084): [remainingLegLengthFrom] recovers the correct remaining length by measuring
 	 * from the separator the front actually stands at, rather than trusting [pathToSemaphore] to
 	 * start there. Read-only; braking keeps using [distanceToSemaphore].
 	 *
@@ -2463,26 +2464,21 @@ class Train :
 	 * Returns [ABSOLUTE_MAX_SPEED] when no path is currently set for this train (the
 	 * interlocking has not yet reserved a route; no physical constraint is known).
 	 *
-	 * **Bugfix (Issue #1088, follow-up of #1061/#1084):** during the same ownership-conflict
-	 * suspension window documented at [distanceToSignalAhead] — the front rebased past a
-	 * separator while [Front.separatorAction] left [pathToSemaphore] untrimmed because the
-	 * path re-query has not succeeded yet — folding from [Path.getFirst] would still include
-	 * the section(s) already behind the front, capping this reading with a limit the train has
-	 * already left. [remainingLegLengthFrom]'s `indexOf`-based lookup of [entrySeparator]
-	 * locates where the front actually stands (first occurrence, mirroring that helper's loop
-	 * note); the fold starts strictly after it, seeded from [entrySeparator] as `prevSep`. In
-	 * the steady state (no suspension, or [entrySeparator] not found on [pathToSemaphore])
-	 * this is [Path.getFirst] again, so the fold is unchanged from before this fix.
+	 * **Bugfix (Issue #1088, follow-up of #1061/#1084):** during the ownership-conflict
+	 * suspension window documented at [entrySeparator], folding from [Path.getFirst] would still
+	 * include the section(s) already behind the front, capping this reading with a limit the
+	 * train has already left. The fold below restarts from [entrySeparator] the moment it meets
+	 * it (first occurrence, mirroring [remainingLegLengthFrom]'s own loop note for a revisited
+	 * separator on a loop topology), discarding whatever it folded before that point. In the
+	 * steady state — no suspension, or [entrySeparator] not found on [pathToSemaphore] — the
+	 * restart never triggers, so the fold is unchanged from before this fix.
 	 *
-	 * Two corner clarifications. The old loop skipped by identity (`element == [Path.getFirst]`
-	 * skipped every occurrence of that separator); this loop skips by index, so on a loop
-	 * topology whose first separator reappears later on the path, that later occurrence is now
-	 * folded — the fold follows the front's actual position instead of the departed entry. And
-	 * in the #1061 leg-end window ([entrySeparator] equals [pathToSemaphore]'s last element)
-	 * everything is skipped and the reading is [ABSOLUTE_MAX_SPEED] — the "no constraint
-	 * known" sentinel, not "full speed permitted"; movement stays doubly gated during the hold
-	 * (the front is parked in its wait, and [setTargetSpeed] keeps its own cleared-block
-	 * guard), the same symmetry [distanceToSignalAhead] shows by reading `0.0` there.
+	 * One corner clarification: in the #1061 leg-end window ([entrySeparator] equals
+	 * [pathToSemaphore]'s last element) everything after the restart is the skipped last
+	 * element, so the reading is [ABSOLUTE_MAX_SPEED] — the "no constraint known" sentinel, not
+	 * "full speed permitted"; movement stays doubly gated during the hold (the front is parked
+	 * in its wait, and [setTargetSpeed] keeps its own cleared-block guard), the same symmetry
+	 * [distanceToSignalAhead] shows by reading `0.0` there.
 	 *
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
@@ -2490,10 +2486,25 @@ class Train :
 		get() =
 			pathToSemaphore?.let { path ->
 				var min = ABSOLUTE_MAX_SPEED
-				val entryIndex = entrySeparator?.let { path.indexOf(it) }?.takeIf { it >= 0 } ?: 0
-				var prevSep: PathSeparator? = if (entryIndex == 0) path.getFirst() else entrySeparator
-				for ((index, element) in path.withIndex()) {
-					if (index <= entryIndex || element == path.getLast()) continue
+				val last = path.getLast()
+				var prevSep: PathSeparator? = path.getFirst()
+				var skippingFirst = true
+				var restartedAtEntry = false
+				for (element in path) {
+					if (skippingFirst) {
+						skippingFirst = false
+						continue
+					}
+					if (!restartedAtEntry && element == entrySeparator) {
+						// The front actually stands here (ownership-conflict suspension window):
+						// discard whatever was folded from the path's head and restart the fold
+						// from this separator, as if it had started strictly after it.
+						restartedAtEntry = true
+						min = ABSOLUTE_MAX_SPEED
+						prevSep = entrySeparator
+						continue
+					}
+					if (element == last) continue
 					val contribution = element.contributeToPathMaxSpeed(prevSep, min)
 					min = contribution.minSpeed
 					prevSep = contribution.updatedPreviousSeparator
