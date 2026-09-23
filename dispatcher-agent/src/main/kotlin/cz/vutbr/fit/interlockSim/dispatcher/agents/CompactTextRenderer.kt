@@ -227,7 +227,13 @@ class CompactTextRenderer : ObservationRenderer {
 					outcome.reason
 
 			is AppliedOutcome.Released -> {
-				val status = if (outcome.anyReleased) "RELEASED" else "NO_RESERVATION"
+				val status =
+					when {
+						outcome.deferredBlockIds.isNotEmpty() ->
+							"PARTIAL (kept: ${outcome.deferredBlockIds.joinToString(", ")}; repeat cancel_route)"
+						outcome.anyReleased -> "RELEASED"
+						else -> "NO_RESERVATION"
+					}
 				"cancel_route ${outcome.trainId} : $status"
 			}
 

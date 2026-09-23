@@ -151,7 +151,7 @@ internal object Issue1025CommittedTrainReleaseScenario {
 		}
 
 	/** Wraps the loop's wired listener so [injector] is activated on the first control step only. */
-	private fun installInjectorActivation(
+	internal fun installInjectorActivation(
 		loop: ShuntingLoop,
 		injector: Process
 	) {
@@ -172,7 +172,7 @@ internal object Issue1025CommittedTrainReleaseScenario {
 	 * a signal governing that block shows a proceed aspect — that is a train inside the
 	 * `hold(1.0)` window. Returns the train id and the live block, or null when no train is there.
 	 */
-	private fun committedFront(
+	internal fun committedFront(
 		perception: DefaultNetworkPerceptionPort,
 		registry: PathReservationRegistry
 	): Pair<String, DynamicTrackBlock>? {
@@ -209,5 +209,5 @@ internal object Issue1025CommittedTrainReleaseScenario {
 		}
 
 	private const val SIM_END_TIME = 300L
-	private const val POLL_PERIOD_SECONDS = 0.1
+	internal const val POLL_PERIOD_SECONDS = 0.1
 }

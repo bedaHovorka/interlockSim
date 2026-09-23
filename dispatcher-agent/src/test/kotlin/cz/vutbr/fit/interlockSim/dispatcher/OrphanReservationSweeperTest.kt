@@ -16,6 +16,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathRelease
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -24,6 +25,7 @@ import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.RouteRelease
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
@@ -74,7 +76,7 @@ class OrphanReservationSweeperTest {
 	 */
 	private val actuatorPort =
 		mockk<NetworkActuatorPort>(relaxed = true).apply {
-			every { releaseRoute(any()) } returns true
+			every { releaseRouteDetailed(any()) } returns RouteRelease(true, emptyList())
 		}
 
 	private fun reading(
@@ -144,6 +146,34 @@ class OrphanReservationSweeperTest {
 	)
 
 	@Test
+	@DisplayName("a release deferred by approach locking keeps the staleness clock and retries on the next sweep")
+	fun deferredReleaseIsRetriedNextSweepWithoutWaitingAgain() {
+		every { actuatorPort.releaseRouteDetailed("Train #1") } returnsMany
+			listOf(RouteRelease(true, listOf("k1")), RouteRelease(true, emptyList()))
+		val held = listOf(reserved("k1", "Train #1"), reserved("kA", "Train #1"))
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = 60.0,
+				ticks =
+					listOf(
+						Tick(simTime = 0.0, blocks = held, activeTrains = listOf("Train #1")),
+						// Stale: first release attempt, deferred; only k1 is still held afterwards.
+						Tick(simTime = 70.0, blocks = held, activeTrains = listOf("Train #1")),
+						// Two seconds later, far below the threshold: the retry must fire at once.
+						Tick(
+							simTime = 72.0,
+							blocks = listOf(reserved("k1", "Train #1")),
+							activeTrains = listOf("Train #1")
+						)
+					)
+			)
+
+		verify(exactly = 2) { actuatorPort.releaseRouteDetailed("Train #1") }
+		assertThat(sweeper.staleReleaseCount).isEqualTo(2)
+	}
+
+	@Test
 	@DisplayName("a reservation owned by no known train is released on the first sweep")
 	fun phantomOwnerIsReleasedImmediately() {
 		// The exact round-1 failure: the system prompt's worked example made the model call
@@ -160,7 +190,7 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 1) { actuatorPort.releaseRoute("T1") }
+		verify(exactly = 1) { actuatorPort.releaseRouteDetailed("T1") }
 		assertThat(sweeper.phantomReleaseCount).isEqualTo(1)
 	}
 
@@ -178,7 +208,7 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 0) { actuatorPort.releaseRoute(any()) }
+		verify(exactly = 0) { actuatorPort.releaseRouteDetailed(any()) }
 		assertThat(sweeper.staleReleaseCount).isEqualTo(0)
 	}
 
@@ -196,7 +226,7 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 1) { actuatorPort.releaseRoute("Train #1") }
+		verify(exactly = 1) { actuatorPort.releaseRouteDetailed("Train #1") }
 		assertThat(sweeper.staleReleaseCount).isEqualTo(1)
 	}
 
@@ -221,7 +251,7 @@ class OrphanReservationSweeperTest {
 	@DisplayName("releaseRoute returning false is not a failure: no counter bump, and no retry next sweep")
 	fun falseReleaseRouteResultDoesNotBumpCounterOrRetryNextSweep() {
 		val neverSucceedsActuator = mockk<NetworkActuatorPort>()
-		every { neverSucceedsActuator.releaseRoute(any()) } returns false
+		every { neverSucceedsActuator.releaseRouteDetailed(any()) } returns RouteRelease(false, emptyList())
 		val held = listOf(reserved("k1", "Train #1"))
 		val perceptionPort = mockk<NetworkPerceptionPort>()
 		val sensorPort = mockk<DispatchLoopSensorPort>()
@@ -269,7 +299,7 @@ class OrphanReservationSweeperTest {
 		sweeper.sweep() // Past the threshold: releaseRoute is called and returns false.
 
 		assertThat(sweeper.staleReleaseCount, "staleReleaseCount must not bump on a false result").isEqualTo(0)
-		verify(exactly = 1) { neverSucceedsActuator.releaseRoute("Train #1") }
+		verify(exactly = 1) { neverSucceedsActuator.releaseRouteDetailed("Train #1") }
 
 		// Same block, unchanged -- "the very next sweep". holdings forgot the owner regardless of
 		// the false result above, so this restarts a fresh staleness clock rather than an
@@ -292,7 +322,7 @@ class OrphanReservationSweeperTest {
 		sweeper.sweep()
 
 		assertThat(sweeper.staleReleaseCount, "staleReleaseCount must still be 0").isEqualTo(0)
-		verify(exactly = 1) { neverSucceedsActuator.releaseRoute("Train #1") }
+		verify(exactly = 1) { neverSucceedsActuator.releaseRouteDetailed("Train #1") }
 	}
 
 	/**
@@ -321,7 +351,7 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 0) { actuatorPort.releaseRoute(any()) }
+		verify(exactly = 0) { actuatorPort.releaseRouteDetailed(any()) }
 		assertThat(sweeper.staleReleaseCount).isEqualTo(0)
 	}
 
@@ -345,7 +375,7 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 0) { actuatorPort.releaseRoute(any()) }
+		verify(exactly = 0) { actuatorPort.releaseRouteDetailed(any()) }
 		assertThat(sweeper.staleReleaseCount).isEqualTo(0)
 	}
 
@@ -367,7 +397,7 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 1) { actuatorPort.releaseRoute("Train #2") }
+		verify(exactly = 1) { actuatorPort.releaseRouteDetailed("Train #2") }
 		assertThat(sweeper.staleReleaseCount).isEqualTo(1)
 	}
 
@@ -386,7 +416,7 @@ class OrphanReservationSweeperTest {
 				)
 		)
 
-		verify(exactly = 1) { actuatorPort.releaseRoute("Train #1") }
+		verify(exactly = 1) { actuatorPort.releaseRouteDetailed("Train #1") }
 	}
 
 	/**
@@ -408,7 +438,8 @@ class OrphanReservationSweeperTest {
 	fun signalsOnlyReclaimIsCountedAndNotRetried() {
 		val reservationService = mockk<PathReservationService>(relaxed = true)
 		every { reservationService.hasClearedSignals("Train #1") } returns true
-		every { reservationService.releasePath("Train #1") } returns emptyList<DynamicTrackBlock>()
+		every { reservationService.releasePathDetailed("Train #1") } returns
+			PathRelease(emptyList<DynamicTrackBlock>(), emptyList())
 		val env = mockk<SimulationEnvironment>(relaxed = true)
 		val actuator = DefaultNetworkActuatorPort(env = env, pathReservationService = reservationService)
 
@@ -474,7 +505,7 @@ class OrphanReservationSweeperTest {
 		assertThat(sweeper.staleReleaseCount, "staleReleaseCount must not double count").isEqualTo(1)
 		// The owner no longer appears in the snapshot at all (its block is FREE), so the sweeper
 		// never revisits it -- releaseRoute is called exactly once across all three sweeps.
-		verify(exactly = 1) { reservationService.releasePath("Train #1") }
+		verify(exactly = 1) { reservationService.releasePathDetailed("Train #1") }
 	}
 
 	@Test
@@ -489,7 +520,7 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 0) { actuatorPort.releaseRoute(any()) }
+		verify(exactly = 0) { actuatorPort.releaseRouteDetailed(any()) }
 		assertThat(sweeper.phantomReleaseCount).isEqualTo(0)
 		assertThat(sweeper.staleReleaseCount).isEqualTo(0)
 	}
@@ -554,8 +585,8 @@ class OrphanReservationSweeperTest {
 					)
 			)
 
-		verify(exactly = 1) { actuatorPort.releaseRoute("Train #1") }
-		verify(exactly = 0) { actuatorPort.releaseRoute("Train #2") }
+		verify(exactly = 1) { actuatorPort.releaseRouteDetailed("Train #1") }
+		verify(exactly = 0) { actuatorPort.releaseRouteDetailed("Train #2") }
 		assertThat(sweeper.staleReleaseCount).isEqualTo(1)
 	}
 
@@ -705,7 +736,7 @@ class OrphanReservationSweeperTest {
 
 		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
 		assertThat(sweeper.staleReleaseCount, "staleReleaseCount").isEqualTo(0)
-		verify(exactly = 0) { actuatorPort.releaseRoute(any()) }
+		verify(exactly = 0) { actuatorPort.releaseRouteDetailed(any()) }
 	}
 
 	/**

@@ -282,4 +282,32 @@ class KoogDispatchAgentImplPromptTest {
 		assertThat(prompts[0]).contains("cancel_route for \"T-rel\": applied — no reservation was held.")
 		assertThat(prompts[0]).doesNotContain("release_route")
 	}
+
+	/**
+	 * Issue #1050: a `cancel_route` that approach locking kept partly applied must tell the model
+	 * WHICH blocks stayed reserved and that repeating the command is the way to finish it --
+	 * otherwise the model reads "applied" and never retries the kept blocks.
+	 */
+	@Test
+	@DisplayName("a Released outcome with deferred blocks reports a partial apply and names the retry (Issue #1050)")
+	fun releasedOutcomeWithDeferredBlocksReportsPartialApply() {
+		val channel = AppliedOutcomeChannel()
+		channel.publish(
+			AppliedOutcome.Released(
+				trainId = "T-rel",
+				anyReleased = true,
+				deferredBlockIds = listOf("k1"),
+				id = CommandId(1L),
+				tickIndex = 1L
+			)
+		)
+		val (agent, prompts) = agentCapturingPrompts(channel)
+
+		runBlocking { agent.decideAsync(emptyObservation()) }
+
+		assertThat(prompts).hasSize(1)
+		assertThat(prompts[0]).contains("cancel_route for \"T-rel\": partly applied")
+		assertThat(prompts[0]).contains("k1")
+		assertThat(prompts[0]).contains("repeat cancel_route to release them")
+	}
 }
