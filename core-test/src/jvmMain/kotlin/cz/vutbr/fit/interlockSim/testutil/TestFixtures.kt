@@ -147,6 +147,37 @@ object TestFixtures {
 	}
 
 	/**
+	 * Loads `switch-between-semaphores.xml` into a fresh [DefaultSimulationContext].
+	 *
+	 * The Koin-injected sibling of [loadShuntingSimulationContext] for this fixture — a mid-leg
+	 * switch (`sw1`) with non-uniform track speeds, unlike `vyhybna.xml` where every section is
+	 * 24.0 m/s. Replaces the load chain that was inlined independently at more than one call
+	 * site (`AbstractPathSetUpSemaphoresTest`, `StandingAtMidLegSwitchSpeedLimitTest`).
+	 *
+	 * The returned context owns a Koin scope and must be closed by the caller, exactly as
+	 * documented on [loadShuntingSimulationContext].
+	 *
+	 * @param simulationContextFactory factory performing the editing → simulation transformation
+	 * @param editingContextFactory when non-null, parses the XML explicitly; when `null` the
+	 *   [simulationContextFactory]'s own stream overload is used
+	 */
+	fun loadSwitchBetweenSemaphoresSimulationContext(
+		simulationContextFactory: SimulationContextFactory,
+		editingContextFactory: JvmEditingContextFactory? = null
+	): DefaultSimulationContext =
+		loadSwitchBetweenSemaphoresXml().use { xmlStream ->
+			val created =
+				if (editingContextFactory == null) {
+					simulationContextFactory.createContext(xmlStream)
+				} else {
+					val editingContext =
+						Util.assertInstanceOf<EditingContext>(editingContextFactory.createContext(xmlStream))
+					editingContext.use { simulationContextFactory.createContext(it) }
+				}
+			Util.assertInstanceOf<DefaultSimulationContext>(created)
+		}
+
+	/**
 	 * Loads `vyhybna.xml` into a fresh [DefaultSimulationContext] **without Koin**.
 	 *
 	 * This is the non-injected sibling of [loadShuntingSimulationContext]: it builds the context

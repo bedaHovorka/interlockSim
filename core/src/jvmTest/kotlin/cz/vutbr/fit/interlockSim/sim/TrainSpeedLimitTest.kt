@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
@@ -100,12 +101,61 @@ class TrainSpeedLimitTest : KoinTestBase() {
 		field.set(train, path)
 	}
 
+	/**
+	 * Injects [separator] into the private `Train.entrySeparator` field — the separator the
+	 * front actually stands at. Used together with [setPathToSemaphore] to reproduce the
+	 * ownership-conflict suspension window (Issue #1088) where the front has been rebased past
+	 * a separator that [pathToSemaphore] itself was never trimmed past.
+	 */
+	private fun setEntrySeparator(
+		train: Train,
+		separator: DynamicPathSeparator?
+	) {
+		val field = Train::class.java.getDeclaredField("entrySeparator")
+		field.isAccessible = true
+		field.set(train, separator)
+	}
+
 	private fun newTrain(): Train {
 		val mockOutOut = mockk<DynamicInOut>(relaxed = true)
 		every { mockOutOut.name } returns "EXIT"
 		every { mockOutOut.toString() } returns "InOut:EXIT"
 		val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 		return Train(mockContext, timetable)
+	}
+
+	/** [buildSuspensionPath]'s topology, plus the two separators the tests below inject. */
+	private class SuspensionFixture(
+		val path: Path,
+		val departed: DynamicPathSeparator,
+		val midSep: DynamicPathSeparator
+	)
+
+	/**
+	 * `departed`—(slow, 5 m/s)—`midSep`—(fast, [aheadMaxSpeed2] on the far end)—`exitSemaphore`,
+	 * the shared topology the 3 suspension-window tests below inject different
+	 * [Train.entrySeparator] values into via [setEntrySeparator]. [aheadMaxSpeed2] is asymmetric
+	 * by default (30.0, not the ahead track's own 40.0 entry-direction speed) so a caller pinning
+	 * the directional `maxSpeed(from)` seed can tell a wrong-end read apart from the right one.
+	 */
+	private fun buildSuspensionPath(aheadMaxSpeed2: Double = 30.0): SuspensionFixture {
+		val departed = createMockNodeCell(name = "DepartedSeparator", speed = 80.0)
+		val midSep = createMockNodeCell(name = "MidSeparator", speed = 80.0)
+		val exitSemaphore = createDynamicInstance(RailSemaphore(false, Cell.SpatialType.HORIZONTAL))
+
+		val behindFrontTrack =
+			SimpleTrackBlock(departed, midSep, length = 100.0, maxSpeed1 = 5.0, maxSpeed2 = 5.0)
+		val aheadOfFrontTrack =
+			SimpleTrackBlock(midSep, exitSemaphore, length = 100.0, maxSpeed1 = 40.0, maxSpeed2 = aheadMaxSpeed2)
+
+		val path = ArrayPath(mockContext)
+		path.addLast(departed)
+		path.addLast(behindFrontTrack)
+		path.addLast(midSep)
+		path.addLast(aheadOfFrontTrack)
+		path.addLast(exitSemaphore)
+
+		return SuspensionFixture(path, departed, midSep)
 	}
 
 	// ── Tests ─────────────────────────────────────────────────────────────────
@@ -163,5 +213,51 @@ class TrainSpeedLimitTest : KoinTestBase() {
 		// No intermediate elements → every element is skipped (first == getFirst, last == getLast)
 		// and the seed ABSOLUTE_MAX_SPEED is returned.  Pins the < 3 element edge case.
 		assertThat(train.currentSpeedLimitMps).isEqualTo(ABSOLUTE_MAX_SPEED)
+	}
+
+	@Test
+	fun `currentSpeedLimitMps excludes the section behind the front during an ownership-conflict suspension`() {
+		val train = newTrain()
+		// The front has been rebased to `midSep` (Issue #1088), but `pathToSemaphore` was never
+		// trimmed for that crossing, so the 5 m/s section behind the front is still on the path.
+		val fixture = buildSuspensionPath()
+
+		setPathToSemaphore(train, fixture.path)
+		setEntrySeparator(train, fixture.midSep)
+
+		// Fixed fold restarts strictly after `midSep` (the front's actual position), so only the
+		// 40 m/s entry-direction speed of the section ahead contributes. The pre-fix fold (from
+		// path.getFirst()) would have also folded the 5 m/s section already behind the front,
+		// returning 5.0; a wrong-end seed would have returned 30.0 (buildSuspensionPath's default).
+		assertThat(train.currentSpeedLimitMps).isEqualTo(40.0)
+	}
+
+	@Test
+	fun `currentSpeedLimitMps folds the whole path when entrySeparator is the leg's first separator`() {
+		val train = newTrain()
+		val fixture = buildSuspensionPath(aheadMaxSpeed2 = 40.0)
+
+		setPathToSemaphore(train, fixture.path)
+		setEntrySeparator(train, fixture.departed)
+
+		// Steady state (no suspension): entrySeparator is the leg's own first separator, so the
+		// fold is unchanged from before the fix — both tracks contribute, min(5.0, 40.0) = 5.0.
+		assertThat(train.currentSpeedLimitMps).isEqualTo(5.0)
+	}
+
+	@Test
+	fun `currentSpeedLimitMps folds the whole path when entrySeparator is not on the path`() {
+		val train = newTrain()
+		val fixture = buildSuspensionPath(aheadMaxSpeed2 = 40.0)
+		// A separator the front stands at that pathToSemaphore does not contain — the third
+		// semantic case, distinct from both "entrySeparator null" and "found at index 0".
+		val offPath = createMockNodeCell(name = "OffPathSeparator", speed = 80.0)
+
+		setPathToSemaphore(train, fixture.path)
+		setEntrySeparator(train, offPath)
+
+		// `offPath` never occurs on `fixture.path`, so the fixed fold's restart never triggers:
+		// both tracks contribute, min(5.0, 40.0) = 5.0 — unchanged from before the fix.
+		assertThat(train.currentSpeedLimitMps).isEqualTo(5.0)
 	}
 }
