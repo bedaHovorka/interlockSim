@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -53,6 +52,9 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 	private companion object {
 		const val END_TIME = 300L
 		const val REAR_FACING_END = "doB1"
+
+		/** Distance to the signal ahead (m) at or under which a train counts as standing at it. */
+		const val STANDING_AT_SIGNAL_TOLERANCE = 1e-6
 	}
 
 	@Test
@@ -67,17 +69,35 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 		wireSynchronousDispatcher(context, loop)
 		val wired = loop.controlStepListener
 
-		var cutTrain: String? = null
-		var extendedFromStandSignal = false
+		// The cut train, the cut route's original rear-facing target, and the ordered
+		// milestones the fix must produce: the train stands at its signal first, only then
+		// does the route extend, and the train itself finishes its journey.
+		var cutTrain: Train? = null
+		var cutOriginalTarget: DynamicPathSeparator? = null
+		var cutTrainStoodAtSignal = false
+		var routeExtendedWhileStanding = false
 		loop.controlStepListener =
 			ControlStepListener {
 				if (cutTrain == null) {
 					cutTrain = cutRouteBackToRearFacingEnd(context, loop, registry)
+					cutOriginalTarget = cutTrain?.let { registry.getPathInfo(it.name)?.target }
+				}
+				val cut = cutTrain
+				if (cut != null && !routeExtendedWhileStanding) {
+					val pathInfo = registry.getPathInfo(cut.name)
+					if (pathInfo != null && cut.distanceToSignalAhead() <= STANDING_AT_SIGNAL_TOLERANCE) {
+						cutTrainStoodAtSignal = true
+					}
 				}
 				wired?.onControlStep()
-				val cut = cutTrain
-				if (cut != null && registry.getPathInfo(cut)?.target?.let(::nameOf) != REAR_FACING_END) {
-					extendedFromStandSignal = true
+				if (cutTrainStoodAtSignal && cut != null) {
+					// The extension is identified by the TARGET ELEMENT changing, not by a name:
+					// the final target is the InOut `A`, whose name-of is `null` — a `null`
+					// comparison would not distinguish "extended to A" from "not extended".
+					val pathInfo = registry.getPathInfo(cut.name)
+					if (pathInfo != null && pathInfo.target != cutOriginalTarget) {
+						routeExtendedWhileStanding = true
+					}
 				}
 			}
 
@@ -85,19 +105,20 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 		context.run()
 
 		assertThat(cutTrain, name = "a B -> A train whose route was cut back to $REAR_FACING_END").isNotNull()
-		assertThat(extendedFromStandSignal, name = "route extended past $REAR_FACING_END").isTrue()
-		assertThat(loop.getTrainsExited(), name = "trains exited").isGreaterThan(0)
+		assertThat(cutTrainStoodAtSignal, name = "the cut train stood at its signal").isTrue()
+		assertThat(routeExtendedWhileStanding, name = "route extended past $REAR_FACING_END while standing").isTrue()
+		assertThat(cutTrain!!.terminated(), name = "the cut train itself finished its journey").isTrue()
 	}
 
 	/**
 	 * Cuts the PathInfo of the first westbound train (destination `A`) whose route already runs
-	 * past [REAR_FACING_END] back to it. Returns the train's name, or `null` when there is none yet.
+	 * past [REAR_FACING_END] back to it. Returns the train, or `null` when there is none yet.
 	 */
 	private fun cutRouteBackToRearFacingEnd(
 		context: DefaultSimulationContext,
 		loop: ShuntingLoop,
 		registry: PathReservationRegistry
-	): String? {
+	): Train? {
 		for (train in loop.getApprovedTrains()) {
 			if (train.timetableDestinationName != "A") continue
 			val info = registry.getPathInfo(train.name) ?: continue
@@ -114,7 +135,7 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 				)
 			registry.restorePathInfo(train.name, cut)
 			releaseBlocksBeyond(context, train.name, elements.subList(endIndex + 1, elements.size))
-			return train.name
+			return train
 		}
 		return null
 	}

@@ -789,9 +789,18 @@ class DefaultPathReservationService(
 							"reserved path has ${mergeCandidate.reservedPath.length()} elements"
 					}
 
-					// Emit BlockReserved for each successfully reserved block
+					// Emit BlockReserved only for the blocks THIS call newly reserved
+					// (forwardBlocks). `blocks` also holds the train's already-owned prefix
+					// (Step 2a.5), and each physical block is later released exactly once
+					// (one BlockReleased per block), so a BlockReserved re-emitted for an
+					// owned block left the per-event reservation counters permanently
+					// off-balance: DefaultMetricsCollectionService.activeReservationCount
+					// never returned to zero (the train was never counted as completed) and
+					// DefaultCollisionDetectionService / TemporalConflictDetector over-counted
+					// it the same way (Issue #1081 review; extensions over owned blocks
+					// became dispatcher-reachable with Issue #1060).
 					val simTime = currentSimulationTime()
-					blocks.forEach { block ->
+					forwardBlocks.forEach { block ->
 						emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
 						// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
 						registry.emit(
@@ -1632,7 +1641,8 @@ class DefaultPathReservationService(
 		ownerTrainId: String?
 	): DynamicPathSeparator? {
 		logger.debug {
-			"findNextReservationTarget: Finding next FREE target from oriented separator $start"
+			"findNextReservationTarget: Finding next FREE target from oriented separator $start" +
+				(ownerTrainId?.let { ", blocks owned by $it count as free (Issue #1060)" } ?: "")
 		}
 
 		// Mirrors reservePathToAnyNextSemaphore(OrientedPathSeparator) steps 1–3, read-only.
@@ -1661,13 +1671,13 @@ class DefaultPathReservationService(
 			logger.debug { "findNextReservationTarget: No separators found from $start via $next" }
 			return null
 		}
-		val firstFree =
+		val firstAvailable =
 			targets.firstOrNull { isPathAvailableFor(dynamicStart, it, DEFAULT_MAX_PATH_DEPTH, ownerTrainId) }
 		logger.debug {
 			"findNextReservationTarget: ${targets.size} target(s) from $start via $next, " +
-				"first FREE = $firstFree"
+				"first available = $firstAvailable"
 		}
-		return firstFree
+		return firstAvailable
 	}
 
 	override fun isPathToAnyNextSemaphoreAvailable(

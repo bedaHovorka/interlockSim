@@ -521,7 +521,14 @@ class ShuntingLoop(
 			(!pathAlreadyExtendedBeyond || awaitingRouteExtension) &&
 				(isApproachingThisInput || pathSetUpTowardThisInput)
 		return if (canReserveForward) {
-			pathReservationService.findNextReservationTarget(to, ownerTrainId)?.let(::nameOf)
+			// Owner-aware (own blocks count as free) only for the #1060 state: the extension
+			// of an awaiting route leads back over the train's own blocks. A not-extended
+			// input keeps the plain FREE-only search, exactly as before Issue #1060.
+			pathReservationService
+				.findNextReservationTarget(
+					to,
+					if (awaitingRouteExtension) ownerTrainId else null
+				)?.let(::nameOf)
 		} else {
 			null
 		}
