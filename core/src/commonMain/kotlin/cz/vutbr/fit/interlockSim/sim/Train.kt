@@ -2474,6 +2474,16 @@ class Train :
 	 * the steady state (no suspension, or [entrySeparator] not found on [pathToSemaphore])
 	 * this is [Path.getFirst] again, so the fold is unchanged from before this fix.
 	 *
+	 * Two corner clarifications. The old loop skipped by identity (`element == [Path.getFirst]`
+	 * skipped every occurrence of that separator); this loop skips by index, so on a loop
+	 * topology whose first separator reappears later on the path, that later occurrence is now
+	 * folded — the fold follows the front's actual position instead of the departed entry. And
+	 * in the #1061 leg-end window ([entrySeparator] equals [pathToSemaphore]'s last element)
+	 * everything is skipped and the reading is [ABSOLUTE_MAX_SPEED] — the "no constraint
+	 * known" sentinel, not "full speed permitted"; movement stays doubly gated during the hold
+	 * (the front is parked in its wait, and [setTargetSpeed] keeps its own cleared-block
+	 * guard), the same symmetry [distanceToSignalAhead] shows by reading `0.0` there.
+	 *
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
 	val currentSpeedLimitMps: Double

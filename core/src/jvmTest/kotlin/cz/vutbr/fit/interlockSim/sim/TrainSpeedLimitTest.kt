@@ -194,8 +194,11 @@ class TrainSpeedLimitTest : KoinTestBase() {
 
 		val behindFrontTrack =
 			SimpleTrackBlock(departed, midSep, length = 100.0, maxSpeed1 = 5.0, maxSpeed2 = 5.0)
+		// Asymmetric on purpose: the fold must seed `prevSep` from `midSep` (this track's entry
+		// end, 40 m/s), not from the exit end (30 m/s) — pinning the directional `maxSpeed(from)`
+		// lookup, which the symmetric maxSpeed1 == maxSpeed2 cannot discriminate.
 		val aheadOfFrontTrack =
-			SimpleTrackBlock(midSep, exitSemaphore, length = 100.0, maxSpeed1 = 40.0, maxSpeed2 = 40.0)
+			SimpleTrackBlock(midSep, exitSemaphore, length = 100.0, maxSpeed1 = 40.0, maxSpeed2 = 30.0)
 
 		val path = ArrayPath(mockContext)
 		path.addLast(departed)
@@ -208,8 +211,9 @@ class TrainSpeedLimitTest : KoinTestBase() {
 		setEntrySeparator(train, midSep)
 
 		// Fixed fold starts strictly after `midSep` (the front's actual position), so only the
-		// 40 m/s section ahead contributes. The pre-fix fold (from path.getFirst()) would have
-		// also folded the 5 m/s section already behind the front, returning 5.0.
+		// 40 m/s entry-direction speed of the section ahead contributes. The pre-fix fold (from
+		// path.getFirst()) would have also folded the 5 m/s section already behind the front,
+		// returning 5.0; a wrong-end seed would have returned 30.0.
 		assertThat(train.currentSpeedLimitMps).isEqualTo(40.0)
 	}
 
@@ -238,6 +242,37 @@ class TrainSpeedLimitTest : KoinTestBase() {
 
 		// Steady state (no suspension): entrySeparator is the leg's own first separator, so the
 		// fold is unchanged from before the fix — both tracks contribute, min(5.0, 40.0) = 5.0.
+		assertThat(train.currentSpeedLimitMps).isEqualTo(5.0)
+	}
+
+	@Test
+	fun `currentSpeedLimitMps folds the whole path when entrySeparator is not on the path`() {
+		val train = newTrain()
+
+		val departed = createMockNodeCell(name = "DepartedSeparator", speed = 80.0)
+		val midSep = createMockNodeCell(name = "MidSeparator", speed = 80.0)
+		// A separator the front stands at that pathToSemaphore does not contain — the third
+		// semantic case of the `?: 0` fallback, distinct from both `null` and "found at 0".
+		val offPath = createMockNodeCell(name = "OffPathSeparator", speed = 80.0)
+		val exitSemaphore = createDynamicInstance(RailSemaphore(false, Cell.SpatialType.HORIZONTAL))
+
+		val behindFrontTrack =
+			SimpleTrackBlock(departed, midSep, length = 100.0, maxSpeed1 = 5.0, maxSpeed2 = 5.0)
+		val aheadOfFrontTrack =
+			SimpleTrackBlock(midSep, exitSemaphore, length = 100.0, maxSpeed1 = 40.0, maxSpeed2 = 40.0)
+
+		val path = ArrayPath(mockContext)
+		path.addLast(departed)
+		path.addLast(behindFrontTrack)
+		path.addLast(midSep)
+		path.addLast(aheadOfFrontTrack)
+		path.addLast(exitSemaphore)
+
+		setPathToSemaphore(train, path)
+		setEntrySeparator(train, offPath)
+
+		// `path.indexOf(offPath)` is -1, so the `?: 0` fallback reproduces the old whole-path
+		// fold: both tracks contribute, min(5.0, 40.0) = 5.0 — unchanged from before the fix.
 		assertThat(train.currentSpeedLimitMps).isEqualTo(5.0)
 	}
 }
