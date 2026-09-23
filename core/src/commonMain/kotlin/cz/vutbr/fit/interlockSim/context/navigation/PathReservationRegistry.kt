@@ -1391,6 +1391,36 @@ class PathReservationRegistry(
 	}
 
 	/**
+	 * Whether freeing every block of [trainId] except [kept] would leave its stored PathInfo
+	 * consistent: pure query, changes nothing.
+	 *
+	 * `true` when no trim is needed (no PathInfo, or [kept] reaches the path's end so nothing
+	 * beyond it can go stale) or when the trim [trimPathInfoTo] would perform will follow --
+	 * the boundary past the last kept block passes [isValidPathInfoEnd]. A caller that must
+	 * not change anything unless the trim will follow ([DefaultPathReservationService]'s
+	 * approach-locked release) checks this BEFORE freeing any block: a freed tail that
+	 * survives in the PathInfo because the trim is refused later stalls the train with
+	 * `OwnershipConflict` (Issue #1050 review round).
+	 *
+	 * `false` when [kept] holds no block on the path (the whole PathInfo would be a stale
+	 * tail with no derivable boundary) or the boundary is one [trimPathInfoTo] refuses.
+	 *
+	 * @since Issue #1050
+	 */
+	fun canTrimPathInfoTo(
+		trainId: String,
+		kept: Collection<DynamicTrackBlock>
+	): Boolean {
+		val elements = trainToPathInfo[trainId]?.reservedPath?.toList() ?: return true
+		val lastKeptIndex = lastIndexOfBlockIn(elements, kept)
+		if (lastKeptIndex < 0) return false
+		if (lastKeptIndex == elements.lastIndex) return true
+		val boundary = elements[lastKeptIndex + 1] as? DynamicPathSeparator ?: return false
+		val nextBlock = elements.getOrNull(lastKeptIndex + 2)?.let(::blockOf)
+		return isValidPathInfoEnd(boundary, nextBlock)
+	}
+
+	/**
 	 * Clear all registrations.
 	 *
 	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-train mappings.

@@ -18,6 +18,7 @@ import assertk.assertions.isTrue
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathRelease
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
@@ -718,7 +719,7 @@ class DefaultNetworkActuatorPortTest {
 		fun trueWhenBlocksReleased() {
 			val released = listOf(mockk<DynamicTrackBlock>(relaxed = true))
 			val svc = mockk<PathReservationService>(relaxed = true)
-			every { svc.releasePath("T1") } returns released
+			every { svc.releasePathDetailed("T1") } returns PathRelease(released, emptyList())
 
 			val p = port(reservationService = svc)
 
@@ -729,7 +730,7 @@ class DefaultNetworkActuatorPortTest {
 		@DisplayName("returns false when no blocks were released and no signal was cleared")
 		fun falseWhenNothingReleased() {
 			val svc = mockk<PathReservationService>(relaxed = true)
-			every { svc.releasePath("T99") } returns emptyList()
+			every { svc.releasePathDetailed("T99") } returns PathRelease(emptyList(), emptyList())
 			every { svc.hasClearedSignals("T99") } returns false
 
 			val p = port(reservationService = svc)
@@ -750,7 +751,7 @@ class DefaultNetworkActuatorPortTest {
 		@DisplayName("returns true when only a signal was cleared, even with zero blocks released")
 		fun trueWhenOnlySignalCleared() {
 			val svc = mockk<PathReservationService>(relaxed = true)
-			every { svc.releasePath("T50") } returns emptyList()
+			every { svc.releasePathDetailed("T50") } returns PathRelease(emptyList(), emptyList())
 			every { svc.hasClearedSignals("T50") } returns true
 
 			val p = port(reservationService = svc)
@@ -771,9 +772,9 @@ class DefaultNetworkActuatorPortTest {
 			var released = false
 			val svc = mockk<PathReservationService>(relaxed = true)
 			every { svc.hasClearedSignals("T51") } answers { !released }
-			every { svc.releasePath("T51") } answers {
+			every { svc.releasePathDetailed("T51") } answers {
 				released = true
-				emptyList()
+				PathRelease(emptyList(), emptyList())
 			}
 
 			val p = port(reservationService = svc)
@@ -796,12 +797,78 @@ class DefaultNetworkActuatorPortTest {
 		@DisplayName("stays false (not forced idempotent-true) when neither blocks nor a signal existed")
 		fun falseWhenNeitherBlocksNorSignalExisted() {
 			val svc = mockk<PathReservationService>(relaxed = true)
-			every { svc.releasePath("T52") } returns emptyList()
+			every { svc.releasePathDetailed("T52") } returns PathRelease(emptyList(), emptyList())
 			every { svc.hasClearedSignals("T52") } returns false
 
 			val p = port(reservationService = svc)
 
 			assertThat(p.releaseRoute("T52")).isFalse()
+		}
+
+		@Test
+		@DisplayName("releaseRouteDetailed reports deferred blocks under their stable ids (Issue #1050)")
+		fun releaseRouteDetailedReportsDeferredBlocks() {
+			val kept = mockk<DynamicTrackBlock>(relaxed = true)
+			every { kept.name } returns "k1"
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePathDetailed("T1") } returns PathRelease(emptyList(), listOf(kept))
+			every { svc.hasClearedSignals("T1") } returns false
+
+			val p = port(reservationService = svc)
+
+			val release = p.releaseRouteDetailed("T1")
+			assertThat(release.anyReleased, "a deferred release still changed the route state").isTrue()
+			assertThat(release.deferredBlockIds, "the kept block's stable id").isEqualTo(listOf("k1"))
+			assertThat(release.deferred).isTrue()
+		}
+
+		@Test
+		@DisplayName("releaseRouteDetailed reports a fully freed route with nothing deferred (Issue #1050)")
+		fun releaseRouteDetailedReportsAFullRelease() {
+			val released = listOf(mockk<DynamicTrackBlock>(relaxed = true))
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePathDetailed("T1") } returns PathRelease(released, emptyList())
+			every { svc.hasClearedSignals("T1") } returns false
+
+			val p = port(reservationService = svc)
+
+			assertThat(p.releaseRouteDetailed("T1")).isEqualTo(RouteRelease(anyReleased = true, deferredBlockIds = emptyList()))
+		}
+	}
+
+	@Nested
+	@DisplayName("releaseRouteDetailed() interface default")
+	inner class ReleaseRouteDetailedDefault {
+		/** A port that overrides only the abstract contract methods, so the interface default runs. */
+		private fun portWithoutDetailedOverride(released: Boolean): NetworkActuatorPort =
+			object : NetworkActuatorPort {
+				override fun requestRoute(
+					trainName: String,
+					fromEndpointName: String,
+					toEndpointName: String
+				): RouteRequestResult = throw UnsupportedOperationException("requestRoute is not exercised by this test")
+
+				override fun releaseRoute(trainName: String): Boolean = released
+
+				override fun setSwitchPosition(
+					switchName: String,
+					position: RailSwitch.Conf
+				): Boolean = false
+
+				override fun setSignalAspect(
+					semaphoreName: String,
+					signal: Signal,
+					trainName: String?
+				): Boolean = false
+			}
+
+		@Test
+		@DisplayName("the default delegates to releaseRoute and reports nothing deferred (Issue #1050)")
+		fun defaultDelegatesToReleaseRouteAndReportsNothingDeferred() {
+			assertThat(portWithoutDetailedOverride(released = true).releaseRouteDetailed("T1"))
+				.isEqualTo(RouteRelease(anyReleased = true, deferredBlockIds = emptyList()))
+			assertThat(portWithoutDetailedOverride(released = false).releaseRouteDetailed("T1").anyReleased).isFalse()
+			assertThat(portWithoutDetailedOverride(released = true).releaseRouteDetailed("T1").deferred).isFalse()
 		}
 	}
 
@@ -930,9 +997,9 @@ class DefaultNetworkActuatorPortTest {
 				if (s.signal.isAllowing()) cleared.getOrPut(trainId) { mutableSetOf() }.add(s)
 			}
 			every { svc.hasClearedSignals(any()) } answers { cleared[firstArg<String>()]?.isNotEmpty() == true }
-			every { svc.releasePath(any()) } answers {
+			every { svc.releasePathDetailed(any()) } answers {
 				cleared.remove(firstArg<String>())?.forEach { it.signal = Signal.STOP }
-				emptyList()
+				PathRelease(emptyList(), emptyList())
 			}
 			val p = port(cells = mapOf((0 to 0) to sem), reservationService = svc)
 

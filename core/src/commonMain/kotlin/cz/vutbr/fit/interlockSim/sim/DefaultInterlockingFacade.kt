@@ -251,6 +251,9 @@ class DefaultInterlockingFacade(
 		// Release all blocks and switches reserved for this train (shared registry — see the
 		// class KDoc — so this clears everything locked by requestRoute()). releasePath is
 		// idempotent: an unknown trainId yields an empty list and touches nothing.
+		// Plain releasePath, NOT releasePathDetailed: this facade is test-only today; a
+		// production caller must go through the approach-locked release (Issue #1050), or it
+		// can free a block a train is mid-booking inside the hold(1.0) window.
 		val releasedBlocks = env.getRoutingServices().getPathReservationService().releasePath(trainId)
 		logger.info { "Released ${releasedBlocks.size} blocks for trainId=$trainId" }
 

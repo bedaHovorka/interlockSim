@@ -66,7 +66,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
  * @see PathReservationRegistry
  * @since Issue #294 (Phase 2 of Issue #292)
  */
-interface PathReservationService {
+interface PathReservationService : ApproachLockedPathRelease {
 	/**
 	 * Result of a path reservation attempt.
 	 *
@@ -249,36 +249,6 @@ interface PathReservationService {
 		target: DynamicPathSeparator,
 		maxDepth: Int = 100
 	): ReservationResult
-
-	/**
-	 * Release all blocks reserved by a train.
-	 *
-	 * This operation is idempotent - calling it multiple times for the same train
-	 * is safe (subsequent calls do nothing).
-	 *
-	 * ## State Changes
-	 *
-	 * For each block owned by the train:
-	 * - Block state transitions from RESERVED to FREE
-	 * - Block.trainId set to null
-	 * - Ownership removed from registry
-	 *
-	 * Signals first, always: every semaphore this service recorded as cleared for [trainId] is
-	 * returned to STOP BEFORE any of its blocks becomes available — a block must never become
-	 * reserveable while the aspect authorising entry to it still shows proceed. This reset runs
-	 * even when the train owns no blocks (a partial release may have reclaimed them earlier),
-	 * which is why [hasClearedSignals] exists.
-	 *
-	 * ## Use Cases
-	 *
-	 * - Train completes journey (exits network)
-	 * - Train cancels path before entering
-	 * - Simulation cleanup/reset
-	 *
-	 * @param trainId Unique identifier for the train
-	 * @return List of blocks that were released (empty if train had no reservations)
-	 */
-	fun releasePath(trainId: String): List<DynamicTrackBlock>
 
 	/**
 	 * Whether this service currently owns at least one semaphore recorded as cleared for
