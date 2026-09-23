@@ -739,7 +739,14 @@ class DispatchDecisionApplier(
 			"DispatchDecisionApplier: applying ReleaseRoute trainName=${decision.trainName}" +
 				decision.rationale.toRationaleLogSuffix()
 		}
-		val released = networkActuator.releaseRoute(decision.trainName)
+		val release = networkActuator.releaseRouteDetailed(decision.trainName)
+		val released = release.anyReleased
+		if (release.deferred) {
+			logger.info {
+				"DispatchDecisionApplier: ReleaseRoute train '${decision.trainName}' only partly released -- " +
+					"approach locking kept ${release.deferredBlockIds.joinToString(", ")} reserved (Issue #1050)"
+			}
+		}
 		if (!released) {
 			logger.debug {
 				"DispatchDecisionApplier: ReleaseRoute train '${decision.trainName}' held no reservation (no-op)"
@@ -749,6 +756,7 @@ class DispatchDecisionApplier(
 			AppliedOutcome.Released(
 				trainId = decision.trainName,
 				anyReleased = released,
+				deferredBlockIds = release.deferredBlockIds,
 				id = it.id,
 				tickIndex = it.tickIndex
 			)

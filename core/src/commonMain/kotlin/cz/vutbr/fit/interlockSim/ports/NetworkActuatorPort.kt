@@ -158,6 +158,22 @@ interface NetworkActuatorPort {
 	fun releaseRoute(trainName: String): Boolean
 
 	/**
+	 * [releaseRoute] that also reports a **deferred** (partial) release (Issue #1050).
+	 *
+	 * When a governing signal of a reserved, unoccupied block shows a proceed aspect, a train may be
+	 * committed to that block (it books it a second after reading the aspect). The release drops the
+	 * signal to STOP but keeps the block reserved, and lists it in [RouteRelease.deferredBlockIds].
+	 * The caller should retry: the next call finds the signal at STOP and frees the block, unless
+	 * the train booked it meanwhile, in which case it is occupied and stays.
+	 *
+	 * The default delegates to [releaseRoute] and reports nothing deferred.
+	 *
+	 * @throws IllegalArgumentException if [trainName] is blank.
+	 * @since Issue #1050
+	 */
+	fun releaseRouteDetailed(trainName: String): RouteRelease = RouteRelease(releaseRoute(trainName), emptyList())
+
+	/**
 	 * Command a named rail switch to the given position.
 	 *
 	 * The switch is set only if it is not currently locked (i.e. no train is occupying
@@ -231,6 +247,22 @@ interface NetworkActuatorPort {
 		signal: Signal,
 		trainName: String?
 	): Boolean
+}
+
+/**
+ * Result of a [NetworkActuatorPort.releaseRouteDetailed] call.
+ *
+ * @property anyReleased same meaning as the [NetworkActuatorPort.releaseRoute] return value
+ * @property deferredBlockIds stable ids of blocks approach locking kept reserved; non-empty means
+ *   the release is partial and the caller should retry
+ * @since Issue #1050
+ */
+data class RouteRelease(
+	val anyReleased: Boolean,
+	val deferredBlockIds: List<String>
+) {
+	/** `true` when part of the route was kept back and a retry is needed. */
+	val deferred: Boolean get() = deferredBlockIds.isNotEmpty()
 }
 
 /**

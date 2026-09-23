@@ -292,10 +292,17 @@ sealed interface AppliedOutcome {
 		override val tickIndex: Long
 	) : AppliedOutcome
 
-	/** `cancel_route` completed; [anyReleased] is `true` if at least one block was released. */
+	/**
+	 * `cancel_route` completed; [anyReleased] is `true` if at least one block was released.
+	 *
+	 * [deferredBlockIds] lists blocks approach locking kept reserved because a proceed aspect stood
+	 * at them and a train may be committed (Issue #1050); non-empty means the release is partial
+	 * and `cancel_route` should be repeated.
+	 */
 	data class Released(
 		val trainId: String,
 		val anyReleased: Boolean,
+		val deferredBlockIds: List<String> = emptyList(),
 		override val id: CommandId,
 		override val tickIndex: Long
 	) : AppliedOutcome

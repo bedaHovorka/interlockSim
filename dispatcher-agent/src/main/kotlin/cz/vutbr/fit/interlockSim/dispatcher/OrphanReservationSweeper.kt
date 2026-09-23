@@ -246,9 +246,12 @@ class OrphanReservationSweeper(
 				"active or queued, so nothing can ever consume or cancel it. " +
 				"Blocks: ${blocks.joinToString(", ") { it.blockId }}"
 		}
-		if (actuatorPort.releaseRoute(owner)) {
+		val release = actuatorPort.releaseRouteDetailed(owner)
+		if (release.anyReleased) {
 			phantomReleaseCount++
 		}
+		// Issue #1050: a deferred release kept blocks reserved; the phantom is offered again next
+		// sweep like any unknown owner, so there is no clock to keep.
 		holdings.remove(owner)
 	}
 
@@ -279,10 +282,22 @@ class OrphanReservationSweeper(
 				"${simTime - previous.sinceSimTime}s of simulated time (threshold " +
 				"${staleAfterSimSeconds}s). Blocks: ${blockIds.joinToString(", ")}"
 		}
-		if (actuatorPort.releaseRoute(owner)) {
+		val release = actuatorPort.releaseRouteDetailed(owner)
+		if (release.anyReleased) {
 			staleReleaseCount++
 		}
-		holdings.remove(owner)
+		if (release.deferred) {
+			// Issue #1050: approach locking kept part of the route reserved (a proceed aspect stood at
+			// it, so a train may be committed). The signals are STOP now: keep the staleness clock on
+			// what remains, so the next sweep retries at once instead of waiting a full threshold again.
+			logger.info {
+				"OrphanReservationSweeper: release of '$owner' deferred by approach locking; " +
+					"retrying next sweep. Kept: ${release.deferredBlockIds.sorted().joinToString(", ")}"
+			}
+			holdings[owner] = Holding(release.deferredBlockIds.sorted(), previous.sinceSimTime)
+		} else {
+			holdings.remove(owner)
+		}
 	}
 
 	/**
