@@ -163,10 +163,10 @@ enum class ApplyFailureCode {
 	GEOMETRICALLY_IMPOSSIBLE,
 
 	/**
-	 * Every candidate route was refused because it does not continue the route the train already
-	 * holds: the stored route ends at some target and the requested one would start elsewhere
-	 * (for example a train standing at `zA`, holding a route to `doB2`, asking for one that
-	 * diverges at switch `vA`). Nothing was reserved, thrown or cleared.
+	 * Every candidate route was refused because it either does not continue the route the train
+	 * already holds or is geometrically impossible, and at least one candidate diverged. The stored
+	 * route ends at some target while a divergent candidate would start elsewhere (for example a
+	 * train standing at `zA`, holding a route to `doB2`, asking for one that diverges at switch `vA`).
 	 *
 	 * Maps to `RouteRequestResult.DivergesFromHeldRoute` (`:core`, read-only).
 	 *
