@@ -158,7 +158,7 @@ object NextHopResolver {
 
 	/** `true` when [input] qualifies as a forward-reservation candidate for its owner. */
 	private fun isEligible(input: BlockInputObservation): Boolean =
-		!input.pathAlreadyExtendedBeyond &&
+		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
 			(input.isApproachingThisInput || input.pathSetUpTowardThisInput) &&
 			input.toSeparatorName != null
 
@@ -178,7 +178,7 @@ object NextHopResolver {
 		trainId: String
 	): NextHopOutcome {
 		val owned = inputs.filter { it.ownerTrainId == trainId }
-		return if (owned.isNotEmpty() && owned.all { it.pathAlreadyExtendedBeyond }) {
+		return if (owned.isNotEmpty() && owned.all { it.pathAlreadyExtendedBeyond && !it.awaitingRouteExtension }) {
 			NextHopOutcome.RouteAlreadySet
 		} else {
 			NextHopOutcome.NoSectionReservable

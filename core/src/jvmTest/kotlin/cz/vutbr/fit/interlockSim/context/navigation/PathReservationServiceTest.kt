@@ -2132,6 +2132,69 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 
 		@Test
+		fun `extending a route over owned blocks emits BlockReserved only for the new blocks`() {
+			// Issue #1081 review (on the Issue #1060 extension): reservePath used to emit
+			// BlockReserved for EVERY block of a successful candidate -- including the
+			// already-owned prefix filtered out at Step 2a.5 -- while each physical block
+			// is later released exactly once. Per-event reservation counters
+			// (DefaultMetricsCollectionService.activeReservationCount,
+			// DefaultCollisionDetectionService, TemporalConflictDetector) therefore never
+			// returned to zero for a train whose route was extended over its own blocks,
+			// so the train was never counted as completed.
+			val reservedEvents = mutableListOf<BlockOccupancyEvent>()
+			registry.addBlockOccupancyListener { event ->
+				if (event.type == BlockOccupancyEventType.BLOCK_RESERVED) {
+					reservedEvents.add(event)
+				}
+			}
+
+			// Step 1: reserve a partial westbound route from B to doA1, so the train owns
+			// every block of B..doA1 (the same fixture as the re-lighting test above).
+			val partial = service.reservePath("t1", inOutNamed("B"), findSemaphoreByName("doA1"))
+			val partialSuccess = assertReservationSuccess(partial)
+			val ownedBeforeExtension = partialSuccess.reservedBlocks.toSet()
+			val eventsAfterPartial = reservedEvents.toList()
+			assertThat(eventsAfterPartial.map { it.block }.toSet())
+				.withMessage("the partial reservation must emit BlockReserved for exactly its own blocks")
+				.isEqualTo(ownedBeforeExtension)
+
+			// Step 2: extend the SAME route all the way to A. The recomputed candidate
+			// spans the blocks t1 already owns (B..doA1) plus the new blocks (doA1..A) --
+			// the overlapping-extension shape of Issue #1060.
+			val extended = service.reservePath("t1", inOutNamed("B"), inOutNamed("A"))
+			val extendedSuccess = assertReservationSuccess(extended)
+			val newBlocks = extendedSuccess.reservedBlocks.toSet() - ownedBeforeExtension
+
+			// Guard: the extension must genuinely overlap -- it re-traverses the owned
+			// prefix AND acquires new blocks. Otherwise the assertions below would pass
+			// vacuously for a topology change.
+			assertThat(newBlocks)
+				.withMessage("the extension must acquire at least one NEW block")
+				.isNotEmpty()
+			assertThat(extendedSuccess.reservedBlocks.toSet().containsAll(ownedBeforeExtension))
+				.withMessage("the extension's candidate must re-traverse the blocks the train already owns")
+				.isTrue()
+
+			// Assert: the extension emits BlockReserved ONLY for the newly acquired blocks.
+			// Before the fix it re-emitted the already-owned prefix, which no later release
+			// ever paired off again.
+			val extensionEvents = reservedEvents.drop(eventsAfterPartial.size)
+			assertThat(extensionEvents)
+				.withMessage("the extension must emit at least one BlockReserved (for its new blocks)")
+				.isNotEmpty()
+			assertThat(extensionEvents.map { it.block }.toSet())
+				.withMessage("every BlockReserved of the extension must be for a NEW block")
+				.isEqualTo(newBlocks)
+
+			// And: across both reservations, no block is reserved twice.
+			assertThat(reservedEvents.groupBy { it.block }.any { it.value.size > 1 })
+				.withMessage(
+					"some block emitted more than one BlockReserved across reserve + extension; " +
+						"a block is released exactly once, so per-event reservation counters would drift"
+				).isFalse()
+		}
+
+		@Test
 		fun `extending a route lights the boundary from the last owned block into the first new block`() {
 			// Step 1: reserve a partial route from zA to doB1 -- ending EXACTLY at doB1, not past
 			// it. A destination separator is never configured as an intermediate boundary (there
