@@ -187,7 +187,7 @@ class RuleBasedDispatcher(
 			TrackFacility.State.OCCUPIED -> {
 				if (!input.isApproachingThisInput) {
 					null
-				} else if (input.pathAlreadyExtendedBeyond) {
+				} else if (input.pathAlreadyExtendedBeyond && !input.awaitingRouteExtension) {
 					logger.debug {
 						"Path already extends beyond ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +
 							"skipping redundant reservation"

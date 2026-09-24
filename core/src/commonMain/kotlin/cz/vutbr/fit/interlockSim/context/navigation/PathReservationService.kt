@@ -497,6 +497,11 @@ interface PathReservationService : ApproachLockedPathRelease {
 	 * method returns — acceptable for the `vyhybna.xml` shunting loop (no such
 	 * routes) and the determinism gate; general networks are deferred to SP0.8+.
 	 *
+	 * The owner-aware [findNextReservationTarget] with two parameters may return a target
+	 * whose path includes blocks the reserving train already owns; this overload keeps the
+	 * original FREE-only behavior (a `null` owner) and the original JVM method descriptor,
+	 * so callers compiled against the one-argument method keep linking (Issue #1060 review).
+	 *
 	 * @param start Starting oriented path separator (typically a semaphore).
 	 * @return The first FREE next separator toward which a path can be reserved, or
 	 *   `null` if none is free.
@@ -504,7 +509,28 @@ interface PathReservationService : ApproachLockedPathRelease {
 	 * @see isPathAvailable
 	 * @since Issue #729 (SP0.7 — Goal 10)
 	 */
-	fun findNextReservationTarget(start: OrientedPathSeparator): DynamicPathSeparator?
+	fun findNextReservationTarget(start: OrientedPathSeparator): DynamicPathSeparator? =
+		findNextReservationTarget(start, null)
+
+	/**
+	 * [findNextReservationTarget] for a train that would reserve the path itself: a block
+	 * owned by [ownerTrainId] counts as available, the way [reservePath] treats it. Needed
+	 * to extend a route that ends at a signal facing away from the train — the extension
+	 * leads back over the blocks the train already holds (Issue #1060). With a `null`
+	 * [ownerTrainId] only FREE blocks count.
+	 *
+	 * @param start Starting oriented path separator (typically a semaphore).
+	 * @param ownerTrainId The train that would reserve the path, or `null` for a FREE-only search.
+	 * @return The first available next separator toward which a path can be reserved — its
+	 *   path may include blocks [ownerTrainId] already owns — or `null` if none is available.
+	 * @see reservePathToAnyNextSemaphore
+	 * @see isPathAvailable
+	 * @since Issue #1060; added as a compatibility-preserving overload (Issue #1060 review)
+	 */
+	fun findNextReservationTarget(
+		start: OrientedPathSeparator,
+		ownerTrainId: String?
+	): DynamicPathSeparator?
 
 	/**
 	 * Check if a path from separator to any next semaphore is currently available.

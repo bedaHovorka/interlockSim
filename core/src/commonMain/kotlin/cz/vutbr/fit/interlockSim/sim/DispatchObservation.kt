@@ -93,9 +93,10 @@ data class QueuedTrainObservation(
  *
  *   **Populated only where a forward reservation is possible** (Issue #749). The shell
  *   resolves it exclusively for inputs satisfying
- *   `!pathAlreadyExtendedBeyond && (isApproachingThisInput || pathSetUpTowardThisInput)`;
+ *   `(!pathAlreadyExtendedBeyond || awaitingRouteExtension) && (isApproachingThisInput || pathSetUpTowardThisInput)`;
  *   for every other input — FREE, not approaching this input, or already extended beyond
- *   it — this is `null` **without the search having been run**. Resolving it means a BFS
+ *   it without awaiting an extension ([awaitingRouteExtension]) — this is `null`
+ *   **without the search having been run**. Resolving it means a BFS
  *   plus a per-candidate topological-path enumeration
  *   ([PathReservationService.findNextReservationTarget][cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.findNextReservationTarget]);
  *   running it for the ~98% of inputs whose value is then discarded cost ~9% of fast-sim
@@ -117,6 +118,16 @@ data class QueuedTrainObservation(
  * @property pathAlreadyExtendedBeyond `true` when [ownerTrainId]'s reserved path
  *   already extends beyond this input — a further reservation attempt would be a
  *   no-op.
+ * @property awaitingRouteExtension `true` when [ownerTrainId] stands at this input's signal
+ *   although [pathAlreadyExtendedBeyond]: its stored route runs past the signal but ends at a
+ *   separator facing away from the train, so navigation cannot build a leg out of it and holds
+ *   the train until the route is extended to the next signal facing it (Issue #1060). The
+ *   route is extended beyond the input, yet a further reservation is NOT a no-op, so a
+ *   dispatcher treats the input like one that is not extended
+ *   ([toSeparatorName] is resolved for it). The flag is set for any train that stands at the
+ *   signal while navigation answers an ownership conflict — including a foreign-owned block
+ *   ahead of an otherwise valid leg, not only the rear-facing-end case. A later reservation
+ *   re-validates everything, so a false positive only costs one search. Defaults to `false`.
  */
 data class BlockInputObservation(
 	val blockId: String,
@@ -126,5 +137,6 @@ data class BlockInputObservation(
 	val ownerTrainId: String?,
 	val isApproachingThisInput: Boolean,
 	val pathSetUpTowardThisInput: Boolean,
-	val pathAlreadyExtendedBeyond: Boolean
+	val pathAlreadyExtendedBeyond: Boolean,
+	val awaitingRouteExtension: Boolean = false
 )

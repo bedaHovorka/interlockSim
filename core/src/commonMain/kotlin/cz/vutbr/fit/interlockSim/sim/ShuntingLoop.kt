@@ -16,6 +16,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -24,6 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.util.Util
@@ -121,6 +124,10 @@ class ShuntingLoop(
 		context.scope.get<PathReservationRegistry>()
 	}
 
+	private val trainNavigationService: TrainNavigationService by lazy {
+		context.getRoutingServices().getTrainNavigationService()
+	}
+
 	// Lazy injection (SP0.11: moved from ctor param to lazy property — construction stays in scope)
 	private val pathReservationService: PathReservationService by lazy {
 		context.getRoutingServices().getPathReservationService()
@@ -128,6 +135,9 @@ class ShuntingLoop(
 
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/** Distance to the signal ahead (m) at or under which a train counts as standing at it. */
+		private const val STANDING_AT_SEPARATOR_TOLERANCE = 1e-6
 
 		/** Report types enabled by the shunting-loop simulation scenario. */
 		internal val ENABLED_REPORT_TYPES =
@@ -456,6 +466,10 @@ class ShuntingLoop(
 			state == TrackFacility.State.RESERVED &&
 				block.isSetUpPath(env.toDynamic(block.getSecondEnd(to)))
 		val pathAlreadyExtendedBeyond = ownerTrainId != null && registry.isPathExtendedBeyond(ownerTrainId, to)
+		val awaitingRouteExtension =
+			pathAlreadyExtendedBeyond &&
+				isApproachingThisInput &&
+				isStandingAwaitingExtension(requireSimulationNotNull(block.getTrackOccupant()), to)
 		return BlockInputObservation(
 			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
 			towardSemaphoreName = to.name,
@@ -464,15 +478,33 @@ class ShuntingLoop(
 					to,
 					isApproachingThisInput,
 					pathSetUpTowardThisInput,
-					pathAlreadyExtendedBeyond
+					pathAlreadyExtendedBeyond,
+					awaitingRouteExtension,
+					ownerTrainId
 				),
 			state = state,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
-			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
+			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
+			awaitingRouteExtension = awaitingRouteExtension
 		)
 	}
+
+	/**
+	 * Whether [occupant] stands at [to] held there by an ownership conflict although its stored
+	 * route runs past [to] (Issue #1060): navigation cannot build a leg out of the route, because
+	 * the route ends at a separator facing away from the train, and answers "wait for the route to
+	 * be extended". Only a train that already stands at the separator can be in that state, so the
+	 * navigation query is made for such a train only, and never on the per-tick hot path.
+	 */
+	private fun isStandingAwaitingExtension(
+		occupant: TrackOccupant,
+		to: DynamicRailSemaphore
+	): Boolean =
+		occupant is Train &&
+			occupant.distanceToSignalAhead() <= STANDING_AT_SEPARATOR_TOLERANCE &&
+			trainNavigationService.findReservedPathForTrain(occupant.name, to) is PathResult.OwnershipConflict
 
 	// Only inputs that can actually yield a forward reservation need a target searched for.
 	// findNextReservationTarget is a graph walk (BFS + per-candidate path enumeration); running
@@ -481,13 +513,22 @@ class ShuntingLoop(
 		to: DynamicRailSemaphore,
 		isApproachingThisInput: Boolean,
 		pathSetUpTowardThisInput: Boolean,
-		pathAlreadyExtendedBeyond: Boolean
+		pathAlreadyExtendedBeyond: Boolean,
+		awaitingRouteExtension: Boolean,
+		ownerTrainId: String?
 	): String? {
 		val canReserveForward =
-			!pathAlreadyExtendedBeyond &&
+			(!pathAlreadyExtendedBeyond || awaitingRouteExtension) &&
 				(isApproachingThisInput || pathSetUpTowardThisInput)
 		return if (canReserveForward) {
-			pathReservationService.findNextReservationTarget(to)?.let(::nameOf)
+			// Owner-aware (own blocks count as free) only for the #1060 state: the extension
+			// of an awaiting route leads back over the train's own blocks. A not-extended
+			// input keeps the plain FREE-only search, exactly as before Issue #1060.
+			pathReservationService
+				.findNextReservationTarget(
+					to,
+					if (awaitingRouteExtension) ownerTrainId else null
+				)?.let(::nameOf)
 		} else {
 			null
 		}
