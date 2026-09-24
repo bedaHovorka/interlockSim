@@ -176,8 +176,8 @@ interface InterlockingFacade {
 			) : DenialCause
 
 			/**
-			 * Every candidate was refused because it does not continue the route the train already
-			 * holds (its PathInfo would start somewhere other than the stored target). Maps from
+			 * Every candidate was refused because it either does not continue the route the train already
+			 * holds or is geometrically impossible, and at least one candidate diverged. Maps from
 			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.DivergesFromHeldRoute].
 			 *
 			 * Deliberately distinct from [AllPathsBlocked]: no block was busy, so retrying the same
