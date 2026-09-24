@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit
  * (`new.start == old.target`) used to be detected only at Step 2i, after blocks were reserved,
  * switches thrown and signals configured, and then reported as `AllPathsBlocked` ("track busy").
  *
- * The precondition now runs at Step 2a.5, before any mutation, and a candidate that fails it is
+ * The precondition now runs at Step 1.6, before any mutation, and a candidate that fails it is
  * reported as [PathReservationService.ReservationResult.DivergesFromHeldRoute].
  *
  * Topology (vyhybna.xml): `zA(14,8) - vA(15,8) - doA1(16,8) ... doB1(25,8)` on the main leg and
