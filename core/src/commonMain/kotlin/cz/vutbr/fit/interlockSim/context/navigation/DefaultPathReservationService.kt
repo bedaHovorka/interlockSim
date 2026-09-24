@@ -942,7 +942,9 @@ class DefaultPathReservationService(
 			divergentFailures.count + geometricFailures.count == attemptedPaths
 		) {
 			return PathReservationService.ReservationResult.DivergesFromHeldRoute(
-				heldTarget = registry.getPathInfo(trainId)?.target.toString(),
+				heldTarget =
+					registry.getPathInfo(trainId)?.let { separatorLabel(it.target) }
+						?: "unknown",
 				reason = divergentFailures.reason
 			)
 		}
@@ -1417,8 +1419,8 @@ class DefaultPathReservationService(
 		// Try to reserve path to each semaphore until one succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
 		var attemptCount = 0
-		// Issue #937: permanently-impossible target count; see classifyExhaustedSemaphores.
-		var geometricAttempts = 0
+		// Issues #937, #1066: geometric or divergent targets; see classifyExhaustedSemaphores.
+		var permanentAttempts = 0
 		for (semaphore in semaphores) {
 			attemptCount++
 			logger.trace {
@@ -1530,44 +1532,48 @@ class DefaultPathReservationService(
 						"reservePathToAnyNextSemaphore: Path to $semaphore geometrically impossible " +
 							"(${result.reason}), trying next"
 					}
-					geometricAttempts++
+					permanentAttempts++
 					lastResult = recordAttemptResult(lastResult, result)
-					continue
 				}
-				// Issue #1066: candidate-specific, not geometric; treated like contention when exhausted.
-				is PathReservationService.ReservationResult.DivergesFromHeldRoute ->
+				// Issue #1066: counted because recordAttemptResult keeps only the LAST result, so
+				// classifyExhaustedSemaphores needs the count to spot a mix with a busy semaphore.
+				is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
+					permanentAttempts++
 					lastResult = recordAttemptResult(lastResult, result)
+				}
 			}
 		}
 
 		// All semaphores tried, none reservable.
-		return classifyExhaustedSemaphores(lastResult, geometricAttempts, attemptCount)
+		return classifyExhaustedSemaphores(lastResult, permanentAttempts, attemptCount)
 	}
 
 	/**
 	 * Final classification for [reservePathToAnyNextSemaphore] once every target semaphore has been
 	 * tried, applying Issue #937's permanence gate to the outer aggregation.
 	 *
-	 * A geometric result may stand only if **every** attempted semaphore was permanently
-	 * impossible ([geometricAttempts] == [attemptCount]). If even one was merely blocked it can
-	 * free up, so the attempt is contention and the caller must wait rather than throw — the same
-	 * rule [classifyExhaustedAttempt] applies to a single `reservePath`'s candidates, and its KDoc
+	 * A permanent verdict — geometric, or (Issue #1066) divergent from the held route — may stand
+	 * only if **every** attempted semaphore was permanent ([permanentAttempts] ==
+	 * [attemptCount]). If even one was merely blocked it can free up, so the
+	 * attempt is contention and the caller must wait rather than throw — the same rule
+	 * [classifyExhaustedAttempt] applies to a single `reservePath`'s candidates, and its KDoc
 	 * carries the full rationale.
 	 *
 	 * Extracted so [reservePathToAnyNextSemaphore] stays within its method-length budget.
 	 */
 	private fun classifyExhaustedSemaphores(
 		lastResult: PathReservationService.ReservationResult?,
-		geometricAttempts: Int,
+		permanentAttempts: Int,
 		attemptCount: Int
 	): PathReservationService.ReservationResult {
 		logger.debug {
 			"reservePathToAnyNextSemaphore: all $attemptCount path(s) exhausted " +
-				"($geometricAttempts geometrically impossible)"
+				"($permanentAttempts permanently refused)"
 		}
-		if (lastResult is PathReservationService.ReservationResult.GeometricallyImpossible &&
-			geometricAttempts < attemptCount
-		) {
+		val permanentVerdict =
+			lastResult is PathReservationService.ReservationResult.GeometricallyImpossible ||
+				lastResult is PathReservationService.ReservationResult.DivergesFromHeldRoute
+		if (permanentVerdict && permanentAttempts < attemptCount) {
 			return PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 		}
 		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
@@ -3006,6 +3012,11 @@ class DefaultPathReservationService(
 	): Pair<GeometricFailures, List<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>> {
 		var failures = GeometricFailures()
 		val usable = mutableListOf<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>()
+		// Early-out for the common case: a train with no stored route cannot diverge from one, so
+		// skip the per-candidate PathInfo build entirely. reservePath sits on the per-tick polling
+		// path (see [recordContentionAndEmitIfNew]'s KDoc), so this guard saves a full probe build
+		// per candidate on every first reservation.
+		if (registry.getPathInfo(trainId) == null) return failures to candidates
 		for (candidate in candidates) {
 			val forwardBlocks = extractUniqueBlocks(candidate.value).filterNot { it.trainName == trainId }
 			val reason =

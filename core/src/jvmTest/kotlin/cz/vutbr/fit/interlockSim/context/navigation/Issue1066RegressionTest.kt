@@ -12,7 +12,9 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -22,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
@@ -41,8 +44,15 @@ import java.util.concurrent.TimeUnit
  * The precondition now runs at Step 1.6, before any mutation, and a candidate that fails it is
  * reported as [PathReservationService.ReservationResult.DivergesFromHeldRoute].
  *
+ * PR #1082 review round adds two guards around that gate:
+ *  - a request STARTING at the held target (`doB1 -> B` while holding `zA -> doB1`) is a normal
+ *    extension and must still reserve and MERGE (the gate must not be over-eager), and
+ *  - the outer semaphore scan (`reservePathToAnyNextSemaphore`) reports the divergent verdict —
+ *    not a retryable "all paths blocked" — when every enumerated semaphore diverges
+ *    (review thread lABQY).
+ *
  * Topology (vyhybna.xml): `zA(14,8) - vA(15,8) - doA1(16,8) ... doB1(25,8)` on the main leg and
- * `vA - doA2(17,9) ... doB2(24,9)` on the branch leg.
+ * `vA - doA2(17,9) ... doB2(24,9)` on the branch leg. InOuts: `A(11,8)`, `B(30,8)`.
  */
 @DisplayName("Issue #1066 Regression: a candidate diverging from the held route is refused before any mutation")
 class Issue1066RegressionTest : KoinTestBase() {
@@ -85,6 +95,20 @@ class Issue1066RegressionTest : KoinTestBase() {
 			"$x,$y" to semaphore.signal
 		}
 
+	/** First track section on the shortest topological path [from] -> [to]. */
+	private fun sectionBetween(
+		from: DynamicPathSeparator,
+		to: DynamicPathSeparator
+	): TrackSection =
+		simulationContext
+			.getRoutingServices()
+			.getTopologyNavigator()
+			.findAllTopologicalPaths(from, to)
+			.firstOrNull()
+			?.filterIsInstance<TrackSection>()
+			?.firstOrNull()
+			?: throw IllegalStateException("No track section between $from and $to")
+
 	@Test
 	@Timeout(30, unit = TimeUnit.SECONDS)
 	@DisplayName("zA -> doB1 while the stored path ends at doB2: refused with DivergesFromHeldRoute, nothing mutated")
@@ -102,9 +126,12 @@ class Issue1066RegressionTest : KoinTestBase() {
 		// at vA, so its merge candidate would start at zA, not at old.target (doB2).
 		val result = service.reservePath(trainId, zA, doB1)
 
-		// Then: a distinct, non-contention denial naming the held target.
+		// Then: a distinct, non-contention denial naming the held target. The target must be
+		// the plain endpoint name, not a debug rendering like "Dynamic[doB2, signal=STOP]"
+		// (review thread on PR #1082): the LLM is told to extend from this exact name.
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
 		val denial = result as PathReservationService.ReservationResult.DivergesFromHeldRoute
+		assertThat(denial.heldTarget).isEqualTo("doB2")
 		assertThat(denial.reason).contains("doB2")
 
 		// And: no block, switch, signal or PathInfo changed.
@@ -113,5 +140,77 @@ class Issue1066RegressionTest : KoinTestBase() {
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(trainId)
 		assertThat(signalAspects()).isEqualTo(signalsBefore)
 		assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(infoBefore)
+	}
+
+	/**
+	 * Reviewer recommendation (PR #1082): the screening must not be over-eager. A request that
+	 * STARTS at the held route's target is the normal forward extension (Issue #911's shape) —
+	 * `new.start == old.target` — so it passes Step 1.6 and must reserve and MERGE, not diverge.
+	 * This is the guard that keeps the #1066 gate from eating legitimate dispatching.
+	 *
+	 * The extension target is InOut B, not zB: zB faces away from an eastbound arrival from doB1
+	 * (G8, Issue #1064), so `doB1 -> zB` is geometrically impossible and no screening is involved.
+	 * `doB1 -> B` is the real production shape — a train held at doB1 extending to the exit.
+	 */
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("doB1 -> B while holding zA -> doB1: legitimate extension, reserved and merged")
+	fun legitimateExtensionFromHeldTargetIsNotRefused() {
+		// Given: the train holds the real main-leg route zA -> doB1 (old.target = doB1).
+		assertThat(service.reservePath(trainId, zA, doB1))
+			.isInstanceOf<PathReservationService.ReservationResult.Success>()
+		val infoBefore = registry.getPathInfo(trainId)
+		assertThat(infoBefore!!.target).isEqualTo(doB1)
+		val blocksBefore = registry.getBlocks(trainId).size
+
+		// When: it extends from doB1 -- the start equals the stored target, exactly the merge
+		// shape Step 1.6 lets through.
+		val result = service.reservePath(trainId, doB1, simulationContext.separatorAt(30, 8))
+
+		// Then: success, and the stored PathInfo is a MERGED one ending at B -- a new object,
+		// not the pre-extension instance.
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		val merged = registry.getPathInfo(trainId)
+		assertThat(merged).isNotSameInstanceAs(infoBefore)
+		assertThat(merged!!.target).isEqualTo(simulationContext.separatorAt(30, 8))
+		assertThat(registry.getBlocks(trainId).size).isGreaterThan(blocksBefore)
+	}
+
+	/**
+	 * Pins the outer aggregation (review thread lABQY on PR #1082):
+	 * [PathReservationService.reservePathToAnyNextSemaphore] counts a divergent attempt in
+	 * `divergentAttempts`. When EVERY enumerated semaphore diverges, the gate in
+	 * `classifyExhaustedSemaphores` holds (`geometricAttempts + divergentAttempts == attemptCount`)
+	 * and the caller sees the distinct [PathReservationService.ReservationResult.DivergesFromHeldRoute]
+	 * verdict, not a retryable "all paths blocked".
+	 */
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("reservePathToAnyNextSemaphore with every target divergent reports DivergesFromHeldRoute")
+	fun outerScanReportsDivergentWhenEveryTargetDiverges() {
+		// Given: the train stands at zA holding zA -> doB2 (branch), so old.target = doB2.
+		assertThat(service.reservePath(trainId, zA, doB2))
+			.isInstanceOf<PathReservationService.ReservationResult.Success>()
+		val infoBefore = registry.getPathInfo(trainId)
+		val blocksBefore = registry.getBlocks(trainId).map { it.getState() }
+
+		// When: the semaphore scan starts at vA along the main leg. The only forward semaphore
+		// it finds is doB1; every candidate for vA -> doB1 either starts elsewhere than old.target
+		// (divergent, Step 1.6) or arrives at doB1 rear-facing (geometric, Step 1.5).
+		val result =
+			service.reservePathToAnyNextSemaphore(
+				trainId,
+				switchVA,
+				sectionBetween(switchVA, simulationContext.separatorAt(16, 8))
+			)
+
+		// Then: the outer verdict is the distinct divergent refusal, naming the held target.
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
+		val denial = result as PathReservationService.ReservationResult.DivergesFromHeldRoute
+		assertThat(denial.heldTarget).isEqualTo("doB2")
+		assertThat(denial.reason).contains("vA")
+		// And nothing was reserved or merged behind it.
+		assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(infoBefore)
+		assertThat(registry.getBlocks(trainId).map { it.getState() }).isEqualTo(blocksBefore)
 	}
 }

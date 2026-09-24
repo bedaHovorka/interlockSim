@@ -602,6 +602,46 @@ class RequestRouteApplyFailureCodeTest {
 	}
 
 	/**
+	 * Issue #1066 review round (PR #1082): the DivergesFromHeldRoute branch must survive the
+	 * **facade-wired** path too — the wiring `DispatcherAgentModule` builds in production. The
+	 * stubbed test above only proves the applier's own `when` can produce the code; this test
+	 * proves the `DenialCause.DivergesFromHeldRoute` discriminant survives `DefaultNetworkActuatorPort`
+	 * into [AppliedOutcome.DivergesFromHeldRoute] with the held target and the reason intact, so
+	 * the model learns the extension/cancel guidance instead of a retryable "blocked".
+	 */
+	@Test
+	@DisplayName(
+		"DivergesFromHeldRoute through a facade-wired port -> DIVERGES_FROM_HELD_ROUTE + outcome carries heldTarget and reason"
+	)
+	fun divergesFromHeldRouteThroughFacadeWiredPortPublishesGuidanceOutcome() {
+		val reason = "new path starts at zA but the stored path ends at doB2"
+		val (outcomes, published) =
+			applyThroughFacadeWiredPort(
+				InterlockingFacade.RouteResponse.Denied(
+					reason,
+					InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute("doB2", reason)
+				)
+			)
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().phase).isEqualTo(ActionPhase.APPLIED_THEN_FAILED)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE)
+
+		assertThat(published).hasSize(1)
+		assertThat(published.first()).isInstanceOf(AppliedOutcome.DivergesFromHeldRoute::class)
+		val divergent = published.first() as AppliedOutcome.DivergesFromHeldRoute
+		assertThat(divergent.trainId).isEqualTo("T1")
+		assertThat(divergent.fromEndpointName).isEqualTo("zA")
+		assertThat(divergent.toEndpointName).isEqualTo("doA1")
+		assertThat(divergent.heldTarget).isEqualTo("doB2")
+		assertThat(divergent.reason).isEqualTo(reason)
+
+		// The rendered prompt must carry the Issue #1066 guidance, not a bare retryable "blocked".
+		val prompt = renderPrompt(divergent)
+		assertThat(prompt).contains("extend from doB2 or cancel the route first")
+	}
+
+	/**
 	 * Renders [outcome] exactly the way the live path does: [KoogDispatchAgentImpl] drains its
 	 * [AppliedOutcomeFeed] while building the user prompt. The `AIAgent` is mocked so no LLM is
 	 * contacted; only the prompt text it would have received is captured.

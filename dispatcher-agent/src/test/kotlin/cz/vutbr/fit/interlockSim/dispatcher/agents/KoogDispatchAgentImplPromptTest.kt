@@ -310,4 +310,38 @@ class KoogDispatchAgentImplPromptTest {
 		assertThat(prompts[0]).contains("k1")
 		assertThat(prompts[0]).contains("repeat cancel_route to release them")
 	}
+
+	// ── AC7: DivergesFromHeldRoute names the held target and the two ways out (Issue #1066,
+	// review thread lABQi on PR #1082) ─────────────────────────────────────────
+
+	/**
+	 * The Issue #1066 refusal must tell the model the two things that CAN move the train forward:
+	 * extend the route from the held target, or cancel the route first. A bare "REFUSED — reason"
+	 * would leave the model retrying the identical request, which is exactly what the new outcome
+	 * exists to stop. The reason text is asserted NOT to leak into this line: the guidance, not the
+	 * kernel's diagnostic prose, is the part only this branch renders.
+	 */
+	@Test
+	@DisplayName("DivergesFromHeldRoute names the held target, the extension and the cancel way out")
+	fun divergesFromHeldRouteNamesExtendAndCancelGuidance() {
+		val channel = AppliedOutcomeChannel()
+		channel.publish(
+			AppliedOutcome.DivergesFromHeldRoute(
+				trainId = "T-1066",
+				fromEndpointName = "zA",
+				toEndpointName = "doB1",
+				heldTarget = "doB2",
+				reason = "non-contiguous merge for train T-1066",
+				id = CommandId(1L),
+				tickIndex = 1L
+			)
+		)
+		val (agent, prompts) = agentCapturingPrompts(channel)
+
+		runBlocking { agent.decideAsync(emptyObservation()) }
+
+		assertThat(prompts).hasSize(1)
+		assertThat(prompts[0]).contains("REFUSED — the train's route already continues toward doB2")
+		assertThat(prompts[0]).contains("extend from doB2 or cancel the route first")
+	}
 }

@@ -113,7 +113,7 @@ fun DispatchDecision.applyToolDrivenToActuator(
 				"$logPrefix: applying RequestRoute trainName=$trainName, from=$fromEndpointName, to=$toEndpointName" +
 					rationale.toRationaleLogSuffix()
 			}
-			return nothing(actuator, logPrefix)
+			return requestRouteAndLog(actuator, logPrefix)
 		}
 		DispatchDecision.NoAction,
 		is DispatchDecision.ApproveTrain,
@@ -126,7 +126,12 @@ fun DispatchDecision.applyToolDrivenToActuator(
 	}
 }
 
-private fun DispatchDecision.RequestRoute.nothing(
+/**
+ * Sends this RequestRoute through [actuator] and logs the result. Named for the side effect
+ * (review thread on PR #1082): the old name `nothing` read like a no-op, but this helper does
+ * perform the route request.
+ */
+private fun DispatchDecision.RequestRoute.requestRouteAndLog(
 	actuator: NetworkActuatorPort,
 	logPrefix: String
 ) {

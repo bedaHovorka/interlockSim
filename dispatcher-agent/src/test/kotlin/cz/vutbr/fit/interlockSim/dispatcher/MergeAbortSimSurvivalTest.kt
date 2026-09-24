@@ -276,19 +276,19 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 		// no footprint" shape [pathologicalMergeOnSimThreadDoesNotKillTheRun] already uses.
 		registry().registerPathInfo(trainId, seedPathInfo(zB))
 
-		// When: a REAL reservation. The train's footprint is empty (no blocks/switches ever
-		// registered for it), so Step 0's contiguity check passes vacuously for any start
-		// (Issue #893's documented exemption) -- this genuinely reserves blocks, locks vA, and
-		// clears zA's signal (Steps 2d-2h) before Step 2i's merge sees new.start (zA) !=
-		// old.target (zB, from the seed) and aborts. Since Issue #1066 that Step 0a condition is
-		// detected BEFORE any of those steps (Step 1.6 screening), so the candidate is skipped
-		// without mutation and the promise below holds trivially, by not acquiring anything, rather
-		// than by rolling back. This is the shape Issue #904's root-cause fix does NOT eliminate -- unlike the ordinary "extend using
-		// the original start" pattern (Issue #911's shape), which now merges cleanly instead of
-		// aborting, so the corruption must be set up this way rather than via two real
-		// `reservePath` calls on the same train.
+		// When: a REAL reservation attempt. The train's footprint is empty (no blocks/switches
+		// ever registered for it), so Step 0's contiguity check passes vacuously for any start
+		// (Issue #893's documented exemption). Since Issue #1066 the seeded PathInfo makes every
+		// candidate divergent, so Step 1.6 screening skips the candidate BEFORE any block,
+		// switch or signal is touched -- the promise below holds by not acquiring anything, not
+		// by rolling back (pre-#1066 this genuinely reserved blocks, locked vA and cleared zA's
+		// signal at Steps 2d-2h before Step 2i's merge aborted; that rollback path is no longer
+		// reachable from a divergent start, and registry-level abort coverage lives in
+		// PathReservationRegistryMergingTest). The seed is still required for the same reason
+		// as in [pathologicalMergeOnSimThreadDoesNotKillTheRun]: the ordinary "extend using the
+		// original start" pattern (Issue #911's shape) merges cleanly instead of diverging.
 		// zA -> doB1, not zA -> doA1: doA1 faces away from a train leaving zA eastward, so G8 (Issue
-		// #1064) would refuse that request before it reserves anything, and no merge would run.
+		// #1064) would refuse that request before it reserves anything, and no screening would run.
 		val result = service().reservePath(trainId, zA, doB1)
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
 		// The candidate never reached mergePathInfo, so its Step 0a WARN no longer fires.

@@ -6,25 +6,27 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty
 import java.nio.file.Files
+import java.util.Collections
 import kotlin.concurrent.thread
 import kotlin.test.assertFailsWith
 
 class PlatformIOJvmTest {
 	/**
-	 * Sometimes the test fails with a NullPointerException in [cleanUp] because [testFiles] contains a null entry.
-	 * The root cause is unclear, but it may be related to concurrent test
-	 * execution or the way temporary files are created and deleted.
-	 *
-	 * java.lang.NullPointerException: Parameter specified as non-null is null: method cz.vutbr.fit.interlockSim.util.PlatformIOKt.deleteFile, parameter path
-	 * 	at cz.vutbr.fit.interlockSim.util.PlatformIOKt.deleteFile(PlatformIO.kt)
-	 * 	at cz.vutbr.fit.interlockSim.util.PlatformIOJvmTest.cleanUp(PlatformIOJvmTest.kt:17)
+	 * Paths of temporary files created by the tests, deleted in [cleanUp]. Synchronized because
+	 * [tempPath] is called from worker threads in `concurrent writes to distinct temporary files
+	 * succeed`; an unsynchronized `ArrayList` let concurrent `add` calls corrupt the list, which
+	 * surfaced as a `NullPointerException` on a null entry in [cleanUp] (the null was a symptom
+	 * of the corruption, not a real value — review thread on PR #1082). Iteration requires an
+	 * explicit `synchronized(testFiles)` block per [Collections.synchronizedList].
 	 */
-	private val testFiles = mutableListOf<String?>()
+	private val testFiles: MutableList<String> =
+		Collections.synchronizedList(mutableListOf<String>())
 
 	@AfterEach
 	fun cleanUp() {
-		testFiles.filterNotNull().forEach { deleteFile(it) }
-		testFiles.clear()
+		val snapshot = synchronized(testFiles) { testFiles.toList() }
+		snapshot.forEach { deleteFile(it) }
+		synchronized(testFiles) { testFiles.clear() }
 	}
 
 	private fun tempPath(suffix: String): String {

@@ -224,7 +224,7 @@ interface PathReservationService : ApproachLockedPathRelease {
 		 * was merely busy keeps the attempt ordinary contention, exactly as for
 		 * [GeometricallyImpossible] (Issue #937).
 		 *
-		 * @property heldTarget Name of the stored PathInfo's target separator (or its `toString()`).
+		 * @property heldTarget Name of the stored route's target separator (e.g. `doB2`).
 		 * @property reason English explanation naming the held target and the candidate start.
 		 * @since Issue #1066
 		 */
