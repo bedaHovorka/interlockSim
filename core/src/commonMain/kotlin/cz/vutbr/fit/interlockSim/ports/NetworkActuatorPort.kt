@@ -452,7 +452,7 @@ sealed class RouteRequestResult {
 	 *
 	 * Distinct from [AllPathsBlocked] on purpose: no block was busy, so "retry in a later tick"
 	 * is wrong advice. The identical request fails until the train's held route is extended from
-	 * [heldTarget], completed or cancelled (`release_route`). Nothing was reserved, thrown or
+	 * [heldTarget], completed or cancelled (`cancel_route`). Nothing was reserved, thrown or
 	 * cleared (Issue #1066).
 	 *
 	 * @property heldTarget Name of the stored route's target separator.
