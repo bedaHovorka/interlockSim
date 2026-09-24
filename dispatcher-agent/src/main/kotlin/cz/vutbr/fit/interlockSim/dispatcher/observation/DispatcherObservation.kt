@@ -293,9 +293,9 @@ sealed interface AppliedOutcome {
 	) : AppliedOutcome
 
 	/**
-	 * `request_route` failed because every candidate diverges from the route the train already
-	 * holds: the stored route ends at [heldTarget] and the requested route would start elsewhere.
-	 * No block was busy and nothing was reserved, thrown or cleared.
+	 * `request_route` failed because every candidate either diverges from the route the train already
+	 * holds or is geometrically impossible, with at least one divergent candidate. The stored route
+	 * ends at [heldTarget]. No block was busy and nothing was reserved, thrown or cleared.
 	 *
 	 * Unlike [Blocked], retrying the identical request is futile: the agent has to extend from
 	 * [heldTarget] or `cancel_route` first (Issue #1066).
