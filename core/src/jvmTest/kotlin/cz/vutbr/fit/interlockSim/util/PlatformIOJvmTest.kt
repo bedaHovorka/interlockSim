@@ -10,11 +10,20 @@ import kotlin.concurrent.thread
 import kotlin.test.assertFailsWith
 
 class PlatformIOJvmTest {
-	private val testFiles = mutableListOf<String>()
+	/**
+	 * Sometimes the test fails with a NullPointerException in [cleanUp] because [testFiles] contains a null entry.
+	 * The root cause is unclear, but it may be related to concurrent test
+	 * execution or the way temporary files are created and deleted.
+	 *
+	 * java.lang.NullPointerException: Parameter specified as non-null is null: method cz.vutbr.fit.interlockSim.util.PlatformIOKt.deleteFile, parameter path
+	 * 	at cz.vutbr.fit.interlockSim.util.PlatformIOKt.deleteFile(PlatformIO.kt)
+	 * 	at cz.vutbr.fit.interlockSim.util.PlatformIOJvmTest.cleanUp(PlatformIOJvmTest.kt:17)
+	 */
+	private val testFiles = mutableListOf<String?>()
 
 	@AfterEach
 	fun cleanUp() {
-		testFiles.forEach { deleteFile(it) }
+		testFiles.filterNotNull().forEach { deleteFile(it) }
 		testFiles.clear()
 	}
 
