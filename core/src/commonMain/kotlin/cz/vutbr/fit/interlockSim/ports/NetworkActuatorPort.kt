@@ -442,10 +442,10 @@ sealed class RouteRequestResult {
 	) : RouteRequestResult()
 
 	/**
-	 * Every candidate route was refused because it does not continue the route the train already
-	 * holds: the stored route ends at [heldTarget] and the requested one would start elsewhere (for
-	 * example a train standing at `zA`, holding a route to `doA2`, asked for one that diverges at
-	 * switch `vA`). Maps from
+	 * Every candidate route was refused because it either does not continue the route the train
+	 * already holds or is geometrically impossible, and at least one candidate diverged. The stored
+	 * route ends at [heldTarget], while a divergent candidate would start elsewhere (for example a
+	 * train standing at `zA`, holding a route to `doA2`, asked for one that diverges at switch `vA`). Maps from
 	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.DivergesFromHeldRoute]
 	 * via
 	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute].
