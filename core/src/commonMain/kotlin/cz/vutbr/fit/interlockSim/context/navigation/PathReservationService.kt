@@ -202,12 +202,12 @@ interface PathReservationService : ApproachLockedPathRelease {
 		) : ReservationResult()
 
 		/**
-		 * Every candidate was refused because it does not continue the route the train already
-		 * holds: its PathInfo would start somewhere other than the stored PathInfo's target, which
-		 * is the precondition of the PathInfo merge (Issue #1066). Typical shape: a train standing
-		 * at `zA` whose stored route ends at `doA2` asks for a route that diverges from it at
-		 * switch `vA`. `start` is contiguous with the train (Issue #893 accepts it, `zA` bounds a
-		 * held block), yet the merge can never succeed while the stored target stays where it is.
+		 * Every candidate was refused because it either does not continue the route the train already
+		 * holds or is geometrically impossible, and at least one candidate diverged. A divergent
+		 * candidate's PathInfo would start somewhere other than the stored PathInfo's target, violating
+		 * the PathInfo merge precondition (Issue #1066). Typical shape: a train standing at `zA` whose
+		 * stored route ends at `doA2` asks for a route that diverges from it at switch `vA`. `start` is
+		 * contiguous with the train, yet the merge cannot succeed while the stored target stays there.
 		 *
 		 * The precondition is evaluated before the candidate touches anything, so nothing was
 		 * reserved, thrown or cleared: no block, switch, signal or PathInfo changed.
