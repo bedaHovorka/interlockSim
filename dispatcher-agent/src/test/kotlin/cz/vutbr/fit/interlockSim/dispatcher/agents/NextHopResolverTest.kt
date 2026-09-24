@@ -49,6 +49,7 @@ class NextHopResolverTest {
 		isApproachingThisInput: Boolean = false,
 		pathSetUpTowardThisInput: Boolean = false,
 		pathAlreadyExtendedBeyond: Boolean = false,
+		awaitingRouteExtension: Boolean = false,
 		blockId: String = "block"
 	): BlockInputObservation =
 		BlockInputObservation(
@@ -59,7 +60,8 @@ class NextHopResolverTest {
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
-			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
+			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
+			awaitingRouteExtension = awaitingRouteExtension
 		)
 
 	// ── Hop selection ────────────────────────────────────────────────────────
@@ -171,6 +173,24 @@ class NextHopResolverTest {
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(extended)))
 
 		assertThat(outcome).isEqualTo(NextHopOutcome.RouteAlreadySet)
+	}
+
+	@Test
+	@DisplayName("an extended input whose train awaits an extension yields the Hop, not RouteAlreadySet (Issue #1060)")
+	fun extendedButAwaitingExtensionYieldsHop() {
+		val standing =
+			input(
+				ownerTrainId = "T1",
+				towardSemaphoreName = "zB",
+				isApproachingThisInput = true,
+				toSeparatorName = "doA1",
+				pathAlreadyExtendedBeyond = true,
+				awaitingRouteExtension = true
+			)
+
+		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(standing)))
+
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "zB", toSeparatorName = "doA1"))
 	}
 
 	@Test
