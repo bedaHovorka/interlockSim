@@ -71,8 +71,7 @@ internal fun blockLabel(section: TrackSection): String {
  */
 class Train :
 	Process,
-	TrackOccupant,
-	Engine.Host {
+	TrackOccupant {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 		private var countValue = 0
@@ -277,7 +276,6 @@ class Train :
 	// Implementation: Either swap start/end positions OR cancel/restore events with train stationary.
 
 	private abstract inner class Site : Process() {
-
 		/**
 		 * Consecutive mid-journey `NoTopologicalPath` results, the counterpart of the origin-InOut
 		 * retry counter. Owned by [holdOrStopAfterNoUsablePath] and reset by [actions] on every
@@ -1465,24 +1463,49 @@ class Train :
 	private val va: SimpleIntegration = SimpleIntegration(velocity, acceleration)
 	private val front: Front = Front()
 	private val tail: Tail = Tail()
-	private val engine: Engine = Engine(this)
+	private val engine: Engine = Engine(EngineHost())
 	private val timetable: Timetable
 	private val env: SimulationEnvironment
 	private var pathToSemaphore: Path? = null
 	override val name: String
 	private val trainNavService: TrainNavigationService
 
-	internal override val velocityVariable: Variable
-		get() = velocity
+	/**
+	 * The [Engine.Host] view of this train. [Engine.Host] is an internal interface, and Kotlin
+	 * forbids `internal` members in an interface, so a public [Train] implementing it directly
+	 * would have to publish the kinematic [Variable]s and the stop-short helpers on its public
+	 * API. This private adapter keeps them private to the train and delegates the rest.
+	 */
+	private inner class EngineHost : Engine.Host {
+		override val trainNumber: Int
+			get() = this@Train.trainNumber
 
-	internal override val accelerationVariable: Variable
-		get() = acceleration
+		override val velocityVariable: Variable
+			get() = velocity
 
-	internal override val semaphoreStopClearanceMeters: Double
-		get() = SEMAPHORE_STOP_CLEARANCE_METERS
+		override val accelerationVariable: Variable
+			get() = acceleration
 
-	internal override fun reportDebug(message: String) {
-		env.report(message, this, ReportType._DEBUG)
+		override fun getVelocity(): Double = this@Train.getVelocity()
+
+		override fun distanceToSemaphore(): Double = this@Train.distanceToSemaphore()
+
+		override fun semaphoreToStopShortOf(): DynamicRailSemaphore? = this@Train.semaphoreToStopShortOf()
+
+		override fun nextSemaphore(): OrientedPathSeparator? = this@Train.nextSemaphore()
+
+		override val currentSpeedLimitMps: Double
+			get() = this@Train.currentSpeedLimitMps
+
+		override val signalAheadAspect: Signal?
+			get() = this@Train.signalAheadAspect
+
+		override val semaphoreStopClearanceMeters: Double
+			get() = SEMAPHORE_STOP_CLEARANCE_METERS
+
+		override fun reportDebug(message: String) {
+			env.report(message, this@Train, ReportType._DEBUG)
+		}
 	}
 
 	/**
@@ -1734,7 +1757,7 @@ class Train :
 	/**
 	 * @return current speed of train
 	 */
-	override fun getVelocity(): Double = velocity.state
+	fun getVelocity(): Double = velocity.state
 
 	/**
 	 * Current velocity of train in m/s (Kotlin property accessor).
@@ -1827,7 +1850,7 @@ class Train :
 	 * @since 2026-01-22 (Issue #203)
 	 * @since 2026-02-06 (Public Train API for animation)
 	 */
-	override val trainNumber: Int
+	val trainNumber: Int
 		get() = number
 
 	/**
@@ -1903,7 +1926,7 @@ class Train :
 	 *
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
-	override val signalAheadAspect: Signal?
+	val signalAheadAspect: Signal?
 		get() = separatorAspect(nextSemaphore())
 
 	/**
@@ -1993,7 +2016,7 @@ class Train :
 	 *
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
-	override val currentSpeedLimitMps: Double
+	val currentSpeedLimitMps: Double
 		get() =
 			pathToSemaphore?.let { path ->
 				var min = ABSOLUTE_MAX_SPEED
@@ -2152,7 +2175,7 @@ class Train :
 	 * [Signal.FREE] and can never be restrictive, and a train must not be held short of its own
 	 * exit point.
 	 */
-	internal override fun semaphoreToStopShortOf(): DynamicRailSemaphore? =
+	private fun semaphoreToStopShortOf(): DynamicRailSemaphore? =
 		if (clearanceStopWaived) {
 			null
 		} else {

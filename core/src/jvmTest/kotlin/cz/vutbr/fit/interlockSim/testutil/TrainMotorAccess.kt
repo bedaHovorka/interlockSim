@@ -24,7 +24,7 @@ import cz.vutbr.fit.interlockSim.sim.Train
  * Issue #1059 renamed the former private inner `Motor` to top-level [Engine]; the field name is
  * `engine`.
  */
-fun engineOf(train: Train): Engine {
+internal fun engineOf(train: Train): Engine {
 	val field = Train::class.java.getDeclaredField("engine")
 	field.isAccessible = true
 	return field.get(train) as Engine
