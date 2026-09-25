@@ -25,6 +25,7 @@ import kotlin.test.Test
  *
  * Pure common-platform tests (KMP `commonTest`) — no MockK/JUnit 5 — so they run on
  * both JVM and native targets.
+ *
  */
 class TrainBrakingKinematicsTest {
 	@Test
