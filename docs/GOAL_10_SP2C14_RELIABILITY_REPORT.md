@@ -326,10 +326,13 @@ should not be conflated with the deadline-miss count above, which is gated per-t
 
 Two timing caveats from prior spikes bound how this figure should be read:
 
-- **SP2c.26 (#849):** the F1 paused-clock regime this project uses for reproducibility freezes the
-  simulation clock only during LLM emission, with zero measured pause latency across 20 trials; it
-  does not itself change the ~2× throttle above, and headless pacing (`SimulationRunner`/
-  `ThrottlingSimulationController`) changes wall-clock only, never event semantics.
+- **SP2c.26 (#849):** the F1 paused-clock regime freezes the simulation clock only during LLM
+  emission, with zero measured pause latency across 20 trials; it does not itself change the ~2×
+  throttle above, and headless pacing (`SimulationRunner`/`ThrottlingSimulationController`) changes
+  wall-clock only, never event semantics. **2026-09-25 correction (#990, #995):** this regime runs
+  only on the non-production `DispatchTickLoop` reference path (`PausedClockTickBudget` has no
+  production construction site); the runs measured in this report are paced by the ~2× throttle
+  described above, not by a paused clock.
 - **SP2c.27 (#850):** no sampling seed reaches Ollama through Koog 1.1.1 (confirmed against the
   pinned source — no code path places a value into a `seed` key), so none of the latency or
   outcome figures in this report are seed-reproducible in the conventional sense. #895 and this
@@ -404,9 +407,10 @@ becomes starvation, rather than thrashing against a blocked station.
 
 Every table in §5 carries a `LLM_CONSTRAINED_JSON` column, and every cell in it reads `0 runs`.
 This is not an oversight: **no sweep grid was ever written for this arm**, and no run of it was
-ever recorded. This gap is tracked as Issue #991 and was carried forward, stated the same way,
-across the #847 and #834 reports rather than silently omitted or filled with an invented number.
-This report follows the same pattern: the arm
+ever recorded. This gap was carried forward, stated the same way, across the #847 and #834
+reports — which pointed at pull request [#890](https://github.com/bedaHovorka/interlockSim/pull/890)
+rather than an issue — rather than silently omitted or filled with an invented number; it is now
+tracked as Issue #991 (filed 2026-08-28). This report follows the same pattern: the arm
 is present in every table with an honest zero, and the gate correctly renders it `❌ FAIL` on
 `0 runs` rather than `✅ PASS` on vacuous truth — `gatePassed` requires `runCount >= 10`, so an
 empty arm cannot pass by default. `c7Clean = yes` for this arm in T1 is vacuous for the same
@@ -509,9 +513,10 @@ individual actions the model did emit were well-formed. `historyN = 0` buys deci
 (fallback ticks drop from 10/10 runs containing at least one, at `historyN = 3`, to 2/10) without
 buying railway reliability — the stall pattern persists at a comparable rate under both settings.
 
-**`LLM_CONSTRAINED_JSON` cannot be evaluated.** No grid file, no runs, no data (#991). This is
-recorded as a gate failure because `gatePassed` requires `runCount >= 10`, not because the arm has
-been shown to be unreliable — the honest statement at the time of this report was "not yet
+**`LLM_CONSTRAINED_JSON` cannot be evaluated.** No grid file, no runs, no data (#991). This was
+originally recorded as a gate failure (and still is in the §5 tables) because `gatePassed`
+requires `runCount >= 10`, not because the arm has been shown to be unreliable — the honest
+statement at the time of this report was "not yet
 measured," and this report keeps that statement visible in every table rather than silently
 dropping the arm or fabricating a number for it. **2026-09-25 correction:** the arm has since been
 retired unmeasured (#991) rather than deferred to a future sweep — see §7.
@@ -625,7 +630,8 @@ distinction.
   ruling: `DispatchTickLoop` (which the retired arm was only reachable through) stays a
   non-production reference implementation; the production loop is `AgentLoopDriver`
 - [#993](https://github.com/bedaHovorka/interlockSim/issues/993) — Goal 10 B2 amendment: the
-  production path reports the recorded rationale, not an affordance annotation
+  production path records no per-decision rationale at all — only `no_op`'s optional `reason`,
+  logged at DEBUG and not persisted; no affordance annotation is produced either
 - [#995](https://github.com/bedaHovorka/interlockSim/issues/995) — Goal 10 A6 amendment: the LLM
   arm's wall-clock report is the `DispatcherRunSnapshot` latency percentiles; the real-time ratio
   is not recorded for that arm
