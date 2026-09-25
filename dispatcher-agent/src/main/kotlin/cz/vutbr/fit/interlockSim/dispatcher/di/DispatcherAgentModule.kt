@@ -47,6 +47,8 @@ import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
+import org.koin.core.module.dsl.onClose
+import org.koin.core.module.dsl.withOptions
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
 import java.nio.file.Path
@@ -196,7 +198,9 @@ val dispatcherAgentModule: Module =
 		// runs (JVM shutdown hook / test teardown), so daemon worker threads do not outlive the
 		// container. Per-run cleanup still goes through KoogAgentPlanAdapter.releaseAgent() —
 		// never close this singleton mid-session while a second GUI start may still need it.
-		single<OllamaSimpleExecutor> { OllamaSimpleExecutor(get()) } onClose { it.close() }
+		single<OllamaSimpleExecutor> { OllamaSimpleExecutor(get()) } withOptions {
+			onClose { it?.close() }
+		}
 
 		// Tool group registry (singleton).
 		// Registry logic is stateless; it just coordinates tool assembly per context.

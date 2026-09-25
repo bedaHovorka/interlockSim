@@ -15,6 +15,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
@@ -223,13 +224,22 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	@DisplayName("#1072: STOPPED pauses the AnimationController (manual stop)")
 	fun animationPausedOnManualStop() {
 		val context = createMockShuntingContext()
+		val running = context.holdRunUntilInterrupted()
+		try {
+			SwingUtilities.invokeAndWait {
+				frame.setContext(context)
+				frame.startSimulation()
+			}
+			assertThat(running.await(5, TimeUnit.SECONDS)).isTrue()
 
-		frame.withStartedSimulation(context) {
 			SwingUtilities.invokeAndWait {
 				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
 				frame.stopSimulation()
 				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
 			}
+		} finally {
+			SwingUtilities.invokeAndWait { frame.stopSimulation() }
+			context.close()
 		}
 	}
 
@@ -254,17 +264,12 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	@DisplayName("#1072: startSimulation restarts animation after a previous STOPPED pause")
 	fun startSimulationRestartsPausedAnimation() {
-		val started = CountDownLatch(1)
 		val context = createMockShuntingContext()
-		context.addPropertyChangeListener { _ -> started.countDown() }
+		context.holdRunUntilInterrupted()
 		try {
 			SwingUtilities.invokeAndWait {
 				frame.setContext(context)
 				frame.startSimulation()
-			}
-			assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
-
-			SwingUtilities.invokeAndWait {
 				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
 				frame.stopSimulation()
 				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
@@ -276,5 +281,36 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 			SwingUtilities.invokeAndWait { frame.stopSimulation() }
 			context.close()
 		}
+	}
+
+	/**
+	 * Keeps each run of this context alive until [Frame.stopSimulation] interrupts it, and returns a
+	 * latch released when the first run has started.
+	 *
+	 * [cz.vutbr.fit.interlockSim.testutil.MockSimulationContext.run] returns at once, so without this
+	 * every run completes naturally within milliseconds and its STOPPED transition pauses the
+	 * animation before a test can observe the running state or take the manual-stop path. The
+	 * listener blocks the simulation thread on the run-start event; [SimulationController.stop]
+	 * interrupts that thread, and because it clears the runner first, the monitor thread emits no
+	 * second (natural) STOPPED. The wait is bounded so a missed interrupt cannot hang the suite.
+	 */
+	private fun SimulationContext.holdRunUntilInterrupted(): CountDownLatch {
+		val running = CountDownLatch(1)
+		addPropertyChangeListener { event ->
+			if (event.propertyName == "frozen" && !SwingUtilities.isEventDispatchThread()) {
+				running.countDown()
+				try {
+					Thread.sleep(RUN_HOLD_MAX_MS)
+				} catch (e: InterruptedException) {
+					Thread.currentThread().interrupt()
+				}
+			}
+		}
+		return running
+	}
+
+	private companion object {
+		/** Upper bound for [holdRunUntilInterrupted]; longer than any test timeout in this class. */
+		const val RUN_HOLD_MAX_MS = 30_000L
 	}
 }

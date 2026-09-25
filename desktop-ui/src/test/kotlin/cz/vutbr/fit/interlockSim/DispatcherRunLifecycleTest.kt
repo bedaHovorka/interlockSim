@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim
 
-import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
@@ -20,7 +19,6 @@ import io.mockk.verify
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.junit.jupiter.api.assertThrows
 import org.koin.dsl.module
 import org.koin.mp.KoinPlatform.getKoin
 import java.util.concurrent.TimeUnit
@@ -76,9 +74,12 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("closeSharedOllamaExecutor closes the bound singleton and is idempotent")
+	@DisplayName("closeSharedOllamaExecutor closes the bound singleton and is safe to repeat")
 	fun closeSharedOllamaExecutorClosesBoundSingleton() {
-		val executor = OllamaSimpleExecutor(OllamaExecutorConfig.forLocalTesting())
+		// A mock rather than a real executor: the real close() contract (terminal, idempotent) is
+		// covered by OllamaSimpleExecutorTest in :dispatcher-agent, and asserting it here would need
+		// getExecutor(), whose Koog PromptExecutor return type is not on this module's classpath.
+		val executor = mockk<OllamaSimpleExecutor>(relaxed = true)
 		// allowOverride: testModule may already bind OllamaSimpleExecutor from the dispatcher module.
 		getKoin().loadModules(
 			listOf(
@@ -92,7 +93,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 		DispatcherRunLifecycle.closeSharedOllamaExecutor()
 		DispatcherRunLifecycle.closeSharedOllamaExecutor()
 
-		assertThrows<IllegalStateException> { executor.getExecutor() }
+		verify(exactly = 2) { executor.close() }
 	}
 
 	@Test
