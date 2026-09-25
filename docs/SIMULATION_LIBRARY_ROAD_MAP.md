@@ -80,7 +80,7 @@ Verified by `grep` against the codebase. **10 production files** and **2 test fi
 | `Process.wait(Head)` | InOutWorker | 1 | **MISSING** |
 | `Process.terminated()` | Generator, LoopProcess, Train, ShuntingLoop | ~6 | **MISSING** |
 | `Condition` interface (`.test()`) | Train (5+ impls), InOutWorker (2 impls) | — | **MISSING** |
-| `Continuous` (extend, `derivatives()`) | SimpleIntegration, ContinuousInvariantChecker, Train.Motor | — | **EXISTS** |
+| `Continuous` (extend, `derivatives()`) | SimpleIntegration, ContinuousInvariantChecker, Engine (ex-Train.Motor) | — | **EXISTS** |
 | `Variable` (`.state`, `.rate`, `.start()`, `.stop()`, `.isActive()`) | Train (25+ refs), SimpleIntegration | — | **EXISTS** |
 | `Reporter` (extend, `.actions()`, `.start()`, `.stop()`, `.setFrequency()`) | Train (anonymous subclass) | — | **MISSING** |
 | `Random` (`.normal()`, `.exp()`, `.shuffle()`) | Generator | 3 | **MISSING** |
@@ -258,7 +258,7 @@ Currently kDisco has `terminate()` which wraps `Process.cancel(jDiscoProcessDele
 
 #### 2.9 `Continuous.start()` / `Continuous.stop()` Return Types
 
-Verify return types match jDisco (returns `Continuous` for method chaining). Train.Motor overrides `start()` with conditional logic — must remain subclassable with proper return type covariance.
+Verify return types match jDisco (returns `Continuous` for method chaining). Engine (ex-Train.Motor, Issue #1059) overrides `start()` with conditional logic — must remain subclassable with proper return type covariance.
 
 ---
 

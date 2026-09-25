@@ -27,28 +27,28 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Comprehensive unit tests for Train physics and Motor inner class.
+ * Comprehensive unit tests for Train physics and Engine class (ex-Motor).
  *
  * This test suite validates the physics calculations used in the train simulation,
- * particularly the Motor inner class which handles acceleration, deceleration, and
- * speed management. The Motor uses kinematic equations (v² = u² + 2as) to calculate
+ * particularly the Engine class (ex-Motor) which handles acceleration, deceleration, and
+ * speed management. The Engine uses kinematic equations (v² = u² + 2as) to calculate
  * proper acceleration/deceleration rates.
  *
  * Physics Foundation:
  * - Kinematic equation: v² = u² + 2as (where v=final velocity, u=initial velocity, a=acceleration, s=distance)
  * - Rearranged: a = (v² - u²) / (2s) = ((v-u)(v+u)) / (2s)
- * - Motor implementation: a = ((targetSpeed - velocity)(targetSpeed + velocity)) / (2s)
+ * - Engine implementation: a = ((targetSpeed - velocity)(targetSpeed + velocity)) / (2s)
  * - Acceleration limits: ±MAXIMAL_ACCELERATION (4.0 m/s²) and MINIMAL_DECELERATION (-3.0 m/s²)
  *
  * Test Strategy:
  * - Use MockSimulationContext for time control without kDisco framework
- * - Test Motor behavior indirectly through Train's public methods
+ * - Test Engine behavior indirectly through Train's public methods
  * - Validate kinematics against expected physics (tolerance: 1e-6 meters, 1e-9 seconds)
  * - Test edge cases: zero distance (SIM-001 mitigation), very small distances, negative distances
  * - Validate safety properties: speed limits, deceleration enforcement
  *
  * Limitations:
- * - Motor is a private inner class - tested indirectly via public Train methods
+ * - Engine is internal - tested indirectly via public Train methods
  * - Full acceleration simulation requires kDisco framework - tests focus on state verification
  * - Exact acceleration curves require integration tests with kDisco ProcessManager
  *

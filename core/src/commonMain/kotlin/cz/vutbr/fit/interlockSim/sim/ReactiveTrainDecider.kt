@@ -45,7 +45,7 @@ import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
  *   the second signal is at least as far as the immediate (`d_second ≥ d_immediate`), so
  *   `sqrt(2·a·d_immediate)` is no greater than the true `sqrt(2·a·d_second)` and is
  *   therefore conservative. This **extends** the kernel's one-signal "start on caution"
- *   brake ([Train] `Motor.onWarning`, which looks only one signal ahead) with a 2-signal
+ *   brake ([Train] `Engine.onWarning`, which looks only one signal ahead) with a 2-signal
  *   Výstraha case enabled by the perception aspect pair.
  *
  * The track [TrainPerceptionReading.currentSpeedLimitMps] always caps the target — even a
