@@ -40,10 +40,10 @@ private val logger = KotlinLogging.logger {}
  * [DispatchDecision.SetSignalAspect]), but nothing calls [translate] today. The production
  * ESA-11 switch-before-signal ordering is enforced instead by
  * [cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService]'s
- * `configureAndRegisterSwitches`, not here. Its only observers are its own unit tests
- * (`PathCommandTranslatorTest`, `CandidatePathRuleEngineTest`, `DispatchDecisionSp2b5Test`);
- * no golden/heavy/parity gate executes it, so any change here is validated by those tests
- * alone. Do not delete in a dead-code sweep without re-opening Issue #978.
+ * `configureAndRegisterSwitches`, not here. Its only observer is its own unit test
+ * (`PathCommandTranslatorTest`); no golden/heavy/parity gate executes it, so any change here
+ * is validated by that test alone. Do not delete in a dead-code sweep without re-opening
+ * Issue #978.
  *
  * ## SP2b.3 (Issue #558)
  *
