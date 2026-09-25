@@ -47,6 +47,7 @@ import java.awt.event.MouseMotionListener
 import javax.swing.JComponent
 import javax.swing.Scrollable
 import javax.swing.SwingConstants
+import javax.swing.SwingUtilities
 import cz.vutbr.fit.interlockSim.util.Point as GridPoint
 
 /**
@@ -424,6 +425,44 @@ class RailwayNetGridCanvas :
 		animationController?.stop()
 		animationController = null
 		animatedRenderer = null
+	}
+
+	/**
+	 * Stop the 30 FPS animation timer without discarding the controller or the last painted frame.
+	 *
+	 * Used when a simulation run ends (natural completion or manual stop) so the GUI stops
+	 * animating while the user can still inspect the final state (Issue #1072). A later
+	 * [ensureAnimationRunning] call restarts the same controller for the next run.
+	 *
+	 * **Idempotent. Must be called from EDT.**
+	 *
+	 * @since Issue #1072
+	 */
+	fun pauseAnimation() {
+		require(SwingUtilities.isEventDispatchThread()) {
+			"pauseAnimation must be called from EDT"
+		}
+		animationController?.stop()
+	}
+
+	/**
+	 * Ensure the animation controller is running when a simulation context is still attached.
+	 *
+	 * No-op when there is no controller (editing mode / not yet set). Restarts a controller
+	 * that [pauseAnimation] stopped after the previous run ended (Issue #1072).
+	 *
+	 * **Must be called from EDT.**
+	 *
+	 * @since Issue #1072
+	 */
+	fun ensureAnimationRunning() {
+		require(SwingUtilities.isEventDispatchThread()) {
+			"ensureAnimationRunning must be called from EDT"
+		}
+		val controller = animationController ?: return
+		if (!controller.isActive) {
+			controller.start()
+		}
 	}
 
 	/**

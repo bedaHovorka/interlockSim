@@ -74,6 +74,33 @@ class KoogDispatchAgentImpl(
 	}
 
 	/**
+	 * Close the underlying Koog [AIAgent] when it is [AutoCloseable] (Issue #1072).
+	 *
+	 * Idempotent and best-effort: failures are logged and swallowed so end-of-run cleanup cannot
+	 * break the Frame STOPPED path. Does **not** close the shared [OllamaSimpleExecutor] — that
+	 * singleton outlives individual agents so a second run in the same JVM can still infer.
+	 */
+	override fun close() {
+		try {
+			val closeable = aiAgent as? AutoCloseable
+			if (closeable != null) {
+				logger.debug { "Closing Koog AIAgent after dispatcher run" }
+				closeable.close()
+			} else {
+				logger.debug {
+					"Koog AIAgent (${aiAgent::class.qualifiedName}) is not AutoCloseable; " +
+						"nothing to close on the agent itself"
+				}
+			}
+		} catch (e: InterruptedException) {
+			Thread.currentThread().interrupt()
+			logger.warn(e) { "Interrupted while closing Koog AIAgent" }
+		} catch (e: Exception) {
+			logger.warn(e) { "Exception closing Koog AIAgent" }
+		}
+	}
+
+	/**
 	 * Builds the per-cycle user prompt. The static station topology is already in the system prompt
 	 * ([cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer]), so only live state
 	 * belongs here.

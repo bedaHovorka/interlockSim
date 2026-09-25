@@ -96,6 +96,9 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		frame.withStartedSimulation(context) {
 			SwingUtilities.invokeAndWait { frame.stopSimulation() }
 
+			// Issue #1072: agent released before the final metrics summary so Koog workers
+			// do not outlive the run.
+			verify(exactly = 1) { measuringAdapter.releaseAgent() }
 			verify(exactly = 1) { measuringAdapter.logFinalSummary() }
 			confirmVerified(measuringAdapter)
 		}
@@ -210,6 +213,68 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 
 		frame.withStartedSimulation(context) {
 			// Must not throw even though context.scope has no DispatcherRunRecorder registered.
+		}
+	}
+
+	// ── Issue #1072 — end-of-run animation + agent release ─────────────────────
+
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("#1072: STOPPED pauses the AnimationController (manual stop)")
+	fun animationPausedOnManualStop() {
+		val context = createMockShuntingContext()
+
+		frame.withStartedSimulation(context) {
+			SwingUtilities.invokeAndWait {
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
+				frame.stopSimulation()
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("#1072: natural completion pauses the AnimationController and releases the Koog agent")
+	fun animationPausedAndAgentReleasedOnNaturalCompletion() {
+		val context = createMockShuntingContext()
+		val measuringAdapter = mockk<MeasuringPlanAdapter>(relaxed = true)
+		context.scope.declare(measuringAdapter)
+
+		frame.withStartedSimulation(context) {
+			verify(timeout = 5000) { measuringAdapter.releaseAgent() }
+			verify(timeout = 5000) { measuringAdapter.logFinalSummary() }
+			SwingUtilities.invokeAndWait {
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@DisplayName("#1072: startSimulation restarts animation after a previous STOPPED pause")
+	fun startSimulationRestartsPausedAnimation() {
+		val started = CountDownLatch(1)
+		val context = createMockShuntingContext()
+		context.addPropertyChangeListener { _ -> started.countDown() }
+		try {
+			SwingUtilities.invokeAndWait {
+				frame.setContext(context)
+				frame.startSimulation()
+			}
+			assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+			SwingUtilities.invokeAndWait {
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
+				frame.stopSimulation()
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
+				// Same context, same AnimationController instance: ensureAnimationRunning restarts it.
+				frame.startSimulation()
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
+			}
+		} finally {
+			SwingUtilities.invokeAndWait { frame.stopSimulation() }
+			context.close()
 		}
 	}
 }

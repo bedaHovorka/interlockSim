@@ -73,8 +73,7 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 			val containsControllerBefore = listenersBefore.any { it === controller }
 			assertThat(containsControllerBefore).isTrue()
 
-			val isRunningBefore = isControllerRunning(controller!!)
-			assertThat(isRunningBefore).isTrue()
+			assertThat(controller!!.isActive).isTrue()
 
 			// Clean up animation (simulates Frame exit)
 			frame.railwayNetGridCanvas.cleanupAnimation()
@@ -84,9 +83,8 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 			val containsControllerAfter = listenersAfter.any { it === controller }
 			assertThat(containsControllerAfter).isFalse()
 
-			// Verify controller is stopped
-			val isRunningAfter = isControllerRunning(controller)
-			assertThat(isRunningAfter).isFalse()
+			// Verify controller is stopped (Issue #1072: public isActive replaces reflection)
+			assertThat(controller.isActive).isFalse()
 		}
 	}
 
@@ -109,13 +107,5 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 		field.isAccessible = true
 		@Suppress("UNCHECKED_CAST")
 		return (field.get(actualContext) as List<*>).filterNotNull()
-	}
-
-	// Reflection-based accessor for AnimationController.isRunning
-
-	private fun isControllerRunning(controller: AnimationController): Boolean {
-		val field = AnimationController::class.java.getDeclaredField("isRunning")
-		field.isAccessible = true
-		return field.getBoolean(controller)
 	}
 }

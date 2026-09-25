@@ -39,6 +39,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -1210,5 +1211,52 @@ class KoogAgentPlanAdapterTest {
 
 		assertThat(slowRecorded.first().latencyMs!!)
 			.isGreaterThanOrEqualTo(fastRecorded.first().latencyMs!!)
+	}
+
+	// ── Agent lifecycle (Issue #1072) ─────────────────────────────────────────
+
+	@Test
+	@DisplayName("releaseAgent closes the cached Koog agent and is idempotent")
+	fun `releaseAgent closes the cached agent and is idempotent`() {
+		val koogAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		coEvery { koogAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		val planAdapter = adapter(koogAgent, fallback)
+
+		runBlocking { planAdapter.plan(observation) }
+		planAdapter.releaseAgent()
+		planAdapter.releaseAgent()
+
+		verify(exactly = 1) { koogAgent.close() }
+	}
+
+	@Test
+	@DisplayName("after releaseAgent the next plan recreates the agent")
+	fun `after releaseAgent the next plan recreates the agent`() {
+		val firstAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		val secondAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		coEvery { firstAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		coEvery { secondAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val agentFactory = mockk<KoogAgentFactory>()
+		coEvery { agentFactory.createAgent(any()) } returnsMany listOf(firstAgent, secondAgent)
+		val fallback = mockk<Dispatcher>()
+		val planAdapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				Duration.ofSeconds(30),
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+
+		runBlocking { planAdapter.plan(observation) }
+		planAdapter.releaseAgent()
+		runBlocking { planAdapter.plan(observation) }
+
+		verify(exactly = 1) { firstAgent.close() }
+		coVerify(exactly = 1) { firstAgent.decideAsync(any()) }
+		coVerify(exactly = 1) { secondAgent.decideAsync(any()) }
+		coVerify(exactly = 2) { agentFactory.createAgent(any()) }
 	}
 }

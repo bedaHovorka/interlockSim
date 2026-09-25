@@ -1,6 +1,9 @@
 # Git worktrees
 .worktrees/
 
+# Local agent investigation scratch (must not land on the PR)
+issue-1072-checklist.md
+
 # Build directories
 build/
 jar/
