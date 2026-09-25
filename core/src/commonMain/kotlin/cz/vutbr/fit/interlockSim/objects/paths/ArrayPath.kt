@@ -26,33 +26,17 @@ import cz.vutbr.fit.interlockSim.util.Util
  *
  * @param context the simulation context for this path
  */
-class ArrayPath(
-	context: SimulationContext
-) : AbstractPath(context) {
-	private val deque = ArrayDeque<PathElement>()
+class ArrayPath private constructor(
+	context: SimulationContext,
+	private val deque: ArrayDeque<PathElement>
+) : AbstractPath(context),
+	MutableCollection<PathElement> by deque {
+	constructor(context: SimulationContext) : this(context, ArrayDeque())
 
-	// MutableCollection contract - delegate to underlying ArrayDeque
-	override fun add(element: PathElement): Boolean = deque.add(element)
-
-	override val size: Int get() = deque.size
-
-	override fun clear() = deque.clear()
-
-	override fun isEmpty(): Boolean = deque.isEmpty()
-
-	override fun contains(element: PathElement): Boolean = deque.contains(element)
-
-	override fun containsAll(elements: Collection<PathElement>): Boolean = deque.containsAll(elements)
-
-	override fun iterator(): MutableIterator<PathElement> = deque.iterator()
-
-	override fun remove(element: PathElement): Boolean = deque.remove(element)
-
+	// removeAll/retainAll convert the argument to a Set for O(1) membership checks, so they stay explicit
 	override fun removeAll(elements: Collection<PathElement>): Boolean = deque.removeAll(elements.toSet())
 
 	override fun retainAll(elements: Collection<PathElement>): Boolean = deque.retainAll(elements.toSet())
-
-	override fun addAll(elements: Collection<PathElement>): Boolean = deque.addAll(elements)
 
 	// Path construction operations - delegate to ArrayDeque's efficient implementations
 	override fun addFirst(element: PathElement) = deque.addFirst(element)
