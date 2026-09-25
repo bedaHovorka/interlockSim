@@ -834,4 +834,36 @@ class ObservationRendererTest {
 			assertThat(actual).isEqualTo(loadGolden("schematic_renderer_golden.txt"))
 		}
 	}
+
+	// ── Issue #1066 (PR #1082 review round): the compact history line for a divergent outcome ──
+
+	@Nested
+	@DisplayName("Issue #1066 — DivergesFromHeldRoute in RECENT TICKS")
+	inner class DivergesFromHeldRouteHistory {
+		/**
+		 * `renderAppliedOutcome`'s Issue #1066 branch must surface the held target in the compact
+		 * history line, so a compact-text model reading its own recent ticks sees WHERE to extend
+		 * from, not a bare refusal.
+		 */
+		@Test
+		@DisplayName("the history line names the held target")
+		fun historyLineNamesHeldTarget() {
+			val outcome =
+				AppliedOutcome.DivergesFromHeldRoute(
+					trainId = "T-1066",
+					fromEndpointName = "zA",
+					toEndpointName = "doB1",
+					heldTarget = "doB2",
+					reason = "non-contiguous merge for train T-1066",
+					id = CommandId(40L),
+					tickIndex = 40L
+				)
+			val record = RendererFixtures.history.last().copy(outcomes = listOf(outcome))
+			val divergentCtx = ctx.copy(history = listOf(record))
+
+			val output = CompactTextRenderer().render(divergentCtx)
+
+			assertThat(output).contains("DIVERGES_FROM_HELD_ROUTE (held target doB2)")
+		}
+	}
 }

@@ -498,6 +498,12 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 					// still a legitimate "did not reserve" outcome for this test's purpose.
 					logger.info { "Train #8 rejected: ${result2.reason}" }
 				}
+
+				is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
+					// Issue #1066: not reachable here (train #8 holds no route), but a legitimate
+					// "did not reserve" outcome for this test's purpose.
+					logger.info { "Train #8 rejected: ${result2.reason}" }
+				}
 			}
 
 			// Verify first train's ownership unchanged

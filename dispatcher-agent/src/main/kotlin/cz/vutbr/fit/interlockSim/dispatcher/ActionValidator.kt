@@ -316,14 +316,16 @@ class ActionValidator(
 		// Forward extension: train holds a route to X, and the new request starts from X — this is
 		// the normal multi-hop case where the dispatcher extends the path one section at a time.
 		//
-		// This is an INDEPENDENT precondition, not a mirror of anything downstream (Issue #834).
-		// PathReservationRegistry.mergePathInfo does require new.start == old.target, but it
-		// enforces that by aborting the merge fail-safe — it keeps the stored PathInfo, reports
-		// nothing to the caller, and leaves the blocks the request already reserved as an orphaned
-		// tail for OrphanReservationSweeper to reclaim. So the registry is not a gate that would
-		// still reject such a request if this check were dropped: this check is the ONLY place a
-		// non-continuing request is refused before any resource is committed. Do not delete it as
-		// "redundant with the registry".
+		// Two INDEPENDENT preflight layers guard this shape (Issue #834, Issue #1066):
+		// 1. This validator refuses a non-continuing request before it reaches the kernel.
+		// 2. The kernel itself now refuses it too: DefaultPathReservationService screens a
+		//    divergent candidate at Step 1.6, BEFORE any block, switch or signal is touched, and
+		//    reports a distinct DivergesFromHeldRoute instead of leaving an orphaned tail for
+		//    OrphanReservationSweeper to reclaim. (Before Issue #1066 the kernel did leave such a
+		//    tail, which is what made this validator the only pre-commit gate.)
+		// Both layers must stay: the validator gives the model an immediate, actionable rejection
+		// from observation data alone, while the kernel gate protects every caller that bypasses
+		// the validator (tests, sim entry paths). Do not delete either as redundant with the other.
 		if (action.fromEndpointName == existingReservation.targetName) {
 			return null
 		}

@@ -160,5 +160,23 @@ enum class ApplyFailureCode {
 	 *
 	 * @since Issue #903
 	 */
-	GEOMETRICALLY_IMPOSSIBLE
+	GEOMETRICALLY_IMPOSSIBLE,
+
+	/**
+	 * Every candidate route was refused because it either does not continue the route the train
+	 * already holds or is geometrically impossible, and at least one candidate diverged. The stored
+	 * route ends at some target while a divergent candidate would start elsewhere (for example a
+	 * train standing at `zA`, holding a route to `doB2`, asking for one that diverges at switch `vA`).
+	 *
+	 * Maps to `RouteRequestResult.DivergesFromHeldRoute` (`:core`, read-only).
+	 *
+	 * **Not** [ALL_PATHS_BLOCKED]: no block was busy, so "retry in a later tick" is wrong advice,
+	 * and before Issue #1066 this outcome was misreported exactly that way. **Is** an LLM failure,
+	 * same framing as [ORIGIN_NOT_CONTIGUOUS] and [GEOMETRICALLY_IMPOSSIBLE]: the identical request
+	 * fails until the held route is extended from its target, completed or cancelled
+	 * (`cancel_route`), so the dispatcher has to change the request.
+	 *
+	 * @since Issue #1066
+	 */
+	DIVERGES_FROM_HELD_ROUTE
 }

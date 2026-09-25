@@ -1006,15 +1006,13 @@ class PathReservationRegistry(
 		// RESERVED tail behind a cleared aspect the train will never reach. Abort fail-safe.
 		// Issue #904: the caller now releases exactly what it acquired for this attempt, so the
 		// tail is no longer orphaned -- it never gets a chance to persist.
-		if (new.start != old.target) {
-			val reason =
-				"non-contiguous merge for train $trainId — new path starts at ${new.start} but " +
-					"the stored path ends at ${old.target}"
+		val nonContiguousReason = nonContiguousMergeReason(trainId, old, new)
+		if (nonContiguousReason != null) {
 			logger.warn {
-				"mergePathInfo: aborting $reason. Keeping existing valid PathInfo unchanged. " +
+				"mergePathInfo: aborting $nonContiguousReason. Keeping existing valid PathInfo unchanged. " +
 					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
 			}
-			return MergeOutcome.Aborted(old, reason)
+			return MergeOutcome.Aborted(old, nonContiguousReason)
 		}
 
 		// Step 0b: new.start must occur exactly once in its own path (see "Preconditions" above).
@@ -1167,6 +1165,40 @@ class PathReservationRegistry(
 	 * @since Issue #295/#296 Phase 3
 	 */
 	fun getPathInfo(trainId: String): PathInfo? = trainToPathInfo[trainId]
+
+	/**
+	 * Read-only probe of [mergePathInfo]'s Step 0a precondition (Issue #1066): would [candidate]
+	 * CONTINUE the route [trainId] currently holds?
+	 *
+	 * Lets `DefaultPathReservationService.reservePath` refuse a divergent candidate BEFORE it
+	 * reserves blocks, throws switches or clears signals, instead of discovering the same
+	 * condition at Step 2i and rolling everything back. Changes no state.
+	 *
+	 * @return `null` when [candidate] continues the stored path, or when the train has no stored
+	 *   PathInfo yet (a first registration is always accepted); otherwise an English reason naming
+	 *   the stored target and the candidate's start.
+	 * @since Issue #1066
+	 */
+	fun nonContinuingCandidateReason(
+		trainId: String,
+		candidate: PathInfo
+	): String? {
+		val old = trainToPathInfo[trainId] ?: return null
+		return nonContiguousMergeReason(trainId, old, candidate)
+	}
+
+	/** Step 0a's predicate and wording, shared by [mergePathInfo] and [nonContinuingCandidateReason]. */
+	private fun nonContiguousMergeReason(
+		trainId: String,
+		old: PathInfo,
+		new: PathInfo
+	): String? =
+		if (new.start != old.target) {
+			"non-contiguous merge for train $trainId — new path starts at ${new.start} but " +
+				"the stored path ends at ${old.target}"
+		} else {
+			null
+		}
 
 	/**
 	 * Restore a train's PathInfo to a previously snapshotted value, bypassing [registerPathInfo]'s

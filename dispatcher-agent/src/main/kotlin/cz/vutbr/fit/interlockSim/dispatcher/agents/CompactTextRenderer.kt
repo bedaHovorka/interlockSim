@@ -219,6 +219,11 @@ class CompactTextRenderer : ObservationRenderer {
 				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
 					"GEOMETRICALLY_IMPOSSIBLE — ${outcome.reason}"
 
+			// Issue #1066: the request does not continue the route the train already holds.
+			is AppliedOutcome.DivergesFromHeldRoute ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
+					"DIVERGES_FROM_HELD_ROUTE (held target ${outcome.heldTarget})"
+
 			// Issue #834 review finding #2: four-condition refusal. Not produced on the production
 			// request_route path; kept total by the same exhaustiveness property as the siblings.
 			is AppliedOutcome.ConditionFailed ->

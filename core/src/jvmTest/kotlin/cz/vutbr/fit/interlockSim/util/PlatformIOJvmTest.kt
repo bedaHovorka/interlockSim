@@ -6,16 +6,27 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty
 import java.nio.file.Files
+import java.util.Collections
 import kotlin.concurrent.thread
 import kotlin.test.assertFailsWith
 
 class PlatformIOJvmTest {
-	private val testFiles = mutableListOf<String>()
+	/**
+	 * Paths of temporary files created by the tests, deleted in [cleanUp]. Synchronized because
+	 * [tempPath] is called from worker threads in `concurrent writes to distinct temporary files
+	 * succeed`; an unsynchronized `ArrayList` let concurrent `add` calls corrupt the list, which
+	 * surfaced as a `NullPointerException` on a null entry in [cleanUp] (the null was a symptom
+	 * of the corruption, not a real value — review thread on PR #1082). Iteration requires an
+	 * explicit `synchronized(testFiles)` block per [Collections.synchronizedList].
+	 */
+	private val testFiles: MutableList<String> =
+		Collections.synchronizedList(mutableListOf<String>())
 
 	@AfterEach
 	fun cleanUp() {
-		testFiles.forEach { deleteFile(it) }
-		testFiles.clear()
+		val snapshot = synchronized(testFiles) { testFiles.toList() }
+		snapshot.forEach { deleteFile(it) }
+		synchronized(testFiles) { testFiles.clear() }
 	}
 
 	private fun tempPath(suffix: String): String {
