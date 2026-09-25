@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
@@ -35,6 +36,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
@@ -318,6 +320,58 @@ class PathReservationRegistryTest : KoinTestBase() {
 			// Assert
 			assertThat(registry.trainCount()).isEqualTo(0)
 			assertThat(registry.blockCount()).isEqualTo(0)
+		}
+	}
+
+	@Nested
+	inner class SwitchOwnership {
+		private fun switches(): List<DynamicRailSwitch> = simulationContext.cellsOfType<DynamicRailSwitch>()
+
+		@Test
+		fun `registerSwitches throws when a switch is already registered to a different train`() {
+			// Arrange - Issue #1076: a plain overwrite used to silently steal the entry.
+			val switch = switches().first()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act + Assert - the foreign registration is rejected...
+			assertFailure { registry.registerSwitches("train2", listOf(switch)) }
+				.isInstanceOf(IllegalStateException::class)
+
+			// ...and BOTH maps still agree on the original owner, with the lock intact.
+			assertThat(registry.getSwitchOwner(switch)).isEqualTo("train1")
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
+			assertThat(registry.getSwitches("train2")).isEmpty()
+			assertThat(switch.locked).isTrue()
+		}
+
+		@Test
+		fun `registerSwitches rejects a mixed list atomically without partial registration`() {
+			// Arrange - train1 owns only the SECOND switch of train2's list.
+			val (free, owned) = switches().take(2)
+			registry.registerSwitches("train1", listOf(owned))
+
+			// Act + Assert - the whole registration fails...
+			assertFailure { registry.registerSwitches("train2", listOf(free, owned)) }
+				.isInstanceOf(IllegalStateException::class)
+
+			// ...and the free switch was NOT registered or locked (pre-check before mutation).
+			assertThat(registry.getSwitchOwner(free)).isNull()
+			assertThat(free.locked).isFalse()
+			assertThat(registry.getSwitches("train2")).isEmpty()
+			assertThat(registry.getSwitchOwner(owned)).isEqualTo("train1")
+		}
+
+		@Test
+		fun `registerSwitches re-registration by the same train stays a no-op`() {
+			val switch = switches().first()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Re-registering the train's own switch (route extension) must not throw.
+			registry.registerSwitches("train1", listOf(switch))
+
+			assertThat(registry.getSwitchOwner(switch)).isEqualTo("train1")
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
+			assertThat(switch.locked).isTrue()
 		}
 	}
 

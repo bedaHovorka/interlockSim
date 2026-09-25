@@ -679,6 +679,15 @@ class DefaultPathReservationService(
 					// is irrelevant -- an orphan has no registered owner, so it can never appear
 					// in registry.getSwitches(trainId) in the first place.
 					releaseOrphanSwitchLocks(extractUniqueSwitches(pathInfo))
+					// Issue #1076: also reclaim STALE foreign ownership (registered to another
+					// train that holds no adjacent block -- the reclaimStaleSwitchLocks
+					// predicate) among this candidate's switches, so the same-position case
+					// that used to succeed by silently STEALING the registry entry now
+					// succeeds by a legitimate reclamation that keeps switchToTrain and
+					// trainToSwitches consistent. A foreign owner that survives this step
+					// protects a live route and refuses the candidate in
+					// configureSwitchesInPath below.
+					reclaimStaleForeignSwitchOwnership(trainId, extractUniqueSwitches(pathInfo))
 
 					// Step 2f: Configure and register switches (Issue #300, #291, #742).
 					// A candidate whose switches cannot be configured is physically impossible
@@ -2467,6 +2476,8 @@ class DefaultPathReservationService(
 		/**
 		 * Issue #1065: a genuinely traversed switch IS locked, in a different position, by
 		 * [holder] (`null` if the lock is an orphan -- see [PathReservationRegistry.getSwitchOwner]).
+		 * Issue #1076: also reported when the switch is REGISTERED to a different train even in
+		 * the SAME position -- traversing it would steal the ownership entry from its live owner.
 		 * Transient: resolves once [holder]'s route releases the switch.
 		 */
 		data class Locked(
@@ -2617,17 +2628,27 @@ class DefaultPathReservationService(
 				// the exact shape that silently corrupted a surviving route's switch position
 				// in Issue #1031. Reported as transient contention, never as a permanent
 				// geometric impossibility.
+				// Issue #1076: a switch REGISTERED to a DIFFERENT train is refused even when
+				// the candidate needs the SAME position it currently holds -- traversing it
+				// would let registerSwitches steal the ownership entry from its live owner.
+				// Stale foreign ownership (owner holds no adjacent block) has already been
+				// reclaimed by reservePath Step 2e.5, so a foreign owner seen here protects a
+				// live route and the candidate must wait -- transient contention as well.
 				val requiredConf = element.pathConf(from, to)
-				if (element.locked && requiredConf != null && requiredConf != element.conf) {
-					val holder = registry.getSwitchOwner(element)
+				val holder = registry.getSwitchOwner(element)
+				val repositionWhileLocked = element.locked && requiredConf != null && requiredConf != element.conf
+				val ownedByOtherTrain = holder != null && holder != trainId
+				if (repositionWhileLocked || ownedByOtherTrain) {
 					logger.warn {
-						"configureSwitchesInPath: Switch ${element.staticRef.getName()} is locked " +
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} is held " +
 							"in ${element.conf} by '$holder' but train $trainId's candidate needs " +
-							"$requiredConf -- transient contention, continuing to check the rest of " +
-							"the candidate for a permanent impossibility (safety SI-5, Issue #1065)"
+							"${requiredConf ?: element.conf} -- transient contention, continuing to " +
+							"check the rest of the candidate for a permanent impossibility " +
+							"(safety SI-5, Issues #1065/#1076)"
 					}
 					if (pendingLocked == null) {
-						pendingLocked = SwitchConfigOutcome.Locked(element, holder, element.conf, requiredConf)
+						pendingLocked =
+							SwitchConfigOutcome.Locked(element, holder, element.conf, requiredConf ?: element.conf)
 					}
 					return@forEachIndexed
 				}
@@ -3480,9 +3501,22 @@ class DefaultPathReservationService(
 			rollbackUnconfigurableCandidate(trainId, forwardBlocks, switches, priorSwitches)
 			return outcome
 		}
-		registry.registerSwitches(trainId, switches)
+		// Issue #1076: extractUniqueSwitches includes switches the path does NOT genuinely
+		// traverse (configureSwitchesInPath skips them leniently when their segments are
+		// undeterminable). A non-traversed switch registered to ANOTHER train must not be
+		// registered here -- registerSwitches now throws on a foreign owner instead of
+		// silently stealing the ownership entry -- so keep only switches that are free or
+		// already this train's. Every genuinely TRAVERSED switch is guaranteed to pass this
+		// filter: a live foreign owner was refused as Locked above and stale foreign
+		// ownership was reclaimed in reservePath Step 2e.5.
+		val registrable =
+			switches.filter { switch ->
+				val owner = registry.getSwitchOwner(switch)
+				owner == null || owner == trainId
+			}
+		registry.registerSwitches(trainId, registrable)
 		logger.debug {
-			"reservePath: Registered ${switches.size} switches for $trainId"
+			"reservePath: Registered ${registrable.size} switches for $trainId"
 		}
 		return SwitchConfigOutcome.Configured
 	}
@@ -3753,6 +3787,43 @@ class DefaultPathReservationService(
 				logger.warn {
 					"releaseOrphanSwitchLocks: unlocked orphan switch ${switch.staticRef.getName()} " +
 						"(locked, but owned by no train -- Issue #1065)"
+				}
+			}
+		}
+	}
+
+	/**
+	 * Issue #1076: reclaim STALE foreign ownership among [switches] before a candidate for
+	 * [trainId] touches them.
+	 *
+	 * A switch registered to a DIFFERENT train whose owner holds no block bounded by it (the
+	 * [reclaimStaleSwitchLocks] staleness predicate) protects no live route -- it survives only
+	 * because a scoped rollback path released the owner's adjacent blocks via
+	 * [PathReservationRegistry.unregisterBlock] directly, bypassing [dropFreedBlock]'s
+	 * reclamation. Before this fix such a switch flowed into
+	 * [PathReservationRegistry.registerSwitches], which silently overwrote `switchToTrain`
+	 * while the old owner's `trainToSwitches` list kept the switch -- the two maps then
+	 * disagreed and the old owner's release path could unlock a switch on the new owner's
+	 * live route. Reclaiming through [PathReservationRegistry.unregisterSwitch] keeps both
+	 * maps consistent; a foreign owner that survives this step is live and refuses the
+	 * candidate in [configureSwitchesInPath] instead.
+	 *
+	 * @since Issue #1076
+	 */
+	private fun reclaimStaleForeignSwitchOwnership(
+		trainId: String,
+		switches: List<DynamicRailSwitch>
+	) {
+		switches.forEach { switch ->
+			val owner = registry.getSwitchOwner(switch) ?: return@forEach
+			if (owner == trainId) return@forEach
+			val stillProtected = registry.getBlocks(owner).any { switch in it.ends() }
+			if (!stillProtected) {
+				registry.unregisterSwitch(owner, switch)
+				logger.info {
+					"reclaimStaleForeignSwitchOwnership: released stale ownership of switch " +
+						"${switch.staticRef.getName()} -- owner '$owner' holds no block bounded " +
+						"by it, so a candidate for '$trainId' may take it over cleanly (Issue #1076)"
 				}
 			}
 		}

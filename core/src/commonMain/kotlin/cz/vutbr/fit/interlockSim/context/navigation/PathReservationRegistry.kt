@@ -567,7 +567,8 @@ class PathReservationRegistry(
 	 *
 	 * ## Preconditions
 	 *
-	 * - No switch in the list should be already owned by a different train
+	 * - No switch in the list may be already owned by a different train — violating this
+	 *   throws (see below) instead of silently overwriting `switchToTrain` (Issue #1076)
 	 * - Caller is responsible for validating switches are not locked by another train
 	 *
 	 * ## State Changes
@@ -577,14 +578,35 @@ class PathReservationRegistry(
 	 * - Sets switchToTrain[switch] = trainId
 	 * - Locks the switch
 	 *
+	 * ## Foreign ownership is rejected atomically (Issue #1076)
+	 *
+	 * A plain overwrite of `switchToTrain[switch]` used to silently steal the entry from
+	 * its current owner while that owner's `trainToSwitches` list still contained the
+	 * switch — the two maps then disagreed, and the OLD owner's release path could later
+	 * unlock a switch the NEW owner was actively using. All switches are therefore
+	 * pre-checked BEFORE any mutation: if ANY switch is registered to a different train,
+	 * an [IllegalStateException] is thrown and the registry is left completely untouched.
+	 * Callers must release stale foreign ownership first (e.g. via [unregisterSwitch]) or
+	 * refuse the route as transient contention.
+	 *
 	 * @param trainId The train identifier
 	 * @param switches List of switches to register as reserved
+	 * @throws IllegalStateException if any switch is already registered to a different
+	 *   train; no registry state is mutated in that case
 	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
 	 */
 	fun registerSwitches(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
 	) {
+		switches.forEach { switch ->
+			val owner = switchToTrain[switch]
+			check(owner == null || owner == trainId) {
+				"registerSwitches: Switch ${switch.staticRef.getName()} is already registered to " +
+					"'$owner' and cannot be registered to '$trainId' (Issue #1076); " +
+					"nothing was registered"
+			}
+		}
 		val switchList = trainToSwitches.getOrPut(trainId) { mutableListOf() }
 		switches.forEach { switch ->
 			if (switch !in switchList) {

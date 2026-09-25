@@ -617,9 +617,13 @@ class DefaultInterlockingFacade(
 		// already reserved when this fails. The check is defence-in-depth: in a single-threaded
 		// kDisco context a switch that passed condition 2 will not change between here and
 		// [registerSwitches], but under a future concurrent model the re-check guards the TOCTOU
-		// window between the position check and the lock.
+		// window between the position check and the lock. Registry ownership by another train is
+		// denied regardless of the physical lock state (Issue #1076): [registerSwitches] now
+		// throws on a foreign owner, so an owned-but-unlocked switch must be refused here as
+		// ordinary retryable contention instead of escaping as an exception.
 		for (switch in switches) {
-			if (switch.locked && registry.getSwitchOwner(switch) != trainId) {
+			val owner = registry.getSwitchOwner(switch)
+			if ((switch.locked || owner != null) && owner != trainId) {
 				return ConditionDenial("Switch ${switch.name} is locked", retryable = true)
 			}
 		}
