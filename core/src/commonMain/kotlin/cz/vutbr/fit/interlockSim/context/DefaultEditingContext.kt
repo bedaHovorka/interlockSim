@@ -314,7 +314,7 @@ open class DefaultEditingContext(
 				buildPath(keys as List<Point>, key1, key2, trackBlock)
 			}
 
-		if (builtPath != null && builtPath.isNotEmpty()) {
+		if (!builtPath.isNullOrEmpty()) {
 			val mapToAdd = builtPath
 			getGrid().putMap(mapToAdd)
 			linesKeys[trackBlock] = mapToAdd.keys.toSet()
