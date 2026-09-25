@@ -18,6 +18,19 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
  * Projects [ActionValidator] verdicts over the candidate set from
  * [ActionCandidateEnumerator] into a flat [List]<[Affordance]> (SP2c.4, Issue #827).
  *
+ * **Non-production reference implementation (Issue #990).** This annotator has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which does not build a
+ * `RenderContext` or call [annotate] — its DECIDE step calls
+ * [DispatcherPlanner.plan][cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner.plan]
+ * instead (see "Wiring status" below). It is kept because
+ * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] — driven by the P10
+ * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
+ * `HeadlessPacingFeasibilityTest` timing harnesses — needs this annotator to build affordances
+ * for `RenderContext`, and its own unit tests (`AffordanceAnnotatorTest`) verify the
+ * zero-predicate-logic guarantee below.
+ *
  * ## Zero predicate logic
  *
  * This class contains **no predicate logic of its own**. Every [Affordance.applicable] flag
@@ -37,14 +50,14 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
  *
  * ## Wiring status (SP2c.4 scope)
  *
- * This annotator is scaffolded but **not yet wired into the production agent loop**.
- * `RenderContext` — the only consumer of the returned `List<Affordance>` — is currently
- * constructed only in test fixtures (`RendererFixtures`); the production
+ * This annotator is scaffolded but **not wired into the production agent loop** (see the
+ * non-production notice above). `RenderContext` — the only consumer of the returned
+ * `List<Affordance>` — is constructed outside tests only by the non-production `DispatchTickLoop`
+ * reference loop (`runTick`), plus test fixtures (`RendererFixtures`); the production
  * `AgentLoopDriver` DECIDE step calls `planner.plan(...)` and does not build a
- * `RenderContext` or call `annotate`. Wiring lands in the SP step that builds the
- * production LLM-planner perception/render path. Consequently a `ConflictHintLatch`
- * registered in `ExampleRegistry.wireDispatcherAgent` receives conflict events but has
- * no production consumer of `getHint` until that wiring lands.
+ * `RenderContext` or call `annotate`. `ExampleRegistry.wireDispatcherAgent` also does not
+ * register a [ConflictHintLatch] as a conflict listener, so in production nothing populates or
+ * reads a latched conflict hint either (Goal 10 B2 amended by Issue #993).
  *
  * ## Output contract
  *

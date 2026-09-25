@@ -49,7 +49,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Wiring
  *
- * Pass an instance to [DispatchTickLoop] at construction time:
+ * Pass an instance to [DispatchTickLoop] at construction time ([DispatchTickLoop] is a
+ * non-production reference implementation — see its own KDoc, Issue #990):
  * ```kotlin
  * val store = DispatcherPreferenceStore()
  * val loop  = DispatchTickLoop(..., preferenceStore = store)
@@ -57,14 +58,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * store.logFinalSummary()
  * ```
  *
- * **Production wiring status:** the store is currently exercised only via tests —
- * [DispatchTickLoop] is constructed only in test code (`PausedClockSpikeHarness`,
- * `RuleBasedDispatcherDeterminismRunner`, `HeadlessPacingFeasibilityTest`,
- * `DispatchTickLoopTest`); production `ExampleRegistry.wireDispatcherAgent` still uses the
- * older `agentDriverAction` loop and does not construct `DispatchTickLoop`. Production
- * wiring of this store therefore awaits `DispatchTickLoop` production promotion. The store
- * API and log format are stable and tested so the wiring is a one-line addition once the loop
- * is promoted.
+ * **Production wiring status:** this store has no production wiring at all. It is exercised
+ * only by its own tests (`DispatcherPreferenceStoreTest`, `ActionAttributionTest`,
+ * `Sp2c20ActionAttributionTest`) and by [DispatchTickLoop], which is itself a non-production
+ * reference implementation (Issue #990) with no planned promotion — see that class's KDoc.
+ * Production LLM runs go through `AgentLoopDriver` (wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`), which neither constructs nor
+ * reads this store.
  */
 class DispatcherPreferenceStore {
 	companion object {

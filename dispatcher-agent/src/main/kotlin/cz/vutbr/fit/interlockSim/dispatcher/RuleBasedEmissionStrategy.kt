@@ -25,6 +25,16 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * [EmissionStrategy] adapter that delegates to the synchronous [Dispatcher] API.
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is [AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which reaches
+ * [RuleBasedDispatcher][cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] through
+ * [cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter] instead of this class. It
+ * is kept because it is what makes [DispatchTickLoop] exercisable with a real dispatcher — the
+ * P10 determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the
+ * `HeadlessPacingFeasibilityTest` / `StaleTailReclaimHarness` test harnesses construct it
+ * directly, plus its own unit tests (`RuleBasedEmissionStrategyTest`).
+ *
  * ## Purpose
  *
  * [RuleBasedEmissionStrategy] routes the [RuleBasedDispatcher][cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]

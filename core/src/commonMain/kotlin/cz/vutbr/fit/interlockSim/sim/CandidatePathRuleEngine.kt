@@ -17,6 +17,21 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Deterministic rule engine (SP2b.2, Issue #557) that ranks candidate routes for the
  * [RuleBasedDispatcher].
  *
+ * **Dormant pipeline stage (Issue #978).** This engine has no production caller today; the
+ * owner ruled it dormant, not dead (2026-09-25). It remains the intended design for
+ * rule-based multi-route selection in [RuleBasedDispatcher] — SP2b.5 (Issue #560) shipped
+ * only the rationale API ([selectWithRationale], [DispatchDecision.rationale]), and wiring
+ * this engine into [RuleBasedDispatcher]'s per-tick multi-route selection never landed.
+ * Downstream, [PathCommandTranslator] is likewise unwired: none of
+ * `DispatchDecision.HoldTrain`, `SetSignalAspect`, or `SetSwitchPosition` has a live producer
+ * in production (`docs/GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md`), and the production
+ * ESA-11 switch-before-signal ordering is enforced instead by
+ * [cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService]'s
+ * `configureAndRegisterSwitches`, not here. Its only observers are its own unit tests
+ * (`CandidatePathRuleEngineTest`, `DispatchDecisionSp2b5Test`); no golden/heavy/parity gate
+ * executes it, so any change here is validated by those tests alone. Do not delete in a
+ * dead-code sweep without re-opening Issue #978.
+ *
  * ## Pipeline position
  *
  * The dispatcher pipeline described by Issue #557 is:

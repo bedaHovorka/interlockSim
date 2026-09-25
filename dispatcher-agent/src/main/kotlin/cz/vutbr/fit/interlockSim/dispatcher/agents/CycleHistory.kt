@@ -33,8 +33,11 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
  * filling half its fields with placeholders, which would make the history *look* richer than the
  * data behind it. This type records exactly what the live path actually knows.
  *
- * When [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] does reach production, this class
- * should be replaced by [TickRingBuffer] rather than kept alongside it.
+ * [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] is a non-production reference
+ * implementation with no promotion planned (Issue #990, owner decision option c), so this class
+ * is not a placeholder awaiting a [TickRingBuffer] replacement — it is the live path's own
+ * history type for as long as [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] remains the
+ * production loop.
  *
  * ## Why a history at all (C5)
  *

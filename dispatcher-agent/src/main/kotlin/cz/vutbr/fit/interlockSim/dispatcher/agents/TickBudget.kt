@@ -15,6 +15,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Deadline wrapper for [EmissionStrategy.emit] inside [DispatchTickLoop].
  *
+ * **Non-production reference implementation (Issue #990).** No implementation of this interface
+ * has a production construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which does not use
+ * [DispatchTickLoop] or this seam at all. It is kept because
+ * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] — driven by the P10
+ * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
+ * `HeadlessPacingFeasibilityTest` timing harnesses — needs a pluggable deadline wrapper, and the
+ * F1/F2 timing-regime ruling documented below (`docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`)
+ * must stay backed by runnable, tested code.
+ *
  * The loop calls `budget.withBudget { emission.emit(prompt, obs) }`. If the emission strategy
  * exceeds the configured deadline, [withBudget] returns `null` and the loop substitutes a
  * [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp] with author
@@ -22,26 +33,32 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * ## Timing regimes
  *
- * Two configurable modes address the reproducibility (P8) vs honesty (F2 real-time ratio) split:
+ * Two configurable modes address the reproducibility (P8) vs honesty (F2 real-time ratio) split.
+ * These regimes record the SP2c.26 F1/F2 ruling (#849) as originally written and apply only to
+ * the non-production [DispatchTickLoop] reference loop; after the #990/#995 gate decisions they
+ * are not production Goal 10 acceptance or reporting modes — the paused clock has no production
+ * construction site, and the LLM arm's production wall-clock report is the latency percentiles
+ * recorded in `DispatcherRunSnapshot` (see `LONG_TERM_GOALS.md` A6, amended #995):
  *
  * - **F1 paused-clock** ([PausedClockTickBudget]) — the simulation clock is frozen for the
  *   entire emission window via [SimulationController.requestPause]/[SimulationController.requestResume].
- *   Sim time is provably unchanged across a slow emission; this is the **acceptance mode** for P8.
+ *   Sim time is provably unchanged across a slow emission; this was the ruling's **acceptance
+ *   mode** for P8.
  *   The feasibility and binding constraints are recorded in
  *   `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`.
  *
  * - **F2 wall-clock deadline** ([DeadlineTickBudget]) — enforces a hard wall-clock deadline via
  *   [kotlinx.coroutines.withTimeoutOrNull]. A miss yields `null` → [ActionAuthor.TIMEOUT_NOOP].
  *   The real-time ratio (sim seconds / emission wall-clock seconds) is measured and **reported**
- *   (logged) by [DispatchTickLoop] but **not used to gate** the LLM arm's run. This is the
- *   **reporting mode** for the LLM arm's honest real-time performance.
+ *   (logged) by [DispatchTickLoop] but **not used to gate** the LLM arm's run. This was the
+ *   ruling's **reporting mode** for the LLM arm's honest real-time performance.
  *
  * ## Implementations
  *
  * | Implementation | Mode | Description |
  * |---|---|---|
- * | [PausedClockTickBudget] | F1 | Pauses sim clock; resumes in `finally`. P8 acceptance mode. |
- * | [DeadlineTickBudget] | F2 | Hard wall-clock deadline; null on timeout. LLM reporting mode. |
+ * | [PausedClockTickBudget] | F1 | Pauses sim clock; resumes in `finally`. P8 acceptance mode (ruling). |
+ * | [DeadlineTickBudget] | F2 | Hard wall-clock deadline; null on timeout. LLM reporting mode (ruling). |
  * | [NoTimeoutBudget] | N/A | No deadline; passes block through. Rule-based strategies. |
  */
 interface TickBudget {
@@ -61,12 +78,21 @@ interface TickBudget {
  * while the LLM (or any other strategy) produces a decision. The simulation is resumed in a
  * `finally` block so a throwing or timed-out emission cannot park the sim indefinitely.
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. It is kept because it is the subject
+ * of the SP2c.26 F1 paused-clock ruling (#849,
+ * `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`), which must stay re-runnable — exercised by
+ * `PromptDeterminismTest`, `TimingRegimesOllamaTest` and its own unit tests (`TickBudgetTest`).
+ *
  * ## P8 reproducibility guarantee
  *
  * **Prompt determinism** is delivered: with the sim clock frozen, the [EmissionStrategy] receives
  * the same immutable `obs0` snapshot that was captured before the pause, and no further sim-thread
  * events can alter observable state. A recorded snapshot sequence therefore always produces a
- * byte-identical prompt sequence. This is the acceptance-mode half of P8 (Issue #532 §A4).
+ * byte-identical prompt sequence. This is the acceptance-mode half of P8 as originally ruled
+ * (Issue #532 §A4).
  *
  * **Decode determinism** is NOT delivered on the production tool-calling path.
  * `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` established that Koog 1.1.1's `OllamaClient`
@@ -143,6 +169,14 @@ class PausedClockTickBudget(
 /**
  * **F2 wall-clock deadline** [TickBudget].
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. It is kept as the F2 wall-clock
+ * reporting-mode reference from the same SP2c.26 F1/F2 timing-regime ruling (#849,
+ * `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`), exercised by `TimingRegimesOllamaTest`,
+ * `DispatchTickLoopTest` and its own unit tests (`TickBudgetTest`).
+ *
  * Enforces a hard wall-clock deadline via [kotlinx.coroutines.withTimeoutOrNull]. A miss yields
  * `null`, which [DispatchTickLoop] maps to a [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp]
  * attributed to [ActionAuthor.TIMEOUT_NOOP].
@@ -150,8 +184,8 @@ class PausedClockTickBudget(
  * ## Real-time ratio reporting
  *
  * [DispatchTickLoop] measures the wall-clock time of each [EmissionStrategy.emit] call and logs
- * the real-time ratio (`simDelta / emissionWallClockSeconds`). For the LLM arm this ratio is
- * **reported only — it does not gate the run**. For the rule-based arm the ratio is intrinsically
+ * the real-time ratio (`simDelta / emissionWallClockSeconds`). For the reference loop's LLM arm
+ * this ratio is **reported only — it does not gate the run**. For the rule-based arm the ratio is intrinsically
  * ≥ 1× (synchronous, sub-millisecond), so the existing [cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible]
  * guard and [cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER]
  * remain the binding enforcement.
@@ -167,6 +201,15 @@ class DeadlineTickBudget(
 
 /**
  * [TickBudget] implementation that applies no deadline — the block always runs to completion.
+ *
+ * **Non-production reference implementation (Issue #990).** This object has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. It is kept because the P10
+ * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
+ * `HeadlessPacingFeasibilityTest` timing harnesses all construct
+ * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] with this as the
+ * budget for their synchronous rule-based emission strategy.
  *
  * Use this for synchronous strategies (e.g. [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy])
  * where a deadline makes no sense: rule-based dispatch returns immediately and

@@ -18,6 +18,25 @@ import cz.vutbr.fit.interlockSim.ports.TrainActuatorPort
  * ([ReactiveTrainDecider]) into actual motor commands on a [TrainActuatorPort].  It is
  * the **"act"** half of the reactive train agent's sense → decide → act loop.
  *
+ * **Dormant pipeline stage (Issue #978).** This object has no production caller today; the
+ * owner ruled it dormant, not dead (2026-09-25). Production applies train decisions without
+ * it: [applyTrainDecisions] in `SynchronousDispatcherWiring.kt` calls [TrainDecisionPolicy.decide]
+ * (whose default [AlgorithmicTrainDecisionPolicy] implementation delegates to
+ * [ReactiveTrainDecider.decide] except for dispatcher hold directives) and forwards the result
+ * via an inline `DefaultTrainActuatorPort(train).setTargetSpeed(decision.targetSpeedMps)` call rather than
+ * through [applyDecision]; nothing calls [holdAtStation] in production either. It remains the
+ * intended single point through which a [TrainAccelerationDecision] would be applied once
+ * wired — mirroring the sibling dormant stages of the same Issue #978 decision,
+ * [CandidatePathRuleEngine] and [PathCommandTranslator], where none of
+ * `DispatchDecision.HoldTrain`, `SetSignalAspect`, or `SetSwitchPosition` has a live producer
+ * either (`docs/GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md`); that stage's ESA-11
+ * switch-before-signal ordering is enforced instead by
+ * [cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService]'s
+ * `configureAndRegisterSwitches`. Its only observer is its own unit test suite
+ * (`ReactiveTrainActuatorTest`); no golden/heavy/parity gate executes it, so any change here
+ * is validated by that test alone. Do not delete in a dead-code sweep without re-opening
+ * Issue #978.
+ *
  * ## Responsibilities
  *
  * 1. **Acceleration / braking** — [applyDecision] calls
@@ -37,8 +56,8 @@ import cz.vutbr.fit.interlockSim.ports.TrainActuatorPort
  *
  * - Does **not** choose routes, reserve paths, or operate switches (dispatcher scope).
  * - Does **not** maintain state across cycles — it is a pure, stateless translator.
- * - Does **not** apply the dwell decision autonomously; the caller (e.g. SP2a.4
- *   [TrainDecisionPolicy]) decides *when* to call [holdAtStation].
+ * - Does **not** apply the dwell decision autonomously; the caller decides *when* to call
+ *   [holdAtStation] — no production caller does so today (see the dormant-stage note above).
  *
  * ## Usage
  *

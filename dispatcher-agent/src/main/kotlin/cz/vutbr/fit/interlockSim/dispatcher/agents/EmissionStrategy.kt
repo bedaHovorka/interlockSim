@@ -14,6 +14,22 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 /**
  * Pluggable "decide" seam for [DispatchTickLoop] (SP2c.5, Issue #828).
  *
+ * **Non-production reference implementation (Issue #990).** No implementation of this interface
+ * has a production construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which does not use this interface at
+ * all — its DECIDE step calls
+ * [DispatcherPlanner.plan][cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner.plan]
+ * instead. This seam is kept because [DispatchTickLoop] — driven by the P10 determinism gate
+ * (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
+ * `HeadlessPacingFeasibilityTest` timing harnesses — needs a pluggable "decide" step, and one of
+ * its two reference implementations,
+ * [RuleBasedEmissionStrategy][cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy],
+ * is driven through [DispatchTickLoop] by that determinism runner. The other,
+ * [ConstrainedJsonEmissionStrategy][cz.vutbr.fit.interlockSim.dispatcher.ConstrainedJsonEmissionStrategy],
+ * is retired unmeasured (Issue #991) and is exercised only by its own unit tests, never through
+ * [DispatchTickLoop].
+ *
  * An [EmissionStrategy] converts a rendered prompt string and the current
  * [DispatcherObservation] into a list of [AttributedAction]s to execute this tick.
  * Returning `null` is equivalent to "no decision" — the caller ([DispatchTickLoop]) will
@@ -29,7 +45,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
  * | Implementation | Description |
  * |---|---|
  * | [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy] | Ignores `prompt`; delegates to [cz.vutbr.fit.interlockSim.sim.Dispatcher]. Author is [ActionAuthor.RULE_BASED]. |
- * | LLM strategy (future SP2c steps) | Sends `prompt` to the model; maps JSON tool calls to [AttributedAction]s. Author is [ActionAuthor.LLM] or [ActionAuthor.RULE_FALLBACK]. |
+ * | [cz.vutbr.fit.interlockSim.dispatcher.ConstrainedJsonEmissionStrategy] | Sends `prompt` to the model as constrained JSON; maps the response to [AttributedAction]s. Author is [ActionAuthor.LLM] or [ActionAuthor.RULE_FALLBACK]. Retired unmeasured (Issue #991); reference only. |
  *
  * ## Return contract
  *
@@ -50,7 +66,7 @@ fun interface EmissionStrategy {
 	 * The author the loop should attribute an **idle-substituted** [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp]
 	 * to when this strategy returns an empty list (ran and decided there is nothing to do).
 	 *
-	 * Defaults to [ActionAuthor.RULE_BASED]; a future LLM strategy overrides it with
+	 * Defaults to [ActionAuthor.RULE_BASED]; an LLM-backed strategy overrides it with
 	 * [ActionAuthor.LLM] so its explicit `no_op`/idle ticks record as LLM-originated, not rule-based.
 	 * This is **not** used for the `null` (deadline/timeout) substitution, which is always
 	 * [ActionAuthor.TIMEOUT_NOOP].

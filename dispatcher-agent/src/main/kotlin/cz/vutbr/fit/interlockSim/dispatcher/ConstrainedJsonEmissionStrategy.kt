@@ -27,11 +27,20 @@ import java.util.concurrent.atomic.AtomicLong
  * [EmissionStrategy] implementation that uses Ollama's constrained-JSON output mode (`format`
  * parameter) rather than native tool-calling (SP2c.13, Issue #836).
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is [AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. The `LLM_CONSTRAINED_JSON` A/B arm
+ * described below was retired unmeasured — no sweep campaign ever exercised it end to end
+ * (Issue #991). It is kept only as a reference for the constrained-JSON schema approach and is
+ * exercised solely by its own unit tests (`ConstrainedJsonEmissionStrategyTest`,
+ * `ConstrainedJsonMutualExclusivityTest`).
+ *
  * ## A/B arm purpose
  *
- * This strategy forms the **B arm** of the SP2c.13 head-to-head experiment. The A arm is
- * [ToolCallingEmissionStrategy] / [KoogAgentPlanAdapter] (which uses Koog's `AIAgent` with
- * native tool-calling). B sends the **same four-action semantic interface** as a constrained-JSON
+ * This strategy forms the **B arm** of the SP2c.13 head-to-head experiment. The A arm would be a
+ * tool-calling `EmissionStrategy`, which does not exist today (see Issue #990 option a); in
+ * production, native tool-calling instead runs through [KoogAgentPlanAdapter] and Koog's
+ * `AIAgent`. B sends the **same four-action semantic interface** as a constrained-JSON
  * schema over Ollama's `format` parameter instead of `tools`, so the model must emit a JSON
  * object matching [ACTION_BATCH_SCHEMA] rather than selecting a function from a tool registry.
  *

@@ -19,6 +19,17 @@ import java.util.concurrent.ConcurrentHashMap
  * Latches [ConflictDetectedEvent] hints per blocked train (SP2c.4, Issue #827 — Goal 9
  * C7 ruling, option (a)).
  *
+ * **Non-production reference implementation (Issue #990).** This latch has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which does not register [onConflict]
+ * as a conflict listener and does not construct this latch at all — see "Wiring status" below.
+ * [getHint] is read only by [AffordanceAnnotator], which itself has no production construction
+ * site (see that class's KDoc), so in production nothing populates or reads this latch. It is
+ * kept because [AffordanceAnnotator]'s own unit tests (`AffordanceAnnotatorTest`) and this
+ * class's own unit tests (`ConflictHintLatchTest`) exercise the Goal 9 C7 ruling option (a)
+ * hint-augmentation behaviour (Goal 10 B2 amended by Issue #993).
+ *
  * ## Motivation
  *
  * [ConflictDetectedEvent] is deduplicated to **once per `(trainId, block)` contention**:
@@ -47,11 +58,10 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * ## Wiring status (SP2c.4 scope)
  *
- * `ExampleRegistry.wireDispatcherAgent` registers `onConflict` as a production conflict
- * listener, so the latch is populated in live runs. However `getHint` has **no production
- * caller** until `AffordanceAnnotator` is wired into the agent loop (see that class's
- * "Wiring status" KDoc). Until then the latch receives events that nothing reads —
- * dormant by design, bounded by the per-context latch lifetime.
+ * `ExampleRegistry.wireDispatcherAgent` does not register [onConflict] as a conflict listener,
+ * so this latch is never populated in production, and `getHint` has **no production caller**
+ * either, since `AffordanceAnnotator` is itself not wired into the agent loop (see that class's
+ * "Wiring status" KDoc). The latch is unused in production — see the non-production notice above.
  *
  * @since Issue #827 (SP2c.4 — Goal 10, Goal 9 C7 ruling option (a))
  */

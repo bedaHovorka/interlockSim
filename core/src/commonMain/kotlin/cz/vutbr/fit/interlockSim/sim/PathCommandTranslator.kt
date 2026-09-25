@@ -28,6 +28,23 @@ private val logger = KotlinLogging.logger {}
  * aspect change — that must be applied through the interlocking before the path is
  * formally reserved.
  *
+ * **Dormant pipeline stage (Issue #978).** This translator has no production caller today;
+ * the owner ruled it dormant, not dead (2026-09-25). It remains the intended
+ * command-generation step between [CandidatePathRuleEngine] and [RuleBasedDispatcher]'s
+ * route selection — SP2b.5 (Issue #560) shipped only [CandidatePathRuleEngine]'s rationale
+ * API ([CandidatePathRuleEngine.selectWithRationale], [DispatchDecision.rationale]), and
+ * wiring this translator into [RuleBasedDispatcher] never landed. `DispatchDecision.HoldTrain`,
+ * `SetSignalAspect`, and `SetSwitchPosition` have no live producer in production
+ * (`docs/GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md`) — this translator is the sole
+ * source-level constructor of the latter two ([DispatchDecision.SetSwitchPosition],
+ * [DispatchDecision.SetSignalAspect]), but nothing calls [translate] today. The production
+ * ESA-11 switch-before-signal ordering is enforced instead by
+ * [cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService]'s
+ * `configureAndRegisterSwitches`, not here. Its only observer is its own unit test
+ * (`PathCommandTranslatorTest`); no golden/heavy/parity gate executes it, so any change here
+ * is validated by that test alone. Do not delete in a dead-code sweep without re-opening
+ * Issue #978.
+ *
  * ## SP2b.3 (Issue #558)
  *
  * SP2b.3 is the "command generation" step in the SP2b dispatcher pipeline:
