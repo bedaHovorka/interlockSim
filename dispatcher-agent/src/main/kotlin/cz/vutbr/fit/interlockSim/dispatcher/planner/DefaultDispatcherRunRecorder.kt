@@ -70,7 +70,8 @@ import java.util.concurrent.atomic.AtomicReference
 class DefaultDispatcherRunRecorder(
 	override val runId: String,
 	private val arm: DispatcherArm,
-	private val params: RunParameters
+	private val params: RunParameters,
+	private val circuitBreaker: LlmCircuitBreaker? = null
 ) : DispatcherRunRecorder {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -307,7 +308,10 @@ class DefaultDispatcherRunRecorder(
 			c7Clean = c7Clean,
 			completedNaturally = endCause == RunEndCause.NATURAL_COMPLETION,
 			endCause = endCause,
-			railwayOutcome = railwayOutcome.get()
+			railwayOutcome = railwayOutcome.get(),
+			circuitBreakerState = circuitBreaker?.state,
+			circuitBreakerTotalSkips = circuitBreaker?.totalSkips,
+			circuitBreakerOpenCount = circuitBreaker?.openCount
 		)
 	}
 
