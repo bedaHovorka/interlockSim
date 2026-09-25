@@ -191,13 +191,9 @@ class InOutWorker(
 			}
 			env.report("Path reserved for $firstLink", inOut, ReportType.NODE_EVENTS)
 
-			// cekej na odchod vlaku z fronty
+			// wait for the train to leave the queue
 			logger.debug { "InOutWorker ${inOut.name} waiting for train $firstLink to leave queue" }
-			waitUntil(
-				object : Condition {
-					override fun test(): Boolean = firstLink != queqe.first()
-				}
-			)
+			waitUntil(Condition { firstLink != queqe.first() })
 			logger.debug { "InOutWorker ${inOut.name} train left queue" }
 		}
 		myIdle = true
