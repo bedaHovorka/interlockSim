@@ -20,9 +20,10 @@ import cz.vutbr.fit.interlockSim.ports.TrainActuatorPort
  *
  * **Dormant pipeline stage (Issue #978).** This object has no production caller today; the
  * owner ruled it dormant, not dead (2026-09-25). Production applies train decisions without
- * it: [SynchronousDispatcherWiring]'s `applyTrainDecisions` calls [ReactiveTrainDecider.decide]
- * directly and forwards the result via an inline
- * `DefaultTrainActuatorPort(train).setTargetSpeed(decision.targetSpeedMps)` call rather than
+ * it: [SynchronousDispatcherWiring]'s `applyTrainDecisions` calls [TrainDecisionPolicy.decide]
+ * (whose default [AlgorithmicTrainDecisionPolicy] implementation delegates to
+ * [ReactiveTrainDecider.decide] except for dispatcher hold directives) and forwards the result
+ * via an inline `DefaultTrainActuatorPort(train).setTargetSpeed(decision.targetSpeedMps)` call rather than
  * through [applyDecision]; nothing calls [holdAtStation] in production either. It remains the
  * intended single point through which a [TrainAccelerationDecision] would be applied once
  * wired — mirroring the sibling dormant stages of the same Issue #978 decision,

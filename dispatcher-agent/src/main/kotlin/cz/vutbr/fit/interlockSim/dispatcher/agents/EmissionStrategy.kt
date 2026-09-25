@@ -22,11 +22,13 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
  * [DispatcherPlanner.plan][cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner.plan]
  * instead. This seam is kept because [DispatchTickLoop] — driven by the P10 determinism gate
  * (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
- * `HeadlessPacingFeasibilityTest` timing harnesses — needs a pluggable "decide" step, and its two
- * reference implementations
- * ([RuleBasedEmissionStrategy][cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy],
- * [ConstrainedJsonEmissionStrategy][cz.vutbr.fit.interlockSim.dispatcher.ConstrainedJsonEmissionStrategy])
- * exercise it end to end.
+ * `HeadlessPacingFeasibilityTest` timing harnesses — needs a pluggable "decide" step, and one of
+ * its two reference implementations,
+ * [RuleBasedEmissionStrategy][cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy],
+ * is driven through [DispatchTickLoop] by that determinism runner. The other,
+ * [ConstrainedJsonEmissionStrategy][cz.vutbr.fit.interlockSim.dispatcher.ConstrainedJsonEmissionStrategy],
+ * is retired unmeasured (Issue #991) and is exercised only by its own unit tests, never through
+ * [DispatchTickLoop].
  *
  * An [EmissionStrategy] converts a rendered prompt string and the current
  * [DispatcherObservation] into a list of [AttributedAction]s to execute this tick.

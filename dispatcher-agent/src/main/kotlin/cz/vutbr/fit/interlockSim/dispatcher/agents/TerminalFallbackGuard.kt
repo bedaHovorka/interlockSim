@@ -20,8 +20,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome.Running
  * **Non-production reference implementation (Issue #990).** This class has no production
  * construction site; the production LLM loop is
  * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
- * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which has its own LLM-absence
- * fallback handling, separate from this guard. It is kept because
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. Its fallback handling is a per-tick
+ * call to `KoogAgentPlanAdapter.runFallback` on inference timeout/exception, not a
+ * threshold-based terminal guard like this one — production has no terminal fallback.
+ * It is kept because
  * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] — driven by the P10
  * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
  * `HeadlessPacingFeasibilityTest` timing harnesses — needs this guard as a constructor default,

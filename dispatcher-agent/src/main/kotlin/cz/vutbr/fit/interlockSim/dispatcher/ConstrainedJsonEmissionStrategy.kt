@@ -37,9 +37,10 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * ## A/B arm purpose
  *
- * This strategy forms the **B arm** of the SP2c.13 head-to-head experiment. The A arm is
- * [ToolCallingEmissionStrategy] / [KoogAgentPlanAdapter] (which uses Koog's `AIAgent` with
- * native tool-calling). B sends the **same four-action semantic interface** as a constrained-JSON
+ * This strategy forms the **B arm** of the SP2c.13 head-to-head experiment. The A arm would be a
+ * tool-calling `EmissionStrategy`, which does not exist today (see Issue #990 option a); in
+ * production, native tool-calling instead runs through [KoogAgentPlanAdapter] and Koog's
+ * `AIAgent`. B sends the **same four-action semantic interface** as a constrained-JSON
  * schema over Ollama's `format` parameter instead of `tools`, so the model must emit a JSON
  * object matching [ACTION_BATCH_SCHEMA] rather than selecting a function from a tool registry.
  *

@@ -19,7 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * has a production construction site; the production LLM loop is
  * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
  * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which does not use
- * [DispatchTickLoop] or this seam at all.
+ * [DispatchTickLoop] or this seam at all. It is kept because
  * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] — driven by the P10
  * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
  * `HeadlessPacingFeasibilityTest` timing harnesses — needs a pluggable deadline wrapper, and the

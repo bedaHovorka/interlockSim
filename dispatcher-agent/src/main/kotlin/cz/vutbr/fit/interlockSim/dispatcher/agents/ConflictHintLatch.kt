@@ -61,8 +61,7 @@ import java.util.concurrent.ConcurrentHashMap
  * `ExampleRegistry.wireDispatcherAgent` does not register [onConflict] as a conflict listener,
  * so this latch is never populated in production, and `getHint` has **no production caller**
  * either, since `AffordanceAnnotator` is itself not wired into the agent loop (see that class's
- * "Wiring status" KDoc). The latch is dormant by design in production, bounded by the
- * per-context latch lifetime — see the non-production notice above.
+ * "Wiring status" KDoc). The latch is unused in production — see the non-production notice above.
  *
  * @since Issue #827 (SP2c.4 — Goal 10, Goal 9 C7 ruling option (a))
  */

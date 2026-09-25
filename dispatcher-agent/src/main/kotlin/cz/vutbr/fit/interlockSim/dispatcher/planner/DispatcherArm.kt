@@ -27,6 +27,11 @@ enum class DispatcherArm {
 	/** LLM dispatcher using Koog tool-calling mode. */
 	LLM_TOOL_CALLING,
 
-	/** LLM dispatcher using constrained-JSON output mode. */
+	/**
+	 * LLM dispatcher using constrained-JSON output mode.
+	 *
+	 * Retired unmeasured (Issue #991, 2026-09-25): no sweep campaign ever exercised it. Kept only
+	 * for the non-production `DispatchTickLoop` reference loop and this taxonomy.
+	 */
 	LLM_CONSTRAINED_JSON
 }
