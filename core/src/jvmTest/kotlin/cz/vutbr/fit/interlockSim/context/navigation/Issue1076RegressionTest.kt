@@ -170,11 +170,11 @@ class Issue1076RegressionTest : KoinTestBase() {
 	 */
 	private fun blockNearSwitchOffCandidatePath(): DynamicTrackBlock {
 		val candidateBlocks = routeBlocksOf(semaphoreZA, semaphoreDoB1).toSet()
-		return routeBlocksOf(semaphoreZA, semaphoreDoB2)
+		return allRouteBlocksOf(semaphoreZA, semaphoreDoB2)
 			.first { switchVA in it.ends() && it !in candidateBlocks }
 	}
 
-	/** All blocks of the first topological path from [start] to [target], in path order. */
+	/** All blocks of the FIRST topological path from [start] to [target], in path order. */
 	private fun routeBlocksOf(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator
@@ -184,6 +184,20 @@ class Issue1076RegressionTest : KoinTestBase() {
 			.getTopologyNavigator()
 			.findAllTopologicalPaths(start, target)
 			.first()
+			.map { it.getTrackBlock() }
+			.filterIsInstance<DynamicTrackBlock>()
+			.distinct()
+
+	/** The blocks of EVERY topological path from [start] to [target], flattened. */
+	private fun allRouteBlocksOf(
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator
+	): List<DynamicTrackBlock> =
+		simulationContext
+			.getRoutingServices()
+			.getTopologyNavigator()
+			.findAllTopologicalPaths(start, target)
+			.flatten()
 			.map { it.getTrackBlock() }
 			.filterIsInstance<DynamicTrackBlock>()
 			.distinct()
