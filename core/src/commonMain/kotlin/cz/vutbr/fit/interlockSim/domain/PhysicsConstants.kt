@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.domain
 
+import kotlin.math.sqrt
+
 /*
  * Railway physics and domain constants.
  *
@@ -31,6 +33,7 @@ package cz.vutbr.fit.interlockSim.domain
  * ## Train Physics
  * - [MAXIMAL_TRAIN_ACCELERATION]: Maximum train acceleration
  * - [MINIMAL_TRAIN_DECELERATION]: Minimum train deceleration (braking)
+ * - [brakingDistanceFrom] / [brakingSpeedWithin]: single service-braking law (Issue #1056)
  *
  * @since 0.1-bachelor
  */
@@ -69,3 +72,41 @@ const val MAXIMAL_TRAIN_ACCELERATION = 4
 
 /** Minimum train deceleration in m/s² (negative value for braking) */
 const val MINIMAL_TRAIN_DECELERATION = -3
+
+/**
+ * Service-braking magnitude (m/s²) implied by [MINIMAL_TRAIN_DECELERATION].
+ *
+ * Always positive so kinematics can use `|a|` without re-deriving the sign at each call site.
+ */
+val SERVICE_BRAKING_DECELERATION_MPS2: Double = -MINIMAL_TRAIN_DECELERATION.toDouble()
+
+/**
+ * Textbook stopping distance (metres) from [speedMps] at the service-braking rate
+ * [MINIMAL_TRAIN_DECELERATION]: `s = v² / (2 · |a|)`.
+ *
+ * Non-positive speeds yield `0.0` (already stopped — no distance needed).
+ *
+ * The inverse of [brakingSpeedWithin]. Used by [cz.vutbr.fit.interlockSim.sim.Train]'s
+ * motor (Issues #1014, #1057) so the braking-room margin and the reactive decider share
+ * one formula rather than two literals of `3` that only agree by coincidence (Issue #1056).
+ */
+fun brakingDistanceFrom(speedMps: Double): Double {
+	if (speedMps <= 0.0) return 0.0
+	return (speedMps * speedMps) / (2.0 * SERVICE_BRAKING_DECELERATION_MPS2)
+}
+
+/**
+ * Highest speed (m/s) from which the train can still stop within [distanceMetres] at the
+ * service-braking rate [MINIMAL_TRAIN_DECELERATION]: `v = sqrt(2 · |a| · s)`.
+ *
+ * Non-positive distances yield `0.0` (no room left to stop from any speed).
+ *
+ * The inverse of [brakingDistanceFrom]. Used by
+ * [cz.vutbr.fit.interlockSim.sim.ReactiveTrainDecider] for the Výstraha speed cap so a
+ * change to [MINIMAL_TRAIN_DECELERATION] reaches every consumer of the braking law
+ * (Issue #1056).
+ */
+fun brakingSpeedWithin(distanceMetres: Double): Double {
+	if (distanceMetres <= 0.0) return 0.0
+	return sqrt(2.0 * SERVICE_BRAKING_DECELERATION_MPS2 * distanceMetres)
+}
