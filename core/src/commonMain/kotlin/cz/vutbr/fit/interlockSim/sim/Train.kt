@@ -20,6 +20,9 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
+import cz.vutbr.fit.interlockSim.domain.MAXIMAL_TRAIN_ACCELERATION
+import cz.vutbr.fit.interlockSim.domain.MINIMAL_TRAIN_DECELERATION
+import cz.vutbr.fit.interlockSim.domain.brakingDistanceFrom
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -78,16 +81,6 @@ class Train :
 		private var countValue = 0
 
 		private fun nextCount(): Int = ++countValue
-
-		/**
-		 * Maximum train acceleration in m/s²
-		 */
-		private const val MAXIMAL_ACCELERATION = 4
-
-		/**
-		 * Minimum train deceleration in m/s² (negative value for braking)
-		 */
-		private const val MINIMAL_DECELERATION = -3
 
 		/**
 		 * Distance in metres a train keeps between its front and the path separator of a
@@ -1519,7 +1512,7 @@ class Train :
 		 * - **half speed** — `targetSpeed / 2 - velocity`, the margin form of
 		 *   [AccelerationStopTest.TO_HALF_SPEED]'s own condition;
 		 * - **braking room** — what is left of the distance to the stop line after the textbook
-		 *   braking distance at the deceleration bound, `v^2 / (2 * |MINIMAL_DECELERATION|)`.
+		 *   braking distance at the deceleration bound, [brakingDistanceFrom].
 		 *
 		 * The braking-room term is what #1014 was missing. On a block too short for the ramp the
 		 * train never reaches half speed, so [derivatives] eventually cleared `accelerate` when the
@@ -1698,8 +1691,8 @@ class Train :
 
 		/**
 		 * Room left to the clearance stop line after the textbook braking distance at the
-		 * deceleration bound, `distance - v^2 / (2 * |MINIMAL_DECELERATION|)`; non-positive exactly
-		 * when the train must start braking now to stand there (Issues #1014, #1057).
+		 * deceleration bound, `distance - [brakingDistanceFrom](v)`; non-positive exactly
+		 * when the train must start braking now to stand there (Issues #1014, #1057, #1056).
 		 *
 		 * [Double.POSITIVE_INFINITY] while it is not armed: no restrictive signal to stop short of, or a
 		 * non-positive remaining distance or velocity — those corners belong to the existing exits
@@ -1710,7 +1703,7 @@ class Train :
 			val remaining = clearanceStopLineDistance()
 			val speed = getVelocity()
 			if (remaining <= 0 || speed <= 0) return Double.POSITIVE_INFINITY
-			return remaining - (speed * speed) / (2.0 * -MINIMAL_DECELERATION)
+			return remaining - brakingDistanceFrom(speed)
 		}
 
 		/**
@@ -1773,7 +1766,7 @@ class Train :
 		 * Phase 2 of [onWarning]: brakes the train to a stand at the clearance stop line.
 		 *
 		 * The condition is published so [derivatives] sees a decelerating phase and applies the
-		 * MINIMAL_DECELERATION bound to it; an inline condition left it clamping this phase as if it
+		 * [MINIMAL_TRAIN_DECELERATION] bound to it; an inline condition left it clamping this phase as if it
 		 * were still accelerating (Issue #1014).
 		 *
 		 * The wait also ends when the aspect clears before the stand. [derivatives] re-reads
@@ -1923,9 +1916,9 @@ class Train :
 			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
 			acceleration.state =
 				if (requireNotNull(currentCondition) { "currentCondition must be set" }.getStopTest().isDecelarate()) {
-					maxOf(a, MINIMAL_DECELERATION.toDouble())
+					maxOf(a, MINIMAL_TRAIN_DECELERATION.toDouble())
 				} else {
-					minOf(a, MAXIMAL_ACCELERATION.toDouble())
+					minOf(a, MAXIMAL_TRAIN_ACCELERATION.toDouble())
 				}
 		}
 	}

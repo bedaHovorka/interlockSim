@@ -8,6 +8,7 @@
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim
+// hook-trigger
 
 import assertk.assertThat
 import assertk.assertions.contains

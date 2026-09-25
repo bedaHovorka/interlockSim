@@ -9,10 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.domain.MINIMAL_TRAIN_DECELERATION
+import cz.vutbr.fit.interlockSim.domain.brakingSpeedWithin
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
-import kotlin.math.sqrt
 
 /**
  * SP2a.2 *decide* step for the reactive train agent (Issue #553).
@@ -68,9 +67,6 @@ object ReactiveTrainDecider {
 	 */
 	const val SPEED_MATCH_TOLERANCE_MPS: Double = 0.1
 
-	/** Braking deceleration magnitude (m/s²), from [MINIMAL_TRAIN_DECELERATION]. */
-	private val brakingDecelerationMps2: Double = -MINIMAL_TRAIN_DECELERATION.toDouble()
-
 	/**
 	 * Decide the correct acceleration target for [reading].
 	 *
@@ -111,18 +107,11 @@ object ReactiveTrainDecider {
 			next.isAllowing() -> minOf(base, next.allowedSpeed()) to "Volno ahead; run to permitted speed"
 			// Výstraha: second signal is STOP — brake so the train can stop by it.
 			else -> {
-				val brakeToStop = brakingSpeedLimit(reading.distanceToSignalAheadMetres)
+				val brakeToStop = brakingSpeedWithin(reading.distanceToSignalAheadMetres)
 				minOf(base, brakeToStop) to "Výstraha (next signal STOP); reduce speed to stop at second signal"
 			}
 		}
 	}
-
-	/**
-	 * Highest speed (m/s) from which the train can brake to a stand within [distanceMetres]
-	 * at the [brakingDecelerationMps2] service-braking rate: `v = sqrt(2·a·s)`.
-	 */
-	private fun brakingSpeedLimit(distanceMetres: Double): Double =
-		if (distanceMetres <= 0.0) 0.0 else sqrt(2.0 * brakingDecelerationMps2 * distanceMetres)
 
 	private fun classify(
 		velocity: Double,

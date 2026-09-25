@@ -151,7 +151,7 @@ class ReactiveTrainDeciderTest {
 
 	@Test
 	fun `Vystraha with zero distance to immediate signal brakes to a stand`() {
-		// brakingSpeedLimit(0.0) hits the `distanceMetres <= 0.0` guard → 0.0; min(base, 0.0) = 0.0.
+		// brakingSpeedWithin(0.0) hits the non-positive guard → 0.0; min(base, 0.0) = 0.0.
 		val decision =
 			ReactiveTrainDecider.decide(
 				trainPerceptionReading(
