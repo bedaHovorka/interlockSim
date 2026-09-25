@@ -30,7 +30,7 @@ class TrainBrakingKinematicsTest {
 	@Test
 	fun `brakingDistanceFrom is v squared over twice the service braking magnitude`() {
 		// |a| = 3 m/s²; v = 6 → s = 36 / 6 = 6.0 m
-		assertThat(brakingDistanceFrom(6.0)).isCloseTo(6.0, 1e-12)
+		assertThat(brakingDistanceFrom(6.0)).isCloseTo(6.0, delta = 1e-12)
 		// v = 0 → already stopped
 		assertThat(brakingDistanceFrom(0.0)).isEqualTo(0.0)
 		assertThat(brakingDistanceFrom(-1.0)).isEqualTo(0.0)
@@ -39,7 +39,7 @@ class TrainBrakingKinematicsTest {
 	@Test
 	fun `brakingSpeedWithin is sqrt of twice a times s`() {
 		// |a| = 3 m/s²; s = 6 → v = sqrt(36) = 6.0 m/s (same numbers ReactiveTrainDeciderTest uses)
-		assertThat(brakingSpeedWithin(6.0)).isCloseTo(6.0, 1e-12)
+		assertThat(brakingSpeedWithin(6.0)).isCloseTo(6.0, delta = 1e-12)
 		assertThat(brakingSpeedWithin(0.0)).isEqualTo(0.0)
 		assertThat(brakingSpeedWithin(-5.0)).isEqualTo(0.0)
 	}
@@ -48,11 +48,11 @@ class TrainBrakingKinematicsTest {
 	fun `distance and speed forms are exact inverses over the shared deceleration`() {
 		val speeds = listOf(1.0, 6.0, 13.89, 27.78, 40.0)
 		for (v in speeds) {
-			assertThat(brakingSpeedWithin(brakingDistanceFrom(v))).isCloseTo(v, 1e-9)
+			assertThat(brakingSpeedWithin(brakingDistanceFrom(v))).isCloseTo(v, delta = 1e-9)
 		}
 		val distances = listOf(1.0, 6.0, 30.0, 100.0, 1000.0)
 		for (s in distances) {
-			assertThat(brakingDistanceFrom(brakingSpeedWithin(s))).isCloseTo(s, 1e-9)
+			assertThat(brakingDistanceFrom(brakingSpeedWithin(s))).isCloseTo(s, delta = 1e-9)
 		}
 	}
 

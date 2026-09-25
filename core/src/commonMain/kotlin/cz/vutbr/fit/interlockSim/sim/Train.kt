@@ -1691,7 +1691,7 @@ class Train :
 
 		/**
 		 * Room left to the clearance stop line after the textbook braking distance at the
-		 * deceleration bound, `distance - [brakingDistanceFrom](v)`; non-positive exactly
+		 * deceleration bound, `distance - brakingDistanceFrom(v)`; non-positive exactly
 		 * when the train must start braking now to stand there (Issues #1014, #1057, #1056).
 		 *
 		 * [Double.POSITIVE_INFINITY] while it is not armed: no restrictive signal to stop short of, or a
