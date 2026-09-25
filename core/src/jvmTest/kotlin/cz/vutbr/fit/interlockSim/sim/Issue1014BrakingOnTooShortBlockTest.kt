@@ -363,7 +363,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * at 6 m, the same early trigger rung 3 uses, well before the ~12.4 m braking-room crossing.
 	 *
 	 * [Motor.approachMargin]'s half-speed term is `targetSpeed / 2 - velocity`, where `targetSpeed`
-	 * is the `normalSpeed` [Train.Front.accelerateToSignal] passed to [Motor.onWarning] before the
+	 * is the `normalSpeed` [Train.Front.accelerateToSignal] passed to [Engine.onWarning] before the
 	 * aspect changed. [Train.semaphoreToStopShortOf] only distinguishes allowing from non-allowing —
 	 * S30 and [Signal.FREE] look identical to it — so phase 1 kept running toward half of the
 	 * *original* commanded speed, not the newly-capped one. On this fixture that is half of
