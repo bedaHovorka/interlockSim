@@ -207,7 +207,7 @@ class DefaultPathReservationService(
 	 * re-cleared for another train are skipped (see [semaphoreClearedFor]).
 	 */
 	private fun resetClearedSemaphores(trainId: String) {
-		val owned = clearedSemaphores.remove(trainId) ?: return
+		val owned: Set<DynamicRailSemaphore> = clearedSemaphores.remove(trainId) ?: return
 		owned.forEach { semaphore ->
 			if (semaphoreClearedFor[semaphore] != trainId) {
 				logger.debug {

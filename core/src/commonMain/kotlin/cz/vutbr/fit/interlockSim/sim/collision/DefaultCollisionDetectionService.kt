@@ -450,8 +450,8 @@ class DefaultCollisionDetectionService(
 		firstId: String,
 		secondId: String
 	): Boolean {
-		val firstBlocks = trainReservedBlocks[firstId]
-		val secondBlocks = trainReservedBlocks[secondId]
+		val firstBlocks: Set<DynamicTrackBlock>? = trainReservedBlocks[firstId]
+		val secondBlocks: Set<DynamicTrackBlock>? = trainReservedBlocks[secondId]
 		if (firstBlocks.isNullOrEmpty() || secondBlocks.isNullOrEmpty()) return false
 		return firstBlocks.any { it in secondBlocks }
 	}

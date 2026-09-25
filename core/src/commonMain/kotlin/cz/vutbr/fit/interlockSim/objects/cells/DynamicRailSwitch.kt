@@ -118,7 +118,7 @@ class DynamicRailSwitch(
 	}
 
 	override fun allowedSpeed(): Double {
-		val double1 = staticRef.speeds.get(conf)
+		val double1 = staticRef.speeds[conf]
 		requireSimulationNotNull(double1) { "Speed for configuration must not be null: speeds=${staticRef.speeds}" }
 		return double1
 	}
