@@ -17,6 +17,17 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.RunOutcome.Running
  * for [threshold] consecutive ticks (SP2c.8, Issue #831), or immediately on a detectable
  * safety-net reappearance (SP2c.9, Issue #832).
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which has its own LLM-absence
+ * fallback handling, separate from this guard. It is kept because
+ * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] — driven by the P10
+ * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
+ * `HeadlessPacingFeasibilityTest` timing harnesses — needs this guard as a constructor default,
+ * and its own unit tests (`TerminalFallbackGuardTest`, `ActionAttributionTest`) exercise its
+ * engagement triggers directly.
+ *
  * ## Three engagement triggers
  *
  * | # | Trigger | Reason | Source |

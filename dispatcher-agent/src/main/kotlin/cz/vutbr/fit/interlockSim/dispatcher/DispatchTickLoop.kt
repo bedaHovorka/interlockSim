@@ -36,6 +36,16 @@ import java.util.concurrent.atomic.AtomicLong
  * Unconditional fixed-tick perceive → decide → act control loop for the Goal 10 dispatcher
  * agent.
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is [AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. It is kept because the P10
+ * determinism gate (`RuleBasedDispatcherDeterminismRunner`) drives it as an independent second
+ * implementation of the dispatch loop, and the SP2c.26 F1 paused-clock ruling harness
+ * (`PausedClockSpikeHarness`, Issue #849, `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`) and
+ * the `HeadlessPacingFeasibilityTest` pacing harness must both stay re-runnable. Reviving it for
+ * production would require a tool-calling [EmissionStrategy], which does not exist today (see
+ * Issue #990 option a).
+ *
  * ## Structural guarantee (C2)
  *
  * Every call to [runTick] is exactly one dispatcher tick: sense the current observation,

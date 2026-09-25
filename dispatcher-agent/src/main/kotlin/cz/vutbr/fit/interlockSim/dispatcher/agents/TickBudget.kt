@@ -15,6 +15,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Deadline wrapper for [EmissionStrategy.emit] inside [DispatchTickLoop].
  *
+ * **Non-production reference implementation (Issue #990).** No implementation of this interface
+ * has a production construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`, which does not use
+ * [DispatchTickLoop] or this seam at all.
+ * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] — driven by the P10
+ * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
+ * `HeadlessPacingFeasibilityTest` timing harnesses — needs a pluggable deadline wrapper, and the
+ * F1/F2 timing-regime ruling documented below (`docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`)
+ * must stay backed by runnable, tested code.
+ *
  * The loop calls `budget.withBudget { emission.emit(prompt, obs) }`. If the emission strategy
  * exceeds the configured deadline, [withBudget] returns `null` and the loop substitutes a
  * [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp] with author
@@ -60,6 +71,14 @@ interface TickBudget {
  * Pauses the simulation clock for the entire emission window, preventing sim time from advancing
  * while the LLM (or any other strategy) produces a decision. The simulation is resumed in a
  * `finally` block so a throwing or timed-out emission cannot park the sim indefinitely.
+ *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. It is kept because it is the subject
+ * of the SP2c.26 F1 paused-clock ruling (#849,
+ * `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`), which must stay re-runnable — exercised by
+ * `PromptDeterminismTest`, `TimingRegimesOllamaTest` and its own unit tests (`TickBudgetTest`).
  *
  * ## P8 reproducibility guarantee
  *
@@ -143,6 +162,14 @@ class PausedClockTickBudget(
 /**
  * **F2 wall-clock deadline** [TickBudget].
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. It is kept as the F2 wall-clock
+ * reporting-mode reference from the same SP2c.26 F1/F2 timing-regime ruling (#849,
+ * `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`), exercised by `TimingRegimesOllamaTest`,
+ * `DispatchTickLoopTest` and its own unit tests (`TickBudgetTest`).
+ *
  * Enforces a hard wall-clock deadline via [kotlinx.coroutines.withTimeoutOrNull]. A miss yields
  * `null`, which [DispatchTickLoop] maps to a [cz.vutbr.fit.interlockSim.dispatcher.DispatchAction.NoOp]
  * attributed to [ActionAuthor.TIMEOUT_NOOP].
@@ -167,6 +194,15 @@ class DeadlineTickBudget(
 
 /**
  * [TickBudget] implementation that applies no deadline — the block always runs to completion.
+ *
+ * **Non-production reference implementation (Issue #990).** This object has no production
+ * construction site; the production LLM loop is
+ * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. It is kept because the P10
+ * determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the `PausedClockSpikeHarness` /
+ * `HeadlessPacingFeasibilityTest` timing harnesses all construct
+ * [DispatchTickLoop][cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] with this as the
+ * budget for their synchronous rule-based emission strategy.
  *
  * Use this for synchronous strategies (e.g. [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedEmissionStrategy])
  * where a deadline makes no sense: rule-based dispatch returns immediately and

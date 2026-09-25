@@ -27,6 +27,14 @@ import java.util.concurrent.atomic.AtomicLong
  * [EmissionStrategy] implementation that uses Ollama's constrained-JSON output mode (`format`
  * parameter) rather than native tool-calling (SP2c.13, Issue #836).
  *
+ * **Non-production reference implementation (Issue #990).** This class has no production
+ * construction site; the production LLM loop is [AgentLoopDriver], wired in
+ * `desktop-ui/.../ExampleRegistry.kt` `wireDispatcherAgent`. The `LLM_CONSTRAINED_JSON` A/B arm
+ * described below was retired unmeasured — no sweep campaign ever exercised it end to end
+ * (Issue #991). It is kept only as a reference for the constrained-JSON schema approach and is
+ * exercised solely by its own unit tests (`ConstrainedJsonEmissionStrategyTest`,
+ * `ConstrainedJsonMutualExclusivityTest`).
+ *
  * ## A/B arm purpose
  *
  * This strategy forms the **B arm** of the SP2c.13 head-to-head experiment. The A arm is

@@ -49,7 +49,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Wiring
  *
- * Pass an instance to [DispatchTickLoop] at construction time:
+ * Pass an instance to [DispatchTickLoop] at construction time ([DispatchTickLoop] is a
+ * non-production reference implementation — see its own KDoc, Issue #990):
  * ```kotlin
  * val store = DispatcherPreferenceStore()
  * val loop  = DispatchTickLoop(..., preferenceStore = store)
