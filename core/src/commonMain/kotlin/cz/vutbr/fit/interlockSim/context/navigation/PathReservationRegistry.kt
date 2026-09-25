@@ -366,7 +366,7 @@ class PathReservationRegistry(
 	 * @return List of blocks that were released (empty if train had no reservations)
 	 */
 	fun unregister(trainId: String): List<DynamicTrackBlock> {
-		val blocks = trainToBlocks[trainId] ?: return emptyList()
+		val blocks: List<DynamicTrackBlock> = trainToBlocks[trainId] ?: return emptyList()
 
 		// Remove all blocks from mappings (regardless of state)
 		blocks.forEach { block ->
@@ -620,7 +620,7 @@ class PathReservationRegistry(
 	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
 	 */
 	fun unregisterSwitches(trainId: String): List<DynamicRailSwitch> {
-		val switches = trainToSwitches[trainId] ?: return emptyList()
+		val switches: List<DynamicRailSwitch> = trainToSwitches[trainId] ?: return emptyList()
 
 		// Unlock and remove all switches from mappings
 		switches.forEach { switch ->

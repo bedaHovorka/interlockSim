@@ -53,13 +53,13 @@ class NodeCellAction(
 			context: EditingContext,
 			args: Array<Any>
 		): Icon {
-			var cell: Cell? = null
-			try {
-				val f = getKoin().get<JvmEditingContextFactory>()
-				cell = f.createNew(context, cellClass, *args) as Cell
-			} catch (e: Exception) {
-				error("Failed to create cell icon: $e")
-			}
+			val cell =
+				try {
+					val f = getKoin().get<JvmEditingContextFactory>()
+					f.createNew(context, cellClass, *args) as Cell
+				} catch (e: Exception) {
+					error("Failed to create cell icon: $e")
+				}
 			val img = BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_RGB)
 			val g = img.createGraphics()
 			g.setRenderingHints(renderingHints)

@@ -111,7 +111,7 @@ class DefaultRailWayNetGrid(
 		key: Point,
 		cell: Cell
 	): Cell? {
-		if (cells.get(key) == cell) return cell
+		if (cells[key] == cell) return cell
 		cells.values.remove(cell)
 		val prev: Cell? = cells.put(key, cell)
 		reverseTable.remove(prev)

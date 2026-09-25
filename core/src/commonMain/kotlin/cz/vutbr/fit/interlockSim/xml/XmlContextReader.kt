@@ -314,7 +314,7 @@ class XmlContextReader {
 	 */
 	private fun parseOptionalName(attrs: Map<String, String>): String? {
 		val name = attrs[NAME]
-		if (name == null || name.isEmpty()) return null
+		if (name.isNullOrEmpty()) return null
 		require(name.length <= MAX_NAME_LENGTH) {
 			"Element name too long (max $MAX_NAME_LENGTH characters): $name"
 		}

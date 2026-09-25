@@ -78,7 +78,7 @@ class DefaultTopologyNavigator(
 		// Step 1: Try to find next section within same block (if current != null)
 		// Kotlin idiom: Use let for cleaner null-safe chaining
 		current?.let {
-			val block = requireNotNull(it.getTrackBlock()) { "TrackBlock cannot be null for current track section" }
+			val block = it.getTrackBlock()
 			block.getNextTrackSection(separator, it)?.also { nextSection ->
 				logger.trace { "getNextTrackSection: found next section within same block from $separator" }
 				return nextSection
@@ -536,7 +536,7 @@ class DefaultTopologyNavigator(
 	): List<TrackSection> {
 		// Step 1: Try within-block navigation first
 		current?.let {
-			val block = requireNotNull(it.getTrackBlock()) { "TrackBlock cannot be null for current track section" }
+			val block = it.getTrackBlock()
 			block.getNextTrackSection(separator, it)?.let { nextSection ->
 				// Found next section within same block
 				return listOf(nextSection)
