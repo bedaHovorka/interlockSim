@@ -404,7 +404,7 @@ becomes starvation, rather than thrashing against a blocked station.
 
 Every table in §5 carries a `LLM_CONSTRAINED_JSON` column, and every cell in it reads `0 runs`.
 This is not an oversight: **no sweep grid was ever written for this arm**, and no run of it was
-ever recorded. This gap is tracked as Issue #890 and was carried forward, stated the same way,
+ever recorded. This gap is tracked as Issue #991 and was carried forward, stated the same way,
 across the #847 and #834 reports rather than silently omitted or filled with an invented number.
 This report follows the same pattern: the arm
 is present in every table with an honest zero, and the gate correctly renders it `❌ FAIL` on
@@ -413,9 +413,19 @@ empty arm cannot pass by default. `c7Clean = yes` for this arm in T1 is vacuous 
 reason (§5, T1 footnote) — it holds over zero runs and must not be read as "the constrained-JSON
 arm is clean."
 
-**Closing this gap is Issue #890's scope, not this report's.** SP2c.14 is a report-generation
-sub-issue depending on SP2c.12/13/23; it does not authorize running a new grid, and per this
-report's explicit scope constraint no simulations were run to try to fill it in.
+**Closing this gap was Issue #991's scope, not this report's; that scope is now moot (see the
+2026-09-25 correction below).** SP2c.14 is a report-generation sub-issue depending on
+SP2c.12/13/23; it does not authorize running a new grid, and per this report's explicit scope
+constraint no simulations were run to try to fill it in.
+
+**2026-09-25 correction:** the `LLM_CONSTRAINED_JSON` arm has since been **retired unmeasured
+(#991)** rather than filled in by a future sweep. It is reachable only through the non-production
+`DispatchTickLoop` reference implementation (#990; see `LONG_TERM_GOALS.md`, Goal 10 completion
+notes), which is the underlying reason no production measurement grid was ever written for it.
+The `0 runs` rows in this section's tables therefore reflect the arm's final, permanent state,
+not an open TODO. (Pull request [#890](https://github.com/bedaHovorka/interlockSim/pull/890) is
+unrelated to this tracking history — it is the merged PR that delivered the
+`ConstrainedJsonEmissionStrategy` class this arm exercises.)
 
 ---
 
@@ -482,7 +492,7 @@ that origin) without ever timing out.
 |---|---|---|---|
 | `RULE_BASED` | ✅ **PASS** — 10/10, `c7Clean` 10/10 | ✅ **PASS** — 10/10, `c7Clean` 10/10 | ✅ **PASS** |
 | `LLM_TOOL_CALLING` | ❌ **FAIL** — 0/10 at both temperature cells | ❌ **FAIL** — best cell 5/10 (`t=0.28`), 3/10 at `t=0.5` | ❌ **FAIL** in every measured configuration |
-| `LLM_CONSTRAINED_JSON` | ❌ **FAIL** (no data) | ❌ **FAIL** (no data) | ❌ **FAIL** — 0 runs, tracked as a data gap by #890, not a negative competence finding |
+| `LLM_CONSTRAINED_JSON` | ❌ **FAIL** (no data) | ❌ **FAIL** (no data) | ❌ **FAIL** — 0 runs; retired unmeasured (#991, 2026-09-25 — see §7), not a negative competence finding |
 
 **`RULE_BASED` clears the ≥ 8/10 bar with room to spare, in both campaigns, at every cell
 measured.** Its 380 attributed actions are entirely its own, `c7Clean` holds without exception,
@@ -499,11 +509,12 @@ individual actions the model did emit were well-formed. `historyN = 0` buys deci
 (fallback ticks drop from 10/10 runs containing at least one, at `historyN = 3`, to 2/10) without
 buying railway reliability — the stall pattern persists at a comparable rate under both settings.
 
-**`LLM_CONSTRAINED_JSON` cannot be evaluated.** No grid file, no runs, no data (#890). This is
+**`LLM_CONSTRAINED_JSON` cannot be evaluated.** No grid file, no runs, no data (#991). This is
 recorded as a gate failure because `gatePassed` requires `runCount >= 10`, not because the arm has
-been shown to be unreliable — the honest statement is "not yet measured," and this report keeps
-that statement visible in every table rather than silently dropping the arm or fabricating a
-number for it.
+been shown to be unreliable — the honest statement at the time of this report was "not yet
+measured," and this report keeps that statement visible in every table rather than silently
+dropping the arm or fabricating a number for it. **2026-09-25 correction:** the arm has since been
+retired unmeasured (#991) rather than deferred to a future sweep — see §7.
 
 ---
 
@@ -606,8 +617,18 @@ distinction.
   campaign #895 re-baselined. Report file deleted on 2026-08-24; see §12.3.
 - [#834](https://github.com/bedaHovorka/interlockSim/issues/834) — SP2c.11, the prompt/history
   work whose `historyN = 0` cell is Campaign B here. Report file deleted on 2026-08-24; see §12.1.
-- [#890](https://github.com/bedaHovorka/interlockSim/issues/890) — the `LLM_CONSTRAINED_JSON`
-  data gap (§7)
+- [#991](https://github.com/bedaHovorka/interlockSim/issues/991) — the `LLM_CONSTRAINED_JSON`
+  arm, retired unmeasured on 2026-09-25 (§7); supersedes the earlier data-gap tracking
+- [#890](https://github.com/bedaHovorka/interlockSim/pull/890) — the merged pull request that
+  delivered `ConstrainedJsonEmissionStrategy`, the class this arm exercises
+- [#990](https://github.com/bedaHovorka/interlockSim/issues/990) — the SP2c tick-loop island
+  ruling: `DispatchTickLoop` (which the retired arm was only reachable through) stays a
+  non-production reference implementation; the production loop is `AgentLoopDriver`
+- [#993](https://github.com/bedaHovorka/interlockSim/issues/993) — Goal 10 B2 amendment: the
+  production path reports the recorded rationale, not an affordance annotation
+- [#995](https://github.com/bedaHovorka/interlockSim/issues/995) — Goal 10 A6 amendment: the LLM
+  arm's wall-clock report is the `DispatcherRunSnapshot` latency percentiles; the real-time ratio
+  is not recorded for that arm
 - [#838](https://github.com/bedaHovorka/interlockSim/issues/838) — SP2c.15, the
   interface-vs-capacity diagnostic follow-up for §8's stall pattern
 - [#591](https://github.com/bedaHovorka/interlockSim/issues/591) — Praha, the OR/MILP optimality

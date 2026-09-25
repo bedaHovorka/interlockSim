@@ -331,6 +331,12 @@ Users receive automatic detection of routing conflicts when multiple trains requ
   component may originate a dispatching action" non-goal. Goal 9's `ConflictDetectedEvent` now
   feeds **affordance-line text** only (`ConflictHintLatch` → `AffordanceAnnotator`); the LLM
   dispatcher stays the only actor. This also delivers Goal 10's B2 amendment.
+- **2026-09-25 correction (#990, #993):** neither `ConflictHintLatch` nor `AffordanceAnnotator` is
+  wired in production. Both belong to the non-production `DispatchTickLoop` reference
+  implementation (see the dated correction under Goal 10's completion notes below); the
+  affordance-line feed described in the previous bullet exists only on that reference path. The
+  production LLM loop is `AgentLoopDriver`, which does not construct or read either class. This
+  also amends Goal 10's B2 entry in the acceptance-contract table below.
 
 ---
 
@@ -377,6 +383,17 @@ Users can enable an AI-powered dispatcher that automatically routes trains throu
 - A measurement layer: per-run JSON records, a cross-run aggregator, and a headless sweep driver
   (`aiSweep`, manual only — never in CI).
 
+**2026-09-25 correction (#990):** the LLM dispatcher bullet above shipped as a **non-production
+reference implementation**, not the production loop. `DispatchTickLoop`, `ActionValidator`, and
+`AffordanceAnnotator` — plus the rest of the SP2c tick-loop island (`RuleBasedEmissionStrategy`,
+`ConstrainedJsonEmissionStrategy`, `EmissionStrategy`, `TerminalFallbackGuard`, `TickBudget`,
+`ConflictHintLatch`) — remain in `:dispatcher-agent`, now documented in their own KDoc as
+non-production; no promotion is planned (owner decision, option c). The production LLM loop is
+`AgentLoopDriver`, wired in `desktop-ui`'s `ExampleRegistry.wireDispatcherAgent` since SP2c.24.
+This also corrects the Explainability bullet above: the affordance-annotation half of "why this
+route? / what else was available?" is produced only on the non-production reference path — the
+production path answers with the recorded rationale alone (see the B2 amendment below).
+
 **Amended acceptance contract** (owner-decided 2026-07-30, recorded in #822 §7; #532's body is
 the governing text):
 
@@ -384,8 +401,8 @@ the governing text):
 |---|---|
 | **A4** | A **measured** success rate: N ≥ 10 runs, gate at **≥ 8/10**, with zero `RULE_FALLBACK` and zero `SAFETY_NET` action attributions in any run. A per-run author breakdown is mandatory. One non-`c7Clean` run fails the whole arm. |
 | **A5** | Demoted and reframed. At ShuntingLoop scale, report **reliability**, not optimality. The optimality comparison moves to Praha (#591) and must there meet an **OR/MILP** yardstick, not only `RuleBasedDispatcher`. |
-| **A6** | Split. Real-time ratio ≥ 1× gates the `RuleBasedDispatcher` only. The LLM arm runs acceptance with a **paused clock** (ratio not applicable) and reports wall-clock separately, ungated. |
-| **B2** | Explainability also reports the affordance annotation of that tick. |
+| **A6** | Split. Real-time ratio ≥ 1× gates the `RuleBasedDispatcher` only (unchanged). The LLM arm runs acceptance with a **paused clock** (ratio not applicable). *Amended 2026-09-25 (#995):* for the LLM arm the wall-clock report actually produced is the per-decision latency percentiles `latencyP50Ms` / `latencyP95Ms` / `latencyMaxMs` recorded in `DispatcherRunSnapshot` (schema v7); the real-time ratio itself is not recorded for the LLM arm — it appears only as a DEBUG log on the non-production `DispatchTickLoop` reference path. |
+| **B2** | *Amended 2026-09-25 (#993):* explainability reports the recorded rationale. The affordance annotation is not produced on the production path — it exists only on the non-production `DispatchTickLoop` reference implementation (#990). |
 | **Non-goal** | The LLM is not responsible for action legality and is **not inside the safety envelope**. The interlocking shields all actions. |
 | **Non-goal** | **No deterministic policy component may originate a dispatching action during an LLM run.** |
 | **Paramount example** | `vyhybna.xml` proves **reliability under autonomy**, not optimality. Praha is where a non-deterministic policy has something to win. |
@@ -401,7 +418,7 @@ the governing text):
 | `LLM_TOOL_CALLING`, temperature 0.5, history 3 | 10 | 0 | ❌ FAIL |
 | `LLM_TOOL_CALLING`, temperature 0.28, history 0 *(shipped default)* | 10 | 5 | ❌ FAIL |
 | `LLM_TOOL_CALLING`, temperature 0.5, history 0 | 10 | 3 | ❌ FAIL |
-| `LLM_CONSTRAINED_JSON` | 0 | 0 | ❌ FAIL — not yet measured (#890) |
+| `LLM_CONSTRAINED_JSON` | 0 | 0 | retired unmeasured (#991) |
 
 Stated plainly: **the rule-based arm meets A4; the LLM arm does not, in any measured
 configuration.** The best cell reaches 5 of 10, three passing runs short of the bar.
