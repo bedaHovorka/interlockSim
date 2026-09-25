@@ -11,8 +11,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isBetween
 import assertk.assertions.isEqualTo
-import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isTrue
@@ -47,8 +47,9 @@ private val logger = KotlinLogging.logger {}
  *
  * Fixture: `A —(200 m)— Sem —100 m— B`. The signal starts at [Signal.STOP], so the leg is held
  * by the clearance-stop approach; it clears to [Signal.S40] early in the approach, which resumes
- * the run at the aspect's cap inside the motor's own approach loop; the train reaches the cap
- * and coasts; then the aspect flips back to [Signal.STOP] with ample braking room left.
+ * the run at the aspect's cap inside the motor's own approach loop; the resumed leg reaches the
+ * cap half-way to the signal (see `ResumedLegSpeedLawTest`) and coasts; then the aspect flips
+ * back to [Signal.STOP] with ample braking room left.
  * `Issue1014BrakingOnTooShortBlockTest`'s rung 3e pins the flip-back **before** the cap is
  * reached; this test pins the flip-back **after** it, the leg state that went unwatched.
  */
@@ -68,11 +69,19 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		const val CLEAR_DISTANCE = 20.0
 
 		/**
-		 * Distance at which the aspect turns restrictive again: far past the point the resumed
-		 * run reaches the S40 cap (11.11 m/s, about 20.6 m of braking distance at the bound),
-		 * with about 90 m of braking room left.
+		 * Distance at which the aspect turns restrictive again. The resumed run reaches the S40
+		 * cap (11.11 m/s) half-way between the clear and the signal, at about 110 m, so the train
+		 * has coasted at the cap for about 30 m; the stop line is then 59 m away and the textbook
+		 * braking distance from the cap at the bound is about 20.6 m.
 		 */
-		const val FLIP_BACK_DISTANCE = 110.0
+		const val FLIP_BACK_DISTANCE = 140.0
+
+		/**
+		 * Stretch before the flip-back over which the train must already be coasting at the
+		 * cap: the leg state in which the resumed leg's wait had ended and, before Issue #1087,
+		 * the motor went idle.
+		 */
+		const val COASTING_STRETCH_METERS = 20.0
 
 		/** Speed below which the braking law's final crawl is not treated as running speed. */
 		const val CRAWL_SPEED_MPS = 0.5
@@ -90,10 +99,10 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		/**
 		 * Slack around the resumed cap at the flip-back, proving the cap really was reached —
 		 * that is, `resumeAtAspectCap`'s wait had ended and pre-fix the motor was idle. The
-		 * resumed run approaches its capped target asymptotically, so a sample can land a hair
-		 * below it, or on numerical noise a hair above.
+		 * resumed leg runs up at a constant rate and its wait wakes at most one 1 ms step late,
+		 * so it overshoots the cap by well under a millimetre per second.
 		 */
-		const val CAP_TOLERANCE_MPS = 0.5
+		const val CAP_TOLERANCE_MPS = 0.01
 	}
 
 	@Test
@@ -134,12 +143,18 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 
 		assertThat(clear.fired, name = "the held aspect was cleared to S40").isTrue()
 
-		// The scenario proves nothing unless the resumed cap really was reached before the flip:
-		// that is the leg state in which the motor went idle before this fix.
-		assertThat(atFlipBack.velocity, name = "speed when the aspect flipped back")
-			.isGreaterThanOrEqualTo(Signal.S40.allowedSpeed() - CAP_TOLERANCE_MPS)
-		assertThat(atFlipBack.velocity, name = "speed when the aspect flipped back")
-			.isLessThanOrEqualTo(Signal.S40.allowedSpeed() + CAP_TOLERANCE_MPS)
+		// The scenario proves nothing unless the resumed cap really was reached before the flip
+		// and the train was coasting there: that is the leg state in which the motor went idle
+		// before this fix, and the only one in which the late-aspect watch of `runApproachLoop`
+		// is armed. A flip during the ramp is `resumeAtAspectCap`'s own exit (rung 3e of
+		// `Issue1014BrakingOnTooShortBlockTest`) and would not reach the watch at all.
+		val cap = Signal.S40.allowedSpeed()
+		samples
+			.filter { it.time <= atFlipBack.time && it.totalDistance >= FLIP_BACK_DISTANCE - COASTING_STRETCH_METERS }
+			.forEach { sample ->
+				assertThat(sample.velocity, name = "speed coasting at the cap before the flip-back, $sample")
+					.isBetween(cap - CAP_TOLERANCE_MPS, cap + CAP_TOLERANCE_MPS)
+			}
 
 		// The flip must land with braking room left, or a stand at the line from whatever speed
 		// the train has would be correct anyway and the rung would not discriminate.
