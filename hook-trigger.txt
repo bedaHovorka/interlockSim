@@ -1,0 +1,1 @@
+trigger gradle via git hook 2 - prepare-commit-msg path
