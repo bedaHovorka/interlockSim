@@ -1084,10 +1084,10 @@ class Train :
 		 * [boundaryGuard]'s clearance term that bound — that is, unless the front is a clearance
 		 * short of the separator and, because [Motor] aims at the same point, already braked to
 		 * walking pace. (The motor brakes for a restrictive aspect that stood so as the leg was
-		 * commanded or turned so mid-leg — see [Motor]'s late-aspect watch, Issue #1057 — except a
-		 * leg resumed from this clearance hold, which that watch does not cover. Only a flip that
-		 * leaves less room than the deceleration bound needs still snaps to zero here, as it
-		 * always did.) The wait is the same level-triggered form [semaphoreAction] uses at the
+		 * commanded or turned so mid-leg — see [Motor]'s late-aspect watch, Issue #1057, which
+		 * since Issue #1087 also covers a leg the motor resumed itself after a clearance hold.
+		 * Only a flip that leaves less room than the deceleration bound needs still snaps to zero
+		 * here, as it always did.) The wait is the same level-triggered form [semaphoreAction] uses at the
 		 * separator; the train resumes the instant the aspect clears, or rolls on to the
 		 * separator when the route is released, and the front is still on the *approach* side of
 		 * the sensor point while it waits, which is the whole point of the clearance.
@@ -1639,12 +1639,25 @@ class Train :
 		 * Hands the motor over on each aspect change until the leg ends: a clear resumes the run at
 		 * the live aspect's cap, a return to a restrictive aspect brakes to the stop line.
 		 *
+		 * A resumed run that reaches its cap does not end the leg either (Issue #1087): going idle
+		 * there left the motor deaf to an aspect turning restrictive while the train coasts at the
+		 * resumed cap — line speed after a clear to FREE — the Issue #1057 defect class on the
+		 * resume path into it. [watchForLateRestrictiveAspect] is re-armed instead, inside the
+		 * motor's own process (a second motor command in the same instant would be the kdisco#73
+		 * shape), and a restrictive flip that exhausts the braking room hands over to the braking
+		 * phase like any other aspect change in this loop.
+		 *
 		 * @param runningOn whether the leg starts in the resumed state (the aspect already allows)
 		 */
 		private suspend fun runApproachLoop(runningOn: Boolean) {
 			var running = runningOn
 			while (true) {
-				val aspectChanged = if (running) resumeAtAspectCap() else brakeToStopLine()
+				val aspectChanged =
+					if (running) {
+						resumeAtAspectCap() || (!terminate && accelerate && watchForLateRestrictiveAspect())
+					} else {
+						brakeToStopLine()
+					}
 				if (!aspectChanged) break
 				running = !running
 			}
@@ -1658,7 +1671,9 @@ class Train :
 		private fun brakingRoomGone(): Boolean = accelerate && targetSpeed > 0.0 && brakingRoomMargin() <= 0.0
 
 		/**
-		 * Keeps a finished leg listening for a restrictive aspect (Issue #1057).
+		 * Keeps a finished leg listening for a restrictive aspect (Issue #1057). Armed both after
+		 * a leg commanded by [accelerateTo] reaches its speed ([iteration]) and after a leg the
+		 * motor resumed itself reaches the live aspect's cap ([runApproachLoop], Issue #1087).
 		 *
 		 * The motor commanded for a leg goes idle once the leg's speed is reached, and an idle
 		 * motor evaluates no [derivatives]: a signal turning restrictive while the train coasts at
@@ -1732,9 +1747,10 @@ class Train :
 		 * The wait also ends when the aspect turns restrictive again before the resumed speed is
 		 * reached. Waiting for the speed alone kept `targetSpeed` positive, so the train accelerated
 		 * towards a signal back at danger and the front gate snapped it to zero at the clearance line
-		 * (PR #1033 review, Train.kt:1688). Once the resumed speed is reached the motor goes idle as
-		 * after any `accelerateTo`, and a restrictive flip after that is not watched for (the
-		 * late-aspect watch of Issue #1057 covers legs commanded by `accelerateTo`, not this resume).
+		 * (PR #1033 review, Train.kt:1688). Once the resumed speed is reached the leg does not go
+		 * idle either: [runApproachLoop] re-arms the late-aspect watch (Issue #1087), so a
+		 * restrictive flip while the train coasts at the resumed cap is braked for exactly like one
+		 * on a leg commanded by `accelerateTo` (Issue #1057).
 		 *
 		 * @return `true` when the aspect turned restrictive again while this leg is still the motor's
 		 *   command — the caller then brakes to the stop line
