@@ -16,24 +16,14 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
-import cz.ksimulantenbande.kdisco.Process
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSample
-import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSampler
-import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
-import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.motorOf
-import cz.vutbr.fit.interlockSim.testutil.runSimpleLinearTrackScenario
+import cz.vutbr.fit.interlockSim.testutil.runHoldAtSeparatorScenario
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -88,12 +78,6 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 
 		/** Train length; short enough to stand inside kB with its tail clear of B. */
 		const val TRAIN_LENGTH = 20.0
-
-		/** Simulation end time; the journey with the stand takes about 30 s. */
-		const val END_TIME = 90L
-
-		/** Sampling period of the kinematic sampler that also drives the scenario. */
-		const val SAMPLE_PERIOD = 0.05
 
 		/**
 		 * How long the train is held before navigation lets it go. Well inside the
@@ -157,26 +141,12 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 	 * the motor while the train stands, and after [STAND_HOLD_SECONDS] lets the train go.
 	 */
 	private fun runScenario(): Outcome {
-		val context = loadVyhybnaContext().tracked()
-		val inOuts = context.getInOuts().toList()
-		val a = inOuts.single { it.name == "A" }
-		val b = inOuts.single { it.name == "B" }
+		val context =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 		val zB = context.cellsOfType<DynamicRailSemaphore>().single { it.name == HOLD_SIGNAL }
-		val reservationService = context.getRoutingServices().getPathReservationService()
-		val realNav = context.getRoutingServices().getTrainNavigationService()
 
 		val holding = AtomicBoolean(true)
-		val holdingNav =
-			decoratingTrainNavigationService(realNav) { trainId, separator ->
-				if (holding.get() && isHoldSignal(separator)) {
-					PathResult.OwnershipConflict
-				} else {
-					realNav.findReservedPathForTrain(trainId, separator)
-				}
-			}
-		val env = NavigationDecoratingContext(context, holdingNav)
 
-		var standTime = -1.0
 		var standDistance = -1.0
 		var aspectAllowingAtStand = false
 		var peakAccelerationWhileStanding = 0.0
@@ -184,40 +154,29 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 		var releasedAt = -1.0
 
 		val run =
-			runSimpleLinearTrackScenario(
+			runHoldAtSeparatorScenario(
 				context,
-				endTime = END_TIME,
-				trainSpecs =
-					listOf(
-						SimpleLinearTrackTestProcess.TrainSpec(
-							inName = "B",
-							outName = "A",
-							inTime = 1.0,
-							outTime = END_TIME.toDouble(),
-							length = TRAIN_LENGTH
-						)
-					),
-				env = env
-			) { train ->
-				assertReservationSuccess(reservationService.reservePath(train.name, b, a))
-				Process.activate(
-					TrainKinematicSampler(train, END_TIME.toDouble(), SAMPLE_PERIOD) { sample ->
-						if (standTime < 0.0 && isStandingPastHalfway(sample)) {
-							standTime = sample.time
-							standDistance = sample.totalDistance
-							aspectAllowingAtStand = zB.signal.isAllowing()
-						}
-						if (standTime >= 0.0 && releasedAt < 0.0) {
-							peakAccelerationWhileStanding = maxOf(peakAccelerationWhileStanding, abs(train.getAcceleration()))
-							if (sample.time >= standTime + STAND_HOLD_SECONDS) {
-								motorPassivatedBeforeRelease = motorOf(train).isPassivated()
-								holding.set(false)
-								releasedAt = sample.time
-							}
-						}
+				holdSignal = HOLD_SIGNAL,
+				standThreshold = DISTANCE_TO_ZB / 2,
+				trainLength = TRAIN_LENGTH,
+				standHoldSeconds = STAND_HOLD_SECONDS,
+				holding = holding::get,
+				onSample = { observation ->
+					if (observation.standing && releasedAt < 0.0) {
+						peakAccelerationWhileStanding =
+							maxOf(peakAccelerationWhileStanding, abs(observation.train.getAcceleration()))
 					}
-				)
-			}
+				},
+				onStand = { observation ->
+					standDistance = observation.sample.totalDistance
+					aspectAllowingAtStand = zB.signal.isAllowing()
+				},
+				onHoldElapsed = { observation ->
+					motorPassivatedBeforeRelease = motorOf(observation.train).isPassivated()
+					holding.set(false)
+					releasedAt = observation.sample.time
+				}
+			)
 		return Outcome(
 			standDistance = standDistance,
 			aspectAllowingAtStand = aspectAllowingAtStand,
@@ -228,19 +187,4 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 			finalDistance = run.train.totalDistance
 		)
 	}
-
-	/** Whether [separator] — static or dynamic — is the signal navigation holds the train at. */
-	private fun isHoldSignal(separator: PathSeparator): Boolean =
-		when (separator) {
-			is DynamicRailSemaphore -> separator.name == HOLD_SIGNAL
-			is RailSemaphore -> separator.getName() == HOLD_SIGNAL
-			else -> false
-		}
-
-	/** The stand at zB, told apart from the stand at the origin before the train is admitted. */
-	private fun isStandingPastHalfway(sample: TrainKinematicSample): Boolean =
-		sample.velocity == 0.0 && sample.totalDistance > DISTANCE_TO_ZB / 2
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 }
