@@ -73,8 +73,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * into explicit [DispatchDecision.SetSwitchPosition] and [DispatchDecision.SetSignalAspect]
  * commands that the interlocking independently validates before the path is reserved.
  * This per-tick [decide] currently reserves a single pre-computed section per input and does
- * not yet route through [CandidatePathRuleEngine]; wiring the engine into multi-route
- * selection here is deferred to SP2b.5 (Issue #560).
+ * not yet route through [CandidatePathRuleEngine]; SP2b.5 (Issue #560) shipped only the
+ * rationale API ([CandidatePathRuleEngine.selectWithRationale], [DispatchDecision.rationale]).
+ * Wiring the engine into multi-route selection here remains open — the SP2b.2/SP2b.3 stage is
+ * dormant, not dead (Issue #978; see [CandidatePathRuleEngine]'s KDoc).
  *
  * ## Goal 9 integration hook
  * This class is also the designated place for wiring Goal 9's
