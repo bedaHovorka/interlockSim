@@ -27,7 +27,9 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -717,5 +719,30 @@ class KoogDispatchAgentImplTest {
 		assertFailure { runBlocking { agent.decideAsync(observation("T1")) } }
 			.isInstanceOf<RuntimeException>()
 			.messageContains("boom")
+	}
+
+	@Test
+	@DisplayName("close is a no-op when the wrapped AIAgent is not AutoCloseable (Issue #1072)")
+	fun closeIsSafeWhenAgentIsNotAutoCloseable() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		agent.close()
+		agent.close()
+	}
+
+	@Test
+	@DisplayName("close closes the wrapped AIAgent when it is AutoCloseable (Issue #1072)")
+	fun closeClosesAutoCloseableAgent() {
+		val aiAgent =
+			mockk<AIAgent<String, String>>(
+				moreInterfaces = arrayOf(AutoCloseable::class),
+				relaxUnitFun = true
+			)
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		agent.close()
+
+		verify(exactly = 1) { (aiAgent as AutoCloseable).close() }
 	}
 }

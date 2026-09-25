@@ -13,7 +13,6 @@ import assertk.assertThat
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
