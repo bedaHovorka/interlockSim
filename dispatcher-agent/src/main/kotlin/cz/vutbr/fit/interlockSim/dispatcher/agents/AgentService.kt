@@ -87,15 +87,22 @@ interface AgentService {
  * 2. Passed to [AgentLoopDriver] via constructor injection
  * 3. [AgentLoopDriver] calls [decideAsync] in its DECIDE phase
  * 4. Results are posted to [ActuatorCommandQueue] for sim-thread application
+ * 5. Issue #1072: callers invoke [close] when the run ends so the underlying Koog
+ *    [ai.koog.agents.core.agent.AIAgent] (and its coroutine workers) do not outlive the run.
+ *    The shared Ollama executor is deliberately **not** closed here — it outlives individual
+ *    agents so a second run in the same JVM can still infer.
+ *
+ * Not a `fun interface`: [close] needs a default body for stubs and mocks.
  *
  * ## SP1 phasing
  *
  * - SP1.2 (this file): Agent interface skeleton
  * - SP1.6 (#551): Full Koog integration, LLM decision-making, tool invocation
+ * - Issue #1072: [close] for end-of-run agent teardown
  *
  * @since Issue #547 (SP1.2 — Goal 10)
  */
-fun interface KoogDispatchAgent {
+interface KoogDispatchAgent {
 	/**
 	 * Asynchronously decide on dispatch actions given the current network observation.
 	 *
@@ -108,6 +115,17 @@ fun interface KoogDispatchAgent {
 	 * @since Issue #547 (SP1.2 — skeleton); full implementation in Issue #551 (SP1.6)
 	 */
 	suspend fun decideAsync(observation: DispatchObservation): List<DispatchDecision>
+
+	/**
+	 * Release resources held by this agent instance (Issue #1072).
+	 *
+	 * Default is a no-op so test doubles and rule-based stubs stay unchanged. Production
+	 * [KoogDispatchAgentImpl] closes the underlying Koog [ai.koog.agents.core.agent.AIAgent] when
+	 * it implements [AutoCloseable]. Idempotent; safe to call more than once.
+	 */
+	fun close() {
+		// Default no-op for stubs and mocks.
+	}
 }
 
 // Re-export domain types for convenience (defined in :core)

@@ -167,6 +167,16 @@ class MeasuringPlanAdapter(
 	}
 
 	/**
+	 * Release the cached Koog agent held by the wrapped [KoogAgentPlanAdapter] (Issue #1072).
+	 *
+	 * Call at end of run (natural completion or manual stop) so Koog/coroutine workers do not
+	 * outlive the simulation. Idempotent; forwards to [KoogAgentPlanAdapter.releaseAgent].
+	 */
+	fun releaseAgent() {
+		inner.releaseAgent()
+	}
+
+	/**
 	 * Logs an unconditional final summary of the current [PlannerMetricsSnapshot].
 	 *
 	 * Unlike the periodic summary in [onTick] (which only fires every [REPORT_EVERY_N_CYCLES]

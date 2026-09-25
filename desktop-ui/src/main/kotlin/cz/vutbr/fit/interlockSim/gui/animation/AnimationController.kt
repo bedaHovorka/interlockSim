@@ -132,8 +132,20 @@ class AnimationController(
 
 	/**
 	 * Whether the animation controller is currently running.
+	 *
+	 * Exposed read-only as [isActive] so callers (Frame lifecycle, tests) can decide whether to
+	 * [start] again after a run ends without reflecting on a private field (Issue #1072).
 	 */
 	private var isRunning: Boolean = false
+
+	/**
+	 * `true` while the 30 FPS repaint timer is active and the controller is listening for
+	 * simulation state changes.
+	 *
+	 * @since Issue #1072 — natural-completion animation stop / restart
+	 */
+	val isActive: Boolean
+		get() = isRunning
 
 	/**
 	 * Cache of all semaphores in the grid for O(1) animation state capture.
