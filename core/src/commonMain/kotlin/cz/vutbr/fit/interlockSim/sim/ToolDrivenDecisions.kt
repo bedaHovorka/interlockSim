@@ -113,49 +113,7 @@ fun DispatchDecision.applyToolDrivenToActuator(
 				"$logPrefix: applying RequestRoute trainName=$trainName, from=$fromEndpointName, to=$toEndpointName" +
 					rationale.toRationaleLogSuffix()
 			}
-			// Exhaustive `when` over the sealed RouteRequestResult — returning it forces the
-			// compiler to enforce coverage (matches the pattern in DefaultNetworkActuatorPort).
-			//
-			// Design note: a successful RequestRoute does NOT bump the block-transition counter
-			// (unlike ReservePath, whose `Reserved` branch calls incrementBlockTransition /
-			// onBlockTransition at the call site). The counter is test-observability only (#365);
-			// trains navigate the reserved route via PathReservationRegistry, not the counter.
-			// See DispatchDecision.RequestRoute KDoc for the full rationale.
-			return when (
-				val result = actuator.requestRoute(trainName, fromEndpointName, toEndpointName)
-			) {
-				is RouteRequestResult.Reserved ->
-					toolDrivenLogger.debug {
-						"$logPrefix: RequestRoute reserved ${result.blocksCount} block(s) for $trainName"
-					}
-				is RouteRequestResult.AllPathsBlocked ->
-					toolDrivenLogger.warn {
-						"$logPrefix: RequestRoute all paths blocked for $trainName " +
-							"($fromEndpointName → $toEndpointName); attempted: ${result.attemptedPaths}"
-					}
-				is RouteRequestResult.Conflict ->
-					toolDrivenLogger.warn {
-						"$logPrefix: RequestRoute conflict for $trainName — " +
-							"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
-					}
-				is RouteRequestResult.NoRouteExists ->
-					toolDrivenLogger.warn {
-						"$logPrefix: RequestRoute no route exists $fromEndpointName → $toEndpointName for $trainName"
-					}
-				is RouteRequestResult.OriginNotContiguous ->
-					toolDrivenLogger.warn {
-						"$logPrefix: RequestRoute origin not contiguous for $trainName — ${result.reason}"
-					}
-				is RouteRequestResult.ConditionFailed ->
-					toolDrivenLogger.warn {
-						"$logPrefix: RequestRoute four-condition refusal for $trainName " +
-							"(${if (result.retryable) "transient" else "permanent"}): ${result.reason}"
-					}
-				is RouteRequestResult.GeometricallyImpossible ->
-					toolDrivenLogger.warn {
-						"$logPrefix: RequestRoute geometrically impossible for $trainName — ${result.reason}"
-					}
-			}
+			return requestRouteAndLog(actuator, logPrefix)
 		}
 		DispatchDecision.NoAction,
 		is DispatchDecision.ApproveTrain,
@@ -165,5 +123,70 @@ fun DispatchDecision.applyToolDrivenToActuator(
 				"applyToolDrivenToActuator must not be called for $this — " +
 					"ApproveTrain/ReservePath/NoAction/HoldTrain are handled by the caller, not this helper."
 			)
+	}
+}
+
+/**
+ * Sends this RequestRoute through [actuator] and logs the result. Named for the side effect
+ * (review thread on PR #1082): the old name `nothing` read like a no-op, but this helper does
+ * perform the route request.
+ */
+private fun DispatchDecision.RequestRoute.requestRouteAndLog(
+	actuator: NetworkActuatorPort,
+	logPrefix: String
+) {
+	// Exhaustive `when` over the sealed RouteRequestResult — returning it forces the
+	// compiler to enforce coverage (matches the pattern in DefaultNetworkActuatorPort).
+	//
+	// Design note: a successful RequestRoute does NOT bump the block-transition counter
+	// (unlike ReservePath, whose `Reserved` branch calls incrementBlockTransition /
+	// onBlockTransition at the call site). The counter is test-observability only (#365);
+	// trains navigate the reserved route via PathReservationRegistry, not the counter.
+	// See DispatchDecision.RequestRoute KDoc for the full rationale.
+	when (
+		val result = actuator.requestRoute(trainName, fromEndpointName, toEndpointName)
+	) {
+		is RouteRequestResult.Reserved ->
+			toolDrivenLogger.debug {
+				"$logPrefix: RequestRoute reserved ${result.blocksCount} block(s) for $trainName"
+			}
+
+		is RouteRequestResult.AllPathsBlocked ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute all paths blocked for $trainName " +
+					"($fromEndpointName → $toEndpointName); attempted: ${result.attemptedPaths}"
+			}
+
+		is RouteRequestResult.Conflict ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute conflict for $trainName — " +
+					"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
+			}
+
+		is RouteRequestResult.NoRouteExists ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute no route exists $fromEndpointName → $toEndpointName for $trainName"
+			}
+
+		is RouteRequestResult.OriginNotContiguous ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute origin not contiguous for $trainName — ${result.reason}"
+			}
+
+		is RouteRequestResult.ConditionFailed ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute four-condition refusal for $trainName " +
+					"(${if (result.retryable) "transient" else "permanent"}): ${result.reason}"
+			}
+
+		is RouteRequestResult.GeometricallyImpossible ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute geometrically impossible for $trainName — ${result.reason}"
+			}
+
+		is RouteRequestResult.DivergesFromHeldRoute ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute diverges from the held route for $trainName — ${result.reason}"
+			}
 	}
 }

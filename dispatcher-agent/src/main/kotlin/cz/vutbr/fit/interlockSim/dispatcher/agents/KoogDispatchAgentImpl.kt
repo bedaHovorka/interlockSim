@@ -352,6 +352,13 @@ class KoogDispatchAgentImpl(
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — ${outcome.reason}"
 
+			// Issue #1066: no block was busy -- the model must not retry the identical request. Tell
+			// it what to do instead of "all paths blocked".
+			is AppliedOutcome.DivergesFromHeldRoute ->
+				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
+					"REFUSED — the train's route already continues toward ${outcome.heldTarget} on " +
+					"another track; extend from ${outcome.heldTarget} or cancel the route first."
+
 			// Issue #834 review finding #2: a four-condition interlocking refusal. The kernel's
 			// reason already explains the refusal; retryable is surfaced so the model does not
 			// retry a permanent output defect. Not produced on the production request_route path.

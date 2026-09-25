@@ -260,7 +260,8 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName(
-		"a merge-aborted reservePath call leaves no orphaned tail -- nothing for the sweeper to reclaim (Issue #904)"
+		"a reservePath call whose merge could not succeed leaves no orphaned tail -- " +
+			"nothing for the sweeper to reclaim (Issues #904, #1066)"
 	)
 	fun mergeAbortedReservePathLeavesNoOrphanedTail() {
 		val trainId = "Train #904 probe"
@@ -275,19 +276,23 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 		// no footprint" shape [pathologicalMergeOnSimThreadDoesNotKillTheRun] already uses.
 		registry().registerPathInfo(trainId, seedPathInfo(zB))
 
-		// When: a REAL reservation. The train's footprint is empty (no blocks/switches ever
-		// registered for it), so Step 0's contiguity check passes vacuously for any start
-		// (Issue #893's documented exemption) -- this genuinely reserves blocks, locks vA, and
-		// clears zA's signal (Steps 2d-2h) before Step 2i's merge sees new.start (zA) !=
-		// old.target (zB, from the seed) and aborts. This reproduces the genuine abort shape
-		// Issue #904's root-cause fix does NOT eliminate -- unlike the ordinary "extend using
-		// the original start" pattern (Issue #911's shape), which now merges cleanly instead of
-		// aborting, so the corruption must be set up this way rather than via two real
-		// `reservePath` calls on the same train.
+		// When: a REAL reservation attempt. The train's footprint is empty (no blocks/switches
+		// ever registered for it), so Step 0's contiguity check passes vacuously for any start
+		// (Issue #893's documented exemption). Since Issue #1066 the seeded PathInfo makes every
+		// candidate divergent, so Step 1.6 screening skips the candidate BEFORE any block,
+		// switch or signal is touched -- the promise below holds by not acquiring anything, not
+		// by rolling back (pre-#1066 this genuinely reserved blocks, locked vA and cleared zA's
+		// signal at Steps 2d-2h before Step 2i's merge aborted; that rollback path is no longer
+		// reachable from a divergent start, and registry-level abort coverage lives in
+		// PathReservationRegistryMergingTest). The seed is still required for the same reason
+		// as in [pathologicalMergeOnSimThreadDoesNotKillTheRun]: the ordinary "extend using the
+		// original start" pattern (Issue #911's shape) merges cleanly instead of diverging.
 		// zA -> doB1, not zA -> doA1: doA1 faces away from a train leaving zA eastward, so G8 (Issue
-		// #1064) would refuse that request before it reserves anything, and no merge would run.
-		service().reservePath(trainId, zA, doB1)
-		assertThat(warningsContaining(NON_CONTIGUOUS_WARN)).isNotEmpty()
+		// #1064) would refuse that request before it reserves anything, and no screening would run.
+		val result = service().reservePath(trainId, zA, doB1)
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
+		// The candidate never reached mergePathInfo, so its Step 0a WARN no longer fires.
+		assertThat(warningsContaining(NON_CONTIGUOUS_WARN)).isEmpty()
 		assertThat(registry().getPathInfo(trainId)!!.target).isEqualTo(zB) // PathInfo untouched
 
 		// Then: the train's ownership is back to exactly what it was before the aborted attempt
@@ -348,10 +353,11 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 		// prior switch, never restores its position -- corrupting the surviving route.
 		val phase2 = service().reservePath(trainId, zA, doB1)
 
-		// Then: refused as ordinary contention -- the SI-5 guard in DynamicRailSwitch.setUpPath
-		// now catches this at Step 2f, before the merge machinery at Step 2i ever runs, so no
-		// "non-contiguous merge" WARN fires for this candidate at all.
-		assertThat(phase2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		// Then: refused before it can touch anything. Since Issue #1066 the merge precondition is
+		// checked at Step 1.6, ahead of the SI-5 switch guard at Step 2f, so the candidate is
+		// skipped as DivergesFromHeldRoute (not "busy") and no "non-contiguous merge" WARN fires.
+		assertThat(phase2).isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
+		assertThat(warningsContaining(NON_CONTIGUOUS_WARN)).isEmpty()
 
 		// And: vA is untouched -- still BRANCH, still locked, still owned by this train's
 		// surviving route. This is the #1065 assertion the issue asked for.

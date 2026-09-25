@@ -440,4 +440,27 @@ sealed class RouteRequestResult {
 	data class GeometricallyImpossible(
 		val reason: String
 	) : RouteRequestResult()
+
+	/**
+	 * Every candidate route was refused because it either does not continue the route the train
+	 * already holds or is geometrically impossible, and at least one candidate diverged. The stored
+	 * route ends at [heldTarget], while a divergent candidate would start elsewhere (for example a
+	 * train standing at `zA`, holding a route to `doA2`, asked for one that diverges at switch `vA`). Maps from
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.DivergesFromHeldRoute]
+	 * via
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute].
+	 *
+	 * Distinct from [AllPathsBlocked] on purpose: no block was busy, so "retry in a later tick"
+	 * is wrong advice. The identical request fails until the train's held route is extended from
+	 * [heldTarget], completed or cancelled (`cancel_route`). Nothing was reserved, thrown or
+	 * cleared (Issue #1066).
+	 *
+	 * @property heldTarget Name of the stored route's target separator.
+	 * @property reason English explanation of the divergence.
+	 * @since Issue #1066
+	 */
+	data class DivergesFromHeldRoute(
+		val heldTarget: String,
+		val reason: String
+	) : RouteRequestResult()
 }

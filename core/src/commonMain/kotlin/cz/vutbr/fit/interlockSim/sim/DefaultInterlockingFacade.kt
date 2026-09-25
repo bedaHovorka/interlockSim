@@ -388,6 +388,14 @@ class DefaultInterlockingFacade(
 					InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible(result.reason)
 				)
 			}
+			is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
+				// Issue #1066: nothing was mutated and no block was busy, so not AllPathsBlocked.
+				logger.info { "Route DENIED for trainId=$trainId: diverges from held route: ${result.reason}" }
+				InterlockingFacade.RouteResponse.Denied(
+					"Route already continues toward ${result.heldTarget}; extend from it or cancel the route first",
+					InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute(result.heldTarget, result.reason)
+				)
+			}
 		}
 	}
 

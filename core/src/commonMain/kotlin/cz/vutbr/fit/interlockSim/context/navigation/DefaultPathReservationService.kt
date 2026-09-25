@@ -562,8 +562,14 @@ class DefaultPathReservationService(
 		// is touched — which leaves a refused candidate nothing to roll back. Screened-out candidates
 		// are recorded like G4, so a request whose every candidate ends rear-facing is reported as a
 		// permanent GeometricallyImpossible.
-		val (rearFacingEnds, usableCandidates) = screenRearFacingEnds(start, target, candidatePaths)
+		val (rearFacingEnds, rearFacingUsable) = screenRearFacingEnds(start, target, candidatePaths)
 		var geometricFailures = rearFacingEnds
+
+		// Step 1.6 (Issue #1066): a candidate that does not continue the route the train already
+		// holds can never merge, so it is skipped here -- before anything is reserved, thrown or
+		// cleared -- instead of at Step 2i after all of that (same first-reason / count shape as
+		// geometricFailures).
+		val (divergentFailures, usableCandidates) = screenDivergentCandidates(trainId, start, target, rearFacingUsable)
 
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in usableCandidates) {
@@ -762,6 +768,8 @@ class DefaultPathReservationService(
 					// Issue #904: register the FORWARD-ONLY segment, not `pathInfo` (which starts
 					// at the original `start` and would falsely non-contiguous-abort on every
 					// route extension that reuses it, per forwardOnlyPathInfo's KDoc).
+					// The candidate already passed the Step 0a contiguity probe (Step 1.6), so the abort
+					// handling below now covers only Step 0b/0c and the cycle guard.
 					val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
 					val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
 					// If the registry's merge fail-safe STILL aborted
@@ -870,7 +878,13 @@ class DefaultPathReservationService(
 		// #903's first-hit-wins still governs *which* reason is reported, not whether the request is
 		// unsatisfiable. Extracted into [classifyExhaustedAttempt] so this branching stays out of
 		// reservePath's own cyclomatic complexity count.
-		return classifyExhaustedAttempt(trainId, geometricFailures, firstBlockedConflict, candidatePaths.size)
+		return classifyExhaustedAttempt(
+			trainId,
+			geometricFailures,
+			divergentFailures,
+			firstBlockedConflict,
+			candidatePaths.size
+		)
 	}
 
 	/**
@@ -890,9 +904,17 @@ class DefaultPathReservationService(
 	 * Issue #903's first-hit-wins still governs *which reason is reported* — the earliest geometric
 	 * reason is the most informative. What changed is the permanence gate, which is an AND over
 	 * candidates rather than an OR. Candidates that fail for other reasons (atomic-reservation
-	 * failure, merge abort) record nothing, so the `count == attemptedPaths` equality treats them as
-	 * non-geometric, which is the safe direction: an unproven candidate must not contribute to a
-	 * verdict of permanent impossibility.
+	 * failure, a merge abort past Step 0a) record nothing, so the `count == attemptedPaths` equality
+	 * treats them as non-geometric, which is the safe direction: an unproven candidate must not
+	 * contribute to a verdict of permanent impossibility.
+	 *
+	 * Issue #1066: a candidate screened out at Step 1.6 because it does not continue the route the
+	 * train holds is counted in [divergentFailures] and contributes to the same permanence gate.
+	 * When every candidate is geometric-or-divergent, the result is `DivergesFromHeldRoute` (the
+	 * actionable one: the divergent candidate may work once the held route is extended or
+	 * cancelled). Before this, that precondition failed only at Step 2i (after the candidate had
+	 * reserved and thrown things), recorded nothing here, and the outcome collapsed to
+	 * `AllPathsBlocked` -- "track busy" -- although no block was busy.
 	 *
 	 * Otherwise: no [BlockEvent.ReservationConflictDetected] emission here (Goal 3) -- a
 	 * blocked-path outcome is routine "path busy, will retry" contention for the
@@ -906,9 +928,26 @@ class DefaultPathReservationService(
 	private fun classifyExhaustedAttempt(
 		trainId: String,
 		geometricFailures: GeometricFailures,
+		divergentFailures: GeometricFailures,
 		firstBlockedConflict: Pair<DynamicTrackBlock, String>?,
 		attemptedPaths: Int
 	): PathReservationService.ReservationResult {
+		// Issue #1066: a divergent candidate (it does not continue the held route) is as permanent as
+		// a geometric one, so the two together satisfy the permanence gate. When any candidate is
+		// divergent the actionable reason is "extend from the held target or cancel the route
+		// first" -- that candidate may well work once the held route is gone, whereas a
+		// geometric reason cannot say so. A mix with a merely busy candidate stays ordinary
+		// contention (below).
+		if (divergentFailures.reason != null &&
+			divergentFailures.count + geometricFailures.count == attemptedPaths
+		) {
+			return PathReservationService.ReservationResult.DivergesFromHeldRoute(
+				heldTarget =
+					registry.getPathInfo(trainId)?.let { separatorLabel(it.target) }
+						?: "unknown",
+				reason = divergentFailures.reason
+			)
+		}
 		if (geometricFailures.reason != null && geometricFailures.count == attemptedPaths) {
 			return PathReservationService.ReservationResult.GeometricallyImpossible(geometricFailures.reason)
 		}
@@ -1380,8 +1419,8 @@ class DefaultPathReservationService(
 		// Try to reserve path to each semaphore until one succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
 		var attemptCount = 0
-		// Issue #937: permanently-impossible target count; see classifyExhaustedSemaphores.
-		var geometricAttempts = 0
+		// Issues #937, #1066: geometric or divergent targets; see classifyExhaustedSemaphores.
+		var permanentAttempts = 0
 		for (semaphore in semaphores) {
 			attemptCount++
 			logger.trace {
@@ -1456,9 +1495,7 @@ class DefaultPathReservationService(
 				}
 				is PathReservationService.ReservationResult.AllPathsBlocked -> {
 					// This semaphore blocked, try next one
-					logger.trace {
-						"reservePathToAnyNextSemaphore: Path to $semaphore blocked, trying next"
-					}
+					logger.trace { "reservePathToAnyNextSemaphore: Path to $semaphore blocked, trying next" }
 					lastResult = recordBlocked(lastResult, attemptCount)
 					continue
 				}
@@ -1495,41 +1532,48 @@ class DefaultPathReservationService(
 						"reservePathToAnyNextSemaphore: Path to $semaphore geometrically impossible " +
 							"(${result.reason}), trying next"
 					}
-					geometricAttempts++
+					permanentAttempts++
 					lastResult = recordAttemptResult(lastResult, result)
-					continue
+				}
+				// Issue #1066: counted because recordAttemptResult keeps only the LAST result, so
+				// classifyExhaustedSemaphores needs the count to spot a mix with a busy semaphore.
+				is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
+					permanentAttempts++
+					lastResult = recordAttemptResult(lastResult, result)
 				}
 			}
 		}
 
 		// All semaphores tried, none reservable.
-		return classifyExhaustedSemaphores(lastResult, geometricAttempts, attemptCount)
+		return classifyExhaustedSemaphores(lastResult, permanentAttempts, attemptCount)
 	}
 
 	/**
 	 * Final classification for [reservePathToAnyNextSemaphore] once every target semaphore has been
 	 * tried, applying Issue #937's permanence gate to the outer aggregation.
 	 *
-	 * A geometric result may stand only if **every** attempted semaphore was permanently
-	 * impossible ([geometricAttempts] == [attemptCount]). If even one was merely blocked it can
-	 * free up, so the attempt is contention and the caller must wait rather than throw — the same
-	 * rule [classifyExhaustedAttempt] applies to a single `reservePath`'s candidates, and its KDoc
+	 * A permanent verdict — geometric, or (Issue #1066) divergent from the held route — may stand
+	 * only if **every** attempted semaphore was permanent ([permanentAttempts] ==
+	 * [attemptCount]). If even one was merely blocked it can free up, so the
+	 * attempt is contention and the caller must wait rather than throw — the same rule
+	 * [classifyExhaustedAttempt] applies to a single `reservePath`'s candidates, and its KDoc
 	 * carries the full rationale.
 	 *
 	 * Extracted so [reservePathToAnyNextSemaphore] stays within its method-length budget.
 	 */
 	private fun classifyExhaustedSemaphores(
 		lastResult: PathReservationService.ReservationResult?,
-		geometricAttempts: Int,
+		permanentAttempts: Int,
 		attemptCount: Int
 	): PathReservationService.ReservationResult {
 		logger.debug {
 			"reservePathToAnyNextSemaphore: all $attemptCount path(s) exhausted " +
-				"($geometricAttempts geometrically impossible)"
+				"($permanentAttempts permanently refused)"
 		}
-		if (lastResult is PathReservationService.ReservationResult.GeometricallyImpossible &&
-			geometricAttempts < attemptCount
-		) {
+		val permanentVerdict =
+			lastResult is PathReservationService.ReservationResult.GeometricallyImpossible ||
+				lastResult is PathReservationService.ReservationResult.DivergesFromHeldRoute
+		if (permanentVerdict && permanentAttempts < attemptCount) {
 			return PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 		}
 		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
@@ -2940,6 +2984,54 @@ class DefaultPathReservationService(
 			if (reason == null) {
 				usable += candidate
 			} else {
+				failures = recordGeometricFailureOnce(failures, reason)
+			}
+		}
+		return failures to usable
+	}
+
+	/**
+	 * Step 1.6 screening of [candidates] (Issue #1066): splits off every candidate whose merge
+	 * candidate would not continue the route the train already holds
+	 * ([PathReservationRegistry.nonContinuingCandidateReason]), and records each one as a
+	 * "divergent" failure. Nothing is mutated, so a skipped candidate leaves nothing to roll back.
+	 *
+	 * A candidate whose blocks the train already owns entirely (empty forward-block list) is
+	 * never screened: it takes `reservePath`'s already-owned early return, which has its own merge
+	 * handling. Ownership does not change between this screening and the candidate loop, because a
+	 * candidate that reserves anything either succeeds (and the loop returns) or rolls back fully.
+	 *
+	 * @return the divergent failures of the screened-out candidates, and the remaining candidates
+	 *   with their original index
+	 */
+	private fun screenDivergentCandidates(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		candidates: List<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>
+	): Pair<GeometricFailures, List<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>> {
+		var failures = GeometricFailures()
+		val usable = mutableListOf<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>()
+		// Early-out for the common case: a train with no stored route cannot diverge from one, so
+		// skip the per-candidate PathInfo build entirely. reservePath sits on the per-tick polling
+		// path (see [recordContentionAndEmitIfNew]'s KDoc), so this guard saves a full probe build
+		// per candidate on every first reservation.
+		if (registry.getPathInfo(trainId) == null) return failures to candidates
+		for (candidate in candidates) {
+			val forwardBlocks = extractUniqueBlocks(candidate.value).filterNot { it.trainName == trainId }
+			val reason =
+				if (forwardBlocks.isEmpty()) {
+					null
+				} else {
+					registry.nonContinuingCandidateReason(
+						trainId,
+						forwardOnlyPathInfo(start, target, candidate.value, forwardBlocks)
+					)
+				}
+			if (reason == null) {
+				usable += candidate
+			} else {
+				logger.debug { "reservePath: skipping candidate ${candidate.index} for $trainId before any mutation: $reason" }
 				failures = recordGeometricFailureOnce(failures, reason)
 			}
 		}

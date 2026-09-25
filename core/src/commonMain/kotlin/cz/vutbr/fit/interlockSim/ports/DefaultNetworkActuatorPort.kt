@@ -180,6 +180,14 @@ class DefaultNetworkActuatorPort(
 				}
 				RouteRequestResult.GeometricallyImpossible(result.reason)
 			}
+			is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
+				// Issue #1066: no block was busy; the request does not continue the held route.
+				logger.warn {
+					"requestRoute: route diverges from the held route for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${result.reason}"
+				}
+				RouteRequestResult.DivergesFromHeldRoute(result.heldTarget, result.reason)
+			}
 		}
 	}
 
@@ -293,6 +301,14 @@ class DefaultNetworkActuatorPort(
 						"($fromEndpointName → $toEndpointName): ${cause.reason}"
 				}
 				RouteRequestResult.GeometricallyImpossible(cause.reason)
+			}
+			is InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute -> {
+				// Issue #1066: same mapping as the legacy/no-facade branch, reason preserved.
+				logger.warn {
+					"requestRoute: route diverges from the held route for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${cause.reason}"
+				}
+				RouteRequestResult.DivergesFromHeldRoute(cause.heldTarget, cause.reason)
 			}
 		}
 

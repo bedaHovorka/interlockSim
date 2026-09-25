@@ -200,6 +200,38 @@ interface PathReservationService : ApproachLockedPathRelease {
 		data class GeometricallyImpossible(
 			val reason: String
 		) : ReservationResult()
+
+		/**
+		 * Every candidate was refused because it either does not continue the route the train already
+		 * holds or is geometrically impossible, and at least one candidate diverged. A divergent
+		 * candidate's PathInfo would start somewhere other than the stored PathInfo's target, violating
+		 * the PathInfo merge precondition (Issue #1066). Typical shape: a train standing at `zA` whose
+		 * stored route ends at `doA2` asks for a route that diverges from it at switch `vA`. `start` is
+		 * contiguous with the train, yet the merge cannot succeed while the stored target stays there.
+		 *
+		 * The precondition is evaluated before the candidate touches anything, so nothing was
+		 * reserved, thrown or cleared: no block, switch, signal or PathInfo changed.
+		 *
+		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention and a
+		 * caller should simply retry next tick, whereas this request cannot succeed while the
+		 * stored route ends at the same target. The caller (or the LLM dispatcher behind it) has
+		 * to extend from the held target or cancel the route first. Also distinct from
+		 * [GeometricallyImpossible], which is permanent for the network topology; this one is a
+		 * property of the train's *current route* and clears once that route is completed or
+		 * cancelled.
+		 *
+		 * Reported only when **every** candidate failed this way or geometrically; a candidate that
+		 * was merely busy keeps the attempt ordinary contention, exactly as for
+		 * [GeometricallyImpossible] (Issue #937).
+		 *
+		 * @property heldTarget Name of the stored route's target separator (e.g. `doB2`).
+		 * @property reason English explanation naming the held target and the candidate start.
+		 * @since Issue #1066
+		 */
+		data class DivergesFromHeldRoute(
+			val heldTarget: String,
+			val reason: String
+		) : ReservationResult()
 	}
 
 	/**
