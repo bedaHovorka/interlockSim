@@ -52,8 +52,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
  *
  * This annotator is scaffolded but **not wired into the production agent loop** (see the
  * non-production notice above). `RenderContext` — the only consumer of the returned
- * `List<Affordance>` — is currently constructed only in test fixtures (`RendererFixtures`);
- * the production `AgentLoopDriver` DECIDE step calls `planner.plan(...)` and does not build a
+ * `List<Affordance>` — is constructed outside tests only by the non-production `DispatchTickLoop`
+ * reference loop (`runTick`), plus test fixtures (`RendererFixtures`); the production
+ * `AgentLoopDriver` DECIDE step calls `planner.plan(...)` and does not build a
  * `RenderContext` or call `annotate`. `ExampleRegistry.wireDispatcherAgent` also does not
  * register a [ConflictHintLatch] as a conflict listener, so in production nothing populates or
  * reads a latched conflict hint either (Goal 10 B2 amended by Issue #993).

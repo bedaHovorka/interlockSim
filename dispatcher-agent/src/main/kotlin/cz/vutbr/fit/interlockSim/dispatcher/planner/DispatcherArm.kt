@@ -30,8 +30,12 @@ enum class DispatcherArm {
 	/**
 	 * LLM dispatcher using constrained-JSON output mode.
 	 *
-	 * Retired unmeasured (Issue #991, 2026-09-25): no sweep campaign ever exercised it. Kept only
-	 * for the non-production `DispatchTickLoop` reference loop and this taxonomy.
+	 * Retired unmeasured (Issue #991, 2026-09-25): no sweep campaign ever exercised it. Kept for
+	 * the arm taxonomy only — [DispatcherRunSnapshot] serialization and cross-run aggregation
+	 * still group runs by arm. Nothing constructs it, and the non-production reference loop's
+	 * constrained-JSON occupant is the
+	 * [ConstrainedJsonEmissionStrategy][cz.vutbr.fit.interlockSim.dispatcher.ConstrainedJsonEmissionStrategy]
+	 * *type*, not this enum value — `DispatchTickLoop` has no arm parameter.
 	 */
 	LLM_CONSTRAINED_JSON
 }

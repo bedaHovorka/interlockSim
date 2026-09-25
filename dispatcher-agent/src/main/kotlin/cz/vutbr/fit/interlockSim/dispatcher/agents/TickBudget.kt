@@ -33,26 +33,32 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * ## Timing regimes
  *
- * Two configurable modes address the reproducibility (P8) vs honesty (F2 real-time ratio) split:
+ * Two configurable modes address the reproducibility (P8) vs honesty (F2 real-time ratio) split.
+ * These regimes record the SP2c.26 F1/F2 ruling (#849) as originally written and apply only to
+ * the non-production [DispatchTickLoop] reference loop; after the #990/#995 gate decisions they
+ * are not production Goal 10 acceptance or reporting modes — the paused clock has no production
+ * construction site, and the LLM arm's production wall-clock report is the latency percentiles
+ * recorded in `DispatcherRunSnapshot` (see `LONG_TERM_GOALS.md` A6, amended #995):
  *
  * - **F1 paused-clock** ([PausedClockTickBudget]) — the simulation clock is frozen for the
  *   entire emission window via [SimulationController.requestPause]/[SimulationController.requestResume].
- *   Sim time is provably unchanged across a slow emission; this is the **acceptance mode** for P8.
+ *   Sim time is provably unchanged across a slow emission; this was the ruling's **acceptance
+ *   mode** for P8.
  *   The feasibility and binding constraints are recorded in
  *   `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`.
  *
  * - **F2 wall-clock deadline** ([DeadlineTickBudget]) — enforces a hard wall-clock deadline via
  *   [kotlinx.coroutines.withTimeoutOrNull]. A miss yields `null` → [ActionAuthor.TIMEOUT_NOOP].
  *   The real-time ratio (sim seconds / emission wall-clock seconds) is measured and **reported**
- *   (logged) by [DispatchTickLoop] but **not used to gate** the LLM arm's run. This is the
- *   **reporting mode** for the LLM arm's honest real-time performance.
+ *   (logged) by [DispatchTickLoop] but **not used to gate** the LLM arm's run. This was the
+ *   ruling's **reporting mode** for the LLM arm's honest real-time performance.
  *
  * ## Implementations
  *
  * | Implementation | Mode | Description |
  * |---|---|---|
- * | [PausedClockTickBudget] | F1 | Pauses sim clock; resumes in `finally`. P8 acceptance mode. |
- * | [DeadlineTickBudget] | F2 | Hard wall-clock deadline; null on timeout. LLM reporting mode. |
+ * | [PausedClockTickBudget] | F1 | Pauses sim clock; resumes in `finally`. P8 acceptance mode (ruling). |
+ * | [DeadlineTickBudget] | F2 | Hard wall-clock deadline; null on timeout. LLM reporting mode (ruling). |
  * | [NoTimeoutBudget] | N/A | No deadline; passes block through. Rule-based strategies. |
  */
 interface TickBudget {
@@ -85,7 +91,8 @@ interface TickBudget {
  * **Prompt determinism** is delivered: with the sim clock frozen, the [EmissionStrategy] receives
  * the same immutable `obs0` snapshot that was captured before the pause, and no further sim-thread
  * events can alter observable state. A recorded snapshot sequence therefore always produces a
- * byte-identical prompt sequence. This is the acceptance-mode half of P8 (Issue #532 §A4).
+ * byte-identical prompt sequence. This is the acceptance-mode half of P8 as originally ruled
+ * (Issue #532 §A4).
  *
  * **Decode determinism** is NOT delivered on the production tool-calling path.
  * `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md` established that Koog 1.1.1's `OllamaClient`
@@ -177,8 +184,8 @@ class PausedClockTickBudget(
  * ## Real-time ratio reporting
  *
  * [DispatchTickLoop] measures the wall-clock time of each [EmissionStrategy.emit] call and logs
- * the real-time ratio (`simDelta / emissionWallClockSeconds`). For the LLM arm this ratio is
- * **reported only — it does not gate the run**. For the rule-based arm the ratio is intrinsically
+ * the real-time ratio (`simDelta / emissionWallClockSeconds`). For the reference loop's LLM arm
+ * this ratio is **reported only — it does not gate the run**. For the rule-based arm the ratio is intrinsically
  * ≥ 1× (synchronous, sub-millisecond), so the existing [cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible]
  * guard and [cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER]
  * remain the binding enforcement.

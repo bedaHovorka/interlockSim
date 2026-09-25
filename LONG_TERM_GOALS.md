@@ -348,12 +348,15 @@ Users receive automatic detection of routing conflicts when multiple trains requ
 **Status:** ✅ **COMPLETE (first stage, 2026-08-23)** — tracked in #532
 
 **User Value:**
-Users can enable an AI-powered dispatcher that automatically routes trains through complex junctions, managing switch positions and signal states without manual intervention. The dispatcher explains its decisions and allows human override at any time.
+Users can enable an AI-powered dispatcher that automatically routes trains through complex junctions, managing switch positions and signal states without manual intervention. The dispatcher explains its decisions and allows human override at any time. *Amended 2026-09-25 (#993): the explanation part is not delivered on the production path — see the amended B2 row below; the override capability stands.*
 
 **Success Criteria (as amended 2026-07-30; #532 governs):**
 - Autonomous operation handling all routine routing decisions
 - Manual override capability at any point
 - Explainable decisions — the user can ask "why this route?" **and** "what else was available?"
+  *Amended 2026-09-25 (#993): not delivered on the production path — production records no
+  per-decision rationale and no affordance annotation; see the 2026-09-25 correction below and
+  the amended B2 row.*
 - Reliability at ShuntingLoop scale, measured as a success rate over N ≥ 10 runs
 - *Dropped:* "performance matching or exceeding the average human dispatcher". No human-dispatcher
   baseline can be collected in this project, so the criterion was unfalsifiable.
@@ -407,7 +410,7 @@ the governing text):
 |---|---|
 | **A4** | A **measured** success rate: N ≥ 10 runs, gate at **≥ 8/10**, with zero `RULE_FALLBACK` and zero `SAFETY_NET` action attributions in any run. A per-run author breakdown is mandatory. One non-`c7Clean` run fails the whole arm. |
 | **A5** | Demoted and reframed. At ShuntingLoop scale, report **reliability**, not optimality. The optimality comparison moves to Praha (#591) and must there meet an **OR/MILP** yardstick, not only `RuleBasedDispatcher`. |
-| **A6** | Split. Real-time ratio ≥ 1× gates the `RuleBasedDispatcher` only (unchanged). The LLM arm runs acceptance with a **paused clock** (ratio not applicable). *Correction 2026-09-25 (#990):* the paused clock (`PausedClockTickBudget`) exists only on the non-production `DispatchTickLoop` reference path and has no production construction site; production LLM runs are instead paced by `ThrottlingSimulationController` capped at `PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER` (2×). *Amended 2026-09-25 (#995):* for the LLM arm the wall-clock report actually produced is the per-decision latency percentiles `latencyP50Ms` / `latencyP95Ms` / `latencyMaxMs` recorded in `DispatcherRunSnapshot` (schema v7); the real-time ratio itself is not recorded for the LLM arm — it appears only as a DEBUG log on the non-production `DispatchTickLoop` reference path. |
+| **A6** | Split. Real-time ratio ≥ 1× gates the `RuleBasedDispatcher` only (unchanged). The LLM arm was to run acceptance with a **paused clock** (ratio not applicable) — *superseded, see the correction below*. *Correction 2026-09-25 (#990):* the paused clock (`PausedClockTickBudget`) exists only on the non-production `DispatchTickLoop` reference path and has no production construction site. Production **headless** LLM runs are instead paced by `ThrottlingSimulationController` *initialized at* `PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER` (2×) — the numeric cap itself is unenforced open work (see `PlannerCapabilities.assertPlannerPacingCompatible`) — while the AI GUI example paces through `DelegatingSimulationController` (an async planner is accepted there but not speed-capped). *Amended 2026-09-25 (#995):* for the LLM arm the wall-clock report actually produced is the per-decision latency percentiles `latencyP50Ms` / `latencyP95Ms` / `latencyMaxMs` recorded in `DispatcherRunSnapshot` (schema v7); the real-time ratio itself is not recorded for the LLM arm — it appears only as a DEBUG log on the non-production `DispatchTickLoop` reference path. |
 | **B2** | *Amended 2026-09-25 (#993):* production records no per-decision rationale — `DispatchDecision.rationale` stays at its `emptyList()` default on every production construction site. The only explanation captured on the production path is `no_op`'s optional `reason`, logged at DEBUG and not persisted. The affordance annotation is likewise not produced on the production path — it exists only on the non-production `DispatchTickLoop` reference implementation (#990). |
 | **Non-goal** | The LLM is not responsible for action legality and is **not inside the safety envelope**. The interlocking shields all actions. |
 | **Non-goal** | **No deterministic policy component may originate a dispatching action during an LLM run.** |

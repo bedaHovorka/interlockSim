@@ -26,8 +26,10 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  * `ApplyFailureCode` checks at apply time, not via this class. This class is exercised by its own
  * unit test suite and by the P10 determinism gate (`RuleBasedDispatcherDeterminismRunner`) and the
  * `PausedClockSpikeHarness` / `HeadlessPacingFeasibilityTest` timing harnesses via
- * [DispatchTickLoop], and is kept as the reference legality table so the two layers cannot
- * silently disagree.
+ * [DispatchTickLoop], and is kept as the reference loop's own legality table. No test executes
+ * this table against the production layers named above; `RejectionCodeExhaustivenessTest` locks
+ * only 1:1 enum-name coverage between [RejectionCode] and this class, so parity between the
+ * tool-local and apply-time checks is not guaranteed by this class's existence.
  *
  * ## Guarantees
  *
