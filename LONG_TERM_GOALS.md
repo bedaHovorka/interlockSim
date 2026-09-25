@@ -418,7 +418,7 @@ the governing text):
 | `LLM_TOOL_CALLING`, temperature 0.5, history 3 | 10 | 0 | ❌ FAIL |
 | `LLM_TOOL_CALLING`, temperature 0.28, history 0 *(shipped default)* | 10 | 5 | ❌ FAIL |
 | `LLM_TOOL_CALLING`, temperature 0.5, history 0 | 10 | 3 | ❌ FAIL |
-| `LLM_CONSTRAINED_JSON` | 0 | 0 | retired unmeasured (#991) |
+| `LLM_CONSTRAINED_JSON` | 0 | 0 | ➖ retired unmeasured (#991) |
 
 Stated plainly: **the rule-based arm meets A4; the LLM arm does not, in any measured
 configuration.** The best cell reaches 5 of 10, three passing runs short of the bar.

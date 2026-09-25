@@ -492,7 +492,7 @@ that origin) without ever timing out.
 |---|---|---|---|
 | `RULE_BASED` | ✅ **PASS** — 10/10, `c7Clean` 10/10 | ✅ **PASS** — 10/10, `c7Clean` 10/10 | ✅ **PASS** |
 | `LLM_TOOL_CALLING` | ❌ **FAIL** — 0/10 at both temperature cells | ❌ **FAIL** — best cell 5/10 (`t=0.28`), 3/10 at `t=0.5` | ❌ **FAIL** in every measured configuration |
-| `LLM_CONSTRAINED_JSON` | ❌ **FAIL** (no data) | ❌ **FAIL** (no data) | ❌ **FAIL** — 0 runs; retired unmeasured (#991, 2026-09-25 — see §7), not a negative competence finding |
+| `LLM_CONSTRAINED_JSON` | ➖ **retired unmeasured** (no data) | ➖ **retired unmeasured** (no data) | ➖ **retired unmeasured** (#991) — 0 runs, not a negative competence finding (2026-09-25 — see §7) |
 
 **`RULE_BASED` clears the ≥ 8/10 bar with room to spare, in both campaigns, at every cell
 measured.** Its 380 attributed actions are entirely its own, `c7Clean` holds without exception,
