@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
+import cz.vutbr.fit.interlockSim.dispatcher.planner.LlmCircuitBreaker
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
@@ -29,6 +30,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.io.TempDir
@@ -95,6 +97,24 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		// `starvationAdjusted leaves a run that made progress alone`.
 		assertThat(loaded.first().endCause, "end cause").isEqualTo(RunEndCause.STARVED)
 		assertThat(loaded.first().completedNaturally, "completed naturally").isFalse()
+	}
+
+	@Test
+	@Tag("integration-test")
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("an LLM run JSON records its circuit breaker end state and counters")
+	fun persistedLlmRunCarriesCircuitBreakerStats(
+		@TempDir root: Path
+	) {
+		val context = createAiContext()
+		context.scope.declare<RunSnapshotStore>(DefaultRunSnapshotStore(root))
+
+		DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION)
+
+		val snapshot = DefaultRunSnapshotStore(root).readAll(root).single()
+		assertThat(snapshot.circuitBreakerState, "circuit breaker state").isEqualTo(LlmCircuitBreaker.State.CLOSED)
+		assertThat(snapshot.circuitBreakerTotalSkips, "circuit breaker total skips").isEqualTo(0L)
+		assertThat(snapshot.circuitBreakerOpenCount, "circuit breaker open count").isEqualTo(0L)
 	}
 
 	@Test

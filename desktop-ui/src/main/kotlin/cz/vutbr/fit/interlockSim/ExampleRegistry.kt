@@ -314,7 +314,10 @@ class ExampleRegistry {
 	 * [createShuntingLoopAIExample] (console) and [createShuntingLoopAIGuiExample] (GUI).
 	 * Issue #847 round 4 (R4-5) / #928.
 	 */
-	private fun declareLlmToolCallingRecorder(scope: Scope) {
+	private fun declareLlmToolCallingRecorder(
+		scope: Scope,
+		circuitBreaker: LlmCircuitBreaker
+	) {
 		scope.declare<DispatcherRunRecorder>(
 			DefaultDispatcherRunRecorder(
 				// Issue #847 (SP2c.24): the sweep driver assigns a deterministic run id per grid
@@ -323,7 +326,8 @@ class ExampleRegistry {
 				runId = scope.get<DispatcherRunConfig>().runId ?: UUID.randomUUID().toString(),
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				params =
-					llmRunParameters(scope.get<OllamaExecutorConfig>(), scope.get<DispatcherRunConfig>())
+					llmRunParameters(scope.get<OllamaExecutorConfig>(), scope.get<DispatcherRunConfig>()),
+				circuitBreaker = circuitBreaker
 			)
 		)
 	}
@@ -379,7 +383,7 @@ class ExampleRegistry {
 			// dispatcher-runs/rule_based/ under an empty model name, silently merging the two arms
 			// whose comparison is the whole point of A4. Override with what this example actually
 			// runs, so the per-run JSON identifies its own arm and parameters.
-			declareLlmToolCallingRecorder(scope)
+			declareLlmToolCallingRecorder(scope, koogAdapter.circuitBreaker)
 			val pacingController =
 				ThrottlingSimulationController(
 					initialSpeedMultiplier = PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER
@@ -488,7 +492,7 @@ class ExampleRegistry {
 			// shuntingLoopAI run was written to dispatcher-runs/rule_based/ under an empty model
 			// name, silently merging the two arms whose comparison is the whole point of A4.
 			// Override with what this example actually runs, mirroring createShuntingLoopAIExample.
-			declareLlmToolCallingRecorder(scope)
+			declareLlmToolCallingRecorder(scope, koogAdapter.circuitBreaker)
 			wireDispatcherAgent(
 				this,
 				loop,

@@ -173,8 +173,8 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 7`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STARVED_CAUSE)
+	fun `current schema version is 8`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_CIRCUIT_BREAKER_STATS)
 	}
 
 	/**
@@ -271,6 +271,24 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded.railwayOutcome.blockTransitions).isEqualTo(173L)
 	}
 
+	@Test
+	fun `serialization round-trips circuit breaker end-of-run measurements`() {
+		val snap =
+			snapshotWith().copy(
+				circuitBreakerState = LlmCircuitBreaker.State.OPEN,
+				circuitBreakerTotalSkips = 12L,
+				circuitBreakerOpenCount = 3L
+			)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"circuitBreakerState\": \"OPEN\"")
+		assertThat(encoded).contains("\"circuitBreakerTotalSkips\": 12")
+		assertThat(encoded).contains("\"circuitBreakerOpenCount\": 3")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded).isEqualTo(snap)
+	}
+
 	/**
 	 * Absent must survive the JSON round-trip as absent. Were `railwayOutcome` encoded with `0`
 	 * placeholders, a sweep would rank a rule-based arm and an unmeasured arm identically.
@@ -320,14 +338,17 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded.schemaVersion).isEqualTo(5)
 		assertThat(decoded.llmSuccessRate).isEqualTo(0.75)
 		assertThat(decoded.actionableTickRate).isEqualTo(0.75)
+		assertThat(decoded.circuitBreakerState).isNull()
+		assertThat(decoded.circuitBreakerTotalSkips).isNull()
+		assertThat(decoded.circuitBreakerOpenCount).isNull()
 	}
 
 	private companion object {
 		/** Pinned literally so a future bump has to touch this test deliberately. */
 		private const val SCHEMA_VERSION_WITH_ACTIONABLE_RATE: Int = 6
 
-		/** Issue #930 added [RunEndCause.STARVED]; no field changed shape. */
-		private const val SCHEMA_VERSION_WITH_STARVED_CAUSE: Int = 7
+		/** Issue #1074 added circuit-breaker end-of-run measurements. */
+		private const val SCHEMA_VERSION_WITH_CIRCUIT_BREAKER_STATS: Int = 8
 
 		private val json =
 			Json {

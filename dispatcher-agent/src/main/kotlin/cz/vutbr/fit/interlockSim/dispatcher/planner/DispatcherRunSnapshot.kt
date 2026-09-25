@@ -24,10 +24,11 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing.  Current version: **6** (version 2 added
+ * handle old JSON files without crashing. Current version: **8** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
- * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927).
+ * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
+ * version 8 added circuit-breaker end state, Issue #1074).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -131,6 +132,12 @@ import kotlinx.serialization.Serializable
  *   `fatalExceptionCount` under the pre-rename field name).
  * @property loggedFatalSimExceptionFirstMessage The first matching log line (trimmed), verbatim;
  *   `null` whenever [loggedFatalSimExceptionCount] is `null` or `0`.
+ * @property circuitBreakerState State of the LLM circuit breaker when the snapshot was captured;
+ *   `null` when this run had no LLM circuit breaker or predates this measurement.
+ * @property circuitBreakerTotalSkips Total LLM cycles skipped by the circuit breaker; `null` when
+ *   the breaker was not measured.
+ * @property circuitBreakerOpenCount Number of times the circuit breaker opened; `null` when the
+ *   breaker was not measured.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -180,7 +187,10 @@ data class DispatcherRunSnapshot(
 	val endCause: RunEndCause?,
 	val railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
 	val loggedFatalSimExceptionCount: Long? = null,
-	val loggedFatalSimExceptionFirstMessage: String? = null
+	val loggedFatalSimExceptionFirstMessage: String? = null,
+	val circuitBreakerState: LlmCircuitBreaker.State? = null,
+	val circuitBreakerTotalSkips: Long? = null,
+	val circuitBreakerOpenCount: Long? = null
 ) {
 	companion object {
 		/**
@@ -219,8 +229,12 @@ data class DispatcherRunSnapshot(
 		 *   starved run as [RunEndCause.NATURAL_COMPLETION] and will keep reporting
 		 *   `completedNaturally = true`; that is what the old code measured, and rewriting it
 		 *   on decode would invent a verdict nobody made.
+		 * - **8** — Issue #1074, added [circuitBreakerState], [circuitBreakerTotalSkips], and
+		 *   [circuitBreakerOpenCount] so a rule-fallback tick caused by an OPEN circuit breaker can
+		 *   be distinguished from a completed LLM attempt that genuinely failed. The fields default
+		 *   to `null`, preserving the fact that older JSON did not record breaker statistics.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 7
+		const val CURRENT_SCHEMA_VERSION: Int = 8
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

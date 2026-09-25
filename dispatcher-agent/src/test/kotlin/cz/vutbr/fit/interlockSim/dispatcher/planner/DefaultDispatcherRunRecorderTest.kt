@@ -220,6 +220,26 @@ class DefaultDispatcherRunRecorderTest {
 	}
 
 	@Test
+	fun `finish captures the circuit breaker state and counters`() {
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+		breaker.recordFailure(simTime = 1.0)
+		breaker.shouldAttempt(simTime = 2.0)
+		val recorder =
+			DefaultDispatcherRunRecorder(
+				runId = "breaker-run",
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				params = defaultParams,
+				circuitBreaker = breaker
+			)
+
+		val snap = recorder.finish(RunEndCause.MANUAL_STOP)
+
+		assertThat(snap.circuitBreakerState).isEqualTo(LlmCircuitBreaker.State.OPEN)
+		assertThat(snap.circuitBreakerTotalSkips).isEqualTo(1L)
+		assertThat(snap.circuitBreakerOpenCount).isEqualTo(1L)
+	}
+
+	@Test
 	fun `llmSuccessRate is zero when totalTicks is zero`() {
 		val snap = recorder().snapshot()
 		assertThat(snap.llmSuccessRate).isEqualTo(0.0)
