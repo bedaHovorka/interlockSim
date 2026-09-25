@@ -218,9 +218,9 @@ class Array2DMap<V : Any> : AbstractMutableMap<Point, V>() {
 		x: Int,
 		y: Int
 	): V? {
-		val iArray = array.get(y)
+		val iArray = array[y]
 		if (iArray == null) return null
-		return iArray.get(x)
+		return iArray[x]
 	}
 
 	override fun get(key: Point): V? = get(key.x, key.y)
@@ -229,10 +229,10 @@ class Array2DMap<V : Any> : AbstractMutableMap<Point, V>() {
 		key: Point,
 		value: V
 	): V? {
-		var iArray = array.get(key.y)
+		var iArray = array[key.y]
 		if (iArray == null) {
 			iArray = RelocableList()
-			array.set(key.y, iArray)
+			array[key.y] = iArray
 		}
 		_keys.add(key)
 		return iArray.set(key.x, value)
@@ -244,7 +244,7 @@ class Array2DMap<V : Any> : AbstractMutableMap<Point, V>() {
 	}
 
 	private fun removeValueOnly(key: Point): V? {
-		val iArray = array.get(key.y) ?: return null
+		val iArray = array[key.y] ?: return null
 		return iArray.removeAt(key.x)
 	}
 
@@ -255,7 +255,7 @@ class Array2DMap<V : Any> : AbstractMutableMap<Point, V>() {
 	 * @return elements at row
 	 */
 	fun getRow(y: Int): List<V> {
-		val list = array.get(y) ?: return emptyList()
+		val list = array[y] ?: return emptyList()
 		return list.filterNotNull()
 	}
 
