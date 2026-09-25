@@ -10,12 +10,14 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.engineOf
 import cz.vutbr.fit.interlockSim.testutil.motorOf
 import cz.vutbr.fit.interlockSim.testutil.runClearanceStopScenario
 import org.junit.jupiter.api.DisplayName
@@ -108,5 +110,34 @@ class MotorBareCancelTest : KoinTestBase() {
 		assertThat(settled, name = "the motor state was read after settling").isTrue()
 		assertThat(peakAccelerationWhileDwelling, name = "acceleration reported while dwelling").isZero()
 		assertThat(motorPassivatedAfterSettling, name = "motor passivated after the halt").isTrue()
+	}
+
+	/**
+	 * Issue #1059: the propulsion process under test is the top-level [Engine], not an inner Motor.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("motorOf returns the top-level Engine process (Issue #1059)")
+	fun motorOfReturnsTopLevelEngine() {
+		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH)
+		val ctx = network.context.tracked()
+		var engineClassName: String? = null
+
+		runClearanceStopScenario(
+			ctx,
+			semaphores = listOf(network.semaphore),
+			endTime = 5L,
+			initialAspect = Signal.FREE,
+			samplePeriod = SAMPLE_PERIOD,
+			onSample = { train, _ ->
+				if (engineClassName == null) {
+					val engine = engineOf(train)
+					engineClassName = engine::class.qualifiedName
+					assertThat(motorOf(train)).isEqualTo(engine)
+				}
+			}
+		)
+
+		assertThat(engineClassName).isEqualTo("cz.vutbr.fit.interlockSim.sim.Engine")
 	}
 }

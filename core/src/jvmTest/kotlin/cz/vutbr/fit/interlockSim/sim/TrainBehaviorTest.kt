@@ -222,7 +222,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Scenario: Train approaching semaphore should decelerate in advance
 		 * to stop smoothly at the signal location.
 		 *
-		 * Physics: Motor.onWarning() mode:
+		 * Physics: Engine.onWarning() mode:
 		 * - Accelerate to half speed (TO_HALF_SPEED condition)
 		 * - Then decelerate to stop (DECELERATION_ENDED condition)
 		 * - Ensures smooth stop without overshoot
@@ -236,7 +236,7 @@ class TrainBehaviorTest : KoinTestBase() {
 			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
-			// Train.Motor has two deceleration modes:
+			// Engine has two deceleration modes:
 			// 1. accelerateTo(speed): Simple deceleration to target speed
 			// 2. onWarning(speed): Two-phase deceleration for smooth stop
 
