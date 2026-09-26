@@ -90,6 +90,15 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 		val beforeSignal: List<TrainKinematicSample>
 	)
 
+	/**
+	 * The speed at a point where v² sits half-way between v₀² and the cap² — both rungs check the
+	 * same mid-slope of their linear v²-over-distance ramp, so they share one spelling of it.
+	 */
+	private fun speedAtSquareMidpoint(
+		v0: Double,
+		cap: Double
+	): Double = sqrt((v0 * v0 + cap * cap) / 2.0)
+
 	private fun runResumedLeg(clearTo: Signal): ResumedRun {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH_BLOCK_LENGTH)
 		val ctx = network.context.tracked()
@@ -141,8 +150,8 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 		val atQuarter = requireNotNull(run.beforeSignal.minByOrNull { abs(it.totalDistance - quarterPoint) })
 		assertThat(atQuarter.velocity, name = "speed a quarter of the way to the signal, $atQuarter")
 			.isBetween(
-				sqrt((v0 * v0 + cap * cap) / 2.0) - SPEED_TOLERANCE_MPS,
-				sqrt((v0 * v0 + cap * cap) / 2.0) + SPEED_TOLERANCE_MPS
+				speedAtSquareMidpoint(v0, cap) - SPEED_TOLERANCE_MPS,
+				speedAtSquareMidpoint(v0, cap) + SPEED_TOLERANCE_MPS
 			)
 
 		val capReached = run.beforeSignal.firstOrNull { it.velocity >= cap - SPEED_TOLERANCE_MPS }
@@ -183,8 +192,8 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 		val atHalf = requireNotNull(run.beforeSignal.minByOrNull { abs(it.totalDistance - halfPoint) })
 		assertThat(atHalf.velocity, name = "speed half-way to the signal, $atHalf")
 			.isBetween(
-				sqrt((v0 * v0 + cap * cap) / 2.0) - SPEED_TOLERANCE_MPS,
-				sqrt((v0 * v0 + cap * cap) / 2.0) + SPEED_TOLERANCE_MPS
+				speedAtSquareMidpoint(v0, cap) - SPEED_TOLERANCE_MPS,
+				speedAtSquareMidpoint(v0, cap) + SPEED_TOLERANCE_MPS
 			)
 
 		val atSignal = run.beforeSignal.last()

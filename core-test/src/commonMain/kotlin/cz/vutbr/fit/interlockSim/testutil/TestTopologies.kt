@@ -61,8 +61,16 @@ object TestTopologies {
 	private val SEMAPHORE_POINT = Point(3, 3)
 
 	/**
+	 * Max speed (m/s) of the linear families' blocks, in both travel directions. The Issue
+	 * #1087 FREE rung asserts the train coasts at exactly this cap after a clear to
+	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.FREE], so it reads this constant instead
+	 * of restating the number.
+	 */
+	const val LINEAR_BLOCK_MAX_SPEED_MPS = 80.0
+
+	/**
 	 * The builder chain behind the single-semaphore linear family:
-	 * `A —[approachLength]— Sem —100 m— B`, all blocks at 80 m/s.
+	 * `A —[approachLength]— Sem —100 m— B`, all blocks at [LINEAR_BLOCK_MAX_SPEED_MPS].
 	 */
 	private fun linearPathWithSemaphoreBuilder(
 		approachLength: Double = 100.0,
@@ -72,8 +80,8 @@ object TestTopologies {
 			.withInOut("A", 1, 1, true)
 			.withSemaphore(SEMAPHORE_POINT.x, SEMAPHORE_POINT.y, semaphoreAllowing)
 			.withInOut("B", 5, 5, false)
-			.withConnection(1, 1, 3, 3, approachLength, 80.0)
-			.withConnection(3, 3, 5, 5, 100.0, 80.0)
+			.withConnection(1, 1, 3, 3, approachLength, LINEAR_BLOCK_MAX_SPEED_MPS)
+			.withConnection(3, 3, 5, 5, 100.0, LINEAR_BLOCK_MAX_SPEED_MPS)
 
 	fun linearPathWithSemaphore(semaphoreAllowing: Boolean = false): EditingContext =
 		linearPathWithSemaphoreBuilder(semaphoreAllowing = semaphoreAllowing).buildEditingContext()

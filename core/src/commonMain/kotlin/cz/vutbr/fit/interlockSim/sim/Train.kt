@@ -1662,6 +1662,10 @@ class Train :
 			while (true) {
 				val aspectChanged =
 					if (running) {
+						// No `targetSpeed > 0` or `DynamicRailSemaphore` guard here, unlike the
+						// `iteration` arm: an allowing aspect's cap is positive, so `targetSpeed > 0`
+						// holds on this path, the resumed leg implies a `DynamicRailSemaphore` ahead,
+						// and `brakingRoomGone()`/`brakingRoomMargin()` re-guard both anyway.
 						resumeAtAspectCap() || (!terminate && accelerate && watchForLateRestrictiveAspect())
 					} else {
 						brakeToStopLine()
