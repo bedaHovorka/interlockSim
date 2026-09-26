@@ -13,7 +13,9 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -24,7 +26,10 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.passAndRelease
+import cz.vutbr.fit.interlockSim.testutil.routeBlocksOf
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
+import cz.vutbr.fit.interlockSim.testutil.topologicalPathBlocks
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -83,6 +88,12 @@ class Issue1076RegressionTest : KoinTestBase() {
 		semaphoreDoB2 = simulationContext.separatorAt(24, 9)
 		switchVA = simulationContext.separatorAt(15, 8) as? DynamicRailSwitch
 			?: throw IllegalStateException("Switch 'vA' is not a DynamicRailSwitch")
+
+		// vA starts in the position a zA -> doB1 candidate needs (MAIN, the k1 leg), so every
+		// same-position scenario below needs no reposition and only ownership can refuse it.
+		if (switchVA.conf != Conf.MAIN) {
+			switchVA.changeConf()
+		}
 	}
 
 	@AfterEach
@@ -94,111 +105,163 @@ class Issue1076RegressionTest : KoinTestBase() {
 	@Timeout(30, unit = TimeUnit.SECONDS)
 	@DisplayName("a same-position candidate over a STALE foreign switch succeeds by reclamation, never by stealing")
 	fun staleForeignOwnershipIsReclaimedInsteadOfStolen() {
-		val staleOwner = "train_1076_stale_owner"
-		val candidate = "train_1076_candidate"
-
-		// Given: vA is in the position the candidate will need (MAIN, the k1 leg towards doB1)
-		// and is registered to a train that holds NO block bounded by it -- the exact stale
+		// Given: vA is registered to a train that holds NO block bounded by it -- the exact stale
 		// window from the issue (a scoped rollback released the owner's adjacent blocks via
 		// registry.unregisterBlock, which bypasses dropFreedBlock's reclamation).
-		if (switchVA.conf != Conf.MAIN) {
-			switchVA.changeConf()
-		}
-		registry.registerSwitches(staleOwner, listOf(switchVA))
+		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
 		assertThat(switchVA.locked).isTrue()
-		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(staleOwner)
 
 		// When: the candidate reserves zA -> doB1, which traverses vA in the SAME position the
 		// stale owner holds. Before the fix, registerSwitches silently overwrote switchToTrain
 		// while the stale owner's trainToSwitches list kept vA -- the two maps disagreed.
-		val result = service.reservePath(candidate, semaphoreZA, semaphoreDoB1)
+		val result = service.reservePath(CANDIDATE, semaphoreZA, semaphoreDoB1)
 
 		// Then: the reservation succeeds by LEGITIMATE reclamation (Step 2e.5), so both maps
 		// agree: the candidate owns vA and the stale owner's switch list is empty.
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(candidate)
-		assertThat(registry.getSwitches(candidate)).contains(switchVA)
-		assertThat(registry.getSwitches(staleOwner)).isEmpty()
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(CANDIDATE)
+		assertThat(registry.getSwitches(CANDIDATE)).contains(switchVA)
+		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
 
 		// And: the stale owner's release path can no longer unlock the candidate's live switch
 		// -- the corruption consequence the issue describes.
-		assertThat(registry.unregisterSwitches(staleOwner)).isEmpty()
+		assertThat(registry.unregisterSwitches(OTHER_OWNER)).isEmpty()
 		assertThat(switchVA.locked).isTrue()
-		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(candidate)
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(CANDIDATE)
 	}
 
 	@Test
 	@Timeout(30, unit = TimeUnit.SECONDS)
 	@DisplayName("a same-position candidate over a LIVE foreign switch is refused as transient contention")
 	fun liveForeignOwnershipRefusesTheSamePositionCandidate() {
-		val liveOwner = "train_1076_live_owner"
-		val candidate = "train_1076_candidate"
-
-		// Given: vA is in the position the candidate will need (MAIN) but is registered to a
-		// train that still holds a block bounded by vA on the OTHER leg (k2 side) -- a live
-		// route the candidate's blocks do not conflict with, so only the ownership check can
-		// refuse the traversal.
-		if (switchVA.conf != Conf.MAIN) {
-			switchVA.changeConf()
-		}
-		val k2SideBlock = blockNearSwitchOffCandidatePath()
-		assertThat(registry.registerAtomic(liveOwner, listOf(k2SideBlock)))
+		// Given: vA is registered to a train that still holds a block bounded by vA on the OTHER
+		// leg (k2 side) -- a live route the candidate's blocks do not conflict with, so only the
+		// ownership check can refuse the traversal. A real route over k2 would need vA in BRANCH;
+		// this arrangement is deliberately not physically consistent, because no consistent live
+		// same-position owner exists without a block conflict that would refuse the candidate
+		// first. It isolates the ownership guard -- do not "fix" it into a consistent route.
+		assertThat(registry.registerAtomic(OTHER_OWNER, listOf(blockNearVAOffCandidatePath())))
 			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
-		registry.registerSwitches(liveOwner, listOf(switchVA))
-		assertThat(switchVA.locked).isTrue()
+		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
 
-		// When: the candidate asks for zA -> doB1 (stem and k1 blocks are FREE, vA already in
-		// MAIN -- before the fix this traversed vA and stole the ownership entry).
-		val result = service.reservePath(candidate, semaphoreZA, semaphoreDoB1)
+		// When / Then: before the fix this traversed vA and stole the ownership entry.
+		assertCandidateRefusedAndOwnerIntact()
+	}
 
-		// Then: refused as TRANSIENT contention (never GeometricallyImpossible, which would
-		// make InOutWorker throw), and the live owner's switch is completely intact.
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("a flank-protected foreign switch is never reclaimed, even with no adjacent block")
+	fun flankProtectedForeignSwitchIsNeverReclaimed() {
+		// Given: vA is a FLANK grant (a facade `route.flank` lock, Issue #1076 review). The flank
+		// owner holds NO block bounded by vA -- a flank switch protects a route it is not adjacent
+		// to -- so without the flank marker Step 2e.5 would release this LIVE protection as stale.
+		registry.registerFlankSwitches(OTHER_OWNER, listOf(switchVA))
+		assertThat(registry.getBlocks(OTHER_OWNER)).isEmpty()
+
+		// When / Then: the flank protection survives and refuses the candidate.
+		assertCandidateRefusedAndOwnerIntact()
+		assertThat(registry.isFlankProtected(switchVA)).isTrue()
+	}
+
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("a foreign owner on a switch with NO valid configuration keeps the candidate GeometricallyImpossible")
+	fun foreignOwnerDoesNotMaskAGeometricImpossibility() {
+		// Given: vA is a flank grant of another train -- the only foreign ownership Step 2e.5
+		// never reclaims, so the ownership guard in configureSwitchesInPath really sees it.
+		registry.registerFlankSwitches(OTHER_OWNER, listOf(switchVA))
+
+		// When: the candidate asks for the impossible diversion doB1 -> doB2 (the Issue #742
+		// shape). The route runs back over k1 to vA and on to k2, and no configuration of vA
+		// joins branch k1 to branch k2, so the required configuration is null.
+		val diversion = service.reservePath(CANDIDATE, semaphoreDoB1, semaphoreDoB2)
+
+		// Then: the permanent geometric impossibility (#742) wins. The ownership guard must not
+		// turn it into retryable contention that a live foreign owner would never resolve, so the
+		// train would retry forever (Issue #1076 review).
+		assertThat(diversion)
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+
+		// And: the foreign owner's grant is untouched by the candidate's rollback.
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(OTHER_OWNER)
 		assertThat(switchVA.locked).isTrue()
-		assertThat(switchVA.conf).isEqualTo(Conf.MAIN)
-		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(liveOwner)
-		assertThat(registry.getSwitches(liveOwner)).contains(switchVA)
-		assertThat(registry.getSwitches(candidate)).isEmpty()
-		assertThat(registry.getBlocks(candidate)).isEmpty()
+		assertThat(registry.getBlocks(CANDIDATE)).isEmpty()
+	}
+
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("a block release next to a flank-protected switch does not reclaim it (Issue #1065 path)")
+	fun blockReleaseDoesNotReclaimAFlankProtectedSwitch() {
+		registry.registerFlankSwitches(OTHER_OWNER, listOf(switchVA))
+
+		passAndReleaseNeighbourBlockOfVA()
+
+		// The flank grant survives the per-block reclamation.
+		assertThat(switchVA.locked).isTrue()
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(OTHER_OWNER)
+		assertThat(registry.isFlankProtected(switchVA)).isTrue()
+	}
+
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("control: the same block release DOES reclaim a plain (non-flank) ownership")
+	fun blockReleaseReclaimsAPlainStaleOwnership() {
+		// The same arrangement with a plain registration proves the release really reaches the
+		// reclamation, so the flank test above is not vacuous.
+		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
+
+		passAndReleaseNeighbourBlockOfVA()
+
+		assertThat(switchVA.locked).isFalse()
+		assertThat(registry.getSwitchOwner(switchVA)).isNull()
+		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
 	}
 
 	/**
-	 * The block bounded by vA on the k2 leg -- adjacent to the switch, but NOT on the
-	 * candidate's zA -> doB1 route, so the candidate's block reservation cannot conflict
-	 * with it and only the Issue #1076 ownership check stands between the candidate and
-	 * the traversal.
+	 * The candidate asks for zA -> doB1 over vA in the SAME position [OTHER_OWNER] holds; it must
+	 * be refused as TRANSIENT contention (never GeometricallyImpossible, which would make
+	 * InOutWorker throw), and the owner's switch must be completely intact.
 	 */
-	private fun blockNearSwitchOffCandidatePath(): DynamicTrackBlock {
-		val candidateBlocks = routeBlocksOf(semaphoreZA, semaphoreDoB1).toSet()
-		return allRouteBlocksOf(semaphoreZA, semaphoreDoB2)
+	private fun assertCandidateRefusedAndOwnerIntact() {
+		val result = service.reservePath(CANDIDATE, semaphoreZA, semaphoreDoB1)
+
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		assertThat(switchVA.locked).isTrue()
+		assertThat(switchVA.conf).isEqualTo(Conf.MAIN)
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(OTHER_OWNER)
+		assertThat(registry.getSwitches(OTHER_OWNER)).contains(switchVA)
+		assertThat(registry.getSwitches(CANDIDATE)).isEmpty()
+		assertThat(registry.getBlocks(CANDIDATE)).isEmpty()
+	}
+
+	/**
+	 * A neighbour train reserves a block bounded by vA and passes it, then releases it through
+	 * the production per-block path (unregisterBlock -> dropFreedBlock -> the Issue #1065
+	 * stale-lock reclamation).
+	 */
+	private fun passAndReleaseNeighbourBlockOfVA() {
+		val block = blockNearVAOffCandidatePath()
+		assertThat(registry.registerAtomic(NEIGHBOUR, listOf(block)))
+			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+		block.setUpPath(block.ends().first { it != switchVA } as DynamicPathSeparator, NEIGHBOUR)
+		assertThat(service.passAndRelease(NEIGHBOUR, block)).isTrue()
+	}
+
+	/**
+	 * The block bounded by vA on the k2 leg -- adjacent to the switch, but NOT on the candidate's
+	 * zA -> doB1 route, so a reservation of it cannot conflict with the candidate.
+	 */
+	private fun blockNearVAOffCandidatePath(): DynamicTrackBlock {
+		val candidateBlocks = simulationContext.routeBlocksOf(semaphoreZA, semaphoreDoB1).toSet()
+		return simulationContext
+			.topologicalPathBlocks(semaphoreZA, semaphoreDoB2)
+			.flatten()
 			.first { switchVA in it.ends() && it !in candidateBlocks }
 	}
 
-	/** All blocks of the FIRST topological path from [start] to [target], in path order. */
-	private fun routeBlocksOf(
-		start: DynamicPathSeparator,
-		target: DynamicPathSeparator
-	): List<DynamicTrackBlock> =
-		simulationContext
-			.getRoutingServices()
-			.getTopologyNavigator()
-			.findAllTopologicalPaths(start, target)
-			.first()
-			.map { it.getTrackBlock() }
-			.filterIsInstance<DynamicTrackBlock>()
-			.distinct()
-
-	/** The blocks of EVERY topological path from [start] to [target], flattened. */
-	private fun allRouteBlocksOf(
-		start: DynamicPathSeparator,
-		target: DynamicPathSeparator
-	): List<DynamicTrackBlock> =
-		simulationContext
-			.getRoutingServices()
-			.getTopologyNavigator()
-			.findAllTopologicalPaths(start, target)
-			.flatten()
-			.map { it.getTrackBlock() }
-			.filterIsInstance<DynamicTrackBlock>()
-			.distinct()
+	private companion object {
+		const val CANDIDATE = "train_1076_candidate"
+		const val OTHER_OWNER = "train_1076_other_owner"
+		const val NEIGHBOUR = "train_1076_neighbour"
+	}
 }

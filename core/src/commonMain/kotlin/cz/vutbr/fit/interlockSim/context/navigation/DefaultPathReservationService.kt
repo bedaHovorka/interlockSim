@@ -22,8 +22,10 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -678,16 +680,12 @@ class DefaultPathReservationService(
 					// otherwise valid candidate. Ordering relative to the priorSwitches snapshot
 					// is irrelevant -- an orphan has no registered owner, so it can never appear
 					// in registry.getSwitches(trainId) in the first place.
-					releaseOrphanSwitchLocks(extractUniqueSwitches(pathInfo))
-					// Issue #1076: also reclaim STALE foreign ownership (registered to another
-					// train that holds no adjacent block -- the reclaimStaleSwitchLocks
-					// predicate) among this candidate's switches, so the same-position case
-					// that used to succeed by silently STEALING the registry entry now
-					// succeeds by a legitimate reclamation that keeps switchToTrain and
-					// trainToSwitches consistent. A foreign owner that survives this step
-					// protects a live route and refuses the candidate in
-					// configureSwitchesInPath below.
-					reclaimStaleForeignSwitchOwnership(trainId, extractUniqueSwitches(pathInfo))
+					val candidateSwitches = extractUniqueSwitches(pathInfo)
+					releaseOrphanSwitchLocks(candidateSwitches)
+					// Issue #1076: likewise reclaim STALE foreign ownership among them, so the
+					// candidate never overwrites it; a foreign owner that survives this step
+					// protects a live route and refuses the candidate in configureSwitchesInPath.
+					reclaimStaleForeignSwitchOwnership(trainId, candidateSwitches)
 
 					// Step 2f: Configure and register switches (Issue #300, #291, #742).
 					// A candidate whose switches cannot be configured is physically impossible
@@ -749,7 +747,7 @@ class DefaultPathReservationService(
 							rollbackUnconfigurableCandidate(
 								trainId,
 								forwardBlocks,
-								extractUniqueSwitches(pathInfo),
+								candidateSwitches,
 								priorSwitches
 							)
 							continue
@@ -2477,7 +2475,8 @@ class DefaultPathReservationService(
 		 * Issue #1065: a genuinely traversed switch IS locked, in a different position, by
 		 * [holder] (`null` if the lock is an orphan -- see [PathReservationRegistry.getSwitchOwner]).
 		 * Issue #1076: also reported when the switch is REGISTERED to a different train even in
-		 * the SAME position -- traversing it would steal the ownership entry from its live owner.
+		 * the SAME position (a known required configuration only) -- traversing it would steal
+		 * the ownership entry from its live owner.
 		 * Transient: resolves once [holder]'s route releases the switch.
 		 */
 		data class Locked(
@@ -2578,128 +2577,49 @@ class DefaultPathReservationService(
 		// Iterate through path elements with index for neighbor access
 		pathElements.forEachIndexed { index, element ->
 			// Only process switches
-			if (element is DynamicRailSwitch) {
-				// Find previous Track (skip over separators)
-				var previous: Track? = null
-				for (i in (index - 1) downTo 0) {
-					if (pathElements[i] is Track) {
-						previous = pathElements[i] as Track
-						break
-					}
+			if (element !is DynamicRailSwitch) return@forEachIndexed
+
+			// Find previous and next Track (skip over separators)
+			val previous = nearestTrackBefore(pathElements, index)
+			val next = nearestTrackAfter(pathElements, index)
+
+			// Skip if we don't have a next track (required for configuration)
+			if (next == null) {
+				logger.warn {
+					"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
+						"has no next track, skipping configuration"
 				}
+				return@forEachIndexed
+			}
 
-				// Find next Track (skip over separators)
-				var next: Track? = null
-				for (i in (index + 1) until pathElements.size) {
-					if (pathElements[i] is Track) {
-						next = pathElements[i] as Track
-						break
-					}
+			// Calculate from/to segments using context.getSegment()
+			// from = segment the train is coming FROM
+			// to = segment the train is going TO
+			val from = context.getSegment(element, previous, next)
+			val to = context.getSegment(element, next, previous)
+
+			// Lenient skip (pre-#742 behavior): segments undeterminable means the path does
+			// not geometrically traverse this switch, so there is nothing to configure.
+			if (from == null || to == null) {
+				logger.info {
+					"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
+						"for train $trainId - segments undeterminable, path does not traverse it " +
+						"(from=${from?.hashCode()}, to=${to?.hashCode()})"
 				}
+				return@forEachIndexed
+			}
 
-				// Skip if we don't have a next track (required for configuration)
-				if (next == null) {
-					logger.warn {
-						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
-							"has no next track, skipping configuration"
-					}
-					return@forEachIndexed // Kotlin lambda: use return@label instead of continue
-				}
+			// Issues #1065/#1076: non-throwing pre-check of ownership/lock contention
+			// (see switchOwnershipPreCheck for the classification rules).
+			switchOwnershipPreCheck(trainId, element, element.pathConf(from, to))?.let { outcome ->
+				pendingLocked = pendingLocked ?: outcome
+				return@forEachIndexed
+			}
 
-				// Calculate from/to segments using context.getSegment()
-				// from = segment the train is coming FROM
-				// to = segment the train is going TO
-				val from = context.getSegment(element, previous, next)
-				val to = context.getSegment(element, next, previous)
-
-				// Lenient skip (pre-#742 behavior): segments undeterminable means the path does
-				// not geometrically traverse this switch, so there is nothing to configure.
-				if (from == null || to == null) {
-					logger.info {
-						"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
-							"for train $trainId - segments undeterminable, path does not traverse it " +
-							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
-					}
-					return@forEachIndexed
-				}
-
-				// Issue #1065: pre-check (non-throwing) whether this candidate needs a switch
-				// already locked, by ANY train (including this one), in the OTHER position --
-				// the exact shape that silently corrupted a surviving route's switch position
-				// in Issue #1031. Reported as transient contention, never as a permanent
-				// geometric impossibility.
-				// Issue #1076: a switch REGISTERED to a DIFFERENT train is refused even when
-				// the candidate needs the SAME position it currently holds -- traversing it
-				// would let registerSwitches steal the ownership entry from its live owner.
-				// Stale foreign ownership (owner holds no adjacent block) has already been
-				// reclaimed by reservePath Step 2e.5, so a foreign owner seen here protects a
-				// live route and the candidate must wait -- transient contention as well.
-				val requiredConf = element.pathConf(from, to)
-				val holder = registry.getSwitchOwner(element)
-				val repositionWhileLocked = element.locked && requiredConf != null && requiredConf != element.conf
-				val ownedByOtherTrain = holder != null && holder != trainId
-				if (repositionWhileLocked || ownedByOtherTrain) {
-					logger.warn {
-						"configureSwitchesInPath: Switch ${element.staticRef.getName()} is held " +
-							"in ${element.conf} by '$holder' but train $trainId's candidate needs " +
-							"${requiredConf ?: element.conf} -- transient contention, continuing to " +
-							"check the rest of the candidate for a permanent impossibility " +
-							"(safety SI-5, Issues #1065/#1076)"
-					}
-					if (pendingLocked == null) {
-						pendingLocked =
-							SwitchConfigOutcome.Locked(element, holder, element.conf, requiredConf ?: element.conf)
-					}
-					return@forEachIndexed
-				}
-
-				try {
-					// Get allowed speed for this switch
-					val allowedSpeed = element.allowedSpeed()
-
-					// Create minimal TrackOccupant for switch configuration
-					// Switch only uses this for logging, not business logic
-					val trainOccupant = MinimalTrackOccupant(trainId)
-
-					// Configure the switch (sets conf, fires PropertyChange event, locks)
-					element.setUpPath(from, to, allowedSpeed, trainOccupant)
-
-					// Increment counter on successful configuration
-					configuredCount++
-
-					logger.info {
-						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
-							"configured to ${element.conf} for train $trainId " +
-							"(from=${from.hashCode()}, to=${to.hashCode()})"
-					}
-				} catch (e: SwitchLockedException) {
-					// Issue #1065: defence-in-depth. The pre-check above should always catch this
-					// first; this only fires if the switch's lock state changed between the
-					// pre-check and this call (not possible in the current single-threaded kDisco
-					// context, but the guard in DynamicRailSwitch.setUpPath is authoritative, so
-					// this call site must not silently mis-classify its refusal as #742).
-					logger.warn {
-						"configureSwitchesInPath: Switch ${element.staticRef.getName()} refused a " +
-							"reposition while locked for train $trainId (Issue #1065): ${e.message}"
-					}
-					if (pendingLocked == null) {
-						pendingLocked =
-							SwitchConfigOutcome.Locked(element, registry.getSwitchOwner(element), e.heldConf, e.requiredConf)
-					}
-				} catch (e: PathSeparatorChangeException) {
-					// Issue #742: the route genuinely traverses this switch (both segments known)
-					// but NO switch configuration joins them — the candidate route is physically
-					// impossible. Reject the configuration so reservePath rolls the candidate
-					// back; silently skipping here reserved untraversable routes and permanently
-					// stalled trains.
-					logger.warn {
-						"configureSwitchesInPath: Switch ${element.staticRef.getName()} cannot join " +
-							"the route's segments for train $trainId - rejecting candidate route " +
-							"(from=${from.hashCode()}, to=${to.hashCode()}, Issue #742)"
-					}
-					logger.debug(e) { "Exception details: ${e.message}" }
-					return SwitchConfigOutcome.Unconfigurable
-				}
+			when (val outcome = setUpTraversedSwitch(trainId, element, from, to)) {
+				SwitchConfigOutcome.Configured -> configuredCount++
+				SwitchConfigOutcome.Unconfigurable -> return outcome
+				is SwitchConfigOutcome.Locked -> pendingLocked = pendingLocked ?: outcome
 			}
 		}
 
@@ -2707,6 +2627,122 @@ class DefaultPathReservationService(
 			"configureSwitchesInPath: Configured $configuredCount switch(es) for train $trainId"
 		}
 		return pendingLocked ?: SwitchConfigOutcome.Configured
+	}
+
+	/**
+	 * Nearest [Track] before [index] in [pathElements], skipping over separators.
+	 *
+	 * @return the track, or null if the path starts with the switch (no track before it)
+	 */
+	private fun nearestTrackBefore(
+		pathElements: List<PathElement>,
+		index: Int
+	): Track? = (index - 1 downTo 0).firstNotNullOfOrNull { i -> pathElements[i] as? Track }
+
+	/**
+	 * Nearest [Track] after [index] in [pathElements], skipping over separators.
+	 *
+	 * @return the track, or null if the path ends with the switch (no track after it)
+	 */
+	private fun nearestTrackAfter(
+		pathElements: List<PathElement>,
+		index: Int
+	): Track? = ((index + 1) until pathElements.size).firstNotNullOfOrNull { i -> pathElements[i] as? Track }
+
+	/**
+	 * Configure [element], which the candidate for [trainId] genuinely traverses from segment
+	 * [from] to segment [to], through [DynamicRailSwitch.setUpPath] (sets conf, fires the
+	 * PropertyChange event for animation, locks).
+	 *
+	 * @return [SwitchConfigOutcome.Configured] on success; [SwitchConfigOutcome.Locked] when
+	 *   setUpPath refuses a reposition while locked; [SwitchConfigOutcome.Unconfigurable] when
+	 *   no configuration joins the two segments
+	 */
+	private fun setUpTraversedSwitch(
+		trainId: String,
+		element: DynamicRailSwitch,
+		from: Cell.Segment,
+		to: Cell.Segment
+	): SwitchConfigOutcome =
+		try {
+			// MinimalTrackOccupant: the switch uses the occupant for logging only.
+			element.setUpPath(from, to, element.allowedSpeed(), MinimalTrackOccupant(trainId))
+			logger.info {
+				"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
+					"configured to ${element.conf} for train $trainId " +
+					"(from=${from.hashCode()}, to=${to.hashCode()})"
+			}
+			SwitchConfigOutcome.Configured
+		} catch (e: SwitchLockedException) {
+			// Issue #1065: defence-in-depth. The pre-check (switchOwnershipPreCheck) should always
+			// catch this first; this only fires if the switch's lock state changed between the
+			// pre-check and this call (not possible in the current single-threaded kDisco
+			// context, but the guard in DynamicRailSwitch.setUpPath is authoritative, so this
+			// call site must not silently mis-classify its refusal as #742).
+			logger.warn {
+				"configureSwitchesInPath: Switch ${element.staticRef.getName()} refused a " +
+					"reposition while locked for train $trainId (Issue #1065): ${e.message}"
+			}
+			SwitchConfigOutcome.Locked(element, registry.getSwitchOwner(element), e.heldConf, e.requiredConf)
+		} catch (e: PathSeparatorChangeException) {
+			// Issue #742: the route genuinely traverses this switch (both segments known) but NO
+			// switch configuration joins them — the candidate route is physically impossible.
+			// Reject the configuration so reservePath rolls the candidate back; silently skipping
+			// here reserved untraversable routes and permanently stalled trains.
+			logger.warn {
+				"configureSwitchesInPath: Switch ${element.staticRef.getName()} cannot join " +
+					"the route's segments for train $trainId - rejecting candidate route " +
+					"(from=${from.hashCode()}, to=${to.hashCode()}, Issue #742)"
+			}
+			logger.debug(e) { "Exception details: ${e.message}" }
+			SwitchConfigOutcome.Unconfigurable
+		}
+
+	/**
+	 * Non-throwing pre-check whether the candidate for [trainId] may traverse [element] that
+	 * needs [requiredConf] (null = the segments admit no switch configuration).
+	 *
+	 * Reported as TRANSIENT contention, never as a permanent geometric impossibility:
+	 *
+	 * - Issue #1065 (safety SI-5): the switch is locked by ANY train (including this one) in
+	 *   the OTHER position — the exact shape that silently corrupted a surviving route's
+	 *   switch position in Issue #1031.
+	 * - Issue #1076: the switch is REGISTERED to a DIFFERENT train, even in the SAME position
+	 *   (stale foreign ownership was already reclaimed in reservePath Step 2e.5, so this owner
+	 *   protects a live route).
+	 *
+	 * Neither fires when [requiredConf] is null: the switch then admits no configuration at
+	 * all, and [DynamicRailSwitch.setUpPath]'s geometric check must classify it as
+	 * `Unconfigurable` (#742, permanent) -- contention a live foreign owner would never
+	 * resolve must not mask it (Issue #1076 review).
+	 *
+	 * @return the contention to report (first-hit-wins in the caller), or null when the
+	 *   candidate may proceed to [DynamicRailSwitch.setUpPath]
+	 */
+	private fun switchOwnershipPreCheck(
+		trainId: String,
+		element: DynamicRailSwitch,
+		requiredConf: RailSwitch.Conf?
+	): SwitchConfigOutcome.Locked? {
+		val required = requiredConf ?: return null
+		val repositionWhileLocked = element.locked && required != element.conf
+		if (!repositionWhileLocked && !registry.isOwnedByOtherTrain(element, trainId)) {
+			return null
+		}
+		val holder = registry.getSwitchOwner(element)
+		logger.warn {
+			val reason =
+				if (repositionWhileLocked) {
+					"is locked in ${element.conf} by '$holder' but train $trainId's candidate needs " +
+						"$required (safety SI-5, Issue #1065)"
+				} else {
+					"is registered to '$holder'; train $trainId's candidate must not take it over " +
+						"(Issue #1076)"
+				}
+			"configureSwitchesInPath: Switch ${element.staticRef.getName()} $reason -- transient " +
+				"contention, continuing to check the rest of the candidate for a permanent impossibility"
+		}
+		return SwitchConfigOutcome.Locked(element, holder, element.conf, required)
 	}
 
 	/**
@@ -3504,16 +3540,10 @@ class DefaultPathReservationService(
 		// Issue #1076: extractUniqueSwitches includes switches the path does NOT genuinely
 		// traverse (configureSwitchesInPath skips them leniently when their segments are
 		// undeterminable). A non-traversed switch registered to ANOTHER train must not be
-		// registered here -- registerSwitches now throws on a foreign owner instead of
-		// silently stealing the ownership entry -- so keep only switches that are free or
-		// already this train's. Every genuinely TRAVERSED switch is guaranteed to pass this
-		// filter: a live foreign owner was refused as Locked above and stale foreign
-		// ownership was reclaimed in reservePath Step 2e.5.
-		val registrable =
-			switches.filter { switch ->
-				val owner = registry.getSwitchOwner(switch)
-				owner == null || owner == trainId
-			}
+		// registered here -- registerSwitches throws on a foreign owner. Every genuinely
+		// TRAVERSED switch passes this filter: a live foreign owner was refused as Locked
+		// above and stale foreign ownership was reclaimed in reservePath Step 2e.5.
+		val registrable = switches.filterNot { registry.isOwnedByOtherTrain(it, trainId) }
 		registry.registerSwitches(trainId, registrable)
 		logger.debug {
 			"reservePath: Registered ${registrable.size} switches for $trainId"
@@ -3794,19 +3824,12 @@ class DefaultPathReservationService(
 
 	/**
 	 * Issue #1076: reclaim STALE foreign ownership among [switches] before a candidate for
-	 * [trainId] touches them.
-	 *
-	 * A switch registered to a DIFFERENT train whose owner holds no block bounded by it (the
-	 * [reclaimStaleSwitchLocks] staleness predicate) protects no live route -- it survives only
-	 * because a scoped rollback path released the owner's adjacent blocks via
+	 * [trainId] touches them, so the candidate never has to overwrite it (see
+	 * [PathReservationRegistry.registerSwitches]). Such ownership typically survives because a
+	 * scoped rollback path released the owner's adjacent blocks via
 	 * [PathReservationRegistry.unregisterBlock] directly, bypassing [dropFreedBlock]'s
-	 * reclamation. Before this fix such a switch flowed into
-	 * [PathReservationRegistry.registerSwitches], which silently overwrote `switchToTrain`
-	 * while the old owner's `trainToSwitches` list kept the switch -- the two maps then
-	 * disagreed and the old owner's release path could unlock a switch on the new owner's
-	 * live route. Reclaiming through [PathReservationRegistry.unregisterSwitch] keeps both
-	 * maps consistent; a foreign owner that survives this step is live and refuses the
-	 * candidate in [configureSwitchesInPath] instead.
+	 * reclamation. A foreign owner that survives this step is live and refuses the candidate in
+	 * [configureSwitchesInPath] instead.
 	 *
 	 * @since Issue #1076
 	 */
@@ -3814,31 +3837,14 @@ class DefaultPathReservationService(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
 	) {
-		switches.forEach { switch ->
-			val owner = registry.getSwitchOwner(switch) ?: return@forEach
-			if (owner == trainId) return@forEach
-			val stillProtected = registry.getBlocks(owner).any { switch in it.ends() }
-			if (!stillProtected) {
-				registry.unregisterSwitch(owner, switch)
-				logger.info {
-					"reclaimStaleForeignSwitchOwnership: released stale ownership of switch " +
-						"${switch.staticRef.getName()} -- owner '$owner' holds no block bounded " +
-						"by it, so a candidate for '$trainId' may take it over cleanly (Issue #1076)"
-				}
-			}
-		}
+		switches
+			.filter { registry.isOwnedByOtherTrain(it, trainId) }
+			.forEach { reclaimIfStale(it) { "before a candidate for '$trainId' takes it, Issue #1076" } }
 	}
 
 	/**
 	 * Issue #1065: once [block] leaves the registry, release any switch lock at its ends that no
-	 * longer protects a live route.
-	 *
-	 * A lock on switch `S` held by train `T` is stale iff `T` holds no OTHER block bounded by
-	 * `S` -- a route never ends AT a switch ([PathReservationRegistry.isValidPathInfoEnd], Issue
-	 * #938), so any switch on a live route always has at least one held adjacent block, and a
-	 * train straddling the switch holds both. So "no held adjacent block" means no train has
-	 * authority over any track the switch connects, and releasing it cannot move a switch under
-	 * a train or contradict a granted route.
+	 * longer protects a live route ([PathReservationRegistry.isStaleSwitchOwnership]).
 	 *
 	 * This is the mechanism that makes the SI-5 guard in [DynamicRailSwitch.setUpPath] livable:
 	 * without it, a train that has passed a switch keeps it locked until its FULL journey
@@ -3847,25 +3853,35 @@ class DefaultPathReservationService(
 	 * EVERY repetition of the vyhybna shunting loop (a train exits, the next one needs the
 	 * opposite position for the same switch), so this is load-bearing, not defensive polish.
 	 *
-	 * Assumes flank protection is not modelled (true today, see
-	 * `docs/INTERLOCKING_SCOPE_LIMITATIONS.md` §B2) -- a flank switch protecting a route it is
-	 * not adjacent to would make this predicate unsound.
-	 *
 	 * @since Issue #1065
 	 */
 	private fun reclaimStaleSwitchLocks(block: DynamicTrackBlock) {
-		block.ends().filterIsInstance<DynamicRailSwitch>().forEach { switch ->
-			if (!switch.locked) return@forEach
-			val owner = registry.getSwitchOwner(switch) ?: return@forEach
-			val stillProtected = registry.getBlocks(owner).any { switch in it.ends() }
-			if (!stillProtected) {
-				registry.unregisterSwitch(owner, switch)
-				logger.info {
-					"reclaimStaleSwitchLocks: released stale lock on switch " +
-						"${switch.staticRef.getName()} -- owner '$owner' holds no block bounded " +
-						"by it after $block was freed (Issue #1065)"
-				}
-			}
+		block
+			.ends()
+			.filterIsInstance<DynamicRailSwitch>()
+			.filter { it.locked }
+			.forEach { reclaimIfStale(it) { "after $block was freed, Issue #1065" } }
+	}
+
+	/**
+	 * Release [switch]'s ownership if [PathReservationRegistry.isStaleSwitchOwnership] says it
+	 * protects no live route. Goes through [PathReservationRegistry.unregisterSwitch], which
+	 * keeps both ownership maps consistent. Shared by [reclaimStaleSwitchLocks] and
+	 * [reclaimStaleForeignSwitchOwnership].
+	 *
+	 * @param trigger why the check runs now -- for the log line only
+	 * @since Issue #1076
+	 */
+	private fun reclaimIfStale(
+		switch: DynamicRailSwitch,
+		trigger: () -> String
+	) {
+		val owner = registry.getSwitchOwner(switch) ?: return
+		if (!registry.isStaleSwitchOwnership(switch)) return
+		registry.unregisterSwitch(owner, switch)
+		logger.info {
+			"Released stale ownership of switch ${switch.staticRef.getName()} held by '$owner' -- " +
+				"the owner holds no block bounded by it (${trigger()})"
 		}
 	}
 
