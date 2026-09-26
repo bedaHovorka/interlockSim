@@ -39,7 +39,7 @@ import cz.ksimulantenbande.kdisco.SimulationEvent as KDiscoSimulationEvent
 private val logger = KotlinLogging.logger {}
 
 /**
- * Issue #1014 — on a block too short for [Motor.onWarning]'s half-speed ramp, the train must
+ * Issue #1014 — on a block too short for [Engine.onWarning]'s half-speed ramp, the train must
  * still be **braked** to its stand, within the deceleration bound, and aimed at the clearance
  * stop line.
  *
@@ -363,7 +363,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * at 6 m, the same early trigger rung 3 uses, well before the ~12.4 m braking-room crossing.
 	 *
 	 * [Motor.approachMargin]'s half-speed term is `targetSpeed / 2 - velocity`, where `targetSpeed`
-	 * is the `normalSpeed` [Train.Front.accelerateToSignal] passed to [Motor.onWarning] before the
+	 * is the `normalSpeed` [Train.Front.accelerateToSignal] passed to [Engine.onWarning] before the
 	 * aspect changed. [Train.semaphoreToStopShortOf] only distinguishes allowing from non-allowing —
 	 * S30 and [Signal.FREE] look identical to it — so phase 1 kept running toward half of the
 	 * *original* commanded speed, not the newly-capped one. On this fixture that is half of
@@ -519,7 +519,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 
 		// Registered before the run: the context freezes its listeners once `run()` starts.
 		ctx.onSimulationEvent { event ->
-			if (event.process?.let { it::class.simpleName == "Motor" } == true) motorEvents += event
+			if (event.process?.let { it::class.simpleName == "Engine" } == true) motorEvents += event
 		}
 
 		val run =

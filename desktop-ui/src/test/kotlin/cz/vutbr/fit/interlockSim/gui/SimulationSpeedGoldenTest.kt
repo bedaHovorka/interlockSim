@@ -365,8 +365,8 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 * - Velocity ≥ 0 m/s (trains move forward only)
 	 * - Acceleration ∈ [[MINIMAL_DECELERATION_MS2], [MAXIMAL_ACCELERATION_MS2]] m/s²
 	 *
-	 * The kinematic equation v²=u²+2as is the formula implemented in `Motor.derivatives()`.
-	 * That motor logic is unit-tested by [TrainPhysicsTest]; here we confirm the equation's
+	 * The kinematic equation v²=u²+2as is the formula implemented in `Engine.derivatives()`.
+	 * That engine logic is unit-tested by [TrainPhysicsTest]; here we confirm the equation's
 	 * outputs (velocity and acceleration) remain within valid physical bounds throughout a
 	 * full multi-train run at every reported sample.
 	 *
@@ -549,10 +549,10 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 		 */
 		const val POSITION_TOLERANCE_M = 1e-6
 
-		/** Physical acceleration upper bound from Train.Motor (m/s²). */
+		/** Physical acceleration upper bound from Engine (m/s²). */
 		const val MAXIMAL_ACCELERATION_MS2 = 4.0
 
-		/** Physical deceleration lower bound from Train.Motor (m/s²). */
+		/** Physical deceleration lower bound from Engine (m/s²). */
 		const val MINIMAL_DECELERATION_MS2 = -3.0
 
 		/**

@@ -5,23 +5,35 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * Reflective access to a train's motor process for lifecycle assertions.
+ * Reflective access to a train's engine process for lifecycle assertions.
  */
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.ksimulantenbande.kdisco.Process
+import cz.vutbr.fit.interlockSim.sim.Engine
 import cz.vutbr.fit.interlockSim.sim.Train
 
 /**
- * The train's `Motor`, reached by reflection.
+ * The train's [Engine], reached by reflection.
  *
- * `Motor` is a private inner class with no public accessor, and it must stay that way — a test
- * that needs its lifecycle state (`isPassivated()`, `isTerminated()`, `terminate()`) must not
- * push a hook into `sim/` production code just to be observable. One helper instead of a private
- * copy per test class.
+ * [Engine] is package-internal and held as a private field on [Train] with no public accessor —
+ * a test that needs its lifecycle state (`isPassivated()`, `isTerminated()`, `terminate()`) must
+ * not push a hook into `sim/` production code just to be observable. One helper instead of a
+ * private copy per test class.
+ *
+ * Issue #1059 renamed the former private inner `Motor` to top-level [Engine]; the field name is
+ * `engine`.
  */
-fun motorOf(train: Train): Process {
-	val field = Train::class.java.getDeclaredField("motor")
+internal fun engineOf(train: Train): Engine {
+	val field = Train::class.java.getDeclaredField("engine")
 	field.isAccessible = true
-	return field.get(train) as Process
+	return field.get(train) as Engine
 }
+
+/**
+ * Lifecycle view of the train's engine as a kDisco [Process].
+ *
+ * Prefer [engineOf] when the test needs the [Engine] type; this alias keeps existing call sites
+ * that only need process lifecycle checks.
+ */
+fun motorOf(train: Train): Process = engineOf(train)
