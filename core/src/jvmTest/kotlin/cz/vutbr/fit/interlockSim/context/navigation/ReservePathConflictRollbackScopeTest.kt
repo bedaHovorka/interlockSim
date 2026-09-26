@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.routeBlocksOf
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
@@ -171,7 +172,7 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 
 		// Given: two blocks of the A → B route, both physically FREE, pre-registered in the
 		// registry — the first to THIS train (the ghost own), the second to another train.
-		val route = routeBlocksOf(inA, inB)
+		val route = context.routeBlocksOf(inA, inB)
 		assertThat(route.size, "the arrangement needs two blocks on the A → B route")
 			.isGreaterThanOrEqualTo(2)
 		val ghost = route.first()
@@ -202,24 +203,10 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 		assertThat(registry.getOwner(contested), "registry owner of the conflicting block").isEqualTo(other)
 	}
 
-	/** Every block of the [start] → [target] route's first topological path, in path order. */
-	private fun routeBlocksOf(
-		start: DynamicPathSeparator,
-		target: DynamicPathSeparator
-	): List<DynamicTrackBlock> =
-		context
-			.getRoutingServices()
-			.getTopologyNavigator()
-			.findAllTopologicalPaths(start, target)
-			.first()
-			.map { it.getTrackBlock() }
-			.filterIsInstance<DynamicTrackBlock>()
-			.distinct()
-
 	/** The first block of the [start] → [target] route that is not in [excluding], in path order. */
 	private fun firstForwardBlockOf(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
 		excluding: List<DynamicTrackBlock>
-	): DynamicTrackBlock = routeBlocksOf(start, target).first { it !in excluding }
+	): DynamicTrackBlock = context.routeBlocksOf(start, target).first { it !in excluding }
 }

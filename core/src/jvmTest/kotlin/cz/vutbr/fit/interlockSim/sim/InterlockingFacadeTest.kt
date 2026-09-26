@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
@@ -50,6 +51,8 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import java.util.concurrent.TimeUnit
@@ -381,28 +384,97 @@ class InterlockingFacadeTest : KoinTestBase() {
 			assertThat((denied.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isTrue()
 		}
 
-		@Test
-		@DisplayName("denies and rolls back reserved blocks when a switch is locked by another train (I2)")
-		fun deniesLockedSwitchAndRollsBackBlocks() {
+		/**
+		 * I2: a switch held by another train denies the route as retryable contention and rolls back
+		 * the blocks reserved before the switch check. [registryOwned] covers the Issue #1076
+		 * defence-in-depth arm: the foreign train owns the switch in the registry while its physical
+		 * lock is INCONSISTENT (unlocked), so lockSwitches must deny on registry ownership alone
+		 * instead of letting registerSwitches throw.
+		 */
+		@ParameterizedTest(name = "registry-owned but unlocked = {0}")
+		@ValueSource(booleans = [false, true])
+		@DisplayName("denies and rolls back reserved blocks when a switch is held by another train (I2)")
+		fun deniesSwitchHeldByAnotherTrainAndRollsBackBlocks(registryOwned: Boolean) {
 			val u1 = block("U1")
 			val v1 = switch("V1", conf = RailSwitch.Conf.MAIN) // matches plusSetting (PLUS -> MAIN)
-			v1.lock() // already locked by another train
 			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
+			if (registryOwned) {
+				registry.registerSwitches("T2", listOf(v1))
+				v1.unlock()
+			} else {
+				v1.lock() // physically locked by another train, no registry owner
+			}
 			val facade = DefaultInterlockingFacade(e, registry)
-			val route =
-				routeS1S2(running = listOf(plusSetting))
+			val route = routeS1S2(running = listOf(plusSetting))
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
-			// Blocks were reserved before the switch lock failed; the atomic rollback must free them.
+			// Blocks were reserved before the switch check failed; the atomic rollback must free them.
 			assertThat(registry.getOwner(u1)).isNull()
-			// Review finding #2 (Issue #834): a switch locked by another train is transient
-			// contention (ConditionFailed.retryable = true), surfaced as a ConditionFailed cause.
 			val denied = response as InterlockingFacade.RouteResponse.Denied
+			// The reason covers the registry reservation, not only the physical lock (Issue #1076 review).
+			assertThat(denied.reason).isEqualTo("Switch V1 is locked or reserved by another train")
+			// Review finding #2 (Issue #834): transient contention, surfaced as a retryable ConditionFailed.
 			assertThat(denied.cause)
 				.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
 			assertThat((denied.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isTrue()
+			// The other train's hold is untouched.
+			assertThat(registry.getSwitchOwner(v1)).isEqualTo(if (registryOwned) "T2" else null)
+		}
+
+		@Test
+		@DisplayName(
+			"a granted route marks only its pure flank switches as flank-protected; release clears the marker (Issue #1076)"
+		)
+		fun grantedRouteMarksFlankSwitchesAndReleaseClearsThem() {
+			val u1 = block("U1")
+			val v1 = switch("V1")
+			val v2 = switch("V2")
+			val s1 = semaphore("S1")
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1, v2), semaphores = listOf(s1))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				routeS1S2(
+					running = listOf(plusSetting),
+					flank = listOf(SwitchSetting(SwitchId("V2"), SwitchPosition.PLUS))
+				)
+
+			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Granted::class)
+			// Both switches are owned and locked; only the flank one carries the flank marker,
+			// so the stale-ownership reclamation skips it but not the running one.
+			assertThat(registry.getSwitchOwner(v1)).isEqualTo("T1")
+			assertThat(registry.getSwitchOwner(v2)).isEqualTo("T1")
+			assertThat(v2.locked).isTrue()
+			assertThat(registry.isFlankProtected(v1)).isFalse()
+			assertThat(registry.isFlankProtected(v2)).isTrue()
+
+			facade.releaseRoute("T1", SignalId("S1"))
+
+			// Release drops the marker together with the ownership.
+			assertThat(registry.isFlankProtected(v2)).isFalse()
+			assertThat(registry.getSwitchOwner(v2)).isNull()
+			assertThat(v2.locked).isFalse()
+		}
+
+		@Test
+		@DisplayName("a switch listed as both running and flank is registered once, as running (Issue #1076)")
+		fun switchListedAsRunningAndFlankIsNotFlankMarked() {
+			val u1 = block("U1")
+			val v1 = switch("V1")
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route = routeS1S2(running = listOf(plusSetting), flank = listOf(plusSetting))
+
+			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Granted::class)
+			assertThat(registry.getSwitches("T1")).containsExactly(v1)
+			// The on-route registration already protects it through its adjacent block, so the
+			// flank marker must not exempt it from staleness reclamation.
+			assertThat(registry.isFlankProtected(v1)).isFalse()
 		}
 
 		@Test

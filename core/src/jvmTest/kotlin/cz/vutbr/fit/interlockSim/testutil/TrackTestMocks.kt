@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -25,6 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import io.mockk.Runs
@@ -240,4 +242,21 @@ class FakeTrackOccupant(
 	override fun distanceToSemaphore(): Double = 0.0
 
 	override fun nextSemaphore(): OrientedPathSeparator? = null
+}
+
+/**
+ * Drive [block] through the production per-block release path: a [FakeTrackOccupant] physically
+ * passes it (enter() then leave()), then [PathReservationService.unregisterBlock] clears it --
+ * funnelling through dropFreedBlock and its Issue #1065 stale-lock reclamation.
+ *
+ * @return the result of [PathReservationService.unregisterBlock]
+ */
+fun PathReservationService.passAndRelease(
+	trainId: String,
+	block: DynamicTrackBlock
+): Boolean {
+	val occupant = FakeTrackOccupant(trainId)
+	block.enter(occupant)
+	block.leave(occupant)
+	return unregisterBlock(trainId, block)
 }

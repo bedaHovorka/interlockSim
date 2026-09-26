@@ -36,6 +36,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
+import cz.vutbr.fit.interlockSim.testutil.routeBlocksOf
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.cellsOfType
@@ -105,7 +106,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.Volno)
 
 		// Then: denied by the switch lock (the arm under test, not an earlier check).
-		assertDeniedWithReason(response, "Switch vB is locked")
+		assertDeniedWithReason(response, "Switch vB is locked or reserved by another train")
 		assertRetryable(response, retryable = true)
 
 		// And: the second route's own block was rolled back, physically and in the registry.
@@ -137,7 +138,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		// When: a second, disjoint route for the same train is denied by a switch another train locked.
 		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.Volno)
 
-		assertDeniedWithReason(response, "Switch vB is locked")
+		assertDeniedWithReason(response, "Switch vB is locked or reserved by another train")
 		assertReleased(next)
 		assertHeld(held, train)
 	}
@@ -180,7 +181,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		val facade = DefaultInterlockingFacade(context, registry)
 
 		val first = facade.requestRoute(train, SignalId("zA"), route, Aspect.Volno)
-		assertDeniedWithReason(first, "Switch vB is locked")
+		assertDeniedWithReason(first, "Switch vB is locked or reserved by another train")
 		assertReleased(next)
 
 		// When: the other train releases the switch and the same route is requested again.
@@ -241,7 +242,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 
 	/** Names every block of the A -> doB1 route "held-N" (in path order) so the facade can look them up. */
 	private fun namedHeldRouteBlocks(): List<DynamicTrackBlock> =
-		routeBlocksOf(inA, doB1).onEachIndexed { index, block -> block.name = "held-$index" }
+		context.routeBlocksOf(inA, doB1).onEachIndexed { index, block -> block.name = "held-$index" }
 
 	/** Route 1 as the dispatcher names it: zA -> doB1 over the given blocks, no switches. */
 	private fun heldRoute(blocks: List<DynamicTrackBlock>): TrainRoute =
@@ -331,24 +332,10 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 			.isSameInstanceAs(pathInfo)
 	}
 
-	/** Every block of the [start] -> [target] route's first topological path, in path order. */
-	private fun routeBlocksOf(
-		start: DynamicPathSeparator,
-		target: DynamicPathSeparator
-	): List<DynamicTrackBlock> =
-		context
-			.getRoutingServices()
-			.getTopologyNavigator()
-			.findAllTopologicalPaths(start, target)
-			.first()
-			.map { it.getTrackBlock() }
-			.filterIsInstance<DynamicTrackBlock>()
-			.distinct()
-
 	/** The first block of the [start] -> [target] route that is not in [excluding], in path order. */
 	private fun firstForwardBlockOf(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
 		excluding: List<DynamicTrackBlock>
-	): DynamicTrackBlock = routeBlocksOf(start, target).first { it !in excluding }
+	): DynamicTrackBlock = context.routeBlocksOf(start, target).first { it !in excluding }
 }
