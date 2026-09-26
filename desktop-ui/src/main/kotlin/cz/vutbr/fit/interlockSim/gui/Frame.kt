@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.DispatcherRunLifecycle
 import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
@@ -277,11 +278,23 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							dispatcherControlPanel.clearRationale()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+							// Issue #1072: stop the 10 Hz time-update timer and the 30 FPS animation
+							// loop when the run ends (natural completion or manual stop). Before this,
+							// natural completion left AnimationController ticking until the user clicked
+							// Stop or closed the window — the "does not return control" symptom.
+							// pauseAnimation keeps the last frame visible for inspection; the next
+							// startSimulation() restarts via ensureAnimationRunning().
+							stopAnimationUpdates()
+							railwayNetGridCanvas.pauseAnimation()
 							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
 							// ended (captured at RUNNING time above). Null for every example except
 							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
 							// Placed last so a failure here can never skip the safety-motivated
 							// detach calls above.
+							// Issue #1072: release the cached Koog agent before the summary so
+							// inference workers do not outlive the run. The shared Ollama executor
+							// stays open for a possible next start in this same JVM.
+							wiredMeasuringAdapter?.releaseAgent()
 							wiredMeasuringAdapter?.logFinalSummary()
 							wiredMeasuringAdapter = null
 							// SP2c.22 (#845): finish the run recorder and log its final summary.
@@ -838,6 +851,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		statusBar.setStarvedIndicator(false)
 		conflictResolutionPanel.clearResolutions()
 
+		// Issue #1072: a previous STOPPED paused the animation and the 10 Hz time timer. Restart
+		// both so the new run is visible again without requiring a full setContext cycle.
+		railwayNetGridCanvas.ensureAnimationRunning()
+		stopAnimationUpdates()
+		startAnimationUpdates()
+
 		try {
 			simulationController.start(context)
 			val activeRunner = simulationController.runner?.takeIf { it.isRunning() }
@@ -1033,6 +1052,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		currentSimulationContext?.close() // Release simulation resources before JVM exit
 		stopAnimationUpdates() // Stop Frame's 10 Hz timer
 		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
+		// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not outlive
+		// the application. Terminal for this JVM process (System.exit follows immediately).
+		DispatcherRunLifecycle.closeSharedOllamaExecutor()
 		dispose()
 		System.exit(0)
 	}

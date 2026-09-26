@@ -15,6 +15,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
@@ -96,6 +97,9 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		frame.withStartedSimulation(context) {
 			SwingUtilities.invokeAndWait { frame.stopSimulation() }
 
+			// Issue #1072: agent released before the final metrics summary so Koog workers
+			// do not outlive the run.
+			verify(exactly = 1) { measuringAdapter.releaseAgent() }
 			verify(exactly = 1) { measuringAdapter.logFinalSummary() }
 			confirmVerified(measuringAdapter)
 		}
@@ -211,5 +215,102 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		frame.withStartedSimulation(context) {
 			// Must not throw even though context.scope has no DispatcherRunRecorder registered.
 		}
+	}
+
+	// ── Issue #1072 — end-of-run animation + agent release ─────────────────────
+
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("#1072: STOPPED pauses the AnimationController (manual stop)")
+	fun animationPausedOnManualStop() {
+		val context = createMockShuntingContext()
+		val running = context.holdRunUntilInterrupted()
+		try {
+			SwingUtilities.invokeAndWait {
+				frame.setContext(context)
+				frame.startSimulation()
+			}
+			assertThat(running.await(5, TimeUnit.SECONDS)).isTrue()
+
+			SwingUtilities.invokeAndWait {
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
+				frame.stopSimulation()
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
+			}
+		} finally {
+			SwingUtilities.invokeAndWait { frame.stopSimulation() }
+			context.close()
+		}
+	}
+
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("#1072: natural completion pauses the AnimationController and releases the Koog agent")
+	fun animationPausedAndAgentReleasedOnNaturalCompletion() {
+		val context = createMockShuntingContext()
+		val measuringAdapter = mockk<MeasuringPlanAdapter>(relaxed = true)
+		context.scope.declare(measuringAdapter)
+
+		frame.withStartedSimulation(context) {
+			verify(timeout = 5000) { measuringAdapter.releaseAgent() }
+			verify(timeout = 5000) { measuringAdapter.logFinalSummary() }
+			SwingUtilities.invokeAndWait {
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@DisplayName("#1072: startSimulation restarts animation after a previous STOPPED pause")
+	fun startSimulationRestartsPausedAnimation() {
+		val context = createMockShuntingContext()
+		context.holdRunUntilInterrupted()
+		try {
+			SwingUtilities.invokeAndWait {
+				frame.setContext(context)
+				frame.startSimulation()
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
+				frame.stopSimulation()
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
+				// Same context, same AnimationController instance: ensureAnimationRunning restarts it.
+				frame.startSimulation()
+				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
+			}
+		} finally {
+			SwingUtilities.invokeAndWait { frame.stopSimulation() }
+			context.close()
+		}
+	}
+
+	/**
+	 * Keeps each run of this context alive until [Frame.stopSimulation] interrupts it, and returns a
+	 * latch released when the first run has started.
+	 *
+	 * [cz.vutbr.fit.interlockSim.testutil.MockSimulationContext.run] returns at once, so without this
+	 * every run completes naturally within milliseconds and its STOPPED transition pauses the
+	 * animation before a test can observe the running state or take the manual-stop path. The
+	 * listener blocks the simulation thread on the run-start event; [SimulationController.stop]
+	 * interrupts that thread, and because it clears the runner first, the monitor thread emits no
+	 * second (natural) STOPPED. The wait is bounded so a missed interrupt cannot hang the suite.
+	 */
+	private fun SimulationContext.holdRunUntilInterrupted(): CountDownLatch {
+		val running = CountDownLatch(1)
+		addPropertyChangeListener { event ->
+			if (event.propertyName == "frozen" && !SwingUtilities.isEventDispatchThread()) {
+				running.countDown()
+				try {
+					Thread.sleep(RUN_HOLD_MAX_MS)
+				} catch (e: InterruptedException) {
+					Thread.currentThread().interrupt()
+				}
+			}
+		}
+		return running
+	}
+
+	private companion object {
+		/** Upper bound for [holdRunUntilInterrupted]; longer than any test timeout in this class. */
+		const val RUN_HOLD_MAX_MS = 30_000L
 	}
 }

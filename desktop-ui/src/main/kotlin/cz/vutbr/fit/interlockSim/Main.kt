@@ -207,6 +207,10 @@ class Main {
 				// already decided above from reached-versus-requested sim time, and a starved run did
 				// reach its horizon. The sweep reads the verdict from the run JSON, not from `$?`.
 				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause())
+				// Issue #1072: release the cached Koog agent before the context/scope closes so
+				// agent workers do not outlive the run. The shared Ollama executor stays open
+				// here — headless one-shot main closes it after the run returns (see loadExample).
+				DispatcherRunLifecycle.releaseKoogAgent(it.scope)
 			} // context closed after simulation
 			outcome
 		} catch (e: ContextCreationException) {
@@ -572,6 +576,10 @@ fun main(args: Array<String>) {
 		// Note this makes `./gradlew :desktop-ui:runExample` (a JavaExec task) fail on such a run.
 		"example" -> {
 			val outcome = main.runExample(args)
+			// Issue #1072: one-shot headless process — close the shared Ollama/Koog executor
+			// after the run so daemon workers do not outlive main. GUI mode leaves it open
+			// until the window closes (see Frame.exitWithoutSaving).
+			DispatcherRunLifecycle.closeSharedOllamaExecutor()
 			if (outcome == RunOutcome.TERMINATED_EARLY) {
 				exitProcess(outcome.exitCode)
 			}

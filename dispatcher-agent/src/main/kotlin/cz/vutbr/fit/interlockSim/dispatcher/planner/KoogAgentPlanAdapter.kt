@@ -764,4 +764,23 @@ class KoogAgentPlanAdapter(
 			agent ?: agentFactory.createAgent(context).also { agent = it }
 		}
 	}
+
+	/**
+	 * Drop and close the cached Koog agent so its workers do not outlive the run (Issue #1072).
+	 *
+	 * Idempotent. The next [plan] call recreates the agent via [getOrCreateAgent]. An in-flight
+	 * [plan] may still hold a reference to the previous instance until that cycle returns; that
+	 * is acceptable — the goal is to stop parking idle Koog/coroutine workers after the run ends,
+	 * not to interrupt a cycle that is already finishing.
+	 *
+	 * Does **not** close the shared [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor].
+	 */
+	fun releaseAgent() {
+		val previous = agent
+		agent = null
+		if (previous != null) {
+			logger.debug { "Releasing cached Koog dispatch agent at end of run" }
+			previous.close()
+		}
+	}
 }

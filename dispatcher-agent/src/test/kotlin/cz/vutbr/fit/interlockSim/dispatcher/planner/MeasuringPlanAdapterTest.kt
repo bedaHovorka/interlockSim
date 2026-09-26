@@ -32,6 +32,7 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -782,6 +783,36 @@ class MeasuringPlanAdapterTest {
 
 			// Reaching this line at all is the assertion: no onTick call threw.
 			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(24L)
+		}
+	}
+
+	// ── Agent lifecycle (Issue #1072) ─────────────────────────────────────────
+
+	@Nested
+	@DisplayName("releaseAgent forwards to the wrapped KoogAgentPlanAdapter")
+	inner class ReleaseAgent {
+		@Test
+		fun `releaseAgent closes the cached Koog agent`() {
+			val agent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+			coEvery { agent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+			val fallback = mockk<Dispatcher>()
+			val adapter = measuring(agent, fallback)
+
+			runBlocking { adapter.plan(observation) }
+			adapter.releaseAgent()
+
+			verify(exactly = 1) { agent.close() }
+		}
+
+		@Test
+		fun `releaseAgent is a no-op when no agent was created`() {
+			val agent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+			val fallback = mockk<Dispatcher>()
+			val adapter = measuring(agent, fallback)
+
+			adapter.releaseAgent()
+
+			verify(exactly = 0) { agent.close() }
 		}
 	}
 }
