@@ -172,7 +172,8 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 
 		/**
 		 * Distance at which rung 3e turns the aspect restrictive again: while the resumed run is
-		 * still ramping up (about 17 m/s there, needing about 49 m of the 109 m left to brake).
+		 * still ramping up (about 17 m/s under the pre-#1087 law aimed at the signal; the rung's
+		 * assertions read the measured speed, so they hold under the resumed-leg law of #1087).
 		 */
 		const val RE_RESTRICTION_DISTANCE = 40.0
 	}

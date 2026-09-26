@@ -317,7 +317,14 @@ fun assertStoodAtClearanceStopLine(
 	signalDistance: Double,
 	name: String = "final distance travelled"
 ) {
-	val stopLine = signalDistance - Train.SEMAPHORE_STOP_CLEARANCE_METERS
+	val stopLine = clearanceStopLine(signalDistance)
 	assertThat(travelled, name = name)
 		.isBetween(stopLine - CLEARANCE_STOP_POSITION_TOLERANCE, stopLine + CLEARANCE_STOP_POSITION_TOLERANCE)
 }
+
+/**
+ * Distance travelled up to the clearance stop line: [signalDistance] short of the signal by
+ * [Train.SEMAPHORE_STOP_CLEARANCE_METERS]. One shared spelling of the stand's geometry, so the
+ * flip rungs' braking-room premises and [assertStoodAtClearanceStopLine] cannot drift apart.
+ */
+fun clearanceStopLine(signalDistance: Double): Double = signalDistance - Train.SEMAPHORE_STOP_CLEARANCE_METERS

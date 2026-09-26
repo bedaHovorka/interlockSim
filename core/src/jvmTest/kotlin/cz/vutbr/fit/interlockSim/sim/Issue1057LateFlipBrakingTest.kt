@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
+import cz.vutbr.fit.interlockSim.domain.brakingDistanceFrom
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.AspectFlipOnce
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -72,9 +73,6 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 		 * leaves under 0.7 m/s at the worst line speed.
 		 */
 		const val MAX_RESIDUAL_STEP_MPS = 1.0
-
-		/** The braking law's deceleration bound, |`Train`'s MINIMAL_DECELERATION|: 3 m/s squared. */
-		const val DECELERATION_BOUND_MPS2 = 3.0
 
 		/**
 		 * Tolerance for the braking-onset margin (the room left minus the textbook braking
@@ -170,7 +168,7 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 		val onset = afterFlip.zipWithNext().first { (a, b) -> b.velocity < a.velocity }.first
 		val roomAtOnset =
 			onset.distanceToSemaphore - Train.SEMAPHORE_STOP_CLEARANCE_METERS -
-				(onset.velocity * onset.velocity) / (2.0 * DECELERATION_BOUND_MPS2)
+				brakingDistanceFrom(onset.velocity)
 		assertThat(abs(roomAtOnset), name = "braking-room margin at braking onset")
 			.isLessThanOrEqualTo(ONSET_MARGIN_TOLERANCE_METERS)
 

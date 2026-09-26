@@ -1084,10 +1084,10 @@ class Train :
 		 * [boundaryGuard]'s clearance term that bound — that is, unless the front is a clearance
 		 * short of the separator and, because [Motor] aims at the same point, already braked to
 		 * walking pace. (The motor brakes for a restrictive aspect that stood so as the leg was
-		 * commanded or turned so mid-leg — see [Motor]'s late-aspect watch, Issue #1057 — except a
-		 * leg resumed from this clearance hold, which that watch does not cover. Only a flip that
-		 * leaves less room than the deceleration bound needs still snaps to zero here, as it
-		 * always did.) The wait is the same level-triggered form [semaphoreAction] uses at the
+		 * commanded or turned so mid-leg — see [Motor]'s late-aspect watch, Issue #1057, which
+		 * since Issue #1087 also covers a leg the motor resumed itself after a clearance hold.
+		 * Only a flip that leaves less room than the deceleration bound needs still snaps to zero
+		 * here, as it always did.) The wait is the same level-triggered form [semaphoreAction] uses at the
 		 * separator; the train resumes the instant the aspect clears, or rolls on to the
 		 * separator when the route is released, and the front is still on the *approach* side of
 		 * the sensor point while it waits, which is the whole point of the clearance.
@@ -1494,8 +1494,15 @@ class Train :
 		 */
 		private var commandPending = false
 
+		/**
+		 * The stop test of one motor leg, and how [derivatives] drives that leg.
+		 *
+		 * @property runUpRate a constant acceleration for the leg in place of the braking law;
+		 *   `null` — every leg but an accelerating [resumeAtAspectCap] — keeps the law
+		 */
 		private inner class AccelerationStopCondition(
-			private val stopTest: AccelerationStopTest
+			private val stopTest: AccelerationStopTest,
+			val runUpRate: Double? = null
 		) : Condition {
 			override fun test(): Boolean = !accelerate || stopTest.condition(targetSpeed, getVelocity())
 
@@ -1639,12 +1646,30 @@ class Train :
 		 * Hands the motor over on each aspect change until the leg ends: a clear resumes the run at
 		 * the live aspect's cap, a return to a restrictive aspect brakes to the stop line.
 		 *
+		 * A resumed run that reaches its cap — half-way to the signal, see the speed-law section of
+		 * [resumeAtAspectCap] — does not end the leg either (Issue #1087): going idle
+		 * there left the motor deaf to an aspect turning restrictive while the train coasts at the
+		 * resumed cap — line speed after a clear to FREE — the Issue #1057 defect class on the
+		 * resume path into it. [watchForLateRestrictiveAspect] is re-armed instead, inside the
+		 * motor's own process (a second motor command in the same instant would be the kdisco#73
+		 * shape), and a restrictive flip that exhausts the braking room hands over to the braking
+		 * phase like any other aspect change in this loop.
+		 *
 		 * @param runningOn whether the leg starts in the resumed state (the aspect already allows)
 		 */
 		private suspend fun runApproachLoop(runningOn: Boolean) {
 			var running = runningOn
 			while (true) {
-				val aspectChanged = if (running) resumeAtAspectCap() else brakeToStopLine()
+				val aspectChanged =
+					if (running) {
+						// No `targetSpeed > 0` or `DynamicRailSemaphore` guard here, unlike the
+						// `iteration` arm: an allowing aspect's cap is positive, so `targetSpeed > 0`
+						// holds on this path, the resumed leg implies a `DynamicRailSemaphore` ahead,
+						// and `brakingRoomGone()`/`brakingRoomMargin()` re-guard both anyway.
+						resumeAtAspectCap() || (!terminate && accelerate && watchForLateRestrictiveAspect())
+					} else {
+						brakeToStopLine()
+					}
 				if (!aspectChanged) break
 				running = !running
 			}
@@ -1658,7 +1683,9 @@ class Train :
 		private fun brakingRoomGone(): Boolean = accelerate && targetSpeed > 0.0 && brakingRoomMargin() <= 0.0
 
 		/**
-		 * Keeps a finished leg listening for a restrictive aspect (Issue #1057).
+		 * Keeps a finished leg listening for a restrictive aspect (Issue #1057). Armed both after
+		 * a leg commanded by [accelerateTo] reaches its speed ([iteration]) and after a leg the
+		 * motor resumed itself reaches the live aspect's cap ([runApproachLoop], Issue #1087).
 		 *
 		 * The motor commanded for a leg goes idle once the leg's speed is reached, and an idle
 		 * motor evaluates no [derivatives]: a signal turning restrictive while the train coasts at
@@ -1732,9 +1759,43 @@ class Train :
 		 * The wait also ends when the aspect turns restrictive again before the resumed speed is
 		 * reached. Waiting for the speed alone kept `targetSpeed` positive, so the train accelerated
 		 * towards a signal back at danger and the front gate snapped it to zero at the clearance line
-		 * (PR #1033 review, Train.kt:1688). Once the resumed speed is reached the motor goes idle as
-		 * after any `accelerateTo`, and a restrictive flip after that is not watched for (the
-		 * late-aspect watch of Issue #1057 covers legs commanded by `accelerateTo`, not this resume).
+		 * (PR #1033 review, Train.kt:1688). Once the resumed speed is reached the leg does not go
+		 * idle either: [runApproachLoop] re-arms the late-aspect watch (Issue #1087), so a
+		 * restrictive flip while the train coasts at the resumed cap is braked for exactly like one
+		 * on a leg commanded by `accelerateTo` (Issue #1057).
+		 *
+		 * ## Speed law of the resumed leg (Issue #1087 decision)
+		 *
+		 * An **accelerating** resume does not use the braking law aimed at the signal. That law,
+		 * `a = (T² − v²) / (2s)`, holds `(T² − v²) / s` constant along a leg, so it reaches its
+		 * target only *at* the signal: a resumed train never ran at its cap anywhere in the block,
+		 * and the watch armed after the cap could never run. Instead the leg runs up at
+		 * [resumedRunUpRate] — the constant rate the same law gives when aimed at **half** the
+		 * distance left at the resume instant, bounded by [MAXIMAL_TRAIN_ACCELERATION] — reaches
+		 * the cap half-way and coasts at it, leaving the second half of the distance for the watch
+		 * to brake in.
+		 *
+		 * - *Why this law.* A driver who sees the signal clear runs up to the permitted speed and
+		 *   then holds it; spreading the run-up exactly to the signal is an artefact of the aim
+		 *   point, not a train property. Aiming half-way keeps the model's geometry-driven law and
+		 *   its bound (at most twice the old run-up rate) instead of introducing a traction
+		 *   constant the model does not have — a fixed rate at the 4 m/s² bound is several times
+		 *   what a real train manages. Aiming at the braking point of the cap was rejected:
+		 *   the aspect allows, so there is no stand to brake for, and a leg that reaches its cap
+		 *   exactly where the braking room runs out leaves the watch nothing to do.
+		 * - *Why a fixed rate rather than the law re-aimed every step.* The law aimed at a moving
+		 *   half-way point gives the same constant rate in exact arithmetic, but reaches `v = T`
+		 *   and `s = 0` in the same step: `(T² − v²) / (2s)` degenerates to `0 / 0` there, and a
+		 *   step that reaches `s ≤ 0` first takes [derivatives]' leg-ending branch, clearing
+		 *   `accelerate` — the watch would then never arm, the very hole it closes. A rate fixed at
+		 *   the resume instant has no singular point, and the leg ends on its plain
+		 *   [AccelerationStopTest.ACCELERATION_ENDED] test, at most one 1 ms step late.
+		 * - *What stays.* A **decelerating** resume (the cap below the current speed) keeps the
+		 *   law aimed at the signal: the aspect's permitted speed applies at the signal, and
+		 *   slowing over the whole distance left reaches it with no coasting state for a watch to
+		 *   cover. In a block too short to reach the cap at the bound, [derivatives]' `s <= 0`
+		 *   branch ends the leg at the signal exactly as before. Legs commanded by [accelerateTo],
+		 *   both [onWarning] phases and the braking to the stop line are unchanged.
 		 *
 		 * @return `true` when the aspect turned restrictive again while this leg is still the motor's
 		 *   command — the caller then brakes to the stop line
@@ -1750,16 +1811,32 @@ class Train :
 			// Same stop-test choice [accelerateTo] makes: a capped target below the current
 			// velocity must decelerate to it, not complete immediately.
 			val resuming =
-				AccelerationStopCondition(
-					if (resumeSpeed > getVelocity()) {
-						AccelerationStopTest.ACCELERATION_ENDED
-					} else {
-						AccelerationStopTest.DECELERATION_ENDED
-					}
-				)
+				if (resumeSpeed > getVelocity()) {
+					AccelerationStopCondition(AccelerationStopTest.ACCELERATION_ENDED, resumedRunUpRate(resumeSpeed))
+				} else {
+					AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
+				}
 			currentCondition = resuming
 			waitUntil(Condition { resuming.test() || semaphoreToStopShortOf() != null })
 			return !terminate && accelerate && semaphoreToStopShortOf() != null
+		}
+
+		/**
+		 * Constant run-up rate of an accelerating [resumeAtAspectCap] leg: the braking law
+		 * `(T² − v²) / (2s)` aimed at half the distance [brakingTargetDistance] has left now, that
+		 * is `(T² − v²) / s`, bounded by [MAXIMAL_TRAIN_ACCELERATION]. See the speed-law section of
+		 * [resumeAtAspectCap] for why.
+		 *
+		 * `null` — the law aimed at the signal — when no distance is left: [derivatives]' `s <= 0`
+		 * branch then ends the leg, as it would for any other leg.
+		 *
+		 * @param target the resumed speed, above the current velocity
+		 */
+		private fun resumedRunUpRate(target: Double): Double? {
+			val distance = brakingTargetDistance()
+			if (distance <= 0.0) return null
+			val speed = getVelocity()
+			return minOf((target - speed) * (target + speed) / distance, MAXIMAL_TRAIN_ACCELERATION.toDouble())
 		}
 
 		/**
@@ -1879,6 +1956,10 @@ class Train :
 		 * [distanceToSemaphore] itself is left alone on purpose: braking must keep measuring to
 		 * the signal, while the port publishes [Train.distanceToSignalAhead] as
 		 * `distanceToSignalAheadMetres` (Issue #1061).
+		 *
+		 * An accelerating [resumeAtAspectCap] leg is not driven by the law; it only reads this
+		 * distance once, at the resume instant, to fix its run-up rate ([resumedRunUpRate]), and
+		 * through [derivatives]' `s <= 0` branch, which still ends it at the signal.
 		 */
 		private fun brakingTargetDistance(): Double {
 			val distance = distanceToSemaphore()
@@ -1904,6 +1985,12 @@ class Train :
 		 */
 		private fun clearanceStopLineDistance(): Double = maxOf(0.0, distanceToSemaphore() - SEMAPHORE_STOP_CLEARANCE_METERS)
 
+		/**
+		 * The motor's acceleration: the braking law `a = (T² − v²) / (2s)` aimed at
+		 * [brakingTargetDistance] and clamped to the deceleration or acceleration bound — or, for
+		 * an accelerating [resumeAtAspectCap] leg, that leg's constant
+		 * [AccelerationStopCondition.runUpRate]. Every leg ends once no distance is left.
+		 */
 		override fun derivatives() {
 			// minmax zpomaleni
 			val s: Double = brakingTargetDistance()
@@ -1913,6 +2000,11 @@ class Train :
 			}
 			if (velocity.state <= 0) velocity.state = 0.0
 
+			val runUpRate = currentCondition?.runUpRate
+			if (runUpRate != null) {
+				acceleration.state = runUpRate
+				return
+			}
 			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
 			acceleration.state =
 				if (requireNotNull(currentCondition) { "currentCondition must be set" }.getStopTest().isDecelarate()) {
