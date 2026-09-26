@@ -14,20 +14,12 @@ import assertk.assertThat
 import assertk.assertions.isBetween
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.ksimulantenbande.kdisco.Process
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSampler
-import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
-import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
-import cz.vutbr.fit.interlockSim.testutil.runSimpleLinearTrackScenario
-import cz.vutbr.fit.interlockSim.testutil.separatorLabel
+import cz.vutbr.fit.interlockSim.testutil.runHoldAtSeparatorScenario
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -72,20 +64,15 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 	private companion object {
 		const val HOLD_SIGNAL = "vB"
 		const val NEXT_SIGNAL = "doA1"
-		const val END_TIME = 90L
 
 		/** `zB`—`vB` block length in `vyhybna.xml`: the section behind the front that the old code counted. */
 		const val SECTION_BEHIND_FRONT = 5.0
 
-		/** Held long enough for the wait to have settled; the reading is taken after this. */
-		const val STAND_HOLD_SECONDS = 2.0
-
-		const val SAMPLE_PERIOD = 0.05
+		/** Past this distance a stand is the one at `vB`, not the one at `B` before admission. */
+		const val STAND_THRESHOLD = 100.0
 
 		/** The unfixed code over-reads by the whole 5 m section, so this is tight enough. */
 		const val TOLERANCE = 1e-2
-
-		const val TRAIN_LENGTH = 20.0
 	}
 
 	private class Outcome(
@@ -110,63 +97,25 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 	}
 
 	private fun runScenario(): Outcome {
-		val context = loadVyhybnaContext().tracked()
-		val inOuts = context.getInOuts().toList()
-		val a = inOuts.single { it.name == "A" }
-		val b = inOuts.single { it.name == "B" }
-		val reservationService = context.getRoutingServices().getPathReservationService()
-		val realNav = context.getRoutingServices().getTrainNavigationService()
-		val holdingNav =
-			decoratingTrainNavigationService(realNav) { trainId, separator ->
-				if (separatorLabel(separator) == HOLD_SIGNAL) {
-					PathResult.OwnershipConflict
-				} else {
-					realNav.findReservedPathForTrain(trainId, separator)
-				}
-			}
-		val env = NavigationDecoratingContext(context, holdingNav)
+		val context =
+			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
-		var standTime = -1.0
 		var trainDistance = Double.NaN
 		var wholeLegDistance = Double.NaN
 		var perceivedDistance = Double.NaN
 		var perceivedName: String? = null
 
-		runSimpleLinearTrackScenario(
+		runHoldAtSeparatorScenario(
 			context,
-			endTime = END_TIME,
-			trainSpecs =
-				listOf(
-					SimpleLinearTrackTestProcess.TrainSpec(
-						inName = "B",
-						outName = "A",
-						inTime = 1.0,
-						outTime = END_TIME.toDouble(),
-						length = TRAIN_LENGTH
-					)
-				),
-			env = env
-		) { train ->
-			assertReservationSuccess(reservationService.reservePath(train.name, b, a))
-			val port = DefaultNetworkPerceptionPort(context, activeTrains = { listOf(train) })
-			Process.activate(
-				TrainKinematicSampler(train, END_TIME.toDouble(), SAMPLE_PERIOD) { sample ->
-					if (standTime < 0.0 && sample.velocity == 0.0 && sample.totalDistance > 100.0) {
-						standTime = sample.time
-					}
-					if (standTime >= 0.0 && perceivedName == null && sample.time >= standTime + STAND_HOLD_SECONDS) {
-						trainDistance = train.distanceToSignalAhead()
-						wholeLegDistance = train.distanceToSemaphore()
-						val reading = port.trainPerception(train.name)
-						perceivedDistance = reading?.distanceToSignalAheadMetres ?: Double.NaN
-						perceivedName = reading?.signalAheadName
-					}
-				}
-			)
+			holdSignal = HOLD_SIGNAL,
+			standThreshold = STAND_THRESHOLD
+		) { observation ->
+			trainDistance = observation.train.distanceToSignalAhead()
+			wholeLegDistance = observation.train.distanceToSemaphore()
+			val reading = observation.port.trainPerception(observation.train.name)
+			perceivedDistance = reading?.distanceToSignalAheadMetres ?: Double.NaN
+			perceivedName = reading?.signalAheadName
 		}
 		return Outcome(trainDistance, wholeLegDistance, perceivedDistance, perceivedName)
 	}
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 }
