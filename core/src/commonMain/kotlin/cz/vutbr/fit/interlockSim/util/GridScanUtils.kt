@@ -39,7 +39,6 @@ inline fun <reified R : Cell> RailwayNetGrid<Cell>.cellsOfType(): List<R> {
  *
  * @param name reads the cell's name (the dynamic cell types expose `name` without a shared supertype)
  * @since Issue #959 — replaces the scan → filter → `associateBy` chain repeated in the network ports
- *   and the dispatcher observation projector
  */
 inline fun <reified R : Cell> RailwayNetGrid<Cell>.cellsByName(name: (R) -> String): Map<String, R> =
 	cellsOfType<R>().indexByNonBlankName(name)
