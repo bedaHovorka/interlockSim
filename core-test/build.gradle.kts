@@ -21,6 +21,8 @@ val koinVersion: String by project
 val kotlinVersion: String by project
 val kdiscoVersion: String by project
 val detektFormattingVersion: String by project
+val junitJupiterVersion: String by project
+val junitPlatformVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -76,9 +78,45 @@ kotlin {
 				// when compiled outside a test source set — the junit5 variant makes them
 				// available for commonMain JVM compilation of CommonKoinTestBase.
 				implementation(kotlin("test-junit5"))
+				// Issue #1110: RepeatedTestCapExtension (Jupiter extension API) and
+				// RepeatedTestCapProbe (nested launcher run that proves the cap is enforced).
+				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
+				implementation("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 			}
 		}
 	}
+}
+
+// ===========================================
+// JUnit extension auto-registration (Issue #1110)
+// ===========================================
+// Generates the ServiceLoader file that registers RepeatedTestCapExtension for JUnit Jupiter's
+// extension auto-detection. Consuming modules enable auto-detection and set the cap on each
+// Test task (junit.jupiter.extensions.autodetection.enabled / interlockSim.test.repeat.maxCount).
+
+val junitExtensionServiceDir = layout.buildDirectory.dir("generated/junitExtensionService")
+
+val generateJUnitExtensionService =
+	tasks.register("generateJUnitExtensionService") {
+		group = "build"
+		description = "Generate META-INF/services registration of the JUnit RepeatedTestCapExtension"
+		val extensionClass = "cz.vutbr.fit.interlockSim.testutil.RepeatedTestCapExtension"
+		val outDirProvider = junitExtensionServiceDir
+		inputs.property("extensionClass", extensionClass)
+		outputs.dir(outDirProvider)
+		doLast {
+			val file =
+				outDirProvider
+					.get()
+					.asFile
+					.resolve("META-INF/services/org.junit.jupiter.api.extension.Extension")
+			file.parentFile.mkdirs()
+			file.writeText("$extensionClass\n")
+		}
+	}
+
+kotlin.sourceSets.named("jvmMain") {
+	resources.srcDir(generateJUnitExtensionService)
 }
 
 // ===========================================

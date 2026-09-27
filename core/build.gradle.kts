@@ -109,7 +109,8 @@ kotlin {
             useJUnitPlatform {
                 excludeTags("integration-test", "heavy-test")
             }
-            systemProperty("junit.jupiter.params.repeat.maxCount", testRepeatMaxCount)
+            systemProperty("interlockSim.test.repeat.maxCount", testRepeatMaxCount)
+            systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
             maxParallelForks = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
             testLogging {
                 events("passed", "skipped", "failed")
@@ -338,7 +339,8 @@ val integrationTest by tasks.registering(Test::class) {
         excludeTags("heavy-test")
     }
 
-    systemProperty("junit.jupiter.params.repeat.maxCount", testRepeatMaxCount)
+    systemProperty("interlockSim.test.repeat.maxCount", testRepeatMaxCount)
+    systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
 
     maxParallelForks = 1
 
@@ -398,7 +400,8 @@ val heavyTest by tasks.registering(Test::class) {
         includeTags("heavy-test")
     }
 
-    systemProperty("junit.jupiter.params.repeat.maxCount", heavyTestRepeatMaxCount)
+    systemProperty("interlockSim.test.repeat.maxCount", heavyTestRepeatMaxCount)
+    systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
 
     maxParallelForks = 1
 
