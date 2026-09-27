@@ -9,9 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -65,6 +68,9 @@ class PathLengthCacheTest : KoinTestBase() {
 	private val third = LengthElement(THIRD_LENGTH)
 	private val extra = LengthElement(EXTRA_LENGTH)
 
+	/** The elements a [Mutation] indexes: `[0]`..`[2]` build the primed path, `[3]` is the extra one. */
+	private val elements = listOf(first, second, third, extra)
+
 	private fun pathOf(vararg elements: PathElement): ArrayPath =
 		ArrayPath(mockContext).apply { elements.forEach { addLast(it) } }
 
@@ -84,7 +90,7 @@ class PathLengthCacheTest : KoinTestBase() {
 		val path = pathOf(first, second, third)
 		assertThat(path.length(), name = "primed length").isEqualTo(FIRST_LENGTH + SECOND_LENGTH + THIRD_LENGTH)
 
-		mutation.mutate(path, listOf(first, second, third, extra))
+		mutation.mutate(path, elements)
 
 		val expected = freshSum(path)
 		assertThat(path.length(), name = "length after ${mutation.method}").isEqualTo(expected)
@@ -97,7 +103,7 @@ class PathLengthCacheTest : KoinTestBase() {
 		val unchanged =
 			mutations().filter { mutation ->
 				val path = pathOf(first, second, third)
-				mutation.mutate(path, listOf(first, second, third, extra))
+				mutation.mutate(path, elements)
 				freshSum(path) == primed
 			}
 		assertThat(unchanged.map { it.method }).isEmpty()
@@ -109,7 +115,9 @@ class PathLengthCacheTest : KoinTestBase() {
 			(
 				Class.forName("java.util.Collection").methods.asList() +
 					Path::class.java.declaredMethods.asList() +
-					ArrayPath::class.java.declaredMethods.filter { Modifier.isPublic(it.modifiers) }
+					listOf(AbstractPath::class.java, ArrayPath::class.java).flatMap { type ->
+						type.declaredMethods.filter { Modifier.isPublic(it.modifiers) }
+					}
 			).filterNot { it.isSynthetic }
 				.map { it.name }
 				.toSet()
@@ -130,6 +138,35 @@ class PathLengthCacheTest : KoinTestBase() {
 	}
 
 	@Test
+	fun `a mutation that fails or changes nothing leaves the length correct`() {
+		// Outside mutations(): these calls leave the element sum unchanged, which that list forbids.
+		val empty = ArrayPath(mockContext)
+		assertThat(empty.length(), name = "primed empty length").isEqualTo(0.0)
+		assertFailure { empty.removeFirst() }.isInstanceOf<NoSuchElementException>()
+		assertThat(empty.length(), name = "length after a failed removeFirst").isEqualTo(0.0)
+		empty.addLast(extra)
+		assertThat(empty.length(), name = "length after addLast on the formerly empty path").isEqualTo(EXTRA_LENGTH)
+
+		val path = pathOf(first, second)
+		assertThat(path.length(), name = "primed length").isEqualTo(FIRST_LENGTH + SECOND_LENGTH)
+		assertThat(path.remove(extra), name = "remove of an absent element").isFalse()
+		assertThat(path.length(), name = "length after removing an absent element").isEqualTo(freshSum(path))
+	}
+
+	@Test
+	fun `reversePath gives a copy whose mutations leave the original cache alone`() {
+		val original = pathOf(first, second, third)
+		val primed = original.length()
+		val reversed = original.reversePath()
+		assertThat(reversed.length(), name = "reversed length").isEqualTo(primed)
+
+		reversed.removeFirst()
+		assertThat(reversed.length(), name = "reversed length after removeFirst").isEqualTo(freshSum(reversed))
+		assertThat(original.length(), name = "original length after mutating the copy").isEqualTo(primed)
+		assertThat(freshSum(original), name = "original element sum").isEqualTo(primed)
+	}
+
+	@Test
 	fun `TransitionAwarePath never reports a stale length`() {
 		val delegate = pathOf(first, second, third)
 		val wrapper = TransitionAwarePath(delegate, mockk<TrackSection>(), mockk<TrackSection>())
@@ -140,6 +177,12 @@ class PathLengthCacheTest : KoinTestBase() {
 
 		delegate.removeFirst()
 		assertThat(wrapper.length(), name = "after a mutation of the delegate").isEqualTo(freshSum(delegate))
+
+		wrapper.iterator().apply {
+			next()
+			remove()
+		}
+		assertThat(wrapper.length(), name = "after an iterator remove through the wrapper").isEqualTo(freshSum(delegate))
 	}
 
 	companion object {
@@ -188,7 +231,19 @@ class PathLengthCacheTest : KoinTestBase() {
 				"getFirst",
 				"getLast",
 				"getNext",
-				"equalsWithElements"
+				"equalsWithElements",
+				// AbstractPath: reservation and occupancy work over the elements, never on the sequence
+				"length",
+				"ends",
+				"isFreeFrom",
+				"isSetUpPath",
+				"setUpPath",
+				"cancelPathSetup",
+				"getContext",
+				"getState",
+				"enter",
+				"leave",
+				"getTrackOccupant"
 			)
 
 		@JvmStatic

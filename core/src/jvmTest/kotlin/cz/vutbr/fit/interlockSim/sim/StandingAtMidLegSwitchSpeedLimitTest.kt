@@ -13,19 +13,11 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSampler
-import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
-import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
-import cz.vutbr.fit.interlockSim.testutil.runSimpleLinearTrackScenario
-import cz.vutbr.fit.interlockSim.testutil.separatorLabel
+import cz.vutbr.fit.interlockSim.testutil.runHoldAtSeparatorScenario
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -71,18 +63,11 @@ class StandingAtMidLegSwitchSpeedLimitTest : KoinTestBase() {
 		/** Speed limit of the `sw1`—`semA`—`A` main track: the section ahead the fixed fold reports. */
 		const val AHEAD_LIMIT = 24.0
 
-		/** Held long enough for the wait to have settled; the reading is taken after this. */
-		const val STAND_HOLD_SECONDS = 2.0
-
-		const val SAMPLE_PERIOD = 0.05
-
 		/**
 		 * The front crosses into `sw1` 60 m past `C`; a stand below this distance would mean the
 		 * train stopped short of the switch, outside the window this test pins.
 		 */
 		const val MIN_STAND_DISTANCE = 50.0
-
-		const val TRAIN_LENGTH = 20.0
 	}
 
 	private class Outcome(
@@ -109,57 +94,24 @@ class StandingAtMidLegSwitchSpeedLimitTest : KoinTestBase() {
 			TestFixtures
 				.loadSwitchBetweenSemaphoresSimulationContext(simulationContextFactory, editingContextFactory)
 				.tracked()
-		val inOuts = context.getInOuts().toList()
-		val a = inOuts.single { it.name == "A" }
-		val c = inOuts.single { it.name == "C" }
-		val reservationService = context.getRoutingServices().getPathReservationService()
-		val realNav = context.getRoutingServices().getTrainNavigationService()
-		val holdingNav =
-			decoratingTrainNavigationService(realNav) { trainId, separator ->
-				if (separatorLabel(separator) == HOLD_SIGNAL) {
-					PathResult.OwnershipConflict
-				} else {
-					realNav.findReservedPathForTrain(trainId, separator)
-				}
-			}
-		val env = NavigationDecoratingContext(context, holdingNav)
-
-		var standTime = -1.0
 		var trainSpeedLimit = Double.NaN
 		var perceivedSpeedLimit = Double.NaN
 		var perceivedName: String? = null
 
-		runSimpleLinearTrackScenario(
+		runHoldAtSeparatorScenario(
 			context,
+			holdSignal = HOLD_SIGNAL,
+			standThreshold = MIN_STAND_DISTANCE,
 			endTime = END_TIME,
-			trainSpecs =
-				listOf(
-					SimpleLinearTrackTestProcess.TrainSpec(
-						inName = "C",
-						outName = "A",
-						inTime = 1.0,
-						outTime = END_TIME.toDouble(),
-						length = TRAIN_LENGTH
-					)
-				),
-			env = env
-		) { train ->
-			assertReservationSuccess(reservationService.reservePath(train.name, c, a))
-			val port = DefaultNetworkPerceptionPort(context, activeTrains = { listOf(train) })
-			Process.activate(
-				TrainKinematicSampler(train, END_TIME.toDouble(), SAMPLE_PERIOD) { sample ->
-					if (standTime < 0.0 && sample.velocity == 0.0 && sample.totalDistance > MIN_STAND_DISTANCE) {
-						standTime = sample.time
-					}
-					if (standTime >= 0.0 && perceivedName == null && sample.time >= standTime + STAND_HOLD_SECONDS) {
-						trainSpeedLimit = train.currentSpeedLimitMps
-						val reading = port.trainPerception(train.name)
-						perceivedSpeedLimit = reading?.currentSpeedLimitMps ?: Double.NaN
-						perceivedName = reading?.signalAheadName
-					}
-				}
-			)
-		}
+			inName = "C",
+			outName = "A",
+			onHoldElapsed = { observation ->
+				trainSpeedLimit = observation.train.currentSpeedLimitMps
+				val reading = observation.port.trainPerception(observation.train.name)
+				perceivedSpeedLimit = reading?.currentSpeedLimitMps ?: Double.NaN
+				perceivedName = reading?.signalAheadName
+			}
+		)
 		return Outcome(trainSpeedLimit, perceivedSpeedLimit, perceivedName)
 	}
 }

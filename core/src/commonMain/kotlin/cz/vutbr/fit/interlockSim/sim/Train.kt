@@ -686,16 +686,15 @@ class Train :
 				// The `path` found at the top of this iteration was queried from the entry of
 				// the section just traversed, so it is partial and `path.getNext(current)`
 				// is null here. Re-query from the new `where` (the separator just crossed =
-				// entry of the upcoming section) — the same query the next iteration makes
-				// at the top of the loop — and take the section after `current` as the
-				// upcoming one. Keeping onNext=true makes getSection() report the section
+				// entry of the upcoming section) — the query the next iteration would make
+				// at the top of the loop, which reuses this answer through `carriedPathResult`
+				// — and take the section after `current` as the upcoming one. Keeping
+				// onNext=true makes getSection() report the section
 				// being entered, with entrySeparator as its entry end. `next` is recomputed
 				// at the top of the next iteration anyway, so this only affects the visible
 				// state during the gap. When the upcoming section is null the front has
 				// reached the destination InOut (or the reserved path ends here); onNext=false
 				// lets the loop's destination check / passivation handle the next iteration.
-				// The answer is kept in `carriedPathResult`: from here to that query nothing
-				// suspends and nothing changes the reservation, so asking again would only repeat it.
 				current = next
 				val upcoming: TrackSection? =
 					if (current != null) {
