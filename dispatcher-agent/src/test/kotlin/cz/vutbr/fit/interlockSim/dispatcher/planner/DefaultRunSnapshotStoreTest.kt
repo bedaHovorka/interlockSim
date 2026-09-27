@@ -40,7 +40,7 @@ class DefaultRunSnapshotStoreTest {
 		@TempDir tmpDir: Path
 	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
-		val snapshot = buildSnapshot(runId = "round-trip-001", arm = DispatcherArm.RULE_BASED)
+		val snapshot = runSnapshot(runId = "round-trip-001", arm = DispatcherArm.RULE_BASED)
 
 		store.write(snapshot)
 
@@ -54,7 +54,7 @@ class DefaultRunSnapshotStoreTest {
 		@TempDir tmpDir: Path
 	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
-		val snapshot = buildSnapshot(runId = "dir-test-001", arm = DispatcherArm.LLM_TOOL_CALLING)
+		val snapshot = runSnapshot(runId = "dir-test-001", arm = DispatcherArm.LLM_TOOL_CALLING)
 
 		val written = store.write(snapshot)
 
@@ -78,7 +78,7 @@ class DefaultRunSnapshotStoreTest {
 	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
 		// Write a snapshot with the current version first (this will be read successfully)
-		val goodSnap = buildSnapshot(runId = "good-001")
+		val goodSnap = runSnapshot(runId = "good-001")
 		store.write(goodSnap)
 
 		// Manually write a file with a future schemaVersion
@@ -99,7 +99,7 @@ class DefaultRunSnapshotStoreTest {
 	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
 		// Write a snapshot with valid JSON first (this will be read successfully)
-		val goodSnap = buildSnapshot(runId = "good-002")
+		val goodSnap = runSnapshot(runId = "good-002")
 		store.write(goodSnap)
 
 		// Manually write a file containing malformed JSON (not parseable at all)
@@ -118,9 +118,9 @@ class DefaultRunSnapshotStoreTest {
 		@TempDir tmpDir: Path
 	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
-		store.write(buildSnapshot(runId = "a001", arm = DispatcherArm.RULE_BASED))
-		store.write(buildSnapshot(runId = "b001", arm = DispatcherArm.LLM_TOOL_CALLING))
-		store.write(buildSnapshot(runId = "c001", arm = DispatcherArm.LLM_CONSTRAINED_JSON))
+		store.write(runSnapshot(runId = "a001", arm = DispatcherArm.RULE_BASED))
+		store.write(runSnapshot(runId = "b001", arm = DispatcherArm.LLM_TOOL_CALLING))
+		store.write(runSnapshot(runId = "c001", arm = DispatcherArm.LLM_CONSTRAINED_JSON))
 
 		val results = store.readAll(tmpDir)
 		assertThat(results).hasSize(3)
@@ -131,7 +131,7 @@ class DefaultRunSnapshotStoreTest {
 		@TempDir tmpDir: Path
 	) {
 		val store = DefaultRunSnapshotStore(root = tmpDir)
-		val snapshot = buildSnapshot(runId = "inv-test-001", totalTicks = 5L)
+		val snapshot = runSnapshot(runId = "inv-test-001", ruleFallbackTicks = 4L)
 
 		store.write(snapshot)
 		val read = store.readAll(tmpDir).first()
@@ -249,59 +249,9 @@ class DefaultRunSnapshotStoreTest {
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
-	private fun buildSnapshot(
-		runId: String,
-		arm: DispatcherArm = DispatcherArm.RULE_BASED,
-		totalTicks: Long = 3L
-	): DispatcherRunSnapshot {
-		val outcomes =
-			TickOutcome.entries
-				.associateWith { 0L }
-				.toMutableMap()
-				.also { map ->
-					map[TickOutcome.LLM_ACTIONS] = totalTicks
-				}.mapKeys { it.key.name }
-		return DispatcherRunSnapshot(
-			runId = runId,
-			arm = arm,
-			params =
-				RunParameters(
-					tickPeriodMs = 500L,
-					historyN = 10,
-					temperature = 0.0,
-					maxActionsPerTick = 3,
-					model = "",
-					seed = null
-				),
-			totalTicks = totalTicks,
-			ticksByOutcome = outcomes,
-			timeoutNoOpByCause = TimeoutNoOpCause.entries.associate { it.name to 0L },
-			llmSuccessRate = 1.0,
-			noOpRate = 0.0,
-			invalidOutputRate = 0.0,
-			repairSuccessRate = 0.0,
-			emittedByActionType = emptyMap(),
-			rejectionsByCode = emptyMap(),
-			applyFailuresByCode = emptyMap(),
-			validAt1 = 0.0,
-			correctAt1 = null,
-			oracleAgreementAt1 = null,
-			latencyP50Ms = 100L,
-			latencyP95Ms = 200L,
-			latencyMaxMs = 300L,
-			actionsByAuthor = emptyMap(),
-			unattributedApplies = 0L,
-			terminalFallbackEngaged = false,
-			terminalFallbackTickIndex = null,
-			c7Clean = true,
-			completedNaturally = true,
-			endCause = RunEndCause.NATURAL_COMPLETION
-		)
-	}
-
 	/** Builds a raw JSON string with a schemaVersion higher than the current one. */
 	private fun buildFutureSchemaJson(runId: String): String {
-		val snap = buildSnapshot(runId = runId)
+		val snap = runSnapshot(runId = runId)
 		// encodeDefaults = true is required: schemaVersion equals its default value, and
 		// kotlinx.serialization omits default-valued fields unless told otherwise. Without this,
 		// the field would never appear in the JSON and the replace() below would be a silent no-op.

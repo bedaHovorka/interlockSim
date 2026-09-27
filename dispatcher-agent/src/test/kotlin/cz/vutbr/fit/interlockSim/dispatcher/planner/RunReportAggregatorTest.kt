@@ -43,10 +43,10 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `runPassed requires completedNaturally, no terminalFallback, and c7Clean`() {
-		assertThat(aggregator.runPassed(snapshot(completedNaturally = true, fallback = false, c7Clean = true))).isTrue()
-		assertThat(aggregator.runPassed(snapshot(completedNaturally = false, fallback = false, c7Clean = true))).isFalse()
-		assertThat(aggregator.runPassed(snapshot(completedNaturally = true, fallback = true, c7Clean = true))).isFalse()
-		assertThat(aggregator.runPassed(snapshot(completedNaturally = true, fallback = false, c7Clean = false))).isFalse()
+		assertThat(aggregator.runPassed(runSnapshot(completedNaturally = true, fallback = false, c7Clean = true))).isTrue()
+		assertThat(aggregator.runPassed(runSnapshot(completedNaturally = false, fallback = false, c7Clean = true))).isFalse()
+		assertThat(aggregator.runPassed(runSnapshot(completedNaturally = true, fallback = true, c7Clean = true))).isFalse()
+		assertThat(aggregator.runPassed(runSnapshot(completedNaturally = true, fallback = false, c7Clean = false))).isFalse()
 	}
 
 	/**
@@ -58,7 +58,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `runPassed rejects a STARVED run`() {
 		val starved =
-			snapshot(completedNaturally = false, fallback = false, c7Clean = true)
+			runSnapshot(completedNaturally = false, fallback = false, c7Clean = true)
 				.copy(
 					endCause = RunEndCause.STARVED,
 					railwayOutcome = RailwayOutcome(journeysCompleted = 0L, trainsExited = 0L)
@@ -72,7 +72,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `runPassed fails below MIN_ACTIONABLE_RATE even when every other condition passes`() {
 		val belowThreshold =
-			snapshot(
+			runSnapshot(
 				completedNaturally = true,
 				fallback = false,
 				c7Clean = true,
@@ -85,7 +85,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `runPassed passes at or above MIN_ACTIONABLE_RATE when every other condition passes`() {
 		val atThreshold =
-			snapshot(
+			runSnapshot(
 				completedNaturally = true,
 				fallback = false,
 				c7Clean = true,
@@ -105,11 +105,11 @@ class RunReportAggregatorTest {
 	fun `runPassed requires both a passing railway outcome AND an adequate actionable rate`() {
 		val llm = DispatcherArm.LLM_TOOL_CALLING
 		val goodRailwayLowRate =
-			snapshot(arm = llm, completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 0.1)
+			runSnapshot(arm = llm, completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 0.1)
 		val badRailwayHighRate =
-			snapshot(arm = llm, completedNaturally = false, fallback = false, c7Clean = true, actionableTickRate = 1.0)
+			runSnapshot(arm = llm, completedNaturally = false, fallback = false, c7Clean = true, actionableTickRate = 1.0)
 		val bothGood =
-			snapshot(arm = llm, completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 1.0)
+			runSnapshot(arm = llm, completedNaturally = true, fallback = false, c7Clean = true, actionableTickRate = 1.0)
 
 		assertThat(aggregator.runPassed(goodRailwayLowRate)).isFalse()
 		assertThat(aggregator.runPassed(badRailwayHighRate)).isFalse()
@@ -130,7 +130,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `runPassed does not apply the actionable-rate clause to the rule-based arm`() {
 		val control =
-			snapshot(
+			runSnapshot(
 				arm = DispatcherArm.RULE_BASED,
 				completedNaturally = true,
 				fallback = false,
@@ -150,7 +150,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `runPassed still applies the actionable-rate clause to an LLM arm`() {
 		val llm =
-			snapshot(
+			runSnapshot(
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				completedNaturally = true,
 				fallback = false,
@@ -170,7 +170,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `runPassed fails a naturally completed run that moved too few trains`() {
 		val weak =
-			snapshot(
+			runSnapshot(
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				completedNaturally = true,
 				fallback = false,
@@ -184,7 +184,7 @@ class RunReportAggregatorTest {
 					)
 			)
 		val adequate =
-			snapshot(
+			runSnapshot(
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				completedNaturally = true,
 				fallback = false,
@@ -210,7 +210,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `runPassed ignores the outcome term when the exit count was not measured`() {
 		val unmeasured =
-			snapshot(
+			runSnapshot(
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				completedNaturally = true,
 				fallback = false,
@@ -226,9 +226,9 @@ class RunReportAggregatorTest {
 	fun `aggregate computes median actionableTickRate correctly`() {
 		val snapshots =
 			listOf(
-				snapshot(runId = "a1", actionableTickRate = 0.4),
-				snapshot(runId = "a2", actionableTickRate = 0.7),
-				snapshot(runId = "a3", actionableTickRate = 0.9)
+				runSnapshot(runId = "a1", actionableTickRate = 0.4),
+				runSnapshot(runId = "a2", actionableTickRate = 0.7),
+				runSnapshot(runId = "a3", actionableTickRate = 0.9)
 			)
 		val report = aggregator.aggregate(snapshots)
 		// Sorted: [0.4, 0.7, 0.9] -> median is 0.7
@@ -238,7 +238,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `gatePassed requires runCount ge 10 and passingRuns ge 8 and all c7Clean`() {
 		// 10 passing runs, all c7Clean → gate passes
-		val tenPassing = (1..10).map { i -> snapshot(runId = "r$i", c7Clean = true) }
+		val tenPassing = (1..10).map { i -> runSnapshot(runId = "r$i", c7Clean = true) }
 		val report = aggregator.aggregate(tenPassing)
 		assertThat(report.gatePassed).isTrue()
 		assertThat(report.passingRuns).isEqualTo(10)
@@ -246,7 +246,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `gatePassed fails when fewer than 10 runs even if all pass`() {
-		val nineRuns = (1..9).map { i -> snapshot(runId = "r$i", c7Clean = true) }
+		val nineRuns = (1..9).map { i -> runSnapshot(runId = "r$i", c7Clean = true) }
 		val report = aggregator.aggregate(nineRuns)
 		assertThat(report.gatePassed).isFalse()
 	}
@@ -255,8 +255,8 @@ class RunReportAggregatorTest {
 	fun `gatePassed fails when fewer than 8 passing runs even at runCount 10`() {
 		// 7 passing + 3 failing (completedNaturally = false) → 7 < 8
 		val snapshots =
-			(1..7).map { i -> snapshot(runId = "p$i", c7Clean = true) } +
-				(1..3).map { i -> snapshot(runId = "f$i", completedNaturally = false, c7Clean = true) }
+			(1..7).map { i -> runSnapshot(runId = "p$i", c7Clean = true) } +
+				(1..3).map { i -> runSnapshot(runId = "f$i", completedNaturally = false, c7Clean = true) }
 		val report = aggregator.aggregate(snapshots)
 		assertThat(report.gatePassed).isFalse()
 		assertThat(report.passingRuns).isEqualTo(7)
@@ -266,8 +266,8 @@ class RunReportAggregatorTest {
 	fun `single non-c7Clean run fails entire arm even at 10 of 10 completions`() {
 		// 9 clean passing + 1 non-c7Clean (but completedNaturally) → gate must fail
 		val snapshots =
-			(1..9).map { i -> snapshot(runId = "c$i", c7Clean = true) } +
-				listOf(snapshot(runId = "dirty", c7Clean = false))
+			(1..9).map { i -> runSnapshot(runId = "c$i", c7Clean = true) } +
+				listOf(runSnapshot(runId = "dirty", c7Clean = false))
 		val report = aggregator.aggregate(snapshots)
 
 		assertThat(report.runCount).isEqualTo(10)
@@ -282,8 +282,8 @@ class RunReportAggregatorTest {
 	fun `allC7Clean is false when any snapshot has c7Clean false`() {
 		val snapshots =
 			listOf(
-				snapshot(runId = "a", c7Clean = true),
-				snapshot(runId = "b", c7Clean = false)
+				runSnapshot(runId = "a", c7Clean = true),
+				runSnapshot(runId = "b", c7Clean = false)
 			)
 		val report = aggregator.aggregate(snapshots)
 		assertThat(report.allC7Clean).isFalse()
@@ -302,9 +302,9 @@ class RunReportAggregatorTest {
 	fun `aggregate computes median llmSuccessRate correctly`() {
 		val snapshots =
 			listOf(
-				snapshot(runId = "r1", llmSuccessRate = 0.6),
-				snapshot(runId = "r2", llmSuccessRate = 0.8),
-				snapshot(runId = "r3", llmSuccessRate = 1.0)
+				runSnapshot(runId = "r1", llmSuccessRate = 0.6),
+				runSnapshot(runId = "r2", llmSuccessRate = 0.8),
+				runSnapshot(runId = "r3", llmSuccessRate = 1.0)
 			)
 		val report = aggregator.aggregate(snapshots)
 		// Sorted: [0.6, 0.8, 1.0] → median is 0.8
@@ -313,24 +313,24 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `aggregate sums rejection counts across all runs`() {
-		val snap1 = snapshot(runId = "s1", rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 3L))
-		val snap2 = snapshot(runId = "s2", rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 2L))
+		val snap1 = runSnapshot(runId = "s1", rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 3L))
+		val snap2 = runSnapshot(runId = "s2", rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 2L))
 		val report = aggregator.aggregate(listOf(snap1, snap2))
 		assertThat(report.rejectionCounts[RejectionCode.UNKNOWN_TRAIN]).isEqualTo(5L)
 	}
 
 	@Test
 	fun `aggregate sums apply-failure counts across all runs`() {
-		val snap1 = snapshot(runId = "af1", applyFailures = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED to 4L))
-		val snap2 = snapshot(runId = "af2", applyFailures = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED to 1L))
+		val snap1 = runSnapshot(runId = "af1", applyFailures = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED to 4L))
+		val snap2 = runSnapshot(runId = "af2", applyFailures = mapOf(ApplyFailureCode.ALL_PATHS_BLOCKED to 1L))
 		val report = aggregator.aggregate(listOf(snap1, snap2))
 		assertThat(report.applyFailureCounts[ApplyFailureCode.ALL_PATHS_BLOCKED]).isEqualTo(5L)
 	}
 
 	@Test
 	fun `aggregate sums author counts across all runs`() {
-		val snap1 = snapshot(runId = "au1", authorCounts = mapOf(ActionAuthor.LLM to 10L))
-		val snap2 = snapshot(runId = "au2", authorCounts = mapOf(ActionAuthor.LLM to 5L))
+		val snap1 = runSnapshot(runId = "au1", authorCounts = mapOf(ActionAuthor.LLM to 10L))
+		val snap2 = runSnapshot(runId = "au2", authorCounts = mapOf(ActionAuthor.LLM to 5L))
 		val report = aggregator.aggregate(listOf(snap1, snap2))
 		assertThat(report.authorCounts[ActionAuthor.LLM]).isEqualTo(15L)
 	}
@@ -339,14 +339,14 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `renderMarkdown produces non-empty string`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "md1")))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "md1")))
 		val md = aggregator.renderMarkdown(listOf(report))
 		assertThat(md).isNotEmpty()
 	}
 
 	@Test
 	fun `renderMarkdown contains all table headings`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "tables")))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "tables")))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		assertThat(md).transform("contains Arm Comparison") { md.contains("## Arm Comparison") }.isTrue()
@@ -360,7 +360,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `renderMarkdown output is English only — no Czech strings`() {
-		val snapshots = (1..10).map { i -> snapshot(runId = "en$i") }
+		val snapshots = (1..10).map { i -> runSnapshot(runId = "en$i") }
 		val report = aggregator.aggregate(snapshots)
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -385,7 +385,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `renderMarkdown shows PASS for arm with 10 passing runs`() {
-		val snapshots = (1..10).map { i -> snapshot(runId = "pass$i") }
+		val snapshots = (1..10).map { i -> runSnapshot(runId = "pass$i") }
 		val report = aggregator.aggregate(snapshots)
 		val md = aggregator.renderMarkdown(listOf(report))
 		assertThat(md).transform("contains PASS") { md.contains("PASS") }.isTrue()
@@ -393,7 +393,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `renderMarkdown shows FAIL for arm with fewer than 10 runs`() {
-		val snapshots = (1..5).map { i -> snapshot(runId = "fail$i") }
+		val snapshots = (1..5).map { i -> runSnapshot(runId = "fail$i") }
 		val report = aggregator.aggregate(snapshots)
 		val md = aggregator.renderMarkdown(listOf(report))
 		assertThat(md).transform("contains FAIL") { md.contains("FAIL") }.isTrue()
@@ -401,8 +401,8 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `renderMarkdown handles multiple arms without mixing rows`() {
-		val ruleReport = aggregator.aggregate(listOf(snapshot(runId = "rb1", arm = DispatcherArm.RULE_BASED)))
-		val llmReport = aggregator.aggregate(listOf(snapshot(runId = "llm1", arm = DispatcherArm.LLM_TOOL_CALLING)))
+		val ruleReport = aggregator.aggregate(listOf(runSnapshot(runId = "rb1", arm = DispatcherArm.RULE_BASED)))
+		val llmReport = aggregator.aggregate(listOf(runSnapshot(runId = "llm1", arm = DispatcherArm.LLM_TOOL_CALLING)))
 		val md = aggregator.renderMarkdown(listOf(ruleReport, llmReport))
 
 		assertThat(md).transform("contains RULE_BASED") { md.contains("RULE_BASED") }.isTrue()
@@ -413,7 +413,7 @@ class RunReportAggregatorTest {
 	fun `p95LatencyMs reflects 95th percentile of per-run latencyP95Ms`() {
 		val snapshots =
 			(1..10).map { i ->
-				snapshot(runId = "lat$i", latencyP95Ms = (i * 100L))
+				runSnapshot(runId = "lat$i", latencyP95Ms = (i * 100L))
 			}
 		val report = aggregator.aggregate(snapshots)
 		// Sorted latencies: 100..1000; p95 index = (10-1)*95/100 = 8 → value at index 8 = 900
@@ -427,17 +427,17 @@ class RunReportAggregatorTest {
 		// when *every* run is unmeasured — never a bare 0 that would misread as "answered in 0 ms".
 		val allNull =
 			(1..10).map { i ->
-				snapshot(runId = "rule$i", latencyP50Ms = null, latencyP95Ms = null, latencyMaxMs = null)
+				runSnapshot(runId = "rule$i", latencyP50Ms = null, latencyP95Ms = null, latencyMaxMs = null)
 			}
 		assertThat(aggregator.aggregate(allNull).p95LatencyMs).isNull()
 
 		// 8 measured runs (100..800) + 2 unmeasured (null, skipped) -> p95 over the 8:
 		// idx = (8-1)*95/100 = 6 -> sorted[6] = 700 (the cross-run linear-index percentile95).
 		val mixed =
-			(1..8).map { i -> snapshot(runId = "lat$i", latencyP95Ms = (i * 100L)) } +
+			(1..8).map { i -> runSnapshot(runId = "lat$i", latencyP95Ms = (i * 100L)) } +
 				listOf(
-					snapshot(runId = "rule1", latencyP95Ms = null),
-					snapshot(runId = "rule2", latencyP95Ms = null)
+					runSnapshot(runId = "rule1", latencyP95Ms = null),
+					runSnapshot(runId = "rule2", latencyP95Ms = null)
 				)
 		assertThat(aggregator.aggregate(mixed).p95LatencyMs).isEqualTo(700L)
 	}
@@ -446,8 +446,8 @@ class RunReportAggregatorTest {
 	fun `aggregate computes medianCorrectAt1 only from snapshots with oracle data`() {
 		val snapshots =
 			listOf(
-				snapshot(runId = "o1", correctAt1 = 0.5),
-				snapshot(runId = "o2", correctAt1 = 0.9)
+				runSnapshot(runId = "o1", correctAt1 = 0.5),
+				runSnapshot(runId = "o2", correctAt1 = 0.9)
 			)
 		val report = aggregator.aggregate(snapshots)
 		assertThat(report.medianCorrectAt1).isEqualTo(0.7)
@@ -458,7 +458,7 @@ class RunReportAggregatorTest {
 		// Task 5 (#834) legitimately introduced "n/a" elsewhere in the report (invalid-action rate
 		// and railway-outcome columns, for figures nothing measured), so this can no longer assert
 		// a blanket absence of "n/a" — it must check the correctAt1 column specifically.
-		val report = aggregator.aggregate(listOf(snapshot(runId = "oracle1", correctAt1 = 0.75)))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "oracle1", correctAt1 = 0.75)))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		assertThat(md).transform("Arm Comparison shows correctAt1") { md.contains("| 0.750 |") }.isTrue()
@@ -469,7 +469,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `renderMarkdown shows non-zero rejection, apply-failure, and author counts and a dirty C7 arm`() {
 		val dirtySnapshot =
-			snapshot(
+			runSnapshot(
 				runId = "dirty1",
 				c7Clean = false,
 				rejections = mapOf(RejectionCode.UNKNOWN_TRAIN to 2L),
@@ -504,7 +504,7 @@ class RunReportAggregatorTest {
 	fun `renderMarkdown shows configured model and seed in Parameter Sweep`() {
 		val report =
 			aggregator.aggregate(
-				listOf(snapshot(runId = "params1", model = "qwen2.5:7b-instruct", seed = 42L))
+				listOf(runSnapshot(runId = "params1", model = "qwen2.5:7b-instruct", seed = 42L))
 			)
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -519,11 +519,11 @@ class RunReportAggregatorTest {
 		// section that could not show two parameter values.
 		val cold =
 			listOf(
-				snapshot(runId = "cold1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
-				snapshot(runId = "cold2", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28)
+				runSnapshot(runId = "cold1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
+				runSnapshot(runId = "cold2", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28)
 			)
 		val hot =
-			listOf(snapshot(runId = "hot1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.5))
+			listOf(runSnapshot(runId = "hot1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.5))
 		val report = aggregator.aggregate(cold + hot)
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -552,9 +552,9 @@ class RunReportAggregatorTest {
 		val report =
 			aggregator.aggregate(
 				listOf(
-					snapshot(runId = "a1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
-					snapshot(runId = "a2", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
-					snapshot(runId = "b1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.9)
+					runSnapshot(runId = "a1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
+					runSnapshot(runId = "a2", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.28),
+					runSnapshot(runId = "b1", arm = DispatcherArm.LLM_TOOL_CALLING, temperature = 0.9)
 				)
 			)
 		val md = aggregator.renderMarkdown(listOf(report))
@@ -578,7 +578,7 @@ class RunReportAggregatorTest {
 	@Test
 	fun `Parameter Sweep reports every AC-required metric from known snapshot values`() {
 		val snap =
-			snapshot(
+			runSnapshot(
 				runId = "ac1",
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				llmSuccessRate = 0.75,
@@ -639,7 +639,7 @@ class RunReportAggregatorTest {
 		// rejected gives an action-scoped rate of 0.25 — a value invalidOutputRate could never
 		// produce from this fixture, so this pins that the two are not silently interchangeable.
 		val snap =
-			snapshot(
+			runSnapshot(
 				runId = "action-rate",
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				invalidOutputRate = 0.0,
@@ -655,7 +655,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `invalid-action rate is n slash a, not zero, when no run in the cell emitted any action`() {
-		val snap = snapshot(runId = "no-actions", arm = DispatcherArm.LLM_TOOL_CALLING)
+		val snap = runSnapshot(runId = "no-actions", arm = DispatcherArm.LLM_TOOL_CALLING)
 		val report = aggregator.aggregate(listOf(snap))
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -665,8 +665,8 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `cells differing only in inferenceTimeoutSeconds render as separate rows`() {
-		val short = snapshot(runId = "short", arm = DispatcherArm.LLM_TOOL_CALLING, inferenceTimeoutSeconds = 30L)
-		val long = snapshot(runId = "long", arm = DispatcherArm.LLM_TOOL_CALLING, inferenceTimeoutSeconds = 90L)
+		val short = runSnapshot(runId = "short", arm = DispatcherArm.LLM_TOOL_CALLING, inferenceTimeoutSeconds = 30L)
+		val long = runSnapshot(runId = "long", arm = DispatcherArm.LLM_TOOL_CALLING, inferenceTimeoutSeconds = 90L)
 		val report = aggregator.aggregate(listOf(short, long))
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -678,8 +678,8 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `cells differing only in promptVariant render as separate rows`() {
-		val v1 = snapshot(runId = "pv1", arm = DispatcherArm.LLM_TOOL_CALLING, promptVariant = "prompt-v1")
-		val v2 = snapshot(runId = "pv2", arm = DispatcherArm.LLM_TOOL_CALLING, promptVariant = "prompt-v2")
+		val v1 = runSnapshot(runId = "pv1", arm = DispatcherArm.LLM_TOOL_CALLING, promptVariant = "prompt-v1")
+		val v2 = runSnapshot(runId = "pv2", arm = DispatcherArm.LLM_TOOL_CALLING, promptVariant = "prompt-v2")
 		val report = aggregator.aggregate(listOf(v1, v2))
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -692,9 +692,9 @@ class RunReportAggregatorTest {
 	@Test
 	fun `cells differing only in circuitBreakerFailureThreshold render as separate rows`() {
 		val low =
-			snapshot(runId = "low", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerFailureThreshold = 2)
+			runSnapshot(runId = "low", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerFailureThreshold = 2)
 		val high =
-			snapshot(runId = "high", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerFailureThreshold = 8)
+			runSnapshot(runId = "high", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerFailureThreshold = 8)
 		val report = aggregator.aggregate(listOf(low, high))
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -707,9 +707,9 @@ class RunReportAggregatorTest {
 	@Test
 	fun `cells differing only in circuitBreakerCooldownSeconds render as separate rows`() {
 		val short =
-			snapshot(runId = "short-cooldown", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerCooldownSeconds = 15.0)
+			runSnapshot(runId = "short-cooldown", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerCooldownSeconds = 15.0)
 		val long =
-			snapshot(runId = "long-cooldown", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerCooldownSeconds = 90.0)
+			runSnapshot(runId = "long-cooldown", arm = DispatcherArm.LLM_TOOL_CALLING, circuitBreakerCooldownSeconds = 90.0)
 		val report = aggregator.aggregate(listOf(short, long))
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -721,7 +721,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `railway outcome figures render as n slash a, not zero, when never measured`() {
-		val snap = snapshot(runId = "unmeasured", arm = DispatcherArm.LLM_TOOL_CALLING)
+		val snap = runSnapshot(runId = "unmeasured", arm = DispatcherArm.LLM_TOOL_CALLING)
 		val report = aggregator.aggregate(listOf(snap))
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -735,7 +735,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `a run with no fatal-exception scan renders n slash a in Per-Run Detail, not a bare zero`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "unscanned", loggedFatalSimExceptionCount = null)))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "unscanned", loggedFatalSimExceptionCount = null)))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val row = md.lines().first { it.startsWith("| ${DispatcherArm.RULE_BASED} | unscanned ") }
@@ -744,7 +744,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `a run whose log was scanned clean renders zero in Per-Run Detail, not n slash a`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "clean", loggedFatalSimExceptionCount = 0L)))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "clean", loggedFatalSimExceptionCount = 0L)))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val row = md.lines().first { it.startsWith("| ${DispatcherArm.RULE_BASED} | clean ") }
@@ -753,7 +753,7 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `no run with a logged FATAL renders the reassuring message in the section, not a table`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "ok1", loggedFatalSimExceptionCount = 0L)))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "ok1", loggedFatalSimExceptionCount = 0L)))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		assertThat(md)
@@ -767,13 +767,13 @@ class RunReportAggregatorTest {
 	@Test
 	fun `a run with a logged FATAL is listed in the section with its count and first message`() {
 		val flagged =
-			snapshot(
+			runSnapshot(
 				runId = "doomed",
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				loggedFatalSimExceptionCount = 2L,
 				loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: pathToSemaphore null at time 12.5"
 			)
-		val clean = snapshot(runId = "ok2", loggedFatalSimExceptionCount = 0L)
+		val clean = runSnapshot(runId = "ok2", loggedFatalSimExceptionCount = 0L)
 		val report = aggregator.aggregate(listOf(flagged, clean))
 		val md = aggregator.renderMarkdown(listOf(report))
 
@@ -788,14 +788,14 @@ class RunReportAggregatorTest {
 
 	@Test
 	fun `repair-success rate is marked as having no live producer, not presented as a bare measurement`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "repair1")))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "repair1")))
 		val md = aggregator.renderMarkdown(listOf(report))
 		assertThat(md).transform("mentions no live producer") { it.contains("no live producer") }.isTrue()
 	}
 
 	@Test
 	fun `Parameter Sweep legend distinguishes invalid-action rate from invalidOutputRate and cites #906`() {
-		val report = aggregator.aggregate(listOf(snapshot(runId = "legend1")))
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "legend1")))
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		assertThat(md).transform("mentions invalidOutputRate for contrast") { it.contains("invalidOutputRate") }.isTrue()
@@ -809,14 +809,14 @@ class RunReportAggregatorTest {
 		// is precisely that ranking on journeysCompleted would put it first, which is the miscount
 		// the ruling forbids: journeysCompleted can credit a journey to a train that never moved.
 		val loser =
-			snapshot(
+			runSnapshot(
 				runId = "loser",
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				temperature = 0.1,
 				railwayOutcome = RailwayOutcome(journeysCompleted = 50L, trainsExited = 1L)
 			)
 		val winner =
-			snapshot(
+			runSnapshot(
 				runId = "winner",
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				temperature = 0.9,
@@ -843,87 +843,6 @@ class RunReportAggregatorTest {
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
-
-	private fun snapshot(
-		runId: String = "test-run",
-		arm: DispatcherArm = DispatcherArm.RULE_BASED,
-		completedNaturally: Boolean = true,
-		fallback: Boolean = false,
-		c7Clean: Boolean = true,
-		llmSuccessRate: Double = 1.0,
-		actionableTickRate: Double = llmSuccessRate,
-		noOpRate: Double = 0.0,
-		invalidOutputRate: Double = 0.0,
-		repairSuccessRate: Double = 0.0,
-		latencyP50Ms: Long? = 100L,
-		latencyP95Ms: Long? = 200L,
-		latencyMaxMs: Long? = 300L,
-		rejections: Map<RejectionCode, Long> = emptyMap(),
-		applyFailures: Map<ApplyFailureCode, Long> = emptyMap(),
-		authorCounts: Map<ActionAuthor, Long> = emptyMap(),
-		emittedByActionType: Map<String, Long> = emptyMap(),
-		correctAt1: Double? = null,
-		model: String = "",
-		seed: Long? = null,
-		temperature: Double = 0.0,
-		inferenceTimeoutSeconds: Long = KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
-		promptVariant: String = RunParameters.DEFAULT_PROMPT_VARIANT,
-		circuitBreakerFailureThreshold: Int = LlmCircuitBreaker.DEFAULT_FAILURE_THRESHOLD,
-		circuitBreakerCooldownSeconds: Double = LlmCircuitBreaker.DEFAULT_COOLDOWN_SECONDS,
-		railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
-		ruleFallbackTicks: Long = 0L,
-		loggedFatalSimExceptionCount: Long? = null,
-		loggedFatalSimExceptionFirstMessage: String? = null
-	): DispatcherRunSnapshot {
-		val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
-		outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
-		outcomes[TickOutcome.RULE_FALLBACK.name] = ruleFallbackTicks
-
-		return DispatcherRunSnapshot(
-			runId = runId,
-			arm = arm,
-			params =
-				RunParameters(
-					tickPeriodMs = 500L,
-					historyN = 10,
-					temperature = temperature,
-					maxActionsPerTick = 3,
-					model = model,
-					seed = seed,
-					inferenceTimeoutSeconds = inferenceTimeoutSeconds,
-					promptVariant = promptVariant,
-					circuitBreakerFailureThreshold = circuitBreakerFailureThreshold,
-					circuitBreakerCooldownSeconds = circuitBreakerCooldownSeconds
-				),
-			totalTicks = 1L + ruleFallbackTicks,
-			ticksByOutcome = outcomes,
-			timeoutNoOpByCause = TimeoutNoOpCause.entries.associate { it.name to 0L },
-			llmSuccessRate = llmSuccessRate,
-			actionableTickRate = actionableTickRate,
-			noOpRate = noOpRate,
-			invalidOutputRate = invalidOutputRate,
-			repairSuccessRate = repairSuccessRate,
-			emittedByActionType = emittedByActionType,
-			rejectionsByCode = rejections.mapKeys { it.key.name },
-			applyFailuresByCode = applyFailures.mapKeys { it.key.name },
-			validAt1 = 1.0,
-			correctAt1 = correctAt1,
-			oracleAgreementAt1 = null,
-			latencyP50Ms = latencyP50Ms,
-			latencyP95Ms = latencyP95Ms,
-			latencyMaxMs = latencyMaxMs,
-			actionsByAuthor = authorCounts.mapKeys { it.key.name },
-			unattributedApplies = 0L,
-			terminalFallbackEngaged = fallback,
-			terminalFallbackTickIndex = if (fallback) 5L else null,
-			c7Clean = c7Clean,
-			completedNaturally = completedNaturally,
-			endCause = if (completedNaturally) RunEndCause.NATURAL_COMPLETION else RunEndCause.TERMINATED_EARLY,
-			railwayOutcome = railwayOutcome,
-			loggedFatalSimExceptionCount = loggedFatalSimExceptionCount,
-			loggedFatalSimExceptionFirstMessage = loggedFatalSimExceptionFirstMessage
-		)
-	}
 
 	/**
 	 * Extracts the data row for [armPrefix] from a single Parameter Sweep table [section] (the

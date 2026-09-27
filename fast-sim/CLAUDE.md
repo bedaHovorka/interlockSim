@@ -25,7 +25,7 @@ NEVER depend on `:dispatcher-agent` (no LLM dependencies in the native binary).
 ## Build, Run, Test
 
 ```bash
-./gradlew buildFastSim          # Links the RELEASE executable (currently the same target as buildFastSimRelease)
+./gradlew buildFastSim          # Links the debug executable (matches what runFastSim runs)
 ./gradlew runFastSim            # Runs the DEBUG executable
 ./gradlew buildFastSimRelease   # Links the release executable
 ./gradlew runFastSimRelease     # Runs the release executable

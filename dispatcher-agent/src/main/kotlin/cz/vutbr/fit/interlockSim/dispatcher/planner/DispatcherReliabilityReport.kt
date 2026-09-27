@@ -16,20 +16,14 @@ import java.nio.file.Path
 private val logger = KotlinLogging.logger {}
 
 /**
- * Entry point for the `dispatcherReliabilityReport` Gradle task (SP2c.23, Issue #846).
- *
- * Reads all [DispatcherRunSnapshot] JSON files from
- * `build/reports/dispatcher-runs/` (the [DefaultRunSnapshotStore] root), groups them by
- * [DispatcherArm], aggregates each arm via [RunReportAggregator], and writes the Markdown
- * report to `build/reports/dispatcher-runs/report.md`.
- *
- * No simulation is re-run; the task is purely a read-then-render operation.
+ * Reads all [DispatcherRunSnapshot] JSON files from [root], groups them by [DispatcherArm],
+ * aggregates each arm via [RunReportAggregator], and writes the Markdown report to
+ * `<root>/report.md`. No simulation is re-run.
  *
  * @since Issue #846 (SP2c.23 — cross-run aggregator + Markdown report + Gradle task)
  */
-fun main() {
-	val store = DefaultRunSnapshotStore()
-	val root = DefaultRunSnapshotStore.DEFAULT_ROOT
+internal fun renderDispatcherReliabilityReport(root: Path): Path {
+	val store = DefaultRunSnapshotStore(root)
 
 	logger.info { "[dispatcherReliabilityReport] reading snapshots from $root" }
 
@@ -61,4 +55,18 @@ fun main() {
 	Files.writeString(reportFile, markdown)
 
 	logger.info { "[dispatcherReliabilityReport] report written to $reportFile" }
+	return reportFile
+}
+
+/** The first CLI argument, or [DefaultRunSnapshotStore.DEFAULT_ROOT] without one (Issue #1022). */
+internal fun reportRootFrom(args: Array<String>): Path =
+	args.firstOrNull()?.let { Path.of(it) } ?: DefaultRunSnapshotStore.DEFAULT_ROOT
+
+/**
+ * Entry point for the `dispatcherReliabilityReport` Gradle task (SP2c.23, Issue #846). Delegates
+ * to [renderDispatcherReliabilityReport] with the root chosen by [reportRootFrom]; the task
+ * passes the repository-root snapshot directory.
+ */
+fun main(args: Array<String>) {
+	renderDispatcherReliabilityReport(reportRootFrom(args))
 }

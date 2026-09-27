@@ -65,6 +65,10 @@ val atomicfuVersion: String by project
 val detektFormattingVersion: String by project
 val jacocoToolVersion: String by project
 
+// JUnit repeat caps (Issue #1002): typed String, so systemProperty(..., Any) gets no Any? warning.
+val testRepeatMaxCount: String by project
+val heavyTestRepeatMaxCount: String by project
+
 group = "cz.vutbr.fit"
 version = "1.0"
 
@@ -105,7 +109,7 @@ kotlin {
             useJUnitPlatform {
                 excludeTags("integration-test", "heavy-test")
             }
-            systemProperty("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
+            systemProperty("junit.jupiter.params.repeat.maxCount", testRepeatMaxCount)
             maxParallelForks = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
             testLogging {
                 events("passed", "skipped", "failed")
@@ -334,7 +338,7 @@ val integrationTest by tasks.registering(Test::class) {
         excludeTags("heavy-test")
     }
 
-    systemProperty("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
+    systemProperty("junit.jupiter.params.repeat.maxCount", testRepeatMaxCount)
 
     maxParallelForks = 1
 
@@ -394,7 +398,7 @@ val heavyTest by tasks.registering(Test::class) {
         includeTags("heavy-test")
     }
 
-    systemProperty("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
+    systemProperty("junit.jupiter.params.repeat.maxCount", heavyTestRepeatMaxCount)
 
     maxParallelForks = 1
 
@@ -515,6 +519,8 @@ sonar {
         // It is already covered by core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/exceptions/
         // RequireFunctionsTest.kt and desktop-ui/src/test/kotlin/cz/vutbr/fit/interlockSim/
         // exceptions/RequireFunctionsTest.kt.
+        // Tracked by Issue #1022. Removal condition: permanent, unless these nine functions stop
+        // being `inline` — there is no test that can move this number while they stay inline.
         property(
             "sonar.coverage.exclusions",
             "src/nativeMain/**,src/commonMain/kotlin/cz/vutbr/fit/interlockSim/exceptions/RequireFunctions.kt",

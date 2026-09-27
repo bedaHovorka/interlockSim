@@ -60,6 +60,9 @@ val detektFormattingVersion: String by project
 val ktlintVersion: String by project
 val jacocoToolVersion: String by project
 
+// JUnit repeat caps (Issue #1002): typed String, so systemProperty(..., Any) gets no Any? warning.
+val heavyTestRepeatMaxCount: String by project
+
 group = "cz.vutbr.fit"
 version = "1.0"
 
@@ -234,7 +237,7 @@ val heavyTest by tasks.registering(Test::class) {
         includeTags("heavy-test")
     }
 
-    systemProperty("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
+    systemProperty("junit.jupiter.params.repeat.maxCount", heavyTestRepeatMaxCount)
 
     jvmArgs("-ea")
     maxParallelForks = 1
@@ -282,15 +285,9 @@ val dispatcherReliabilityReport by tasks.registering(JavaExec::class) {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherReliabilityReportKt")
 
-    // Issue #847 round 4: read the runs where headless runs actually write them.
-    // DefaultRunSnapshotStore.DEFAULT_ROOT is a RELATIVE path ("build/reports/dispatcher-runs"),
-    // so it resolves against the working directory. `java -jar interlockSim.jar example ...` is
-    // launched from the repository root and writes there, while a JavaExec task defaults its
-    // working directory to the *module* directory and would read
-    // dispatcher-agent/build/reports/dispatcher-runs -- a different, empty directory. The task then
-    // succeeds and renders an all-zero report, which is indistinguishable from "no runs were
-    // recorded" and is exactly the silent-empty-measurement failure #847 cannot afford.
-    workingDir = rootProject.projectDir
+    // Issue #847: headless runs write DEFAULT_ROOT relative to the repository root, so pass that
+    // directory explicitly. Reading the module-relative default would render an all-zero report.
+    args(rootProject.file("build/reports/dispatcher-runs").absolutePath)
 
     dependsOn(tasks.named("classes"))
 }
@@ -412,14 +409,6 @@ sonar {
                 file("build/reports/jacoco/test/jacocoTestReport.xml").absolutePath,
                 aggregatedCoverageReport,
             ).joinToString(","),
-        )
-        // DispatcherReliabilityReport.kt is a fun main() CLI entry point for the
-        // dispatcherReliabilityReport Gradle task. It reads a hardcoded
-        // DefaultRunSnapshotStore.DEFAULT_ROOT, so testing it would require changing production
-        // code to inject the root; that is out of scope, leaving the file permanently unmeasurable.
-        property(
-            "sonar.coverage.exclusions",
-            "src/main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/planner/DispatcherReliabilityReport.kt",
         )
     }
 }
