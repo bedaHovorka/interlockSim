@@ -73,9 +73,6 @@ class TrainHeadingResolver(
 	/** Location at which a candidate 180° flip was first observed, per train. */
 	private val pendingFlipLocations = mutableMapOf<Int, PointF>()
 
-	/** The [activeTrainNumbers] set passed to the previous [retainTrains] call, if any. */
-	private var previousActiveTrainNumbers: Set<Int>? = null
-
 	/**
 	 * Resolve the heading to render for a train this frame.
 	 *
@@ -128,14 +125,23 @@ class TrainHeadingResolver(
 	 * @param activeTrainNumbers Train numbers present in the current animation state
 	 */
 	fun retainTrains(activeTrainNumbers: Set<Int>) {
-		if (activeTrainNumbers == previousActiveTrainNumbers) {
-			// Same train set as last frame: the three retainAll calls below would all be no-ops.
+		// previousHeadings always has the same key set as previousLocations (resolveHeading writes
+		// both together), so checking one covers both maps; pendingFlipLocations is checked
+		// separately since a train can be tracked there without (yet) being in the other two.
+		val nothingToPrune =
+			previousLocations.keys.all { it in activeTrainNumbers } &&
+				pendingFlipLocations.keys.all { it in activeTrainNumbers }
+		if (nothingToPrune) {
+			// Every tracked train is still active: the three retainAll calls below would all be
+			// no-ops. Deliberately re-derived from the resolver's own state on every call rather than
+			// cached against the previous activeTrainNumbers argument (Issue #790 review): a train
+			// resolved outside that set between two retainTrains calls with the same argument would
+			// otherwise escape pruning, and caching the caller's set risked aliasing a mutable one.
 			return
 		}
 		previousLocations.keys.retainAll(activeTrainNumbers)
 		previousHeadings.keys.retainAll(activeTrainNumbers)
 		pendingFlipLocations.keys.retainAll(activeTrainNumbers)
-		previousActiveTrainNumbers = activeTrainNumbers
 	}
 
 	/**

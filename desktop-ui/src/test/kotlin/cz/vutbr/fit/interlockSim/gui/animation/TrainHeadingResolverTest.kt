@@ -274,4 +274,19 @@ class TrainHeadingResolverTest {
 		assertThat(resolver.resolveHeading(1, null, at(19f, 8f))).isEqualTo(east)
 		assertThat(resolver.resolveHeading(2, null, at(25f, 8f))).isEqualTo(west)
 	}
+
+	@Test
+	fun `a train resolved between two identical retainTrains calls is still pruned by the second`() {
+		// Review finding I-2: retainTrains({1}) -> resolveHeading(2, ...) -> retainTrains({1}) must
+		// still prune train 2's state, even though the argument is the same set both times. A guard
+		// that only compares the argument against the previous call's argument misses this: train 2
+		// was never in that argument, so its state would otherwise escape pruning forever.
+		resolver.retainTrains(setOf(1))
+		resolver.resolveHeading(2, west, at(25f, 8f)) // train 2 resolved outside the retained set
+		resolver.retainTrains(setOf(1)) // same argument as the first call
+		// If train 2's state had escaped pruning, this would return the tracked `west`, not the
+		// default heading. A reused train number 2 must not inherit a pending flip either.
+		val heading = resolver.resolveHeading(2, null, at(25f, 8f))
+		assertThat(heading).isEqualTo(TrainHeadingResolver.DEFAULT_TRAIN_HEADING)
+	}
 }
