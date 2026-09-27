@@ -135,6 +135,25 @@ without hedging, gives the per-outcome breakdown behind it, and points at SP2c.1
 interface-vs-capacity diagnostic for what the failure does and does not tell us about model
 capability. A negative result is a result.
 
+### 3.4 Absent circuit-breaker fields on a `TIMEOUT_ABORT` run mean "not recorded", never "never opened"
+
+Issue #1074 (PR #1097) added `circuitBreakerState`, `circuitBreakerTotalSkips`, and
+`circuitBreakerOpenCount` to `DispatcherRunSnapshot`, populated from the run's terminal circuit
+breaker state when `finishAndPersist` runs. A run killed by `AiSweepDriver` for exceeding
+`perRunTimeoutSeconds` never reaches `finishAndPersist` — the child JVM is dead — so the synthetic
+`TIMEOUT_ABORT` snapshot `AiSweepDriver` writes in its place always has these three fields `null`,
+the same "absent is not zero" convention already in force for `railwayOutcome` (§3.1's neighbour,
+not the same field but the same rule) and the latency percentiles.
+
+**This is precisely the run class where these figures are most informative.** The failure sequence
+these fields are meant to surface is: LLM stall → breaker opens → run starves → per-run timeout —
+which is exactly a `TIMEOUT_ABORT`. Reading the resulting `null` as "the breaker never opened"
+would silently misread the runs most likely to show an OPEN breaker as breaker-clean, inverting the
+finding. Any analysis that pools or averages these three fields across runs must exclude
+`TIMEOUT_ABORT` runs from that denominator rather than treat their `null` as `0`; this report does
+not currently pool them (see the columns actually rendered in §5), and this note is here so a
+future revision that does add such a column does not reintroduce the mistake.
+
 ---
 
 ## 4. The gate this report scores against (A4)

@@ -148,8 +148,16 @@ class AiSweepDriverTest {
 		assertThat(summary.aborted).isEqualTo(1)
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
 		assertThat(written).hasSize(1)
-		assertThat(written.single().endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
-		assertThat(written.single().completedNaturally).isEqualTo(false)
+		val snapshot = written.single()
+		assertThat(snapshot.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(snapshot.completedNaturally).isEqualTo(false)
+		// Issue #1104: the child JVM was killed before finishAndPersist could run, so the breaker's
+		// terminal state is unknowable from outside. These three fields must stay null -- "not
+		// recorded" -- rather than read as "the breaker never opened" (see DispatcherRunSnapshot's
+		// circuitBreakerState KDoc and GOAL_10_SP2C14_RELIABILITY_REPORT.md §3.4).
+		assertThat(snapshot.circuitBreakerState).isNull()
+		assertThat(snapshot.circuitBreakerTotalSkips).isNull()
+		assertThat(snapshot.circuitBreakerOpenCount).isNull()
 	}
 
 	@Test

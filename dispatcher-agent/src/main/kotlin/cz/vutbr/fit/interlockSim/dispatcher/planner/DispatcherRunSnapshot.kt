@@ -134,11 +134,19 @@ import kotlinx.serialization.Serializable
  * @property loggedFatalSimExceptionFirstMessage The first matching log line (trimmed), verbatim;
  *   `null` whenever [loggedFatalSimExceptionCount] is `null` or `0`.
  * @property circuitBreakerState State of the LLM circuit breaker when the snapshot was captured;
- *   `null` when this run had no LLM circuit breaker or predates this measurement.
+ *   `null` when this run had no LLM circuit breaker or predates this measurement — *not measured*,
+ *   never *measured as never opened*. In particular, a synthetic `TIMEOUT_ABORT` snapshot (written
+ *   by `AiSweepDriver` when a run exceeds `perRunTimeoutSeconds`) always has this field `null`: the
+ *   child JVM was killed before it could reach `finishAndPersist`, so its breaker state is
+ *   unknowable from outside, not evidence that the breaker stayed closed. This is exactly the run
+ *   class most likely to show an OPEN breaker (LLM stall → breaker opens → run starves → per-run
+ *   timeout), so reading its absence as "clean" would misread the runs it most needs to flag.
  * @property circuitBreakerTotalSkips Total LLM cycles skipped by the circuit breaker; `null` when
- *   the breaker was not measured.
+ *   the breaker was not measured — see [circuitBreakerState]'s `TIMEOUT_ABORT` caveat, which
+ *   applies here identically (never read `null` as `0`).
  * @property circuitBreakerOpenCount Number of times the circuit breaker opened; `null` when the
- *   breaker was not measured.
+ *   breaker was not measured — see [circuitBreakerState]'s `TIMEOUT_ABORT` caveat, which applies
+ *   here identically (never read `null` as `0`).
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
