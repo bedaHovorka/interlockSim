@@ -145,17 +145,18 @@ open class ControlledLoopOverheadBenchmark {
 		val factory =
 			KoinJavaComponent.get<SimulationContextFactory>(SimulationContextFactory::class.java)
 		val ctx = railwayNetworkXml().use { factory.createContext(it) } as DefaultSimulationContext
-		// Assign before the remaining setup so releaseContext() can close ctx even if
-		// getInOuts()/setMainProcess() below throws (Issue #758) — otherwise the already-created
-		// context is never reachable from releaseContext() and its Koin scope leaks.
-		context = ctx
+		// JMH does not run @TearDown(Level.Invocation) after a failed @Setup(Level.Invocation), so
+		// releaseContext() never sees ctx unless getInOuts()/setMainProcess() below succeed. `context`
+		// is therefore only assigned on success; on failure this catch closes ctx itself (Issue #758)
+		// so its Koin scope does not leak. runCatching keeps the original failure as the exception
+		// JMH sees, attaching any close() failure as a suppressed exception instead of replacing it.
 		try {
 			ctx.getInOuts()
 			ctx.setMainProcess(ShuntingLoop(ctx, simulationEndTime))
-		} catch (e: Exception) {
-			context = null
-			ctx.close()
-			throw e
+			context = ctx
+		} catch (t: Throwable) {
+			runCatching { ctx.close() }.exceptionOrNull()?.let(t::addSuppressed)
+			throw t
 		}
 	}
 
