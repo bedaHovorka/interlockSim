@@ -40,6 +40,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -1210,5 +1211,92 @@ class KoogAgentPlanAdapterTest {
 
 		assertThat(slowRecorded.first().latencyMs!!)
 			.isGreaterThanOrEqualTo(fastRecorded.first().latencyMs!!)
+	}
+
+	// ── Agent lifecycle (Issue #1072) ─────────────────────────────────────────
+
+	@Test
+	@DisplayName("releaseAgent closes the cached Koog agent and is idempotent")
+	fun `releaseAgent closes the cached agent and is idempotent`() {
+		val koogAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		coEvery { koogAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		val planAdapter = adapter(koogAgent, fallback)
+
+		runBlocking { planAdapter.plan(observation) }
+		planAdapter.releaseAgent()
+		planAdapter.releaseAgent()
+
+		coVerify(exactly = 1) { koogAgent.close() }
+	}
+
+	@Test
+	@DisplayName("after releaseAgent the next plan recreates the agent")
+	fun `after releaseAgent the next plan recreates the agent`() {
+		val firstAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		val secondAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		coEvery { firstAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		coEvery { secondAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val agentFactory = mockk<KoogAgentFactory>()
+		coEvery { agentFactory.createAgent(any()) } returnsMany listOf(firstAgent, secondAgent)
+		val fallback = mockk<Dispatcher>()
+		val planAdapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				Duration.ofSeconds(30),
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+
+		runBlocking { planAdapter.plan(observation) }
+		planAdapter.releaseAgent()
+		runBlocking { planAdapter.plan(observation) }
+
+		coVerify(exactly = 1) { firstAgent.close() }
+		coVerify(exactly = 1) { firstAgent.decideAsync(any()) }
+		coVerify(exactly = 1) { secondAgent.decideAsync(any()) }
+		coVerify(exactly = 2) { agentFactory.createAgent(any()) }
+	}
+
+	@Test
+	@DisplayName(
+		"releaseAgent blocks until an in-flight agent creation finishes, then closes the created agent (#1096 review)"
+	)
+	fun `releaseAgent blocks until an in-flight creation finishes then closes it`() {
+		val freshAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		coEvery { freshAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		val agentFactory = mockk<KoogAgentFactory>()
+		val createEntered = CompletableDeferred<Unit>()
+		// The create runs on its own thread and pauses (real delay, not gated on a release call)
+		// so the main thread's releaseAgent below provably has to wait for it — releaseAgent
+		// (#1096 review) takes the same agentInitMutex as getOrCreateAgent, so the create-vs-
+		// release race the review's finding 2 flagged is now impossible by construction: the two
+		// paths cannot interleave, only serialize.
+		coEvery { agentFactory.createAgent(any()) } coAnswers {
+			createEntered.complete(Unit)
+			delay(200)
+			freshAgent
+		}
+		val planAdapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				Duration.ofSeconds(30),
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+
+		val planThread = Thread { runBlocking { planAdapter.plan(observation) } }
+		planThread.start()
+		runBlocking { createEntered.await() }
+
+		planAdapter.releaseAgent()
+
+		coVerify(exactly = 1) { freshAgent.close() }
+		planThread.join(5_000)
 	}
 }

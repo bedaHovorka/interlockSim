@@ -10,6 +10,9 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Service for creating and managing Koog-based dispatch agents (SP1 skeleton, Issue #547).
@@ -87,11 +90,20 @@ interface AgentService {
  * 2. Passed to [AgentLoopDriver] via constructor injection
  * 3. [AgentLoopDriver] calls [decideAsync] in its DECIDE phase
  * 4. Results are posted to [ActuatorCommandQueue] for sim-thread application
+ * 5. Issue #1072: callers invoke [close] when the run ends so the underlying Koog
+ *    [ai.koog.agents.core.agent.AIAgent] (and its coroutine workers) do not outlive the run.
+ *    The shared Ollama executor is deliberately **not** closed here — it outlives individual
+ *    agents so a second run in the same JVM can still infer.
+ *
+ * A `fun interface`: [decideAsync] is the single abstract member, so SAM/lambda construction
+ * stays valid. [close] keeps a default no-op body (Kotlin fun interfaces allow default-bodied
+ * members), so stubs and mocks are unaffected.
  *
  * ## SP1 phasing
  *
  * - SP1.2 (this file): Agent interface skeleton
  * - SP1.6 (#551): Full Koog integration, LLM decision-making, tool invocation
+ * - Issue #1072: [close] for end-of-run agent teardown
  *
  * @since Issue #547 (SP1.2 — Goal 10)
  */
@@ -108,6 +120,24 @@ fun interface KoogDispatchAgent {
 	 * @since Issue #547 (SP1.2 — skeleton); full implementation in Issue #551 (SP1.6)
 	 */
 	suspend fun decideAsync(observation: DispatchObservation): List<DispatchDecision>
+
+	/**
+	 * Release resources held by this agent instance (Issue #1072).
+	 *
+	 * Default is a no-op so test doubles and rule-based stubs stay unchanged. Production
+	 * [KoogDispatchAgentImpl] calls the underlying Koog [ai.koog.agents.core.agent.AIAgent]'s
+	 * own [ai.koog.utils.io.Closeable.close] directly — both are suspend, so no blocking bridge
+	 * is needed here (Koog's `AIAgent` does not implement `java.lang.AutoCloseable`). The one
+	 * unavoidable suspend→blocking bridge for this non-suspend-friendly lifecycle lives at
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.releaseAgent], the
+	 * single non-suspend boundary in the release chain (#1096 review round — keeping this
+	 * method suspend avoids a second, nested bridge on the caller's rollback path). Idempotent;
+	 * safe to call more than once. The shared Ollama executor is deliberately **not** closed
+	 * here — it outlives individual agents so a second run in this same JVM can still infer.
+	 */
+	suspend fun close() {
+		logger.trace { "KoogDispatchAgent.close(): default no-op (stub/mock implementation)" }
+	}
 }
 
 // Re-export domain types for convenience (defined in :core)

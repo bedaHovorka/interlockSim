@@ -47,6 +47,8 @@ import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
+import org.koin.core.module.dsl.onClose
+import org.koin.core.module.dsl.withOptions
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
 import java.nio.file.Path
@@ -192,7 +194,13 @@ val dispatcherAgentModule: Module =
 		// Wraps Koog's simpleOllamaAIExecutor for local LLM inference.
 		// Lazy-initialized on first access (defers network connectivity check).
 		// All agents share the same Ollama-backed executor (heavyweight stateful resource).
-		single<OllamaSimpleExecutor> { OllamaSimpleExecutor(get()) }
+		// Issue #1072: onClose closes the underlying PromptExecutor/OllamaClient when stopKoin()
+		// runs (JVM shutdown hook / test teardown), so daemon worker threads do not outlive the
+		// container. Per-run cleanup still goes through KoogAgentPlanAdapter.releaseAgent() —
+		// never close this singleton mid-session while a second GUI start may still need it.
+		single<OllamaSimpleExecutor> { OllamaSimpleExecutor(get()) } withOptions {
+			onClose { it?.close() }
+		}
 
 		// Tool group registry (singleton).
 		// Registry logic is stateless; it just coordinates tool assembly per context.

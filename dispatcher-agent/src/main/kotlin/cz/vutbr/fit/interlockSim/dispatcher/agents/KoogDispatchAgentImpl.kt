@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Real Koog-based railway dispatch agent.
@@ -54,6 +55,9 @@ class KoogDispatchAgentImpl(
 		private val logger = KotlinLogging.logger {}
 	}
 
+	/** Set once by [close]; guards that the Koog close is called at most once per instance. */
+	private val closed = AtomicBoolean(false)
+
 	/**
 	 * The built Koog agent, exposed `internal` for the build-contract test to reflect on its
 	 * strategy + [ai.koog.agents.core.agent.config.AIAgentConfig] without driving a live LLM run.
@@ -71,6 +75,35 @@ class KoogDispatchAgentImpl(
 				"as tool-call side effects during this call"
 		}
 		return emptyList()
+	}
+
+	/**
+	 * Close the underlying Koog [AIAgent] through its suspend [ai.koog.utils.io.Closeable.close]
+	 * (Issue #1072).
+	 *
+	 * Koog's `AIAgent` does NOT implement `java.lang.AutoCloseable` — an earlier draft cast to
+	 * `AutoCloseable`, which is always null in production, making the whole close a silent no-op
+	 * (the #1096 review's finding 1). This override stays suspend (#1096 review round) so it can
+	 * call [aiAgent]'s suspend close directly, with no blocking bridge here — a `runBlocking` at
+	 * this layer would nest inside whatever suspend/mutex context the caller is already in (e.g.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]'s create path), a real
+	 * starvation/deadlock surface under dispatcher pressure. The one unavoidable bridge lives at
+	 * that adapter's `releaseAgent`, the actual non-suspend boundary. Idempotent via [closed];
+	 * best-effort: failures are logged and swallowed so end-of-run cleanup cannot break the Frame
+	 * STOPPED path. Does **not** close the shared [OllamaSimpleExecutor] — that singleton
+	 * outlives individual agents so a second run in the same JVM can still infer.
+	 */
+	override suspend fun close() {
+		if (!closed.compareAndSet(false, true)) return
+		try {
+			logger.debug { "Closing Koog AIAgent after dispatcher run" }
+			aiAgent.close()
+		} catch (e: InterruptedException) {
+			Thread.currentThread().interrupt()
+			logger.warn(e) { "Interrupted while closing Koog AIAgent" }
+		} catch (e: Exception) {
+			logger.warn(e) { "Exception closing Koog AIAgent" }
+		}
 	}
 
 	/**

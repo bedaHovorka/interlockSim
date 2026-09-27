@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isFalse
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -161,6 +162,43 @@ class AnimationControllerResourceCleanupTest : KoinTestBase() {
 			controller.stop()
 			assertThat(getSemaphoreCache(controller)).isNull()
 			assertThat(getSwitchCache(controller)).isNull()
+		}
+	}
+
+	/**
+	 * Verify captureFinalFrameAndPause() runs one final capture while the caches are still
+	 * populated (stop() clears them) and then stops the loop (#1096 review, Issue #1072).
+	 */
+	@Test
+	fun captureFinalFrameAndPauseCapturesFinalStateAndStops() {
+		runOnEDT {
+			val (controller, _) = createController()
+			controller.start()
+			assertThat(isRunning(controller)).isTrue()
+
+			controller.captureFinalFrameAndPause()
+
+			assertThat(isRunning(controller)).isFalse()
+			// The final capture must have run BEFORE stop() cleared the caches: captureState
+			// over empty caches would produce an all-empty state map. Signal states present
+			// prove the capture used the populated caches (the ordering the review required).
+			assertThat(controller.currentState.signalStates).isNotEmpty()
+		}
+	}
+
+	/**
+	 * Verify captureFinalFrameAndPause() is an idempotent no-op when already stopped.
+	 */
+	@Test
+	fun captureFinalFrameAndPauseIsANoOpWhenNotRunning() {
+		runOnEDT {
+			val (controller, _) = createController()
+
+			// Never started — both calls must be safe no-ops
+			controller.captureFinalFrameAndPause()
+			controller.captureFinalFrameAndPause()
+
+			assertThat(isRunning(controller)).isFalse()
 		}
 	}
 

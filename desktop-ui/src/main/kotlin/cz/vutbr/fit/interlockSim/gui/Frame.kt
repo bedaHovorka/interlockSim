@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.DispatcherRunLifecycle
 import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
@@ -277,6 +278,17 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							dispatcherControlPanel.clearRationale()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+							// Issue #1072: stop the 10 Hz time-update timer and the 30 FPS animation
+							// loop when the run ends (natural completion or manual stop). Before this,
+							// natural completion left AnimationController ticking until the user clicked
+							// Stop or closed the window — the "does not return control" symptom.
+							// captureFinalFrameAndPause (#1096 review) runs one last state capture
+							// before pausing — pauseAnimation alone left the painted frame one state
+							// behind the run's real end, because stop() clears the caches a bare
+							// pause never re-captured. The next startSimulation() restarts via
+							// ensureAnimationRunning().
+							stopAnimationUpdates()
+							railwayNetGridCanvas.captureFinalFrameAndPause()
 							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
 							// ended (captured at RUNNING time above). Null for every example except
 							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
@@ -309,6 +321,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 								wiredRunRecorder?.finish(runEndCause)
 								wiredRunRecorder?.logFinalSummary()
 							}
+							// #1096 review: release the cached Koog agent AFTER persistence, through
+							// DispatcherRunLifecycle (falls back to a bare KoogAgentPlanAdapter,
+							// swallows exceptions) and off the EDT — a throwing release can no
+							// longer lose the run JSON or the STARVED verdict (#930), and the EDT
+							// never blocks on the agent's runBlocking close bridge (Issue #1072).
+							DispatcherRunLifecycle.releaseKoogAgentInBackground(runScope)
 							wiredRunRecorder = null
 							wiredRunScope = null
 						}
@@ -840,6 +858,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		try {
 			simulationController.start(context)
+			// Issue #1072 + #1096 review: a previous STOPPED paused the animation and the 10 Hz
+			// time timer. Restart both so the new run is visible again without requiring a full
+			// setContext cycle — moved here, after a successful start, so a failed start leaves
+			// the previous run's animation paused instead of resurrecting it with no run behind it.
+			railwayNetGridCanvas.ensureAnimationRunning()
+			stopAnimationUpdates()
+			startAnimationUpdates()
 			val activeRunner = simulationController.runner?.takeIf { it.isRunning() }
 			simulationControlPanel.runner = activeRunner
 
@@ -1033,6 +1058,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		currentSimulationContext?.close() // Release simulation resources before JVM exit
 		stopAnimationUpdates() // Stop Frame's 10 Hz timer
 		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
+		// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not outlive
+		// the application. Terminal for this JVM process (System.exit follows immediately).
+		DispatcherRunLifecycle.closeSharedOllamaExecutor()
 		dispose()
 		System.exit(0)
 	}

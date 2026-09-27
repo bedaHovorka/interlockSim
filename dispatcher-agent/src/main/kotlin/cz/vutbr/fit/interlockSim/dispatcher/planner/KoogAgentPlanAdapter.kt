@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
@@ -234,9 +235,11 @@ class KoogAgentPlanAdapter(
 	/**
 	 * Lazily-created Koog dispatch agent, guarded by [agentInitMutex].
 	 *
-	 * `null` until the first [plan] call; `@Volatile` for safe publication after the mutex
-	 * is released so that the fast path in [getOrCreateAgent] avoids acquiring the lock on
-	 * every subsequent call.
+	 * `null` until the first [plan] call; `@Volatile` for safe publication after the mutex is
+	 * released so the fast path in [getOrCreateAgent] can skip the lock once initialized.
+	 * [releaseAgent] also takes [agentInitMutex] (#1096 review round) so the create-vs-release
+	 * race the review's finding 2 flagged is impossible by construction — mutual exclusion,
+	 * not a detect-and-roll-back generation counter.
 	 */
 	@Volatile
 	private var agent: KoogDispatchAgent? = null
@@ -755,13 +758,41 @@ class KoogAgentPlanAdapter(
 	 *
 	 * Thread-safe: a [Mutex] serializes concurrent initializations so exactly one
 	 * [KoogAgentFactory.createAgent] call is made even when [plan] is invoked from
-	 * multiple coroutines simultaneously. The `@Volatile` fast-path check avoids
-	 * lock contention after initialization.
+	 * multiple coroutines simultaneously. The `@Volatile` fast-path check avoids lock
+	 * contention after initialization. [releaseAgent] takes the same [agentInitMutex]
+	 * (#1096 review round), so a release can never observe a half-published create and
+	 * miss the fresh agent — it either runs before this call starts or blocks until this
+	 * call (and its mutex hold) finishes, never in between.
 	 */
 	private suspend fun getOrCreateAgent(): KoogDispatchAgent {
 		agent?.let { return it }
 		return agentInitMutex.withLock {
 			agent ?: agentFactory.createAgent(context).also { agent = it }
+		}
+	}
+
+	/**
+	 * Drop and close the cached Koog agent so its workers do not outlive the run (Issue #1072).
+	 *
+	 * Idempotent. The next [plan] call recreates the agent via [getOrCreateAgent]. Non-suspend
+	 * on purpose — callers are the GUI's background release thread, headless main, and
+	 * [MeasuringPlanAdapter.releaseAgent] — so this bridges to suspend with `runBlocking`; that
+	 * is safe because none of those callers are already inside a coroutine holding
+	 * [agentInitMutex]. Taking the same mutex [getOrCreateAgent] uses (#1096 review round) makes
+	 * the earlier create-vs-release race (finding 2: a release could observe no cached agent
+	 * while a create was in flight, and the freshly published agent would then leak) impossible
+	 * by construction — the two paths simply cannot interleave. Close runs after the mutex is
+	 * released so a slow or hanging close does not block the next cycle's create.
+	 *
+	 * Does **not** close the shared [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor].
+	 */
+	fun releaseAgent() {
+		runBlocking {
+			val previous = agentInitMutex.withLock { agent.also { agent = null } }
+			if (previous != null) {
+				logger.debug { "Releasing cached Koog dispatch agent at end of run" }
+				previous.close()
+			}
 		}
 	}
 }
