@@ -143,7 +143,7 @@ breaker state when `finishAndPersist` runs. A run killed by `AiSweepDriver` for 
 `perRunTimeoutSeconds` never reaches `finishAndPersist` — the child JVM is dead — so the synthetic
 `TIMEOUT_ABORT` snapshot `AiSweepDriver` writes in its place always has these three fields `null`,
 the same "absent is not zero" convention already in force for `railwayOutcome` (§3.1's neighbour,
-not the same field but the same rule) and the latency percentiles.
+not the same field but the same rule).
 
 **This is precisely the run class where these figures are most informative.** The failure sequence
 these fields are meant to surface is: LLM stall → breaker opens → run starves → per-run timeout —
@@ -153,6 +153,15 @@ finding. Any analysis that pools or averages these three fields across runs must
 `TIMEOUT_ABORT` runs from that denominator rather than treat their `null` as `0`; this report does
 not currently pool them (see the columns actually rendered in §5), and this note is here so a
 future revision that does add such a column does not reintroduce the mistake.
+
+**This "absent is not zero" rule does *not* currently hold for latency on the same aborted
+snapshots — that is a separate, pre-existing defect, not a second instance of the breaker-field
+rule above.** `abortedSnapshot` writes `latencyP50Ms = 0L`, `latencyP95Ms = 0L`, `latencyMaxMs = 0L`
+(`AiSweepDriver.kt`) on both `TIMEOUT_ABORT` and `CRASH` runs — not `null` — and
+`RunReportAggregator`'s latency medians only drop `null` values, so those zeros are currently pulled
+into the arm's T1/T6 latency medians. This is a known gap in the `Long → Long?` widening that
+Issue #834 applied to the latency fields, which missed the abort path; it is tracked by a follow-up
+issue rather than fixed here.
 
 ---
 
