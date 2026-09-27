@@ -23,7 +23,7 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
-import cz.vutbr.fit.interlockSim.util.cellsByName
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 
 /**
  * Captures the sim-thread-only sources described in #824's design table into one immutable
@@ -270,16 +270,17 @@ class DispatcherObservationProjector(
 	 * construction-time safety [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer.describe]
 	 * relies on, since the kernel has not started mutating live state before the first tick.
 	 *
-	 * Indexed with [cellsByName] (Issue #959), the same rule `DefaultNetworkActuatorPort.switchByName`
-	 * uses, so a switch name shared by two cells reports the switch that name commands (the one
-	 * scanned last).
+	 * A switch name shared by two cells keeps the one scanned FIRST (`distinctBy`), the same rule
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer] applies, so the per-tick
+	 * view and the serialized topology describe the same cell. This is why it does not use
+	 * `cellsByName`, whose `associateBy` keeps the last one.
 	 */
 	private val switches: List<DynamicRailSwitch> by lazy {
 		environment
 			.getRailWayNetGrid()
-			.cellsByName<DynamicRailSwitch> { it.name }
-			.values
-			.toList()
+			.cellsOfType<DynamicRailSwitch>()
+			.filter { it.name.isNotBlank() }
+			.distinctBy { it.name }
 	}
 
 	private fun buildSwitchViews(): List<SwitchView> =
