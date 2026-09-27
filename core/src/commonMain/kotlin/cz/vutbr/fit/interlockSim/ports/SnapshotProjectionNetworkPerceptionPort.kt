@@ -63,8 +63,7 @@ class SnapshotProjectionNetworkPerceptionPort(
 	 * Returns the [SemaphoreReading] whose [SemaphoreReading.name] matches
 	 * [semaphoreName], or `null` if the snapshot contains no such semaphore.
 	 */
-	override fun signalAspect(semaphoreName: String): SemaphoreReading? =
-		snapshotProvider().semaphores.firstOrNull { it.name == semaphoreName }
+	override fun signalAspect(semaphoreName: String): SemaphoreReading? = snapshotProvider().signalAspect(semaphoreName)
 
 	/**
 	 * Projects from [SimulationSnapshot.semaphores] — off-thread-safe.
@@ -79,8 +78,7 @@ class SnapshotProjectionNetworkPerceptionPort(
 	 * Returns the [BlockOccupancyReading] whose [BlockOccupancyReading.blockId] matches
 	 * [blockId], or `null` if the snapshot contains no such block.
 	 */
-	override fun blockOccupancy(blockId: String): BlockOccupancyReading? =
-		snapshotProvider().blocks.firstOrNull { it.blockId == blockId }
+	override fun blockOccupancy(blockId: String): BlockOccupancyReading? = snapshotProvider().blockOccupancy(blockId)
 
 	/**
 	 * Projects from [SimulationSnapshot.blocks] — off-thread-safe.
@@ -95,8 +93,7 @@ class SnapshotProjectionNetworkPerceptionPort(
 	 * Returns the [TrainPositionReading] whose [TrainPositionReading.trainId] matches
 	 * [trainId], or `null` if no such active train appears in the snapshot.
 	 */
-	override fun trainPosition(trainId: String): TrainPositionReading? =
-		snapshotProvider().trainPositions.firstOrNull { it.trainId == trainId }
+	override fun trainPosition(trainId: String): TrainPositionReading? = snapshotProvider().trainPosition(trainId)
 
 	/**
 	 * Projects from [SimulationSnapshot.trainPositions] — off-thread-safe.
@@ -111,8 +108,7 @@ class SnapshotProjectionNetworkPerceptionPort(
 	 * Returns the [TimetableReading] whose [TimetableReading.trainId] matches [trainId],
 	 * or `null` if no such active train appears in the snapshot.
 	 */
-	override fun trainTimetable(trainId: String): TimetableReading? =
-		snapshotProvider().timetables.firstOrNull { it.trainId == trainId }
+	override fun trainTimetable(trainId: String): TimetableReading? = snapshotProvider().trainTimetable(trainId)
 
 	/**
 	 * Projects from [SimulationSnapshot.timetables] — off-thread-safe.
@@ -130,8 +126,7 @@ class SnapshotProjectionNetworkPerceptionPort(
 	 * Note: [SimulationSnapshot.trainPerceptions] defaults to `emptyList()` for snapshots
 	 * captured before SP2a.1. This method returns `null` in that case.
 	 */
-	override fun trainPerception(trainId: String): TrainPerceptionReading? =
-		snapshotProvider().trainPerceptions.firstOrNull { it.trainId == trainId }
+	override fun trainPerception(trainId: String): TrainPerceptionReading? = snapshotProvider().trainPerception(trainId)
 
 	/**
 	 * Projects from [SimulationSnapshot.trainPerceptions] — off-thread-safe.
