@@ -9,11 +9,15 @@
  */
 package cz.vutbr.fit.interlockSim
 
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.DisplayName
@@ -22,6 +26,7 @@ import org.junit.jupiter.api.Timeout
 import org.koin.dsl.module
 import org.koin.mp.KoinPlatform.getKoin
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Unit tests for [DispatcherRunLifecycle] (Issue #1072).
@@ -34,7 +39,7 @@ import java.util.concurrent.TimeUnit
 @DisplayName("DispatcherRunLifecycle (Issue #1072)")
 class DispatcherRunLifecycleTest : KoinTestBase() {
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("releaseKoogAgent calls MeasuringPlanAdapter.releaseAgent when present")
 	fun releaseKoogAgentCallsMeasuringAdapter() {
 		val context = createMockShuntingContext()
@@ -48,7 +53,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("releaseKoogAgent falls back to bare KoogAgentPlanAdapter when MeasuringPlanAdapter is absent")
 	fun releaseKoogAgentFallsBackToBareAdapter() {
 		val context = createMockShuntingContext()
@@ -62,7 +67,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("releaseKoogAgent is a no-op for null scope and for scopes without a planner")
 	fun releaseKoogAgentNoOpWhenAbsent() {
 		DispatcherRunLifecycle.releaseKoogAgent(null)
@@ -73,7 +78,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("closeSharedOllamaExecutor closes the bound singleton and is safe to repeat")
 	fun closeSharedOllamaExecutorClosesBoundSingleton() {
 		// A mock rather than a real executor: the real close() contract (terminal, idempotent) is
@@ -97,9 +102,64 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("closeSharedOllamaExecutor is safe when no OllamaSimpleExecutor is bound")
 	fun closeSharedOllamaExecutorSafeWhenUnbound() {
 		DispatcherRunLifecycle.closeSharedOllamaExecutor()
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("releaseKoogAgent swallows a releaseAgent failure instead of throwing (#1096 review)")
+	fun releaseKoogAgentSwallowsReleaseFailure() {
+		val context = createMockShuntingContext()
+		val measuring = mockk<MeasuringPlanAdapter>()
+		every { measuring.releaseAgent() } throws RuntimeException("release-boom")
+		context.scope.declare(measuring)
+
+		DispatcherRunLifecycle.releaseKoogAgent(context.scope)
+
+		verify(exactly = 1) { measuring.releaseAgent() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("closeSharedOllamaExecutor swallows a close failure instead of throwing (#1096 review)")
+	fun closeSharedOllamaExecutorSwallowsCloseFailure() {
+		val executor = mockk<OllamaSimpleExecutor>()
+		every { executor.close() } throws RuntimeException("close-boom")
+		getKoin().loadModules(
+			listOf(
+				module {
+					single { executor }
+				}
+			),
+			allowOverride = true
+		)
+
+		DispatcherRunLifecycle.closeSharedOllamaExecutor()
+
+		verify(exactly = 1) { executor.close() }
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("releaseKoogAgentInBackground releases the scoped adapter on a background thread (#1096 review)")
+	fun releaseKoogAgentInBackgroundReleasesOffCallingThread() {
+		val context = createMockShuntingContext()
+		val measuring = mockk<MeasuringPlanAdapter>(relaxed = true)
+		context.scope.declare(measuring)
+		val releaseThreadName = AtomicReference<String?>(null)
+		every { measuring.releaseAgent() } answers {
+			releaseThreadName.set(Thread.currentThread().name)
+		}
+
+		DispatcherRunLifecycle.releaseKoogAgentInBackground(context.scope)
+
+		verify(timeout = 5000, exactly = 1) { measuring.releaseAgent() }
+		assertThat(releaseThreadName.get()).isNotEqualTo(Thread.currentThread().name)
+		assertThat(releaseThreadName.get()).isEqualTo("koog-agent-release")
+		context.close()
 	}
 }

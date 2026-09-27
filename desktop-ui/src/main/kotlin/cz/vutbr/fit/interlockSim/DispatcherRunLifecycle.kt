@@ -50,6 +50,27 @@ object DispatcherRunLifecycle {
 	}
 
 	/**
+	 * Release the cached Koog dispatch agent off the caller's thread (Issue #1072, #1096 review).
+	 *
+	 * Same resolution and exception swallowing as [releaseKoogAgent], run on a daemon thread so
+	 * the GUI STOPPED path never blocks the EDT on the agent's `runBlocking` close bridge.
+	 * Persistence must happen BEFORE this is called — a release failure must not cost the run
+	 * JSON or the STARVED verdict (#930). The synchronous [releaseKoogAgent] stays the headless
+	 * path: main exits right after, and a fire-and-forget thread could be killed before it runs.
+	 *
+	 * @since Issue #1096 review round
+	 */
+	fun releaseKoogAgentInBackground(scope: Scope?) {
+		if (scope == null) return
+		Thread(
+			{
+				releaseKoogAgent(scope)
+			},
+			"koog-agent-release"
+		).apply { isDaemon = true }.start()
+	}
+
+	/**
 	 * Close the shared Ollama-backed prompt executor if one is bound in the global Koin container.
 	 *
 	 * Idempotent and safe when Koin is not started or the binding is absent. Terminal for the
