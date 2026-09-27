@@ -726,7 +726,7 @@ class KoogDispatchAgentImplTest {
 	fun samConversionCompilesAndDefaultCloseIsNoOp() {
 		val agent: KoogDispatchAgent = KoogDispatchAgent { _ -> emptyList() }
 
-		agent.close()
+		runBlocking { agent.close() }
 
 		assertThat(agent).isInstanceOf<KoogDispatchAgent>()
 	}
@@ -737,7 +737,7 @@ class KoogDispatchAgentImplTest {
 		val aiAgent = mockk<AIAgent<String, String>>(relaxUnitFun = true)
 		val agent = KoogDispatchAgentImpl(aiAgent)
 
-		agent.close()
+		runBlocking { agent.close() }
 
 		coVerify(exactly = 1) { aiAgent.close() }
 	}
@@ -748,8 +748,10 @@ class KoogDispatchAgentImplTest {
 		val aiAgent = mockk<AIAgent<String, String>>(relaxUnitFun = true)
 		val agent = KoogDispatchAgentImpl(aiAgent)
 
-		agent.close()
-		agent.close()
+		runBlocking {
+			agent.close()
+			agent.close()
+		}
 
 		coVerify(exactly = 1) { aiAgent.close() }
 	}
@@ -761,8 +763,10 @@ class KoogDispatchAgentImplTest {
 		coEvery { aiAgent.close() } throws RuntimeException("close-boom")
 		val agent = KoogDispatchAgentImpl(aiAgent)
 
-		agent.close()
-		agent.close() // idempotent under the guard: no second call and no second throw
+		runBlocking {
+			agent.close()
+			agent.close() // idempotent under the guard: no second call and no second throw
+		}
 
 		coVerify(exactly = 1) { aiAgent.close() }
 	}

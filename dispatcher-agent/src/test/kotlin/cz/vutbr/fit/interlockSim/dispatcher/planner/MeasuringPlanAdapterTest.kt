@@ -30,9 +30,9 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -801,7 +801,7 @@ class MeasuringPlanAdapterTest {
 			runBlocking { adapter.plan(observation) }
 			adapter.releaseAgent()
 
-			verify(exactly = 1) { agent.close() }
+			coVerify(exactly = 1) { agent.close() }
 		}
 
 		@Test
@@ -812,7 +812,7 @@ class MeasuringPlanAdapterTest {
 
 			adapter.releaseAgent()
 
-			verify(exactly = 0) { agent.close() }
+			coVerify(exactly = 0) { agent.close() }
 		}
 	}
 }

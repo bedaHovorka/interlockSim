@@ -123,13 +123,16 @@ fun interface KoogDispatchAgent {
 	 *
 	 * Default is a no-op so test doubles and rule-based stubs stay unchanged. Production
 	 * [KoogDispatchAgentImpl] calls the underlying Koog [ai.koog.agents.core.agent.AIAgent]'s
-	 * [ai.koog.utils.io.Closeable.close] (a suspend fun; Koog's `AIAgent` does not implement
-	 * `java.lang.AutoCloseable`), bridged to this non-suspend signature with `runBlocking`.
-	 * Idempotent; safe to call more than once. The shared Ollama executor is deliberately
-	 * **not** closed here — it outlives individual agents so a second run in this same JVM
-	 * can still infer.
+	 * own [ai.koog.utils.io.Closeable.close] directly — both are suspend, so no blocking bridge
+	 * is needed here (Koog's `AIAgent` does not implement `java.lang.AutoCloseable`). The one
+	 * unavoidable suspend→blocking bridge for this non-suspend-friendly lifecycle lives at
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter.releaseAgent], the
+	 * single non-suspend boundary in the release chain (#1096 review round — keeping this
+	 * method suspend avoids a second, nested bridge on the caller's rollback path). Idempotent;
+	 * safe to call more than once. The shared Ollama executor is deliberately **not** closed
+	 * here — it outlives individual agents so a second run in this same JVM can still infer.
 	 */
-	fun close() {
+	suspend fun close() {
 		// Default no-op for stubs and mocks.
 	}
 }

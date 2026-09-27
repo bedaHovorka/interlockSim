@@ -23,12 +23,11 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.TimeSource
 
 /**
@@ -234,23 +233,16 @@ class KoogAgentPlanAdapter(
 		)
 
 	/**
-	 * Lazily-created Koog dispatch agent, published under [agentInitMutex].
+	 * Lazily-created Koog dispatch agent, guarded by [agentInitMutex].
 	 *
-	 * `null` until the first [plan] call. An [AtomicReference] (not `@Volatile`) because
-	 * [releaseAgent] detaches with a single atomic `getAndSet(null)` — the release path is
-	 * non-suspend and cannot take the mutex, so it coordinates with the create path through
-	 * [releaseGeneration] plus this reference (see [getOrCreateAgent] for the ordering proof).
+	 * `null` until the first [plan] call; `@Volatile` for safe publication after the mutex is
+	 * released so the fast path in [getOrCreateAgent] can skip the lock once initialized.
+	 * [releaseAgent] also takes [agentInitMutex] (#1096 review round) so the create-vs-release
+	 * race the review's finding 2 flagged is impossible by construction — mutual exclusion,
+	 * not a detect-and-roll-back generation counter.
 	 */
-	private val agentRef = AtomicReference<KoogDispatchAgent?>(null)
-
-	/**
-	 * Bumped by every [releaseAgent] BEFORE it detaches the agent. The create path in
-	 * [getOrCreateAgent] reads it before and after [KoogAgentFactory.createAgent]: if the
-	 * value moved, a release fired while the factory call was in flight, and the freshly
-	 * created agent is rolled back and closed instead of being published post-release
-	 * (the leak the #1096 review's finding 2 flagged).
-	 */
-	private val releaseGeneration = AtomicLong(0L)
+	@Volatile
+	private var agent: KoogDispatchAgent? = null
 
 	/** Ensures exactly one concurrent [KoogAgentFactory.createAgent] call (suspend-friendly). */
 	private val agentInitMutex = Mutex()
@@ -367,38 +359,22 @@ class KoogAgentPlanAdapter(
 		// "exception fallback that also throws still records the tick before propagating") would be
 		// caught here too and produce a second, spurious fallback attempt.
 		val a =
-			(
-				try {
-					getOrCreateAgent()
-				} catch (e: CancellationException) {
-					throw e
-				} catch (e: Exception) {
-					return runFallback(
-						observation = observation,
-						latencyMs = null,
-						outcomeFromFallbackOracle = false
-					) {
-						logger.warn(e) {
-							"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
-								"(simTime=${observation.snapshot.simTime})"
-						}
-					}
-				}
-			)
-				// A release fired while the factory call was in flight: getOrCreateAgent already
-				// closed the fresh agent and returned null. Same counted-fallback shape as the
-				// creation-failure catch above (latencyMs null — no inference was attempted).
-				?: return runFallback(
+			try {
+				getOrCreateAgent()
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				return runFallback(
 					observation = observation,
 					latencyMs = null,
 					outcomeFromFallbackOracle = false
 				) {
-					logger.info {
-						"KoogAgentPlanAdapter: agent release raced agent creation at end of run — " +
-							"running the rule-based fallback for this cycle " +
+					logger.warn(e) {
+						"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
 							"(simTime=${observation.snapshot.simTime})"
 					}
 				}
+			}
 
 		if (!circuitBreaker.shouldAttempt(observation.snapshot.simTime)) {
 			// Sustained overload (Issue #1058): the breaker is OPEN and the cooldown has not
@@ -782,67 +758,41 @@ class KoogAgentPlanAdapter(
 	 *
 	 * Thread-safe: a [Mutex] serializes concurrent initializations so exactly one
 	 * [KoogAgentFactory.createAgent] call is made even when [plan] is invoked from
-	 * multiple coroutines simultaneously. The atomic fast-path check avoids lock
-	 * contention after initialization.
-	 *
-	 * Returns `null` when a [releaseAgent] fires while the factory call is in flight
-	 * (the #1096 review's finding 2). Ordering proof for that case: [releaseAgent] bumps
-	 * [releaseGeneration] BEFORE its `getAndSet(null)` detach, and this method re-reads
-	 * the generation AFTER publishing the fresh agent. A release racing this create either
-	 * bumps the generation before the re-read — detected here, so the fresh agent is
-	 * rolled back and closed by this method — or bumps it after, in which case the
-	 * release's own `getAndSet` observes the published agent and closes it. Either way the
-	 * fresh agent is closed exactly once and never leaked.
-	 *
-	 * @return the cached agent, or `null` when the create raced a release — the caller's
-	 *   cycle must run the rule-based fallback.
+	 * multiple coroutines simultaneously. The `@Volatile` fast-path check avoids lock
+	 * contention after initialization. [releaseAgent] takes the same [agentInitMutex]
+	 * (#1096 review round), so a release can never observe a half-published create and
+	 * miss the fresh agent — it either runs before this call starts or blocks until this
+	 * call (and its mutex hold) finishes, never in between.
 	 */
-	private suspend fun getOrCreateAgent(): KoogDispatchAgent? {
-		agentRef.get()?.let { return it }
+	private suspend fun getOrCreateAgent(): KoogDispatchAgent {
+		agent?.let { return it }
 		return agentInitMutex.withLock {
-			agentRef.get()
-				?: run {
-					val generationAtCreateStart = releaseGeneration.get()
-					val created = agentFactory.createAgent(context)
-					agentRef.set(created)
-					if (releaseGeneration.get() != generationAtCreateStart) {
-						if (agentRef.compareAndSet(created, null)) {
-							logger.debug {
-								"KoogAgentPlanAdapter: releaseAgent raced agent creation — " +
-									"closing the fresh agent so it cannot outlive the run"
-							}
-							runCatching { created.close() }
-								.onFailure { e ->
-									logger.warn(e) { "Failed to close the raced fresh agent" }
-								}
-						}
-						return null
-					}
-					created
-				}
+			agent ?: agentFactory.createAgent(context).also { agent = it }
 		}
 	}
 
 	/**
 	 * Drop and close the cached Koog agent so its workers do not outlive the run (Issue #1072).
 	 *
-	 * Idempotent. The next [plan] call recreates the agent via [getOrCreateAgent]. An in-flight
-	 * [plan] may still hold a reference to the previous instance until that cycle returns; that
-	 * is acceptable — the goal is to stop parking idle Koog/coroutine workers after the run ends,
-	 * not to interrupt a cycle that is already finishing.
+	 * Idempotent. The next [plan] call recreates the agent via [getOrCreateAgent]. Non-suspend
+	 * on purpose — callers are the GUI's background release thread, headless main, and
+	 * [MeasuringPlanAdapter.releaseAgent] — so this bridges to suspend with `runBlocking`; that
+	 * is safe because none of those callers are already inside a coroutine holding
+	 * [agentInitMutex]. Taking the same mutex [getOrCreateAgent] uses (#1096 review round) makes
+	 * the earlier create-vs-release race (finding 2: a release could observe no cached agent
+	 * while a create was in flight, and the freshly published agent would then leak) impossible
+	 * by construction — the two paths simply cannot interleave. Close runs after the mutex is
+	 * released so a slow or hanging close does not block the next cycle's create.
 	 *
 	 * Does **not** close the shared [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor].
 	 */
 	fun releaseAgent() {
-		// Bump the generation FIRST, then detach: a release racing the create path's
-		// post-publish generation re-read can therefore never be missed (see
-		// [getOrCreateAgent]'s ordering proof). Non-suspend on purpose — callers are the
-		// GUI EDT stop path, headless main, and [MeasuringPlanAdapter.releaseAgent].
-		releaseGeneration.incrementAndGet()
-		val previous = agentRef.getAndSet(null)
-		if (previous != null) {
-			logger.debug { "Releasing cached Koog dispatch agent at end of run" }
-			previous.close()
+		runBlocking {
+			val previous = agentInitMutex.withLock { agent.also { agent = null } }
+			if (previous != null) {
+				logger.debug { "Releasing cached Koog dispatch agent at end of run" }
+				previous.close()
+			}
 		}
 	}
 }

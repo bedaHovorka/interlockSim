@@ -16,7 +16,6 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -84,19 +83,21 @@ class KoogDispatchAgentImpl(
 	 *
 	 * Koog's `AIAgent` does NOT implement `java.lang.AutoCloseable` — an earlier draft cast to
 	 * `AutoCloseable`, which is always null in production, making the whole close a silent no-op
-	 * (the #1096 review's finding 1). The suspend close is bridged with `runBlocking`: no layer
-	 * that calls this owns a coroutine scope, headless main exits right after the call, and
-	 * Koog 1.1.1's `AIAgentBase.close()` is a bounded upstream no-op that never touches the
-	 * executor. Idempotent via [closed]; best-effort: failures are logged and swallowed so
-	 * end-of-run cleanup cannot break the Frame STOPPED path. Does **not** close the shared
-	 * [OllamaSimpleExecutor] — that singleton outlives individual agents so a second run in
-	 * the same JVM can still infer.
+	 * (the #1096 review's finding 1). This override stays suspend (#1096 review round) so it can
+	 * call [aiAgent]'s suspend close directly, with no blocking bridge here — a `runBlocking` at
+	 * this layer would nest inside whatever suspend/mutex context the caller is already in (e.g.
+	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter]'s create path), a real
+	 * starvation/deadlock surface under dispatcher pressure. The one unavoidable bridge lives at
+	 * that adapter's `releaseAgent`, the actual non-suspend boundary. Idempotent via [closed];
+	 * best-effort: failures are logged and swallowed so end-of-run cleanup cannot break the Frame
+	 * STOPPED path. Does **not** close the shared [OllamaSimpleExecutor] — that singleton
+	 * outlives individual agents so a second run in the same JVM can still infer.
 	 */
-	override fun close() {
+	override suspend fun close() {
 		if (!closed.compareAndSet(false, true)) return
 		try {
 			logger.debug { "Closing Koog AIAgent after dispatcher run" }
-			runBlocking { aiAgent.close() }
+			aiAgent.close()
 		} catch (e: InterruptedException) {
 			Thread.currentThread().interrupt()
 			logger.warn(e) { "Interrupted while closing Koog AIAgent" }

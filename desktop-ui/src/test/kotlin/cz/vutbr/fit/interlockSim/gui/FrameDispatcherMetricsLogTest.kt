@@ -12,7 +12,6 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
-import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEmpty
@@ -26,9 +25,9 @@ import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import cz.vutbr.fit.interlockSim.testutil.withStartedSimulation
 import io.mockk.confirmVerified
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -264,25 +263,18 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		context.scope.declare(measuringAdapter)
 		context.scope.declare(runRecorder)
 
-		val events = java.util.Collections.synchronizedList(mutableListOf<String>())
-		every { runRecorder.finish(any()) } answers {
-			events.add("persist")
-			mockk<cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot>(relaxed = true)
-		}
-		every { measuringAdapter.releaseAgent() } answers {
-			events.add("release")
-		}
-
 		frame.withStartedSimulation(context) {
 			SwingUtilities.invokeAndWait { frame.stopSimulation() }
 
-			val deadline = System.currentTimeMillis() + 5000
-			while (events.size < 2 && System.currentTimeMillis() < deadline) {
-				Thread.sleep(20)
-			}
+			// Release now runs on a background thread — poll for it before asserting order.
+			verify(timeout = 5000) { runRecorder.finish(any()) }
+			verify(timeout = 5000) { measuringAdapter.releaseAgent() }
 			// Pre-fix code released the agent (line 297) BEFORE finishAndPersist (line 317) —
 			// a throwing release would have lost the run JSON and the STARVED verdict (#930).
-			assertThat(events).containsExactly("persist", "release")
+			verifyOrder {
+				runRecorder.finish(any())
+				measuringAdapter.releaseAgent()
+			}
 		}
 	}
 

@@ -105,11 +105,11 @@ class AgentBuildContractTest {
 		val agent =
 			runBlocking { service.createDispatchAgent(config.modelName, emptyList(), null) }
 
-		// Drives the real GraphAIAgent suspend close through KoogDispatchAgentImpl's
-		// runBlocking bridge. Koog 1.1.1's AIAgentBase.close() is an upstream no-op that never
-		// touches the executor — this test pins that contract so a future Koog upgrade that
-		// starts closing the shared executor fails here instead of breaking the second run.
-		agent.close()
+		// Drives the real GraphAIAgent suspend close. Koog 1.1.1's AIAgentBase.close() is an
+		// upstream no-op that never touches the executor — this test pins that contract so a
+		// future Koog upgrade that starts closing the shared executor fails here instead of
+		// breaking the second run.
+		runBlocking { agent.close() }
 
 		// getExecutor() rejects with IllegalStateException after close(), so a successful
 		// return proves the shared executor stayed open for the next run in this JVM.
