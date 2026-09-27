@@ -55,8 +55,8 @@ data class DispatchObservation(
 	companion object {
 		/**
 		 * Builds a [DispatchObservation] from the fields a push-based observation source (for
-		 * example [cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation] in
-		 * `:dispatcher-agent`) carries, without that module's type ever being visible here —
+		 * example `DispatcherObservation` (`:dispatcher-agent`)) carries, without that module's
+		 * type ever being visible here —
 		 * `:core` cannot depend on `:dispatcher-agent` (see the module's `CLAUDE.md`).
 		 *
 		 * [Dispatcher.decide] takes a [DispatchObservation] built around the general-purpose
