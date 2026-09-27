@@ -37,24 +37,12 @@ val ktlintVersion: String by project
 val detektFormattingVersion: String by project
 val jacocoToolVersion: String by project
 
+// JUnit repeat caps (Issue #1002): typed String, so systemProperty(..., Any) gets no Any? warning.
+val testRepeatMaxCount: String by project
+val heavyTestRepeatMaxCount: String by project
+
 group = "cz.vutbr.fit"
 version = "1.0"
-
-/**
- * Sets [name] as a system property for this test task from [value], but only when [value] is
- * non-null. `systemProperty` declares a non-null `Any` parameter, so passing `properties[...]`
- * (which is `Any?`) straight through produced a "Type mismatch: inferred type is Any? but Any was
- * expected" warning on every recompile of this script (Issue #1002). Both properties this is used
- * for (`testRepeatMaxCount` = 50, `heavyTestRepeatMaxCount` = 1000) are always defined in
- * gradle.properties, so in practice this always sets the property; the null-check exists to keep
- * a genuinely absent property absent rather than coercing it to an empty string.
- */
-fun Test.systemPropertyIfPresent(
-    name: String,
-    value: Any?,
-) {
-    if (value != null) systemProperty(name, value)
-}
 
 java {
     toolchain {
@@ -153,7 +141,7 @@ tasks.test {
         excludeTags("integration-test", "heavy-test")
     }
 
-    systemPropertyIfPresent("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
+    systemProperty("junit.jupiter.params.repeat.maxCount", testRepeatMaxCount)
 
     maxParallelForks = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
 
@@ -195,7 +183,7 @@ val integrationTest by tasks.registering(Test::class) {
         excludeTags("heavy-test")
     }
 
-    systemPropertyIfPresent("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
+    systemProperty("junit.jupiter.params.repeat.maxCount", testRepeatMaxCount)
 
     maxParallelForks = 1
 
@@ -245,7 +233,7 @@ val heavyTest by tasks.registering(Test::class) {
         includeTags("heavy-test")
     }
 
-    systemPropertyIfPresent("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
+    systemProperty("junit.jupiter.params.repeat.maxCount", heavyTestRepeatMaxCount)
 
     maxParallelForks = 1
 

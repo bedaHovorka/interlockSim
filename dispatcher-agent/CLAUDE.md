@@ -33,10 +33,11 @@ deliberately live in `:core` to avoid a dependency cycle. Which
   the `ollama-test` tag.
 - **`ollama-test` tag:** tests that need a live Ollama with `qwen2.5:7b-instruct`.
   This is the only module using that tag.
-- **`dispatcherReliabilityReport`** runs with `workingDir = rootProject.projectDir`
-  on purpose (Issue #847): `DefaultRunSnapshotStore.DEFAULT_ROOT` is the relative
-  path `build/reports/dispatcher-runs`, so a module-relative working directory
-  would silently produce an all-zero report. It reads existing JSON only.
+- **`dispatcherReliabilityReport`** passes the absolute repository-root
+  `build/reports/dispatcher-runs` as its argument on purpose (Issue #847):
+  `DefaultRunSnapshotStore.DEFAULT_ROOT` is that path relative to the working
+  directory, so reading it from the module directory would silently produce an
+  all-zero report. It reads existing JSON only.
 - **MockWebServer is pinned to 5.x** because koog-agents' transitive aws-smithy
   forces okhttp 5.x, and mockwebserver 4.x crashes on the removed
   `okhttp3.internal.Util`.

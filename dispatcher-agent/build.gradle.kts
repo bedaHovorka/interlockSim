@@ -60,24 +60,11 @@ val detektFormattingVersion: String by project
 val ktlintVersion: String by project
 val jacocoToolVersion: String by project
 
+// JUnit repeat caps (Issue #1002): typed String, so systemProperty(..., Any) gets no Any? warning.
+val heavyTestRepeatMaxCount: String by project
+
 group = "cz.vutbr.fit"
 version = "1.0"
-
-/**
- * Sets [name] as a system property for this test task from [value], but only when [value] is
- * non-null. `systemProperty` declares a non-null `Any` parameter, so passing `properties[...]`
- * (which is `Any?`) straight through produced a "Type mismatch: inferred type is Any? but Any was
- * expected" warning on every recompile of this script (Issue #1002). `heavyTestRepeatMaxCount`
- * (= 1000, the only property this is used for here) is always defined in gradle.properties, so in
- * practice this always sets the property; the null-check exists to keep a genuinely absent
- * property absent rather than coercing it to an empty string.
- */
-fun Test.systemPropertyIfPresent(
-    name: String,
-    value: Any?,
-) {
-    if (value != null) systemProperty(name, value)
-}
 
 java {
     toolchain {
@@ -250,7 +237,7 @@ val heavyTest by tasks.registering(Test::class) {
         includeTags("heavy-test")
     }
 
-    systemPropertyIfPresent("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
+    systemProperty("junit.jupiter.params.repeat.maxCount", heavyTestRepeatMaxCount)
 
     jvmArgs("-ea")
     maxParallelForks = 1
@@ -298,15 +285,9 @@ val dispatcherReliabilityReport by tasks.registering(JavaExec::class) {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherReliabilityReportKt")
 
-    // Issue #847 round 4: read the runs where headless runs actually write them.
-    // DefaultRunSnapshotStore.DEFAULT_ROOT is a RELATIVE path ("build/reports/dispatcher-runs"),
-    // so it resolves against the working directory. `java -jar interlockSim.jar example ...` is
-    // launched from the repository root and writes there, while a JavaExec task defaults its
-    // working directory to the *module* directory and would read
-    // dispatcher-agent/build/reports/dispatcher-runs -- a different, empty directory. The task then
-    // succeeds and renders an all-zero report, which is indistinguishable from "no runs were
-    // recorded" and is exactly the silent-empty-measurement failure #847 cannot afford.
-    workingDir = rootProject.projectDir
+    // Issue #847: headless runs write DEFAULT_ROOT relative to the repository root, so pass that
+    // directory explicitly. Reading the module-relative default would render an all-zero report.
+    args(rootProject.file("build/reports/dispatcher-runs").absolutePath)
 
     dependsOn(tasks.named("classes"))
 }
@@ -429,10 +410,5 @@ sonar {
                 aggregatedCoverageReport,
             ).joinToString(","),
         )
-        // Issue #1022: DispatcherReliabilityReport.kt used to be excluded here because its
-        // fun main() read DefaultRunSnapshotStore.DEFAULT_ROOT directly, which testing would
-        // require changing production code to avoid. The root is now injectable
-        // (renderDispatcherReliabilityReport(root)) and covered by a CLI test against a temp
-        // directory, so the exclusion is gone.
     }
 }

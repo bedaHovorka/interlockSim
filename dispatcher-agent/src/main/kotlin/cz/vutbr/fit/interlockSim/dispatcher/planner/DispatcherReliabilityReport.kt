@@ -16,17 +16,13 @@ import java.nio.file.Path
 private val logger = KotlinLogging.logger {}
 
 /**
- * Reads all [DispatcherRunSnapshot] JSON files from [root] (the [DefaultRunSnapshotStore] root,
- * [DefaultRunSnapshotStore.DEFAULT_ROOT] by default), groups them by [DispatcherArm], aggregates
- * each arm via [RunReportAggregator], and writes the Markdown report to `<root>/report.md`.
- *
- * No simulation is re-run; this is purely a read-then-render operation. [root] is injectable
- * (Issue #1022) so tests can point it at a temporary directory instead of reading the CLI's
- * hardcoded production default.
+ * Reads all [DispatcherRunSnapshot] JSON files from [root], groups them by [DispatcherArm],
+ * aggregates each arm via [RunReportAggregator], and writes the Markdown report to
+ * `<root>/report.md`. No simulation is re-run.
  *
  * @since Issue #846 (SP2c.23 — cross-run aggregator + Markdown report + Gradle task)
  */
-fun renderDispatcherReliabilityReport(root: Path = DefaultRunSnapshotStore.DEFAULT_ROOT): Path {
+internal fun renderDispatcherReliabilityReport(root: Path): Path {
 	val store = DefaultRunSnapshotStore(root)
 
 	logger.info { "[dispatcherReliabilityReport] reading snapshots from $root" }
@@ -62,10 +58,15 @@ fun renderDispatcherReliabilityReport(root: Path = DefaultRunSnapshotStore.DEFAU
 	return reportFile
 }
 
+/** The first CLI argument, or [DefaultRunSnapshotStore.DEFAULT_ROOT] without one (Issue #1022). */
+internal fun reportRootFrom(args: Array<String>): Path =
+	args.firstOrNull()?.let { Path.of(it) } ?: DefaultRunSnapshotStore.DEFAULT_ROOT
+
 /**
  * Entry point for the `dispatcherReliabilityReport` Gradle task (SP2c.23, Issue #846). Delegates
- * to [renderDispatcherReliabilityReport] with the production default root.
+ * to [renderDispatcherReliabilityReport] with the root chosen by [reportRootFrom]; the task
+ * passes the repository-root snapshot directory.
  */
-fun main() {
-	renderDispatcherReliabilityReport()
+fun main(args: Array<String>) {
+	renderDispatcherReliabilityReport(reportRootFrom(args))
 }
