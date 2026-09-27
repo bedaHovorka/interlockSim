@@ -2148,7 +2148,7 @@ class DefaultPathReservationService(
 			inouts.map { target ->
 				target to
 					lazy(LazyThreadSafetyMode.NONE) {
-						navigator.findAllTopologicalPaths(start, target)
+						navigator.findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)
 					}
 			}
 		// Note: findAllTopologicalPaths returns empty list if no path exists
