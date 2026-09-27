@@ -327,7 +327,7 @@ class DispatcherObservationProjectorTest : DispatcherKoinTestBase() {
 		/**
 		 * data.xsd does not forbid two switches with the same name. The per-tick view keeps the
 		 * first one in grid-scan order, the same rule StationTopologySerializer applies, so the
-		 * prompt never mixes one cell's type with another cell's position (Issue #959 review).
+		 * prompt never mixes one cell's type with another cell's position (Issue #959).
 		 */
 		@Test
 		@DisplayName("a switch name shared by two cells reports the first one in grid-scan order")
