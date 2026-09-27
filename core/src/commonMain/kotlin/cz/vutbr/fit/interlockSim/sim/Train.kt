@@ -290,9 +290,10 @@ class Train :
 			semaphoreName: String
 		): String =
 			"Train $trainNumber at semaphore $semaphoreName: findReservedPathForTrain returned " +
-				"OwnershipConflict while resuming - the path exists but is reserved for another " +
-				"train. This indicates a logic error - signal should only allow when the path " +
-				"is reserved for this train."
+				"OwnershipConflict while resuming - the path is not (fully) reserved for this " +
+				"train (another owner, partial ownership, or no PathInfo registered). This " +
+				"indicates a logic error - signal should only allow when the path is reserved " +
+				"for this train."
 
 		internal fun formatResumePathNullMessage(
 			trainNumber: Int,

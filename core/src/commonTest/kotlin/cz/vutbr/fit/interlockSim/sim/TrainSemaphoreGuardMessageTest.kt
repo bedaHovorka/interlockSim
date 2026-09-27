@@ -40,7 +40,11 @@ class TrainSemaphoreGuardMessageTest {
 		assertTrue(msg.contains("Train 7"), "names the train: $msg")
 		assertTrue(msg.contains("semaphore S3"), "names the semaphore: $msg")
 		assertTrue(msg.contains("OwnershipConflict"), "names its own PathResult branch: $msg")
-		assertTrue(msg.contains("reserved for another train"), "names the conflicting party: $msg")
+		assertTrue(
+			msg.contains("not (fully) reserved for this train"),
+			"stays accurate for every OwnershipConflict cause -- another owner, partial " +
+				"ownership, or no PathInfo registered, not only a conflicting train: $msg"
+		)
 	}
 
 	@Test
