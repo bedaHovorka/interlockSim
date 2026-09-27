@@ -27,7 +27,7 @@ private val logger = KotlinLogging.logger {}
  * @since Issue #846 (SP2c.23 — cross-run aggregator + Markdown report + Gradle task)
  */
 fun renderDispatcherReliabilityReport(root: Path = DefaultRunSnapshotStore.DEFAULT_ROOT): Path {
-	val store = DefaultRunSnapshotStore()
+	val store = DefaultRunSnapshotStore(root)
 
 	logger.info { "[dispatcherReliabilityReport] reading snapshots from $root" }
 
