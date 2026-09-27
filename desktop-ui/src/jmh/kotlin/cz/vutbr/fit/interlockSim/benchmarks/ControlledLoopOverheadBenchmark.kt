@@ -47,11 +47,15 @@ import java.util.concurrent.TimeUnit
  * - [baselineNoOpController] passes [NoOpSimulationController], the `object` singleton.
  *   Being a singleton it is monomorphic at the call site, so the JIT can devirtualize and
  *   inline the empty bodies away.
- * - [withBenchmarkController] passes a fresh [BenchmarkController], a distinct class whose
- *   method bodies are equally empty.
+ * - [withBenchmarkController] passes [benchmarkController], one [BenchmarkController] instance
+ *   hoisted into a field and reused across every invocation of this trial — a distinct class
+ *   whose method bodies are equally empty, but otherwise as monomorphic at the call site as
+ *   the singleton in the other arm.
  *
- * The delta between the two arms is therefore the real dispatch/bookkeeping cost of the
- * hook, and it is exactly the asymmetry that the JUnit test which used to live in
+ * Both arms therefore allocate nothing per invocation; the only variable between them is the
+ * property under test — singleton vs. distinct class — not allocation cost (Issue #758). The
+ * delta between the two arms is therefore the real dispatch/bookkeeping cost of the hook, and
+ * it is exactly the asymmetry that the JUnit test which used to live in
  * `DefaultSimulationContextControllerTest` was silently measuring.
  *
  * ## Why this is a benchmark and not a test
@@ -99,10 +103,18 @@ open class ControlledLoopOverheadBenchmark {
 	 */
 	private val simulationEndTime: Long = 60L
 
+	/**
+	 * The [SimulationController] used by [withBenchmarkController], created once per trial
+	 * (Issue #758) so both arms are like-for-like: neither allocates a controller per
+	 * invocation, and the only difference left is singleton vs. distinct class at the call site.
+	 */
+	private lateinit var benchmarkController: BenchmarkController
+
 	@Setup(Level.Trial)
 	fun startDi() {
 		stopKoin() // Clean slate — a previous trial in this JVM may have left Koin running.
 		startKoin { modules(interlockSimModule) }
+		benchmarkController = BenchmarkController()
 	}
 
 	@TearDown(Level.Trial)
@@ -133,9 +145,18 @@ open class ControlledLoopOverheadBenchmark {
 		val factory =
 			KoinJavaComponent.get<SimulationContextFactory>(SimulationContextFactory::class.java)
 		val ctx = railwayNetworkXml().use { factory.createContext(it) } as DefaultSimulationContext
-		ctx.getInOuts()
-		ctx.setMainProcess(ShuntingLoop(ctx, simulationEndTime))
+		// Assign before the remaining setup so releaseContext() can close ctx even if
+		// getInOuts()/setMainProcess() below throws (Issue #758) — otherwise the already-created
+		// context is never reachable from releaseContext() and its Koin scope leaks.
 		context = ctx
+		try {
+			ctx.getInOuts()
+			ctx.setMainProcess(ShuntingLoop(ctx, simulationEndTime))
+		} catch (e: Exception) {
+			context = null
+			ctx.close()
+			throw e
+		}
 	}
 
 	@TearDown(Level.Invocation)
@@ -187,15 +208,17 @@ open class ControlledLoopOverheadBenchmark {
 	}
 
 	/**
-	 * The controlled loop driven by a non-singleton no-op controller.
+	 * The controlled loop driven by [benchmarkController], a non-singleton no-op controller
+	 * reused across every invocation.
 	 *
 	 * The difference against [baselineNoOpController] is the hook's dispatch and bookkeeping
-	 * cost per simulation event.
+	 * cost per simulation event — not a per-invocation allocation, since neither arm allocates
+	 * a controller (Issue #758).
 	 */
 	@Benchmark
 	fun withBenchmarkController(blackhole: Blackhole) {
 		val ctx = requireNotNull(context) { "prepareContext() must run before the benchmark body" }
-		ctx.run(BenchmarkController())
+		ctx.run(benchmarkController)
 		blackhole.consume(ctx)
 	}
 }
