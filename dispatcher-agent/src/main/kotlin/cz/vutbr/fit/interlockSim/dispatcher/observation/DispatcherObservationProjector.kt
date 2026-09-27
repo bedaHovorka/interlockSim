@@ -23,7 +23,7 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
-import cz.vutbr.fit.interlockSim.util.cellsOfType
+import cz.vutbr.fit.interlockSim.util.cellsByName
 
 /**
  * Captures the sim-thread-only sources described in #824's design table into one immutable
@@ -269,13 +269,17 @@ class DispatcherObservationProjector(
 	 * `lazy` so the single walk runs on the first [captureOnSimThread] (the sim thread) — the same
 	 * construction-time safety [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer.describe]
 	 * relies on, since the kernel has not started mutating live state before the first tick.
+	 *
+	 * Indexed with [cellsByName] (Issue #959), the same rule `DefaultNetworkActuatorPort.switchByName`
+	 * uses, so a switch name shared by two cells reports the switch that name commands (the one
+	 * scanned last).
 	 */
 	private val switches: List<DynamicRailSwitch> by lazy {
 		environment
 			.getRailWayNetGrid()
-			.cellsOfType<DynamicRailSwitch>()
-			.filter { it.name.isNotBlank() }
-			.distinctBy { it.name }
+			.cellsByName<DynamicRailSwitch> { it.name }
+			.values
+			.toList()
 	}
 
 	private fun buildSwitchViews(): List<SwitchView> =
