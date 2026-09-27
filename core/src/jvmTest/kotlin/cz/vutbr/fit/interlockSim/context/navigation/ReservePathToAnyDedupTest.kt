@@ -188,12 +188,12 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 				)
 			val start = rudyUjezd.getRailWayNetGrid()[Point(11, 31)] as DynamicRailSemaphore
 			val inOuts = rudyUjezd.getInOuts().map { rudyUjezd.toDynamic(it) as DynamicInOut }
-			val samePartition = inOuts.filter { it.getOrientation() != start.getOrientation() }
-			assertThat(samePartition.size, name = "InOuts sorted together").isGreaterThan(1)
+			val oppositeSide = inOuts.filter { it.getOrientation() != start.getOrientation() }
+			assertThat(oppositeSide.size, name = "InOuts sorted together").isGreaterThan(1)
 
 			service.reservePathToAny("train1", start)
 
-			val sortedPairs = samePartition.map { (start as PathSeparator) to (it as PathSeparator) }
+			val sortedPairs = oppositeSide.map { (start as PathSeparator) to (it as PathSeparator) }
 			assertThat(sortedPairs.map { counting.calls[it] }, name = "enumerations per sorted InOut")
 				.each { it.isEqualTo(1) }
 			assertThat(counting.calls.values.toList(), name = "enumerations per pair").each { it.isEqualTo(1) }
