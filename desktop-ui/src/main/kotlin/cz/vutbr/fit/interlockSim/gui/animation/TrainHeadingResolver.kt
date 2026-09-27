@@ -134,7 +134,7 @@ class TrainHeadingResolver(
 		if (nothingToPrune) {
 			// Every tracked train is still active: the three retainAll calls below would all be
 			// no-ops. Deliberately re-derived from the resolver's own state on every call rather than
-			// cached against the previous activeTrainNumbers argument (Issue #790 review): a train
+			// cached against the previous activeTrainNumbers argument (Issue #790): a train
 			// resolved outside that set between two retainTrains calls with the same argument would
 			// otherwise escape pruning, and caching the caller's set risked aliasing a mutable one.
 			return

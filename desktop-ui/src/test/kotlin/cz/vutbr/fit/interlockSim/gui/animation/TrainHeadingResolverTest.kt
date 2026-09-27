@@ -269,7 +269,7 @@ class TrainHeadingResolverTest {
 		resolver.resolveHeading(1, east, at(19f, 8f))
 		resolver.resolveHeading(2, west, at(25f, 8f))
 		resolver.retainTrains(setOf(1, 2))
-		// Same set as last call: short-circuits before the retainAll calls (#790).
+		// Every tracked train is active: short-circuits before the retainAll calls (#790).
 		resolver.retainTrains(setOf(1, 2))
 		assertThat(resolver.resolveHeading(1, null, at(19f, 8f))).isEqualTo(east)
 		assertThat(resolver.resolveHeading(2, null, at(25f, 8f))).isEqualTo(west)
@@ -277,7 +277,7 @@ class TrainHeadingResolverTest {
 
 	@Test
 	fun `a train resolved between two identical retainTrains calls is still pruned by the second`() {
-		// Review finding I-2: retainTrains({1}) -> resolveHeading(2, ...) -> retainTrains({1}) must
+		// Issue #790: retainTrains({1}) -> resolveHeading(2, ...) -> retainTrains({1}) must
 		// still prune train 2's state, even though the argument is the same set both times. A guard
 		// that only compares the argument against the previous call's argument misses this: train 2
 		// was never in that argument, so its state would otherwise escape pruning forever.
