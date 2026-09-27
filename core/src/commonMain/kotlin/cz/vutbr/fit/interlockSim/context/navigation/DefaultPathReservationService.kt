@@ -40,6 +40,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -381,6 +382,28 @@ class DefaultPathReservationService(
 			.filterIsInstance<DynamicTrackBlock>()
 			.toList()
 	}
+
+	/**
+	 * Every [DynamicRailSemaphore] in this context's grid, in grid-scan order (column by column,
+	 * top to bottom), read once on first use.
+	 *
+	 * Same lifetime and same assumption as [allBlocksCache]: the simulation grid is populated
+	 * only while the context is built and is frozen before this per-context service can be
+	 * obtained, so cells are never added or removed afterwards. Only the semaphores' live state
+	 * changes, and that is read off these references. Lazy for the same reason as
+	 * [allBlocksCache]. Mirrors [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]'s
+	 * semaphore cache.
+	 *
+	 * @since Issue #965 — replaces a full grid scan on every [reservePathToAny] call
+	 */
+	private val allSemaphoresCache: List<DynamicRailSemaphore> by lazy {
+		environment.getRailWayNetGrid().cellsOfType<DynamicRailSemaphore>().also { semaphores ->
+			logger.trace { "allSemaphores: Found ${semaphores.size} semaphore(s) in grid" }
+		}
+	}
+
+	/** All semaphores of this context's grid, from [allSemaphoresCache]; `internal` for tests. */
+	internal fun allSemaphores(): List<DynamicRailSemaphore> = allSemaphoresCache
 
 	/**
 	 * Every block that constitutes [trainId]'s current authority: those the registry records as
@@ -1906,8 +1929,8 @@ class DefaultPathReservationService(
 		}
 
 		// Add semaphores (except start)
-		// Note: getAllSemaphores() scans the grid to find all DynamicRailSemaphore instances
-		getAllSemaphores().forEach { semaphore ->
+		// Note: allSemaphores() is the grid scan cached once per service (Issue #965)
+		allSemaphores().forEach { semaphore ->
 			if (semaphore != start) {
 				semaphores.add(semaphore)
 			}
@@ -2052,53 +2075,6 @@ class DefaultPathReservationService(
 
 		// Return last failure result (or AllPathsBlocked if no result available)
 		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(sortedTargets.size)
-	}
-
-	/**
-	 * Get all semaphores in the network by scanning the grid.
-	 *
-	 * ## Implementation
-	 *
-	 * Scans the grid using dynamically-obtained dimensions (getCols(), getRows())
-	 * to find all DynamicRailSemaphore instances.
-	 *
-	 * ## Grid Dimensions
-	 *
-	 * No hardcoded dimensions - uses grid.cols and grid.rows for
-	 * dynamic discovery. This is acceptable for reservePathToAny() which is
-	 * called infrequently (only when train needs new path).
-	 *
-	 * ## Type Safety
-	 *
-	 * The environment parameter is typed as SimulationEnvironment, but at runtime
-	 * it's always a SimulationContext (which extends Context). We cast to access
-	 * getRailWayNetGrid() for grid scanning. This is safe because:
-	 * - PathReservationService is only used in simulation mode
-	 * - SimulationContext always implements Context interface
-	 * - All Koin module configurations pass DefaultSimulationContext
-	 *
-	 * @return List of all DynamicRailSemaphore instances in the network
-	 */
-	private fun getAllSemaphores(): List<DynamicRailSemaphore> {
-		// Use interface method (added to SimulationEnvironment for navigation services)
-		val grid = environment.getRailWayNetGrid()
-		val semaphores = mutableListOf<DynamicRailSemaphore>()
-
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell =
-					grid[
-						cz.vutbr.fit.interlockSim.util
-							.Point(x, y)
-					]
-				if (cell is DynamicRailSemaphore) {
-					semaphores.add(cell)
-				}
-			}
-		}
-
-		logger.trace { "getAllSemaphores: Found ${semaphores.size} semaphore(s) in grid" }
-		return semaphores
 	}
 
 	// ========== Private helper methods ==========
