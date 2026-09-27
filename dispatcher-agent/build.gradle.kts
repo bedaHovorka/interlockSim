@@ -63,6 +63,22 @@ val jacocoToolVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
+/**
+ * Sets [name] as a system property for this test task from [value], but only when [value] is
+ * non-null. `systemProperty` declares a non-null `Any` parameter, so passing `properties[...]`
+ * (which is `Any?`) straight through produced a "Type mismatch: inferred type is Any? but Any was
+ * expected" warning on every recompile of this script (Issue #1002). `heavyTestRepeatMaxCount`
+ * (= 1000, the only property this is used for here) is always defined in gradle.properties, so in
+ * practice this always sets the property; the null-check exists to keep a genuinely absent
+ * property absent rather than coercing it to an empty string.
+ */
+fun Test.systemPropertyIfPresent(
+    name: String,
+    value: Any?,
+) {
+    if (value != null) systemProperty(name, value)
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
@@ -234,7 +250,7 @@ val heavyTest by tasks.registering(Test::class) {
         includeTags("heavy-test")
     }
 
-    systemProperty("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
+    systemPropertyIfPresent("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
 
     jvmArgs("-ea")
     maxParallelForks = 1
