@@ -41,6 +41,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -1258,5 +1261,82 @@ class KoogAgentPlanAdapterTest {
 		coVerify(exactly = 1) { firstAgent.decideAsync(any()) }
 		coVerify(exactly = 1) { secondAgent.decideAsync(any()) }
 		coVerify(exactly = 2) { agentFactory.createAgent(any()) }
+	}
+
+	@Test
+	@DisplayName(
+		"a releaseAgent that fires during agent creation closes the fresh agent instead of leaking it (#1096 review)"
+	)
+	fun `releaseAgent during agent creation closes the fresh agent instead of leaking it`() {
+		val freshAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		coEvery { freshAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val agentFactory = mockk<KoogAgentFactory>()
+		val planAdapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				Duration.ofSeconds(30),
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+		// The release lands mid-create — the factory call itself releases, so the run-end
+		// release and the first creation are deterministically concurrent, no real races.
+		coEvery { agentFactory.createAgent(any()) } coAnswers {
+			planAdapter.releaseAgent()
+			freshAgent
+		}
+
+		val decisions = runBlocking { planAdapter.plan(observation) }
+
+		// The raced cycle must fall back (no inference on a closed agent) ...
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
+		// ... the fresh agent the factory produced must end up closed exactly once (the leak
+		// the pre-fix code had: release saw a null agent and the fresh one was published after)
+		verify(exactly = 1) { freshAgent.close() }
+		coVerify(exactly = 0) { freshAgent.decideAsync(any()) }
+	}
+
+	@Test
+	@DisplayName("a concurrent plan and releaseAgent still closes the created agent (#1096 review)")
+	fun `concurrent plan and releaseAgent still closes the created agent`() {
+		val freshAgent = mockk<KoogDispatchAgent>(relaxUnitFun = true)
+		coEvery { freshAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val agentFactory = mockk<KoogAgentFactory>()
+		val createEntered = CompletableDeferred<Unit>()
+		val releaseDone = CompletableDeferred<Unit>()
+		// The create parks after entering, so the main coroutine's releaseAgent provably runs
+		// while the factory call is in flight — the exact interleaving the review flagged.
+		coEvery { agentFactory.createAgent(any()) } coAnswers {
+			createEntered.complete(Unit)
+			releaseDone.await()
+			freshAgent
+		}
+		val planAdapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				Duration.ofSeconds(30),
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+
+		val decisions =
+			runBlocking {
+				val planned = async(Dispatchers.Default) { planAdapter.plan(observation) }
+				createEntered.await()
+				planAdapter.releaseAgent()
+				releaseDone.complete(Unit)
+				planned.await()
+			}
+
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
+		verify(exactly = 1) { freshAgent.close() }
+		coVerify(exactly = 0) { freshAgent.decideAsync(any()) }
 	}
 }
