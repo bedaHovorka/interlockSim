@@ -480,6 +480,13 @@ class Train :
 			// Only the Front writes it — see [isFront].
 			if (isFront) this@Train.entrySeparator = where
 
+			// The reserved-path answer for `where` that the end of the previous iteration already
+			// obtained, handed to the query at the top of this one (Issue #963). It is set only
+			// right after the boundary crossing and consumed by the very next query, with no
+			// suspension point and no path change in between, so it never outlives the state it
+			// describes.
+			var carriedPathResult: PathResult? = null
+
 			while (true) {
 				// Check if we've reached the destination InOut BEFORE querying for path
 				if (where is DynamicInOut && current != null) {
@@ -510,7 +517,8 @@ class Train :
 				 * @see cz.vutbr.fit.interlockSim.context.navigation.PathResult
 				 * @see docs/TRAIN_PASSIVATION_FIX.md
 				 */
-				val pathResult = trainNavService.findReservedPathForTrain(name, where)
+				val pathResult = carriedPathResult ?: trainNavService.findReservedPathForTrain(name, where)
+				carriedPathResult = null
 				val path =
 					when (pathResult) {
 						is PathResult.Available -> pathResult.path
@@ -678,9 +686,10 @@ class Train :
 				// The `path` found at the top of this iteration was queried from the entry of
 				// the section just traversed, so it is partial and `path.getNext(current)`
 				// is null here. Re-query from the new `where` (the separator just crossed =
-				// entry of the upcoming section) — the same query the next iteration makes
-				// at the top of the loop — and take the section after `current` as the
-				// upcoming one. Keeping onNext=true makes getSection() report the section
+				// entry of the upcoming section) — the query the next iteration would make
+				// at the top of the loop, which reuses this answer through `carriedPathResult`
+				// — and take the section after `current` as the upcoming one. Keeping
+				// onNext=true makes getSection() report the section
 				// being entered, with entrySeparator as its entry end. `next` is recomputed
 				// at the top of the next iteration anyway, so this only affects the visible
 				// state during the gap. When the upcoming section is null the front has
@@ -690,6 +699,7 @@ class Train :
 				val upcoming: TrackSection? =
 					if (current != null) {
 						val nextPathResult = trainNavService.findReservedPathForTrain(name, where)
+						carriedPathResult = nextPathResult
 						if (nextPathResult is PathResult.Available) nextPathResult.path.getNext(current) else null
 					} else {
 						null

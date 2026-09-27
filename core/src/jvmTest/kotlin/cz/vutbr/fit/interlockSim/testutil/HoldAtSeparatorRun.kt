@@ -14,7 +14,6 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.sim.SimpleLinearTrackTestProcess
 import cz.vutbr.fit.interlockSim.sim.Train
 
 /** Simulation end time; the journey with the stand takes about 30 s. */
@@ -77,39 +76,23 @@ fun runHoldAtSeparatorScenario(
 	onStand: (HoldAtSeparatorObservation) -> Unit = {},
 	onHoldElapsed: (HoldAtSeparatorObservation) -> Unit = {}
 ): SimpleLinearTrackRun {
-	val inOuts = context.getInOuts().toList()
-	val origin = inOuts.single { it.name == inName }
-	val destination = inOuts.single { it.name == outName }
-	val reservationService = context.getRoutingServices().getPathReservationService()
-	val realNav = context.getRoutingServices().getTrainNavigationService()
-	val holdingNav =
-		decoratingTrainNavigationService(realNav) { trainId, separator ->
+	var standTime = -1.0
+	var holdElapsed = false
+
+	return runReservedSingleTrainScenario(
+		context,
+		inName = inName,
+		outName = outName,
+		endTime = endTime,
+		trainLength = trainLength,
+		findReservedPath = { realNav, trainId, separator ->
 			if (holding() && separatorLabel(separator) == holdSignal) {
 				PathResult.OwnershipConflict
 			} else {
 				realNav.findReservedPathForTrain(trainId, separator)
 			}
 		}
-
-	var standTime = -1.0
-	var holdElapsed = false
-
-	return runSimpleLinearTrackScenario(
-		context,
-		endTime = endTime,
-		trainSpecs =
-			listOf(
-				SimpleLinearTrackTestProcess.TrainSpec(
-					inName = inName,
-					outName = outName,
-					inTime = 1.0,
-					outTime = endTime.toDouble(),
-					length = trainLength
-				)
-			),
-		env = NavigationDecoratingContext(context, holdingNav)
 	) { train ->
-		assertReservationSuccess(reservationService.reservePath(train.name, origin, destination))
 		val port = DefaultNetworkPerceptionPort(context, activeTrains = { listOf(train) })
 		Process.activate(
 			TrainKinematicSampler(train, endTime.toDouble(), samplePeriod) { sample ->

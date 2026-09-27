@@ -81,7 +81,42 @@ abstract class AbstractPath protected constructor(
 		return min
 	}
 
+	/**
+	 * [length] result for the current element sequence; meaningful only while [lengthValid].
+	 *
+	 * `Engine.derivatives` reads the path length on every integration step, so the sum is
+	 * computed once per element sequence instead of on every call (Issue #962). A path is
+	 * mutated during a run (the front consumes `pathToSemaphore` with `removeFirst`), so this is
+	 * an invalidated field and not `by lazy`: every subclass mutator calls [invalidateLength].
+	 * Each element's [PathElement.contributeToPathLength] is constant — tracks delegate to an
+	 * immutable static length, separators contribute zero — so the element sequence alone decides
+	 * the value.
+	 *
+	 * Not thread-safe: read and mutate on the simulation thread only, like the element sequence
+	 * itself.
+	 */
+	private var cachedLength: Double = 0.0
+
+	/** Whether [cachedLength] matches the current element sequence. */
+	private var lengthValid: Boolean = false
+
+	/**
+	 * Marks the cached [length] stale. Every mutator of a subclass's element sequence must call
+	 * this after the mutation, or [length] would keep returning the length of the old sequence.
+	 */
+	protected fun invalidateLength() {
+		lengthValid = false
+	}
+
 	override fun length(): Double {
+		if (!lengthValid) {
+			cachedLength = computeLength()
+			lengthValid = true
+		}
+		return cachedLength
+	}
+
+	private fun computeLength(): Double {
 		var sum = 0.0
 		for (e in this) {
 			val elementLength = e.contributeToPathLength()
