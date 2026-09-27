@@ -60,9 +60,9 @@ private val logger = KotlinLogging.logger {}
  *   `env.getRoutingServices().getPathReservationService()`); injectable for testing.
  * @param interlockingFacade SP3.5 (Issue #573): when non-null, [requestRoute] is routed
  *   through the interlocking safety kernel as the **single chokepoint** protecting all
- *   callers (Koog tools arriving via [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue],
- *   `SynchronousDispatcherWiring` (`:core`),
- *   [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]).
+ *   callers (Koog tools arriving via `ActuatorCommandQueue` (`:dispatcher-agent`),
+ *   [cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher],
+ *   `DispatchDecisionApplier` (`:dispatcher-agent`)).
  *   When `null` (default), falls back to the legacy direct
  *   [PathReservationService.reservePath] path — used by `:fast-sim` and tests that run
  *   without Koin DI. Production wiring always provides the facade.
