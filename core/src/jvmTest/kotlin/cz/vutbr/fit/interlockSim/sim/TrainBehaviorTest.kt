@@ -39,7 +39,7 @@ import org.koin.test.inject
  * - Initial state validation (velocity=0, acceleration=0, position=0)
  * - Physics constants (MAXIMAL_ACCELERATION=4, MINIMAL_DECELERATION=-3)
  * - Timetable storage and train length configuration
- * - Motor, Front, and Tail initialization
+ * - Engine, Front, and Tail initialization
  * - Distance calculation formulas (stopping distance, acceleration time)
  *
  * Test Strategy:
@@ -59,7 +59,7 @@ import org.koin.test.inject
  *
  * Railway Context:
  * These tests validate that trains are correctly configured before simulation
- * begins, including proper initialization of motor physics, timetable data,
+ * begins, including proper initialization of engine physics, timetable data,
  * and initial state at rest.
  *
  * For full simulation integration tests that run context.run(), see:
@@ -97,7 +97,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 *
 		 * Physics: From v² = u² + 2as, with u=0, v=target, distance available:
 		 * acceleration a = v² / (2s)
-		 * Motor enforces: a ≤ MAXIMAL_ACCELERATION (4 m/s²)
+		 * Engine enforces: a ≤ MAXIMAL_ACCELERATION (4 m/s²)
 		 *
 		 * Railway Context: Trains must accelerate smoothly for passenger comfort
 		 * and reach line speed efficiently for schedule adherence.
@@ -113,7 +113,7 @@ class TrainBehaviorTest : KoinTestBase() {
 			assertThat(train).isNotNull()
 			assertThat(train.getVelocity()).isEqualTo(0.0)
 			assertThat(train.getAcceleration()).isEqualTo(0.0)
-			// Motor will apply acceleration when simulation starts
+			// Engine will apply acceleration when simulation starts
 			// Acceleration limited by MAXIMAL_ACCELERATION = 4 m/s²
 		}
 
@@ -123,7 +123,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Scenario: Train should never exceed MAXIMAL_ACCELERATION (4 m/s²)
 		 * during acceleration phase, regardless of target speed or distance.
 		 *
-		 * Physics: Motor.derivatives() enforces:
+		 * Physics: Engine.derivatives() enforces:
 		 * acceleration = min(calculated, MAXIMAL_ACCELERATION)
 		 *
 		 * Railway Context: Acceleration limited by adhesion (wheel-rail contact)
@@ -141,7 +141,7 @@ class TrainBehaviorTest : KoinTestBase() {
 
 			// Physics constraints documented in Train.kt:
 			// private const val MAXIMAL_ACCELERATION = 4 (m/s²)
-			// Motor.derivatives() ensures: acceleration ≤ MAXIMAL_ACCELERATION
+			// Engine.derivatives() ensures: acceleration ≤ MAXIMAL_ACCELERATION
 
 			// Verify train is constructed properly
 			assertThat(train.trainLength).isEqualTo(100.0)
@@ -250,7 +250,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Scenario: Train should never exceed MINIMAL_DECELERATION (-3 m/s²)
 		 * during braking, regardless of how quickly it needs to stop.
 		 *
-		 * Physics: Motor.derivatives() enforces:
+		 * Physics: Engine.derivatives() enforces:
 		 * deceleration = max(calculated, MINIMAL_DECELERATION)
 		 *
 		 * Railway Context: Deceleration limited by braking power and passenger
@@ -265,7 +265,7 @@ class TrainBehaviorTest : KoinTestBase() {
 
 			// Physics constraints documented in Train.kt:
 			// private const val MINIMAL_DECELERATION = -3 (m/s²)
-			// Motor.derivatives() ensures: deceleration ≥ MINIMAL_DECELERATION
+			// Engine.derivatives() ensures: deceleration ≥ MINIMAL_DECELERATION
 
 			// Verify train construction
 			assertThat(train).isNotNull()
@@ -296,7 +296,7 @@ class TrainBehaviorTest : KoinTestBase() {
 			// Assert - Stopping distance should be 150 meters
 			assertThat(expectedStoppingDistance).isEqualTo(150.0)
 
-			// Motor uses this physics in derivatives():
+			// Engine uses this physics in derivatives():
 			// a = ((targetSpeed - velocity) × (targetSpeed + velocity)) / (2 × distance)
 			// When targetSpeed=0 (stopping): a = -velocity² / (2 × distance)
 		}
@@ -307,7 +307,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Scenario: Train should come to complete stop (velocity = 0) at
 		 * the target position without overshoot or undershoot.
 		 *
-		 * Physics: Motor uses waitUntil condition to detect when target reached:
+		 * Physics: Engine uses waitUntil condition to detect when target reached:
 		 * - DECELERATION_ENDED: targetSpeed ≥ velocity (for braking)
 		 * - Position tracking via Site ensures precise location
 		 *
@@ -321,10 +321,10 @@ class TrainBehaviorTest : KoinTestBase() {
 			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
-			// Motor.AccelerationStopCondition checks:
+			// Engine.AccelerationStopCondition checks:
 			// stopTest.condition(targetSpeed, velocity)
 			// For deceleration: targetSpeed ≥ velocity
-			// When velocity reaches targetSpeed, motor stops
+			// When velocity reaches targetSpeed, engine stops
 
 			// Verify train is at rest initially
 			assertThat(train.getVelocity()).isEqualTo(0.0)
@@ -390,7 +390,7 @@ class TrainBehaviorTest : KoinTestBase() {
 
 			// Train.Front.accelerateToSignal() handles green signal:
 			// if (nextSignal.isAllowing()) {
-			//     motor.accelerateTo(min(nextSignal.allowedSpeed(), signalSpeed))
+			//     engine.accelerateTo(min(nextSignal.allowedSpeed(), signalSpeed))
 			// }
 
 			// Verify train is ready
@@ -434,7 +434,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Physics: Train.distanceToSemaphore():
 		 * - Returns: pathToSemaphore.length() - front.getPosition()
 		 * - Front.getPosition() tracks position within current track section
-		 * - Used by Motor.derivatives() for acceleration calculation
+		 * - Used by Engine.derivatives() for acceleration calculation
 		 *
 		 * Railway Context: Distance-to-signal determines braking point.
 		 */
@@ -649,13 +649,13 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Test: Train terminates cleanly after exit
 		 *
 		 * Scenario: After reaching exit InOut, train should terminate
-		 * all processes (motor, front, tail, reporter) cleanly.
+		 * all processes (engine, front, tail, reporter) cleanly.
 		 *
 		 * Physics: Train.actions() cleanup:
 		 * - r.setFrequency(POSITIVE_INFINITY) // stop reporting
 		 * - r.stop()
 		 * - stop() // velocity, acceleration Variables
-		 * - motor.terminate()
+		 * - engine.terminate()
 		 *
 		 * Railway Context: Clean termination prevents resource leaks.
 		 */
@@ -672,7 +672,7 @@ class TrainBehaviorTest : KoinTestBase() {
 			// r.setFrequency(Double.POSITIVE_INFINITY)
 			// r.stop()
 			// stop()
-			// motor.terminate()
+			// engine.terminate()
 
 			// Verify train construction
 			assertThat(train).isNotNull()

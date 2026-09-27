@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.ports.TrainActuatorPort
  * SP2a.3 *act* step for the reactive train agent (Issue #554).
  *
  * Translates a [TrainAccelerationDecision] produced by the SP2a.2 *decide* step
- * ([ReactiveTrainDecider]) into actual motor commands on a [TrainActuatorPort].  It is
+ * ([ReactiveTrainDecider]) into actual engine commands on a [TrainActuatorPort].  It is
  * the **"act"** half of the reactive train agent's sense → decide → act loop.
  *
  * **Dormant pipeline stage (Issue #978).** This object has no production caller today; the
@@ -88,7 +88,7 @@ object ReactiveTrainActuator {
 	 *   braking.
 	 *
 	 * @param decision The acceleration target decided by [ReactiveTrainDecider.decide].
-	 * @param actuator The actuator port wrapping the train's motor.
+	 * @param actuator The actuator port wrapping the train's engine.
 	 */
 	fun applyDecision(
 		decision: TrainAccelerationDecision,
@@ -101,7 +101,7 @@ object ReactiveTrainActuator {
 	 * Hold the train stationary at a station for [dwellDurationSeconds] simulation seconds.
 	 *
 	 * Delegates to [TrainActuatorPort.holdAtStation], which schedules a fire-and-forget
-	 * dwell period after which the motor remains stopped.
+	 * dwell period after which the engine remains stopped.
 	 *
 	 * The train must already be at rest — this starts a dwell timer, it does not brake.
 	 * Call [applyDecision] with a `0.0` target speed first and wait for the train to come
@@ -110,7 +110,7 @@ object ReactiveTrainActuator {
 	 * does not re-accelerate the train.
 	 *
 	 * @param dwellDurationSeconds Station dwell time in simulation seconds (must be > 0).
-	 * @param actuator The actuator port wrapping the train's motor.
+	 * @param actuator The actuator port wrapping the train's engine.
 	 * @throws IllegalArgumentException if [dwellDurationSeconds] is ≤ 0.
 	 * @throws cz.vutbr.fit.interlockSim.exceptions.SimulationException if the train is moving
 	 *   or a station dwell is already in progress.

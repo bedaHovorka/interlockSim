@@ -5,7 +5,7 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * A motor cancelled with no follow-up command must go idle, not re-run its last command.
+ * An engine cancelled with no follow-up command must go idle, not re-run its last command.
  */
 package cz.vutbr.fit.interlockSim.sim
 
@@ -52,8 +52,8 @@ import kotlin.math.abs
  * in a plain `accelerateTo` wait far from its target when the halt lands.
  */
 @Tag("integration-test")
-@DisplayName("A bare motor cancel leaves the motor idle")
-class MotorBareCancelTest : KoinTestBase() {
+@DisplayName("A bare engine cancel leaves the engine idle")
+class EngineBareCancelTest : KoinTestBase() {
 	private companion object {
 		/** Approach length; long enough for the halt to land well before the target speed. */
 		const val APPROACH = 100.0
@@ -67,22 +67,22 @@ class MotorBareCancelTest : KoinTestBase() {
 		/** Speed at which the train is halted: moving, and far below the commanded 27.78 m/s. */
 		const val HALT_SPEED_MPS = 5.0
 
-		/** Station dwell requested at the halt; the motor is inspected during it. */
+		/** Station dwell requested at the halt; the engine is inspected during it. */
 		const val DWELL_SECONDS = 4.0
 
-		/** Settling time after the halt before the motor's state is read. */
+		/** Settling time after the halt before the engine's state is read. */
 		const val SETTLE_SECONDS = 1.0
 	}
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
-	@DisplayName("a halt followed by a station dwell leaves the motor passivated with zero acceleration")
-	fun haltThenDwellLeavesTheMotorIdle() {
+	@DisplayName("a halt followed by a station dwell leaves the engine passivated with zero acceleration")
+	fun haltThenDwellLeavesTheEngineIdle() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH)
 		val ctx = network.context.tracked()
 		var haltedAt = -1.0
 		var peakAccelerationWhileDwelling = 0.0
-		var motorPassivatedAfterSettling = false
+		var enginePassivatedAfterSettling = false
 		var settled = false
 
 		runClearanceStopScenario(
@@ -100,16 +100,16 @@ class MotorBareCancelTest : KoinTestBase() {
 					peakAccelerationWhileDwelling = maxOf(peakAccelerationWhileDwelling, abs(train.getAcceleration()))
 					if (!settled && sample.time >= haltedAt + SETTLE_SECONDS) {
 						settled = true
-						motorPassivatedAfterSettling = motorOf(train).isPassivated()
+						enginePassivatedAfterSettling = motorOf(train).isPassivated()
 					}
 				}
 			}
 		)
 
 		assertThat(haltedAt, name = "time of the halt").isGreaterThan(0.0)
-		assertThat(settled, name = "the motor state was read after settling").isTrue()
+		assertThat(settled, name = "the engine state was read after settling").isTrue()
 		assertThat(peakAccelerationWhileDwelling, name = "acceleration reported while dwelling").isZero()
-		assertThat(motorPassivatedAfterSettling, name = "motor passivated after the halt").isTrue()
+		assertThat(enginePassivatedAfterSettling, name = "engine passivated after the halt").isTrue()
 	}
 
 	/**

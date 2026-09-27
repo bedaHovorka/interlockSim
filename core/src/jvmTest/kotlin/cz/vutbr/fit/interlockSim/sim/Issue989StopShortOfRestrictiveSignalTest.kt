@@ -242,9 +242,9 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 		logger.info { "T2 slowest approach sample: $crawl" }
 
 		// (a) It braked: the train was crawling before it stopped, not running. Scope: this
-		//     fixture's aspect stands restrictive from departure, so the motor aimed at the
+		//     fixture's aspect stands restrictive from departure, so the engine aimed at the
 		//     stop line and braked the whole approach. A restrictive flip arriving mid-leg
-		//     re-commands nothing (the motor is commanded once per leg), so that stand still
+		//     re-commands nothing (the engine is commanded once per leg), so that stand still
 		//     snaps to zero from line speed — the T5 rung pins where it lands.
 		assertThat(crawl.velocity, name = "slowest approach speed").isLessThanOrEqualTo(CRAWL_SPEED_MPS)
 		// (b) It braked to the RIGHT point: that crawl happened at the clearance stop line, not
@@ -556,7 +556,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	 * way at whatever crawl the flicker left it with.
 	 *
 	 * Scope note: this scenario cannot exercise the kDisco 0.6.1 double-command hazard
-	 * (kdisco#73). A mid-leg flip re-commands nothing — the motor is commanded once per leg —
+	 * (kdisco#73). A mid-leg flip re-commands nothing — the engine is commanded once per leg —
 	 * and the aspect clears again before the gate can `fireStop`, so nothing is ever parked
 	 * for a command to miss; that guard is the stand-down comment in [Train] plus the
 	 * stands-and-resumes of the T3/T4 rungs. What this rung pins is the flicker leaving no

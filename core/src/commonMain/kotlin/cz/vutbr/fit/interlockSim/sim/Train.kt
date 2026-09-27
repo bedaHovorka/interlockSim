@@ -504,7 +504,7 @@ class Train :
 				 * Conservative approach compliance:
 				 * - ✅ Comprehensive tests (TrainPathReservationIntegrationTest, TrainNavigationServiceTest)
 				 * - ✅ Documentation (TRAIN_PASSIVATION_FIX.md, PathResult.kt KDoc)
-				 * - ✅ Physics validation (no regression in motor behavior)
+				 * - ✅ Physics validation (no regression in engine behavior)
 				 * - ✅ Backward compatible (sealed class replaces nullable Path)
 				 *
 				 * @see cz.vutbr.fit.interlockSim.context.navigation.PathResult
@@ -567,7 +567,7 @@ class Train :
 					// top of this loop before the path query; it never falls through to here.
 					// At the origin (current == null) we must NOT break — the train waits for
 					// the dispatcher to reserve a path (Issue #905, AC1).
-					// Stop motor completely to prevent creeping motion during passivation
+					// Stop engine completely to prevent creeping motion during passivation
 					engine.cancelAccelerating()
 					this@Train.stop()
 
@@ -584,7 +584,7 @@ class Train :
 								 * after every discrete event (including block releases), so the train
 								 * resumes exactly when the path becomes available.
 								 *
-								 * The motor has already been stopped, so there is no creeping risk.
+								 * The engine has already been stopped, so there is no creeping risk.
 								 *
 								 * This branch is now also reached at the origin (Issue #905, AC1):
 								 * an OwnershipConflict at the entry InOut resolves the instant the
@@ -885,7 +885,7 @@ class Train :
 			 * Conservative approach compliance:
 			 * - ✅ Comprehensive tests (TrainPathReservationIntegrationTest, TrainNavigationServiceTest)
 			 * - ✅ Documentation (TRAIN_PASSIVATION_FIX.md, PathResult.kt KDoc)
-			 * - ✅ Physics validation (no regression in motor behavior)
+			 * - ✅ Physics validation (no regression in engine behavior)
 			 * - ✅ Backward compatible (sealed class replaces nullable Path)
 			 *
 			 * @see cz.vutbr.fit.interlockSim.context.navigation.PathResult
@@ -939,7 +939,7 @@ class Train :
 				 * Conservative approach compliance:
 				 * - ✅ Comprehensive tests (TrainPathReservationIntegrationTest, TrainNavigationServiceTest)
 				 * - ✅ Documentation (TRAIN_PASSIVATION_FIX.md, PathResult.kt KDoc)
-				 * - ✅ Physics validation (no regression in motor behavior)
+				 * - ✅ Physics validation (no regression in engine behavior)
 				 * - ✅ Backward compatible (sealed class replaces nullable Path)
 				 *
 				 * Note: Re-fetch path after signal becomes allowing.
@@ -1078,7 +1078,7 @@ class Train :
 		 * Called on every release of the gate and stands down immediately unless it was
 		 * [boundaryGuard]'s clearance term that bound — that is, unless the front is a clearance
 		 * short of the separator and, because [Engine] aims at the same point, already braked to
-		 * walking pace. (The motor brakes for a restrictive aspect that stood so as the leg was
+		 * walking pace. (The engine brakes for a restrictive aspect that stood so as the leg was
 		 * commanded or turned so mid-leg — see [Engine]'s late-aspect watch, Issue #1057, which
 		 * since Issue #1087 also covers a leg the engine resumed itself after a clearance hold.
 		 * Only a flip that leaves less room than the deceleration bound needs still snaps to zero
@@ -1091,9 +1091,9 @@ class Train :
 			// Stand down once the section end itself has been reached. That release belongs to
 			// the historical path: separatorAction/semaphoreAction run next and own every signal
 			// decision at a separator, including the restart. Acting here as well would issue a
-			// second motor command in the same instant, and on kDisco 0.6.1 that command never
+			// second engine command in the same instant, and on kDisco 0.6.1 that command never
 			// takes effect (kdisco#73): the activate is consumed as the pending `waitUntil`
-			// wake-up notice, the wait returns inside the old iteration, the motor completes it
+			// wake-up notice, the wait returns inside the old iteration, the engine completes it
 			// and passivates, and the queued command goes unprocessed. A train then coasts at
 			// whatever crawl it arrived with and never accelerates again (measured on this
 			// branch: a train crossing at 1.6 mm/s and holding that speed to the end of the
@@ -1112,7 +1112,7 @@ class Train :
 				// The aspect cleared while the train was braking towards the stop line. If it
 				// had already come to a stand there, nothing else will ever move it again: the
 				// gate below is level-triggered on a position that no longer changes and the
-				// motor was told to stop at a point the train has now reached. Restart it.
+				// engine was told to stop at a point the train has now reached. Restart it.
 				if (getVelocity() <= maxAbsError) fireResume()
 				return
 			}
@@ -1190,9 +1190,9 @@ class Train :
 
 		/**
 		 * Gives up the clearance stop for the rest of this section traversal and re-commands the
-		 * motor at the separator itself.
+		 * engine at the separator itself.
 		 *
-		 * Both are needed. Clearing the flag alone would leave the motor's braking target — and
+		 * Both are needed. Clearing the flag alone would leave the engine's braking target — and
 		 * with it the train — parked at a stop line it has already reached, crawling the last
 		 * metre at the millimetres per second the braking law leaves there. The command is the
 		 * same [Engine.onWarning] two-phase approach [accelerateToSignal] issues for a
@@ -1217,7 +1217,7 @@ class Train :
 		 * signal — and the loop's bounded no-path and ownership-conflict policies engage only
 		 * once the aspect allows and the loop re-queries.
 		 *
-		 * [waiveClearanceStop] re-aims the motor, but [fireStop] already stopped this train, its
+		 * [waiveClearanceStop] re-aims the engine, but [fireStop] already stopped this train, its
 		 * front and its tail, so they must be started again here or the train parks at the stop
 		 * line for the rest of the run. [fireResume] cannot do that: it requires an allowing
 		 * aspect, and a released route is exactly the case where none stands. No `env.report`
@@ -1248,7 +1248,7 @@ class Train :
 		 * Restarts the train from the clearance stop line, mid-section.
 		 *
 		 * The counterpart of [fireStart] for a stop that did **not** happen at a separator:
-		 * [accelerateToSignal] cannot be reused, because it re-commands the motor from the
+		 * [accelerateToSignal] cannot be reused, because it re-commands the engine from the
 		 * semaphore the train *departed* — which is back at STOP by then (`semaphoreAction`
 		 * sets it after its `hold(1.0)`). What is known here instead is the aspect ahead, which
 		 * has just become allowing, and the leg's physical speed limit. Both sites and the train
@@ -1256,7 +1256,7 @@ class Train :
 		 * front − tail = length invariant is preserved.
 		 *
 		 * The command only has to carry the train over the last clearance metres; on reaching
-		 * the separator [semaphoreAction] re-commands the motor for the next leg as usual.
+		 * the separator [semaphoreAction] re-commands the engine for the next leg as usual.
 		 */
 		private fun fireResume() {
 			val aspect =
@@ -2222,7 +2222,7 @@ class Train :
 	}
 
 	/**
-	 * Set the target speed for this train's motor from an external agent.
+	 * Set the target speed for this train's engine from an external agent.
 	 *
 	 * Delegates to [Engine.accelerateTo]: the physics model (acceleration ramp, braking
 	 * ramp, speed-limit enforcement) takes effect immediately.  This is the public surface
@@ -2274,7 +2274,7 @@ class Train :
 	 * timer running alongside a rolling train would silently misrepresent a station stop.
 	 * This mirrors [reverseDirection], which requires the same precondition.
 	 *
-	 * After the dwell expires the motor is *not* restarted here — [isStationDwelling] flips
+	 * After the dwell expires the engine is *not* restarted here — [isStationDwelling] flips
 	 * back to `false` and the agent's next [setTargetSpeed] call restarts the train.
 	 *
 	 * **Thread safety:** Must be called from the kDisco simulation thread.
@@ -2310,7 +2310,7 @@ class Train :
 	 * Fire-and-forget kDisco process that implements a station dwell pause.
 	 *
 	 * Spawned by [holdAtStation]; holds for [dwellSeconds] simulation seconds and then
-	 * completes.  Clears [isStationDwelling] when the dwell expires.  The motor is not
+	 * completes.  Clears [isStationDwelling] when the dwell expires.  The engine is not
 	 * restarted here — the agent's next [setTargetSpeed] call will do that.
 	 *
 	 * @since Issue #554 (SP2a.3 — Goal 10)

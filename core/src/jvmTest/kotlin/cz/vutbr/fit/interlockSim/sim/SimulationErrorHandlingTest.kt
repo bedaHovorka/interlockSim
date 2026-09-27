@@ -189,7 +189,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		 * Test: Train detects distance calculation edge case
 		 *
 		 * Scenario: When distanceToSemaphore() returns zero or negative,
-		 * Motor.derivatives() should handle gracefully (SIM-001 mitigation).
+		 * Engine.derivatives() should handle gracefully (SIM-001 mitigation).
 		 *
 		 * Safety: Prevents division by zero in acceleration calculation.
 		 */
@@ -204,7 +204,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			// Before pathToSemaphore is assigned, distanceToSemaphore() returns 0
 			assertThat(train.distanceToSemaphore()).isEqualTo(0.0)
 
-			// Motor.derivatives() has guard:
+			// Engine.derivatives() has guard:
 			// if (s <= 0) { accelerate = false; return }
 			// This mitigates SIM-001: potential division by zero
 		}

@@ -404,7 +404,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 			assertThat(velocity)
 				.isGreaterThanOrEqualTo(-POSITION_TOLERANCE_M)
 
-			// Acceleration must be within physical motor bounds
+			// Acceleration must be within physical engine bounds
 			assertThat(acceleration)
 				.isGreaterThanOrEqualTo(MINIMAL_DECELERATION_MS2 - POSITION_TOLERANCE_M)
 			assertThat(acceleration)

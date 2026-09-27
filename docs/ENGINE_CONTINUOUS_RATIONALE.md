@@ -91,11 +91,15 @@ trait/mixin for two classes.
 ## Host interface (Issue #1059)
 
 `Engine` is no longer an inner class of `Train`. It receives a narrow
-`Engine.Host` implemented by `Train`, exposing only the kinematics surface the
-ODE process needs (velocity/acceleration variables, distance-to-semaphore,
-restrictive-signal query, speed limit, debug reporting). That keeps `Variable`
-fields off the public Train API while allowing the propulsion process to live
-in its own file.
+`Engine.Host`, exposing only the kinematics surface the ODE process needs
+(velocity/acceleration variables, distance-to-semaphore, restrictive-signal
+query, speed limit, debug reporting). `Engine.Host` is `internal`, so a public
+`Train` cannot implement it directly without publishing those members on its
+own public API. `Train` instead holds a private `EngineHost` inner class that
+implements `Engine.Host` and delegates to `Train`'s own private state — that
+adapter, not `Train` itself, is the `Host`. This keeps `Variable` fields off
+the public Train API while allowing the propulsion process to live in its own
+file.
 
 ## Non-goals
 
@@ -108,7 +112,7 @@ in its own file.
 - Code: `core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/Engine.kt`
   — search for `internal class Engine` and `override fun derivatives()`
 - Code: `core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/Train.kt`
-  — `Engine.Host` implementation and `private val engine`
+  — `EngineHost` adapter (implements `Engine.Host`) and `private val engine`
 - Code: `core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/LoopProcess.kt`
 - kDisco: <https://github.com/bedaHovorka/kdisco/>
 - Issue: [#373](https://github.com/bedaHovorka/interlockSim/issues/373)

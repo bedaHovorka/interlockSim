@@ -37,7 +37,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Extracted from [Train] as a top-level class (Issue #1059) so kinematics stay testable and
  * documentable without living inside the multi-thousand-line train process.
  *
- * See `docs/MOTOR_CONTINUOUS_RATIONALE.md` (issue #373; renamed Engine in #1059).
+ * See `docs/ENGINE_CONTINUOUS_RATIONALE.md` (issue #373; renamed Engine in #1059).
  *
  * @param host the owning train surface this engine drives
  */
@@ -49,8 +49,11 @@ internal class Engine(
 	}
 
 	/**
-	 * Narrow train surface the engine needs. Implemented by [Train] so kinematics stay
-	 * package-internal without exposing [Variable] fields on the public Train API.
+	 * Narrow train surface the engine needs. This interface is `internal`, so a public
+	 * [Train] cannot implement it directly without publishing these members on its own
+	 * public API. [Train] instead holds a private `EngineHost` adapter that implements
+	 * [Host] and delegates to [Train]'s own private state, keeping [Variable] fields off
+	 * the public Train API.
 	 */
 	internal interface Host {
 		val trainNumber: Int

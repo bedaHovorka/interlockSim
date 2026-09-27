@@ -11,7 +11,10 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotSameInstanceAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.ksimulantenbande.kdisco.Continuous
 import cz.ksimulantenbande.kdisco.Process
@@ -23,6 +26,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import kotlin.reflect.KVisibility
 
 /**
  * Pins the Issue #1059 extraction contract: Train owns a top-level [Engine] process
@@ -54,10 +58,58 @@ class EngineExtractionTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("AccelerationStopTest keeps its deceleration flags and half-speed test")
-	fun accelerationStopTestKeepsHistoricalMotorBehavior() {
+	fun accelerationStopTestKeepsHistoricalEngineBehavior() {
 		assertThat(AccelerationStopTest.ACCELERATION_ENDED.isDecelerate()).isEqualTo(false)
 		assertThat(AccelerationStopTest.DECELERATION_ENDED.isDecelerate()).isEqualTo(true)
 		assertThat(AccelerationStopTest.TO_HALF_SPEED.condition(20.0, 10.0)).isTrue()
+	}
+
+	/**
+	 * Locks the adapter design commit `5b6985b7` chose: [Train] does not implement [Engine.Host]
+	 * directly. [Engine.Host] is `internal`, so a public [Train] implementing it would have to
+	 * publish the kinematic [cz.ksimulantenbande.kdisco.Variable]s on its public API — see the
+	 * private `EngineHost` adapter in [Train].
+	 */
+	@Test
+	@DisplayName("Train does not implement Engine.Host directly")
+	fun trainDoesNotImplementEngineHostDirectly() {
+		assertThat(Engine.Host::class.java.isAssignableFrom(Train::class.java)).isFalse()
+	}
+
+	/**
+	 * [Engine.Host] stays `internal` so it can expose [cz.ksimulantenbande.kdisco.Variable]
+	 * fields without those fields becoming part of any public API.
+	 */
+	@Test
+	@DisplayName("Engine.Host is internal, not public")
+	fun engineHostIsInternal() {
+		assertThat(Engine.Host::class.visibility).isEqualTo(KVisibility.INTERNAL)
+	}
+
+	/**
+	 * Each train owns its own [Engine]: two trains must not share the propulsion process that
+	 * drives their kinematic [cz.ksimulantenbande.kdisco.Variable]s.
+	 */
+	@Test
+	@DisplayName("distinct trains hold distinct engines")
+	fun distinctTrainsHoldDistinctEngines() {
+		val firstTrain = Train(createMockSimulationContext(), createTimetable())
+		val secondTrain = Train(createMockSimulationContext(), createTimetable())
+
+		assertThat(engineOf(firstTrain)).isNotSameInstanceAs(engineOf(secondTrain))
+	}
+
+	/**
+	 * [engineOf] reflects into the same private field every time; repeated calls on the same
+	 * train must return the identical [Engine] instance, not a fresh lookup that happens to be
+	 * equal.
+	 */
+	@Test
+	@DisplayName("repeated engineOf calls on the same train return the same instance")
+	fun engineOfIsStableAcrossCalls() {
+		val train = Train(createMockSimulationContext(), createTimetable())
+
+		assertThat(engineOf(train)).isSameInstanceAs(engineOf(train))
 	}
 
 	private fun createTimetable(): Timetable {

@@ -53,14 +53,14 @@ import kotlin.math.abs
  * until the test lifts it, and the two rungs pin the same behaviour as before:
  *
  * - [theTrainStandsAtTheGreenSignalWhereNavigationHoldsIt] — the stand: at the separator, not a
- *   clearance short of it, with the aspect still allowing, and the motor idle (zero acceleration,
+ *   clearance short of it, with the aspect still allowing, and the engine idle (zero acceleration,
  *   passivated).
  * - [theTrainRestartsOnceNavigationLetsItGo] — lifting the conflict wakes the wait, the separator
  *   restarts the train, and it completes the journey.
  *
- * The motor's idleness at this stand is a rounding coin flip on code without the `commandPending`
- * guard: the stop's cancel wakes the motor twice only when the last integration step ends on the
- * near side of the signal. `MotorBareCancelTest` pins that defect deterministically; the assertion
+ * The engine's idleness at this stand is a rounding coin flip on code without the `commandPending`
+ * guard: the stop's cancel wakes the engine twice only when the last integration step ends on the
+ * near side of the signal. `EngineBareCancelTest` pins that defect deterministically; the assertion
  * here is the invariant at the stop a real run showed.
  */
 @Tag("integration-test")
@@ -82,7 +82,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 		/**
 		 * How long the train is held before navigation lets it go. Well inside the
 		 * ownership-conflict WARN horizon, and long enough for every wake-up of the stop to be
-		 * delivered and settle before the motor is inspected.
+		 * delivered and settle before the engine is inspected.
 		 */
 		const val STAND_HOLD_SECONDS = 3.0
 
@@ -101,7 +101,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 		val standDistance: Double,
 		val aspectAllowingAtStand: Boolean,
 		val peakAccelerationWhileStanding: Double,
-		val motorPassivatedBeforeRelease: Boolean,
+		val enginePassivatedBeforeRelease: Boolean,
 		val releasedAt: Double,
 		val trainsExited: Int,
 		val finalDistance: Double
@@ -117,7 +117,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 			.isBetween(DISTANCE_TO_ZB - POSITION_TOLERANCE, DISTANCE_TO_ZB + POSITION_TOLERANCE)
 		assertThat(outcome.aspectAllowingAtStand, name = "zB allowing at the stand").isTrue()
 		assertThat(outcome.peakAccelerationWhileStanding, name = "acceleration reported while standing").isZero()
-		assertThat(outcome.motorPassivatedBeforeRelease, name = "motor passivated at the stand").isTrue()
+		assertThat(outcome.enginePassivatedBeforeRelease, name = "engine passivated at the stand").isTrue()
 	}
 
 	@Test
@@ -138,7 +138,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 	 * sampled throughout. Navigation answers the train's query at `zB` with an ownership conflict
 	 * until the sampler lifts it. The sampler's callback is the scenario driver — it runs on the
 	 * simulation thread, the only thread allowed to read the train: it records the stand, watches
-	 * the motor while the train stands, and after [STAND_HOLD_SECONDS] lets the train go.
+	 * the engine while the train stands, and after [STAND_HOLD_SECONDS] lets the train go.
 	 */
 	private fun runScenario(): Outcome {
 		val context =
@@ -150,7 +150,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 		var standDistance = -1.0
 		var aspectAllowingAtStand = false
 		var peakAccelerationWhileStanding = 0.0
-		var motorPassivatedBeforeRelease = false
+		var enginePassivatedBeforeRelease = false
 		var releasedAt = -1.0
 
 		val run =
@@ -172,7 +172,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 					aspectAllowingAtStand = zB.signal.isAllowing()
 				},
 				onHoldElapsed = { observation ->
-					motorPassivatedBeforeRelease = motorOf(observation.train).isPassivated()
+					enginePassivatedBeforeRelease = motorOf(observation.train).isPassivated()
 					holding.set(false)
 					releasedAt = observation.sample.time
 				}
@@ -181,7 +181,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 			standDistance = standDistance,
 			aspectAllowingAtStand = aspectAllowingAtStand,
 			peakAccelerationWhileStanding = peakAccelerationWhileStanding,
-			motorPassivatedBeforeRelease = motorPassivatedBeforeRelease,
+			enginePassivatedBeforeRelease = enginePassivatedBeforeRelease,
 			releasedAt = releasedAt,
 			trainsExited = run.process.getTrainsExited(),
 			finalDistance = run.train.totalDistance

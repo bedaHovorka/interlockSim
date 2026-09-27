@@ -32,7 +32,7 @@ import kotlin.math.abs
 private val logger = KotlinLogging.logger {}
 
 /**
- * Issue #1057 — the motor is commanded once per leg, so an aspect that turns restrictive while
+ * Issue #1057 — the engine is commanded once per leg, so an aspect that turns restrictive while
  * the train is already running at line speed re-commands nothing. Before the fix the front was
  * then carried to the clearance stop line at full speed and snapped to zero by `fireStop`.
  *

@@ -33,7 +33,7 @@ open class Generator(
 		dtMin = 1e-6
 		// Block-boundary and tail-entry events are now located by kDisco root-finding
 		// (`Process.waitCrossing`, see Train.kt) rather than by step granularity, so `dtMax` no
-		// longer has to be tiny to keep *those* events' overshoot negligible. Motor's approach
+		// longer has to be tiny to keep *those* events' overshoot negligible. Engine's approach
 		// phase joined them in Issue #1014 (`Process.waitUntilCrossing` on the approach margin),
 		// but its remaining velocity-target waits — the `accelerateTo` arms — are NOT converted
 		// and still rely on step granularity via plain `waitUntil`. So `dtMax` is deliberately

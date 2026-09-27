@@ -224,7 +224,7 @@ class MultiTrainLoopTest : KoinTestBase() {
 				private set
 
 			// Captured synchronously, in the same call, immediately after the halt callback
-			// fires — Train's own Motor is a separate Continuous() process that Train.stop()
+			// fires — Train's own Engine is a separate Continuous() process that Train.stop()
 			// does not stop, so it keeps chasing its target speed on later ticks. Reading the
 			// snapshot after ctx.run() returns would observe a re-accelerated, non-zero velocity.
 			var velocityImmediatelyAfterHalt: Double? = null

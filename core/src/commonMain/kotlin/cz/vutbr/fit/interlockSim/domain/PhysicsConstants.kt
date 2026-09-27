@@ -87,7 +87,7 @@ val SERVICE_BRAKING_DECELERATION_MPS2: Double = -MINIMAL_TRAIN_DECELERATION.toDo
  * Non-positive speeds yield `0.0` (already stopped — no distance needed).
  *
  * The inverse of [brakingSpeedWithin]. Used by [cz.vutbr.fit.interlockSim.sim.Train]'s
- * motor (Issues #1014, #1057) so the braking-room margin and the reactive decider share
+ * engine (Issues #1014, #1057) so the braking-room margin and the reactive decider share
  * one formula rather than two literals of `3` that only agree by coincidence (Issue #1056).
  */
 fun brakingDistanceFrom(speedMps: Double): Double {
