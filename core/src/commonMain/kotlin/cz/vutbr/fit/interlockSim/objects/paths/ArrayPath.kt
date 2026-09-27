@@ -33,17 +33,43 @@ class ArrayPath private constructor(
 	MutableCollection<PathElement> by deque {
 	constructor(context: SimulationContext) : this(context, ArrayDeque())
 
-	// removeAll/retainAll convert the argument to a Set for O(1) membership checks, so they stay explicit
-	override fun removeAll(elements: Collection<PathElement>): Boolean = deque.removeAll(elements.toSet())
+	// Every mutator of the element sequence is spelled out, even where `by deque` would delegate it,
+	// so that each one clears the cached length (Issue #962). A mutator added later must do the same.
+	// JVM-only defaults such as `removeIf` are not delegated by `by deque`; they mutate through
+	// [iterator], whose `remove` invalidates as well.
 
-	override fun retainAll(elements: Collection<PathElement>): Boolean = deque.retainAll(elements.toSet())
+	override fun add(element: PathElement): Boolean = deque.add(element).also { invalidateLength() }
+
+	override fun addAll(elements: Collection<PathElement>): Boolean = deque.addAll(elements).also { invalidateLength() }
+
+	override fun remove(element: PathElement): Boolean = deque.remove(element).also { invalidateLength() }
+
+	override fun clear() {
+		deque.clear()
+		invalidateLength()
+	}
+
+	// removeAll/retainAll convert the argument to a Set for O(1) membership checks, so they stay explicit
+	override fun removeAll(elements: Collection<PathElement>): Boolean =
+		deque.removeAll(elements.toSet()).also { invalidateLength() }
+
+	override fun retainAll(elements: Collection<PathElement>): Boolean =
+		deque.retainAll(elements.toSet()).also { invalidateLength() }
+
+	override fun iterator(): MutableIterator<PathElement> = LengthInvalidatingIterator(deque.iterator())
 
 	// Path construction operations - delegate to ArrayDeque's efficient implementations
-	override fun addFirst(element: PathElement) = deque.addFirst(element)
+	override fun addFirst(element: PathElement) {
+		deque.addFirst(element)
+		invalidateLength()
+	}
 
-	override fun addLast(element: PathElement) = deque.addLast(element)
+	override fun addLast(element: PathElement) {
+		deque.addLast(element)
+		invalidateLength()
+	}
 
-	override fun removeFirst(): PathElement = deque.removeFirst()
+	override fun removeFirst(): PathElement = deque.removeFirst().also { invalidateLength() }
 
 	// Path-specific typed accessors with runtime type validation
 	override fun getFirst(): PathSeparator = Util.assertInstanceOf<PathSeparator>(deque.first())
@@ -119,7 +145,18 @@ class ArrayPath private constructor(
 	}
 
 	// Reverse iteration support
-	override fun descendingIterator(): Iterator<PathElement> = deque.asReversed().iterator()
+	// Wrapped as well: the declared type is read-only, but the runtime object is mutable.
+	override fun descendingIterator(): Iterator<PathElement> = LengthInvalidatingIterator(deque.asReversed().iterator())
+
+	/** A [MutableIterator] over the deque whose [remove] also clears the cached length. */
+	private inner class LengthInvalidatingIterator(
+		private val delegate: MutableIterator<PathElement>
+	) : MutableIterator<PathElement> by delegate {
+		override fun remove() {
+			delegate.remove()
+			invalidateLength()
+		}
+	}
 
 	override fun toString(): String = deque.toString()
 }
