@@ -480,6 +480,13 @@ class Train :
 			// Only the Front writes it — see [isFront].
 			if (isFront) this@Train.entrySeparator = where
 
+			// The reserved-path answer for `where` that the end of the previous iteration already
+			// obtained, handed to the query at the top of this one (Issue #963). It is set only
+			// right after the boundary crossing and consumed by the very next query, with no
+			// suspension point and no path change in between, so it never outlives the state it
+			// describes.
+			var carriedPathResult: PathResult? = null
+
 			while (true) {
 				// Check if we've reached the destination InOut BEFORE querying for path
 				if (where is DynamicInOut && current != null) {
@@ -510,7 +517,8 @@ class Train :
 				 * @see cz.vutbr.fit.interlockSim.context.navigation.PathResult
 				 * @see docs/TRAIN_PASSIVATION_FIX.md
 				 */
-				val pathResult = trainNavService.findReservedPathForTrain(name, where)
+				val pathResult = carriedPathResult ?: trainNavService.findReservedPathForTrain(name, where)
+				carriedPathResult = null
 				val path =
 					when (pathResult) {
 						is PathResult.Available -> pathResult.path
@@ -686,10 +694,13 @@ class Train :
 				// state during the gap. When the upcoming section is null the front has
 				// reached the destination InOut (or the reserved path ends here); onNext=false
 				// lets the loop's destination check / passivation handle the next iteration.
+				// The answer is kept in `carriedPathResult`: from here to that query nothing
+				// suspends and nothing changes the reservation, so asking again would only repeat it.
 				current = next
 				val upcoming: TrackSection? =
 					if (current != null) {
 						val nextPathResult = trainNavService.findReservedPathForTrain(name, where)
+						carriedPathResult = nextPathResult
 						if (nextPathResult is PathResult.Available) nextPathResult.path.getNext(current) else null
 					} else {
 						null
