@@ -531,6 +531,8 @@ sonar {
         // It is already covered by core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/exceptions/
         // RequireFunctionsTest.kt and desktop-ui/src/test/kotlin/cz/vutbr/fit/interlockSim/
         // exceptions/RequireFunctionsTest.kt.
+        // Tracked by Issue #1022. Removal condition: permanent, unless these nine functions stop
+        // being `inline` — there is no test that can move this number while they stay inline.
         property(
             "sonar.coverage.exclusions",
             "src/nativeMain/**,src/commonMain/kotlin/cz/vutbr/fit/interlockSim/exceptions/RequireFunctions.kt",
