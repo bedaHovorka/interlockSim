@@ -362,7 +362,7 @@ class SimulationSnapshotTest {
 	}
 
 	@Test
-	fun `map-backed lookups do not affect equals, hashCode or toString`() {
+	fun `map-backed lookups do not affect equals hashCode or toString`() {
 		// The lazy lookup maps live in the class body (not the primary constructor), so they
 		// must never leak into the generated data-class members even after being populated.
 		val semaphores = listOf(SemaphoreReading("zA", Signal.FREE))

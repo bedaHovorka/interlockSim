@@ -45,7 +45,7 @@ class DispatchObservationTest {
 	}
 
 	@Test
-	fun `from leaves semaphores, blocks and timetables empty`() {
+	fun `from leaves semaphores blocks and timetables empty`() {
 		val observation =
 			DispatchObservation.from(
 				simTime = 0.0,
