@@ -92,7 +92,9 @@ interface AgentService {
  *    The shared Ollama executor is deliberately **not** closed here — it outlives individual
  *    agents so a second run in the same JVM can still infer.
  *
- * Not a `fun interface`: [close] needs a default body for stubs and mocks.
+ * A `fun interface`: [decideAsync] is the single abstract member, so SAM/lambda construction
+ * stays valid. [close] keeps a default no-op body (Kotlin fun interfaces allow default-bodied
+ * members), so stubs and mocks are unaffected.
  *
  * ## SP1 phasing
  *
@@ -102,7 +104,7 @@ interface AgentService {
  *
  * @since Issue #547 (SP1.2 — Goal 10)
  */
-interface KoogDispatchAgent {
+fun interface KoogDispatchAgent {
 	/**
 	 * Asynchronously decide on dispatch actions given the current network observation.
 	 *
@@ -120,8 +122,12 @@ interface KoogDispatchAgent {
 	 * Release resources held by this agent instance (Issue #1072).
 	 *
 	 * Default is a no-op so test doubles and rule-based stubs stay unchanged. Production
-	 * [KoogDispatchAgentImpl] closes the underlying Koog [ai.koog.agents.core.agent.AIAgent] when
-	 * it implements [AutoCloseable]. Idempotent; safe to call more than once.
+	 * [KoogDispatchAgentImpl] calls the underlying Koog [ai.koog.agents.core.agent.AIAgent]'s
+	 * [ai.koog.utils.io.Closeable.close] (a suspend fun; Koog's `AIAgent` does not implement
+	 * `java.lang.AutoCloseable`), bridged to this non-suspend signature with `runBlocking`.
+	 * Idempotent; safe to call more than once. The shared Ollama executor is deliberately
+	 * **not** closed here — it outlives individual agents so a second run in this same JVM
+	 * can still infer.
 	 */
 	fun close() {
 		// Default no-op for stubs and mocks.

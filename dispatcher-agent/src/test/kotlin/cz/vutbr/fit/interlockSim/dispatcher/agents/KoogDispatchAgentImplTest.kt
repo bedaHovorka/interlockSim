@@ -721,6 +721,16 @@ class KoogDispatchAgentImplTest {
 	}
 
 	@Test
+	@DisplayName("KoogDispatchAgent stays a fun interface: SAM conversion compiles and default close is a no-op (#1072 review)")
+	fun samConversionCompilesAndDefaultCloseIsNoOp() {
+		val agent: KoogDispatchAgent = KoogDispatchAgent { _ -> emptyList() }
+
+		agent.close()
+
+		assertThat(agent).isInstanceOf<KoogDispatchAgent>()
+	}
+
+	@Test
 	@DisplayName("close is a no-op when the wrapped AIAgent is not AutoCloseable (Issue #1072)")
 	fun closeIsSafeWhenAgentIsNotAutoCloseable() {
 		val aiAgent = mockk<AIAgent<String, String>>()
