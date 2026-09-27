@@ -98,7 +98,7 @@ listOf(
 val isLinuxHost: Boolean by gradle.extra
 if (isLinuxHost) {
 	listOf(
-		Triple("buildFastSim", "build", ":fast-sim:linkReleaseExecutableLinuxX64"),
+		Triple("buildFastSim", "build", ":fast-sim:linkDebugExecutableLinuxX64"),
 		Triple("runFastSim", "application", ":fast-sim:runDebugExecutableLinuxX64"),
 		Triple("buildFastSimRelease", "build", ":fast-sim:linkReleaseExecutableLinuxX64"),
 		Triple("runFastSimRelease", "application", ":fast-sim:runReleaseExecutableLinuxX64"),
