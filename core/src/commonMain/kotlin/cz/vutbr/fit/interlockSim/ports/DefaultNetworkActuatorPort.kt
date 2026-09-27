@@ -61,7 +61,7 @@ private val logger = KotlinLogging.logger {}
  * @param interlockingFacade SP3.5 (Issue #573): when non-null, [requestRoute] is routed
  *   through the interlocking safety kernel as the **single chokepoint** protecting all
  *   callers (Koog tools arriving via [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue],
- *   [cz.vutbr.fit.interlockSim.sim.SynchronousDispatcherWiring],
+ *   `SynchronousDispatcherWiring` (`:core`),
  *   [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]).
  *   When `null` (default), falls back to the legacy direct
  *   [PathReservationService.reservePath] path — used by `:fast-sim` and tests that run
