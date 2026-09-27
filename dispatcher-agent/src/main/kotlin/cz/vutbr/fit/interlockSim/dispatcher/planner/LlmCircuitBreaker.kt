@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
+import kotlinx.serialization.Serializable
+
 /**
  * Per-adapter circuit breaker guarding the LLM call in [KoogAgentPlanAdapter] against sustained
  * overload (Issue #1058): once [failureThreshold] cycles fail in a row, further cycles skip the
@@ -43,9 +45,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * probe ever again while stuck in HALF_OPEN.
  *
  * Not thread-safe beyond [Synchronized] on the mutating methods ([shouldAttempt], [recordSuccess],
- * [recordFailure], [abandonProbe]) — cheap insurance against the same concurrent-`plan()`
- * scenario [KoogAgentPlanAdapter]'s own agent-init `Mutex` guards against, even though production
- * call patterns serialize `plan()` per adapter in practice.
+ * [recordFailure], [abandonProbe]) and on [metricsSnapshot] — cheap insurance against the same
+ * concurrent-`plan()` scenario [KoogAgentPlanAdapter]'s own agent-init `Mutex` guards against,
+ * even though production call patterns serialize `plan()` per adapter in practice.
  */
 class LlmCircuitBreaker(
 	private val failureThreshold: Int = DEFAULT_FAILURE_THRESHOLD,
@@ -61,6 +63,7 @@ class LlmCircuitBreaker(
 		}
 	}
 
+	@Serializable
 	enum class State { CLOSED, OPEN, HALF_OPEN }
 
 	@Volatile
@@ -163,9 +166,31 @@ class LlmCircuitBreaker(
 		probeInFlight = false
 	}
 
+	/** Immutable point-in-time copy of the four public counters. */
+	data class Metrics(
+		val state: State,
+		val consecutiveFailures: Int,
+		val totalSkips: Long,
+		val openCount: Long
+	)
+
+	/**
+	 * One atomic reading of all four public counters, taken under this class's monitor so the
+	 * values are mutually consistent even while another thread is mid-[recordFailure] mutation —
+	 * [recordFailure] writes [state] `OPEN` before it increments [openCount], so three independent
+	 * volatile reads could combine `OPEN` with the pre-transition `openCount`. Issue #1074:
+	 * [DefaultDispatcherRunRecorder] persists exactly this reading, and the terminal run JSON is
+	 * the trusted record a breaker-skip is distinguished from an LLM failure by.
+	 */
+	@Synchronized
+	fun metricsSnapshot(): Metrics = Metrics(state, consecutiveFailures, totalSkips, openCount)
+
 	/** One-line end-of-run summary, mirroring [cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop.summaryLine]. */
-	fun summaryLine(): String =
-		"[LlmCircuitBreaker] state=$state consecutiveFailures=$consecutiveFailures totalSkips=$totalSkips"
+	fun summaryLine(): String {
+		val metrics = metricsSnapshot()
+		return "[LlmCircuitBreaker] state=${metrics.state} " +
+			"consecutiveFailures=${metrics.consecutiveFailures} totalSkips=${metrics.totalSkips}"
+	}
 
 	companion object {
 		const val DEFAULT_FAILURE_THRESHOLD: Int = 3

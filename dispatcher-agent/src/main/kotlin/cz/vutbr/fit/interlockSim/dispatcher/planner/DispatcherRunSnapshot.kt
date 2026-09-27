@@ -28,7 +28,8 @@ import kotlinx.serialization.Serializable
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
- * version 8 added circuit-breaker end state, Issue #1074).
+ * version 7 added [RunEndCause.STARVED], Issue #930; version 8 added circuit-breaker end
+ * state, Issue #1074).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
