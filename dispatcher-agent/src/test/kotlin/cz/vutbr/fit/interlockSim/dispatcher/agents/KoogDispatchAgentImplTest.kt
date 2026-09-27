@@ -731,27 +731,38 @@ class KoogDispatchAgentImplTest {
 	}
 
 	@Test
-	@DisplayName("close is a no-op when the wrapped AIAgent is not AutoCloseable (Issue #1072)")
-	fun closeIsSafeWhenAgentIsNotAutoCloseable() {
-		val aiAgent = mockk<AIAgent<String, String>>()
+	@DisplayName("close calls the Koog suspend close of the wrapped AIAgent exactly once (Issue #1072)")
+	fun closeCallsKoogSuspendCloseExactlyOnce() {
+		val aiAgent = mockk<AIAgent<String, String>>(relaxUnitFun = true)
 		val agent = KoogDispatchAgentImpl(aiAgent)
 
 		agent.close()
-		agent.close()
+
+		coVerify(exactly = 1) { aiAgent.close() }
 	}
 
 	@Test
-	@DisplayName("close closes the wrapped AIAgent when it is AutoCloseable (Issue #1072)")
-	fun closeClosesAutoCloseableAgent() {
-		val aiAgent =
-			mockk<AIAgent<String, String>>(
-				moreInterfaces = arrayOf(AutoCloseable::class),
-				relaxUnitFun = true
-			)
+	@DisplayName("close is idempotent: a second close does not call the Koog close again (Issue #1072)")
+	fun closeIsIdempotentAcrossCalls() {
+		val aiAgent = mockk<AIAgent<String, String>>(relaxUnitFun = true)
 		val agent = KoogDispatchAgentImpl(aiAgent)
 
 		agent.close()
+		agent.close()
 
-		verify(exactly = 1) { (aiAgent as AutoCloseable).close() }
+		coVerify(exactly = 1) { aiAgent.close() }
+	}
+
+	@Test
+	@DisplayName("close swallows an exception from the Koog close instead of propagating it (Issue #1072)")
+	fun closeSwallowsExceptionsFromKoogClose() {
+		val aiAgent = mockk<AIAgent<String, String>>()
+		coEvery { aiAgent.close() } throws RuntimeException("close-boom")
+		val agent = KoogDispatchAgentImpl(aiAgent)
+
+		agent.close()
+		agent.close() // idempotent under the guard: no second call and no second throw
+
+		coVerify(exactly = 1) { aiAgent.close() }
 	}
 }

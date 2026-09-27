@@ -10,8 +10,10 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import ai.koog.agents.core.agent.GraphAIAgent
+import ai.koog.prompt.executor.model.PromptExecutor
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -91,5 +93,26 @@ class AgentBuildContractTest {
 				as KoogDispatchAgentImpl
 
 		assertThat(agent.builtAgent.agentConfig.responseProcessor).isNull()
+	}
+
+	@Test
+	@DisplayName("closing the agent leaves the shared Ollama executor open for a second run (Issue #1072)")
+	fun closingAgentLeavesSharedExecutorOpen() {
+		val config = OllamaExecutorConfig.forLocalTesting()
+		val executor = OllamaSimpleExecutor(config)
+		val service = DefaultAgentService(executor, config)
+
+		val agent =
+			runBlocking { service.createDispatchAgent(config.modelName, emptyList(), null) }
+
+		// Drives the real GraphAIAgent suspend close through KoogDispatchAgentImpl's
+		// runBlocking bridge. Koog 1.1.1's AIAgentBase.close() is an upstream no-op that never
+		// touches the executor — this test pins that contract so a future Koog upgrade that
+		// starts closing the shared executor fails here instead of breaking the second run.
+		agent.close()
+
+		// getExecutor() rejects with IllegalStateException after close(), so a successful
+		// return proves the shared executor stayed open for the next run in this JVM.
+		assertThat(executor.getExecutor()).isInstanceOf<PromptExecutor>()
 	}
 }

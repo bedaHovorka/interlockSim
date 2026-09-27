@@ -16,6 +16,8 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.runBlocking
 
 /**
  * Real Koog-based railway dispatch agent.
@@ -54,6 +56,9 @@ class KoogDispatchAgentImpl(
 		private val logger = KotlinLogging.logger {}
 	}
 
+	/** Set once by [close]; guards that the Koog close is called at most once per instance. */
+	private val closed = AtomicBoolean(false)
+
 	/**
 	 * The built Koog agent, exposed `internal` for the build-contract test to reflect on its
 	 * strategy + [ai.koog.agents.core.agent.config.AIAgentConfig] without driving a live LLM run.
@@ -74,24 +79,24 @@ class KoogDispatchAgentImpl(
 	}
 
 	/**
-	 * Close the underlying Koog [AIAgent] when it is [AutoCloseable] (Issue #1072).
+	 * Close the underlying Koog [AIAgent] through its suspend [ai.koog.utils.io.Closeable.close]
+	 * (Issue #1072).
 	 *
-	 * Idempotent and best-effort: failures are logged and swallowed so end-of-run cleanup cannot
-	 * break the Frame STOPPED path. Does **not** close the shared [OllamaSimpleExecutor] — that
-	 * singleton outlives individual agents so a second run in the same JVM can still infer.
+	 * Koog's `AIAgent` does NOT implement `java.lang.AutoCloseable` — an earlier draft cast to
+	 * `AutoCloseable`, which is always null in production, making the whole close a silent no-op
+	 * (the #1096 review's finding 1). The suspend close is bridged with `runBlocking`: no layer
+	 * that calls this owns a coroutine scope, headless main exits right after the call, and
+	 * Koog 1.1.1's `AIAgentBase.close()` is a bounded upstream no-op that never touches the
+	 * executor. Idempotent via [closed]; best-effort: failures are logged and swallowed so
+	 * end-of-run cleanup cannot break the Frame STOPPED path. Does **not** close the shared
+	 * [OllamaSimpleExecutor] — that singleton outlives individual agents so a second run in
+	 * the same JVM can still infer.
 	 */
 	override fun close() {
+		if (!closed.compareAndSet(false, true)) return
 		try {
-			val closeable = aiAgent as? AutoCloseable
-			if (closeable != null) {
-				logger.debug { "Closing Koog AIAgent after dispatcher run" }
-				closeable.close()
-			} else {
-				logger.debug {
-					"Koog AIAgent (${aiAgent::class.qualifiedName}) is not AutoCloseable; " +
-						"nothing to close on the agent itself"
-				}
-			}
+			logger.debug { "Closing Koog AIAgent after dispatcher run" }
+			runBlocking { aiAgent.close() }
 		} catch (e: InterruptedException) {
 			Thread.currentThread().interrupt()
 			logger.warn(e) { "Interrupted while closing Koog AIAgent" }
