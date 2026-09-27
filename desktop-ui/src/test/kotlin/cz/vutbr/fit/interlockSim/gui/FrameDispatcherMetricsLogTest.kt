@@ -12,8 +12,10 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
@@ -24,6 +26,7 @@ import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import cz.vutbr.fit.interlockSim.testutil.withStartedSimulation
 import io.mockk.confirmVerified
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
@@ -97,9 +100,9 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		frame.withStartedSimulation(context) {
 			SwingUtilities.invokeAndWait { frame.stopSimulation() }
 
-			// Issue #1072: agent released before the final metrics summary so Koog workers
-			// do not outlive the run.
-			verify(exactly = 1) { measuringAdapter.releaseAgent() }
+			// #1096 review: release now runs on a background thread (after persistence — see
+			// releaseHappensAfterPersistenceOnStop) — poll before the synchronous verifies below.
+			verify(timeout = 5000, exactly = 1) { measuringAdapter.releaseAgent() }
 			verify(exactly = 1) { measuringAdapter.logFinalSummary() }
 			confirmVerified(measuringAdapter)
 		}
@@ -236,10 +239,50 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isTrue()
 				frame.stopSimulation()
 				assertThat(frame.railwayNetGridCanvas.animationController!!.isActive).isFalse()
+				// #1096 review: STOPPED must capture the final frame before pausing (Task 5's
+				// captureFinalFrameAndPause), not just pause. captureFinalFrameAndPause captures
+				// BEFORE stop() clears the semaphore/switch caches; a capture running after stop
+				// (the old pauseAnimation-only ordering) would produce empty signal states.
+				assertThat(
+					frame.railwayNetGridCanvas.animationController!!
+						.currentState.signalStates
+				).isNotEmpty()
 			}
 		} finally {
 			SwingUtilities.invokeAndWait { frame.stopSimulation() }
 			context.close()
+		}
+	}
+
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@DisplayName("#1096 review: the Koog agent is released after persistence, not before (STOPPED path)")
+	fun releaseHappensAfterPersistenceOnStop() {
+		val context = createMockShuntingContext()
+		val measuringAdapter = mockk<MeasuringPlanAdapter>(relaxed = true)
+		val runRecorder = mockk<DispatcherRunRecorder>(relaxed = true)
+		context.scope.declare(measuringAdapter)
+		context.scope.declare(runRecorder)
+
+		val events = java.util.Collections.synchronizedList(mutableListOf<String>())
+		every { runRecorder.finish(any()) } answers {
+			events.add("persist")
+			mockk<cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot>(relaxed = true)
+		}
+		every { measuringAdapter.releaseAgent() } answers {
+			events.add("release")
+		}
+
+		frame.withStartedSimulation(context) {
+			SwingUtilities.invokeAndWait { frame.stopSimulation() }
+
+			val deadline = System.currentTimeMillis() + 5000
+			while (events.size < 2 && System.currentTimeMillis() < deadline) {
+				Thread.sleep(20)
+			}
+			// Pre-fix code released the agent (line 297) BEFORE finishAndPersist (line 317) —
+			// a throwing release would have lost the run JSON and the STARVED verdict (#930).
+			assertThat(events).containsExactly("persist", "release")
 		}
 	}
 

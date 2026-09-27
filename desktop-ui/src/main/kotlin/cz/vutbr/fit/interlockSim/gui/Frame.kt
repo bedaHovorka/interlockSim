@@ -282,19 +282,18 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// loop when the run ends (natural completion or manual stop). Before this,
 							// natural completion left AnimationController ticking until the user clicked
 							// Stop or closed the window — the "does not return control" symptom.
-							// pauseAnimation keeps the last frame visible for inspection; the next
-							// startSimulation() restarts via ensureAnimationRunning().
+							// captureFinalFrameAndPause (#1096 review) runs one last state capture
+							// before pausing — pauseAnimation alone left the painted frame one state
+							// behind the run's real end, because stop() clears the caches a bare
+							// pause never re-captured. The next startSimulation() restarts via
+							// ensureAnimationRunning().
 							stopAnimationUpdates()
-							railwayNetGridCanvas.pauseAnimation()
+							railwayNetGridCanvas.captureFinalFrameAndPause()
 							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
 							// ended (captured at RUNNING time above). Null for every example except
 							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
 							// Placed last so a failure here can never skip the safety-motivated
 							// detach calls above.
-							// Issue #1072: release the cached Koog agent before the summary so
-							// inference workers do not outlive the run. The shared Ollama executor
-							// stays open for a possible next start in this same JVM.
-							wiredMeasuringAdapter?.releaseAgent()
 							wiredMeasuringAdapter?.logFinalSummary()
 							wiredMeasuringAdapter = null
 							// SP2c.22 (#845): finish the run recorder and log its final summary.
@@ -322,6 +321,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 								wiredRunRecorder?.finish(runEndCause)
 								wiredRunRecorder?.logFinalSummary()
 							}
+							// #1096 review: release the cached Koog agent AFTER persistence, through
+							// DispatcherRunLifecycle (falls back to a bare KoogAgentPlanAdapter,
+							// swallows exceptions) and off the EDT — a throwing release can no
+							// longer lose the run JSON or the STARVED verdict (#930), and the EDT
+							// never blocks on the agent's runBlocking close bridge (Issue #1072).
+							DispatcherRunLifecycle.releaseKoogAgentInBackground(runScope)
 							wiredRunRecorder = null
 							wiredRunScope = null
 						}
@@ -851,14 +856,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		statusBar.setStarvedIndicator(false)
 		conflictResolutionPanel.clearResolutions()
 
-		// Issue #1072: a previous STOPPED paused the animation and the 10 Hz time timer. Restart
-		// both so the new run is visible again without requiring a full setContext cycle.
-		railwayNetGridCanvas.ensureAnimationRunning()
-		stopAnimationUpdates()
-		startAnimationUpdates()
-
 		try {
 			simulationController.start(context)
+			// Issue #1072 + #1096 review: a previous STOPPED paused the animation and the 10 Hz
+			// time timer. Restart both so the new run is visible again without requiring a full
+			// setContext cycle — moved here, after a successful start, so a failed start leaves
+			// the previous run's animation paused instead of resurrecting it with no run behind it.
+			railwayNetGridCanvas.ensureAnimationRunning()
+			stopAnimationUpdates()
+			startAnimationUpdates()
 			val activeRunner = simulationController.runner?.takeIf { it.isRunning() }
 			simulationControlPanel.runner = activeRunner
 
