@@ -91,6 +91,9 @@ abstract class AbstractPath protected constructor(
 	 * Each element's [PathElement.contributeToPathLength] is constant — tracks delegate to an
 	 * immutable static length, separators contribute zero — so the element sequence alone decides
 	 * the value.
+	 *
+	 * Not thread-safe: read and mutate on the simulation thread only, like the element sequence
+	 * itself.
 	 */
 	private var cachedLength: Double = 0.0
 
