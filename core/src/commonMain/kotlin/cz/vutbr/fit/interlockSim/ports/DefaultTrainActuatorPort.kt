@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.sim.Train
  * ## Design constraint
  *
  * Train agents are **algorithmic only** (no LLM, per the 2026-07-04 decision).  This
- * implementation gives a deterministic algorithm a stable handle on the train motor
+ * implementation gives a deterministic algorithm a stable handle on the train engine
  * without coupling it to kDisco internals — the same isolation guarantee that
  * [DefaultNetworkActuatorPort] provides for the dispatcher.
  *
@@ -29,7 +29,7 @@ import cz.vutbr.fit.interlockSim.sim.Train
  *
  * Not thread-safe.  All calls must originate from the single kDisco simulation thread.
  *
- * @param train The train whose motor this port controls.
+ * @param train The train whose engine this port controls.
  *
  * @see TrainActuatorPort
  * @see DefaultNetworkActuatorPort
@@ -58,7 +58,7 @@ class DefaultTrainActuatorPort(
 	 *
 	 * Validates the precondition and delegates to [Train.holdAtStation].  A fire-and-forget
 	 * kDisco process is spawned inside [Train] that cancels current acceleration, waits for
-	 * [dwellDurationSeconds] sim-seconds, and then completes — leaving the motor stopped
+	 * [dwellDurationSeconds] sim-seconds, and then completes — leaving the engine stopped
 	 * until the agent's next [setTargetSpeed] call restarts it.
 	 *
 	 * @param dwellDurationSeconds Dwell time in simulation seconds (must be > 0).

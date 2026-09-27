@@ -39,8 +39,8 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Issue #1087 — the late-aspect watch of Issue #1057 covered only legs commanded by
- * `accelerateTo`. A leg the motor resumed by itself after a clearance hold
- * (`Motor.resumeAtAspectCap`) went idle once the resumed cap was reached, so an aspect turning
+ * `accelerateTo`. A leg the engine resumed by itself after a clearance hold
+ * (`Engine.resumeAtAspectCap`) went idle once the resumed cap was reached, so an aspect turning
  * restrictive while the train coasted at that cap re-commanded nothing: the front reached the
  * clearance line at the resumed speed and `fireStop` snapped it to zero — the Issue #1057 defect
  * class on a different path into it.
@@ -51,7 +51,7 @@ private val logger = KotlinLogging.logger {}
  *
  * Fixture: `A —(200 m)— Sem —100 m— B`. The signal starts at [Signal.STOP], so the leg is held
  * by the clearance-stop approach; it clears to [Signal.S40] early in the approach, which resumes
- * the run at the aspect's cap inside the motor's own approach loop; the resumed leg reaches the
+ * the run at the aspect's cap inside the engine's own approach loop; the resumed leg reaches the
  * cap half-way to the signal (see `ResumedLegSpeedLawTest`) and coasts; then the aspect flips
  * back to [Signal.STOP] with ample braking room left.
  * `Issue1014BrakingOnTooShortBlockTest`'s rung 3e pins the flip-back **before** the cap is
@@ -90,7 +90,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		/**
 		 * Stretch before the flip-back over which the train must already be coasting at the
 		 * cap: the leg state in which the resumed leg's wait had ended and, before Issue #1087,
-		 * the motor went idle.
+		 * the engine went idle.
 		 */
 		const val COASTING_STRETCH_METERS = 20.0
 
@@ -109,7 +109,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 
 		/**
 		 * Slack around the resumed cap at the flip-back, proving the cap really was reached —
-		 * that is, `resumeAtAspectCap`'s wait had ended and pre-fix the motor was idle. The
+		 * that is, `resumeAtAspectCap`'s wait had ended and pre-fix the engine was idle. The
 		 * resumed leg runs up at a constant rate and its wait wakes at most one 1 ms step late,
 		 * so it overshoots the cap by well under a millimetre per second.
 		 */
@@ -224,7 +224,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		assertThat(run.clearFired, name = "the held aspect was cleared to S40").isTrue()
 
 		// The scenario proves nothing unless the resumed cap really was reached before the flip
-		// and the train was coasting there: that is the leg state in which the motor went idle
+		// and the train was coasting there: that is the leg state in which the engine went idle
 		// before this fix, and the only one in which the late-aspect watch of `runApproachLoop`
 		// is armed. A flip during the ramp is `resumeAtAspectCap`'s own exit (rung 3e of
 		// `Issue1014BrakingOnTooShortBlockTest`) and would not reach the watch at all.
@@ -276,7 +276,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		assertThat(run.clearFired, name = "the held aspect was cleared to FREE").isTrue()
 
 		// The same premise as the S40 rung, at line speed: the cap was reached before the flip
-		// and the train was coasting there — pre-fix, the motor was idle in exactly this state.
+		// and the train was coasting there — pre-fix, the engine was idle in exactly this state.
 		val cap = TestTopologies.LINEAR_BLOCK_MAX_SPEED_MPS
 		run.samples
 			.filter { it.time <= atFlipBack.time && it.totalDistance >= FREE_FLIP_BACK_DISTANCE - COASTING_STRETCH_METERS }
@@ -356,7 +356,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		).isGreaterThanOrEqualTo(boundaryDistance)
 
 		// From a flip with the room gone, braking at the bound still stands the train at the
-		// line; the pre-fix idle motor would have let the front's `fireStop` snap it to zero.
+		// line; the pre-fix idle engine would have let the front's `fireStop` snap it to zero.
 		assertThat(
 			worstSpeedStepAfter(run.samples, atFlipBack.time),
 			name = "largest speed change between consecutive samples after the flip-back"

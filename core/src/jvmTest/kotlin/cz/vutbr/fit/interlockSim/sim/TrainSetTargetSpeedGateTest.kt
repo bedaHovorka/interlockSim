@@ -117,7 +117,7 @@ class TrainSetTargetSpeedGateTest : KoinTestBase() {
 		val occupied = reservationService.getOccupiedBlocks(train.name)
 		assertThat(reserved.size).isGreaterThan(occupied.size)
 
-		// The gate must NOT early-return here — it should fall through to Motor.accelerateTo(),
+		// The gate must NOT early-return here — it should fall through to Engine.accelerateTo(),
 		// which requires a live kDisco simulation and throws DiscoException("Not inside a
 		// simulation") outside one. That specific exception (rather than a silent early return)
 		// is the proof the gate passed the train through instead of rejecting it.

@@ -5,17 +5,19 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * A motor cancelled with no follow-up command must go idle, not re-run its last command.
+ * An engine cancelled with no follow-up command must go idle, not re-run its last command.
  */
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.engineOf
 import cz.vutbr.fit.interlockSim.testutil.motorOf
 import cz.vutbr.fit.interlockSim.testutil.runClearanceStopScenario
 import org.junit.jupiter.api.DisplayName
@@ -26,32 +28,32 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 /**
- * A `Motor.cancelAccelerating()` with no command after it must leave the motor idle.
+ * An `Engine.cancelAccelerating()` with no command after it must leave the engine idle.
  *
  * ## The defect this pins
  *
  * On an engine whose `activate` and wait-notice wake-ups are separate channels (kdisco#74), a
- * cancel aimed at a motor parked in its wait wakes it twice: once through the activate it
+ * cancel aimed at an Engine parked in its wait wakes it twice: once through the activate it
  * issues, once through the wait notice its `accelerate = false` satisfies. The first turn
- * finishes the iteration and passivates; the second resumed the passivated motor and ran
- * `iteration()` again with the **stale** condition — the motor started integrating towards
+ * finishes the iteration and passivates; the second resumed the passivated engine and ran
+ * `iteration()` again with the **stale** condition — the engine started integrating towards
  * its old target with `accelerate == true`, on a train whose velocity integration was stopped,
  * so it stood there reporting a non-zero acceleration until the next real command.
  *
  * Measured on `shuntingLoopAI` on 2026-09-13: a train stopped at `zB` for an ownership conflict
  * reported `2.469 m/s²` (`v² / 2s` for the old 22.22 m/s target) for the rest of the run. That
- * stop's cancel lands on a still-waiting motor only when the last integration step ends on the
+ * stop's cancel lands on a still-waiting engine only when the last integration step ends on the
  * near side of the signal — a rounding coin flip, since the train reaches its target exactly
  * at the signal — so this test forces the shape deterministically instead: the train is halted
  * mid-leg through the public [Train.requestHalt] and the bare cancel then comes from
  * [Train.holdAtStation], which issues no command of its own by design.
  *
- * The fixture is the linear ladder with its intermediate signal left allowing, so the motor is
+ * The fixture is the linear ladder with its intermediate signal left allowing, so the engine is
  * in a plain `accelerateTo` wait far from its target when the halt lands.
  */
 @Tag("integration-test")
-@DisplayName("A bare motor cancel leaves the motor idle")
-class MotorBareCancelTest : KoinTestBase() {
+@DisplayName("A bare engine cancel leaves the engine idle")
+class EngineBareCancelTest : KoinTestBase() {
 	private companion object {
 		/** Approach length; long enough for the halt to land well before the target speed. */
 		const val APPROACH = 100.0
@@ -65,22 +67,22 @@ class MotorBareCancelTest : KoinTestBase() {
 		/** Speed at which the train is halted: moving, and far below the commanded 27.78 m/s. */
 		const val HALT_SPEED_MPS = 5.0
 
-		/** Station dwell requested at the halt; the motor is inspected during it. */
+		/** Station dwell requested at the halt; the engine is inspected during it. */
 		const val DWELL_SECONDS = 4.0
 
-		/** Settling time after the halt before the motor's state is read. */
+		/** Settling time after the halt before the engine's state is read. */
 		const val SETTLE_SECONDS = 1.0
 	}
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
-	@DisplayName("a halt followed by a station dwell leaves the motor passivated with zero acceleration")
-	fun haltThenDwellLeavesTheMotorIdle() {
+	@DisplayName("a halt followed by a station dwell leaves the engine passivated with zero acceleration")
+	fun haltThenDwellLeavesTheEngineIdle() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH)
 		val ctx = network.context.tracked()
 		var haltedAt = -1.0
 		var peakAccelerationWhileDwelling = 0.0
-		var motorPassivatedAfterSettling = false
+		var enginePassivatedAfterSettling = false
 		var settled = false
 
 		runClearanceStopScenario(
@@ -98,15 +100,44 @@ class MotorBareCancelTest : KoinTestBase() {
 					peakAccelerationWhileDwelling = maxOf(peakAccelerationWhileDwelling, abs(train.getAcceleration()))
 					if (!settled && sample.time >= haltedAt + SETTLE_SECONDS) {
 						settled = true
-						motorPassivatedAfterSettling = motorOf(train).isPassivated()
+						enginePassivatedAfterSettling = motorOf(train).isPassivated()
 					}
 				}
 			}
 		)
 
 		assertThat(haltedAt, name = "time of the halt").isGreaterThan(0.0)
-		assertThat(settled, name = "the motor state was read after settling").isTrue()
+		assertThat(settled, name = "the engine state was read after settling").isTrue()
 		assertThat(peakAccelerationWhileDwelling, name = "acceleration reported while dwelling").isZero()
-		assertThat(motorPassivatedAfterSettling, name = "motor passivated after the halt").isTrue()
+		assertThat(enginePassivatedAfterSettling, name = "engine passivated after the halt").isTrue()
+	}
+
+	/**
+	 * Issue #1059: the propulsion process under test is the top-level [Engine], not an inner Motor.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("motorOf returns the top-level Engine process (Issue #1059)")
+	fun motorOfReturnsTopLevelEngine() {
+		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH)
+		val ctx = network.context.tracked()
+		var engineClassName: String? = null
+
+		runClearanceStopScenario(
+			ctx,
+			semaphores = listOf(network.semaphore),
+			endTime = 5L,
+			initialAspect = Signal.FREE,
+			samplePeriod = SAMPLE_PERIOD,
+			onSample = { train, _ ->
+				if (engineClassName == null) {
+					val engine = engineOf(train)
+					engineClassName = engine::class.qualifiedName
+					assertThat(motorOf(train)).isEqualTo(engine)
+				}
+			}
+		)
+
+		assertThat(engineClassName).isEqualTo("cz.vutbr.fit.interlockSim.sim.Engine")
 	}
 }

@@ -39,7 +39,7 @@ import cz.ksimulantenbande.kdisco.SimulationEvent as KDiscoSimulationEvent
 private val logger = KotlinLogging.logger {}
 
 /**
- * Issue #1014 — on a block too short for [Motor.onWarning]'s half-speed ramp, the train must
+ * Issue #1014 — on a block too short for [Engine.onWarning]'s half-speed ramp, the train must
  * still be **braked** to its stand, within the deceleration bound, and aimed at the clearance
  * stop line.
  *
@@ -68,7 +68,7 @@ private val logger = KotlinLogging.logger {}
  * - [aspectClearingDuringTheApproachIsRunThroughNotBrakedTo] — the braking-room exit must be
  *   armed only while the train really does stop short of a restrictive signal. Without that
  *   gate the train creeps up to a signal that has already cleared.
- * - [terminatingTheMotorMidApproachLeavesNoProcessParkedInTheWait] — the teardown contract of
+ * - [terminatingTheEngineMidApproachLeavesNoProcessParkedInTheWait] — the teardown contract of
  *   the new wait. Not a defect rung: it pins what the other three cannot reach.
  *
  * ## Fixture
@@ -129,7 +129,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 		const val CRAWL_SPEED_MPS = 0.5
 
 		/**
-		 * Deceleration allowed while the train coasts after its motor was torn down. A coasting
+		 * Deceleration allowed while the train coasts after its engine was torn down. A coasting
 		 * train holds its speed, so this is numerical noise only; a train that entered the
 		 * braking phase would show the full bound instead.
 		 */
@@ -254,11 +254,11 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * already crossed into phase 2: the aspect clears at 20 m, past the ~12.4 m braking-room
 	 * crossing, while `targetSpeed` is already latched at zero.
 	 *
-	 * [Motor.approachMargin]'s own KDoc promises "the approach behaves exactly as it did before
+	 * [Engine.approachMargin]'s own KDoc promises "the approach behaves exactly as it did before
 	 * this rule: the train runs on" for an aspect that clears mid-phase — but that promise was
 	 * built into the phase-1 wait condition only. Before the phase-2 fix, nothing re-opened
-	 * `targetSpeed`: [Motor.derivatives] re-reads [Train.semaphoreToStopShortOf] every step through
-	 * [Motor.brakingTargetDistance], so the aim point did snap back from the clearance line to the
+	 * `targetSpeed`: [Engine.derivatives] re-reads [Train.semaphoreToStopShortOf] every step through
+	 * [Engine.brakingTargetDistance], so the aim point did snap back from the clearance line to the
 	 * signal once the aspect cleared, but the train still braked all the way to that point because
 	 * `targetSpeed` stayed `0.0`. Pre-fix behaviour: the train crawled past the separator instead of
 	 * running through it.
@@ -312,7 +312,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 *
 	 * [Train.currentSpeedLimitMps] is deliberately aspect-independent (the physical track
 	 * constraint only, see its KDoc); [Train.Front.fireResume] and [Train.Front.accelerateToSignal]
-	 * both cap it with the live aspect's [Signal.allowedSpeed] before commanding the motor. Without
+	 * both cap it with the live aspect's [Signal.allowedSpeed] before commanding the engine. Without
 	 * the same cap here, the resumed run would target the track limit and pass the signal above the
 	 * speed it actually permits.
 	 */
@@ -362,8 +362,8 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * Rung 3c's counterpart during phase 1 instead of phase 2: the aspect clears to [Signal.S30]
 	 * at 6 m, the same early trigger rung 3 uses, well before the ~12.4 m braking-room crossing.
 	 *
-	 * [Motor.approachMargin]'s half-speed term is `targetSpeed / 2 - velocity`, where `targetSpeed`
-	 * is the `normalSpeed` [Train.Front.accelerateToSignal] passed to [Motor.onWarning] before the
+	 * [Engine.approachMargin]'s half-speed term is `targetSpeed / 2 - velocity`, where `targetSpeed`
+	 * is the `normalSpeed` [Train.Front.accelerateToSignal] passed to [Engine.onWarning] before the
 	 * aspect changed. [Train.semaphoreToStopShortOf] only distinguishes allowing from non-allowing —
 	 * S30 and [Signal.FREE] look identical to it — so phase 1 kept running toward half of the
 	 * *original* commanded speed, not the newly-capped one. On this fixture that is half of
@@ -415,7 +415,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * STOP → clear → STOP within one leg: the aspect that let rungs 3 to 3d run on turns
 	 * restrictive again before the separator (Copilot review, PR #1033, Train.kt:1688).
 	 *
-	 * Once the aspect cleared, [Motor.resumeAtAspectCap] waited only for the resumed speed and
+	 * Once the aspect cleared, [Engine.resumeAtAspectCap] waited only for the resumed speed and
 	 * stopped observing the signal. A return to STOP left `targetSpeed` positive, so the train kept
 	 * accelerating towards a signal at danger and the front gate snapped it to zero at the
 	 * clearance line — measured at 34.09 m/s, with 109 m of room where 49 m of braking would have
@@ -478,19 +478,19 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	/**
 	 * The teardown contract of the converted wait.
 	 *
-	 * `Motor.terminate()` sets a flag and wakes the process, and the process is expected to leave
+	 * `Engine.terminate()` sets a flag and wakes the process, and the process is expected to leave
 	 * its loop. For the approach that only works because the wake-up is a
 	 * `Process.reactivate`: kDisco absorbs a plain `Process.activate` aimed at a process parked in
 	 * a crossing wait whose guard is still positive, and at teardown the guard *is* positive —
-	 * `Train.stop()` has already zeroed the velocity, so [Motor.approachMargin] falls back to its
-	 * half-speed term. An absorbed wake-up would leave the motor parked for the rest of the run
+	 * `Train.stop()` has already zeroed the velocity, so [Engine.approachMargin] falls back to its
+	 * half-speed term. An absorbed wake-up would leave the engine parked for the rest of the run
 	 * with a live crossing notice, re-evaluated after every event and every integration step, on a
 	 * train whose reservations have already been released.
 	 *
 	 * **This rung is not a defect reproduction.** No route through `Train.actions()` reaches that
 	 * state today: the last leg of a journey is always commanded with `accelerateTo`, because an
 	 * exit `InOut`'s `outSemaphore` is a constant [Signal.FREE] and can never be restrictive, and
-	 * every abnormal exit cancels the motor first. The other three rungs therefore cannot reach
+	 * every abnormal exit cancels the engine first. The other three rungs therefore cannot reach
 	 * this path, which is exactly why it is pinned here instead: the guard is defensive, and a
 	 * defensive guard that nothing exercises is a guard that can be quietly broken.
 	 *
@@ -498,7 +498,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 *
 	 * **Engine note.** This rung only discriminates on a kDisco that re-parks a crossing wait on a
 	 * stray wake-up (kdisco#74). Measured by swapping `reactivate` back to `activate`: on that
-	 * engine the motor is not torn down at the forced instant but keeps governing the train for a
+	 * engine the engine is not torn down at the forced instant but keeps governing the train for a
 	 * further 2.2 simulated seconds before it finally leaves the loop, and this rung goes red on
 	 * the termination time. On the older engine an `activate` resumes a crossing-parked process
 	 * directly, so the wait ends either way and the rung passes with both spellings — correctly,
@@ -508,18 +508,18 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 */
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@DisplayName("terminating the motor mid-approach leaves no process parked in the wait")
-	fun terminatingTheMotorMidApproachLeavesNoProcessParkedInTheWait() {
+	@DisplayName("terminating the engine mid-approach leaves no process parked in the wait")
+	fun terminatingTheEngineMidApproachLeavesNoProcessParkedInTheWait() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
 		val ctx = network.context.tracked()
-		val motorEvents = mutableListOf<KDiscoSimulationEvent>()
-		var motor: Process? = null
+		val engineEvents = mutableListOf<KDiscoSimulationEvent>()
+		var engine: Process? = null
 		var terminatedAt = -1.0
 		var speedAtTerminate = -1.0
 
 		// Registered before the run: the context freezes its listeners once `run()` starts.
 		ctx.onSimulationEvent { event ->
-			if (event.process?.let { it::class.simpleName == "Motor" } == true) motorEvents += event
+			if (event.process?.let { it::class.simpleName == "Engine" } == true) engineEvents += event
 		}
 
 		val run =
@@ -531,35 +531,35 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 				trainLength = SHORT_TRAIN_LENGTH,
 				samplePeriod = SAMPLE_PERIOD,
 				onSample = { train, sample ->
-					if (motor == null && sample.velocity > TEARDOWN_TRIGGER_SPEED_MPS) {
+					if (engine == null && sample.velocity > TEARDOWN_TRIGGER_SPEED_MPS) {
 						val parked = motorOf(train)
 						// Phase 1 by construction: moving, and still well below the half-speed
-						// hand-over, so the motor is parked in the approach wait and not in the
+						// hand-over, so the engine is parked in the approach wait and not in the
 						// braking phase. State predicates are deliberately not used here — kDisco
 						// only grew `isWaiting()` in the fix this branch pins, so asserting on it
 						// would not compile against the engine CI resolves.
-						assertThat(parked.isTerminated(), name = "motor already terminated")
+						assertThat(parked.isTerminated(), name = "engine already terminated")
 							.isFalse()
-						motor = parked
+						engine = parked
 						terminatedAt = sample.time
 						speedAtTerminate = sample.velocity
 						parked.terminate()
 					}
 				}
 			)
-		val torn = requireNotNull(motor) { "the motor was never torn down — the trigger never fired" }
+		val torn = requireNotNull(engine) { "the engine was never torn down — the trigger never fired" }
 		logger.info {
 			"R4: terminated at t=$terminatedAt v=$speedAtTerminate, " +
-				"motor events=${motorEvents.map { "${it::class.simpleName}@${it.time}" }}"
+				"engine events=${engineEvents.map { "${it::class.simpleName}@${it.time}" }}"
 		}
 
-		// The wait really ended: an absorbed wake-up would leave the motor parked for the rest of
+		// The wait really ended: an absorbed wake-up would leave the engine parked for the rest of
 		// the run and it would never reach a terminated state.
-		assertThat(torn.isTerminated(), name = "motor terminated").isTrue()
+		assertThat(torn.isTerminated(), name = "engine terminated").isTrue()
 		val terminationEvent =
-			motorEvents.firstOrNull { it is KDiscoSimulationEvent.ProcessTerminated }
-		assertThat(terminationEvent, name = "motor termination event").isNotNull()
-		assertThat(requireNotNull(terminationEvent).time, name = "time the motor terminated")
+			engineEvents.firstOrNull { it is KDiscoSimulationEvent.ProcessTerminated }
+		assertThat(terminationEvent, name = "engine termination event").isNotNull()
+		assertThat(requireNotNull(terminationEvent).time, name = "time the engine terminated")
 			.isLessThanOrEqualTo(terminatedAt + SAMPLE_PERIOD)
 
 		// The braking phase was skipped, so the train coasts rather than braking: the `!terminate`

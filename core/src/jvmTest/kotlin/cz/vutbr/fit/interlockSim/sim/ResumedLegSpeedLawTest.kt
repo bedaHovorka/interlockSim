@@ -5,7 +5,7 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * The speed law of a leg the motor resumes by itself after a held restrictive signal clears.
+ * The speed law of a leg the engine resumes by itself after a held restrictive signal clears.
  */
 package cz.vutbr.fit.interlockSim.sim
 
@@ -35,7 +35,7 @@ import kotlin.math.sqrt
 private val logger = KotlinLogging.logger {}
 
 /**
- * The speed law of the leg `Motor.resumeAtAspectCap` starts when a held restrictive signal
+ * The speed law of the leg `Engine.resumeAtAspectCap` starts when a held restrictive signal
  * clears during the clearance-stop approach (Issue #1087 decision).
  *
  * Every other leg aims the law `a = (T² − v²) / (2s)` at the signal, so it reaches its target
@@ -79,7 +79,7 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 
 		/**
 		 * Stretch before the signal left out of the coast check: at the separator the front
-		 * re-commands the motor for the next leg.
+		 * re-commands the engine for the next leg.
 		 */
 		const val SEPARATOR_MARGIN_METERS = 1.0
 	}

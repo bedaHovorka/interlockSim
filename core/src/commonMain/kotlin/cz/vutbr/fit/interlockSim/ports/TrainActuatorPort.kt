@@ -28,7 +28,7 @@ package cz.vutbr.fit.interlockSim.ports
  * ## Design constraint
  *
  * Train agents are **algorithmic only** (no LLM, per the 2026-07-04 decision).  This
- * interface gives a deterministic algorithm a stable handle on the train motor without
+ * interface gives a deterministic algorithm a stable handle on the train engine without
  * coupling it to kDisco internals or simulation implementation details.  Keeping the
  * interface minimal ensures the algorithmic implementation stays easy to reason about.
  *
@@ -55,7 +55,7 @@ package cz.vutbr.fit.interlockSim.ports
  */
 interface TrainActuatorPort {
 	/**
-	 * Set the target speed for the train's motor.
+	 * Set the target speed for the train's engine.
 	 *
 	 * The simulation kernel accelerates or decelerates the train towards [speed] within
 	 * the physics constraints (maximum acceleration / minimum braking force defined by
@@ -74,7 +74,7 @@ interface TrainActuatorPort {
 	 * SP2a.3 act step for station dwell (Issue #554).  Schedules a *fire-and-forget* dwell
 	 * period of [dwellDurationSeconds] sim-seconds.  After this period the train is
 	 * released; the **next** [setTargetSpeed] call from the agent's act step restarts the
-	 * motor.
+	 * engine.
 	 *
 	 * ## Precondition: the train must already be stopped
 	 *

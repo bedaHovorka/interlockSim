@@ -5,7 +5,7 @@
  *
  * Railway Interlocking Simulator
  *
- * Unit tests for Train physics and motor acceleration
+ * Unit tests for Train physics and engine acceleration
  * Phase 1.1 test implementation - 2026-01-10
  */
 package cz.vutbr.fit.interlockSim.sim
@@ -27,28 +27,28 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Comprehensive unit tests for Train physics and Motor inner class.
+ * Comprehensive unit tests for Train physics and Engine class (ex-Motor).
  *
  * This test suite validates the physics calculations used in the train simulation,
- * particularly the Motor inner class which handles acceleration, deceleration, and
- * speed management. The Motor uses kinematic equations (v² = u² + 2as) to calculate
+ * particularly the Engine class (ex-Motor) which handles acceleration, deceleration, and
+ * speed management. The Engine uses kinematic equations (v² = u² + 2as) to calculate
  * proper acceleration/deceleration rates.
  *
  * Physics Foundation:
  * - Kinematic equation: v² = u² + 2as (where v=final velocity, u=initial velocity, a=acceleration, s=distance)
  * - Rearranged: a = (v² - u²) / (2s) = ((v-u)(v+u)) / (2s)
- * - Motor implementation: a = ((targetSpeed - velocity)(targetSpeed + velocity)) / (2s)
+ * - Engine implementation: a = ((targetSpeed - velocity)(targetSpeed + velocity)) / (2s)
  * - Acceleration limits: ±MAXIMAL_ACCELERATION (4.0 m/s²) and MINIMAL_DECELERATION (-3.0 m/s²)
  *
  * Test Strategy:
  * - Use MockSimulationContext for time control without kDisco framework
- * - Test Motor behavior indirectly through Train's public methods
+ * - Test Engine behavior indirectly through Train's public methods
  * - Validate kinematics against expected physics (tolerance: 1e-6 meters, 1e-9 seconds)
  * - Test edge cases: zero distance (SIM-001 mitigation), very small distances, negative distances
  * - Validate safety properties: speed limits, deceleration enforcement
  *
  * Limitations:
- * - Motor is a private inner class - tested indirectly via public Train methods
+ * - Engine is internal - tested indirectly via public Train methods
  * - Full acceleration simulation requires kDisco framework - tests focus on state verification
  * - Exact acceleration curves require integration tests with kDisco ProcessManager
  *
@@ -67,16 +67,16 @@ class TrainPhysicsTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Motor Acceleration Physics")
-	inner class MotorAccelerationTests {
+	@DisplayName("Engine Acceleration Physics")
+	inner class EngineAccelerationTests {
 		/**
-		 * Test: Motor accelerates train from standstill (v=0 to v=target)
+		 * Test: Engine accelerates train from standstill (v=0 to v=target)
 		 *
 		 * Railway context: Train must accelerate smoothly from platform departure to line speed.
-		 * This tests the most basic motor operation - starting from rest.
+		 * This tests the most basic engine operation - starting from rest.
 		 */
 		@Test
-		fun `motor accelerates train from standstill`() {
+		fun `engine accelerates train from standstill`() {
 			// Arrange
 			val timetable = createTimetableWithLength(100.0)
 			val train = Train(mockContext, timetable)
@@ -91,16 +91,16 @@ class TrainPhysicsTest : KoinTestBase() {
 		}
 
 		/**
-		 * Test: Motor applies deceleration to reduce speed toward target
+		 * Test: Engine applies deceleration to reduce speed toward target
 		 *
 		 * Railway context: Train must decelerate as it approaches a speed-restricted zone
 		 * or a red signal. This tests the opposing case - slowing from motion.
 		 *
-		 * Physics validation: When target speed < current velocity, motor should apply
+		 * Physics validation: When target speed < current velocity, engine should apply
 		 * negative acceleration (braking) to reduce velocity.
 		 */
 		@Test
-		fun `motor decelerates train to target speed`() {
+		fun `engine decelerates train to target speed`() {
 			// Arrange
 			val timetable = createTimetableWithLength(150.0)
 			val train = Train(mockContext, timetable)
@@ -124,13 +124,13 @@ class TrainPhysicsTest : KoinTestBase() {
 			assertThat(calculatedDeceleration)
 				.isCloseTo(-1.833333, 0.01) // Allow 0.01 m/s² tolerance
 
-			// Verify deceleration respects motor limits
+			// Verify deceleration respects engine limits
 			assertThat(Math.abs(calculatedDeceleration))
 				.isLessThanOrEqualTo(3.0) // Within MINIMAL_DECELERATION limit of 3.0 m/s²
 		}
 
 		/**
-		 * Test: Motor maintains constant speed when at target speed
+		 * Test: Engine maintains constant speed when at target speed
 		 *
 		 * Railway context: Train at cruising speed between signals should maintain
 		 * constant velocity. No acceleration or deceleration needed.
@@ -138,7 +138,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 * Physics validation: When current velocity = target velocity, acceleration = 0
 		 */
 		@Test
-		fun `motor maintains constant speed when at target`() {
+		fun `engine maintains constant speed when at target`() {
 			// Arrange
 			val timetable = createTimetableWithLength(100.0)
 			val train = Train(mockContext, timetable)
@@ -152,7 +152,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		}
 
 		/**
-		 * Test: Motor respects maximum acceleration limit (4.0 m/s²)
+		 * Test: Engine respects maximum acceleration limit (4.0 m/s²)
 		 *
 		 * Railway context: Locomotives have physical limits on acceleration due to
 		 * traction and adhesion. Exceeding these limits causes wheel slip.
@@ -161,7 +161,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 * is clamped to MAXIMAL_ACCELERATION = 4.0 m/s²
 		 */
 		@Test
-		fun `motor respects maximum acceleration limit`() {
+		fun `engine respects maximum acceleration limit`() {
 			// Arrange
 			val timetable = createTimetableWithLength(50.0)
 			val train = Train(mockContext, timetable)
@@ -169,13 +169,13 @@ class TrainPhysicsTest : KoinTestBase() {
 			// Set train at very low speed
 			setTrainVelocity(train, 5.0)
 
-			// Motor inner class clamps acceleration to MAXIMAL_ACCELERATION (4.0 m/s²)
+			// Engine clamps acceleration to MAXIMAL_ACCELERATION (4.0 m/s²)
 			// Verify train was created successfully (acceleration limiting happens during kDisco simulation)
 			assertThat(train).isNotNull()
 		}
 
 		/**
-		 * Test: Motor respects maximum deceleration limit (3.0 m/s²)
+		 * Test: Engine respects maximum deceleration limit (3.0 m/s²)
 		 *
 		 * Railway context: Braking deceleration is limited by friction and track conditions.
 		 * Emergency braking has higher limits, but normal braking is constrained.
@@ -183,7 +183,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 * Physics validation: Deceleration is clamped to MINIMAL_DECELERATION = -3.0 m/s²
 		 */
 		@Test
-		fun `motor respects maximum deceleration limit`() {
+		fun `engine respects maximum deceleration limit`() {
 			// Arrange
 			val timetable = createTimetableWithLength(100.0)
 			val train = Train(mockContext, timetable)
@@ -191,22 +191,22 @@ class TrainPhysicsTest : KoinTestBase() {
 			val highSpeed = 80.0 // 80 m/s = 288 km/h
 			setTrainVelocity(train, highSpeed)
 
-			// Motor applies deceleration clamped to -3.0 m/s² (MINIMAL_DECELERATION)
+			// Engine applies deceleration clamped to -3.0 m/s² (MINIMAL_DECELERATION)
 			// This ensures realistic braking characteristics
 			assertThat(train).isNotNull()
 		}
 
 		/**
-		 * Test: Motor handles zero target speed (emergency stop)
+		 * Test: Engine handles zero target speed (emergency stop)
 		 *
 		 * Railway context: When encountering a red signal or emergency stop,
 		 * target speed becomes 0 and maximum deceleration is applied.
 		 *
-		 * Physics validation: Motor should decelerate aggressively toward zero velocity
+		 * Physics validation: Engine should decelerate aggressively toward zero velocity
 		 * without violating acceleration limits.
 		 */
 		@Test
-		fun `motor handles zero target speed - emergency stop`() {
+		fun `engine handles zero target speed - emergency stop`() {
 			// Arrange
 			val timetable = createTimetableWithLength(200.0)
 			val train = Train(mockContext, timetable)
@@ -220,7 +220,7 @@ class TrainPhysicsTest : KoinTestBase() {
 
 			// Physics: When emergency stopping from 60 m/s to 0 over 400 meters:
 			// a = (v² - u²) / (2s) = (0² - 60²) / (2 * 400) = (0 - 3600) / 800 = -4.5 m/s²
-			// This exceeds the MINIMAL_DECELERATION limit of -3.0 m/s², so motor clamps to -3.0 m/s²
+			// This exceeds the MINIMAL_DECELERATION limit of -3.0 m/s², so engine clamps to -3.0 m/s²
 			val calculatedDeceleration =
 				(targetSpeed * targetSpeed - currentSpeed * currentSpeed) /
 					(2.0 * distanceToSemaphore)
@@ -229,9 +229,9 @@ class TrainPhysicsTest : KoinTestBase() {
 			assertThat(Math.abs(calculatedDeceleration))
 				.isCloseTo(4.5, 0.01)
 
-			// Motor would clamp this to maximum deceleration of 3.0 m/s²
-			val motorClampedDeceleration = Math.max(calculatedDeceleration, -3.0)
-			assertThat(motorClampedDeceleration)
+			// Engine would clamp this to maximum deceleration of 3.0 m/s²
+			val engineClampedDeceleration = Math.max(calculatedDeceleration, -3.0)
+			assertThat(engineClampedDeceleration)
 				.isCloseTo(-3.0, 0.01)
 
 			// Verify train reached expected deceleration capability
@@ -332,7 +332,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		/**
 		 * Test: Velocity updates correctly after movement step
 		 *
-		 * Railway context: Train's velocity changes according to motor acceleration/deceleration.
+		 * Railway context: Train's velocity changes according to engine acceleration/deceleration.
 		 *
 		 * Note: Actual velocity state changes during kDisco simulation via SimpleIntegration
 		 */
@@ -348,19 +348,19 @@ class TrainPhysicsTest : KoinTestBase() {
 				.isEqualTo(0.0)
 
 			// In actual simulation, velocity would be updated by SimpleIntegration
-			// based on acceleration from Motor derivatives()
+			// based on acceleration from Engine derivatives()
 		}
 	}
 
 	@Nested
 	@DisplayName("Edge Cases and Safety (SIM-001 Mitigation)")
-	inner class MotorEdgeCases {
+	inner class EngineEdgeCases {
 		/**
-		 * Test: Motor handles zero distance gracefully
+		 * Test: Engine handles zero distance gracefully
 		 *
 		 * Railway context: Edge case where train is already at path separator.
 		 *
-		 * SIM-001 Analysis: Division by zero in Motor.derivatives()
+		 * SIM-001 Analysis: Division by zero in Engine.derivatives()
 		 * Problem: a = ((targetSpeed - velocity)(targetSpeed + velocity)) / (2 * s)
 		 * When s → 0, formula approaches division by zero
 		 *
@@ -376,7 +376,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 * This test validates that zero distance is handled without crashing
 		 */
 		@Test
-		fun `motor handles zero distance gracefully`() {
+		fun `engine handles zero distance gracefully`() {
 			// Arrange
 			val timetable = createTimetableWithLength(50.0)
 			val train = Train(mockContext, timetable)
@@ -384,25 +384,25 @@ class TrainPhysicsTest : KoinTestBase() {
 			// Zero distance should not cause exception
 			assertThat(train).isNotNull()
 
-			// Verify guard condition exists in Motor.derivatives():
+			// Verify guard condition exists in Engine.derivatives():
 			// "if (s <= 0) { accelerate = false; return; }"
 			// This ensures no division by zero occurs
 		}
 
 		/**
-		 * Test: Motor handles very small distance values
+		 * Test: Engine handles very small distance values
 		 *
 		 * Railway context: Train very close to next semaphore may have small
 		 * but non-zero distances that could cause numerical instability.
 		 *
 		 * Physics validation: With very small s, acceleration magnitude can be very large.
-		 * Motor acceleration limits (±4 / -3 m/s²) prevent runaway values.
+		 * Engine acceleration limits (±4 / -3 m/s²) prevent runaway values.
 		 *
 		 * Example: a = (20² - 0) / (2 * 0.001) = 200,000 m/s²
-		 * But clamped to max 4.0 m/s² by Motor
+		 * But clamped to max 4.0 m/s² by Engine
 		 */
 		@Test
-		fun `motor handles very small distance values`() {
+		fun `engine handles very small distance values`() {
 			// Arrange
 			val timetable = createTimetableWithLength(0.1) // 0.1 meter train
 			val train = Train(mockContext, timetable)
@@ -412,11 +412,11 @@ class TrainPhysicsTest : KoinTestBase() {
 				.isCloseTo(0.1, 1e-6)
 
 			// Distance calculations with small values should not cause overflow
-			// due to motor acceleration limits (clamped to ±4 / -3 m/s²)
+			// due to engine acceleration limits (clamped to ±4 / -3 m/s²)
 		}
 
 		/**
-		 * Test: Motor handles negative distance (should not occur)
+		 * Test: Engine handles negative distance (should not occur)
 		 *
 		 * Railway context: Train has passed semaphore (negative distance ahead).
 		 * This should not happen in correct simulation flow but documents safe behavior.
@@ -424,7 +424,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 * SIM-001 Mitigation: Guard "if (s <= 0)" catches negative distances
 		 */
 		@Test
-		fun `motor handles negative distance - should not occur`() {
+		fun `engine handles negative distance - should not occur`() {
 			// Arrange
 			val timetable = createTimetableWithLength(100.0)
 			val train = Train(mockContext, timetable)
@@ -436,7 +436,7 @@ class TrainPhysicsTest : KoinTestBase() {
 
 			assertThat(train).isNotNull()
 
-			// Motor.derivatives() guard: if (s <= 0) { accelerate = false; return; }
+			// Engine.derivatives() guard: if (s <= 0) { accelerate = false; return; }
 			// This prevents any calculation with negative s
 		}
 	}
@@ -464,7 +464,7 @@ class TrainPhysicsTest : KoinTestBase() {
 			val trackMaxSpeed = 50.0 // m/s = 180 km/h
 
 			// Train velocity should not exceed track limit
-			// (enforced by Motor acceleration toward path.maxSpeed)
+			// (enforced by Engine acceleration toward path.maxSpeed)
 			assertThat(train.getVelocity())
 				.isLessThanOrEqualTo(trackMaxSpeed)
 		}
@@ -476,7 +476,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 * while still ahead of the restriction. This requires early deceleration.
 		 *
 		 * Physics validation:
-		 * Motor calculates deceleration distance: s = v² / (2a)
+		 * Engine calculates deceleration distance: s = v² / (2a)
 		 * With initial speed 30 m/s and deceleration 3 m/s²: s = 150 meters
 		 * Train must start braking 150 meters before restriction.
 		 */

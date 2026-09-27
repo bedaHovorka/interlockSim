@@ -382,7 +382,7 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 			// Dwell simulation:
 			// - kDisco's time() method tracks simulation clock
 			// - hold(duration) suspends process for specified time
-			// - When train must dwell, its Motor sets targetSpeed = 0
+			// - When train must dwell, its Engine sets targetSpeed = 0
 			// - Train decelerates over distance calculated by physics
 			// - Train remains stopped until dwell expires
 		}

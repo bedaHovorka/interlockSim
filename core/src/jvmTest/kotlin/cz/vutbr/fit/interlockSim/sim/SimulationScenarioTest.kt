@@ -276,7 +276,7 @@ class SimulationScenarioTest : KoinTestBase() {
 			assertThat(train.getVelocity()).isEqualTo(0.0)
 
 			// Train velocity should never exceed track speed limits (validated during simulation)
-			// This is enforced by Motor's accelerateTo() method
+			// This is enforced by Engine's accelerateTo() method
 		}
 
 		/**
@@ -301,7 +301,7 @@ class SimulationScenarioTest : KoinTestBase() {
 			// Railway physics constraints:
 			// - Maximum acceleration: 4 m/s² (adhesion limited)
 			// - Maximum deceleration: -3 m/s² (braking limited)
-			// These are validated during simulation by Motor.derivatives()
+			// These are validated during simulation by Engine.derivatives()
 		}
 	}
 
@@ -355,7 +355,7 @@ class SimulationScenarioTest : KoinTestBase() {
 			assertThat(train).isNotNull()
 
 			// Train.Front.accelerateToSignal() logic:
-			// - When signal is allowing, motor.accelerateTo(allowedSpeed)
+			// - When signal is allowing, engine.accelerateTo(allowedSpeed)
 			// - Train accelerates to min(pathMaxSpeed, signalSpeed, trackMaxSpeed)
 		}
 

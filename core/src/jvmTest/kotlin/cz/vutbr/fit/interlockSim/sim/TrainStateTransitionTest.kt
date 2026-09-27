@@ -46,7 +46,7 @@ import org.junit.jupiter.api.Test
  *
  * Limitations:
  * - Cannot fully test kDisco Process event scheduling without running simulation
- * - Motor acceleration physics tested in TrainPhysicsTest
+ * - Engine acceleration physics tested in TrainPhysicsTest
  * - Full path reservation tested in AbstractPathTest
  */
 class TrainStateTransitionTest : KoinTestBase() {
@@ -87,7 +87,7 @@ class TrainStateTransitionTest : KoinTestBase() {
 
 			// Act
 			// In discrete-event simulation, starting the train would typically be done
-			// by the InOutWorker. We simulate this by advancing time to allow motor to accelerate.
+			// by the InOutWorker. We simulate this by advancing time to allow engine to accelerate.
 			// The train.start() method initializes velocity and acceleration variables.
 			train.start()
 			mockContext.advanceTime(0.1)
@@ -108,7 +108,7 @@ class TrainStateTransitionTest : KoinTestBase() {
 			mockContext.advanceTime(0.5)
 
 			// Act
-			// When approaching a red signal, the motor would decelerate the train
+			// When approaching a red signal, the engine would decelerate the train
 			// We simulate this by stopping the train completely (simulating emergency braking)
 			train.stop()
 			mockContext.advanceTime(0.1)

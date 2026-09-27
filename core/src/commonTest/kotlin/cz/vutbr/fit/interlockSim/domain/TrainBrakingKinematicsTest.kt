@@ -5,7 +5,7 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * Issue #1056 — single service-braking law shared by Motor and ReactiveTrainDecider.
+ * Issue #1056 — single service-braking law shared by Engine and ReactiveTrainDecider.
  */
 package cz.vutbr.fit.interlockSim.domain
 
@@ -19,7 +19,7 @@ import kotlin.test.Test
  * (`brakingDistanceFrom` / `brakingSpeedWithin`).
  *
  * These two functions are the single source of the textbook braking law
- * `v² = 2 · |a| · s` over [MINIMAL_TRAIN_DECELERATION]. Train Motor and
+ * `v² = 2 · |a| · s` over [MINIMAL_TRAIN_DECELERATION]. The train's Engine and
  * ReactiveTrainDecider must both call them so a change to the deceleration
  * constant reaches every consumer (Issue #1056).
  *
