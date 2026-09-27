@@ -1630,6 +1630,54 @@ class DefaultPathReservationService(
 		}
 	}
 
+	/**
+	 * Resolve the track section leading forward from [start], read-only.
+	 *
+	 * 1. Convert [start] to its dynamic wrapper ([SimulationEnvironment.toDynamic] is idempotent).
+	 * 2. Pick the forward segment from the separator's orientation. SPECIAL CASE: an InOut connects
+	 *    bidirectionally at `direction()` ([InOut.getTrackConnectionDirection]); a semaphore's
+	 *    `direction()` is its forward travel direction.
+	 * 3. Look up the separator's grid location and the graph edge assigned to that segment.
+	 *
+	 * Shared by [reservePathToAnyNextSemaphore] (the oriented overload) and
+	 * [findNextReservationTarget] so the two cannot drift (Issue #957).
+	 *
+	 * @param caller name of the calling method, used as the log prefix
+	 * @return the dynamic start and the forward section, or `null` (logged as a warning) when
+	 *   [start] has no grid location or no track section in its forward direction
+	 */
+	private fun resolveForwardSection(
+		start: OrientedPathSeparator,
+		caller: String
+	): Pair<DynamicPathSeparator, TrackSection>? {
+		val dynamicStart = environment.toDynamic(start)
+		val forwardSegment =
+			when (start) {
+				is InOut -> start.getTrackConnectionDirection()
+				is DynamicInOut -> start.getTrackConnectionDirection()
+				else -> start.direction()
+			}
+		logger.debug {
+			"$caller: START=$start orientation=${start.getOrientation()} forwardSegment=$forwardSegment"
+		}
+
+		val location = environment.getRailWayNetGrid().getLocation(start)
+		if (location == null) {
+			logger.warn { "$caller: No location found for $start" }
+			return null
+		}
+		logger.debug { "$caller: Location=$location" }
+
+		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
+		if (next == null) {
+			logger.warn {
+				"$caller: No outgoing track section from $start at $location in direction $forwardSegment"
+			}
+			return null
+		}
+		return dynamicStart to next
+	}
+
 	override fun reservePathToAnyNextSemaphore(
 		trainId: String,
 		start: OrientedPathSeparator
@@ -1638,43 +1686,10 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Finding path from oriented separator $start for $trainId"
 		}
 
-		// Step 1: Convert to dynamic if needed (toDynamic is idempotent)
-		val dynamicStart = environment.toDynamic(start)
-
-		// Step 2: Get next track section based on separator's orientation
-		// For oriented separators, use the direction() method to get the forward segment
-		// SPECIAL CASE: InOut connects bidirectionally at direction() (not anti-direction)
-		val forwardSegment =
-			when (start) {
-				is InOut -> start.getTrackConnectionDirection() // Track connection at direction()
-				is DynamicInOut -> start.getTrackConnectionDirection() // Track connection at direction()
-				else -> start.direction() // Semaphores: direction is forward travel
-			}
-		logger.debug {
-			"reservePathToAnyNextSemaphore: START=$start orientation=${start.getOrientation()} forwardSegment=$forwardSegment"
-		}
-
-		// Step 3: Find the track section connected to the forward segment
-		// Use interface methods (added to SimulationEnvironment for navigation services)
-		val location = environment.getRailWayNetGrid().getLocation(start)
-		if (location == null) {
-			logger.warn {
-				"reservePathToAnyNextSemaphore: No location found for $start"
-			}
-			return PathReservationService.ReservationResult.NoPathExists
-		}
-
-		logger.info {
-			"reservePathToAnyNextSemaphore: Location=$location"
-		}
-
-		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
-		if (next == null) {
-			logger.warn {
-				"reservePathToAnyNextSemaphore: No outgoing track section from $start at $location in direction $forwardSegment"
-			}
-			return PathReservationService.ReservationResult.NoPathExists
-		}
+		// Steps 1–3: resolve the forward track section from the separator's orientation
+		val (dynamicStart, next) =
+			resolveForwardSection(start, "reservePathToAnyNextSemaphore")
+				?: return PathReservationService.ReservationResult.NoPathExists
 
 		logger.info {
 			"reservePathToAnyNextSemaphore: Selected next track section: $next"
@@ -1696,26 +1711,7 @@ class DefaultPathReservationService(
 				(ownerTrainId?.let { ", blocks owned by $it count as free (Issue #1060)" } ?: "")
 		}
 
-		// Mirrors reservePathToAnyNextSemaphore(OrientedPathSeparator) steps 1–3, read-only.
-		val dynamicStart = environment.toDynamic(start)
-		val forwardSegment =
-			when (start) {
-				is InOut -> start.getTrackConnectionDirection()
-				is DynamicInOut -> start.getTrackConnectionDirection()
-				else -> start.direction()
-			}
-		val location = environment.getRailWayNetGrid().getLocation(start)
-		if (location == null) {
-			logger.warn { "findNextReservationTarget: No location found for $start" }
-			return null
-		}
-		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
-		if (next == null) {
-			logger.warn {
-				"findNextReservationTarget: No outgoing track section from $start at $location in direction $forwardSegment"
-			}
-			return null
-		}
+		val (dynamicStart, next) = resolveForwardSection(start, "findNextReservationTarget") ?: return null
 
 		val targets = findNextSemaphoresVia(dynamicStart, next)
 		if (targets.isEmpty()) {
