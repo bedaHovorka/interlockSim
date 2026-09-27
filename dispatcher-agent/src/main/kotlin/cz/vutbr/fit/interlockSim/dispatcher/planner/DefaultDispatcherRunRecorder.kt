@@ -70,7 +70,8 @@ import java.util.concurrent.atomic.AtomicReference
 class DefaultDispatcherRunRecorder(
 	override val runId: String,
 	private val arm: DispatcherArm,
-	private val params: RunParameters
+	private val params: RunParameters,
+	private val circuitBreaker: LlmCircuitBreaker? = null
 ) : DispatcherRunRecorder {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -202,7 +203,12 @@ class DefaultDispatcherRunRecorder(
 				"maxConcurrentTrains=${formatFigure(railway.maxConcurrentTrains)} " +
 				"blockTransitions=${formatFigure(railway.blockTransitions)} " +
 				"conflicts=${formatFigure(railway.conflicts)} " +
-				"failedReservations=${formatFigure(railway.failedReservations)}"
+				"failedReservations=${formatFigure(railway.failedReservations)} " +
+				// Issue #1074: the breaker figures, so one run is readable without opening the
+				// JSON — same reasoning as the railway figures above (#834).
+				"circuitBreakerState=${snap.circuitBreakerState ?: "n/a"} " +
+				"circuitBreakerTotalSkips=${formatFigure(snap.circuitBreakerTotalSkips)} " +
+				"circuitBreakerOpenCount=${formatFigure(snap.circuitBreakerOpenCount)}"
 		}
 		// Issue #834 review finding #6: llmSuccessRate above is reclassified in #834 (idle ticks
 		// moved RULE_FALLBACK -> LLM_NO_OP, and REVISED's cap-full no_op turns former fallback ticks
@@ -279,6 +285,11 @@ class DefaultDispatcherRunRecorder(
 			(byAuthor[ActionAuthor.RULE_FALLBACK.name] ?: 0L) == 0L &&
 				(byAuthor[ActionAuthor.SAFETY_NET.name] ?: 0L) == 0L
 
+		// One atomic breaker reading (Issue #1074, PR #1097 review): three independent volatile
+		// reads could persist `OPEN` with the pre-transition `openCount` if a `plan()` thread is
+		// mid-`recordFailure` while this snapshot is built.
+		val breaker = circuitBreaker?.metricsSnapshot()
+
 		return DispatcherRunSnapshot(
 			runId = runId,
 			arm = arm,
@@ -307,7 +318,10 @@ class DefaultDispatcherRunRecorder(
 			c7Clean = c7Clean,
 			completedNaturally = endCause == RunEndCause.NATURAL_COMPLETION,
 			endCause = endCause,
-			railwayOutcome = railwayOutcome.get()
+			railwayOutcome = railwayOutcome.get(),
+			circuitBreakerState = breaker?.state,
+			circuitBreakerTotalSkips = breaker?.totalSkips,
+			circuitBreakerOpenCount = breaker?.openCount
 		)
 	}
 

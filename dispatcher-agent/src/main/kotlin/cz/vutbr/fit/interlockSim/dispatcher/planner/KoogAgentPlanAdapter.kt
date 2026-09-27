@@ -180,7 +180,7 @@ class KoogAgentPlanAdapter(
 	private val commandQueue: ActuatorCommandQueue,
 	private val sinkHolder: SinkHolder,
 	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-	private val circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
+	val circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}

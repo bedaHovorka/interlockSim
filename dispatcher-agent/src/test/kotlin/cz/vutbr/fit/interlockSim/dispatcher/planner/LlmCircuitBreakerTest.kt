@@ -127,6 +127,37 @@ class LlmCircuitBreakerTest {
 	}
 
 	@Test
+	fun `metricsSnapshot returns all four counters in one reading`() {
+		// Issue #1074, PR #1097 review: the terminal run JSON persists exactly this reading, so it
+		// must carry every counter — the recorder must not take three separate volatile reads that
+		// a concurrent plan() could tear apart (`OPEN` with the pre-transition `openCount`).
+		val breaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
+
+		breaker.recordFailure(simTime = 0.0)
+
+		var metrics = breaker.metricsSnapshot()
+		assertThat(metrics.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+		assertThat(metrics.consecutiveFailures).isEqualTo(1)
+		assertThat(metrics.totalSkips).isEqualTo(0L)
+		assertThat(metrics.openCount).isEqualTo(1L)
+
+		breaker.shouldAttempt(simTime = 10.0)
+
+		metrics = breaker.metricsSnapshot()
+		assertThat(metrics.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
+		assertThat(metrics.totalSkips).isEqualTo(1L)
+
+		breaker.shouldAttempt(simTime = 60.0)
+		breaker.recordSuccess()
+
+		metrics = breaker.metricsSnapshot()
+		assertThat(metrics.state).isEqualTo(LlmCircuitBreaker.State.CLOSED)
+		assertThat(metrics.consecutiveFailures).isEqualTo(0)
+		assertThat(metrics.totalSkips).isEqualTo(1L)
+		assertThat(metrics.openCount).isEqualTo(1L)
+	}
+
+	@Test
 	fun `rejects a non-positive failureThreshold`() {
 		assertFailure { LlmCircuitBreaker(failureThreshold = 0) }
 			.isInstanceOf<IllegalArgumentException>()
