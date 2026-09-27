@@ -10,6 +10,9 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Service for creating and managing Koog-based dispatch agents (SP1 skeleton, Issue #547).
@@ -133,7 +136,7 @@ fun interface KoogDispatchAgent {
 	 * here — it outlives individual agents so a second run in this same JVM can still infer.
 	 */
 	suspend fun close() {
-		// Default no-op for stubs and mocks.
+		logger.trace { "KoogDispatchAgent.close(): default no-op (stub/mock implementation)" }
 	}
 }
 
