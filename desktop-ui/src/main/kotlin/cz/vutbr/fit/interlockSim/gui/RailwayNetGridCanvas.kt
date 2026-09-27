@@ -446,6 +446,25 @@ class RailwayNetGridCanvas :
 	}
 
 	/**
+	 * Capture the final simulation state and pause the animation loop (Issue #1072, #1096 review).
+	 *
+	 * Same pause-only contract as [pauseAnimation] (the controller and the last painted frame
+	 * are kept), but first runs one state capture so the final frame reflects the end-of-run
+	 * state instead of lagging behind it — [AnimationController.stop] stops the repaint timer,
+	 * so without this capture the last painted frame is the second-to-last state.
+	 *
+	 * **Idempotent. Must be called from EDT.**
+	 *
+	 * @since Issue #1096 review round
+	 */
+	fun captureFinalFrameAndPause() {
+		require(SwingUtilities.isEventDispatchThread()) {
+			"captureFinalFrameAndPause must be called from EDT"
+		}
+		animationController?.captureFinalFrameAndPause()
+	}
+
+	/**
 	 * Ensure the animation controller is running when a simulation context is still attached.
 	 *
 	 * No-op when there is no controller (editing mode / not yet set). Restarts a controller

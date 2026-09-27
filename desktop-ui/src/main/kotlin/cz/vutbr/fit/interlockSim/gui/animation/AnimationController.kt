@@ -275,6 +275,28 @@ class AnimationController(
 	}
 
 	/**
+	 * Capture the final simulation state, stop the animation loop, and repaint once so the
+	 * last painted frame reflects the run's final state (Issue #1072, #1096 review).
+	 *
+	 * The capture must run BEFORE [stop] — [stop] clears [semaphoreCache]/[switchCache], and a
+	 * capture over empty caches paints an empty frame. The explicit [canvas] repaint is needed
+	 * because [stop] also stops the 30 FPS repaint timer that would otherwise draw the fresh
+	 * state. Idempotent no-op when the controller is not running.
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun captureFinalFrameAndPause() {
+		require(SwingUtilities.isEventDispatchThread()) {
+			"AnimationController.captureFinalFrameAndPause() must be called from EDT"
+		}
+		if (!isRunning) return
+
+		captureAndUpdateState()
+		stop()
+		canvas.repaint()
+	}
+
+	/**
 	 * ContextPropertyChangeListener implementation for simulation state updates.
 	 *
 	 * **Called on kDisco simulation thread** (not EDT!).
