@@ -73,6 +73,9 @@ class TrainHeadingResolver(
 	/** Location at which a candidate 180° flip was first observed, per train. */
 	private val pendingFlipLocations = mutableMapOf<Int, PointF>()
 
+	/** The [activeTrainNumbers] set passed to the previous [retainTrains] call, if any. */
+	private var previousActiveTrainNumbers: Set<Int>? = null
+
 	/**
 	 * Resolve the heading to render for a train this frame.
 	 *
@@ -101,6 +104,10 @@ class TrainHeadingResolver(
 			if (authoritative != null) {
 				resolveAuthoritativeHeading(trainNumber, authoritative, previousHeading, currentLocation)
 			} else {
+				// No authoritative heading this frame: any pending flip was tracked against an
+				// authoritative reading, so it no longer applies and would otherwise linger stale
+				// across the null-authoritative window (Issue #790).
+				pendingFlipLocations.remove(trainNumber)
 				previousLocation?.let { inferHeading(it, currentLocation) }
 					?: previousHeading
 					?: defaultHeading
@@ -121,9 +128,14 @@ class TrainHeadingResolver(
 	 * @param activeTrainNumbers Train numbers present in the current animation state
 	 */
 	fun retainTrains(activeTrainNumbers: Set<Int>) {
+		if (activeTrainNumbers == previousActiveTrainNumbers) {
+			// Same train set as last frame: the three retainAll calls below would all be no-ops.
+			return
+		}
 		previousLocations.keys.retainAll(activeTrainNumbers)
 		previousHeadings.keys.retainAll(activeTrainNumbers)
 		pendingFlipLocations.keys.retainAll(activeTrainNumbers)
+		previousActiveTrainNumbers = activeTrainNumbers
 	}
 
 	/**
