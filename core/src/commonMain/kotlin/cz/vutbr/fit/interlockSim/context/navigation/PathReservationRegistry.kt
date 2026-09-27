@@ -206,6 +206,23 @@ class PathReservationRegistry(
 	private val switchToTrain = mutableMapOf<DynamicRailSwitch, String>()
 
 	/**
+	 * Switches registered as FLANK protection (Issue #1076 review).
+	 *
+	 * A facade `lockRouteAtomic` grant locks `route.flank` switches that protect a route the
+	 * switch is NOT adjacent to (see `docs/INTERLOCKING_SCOPE_LIMITATIONS.md` §B2). The
+	 * "owner holds no block bounded by it" staleness rule of [isStaleSwitchOwnership] is
+	 * unsound for such a switch -- a live flank grant has no adjacent block by definition --
+	 * so a marked switch is never stale while its registration stands. The marker is cleared
+	 * together with the ownership ([unregisterSwitch], [unregisterSwitches], [clear]). It is
+	 * per switch, not per route: if the same train later also registers the switch as a running
+	 * switch, the marker stays until release -- the registry cannot tell whether the earlier
+	 * flank route is still live, so it keeps the conservative answer.
+	 *
+	 * @since Issue #1076
+	 */
+	private val flankProtectedSwitches = mutableSetOf<DynamicRailSwitch>()
+
+	/**
 	 * Mapping: Train ID → PathInfo metadata
 	 *
 	 * Stores complete path information including entry directions for each train.
@@ -567,7 +584,8 @@ class PathReservationRegistry(
 	 *
 	 * ## Preconditions
 	 *
-	 * - No switch in the list should be already owned by a different train
+	 * - No switch in the list may be already owned by a different train — violating this
+	 *   throws (see below) instead of silently overwriting `switchToTrain` (Issue #1076)
 	 * - Caller is responsible for validating switches are not locked by another train
 	 *
 	 * ## State Changes
@@ -577,14 +595,34 @@ class PathReservationRegistry(
 	 * - Sets switchToTrain[switch] = trainId
 	 * - Locks the switch
 	 *
+	 * ## Foreign ownership is rejected atomically (Issue #1076)
+	 *
+	 * A plain overwrite of `switchToTrain[switch]` used to silently steal the entry from
+	 * its current owner while that owner's `trainToSwitches` list still contained the
+	 * switch — the two maps then disagreed, and the OLD owner's release path could later
+	 * unlock a switch the NEW owner was actively using. All switches are therefore
+	 * pre-checked BEFORE any mutation: if ANY switch is registered to a different train,
+	 * an [IllegalStateException] is thrown and the registry is left completely untouched.
+	 * Callers must release stale foreign ownership first (e.g. via [unregisterSwitch]) or
+	 * refuse the route as transient contention.
+	 *
 	 * @param trainId The train identifier
 	 * @param switches List of switches to register as reserved
+	 * @throws IllegalStateException if any switch is already registered to a different
+	 *   train; no registry state is mutated in that case
 	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
 	 */
 	fun registerSwitches(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
 	) {
+		switches.forEach { switch ->
+			check(!isOwnedByOtherTrain(switch, trainId)) {
+				"registerSwitches: Switch ${switch.staticRef.getName()} is already registered to " +
+					"'${switchToTrain[switch]}' and cannot be registered to '$trainId' (Issue #1076); " +
+					"nothing was registered"
+			}
+		}
 		val switchList = trainToSwitches.getOrPut(trainId) { mutableListOf() }
 		switches.forEach { switch ->
 			if (switch !in switchList) {
@@ -601,6 +639,65 @@ class PathReservationRegistry(
 		logger.info {
 			"registerSwitches: Registered ${switches.size} switches for '$trainId'"
 		}
+	}
+
+	/**
+	 * Register switches as FLANK protection for a train (Issue #1076 review).
+	 *
+	 * [registerSwitches] (same atomic foreign-owner rejection), then marks the switches as
+	 * flank-protected -- see [flankProtectedSwitches] for why.
+	 *
+	 * @throws IllegalStateException if any switch is already registered to a different
+	 *   train; no registry state is mutated in that case
+	 * @since Issue #1076
+	 */
+	fun registerFlankSwitches(
+		trainId: String,
+		switches: List<DynamicRailSwitch>
+	) {
+		if (switches.isEmpty()) return
+		registerSwitches(trainId, switches)
+		flankProtectedSwitches += switches
+	}
+
+	/**
+	 * Whether [switch] is currently registered as flank protection -- see
+	 * [flankProtectedSwitches].
+	 *
+	 * @since Issue #1076
+	 */
+	fun isFlankProtected(switch: DynamicRailSwitch): Boolean = switch in flankProtectedSwitches
+
+	/**
+	 * Whether [switch] is registered to a train OTHER than [trainId] -- the ownership a
+	 * registration for [trainId] must never overwrite (Issue #1076).
+	 *
+	 * @since Issue #1076
+	 */
+	fun isOwnedByOtherTrain(
+		switch: DynamicRailSwitch,
+		trainId: String
+	): Boolean {
+		val owner = switchToTrain[switch]
+		return owner != null && owner != trainId
+	}
+
+	/**
+	 * Whether [switch]'s ownership protects no live route any more, so it may be released.
+	 *
+	 * Stale iff the switch has an owner, is not flank-protected ([flankProtectedSwitches]), and
+	 * the owner holds no block bounded by it. A route never ends AT a switch
+	 * ([isValidPathInfoEnd], Issue #938), so any switch on a live route has at least one held
+	 * adjacent block, and a train straddling the switch holds both. "No held adjacent block"
+	 * therefore means no train has authority over any track the switch connects, and
+	 * releasing it cannot move a switch under a train or contradict a granted route.
+	 *
+	 * @since Issue #1076 (the #1065 reclamation predicate, moved here with its flank exception)
+	 */
+	fun isStaleSwitchOwnership(switch: DynamicRailSwitch): Boolean {
+		val owner = switchToTrain[switch] ?: return false
+		if (switch in flankProtectedSwitches) return false
+		return trainToBlocks[owner]?.none { switch in it.ends() } ?: true
 	}
 
 	/**
@@ -626,6 +723,7 @@ class PathReservationRegistry(
 		switches.forEach { switch ->
 			switch.unlock()
 			switchToTrain.remove(switch)
+			flankProtectedSwitches.remove(switch)
 			logger.info {
 				"unregisterSwitches: Unlocked switch ${switch.hashCode()} for '$trainId', locked=${switch.locked}"
 			}
@@ -675,6 +773,7 @@ class PathReservationRegistry(
 		}
 		switch.unlock()
 		switchToTrain.remove(switch)
+		flankProtectedSwitches.remove(switch)
 		trainToSwitches[trainId]?.remove(switch)
 		if (trainToSwitches[trainId]?.isEmpty() == true) {
 			trainToSwitches.remove(trainId)
@@ -1455,7 +1554,8 @@ class PathReservationRegistry(
 	/**
 	 * Clear all registrations.
 	 *
-	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-train mappings.
+	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-train mappings,
+	 * and the flank-protection markers that belong to those switch registrations.
 	 * Used for simulation reset or cleanup.
 	 */
 	fun clear() {
@@ -1463,6 +1563,7 @@ class PathReservationRegistry(
 		blockToTrain.clear()
 		trainToSwitches.clear()
 		switchToTrain.clear()
+		flankProtectedSwitches.clear()
 		trainToPathInfo.clear()
 	}
 

@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
@@ -35,11 +36,14 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.koin.test.inject
 
 /**
@@ -318,6 +322,106 @@ class PathReservationRegistryTest : KoinTestBase() {
 			// Assert
 			assertThat(registry.trainCount()).isEqualTo(0)
 			assertThat(registry.blockCount()).isEqualTo(0)
+		}
+	}
+
+	@Nested
+	inner class SwitchOwnership {
+		private fun switches(): List<DynamicRailSwitch> = simulationContext.cellsOfType<DynamicRailSwitch>()
+
+		@Test
+		fun `registerSwitches throws when a switch is already registered to a different train`() {
+			// Arrange - Issue #1076: a plain overwrite used to silently steal the entry.
+			val switch = switches().first()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act + Assert - the foreign registration is rejected...
+			assertFailure { registry.registerSwitches("train2", listOf(switch)) }
+				.isInstanceOf(IllegalStateException::class)
+
+			// ...and BOTH maps still agree on the original owner, with the lock intact.
+			assertThat(registry.getSwitchOwner(switch)).isEqualTo("train1")
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
+			assertThat(registry.getSwitches("train2")).isEmpty()
+			assertThat(switch.locked).isTrue()
+		}
+
+		@ParameterizedTest(name = "flank = {0}")
+		@ValueSource(booleans = [false, true])
+		fun `a mixed list is rejected atomically without partial registration`(flank: Boolean) {
+			// Arrange - train1 owns only the SECOND switch of train2's list.
+			val (free, owned) = switches().take(2)
+			registry.registerSwitches("train1", listOf(owned))
+
+			// Act + Assert - the whole registration fails, for plain and flank registration alike...
+			assertFailure {
+				if (flank) {
+					registry.registerFlankSwitches("train2", listOf(free, owned))
+				} else {
+					registry.registerSwitches("train2", listOf(free, owned))
+				}
+			}.isInstanceOf(IllegalStateException::class)
+
+			// ...and the free switch was NOT registered, locked, or marked (pre-check before mutation).
+			assertThat(registry.getSwitchOwner(free)).isNull()
+			assertThat(free.locked).isFalse()
+			assertThat(registry.isFlankProtected(free)).isFalse()
+			assertThat(registry.getSwitches("train2")).isEmpty()
+			assertThat(registry.getSwitchOwner(owned)).isEqualTo("train1")
+		}
+
+		@Test
+		fun `registerSwitches re-registration by the same train stays a no-op`() {
+			val switch = switches().first()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Re-registering the train's own switch (route extension) must not throw.
+			registry.registerSwitches("train1", listOf(switch))
+
+			assertThat(registry.getSwitchOwner(switch)).isEqualTo("train1")
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
+			assertThat(switch.locked).isTrue()
+		}
+
+		@Test
+		fun `flank protection marker follows the registration lifecycle`() {
+			val switch = switches().first()
+			registry.registerFlankSwitches("train1", listOf(switch))
+
+			// Registered as flank: owned, locked, and marked for reclamation to skip it.
+			assertThat(registry.getSwitchOwner(switch)).isEqualTo("train1")
+			assertThat(switch.locked).isTrue()
+			assertThat(registry.isFlankProtected(switch)).isTrue()
+
+			// Release clears the marker together with the ownership...
+			assertThat(registry.unregisterSwitch("train1", switch)).isTrue()
+			assertThat(registry.isFlankProtected(switch)).isFalse()
+			assertThat(registry.getSwitchOwner(switch)).isNull()
+
+			// ...and a later NORMAL registration does not restore it (the marker is
+			// purpose-specific, not a property of the switch).
+			registry.registerSwitches("train1", listOf(switch))
+			assertThat(registry.isFlankProtected(switch)).isFalse()
+		}
+
+		@Test
+		fun `unregisterSwitches clears the flank protection marker`() {
+			val (flankSwitch, plainSwitch) = switches().take(2)
+			registry.registerFlankSwitches("train1", listOf(flankSwitch))
+			registry.registerSwitches("train1", listOf(plainSwitch))
+
+			registry.unregisterSwitches("train1")
+
+			assertThat(registry.isFlankProtected(flankSwitch)).isFalse()
+			assertThat(registry.getSwitchOwner(flankSwitch)).isNull()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+		}
+
+		@Test
+		fun `registerFlankSwitches on an empty list registers nothing`() {
+			registry.registerFlankSwitches("train1", emptyList())
+
+			assertThat(registry.getSwitches("train1")).isEmpty()
 		}
 	}
 

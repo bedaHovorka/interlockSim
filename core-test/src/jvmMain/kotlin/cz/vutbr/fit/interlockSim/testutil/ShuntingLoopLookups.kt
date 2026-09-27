@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 
 /**
@@ -67,3 +68,23 @@ fun SimulationContext.separatorAt(
 			?: throw IllegalStateException("Grid position ($x, $y) holds no path separator (was: $cell)")
 	return toDynamic(separator)
 }
+
+/**
+ * The blocks of each topological path from [start] to [target]: one list per path, each in path
+ * order without repeats. Three navigation tests each declared a private copy of this chain
+ * (Issue #1076 review).
+ */
+fun SimulationContext.topologicalPathBlocks(
+	start: DynamicPathSeparator,
+	target: DynamicPathSeparator
+): List<List<DynamicTrackBlock>> =
+	getRoutingServices()
+		.getTopologyNavigator()
+		.findAllTopologicalPaths(start, target)
+		.map { path -> path.map { it.getTrackBlock() }.filterIsInstance<DynamicTrackBlock>().distinct() }
+
+/** Every block of the FIRST topological path from [start] to [target], in path order. */
+fun SimulationContext.routeBlocksOf(
+	start: DynamicPathSeparator,
+	target: DynamicPathSeparator
+): List<DynamicTrackBlock> = topologicalPathBlocks(start, target).first()

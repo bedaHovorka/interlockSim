@@ -486,7 +486,18 @@ class DefaultInterlockingFacade(
 		route: TrainRoute
 	): RouteLockOutcome {
 		val blocks = route.blocks.map { blockByName.getValue(it.name) }
-		val switches = (route.running + route.flank).map { switchByName.getValue(it.switch.name) }
+		val runningSwitches = route.running.map { switchByName.getValue(it.switch.name) }
+		// A switch listed as BOTH running and flank is already protected by its on-route
+		// registration (the owner holds an adjacent block, as long as `route.blocks` bounds its
+		// running switches -- TrainRoute does not enforce that), so only PURE flank switches are
+		// registered as flank-protected (Issue #1076 review) -- the flank marker must not
+		// exempt an on-route registration from staleness reclamation.
+		val flankSwitches =
+			route.flank
+				.map { switchByName.getValue(it.switch.name) }
+				.filter { it !in runningSwitches }
+				.distinct()
+		val switches = runningSwitches + flankSwitches
 
 		val fromSeparator = if (blocks.isEmpty()) null else semaphoreByName[route.from.name]
 		if (blocks.isNotEmpty() && fromSeparator == null) {
@@ -497,7 +508,7 @@ class DefaultInterlockingFacade(
 			registerBlocks(trainId, blocks, fromSeparator)?.let { return RouteLockOutcome.Denied(it) }
 		}
 
-		lockSwitches(trainId, switches)?.let { switchDenial ->
+		lockSwitches(trainId, runningSwitches, flankSwitches)?.let { switchDenial ->
 			if (fromSeparator != null) {
 				rollbackBlocks(trainId, reserved = blocks, registered = blocks, fromSeparator = fromSeparator)
 			}
@@ -601,15 +612,17 @@ class DefaultInterlockingFacade(
 	}
 
 	/**
-	 * Locks [switches] for [trainId] via [PathReservationRegistry.registerSwitches], after
-	 * verifying none are already locked by a different train.
+	 * Locks [running] and [flank] switches for [trainId] via
+	 * [PathReservationRegistry.registerSwitches] / [PathReservationRegistry.registerFlankSwitches],
+	 * after verifying none are already locked by a different train.
 	 *
 	 * @return null on success, otherwise a [ConditionDenial] (transient contention — the switch
-	 *   is locked by another train; nothing left locked).
+	 *   is locked or registry-reserved by another train; nothing left locked).
 	 */
 	private fun lockSwitches(
 		trainId: String,
-		switches: List<DynamicRailSwitch>
+		running: List<DynamicRailSwitch>,
+		flank: List<DynamicRailSwitch>
 	): ConditionDenial? {
 		// Authoritative switch lock-conflict check (M6). Condition 2 above only verifies position;
 		// lock-ownership is checked here, immediately before registration. This is the single
@@ -617,13 +630,21 @@ class DefaultInterlockingFacade(
 		// already reserved when this fails. The check is defence-in-depth: in a single-threaded
 		// kDisco context a switch that passed condition 2 will not change between here and
 		// [registerSwitches], but under a future concurrent model the re-check guards the TOCTOU
-		// window between the position check and the lock.
-		for (switch in switches) {
-			if (switch.locked && registry.getSwitchOwner(switch) != trainId) {
-				return ConditionDenial("Switch ${switch.name} is locked", retryable = true)
+		// window between the position check and the lock. Registry ownership by another train is
+		// denied regardless of the physical lock state (Issue #1076): [registerSwitches] now
+		// throws on a foreign owner, so an owned-but-unlocked switch must be refused here as
+		// ordinary retryable contention instead of escaping as an exception.
+		for (switch in running + flank) {
+			val lockedByOther = switch.locked && registry.getSwitchOwner(switch) != trainId
+			if (lockedByOther || registry.isOwnedByOtherTrain(switch, trainId)) {
+				return ConditionDenial(
+					"Switch ${switch.name} is locked or reserved by another train",
+					retryable = true
+				)
 			}
 		}
-		registry.registerSwitches(trainId, switches)
+		registry.registerSwitches(trainId, running)
+		registry.registerFlankSwitches(trainId, flank)
 		return null
 	}
 

@@ -22,10 +22,9 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.passAndRelease
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -155,7 +154,7 @@ class Issue1065RegressionTest : KoinTestBase() {
 		// still holds the OTHER block touching vA, so vA's lock must survive this first
 		// release.
 		val firstNearVA = blocksNearVA[0]
-		assertThat(passAndRelease(trainId1, firstNearVA)).isTrue()
+		assertThat(service.passAndRelease(trainId1, firstNearVA)).isTrue()
 		// vA must stay locked -- train 1 still holds the other block adjacent to it.
 		assertThat(switchVA.locked).isTrue()
 
@@ -164,7 +163,7 @@ class Issue1065RegressionTest : KoinTestBase() {
 		// held) -- unlike unregister()'s unconditional unlock on FULL completion, this is the
 		// mid-journey case unregister() never reaches.
 		val secondNearVA = blocksNearVA[1]
-		assertThat(passAndRelease(trainId1, secondNearVA)).isTrue()
+		assertThat(service.passAndRelease(trainId1, secondNearVA)).isTrue()
 
 		// Then: vA is reclaimed -- unlocked and unowned -- even though train 1's journey is not
 		// complete (it still holds blocksFarFromVA). This is the #1065 assertion: vA must be
@@ -199,7 +198,7 @@ class Issue1065RegressionTest : KoinTestBase() {
 		val blocksNearVA = registry.getBlocks(trainId1).filter { switchVA in it.ends() }
 		assertThat(blocksNearVA.size).isEqualTo(2) // vA sits between exactly two blocks
 		val stemBlock = blocksNearVA.first { semaphoreZA in it.ends() }
-		assertThat(passAndRelease(trainId1, stemBlock)).isTrue()
+		assertThat(service.passAndRelease(trainId1, stemBlock)).isTrue()
 		// vA must stay locked -- train 1 still holds the k1-side block bounded by it.
 		assertThat(switchVA.locked).isTrue()
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(trainId1)
@@ -227,23 +226,5 @@ class Issue1065RegressionTest : KoinTestBase() {
 		assertThat(switchVA.conf).isEqualTo(Conf.MAIN)
 		assertThat(switchVA.locked).isTrue()
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(trainId1)
-	}
-
-	/**
-	 * Drive [block] through the production per-block release path: a [FakeTrackOccupant]
-	 * physically passes it (enter() then leave()), then
-	 * [PathReservationService.unregisterBlock] clears it -- funnelling through dropFreedBlock
-	 * and its Issue #1065 stale-lock reclamation.
-	 *
-	 * @return the result of [PathReservationService.unregisterBlock]
-	 */
-	private fun passAndRelease(
-		trainId: String,
-		block: DynamicTrackBlock
-	): Boolean {
-		val occupant = FakeTrackOccupant(trainId)
-		block.enter(occupant)
-		block.leave(occupant)
-		return service.unregisterBlock(trainId, block)
 	}
 }
