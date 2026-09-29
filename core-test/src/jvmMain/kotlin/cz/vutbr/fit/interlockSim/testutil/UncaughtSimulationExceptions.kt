@@ -3,11 +3,11 @@
  *
  * BSc Thesis  2006/2007
  *
- * Railway Interlocking Simulator — Dispatcher Agent Tests
+ * Railway Interlocking Simulator - Test Suite
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.dispatcher.testutil
+package cz.vutbr.fit.interlockSim.testutil
 
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -20,6 +20,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * simulation goes on without that process. A test that only checks that `run()` returned has not
  * checked that no train died. This helper installs a recording handler on the calling thread for
  * the duration of [block] and returns what escaped.
+ *
+ * Lives in `:core-test` so `:core` and `:dispatcher-agent` tests share one copy, the same move
+ * [NavigationDecoratingContext] made (Issue #947).
  */
 object UncaughtSimulationExceptions {
 	/** The value [block] returned and every exception a process let escape while it ran. */

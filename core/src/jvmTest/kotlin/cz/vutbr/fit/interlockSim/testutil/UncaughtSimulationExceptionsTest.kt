@@ -3,11 +3,11 @@
  *
  * BSc Thesis  2006/2007
  *
- * Railway Interlocking Simulator — Dispatcher Agent Tests
+ * Railway Interlocking Simulator - Test Suite
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.dispatcher.testutil
+package cz.vutbr.fit.interlockSim.testutil
 
 import assertk.assertThat
 import assertk.assertions.hasSize
