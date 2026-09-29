@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.Train
@@ -49,6 +51,11 @@ class HoldAtSeparatorObservation(
  * separator named [holdSignal] with a [PathResult.OwnershipConflict] while [holding] says so,
  * and a [TrainKinematicSampler] driving the run at [samplePeriod].
  *
+ * Once [holding] turns false, the queries at the held separator go to [answerAfterLift] instead.
+ * The default delegates to the real service, which is what a lift means to the existing
+ * consumers: the conflict is gone, so the train restarts. A scenario that wants to drive a
+ * specific post-lift branch injects different answers here.
+ *
  * The callbacks run on the simulation thread, in this order per sample:
  *
  * - [onSample] — every sample, for windows measured while the train still runs;
@@ -72,6 +79,13 @@ fun runHoldAtSeparatorScenario(
 	samplePeriod: Double = HOLD_AT_SEPARATOR_SAMPLE_PERIOD,
 	standHoldSeconds: Double = HOLD_AT_SEPARATOR_STAND_HOLD_SECONDS,
 	holding: () -> Boolean = { true },
+	answerAfterLift: (
+		realNav: TrainNavigationService,
+		trainId: String,
+		separator: PathSeparator
+	) -> PathResult = { realNav, trainId, separator ->
+		realNav.findReservedPathForTrain(trainId, separator)
+	},
 	onSample: (HoldAtSeparatorObservation) -> Unit = {},
 	onStand: (HoldAtSeparatorObservation) -> Unit = {},
 	onHoldElapsed: (HoldAtSeparatorObservation) -> Unit = {}
@@ -86,10 +100,12 @@ fun runHoldAtSeparatorScenario(
 		endTime = endTime,
 		trainLength = trainLength,
 		findReservedPath = { realNav, trainId, separator ->
-			if (holding() && separatorLabel(separator) == holdSignal) {
+			if (separatorLabel(separator) != holdSignal) {
+				realNav.findReservedPathForTrain(trainId, separator)
+			} else if (holding()) {
 				PathResult.OwnershipConflict
 			} else {
-				realNav.findReservedPathForTrain(trainId, separator)
+				answerAfterLift(realNav, trainId, separator)
 			}
 		}
 	) { train ->
