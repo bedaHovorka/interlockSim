@@ -125,13 +125,10 @@ class TrainHeadingResolver(
 	 * @param activeTrainNumbers Train numbers present in the current animation state
 	 */
 	fun retainTrains(activeTrainNumbers: Set<Int>) {
-		// previousHeadings always has the same key set as previousLocations (resolveHeading writes
-		// both together), so checking one covers both maps; pendingFlipLocations is checked
-		// separately since a train can be tracked there without (yet) being in the other two.
-		val nothingToPrune =
-			previousLocations.keys.all { it in activeTrainNumbers } &&
-				pendingFlipLocations.keys.all { it in activeTrainNumbers }
-		if (nothingToPrune) {
+		// Checking previousLocations covers all three maps: resolveHeading is the only writer of
+		// each, and every call ends by writing previousLocations and previousHeadings, so between
+		// calls the other two maps' keys are always a subset of previousLocations' keys.
+		if (previousLocations.keys.all { it in activeTrainNumbers }) {
 			// Every tracked train is still active: the three retainAll calls below would all be
 			// no-ops. Deliberately re-derived from the resolver's own state on every call rather than
 			// cached against the previous activeTrainNumbers argument (Issue #790): a train

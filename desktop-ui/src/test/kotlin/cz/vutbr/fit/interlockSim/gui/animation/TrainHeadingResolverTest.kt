@@ -224,6 +224,19 @@ class TrainHeadingResolverTest {
 		assertThat(heading).isEqualTo(west)
 	}
 
+	@Test
+	fun `the pending-flip clear does not disturb the null-frame fallback chain`() {
+		// The null branch must remove only the pending-flip entry: previousLocations and
+		// previousHeadings keep driving movement inference across the null-authoritative
+		// window. The other fallback tests never start from a pending flip; this one proves
+		// the #790 cleanup takes no other state with it.
+		resolver.resolveHeading(1, east, at(19f, 8f))
+		resolver.resolveHeading(1, west, at(20f, 8f)) // suppressed flip, entry recorded at (20,8)
+		// Null-authoritative frame WITH movement: inferred from (20,8) -> (21,8), i.e. east.
+		val heading = resolver.resolveHeading(1, null, at(21f, 8f))
+		assertThat(heading).isEqualTo(east)
+	}
+
 	// ========== Per-train independence and pruning ==========
 
 	@Test
@@ -285,7 +298,7 @@ class TrainHeadingResolverTest {
 		resolver.resolveHeading(2, west, at(25f, 8f)) // train 2 resolved outside the retained set
 		resolver.retainTrains(setOf(1)) // same argument as the first call
 		// If train 2's state had escaped pruning, this would return the tracked `west`, not the
-		// default heading. A reused train number 2 must not inherit a pending flip either.
+		// default heading.
 		val heading = resolver.resolveHeading(2, null, at(25f, 8f))
 		assertThat(heading).isEqualTo(TrainHeadingResolver.DEFAULT_TRAIN_HEADING)
 	}
