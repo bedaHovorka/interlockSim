@@ -70,12 +70,22 @@ val checkKdisco by tasks.registering {
 // @RepeatedTest repetition caps (Issue #1110)
 // ===========================================
 // Turns on JUnit extension auto-detection for every Test task, so :core-test's
-// RepeatedTestCapExtension (registered in its META-INF/services) runs everywhere. The caps
-// themselves live in the extension and follow the heavy-test tag, not the task.
+// RepeatedTestCapExtension (registered in its META-INF/services) runs everywhere. The
+// extension ships via :core-test's classpath, so a module that drops its :core-test test
+// dependency also drops its cap enforcement — each JVM module keeps a
+// RepeatedTestCapWiringTest tripwire that catches this. The cap values come from
+// gradle.properties and follow the heavy-test tag, not the task.
+
+val testRepeatMaxCount: String by project
+val heavyTestRepeatMaxCount: String by project
+require(testRepeatMaxCount.toIntOrNull() != null) { "testRepeatMaxCount must be an integer: '$testRepeatMaxCount'" }
+require(heavyTestRepeatMaxCount.toIntOrNull() != null) { "heavyTestRepeatMaxCount must be an integer: '$heavyTestRepeatMaxCount'" }
 
 subprojects {
     tasks.withType<Test>().configureEach {
         systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
+        systemProperty("interlockSim.test.repeat.maxCount", testRepeatMaxCount)
+        systemProperty("interlockSim.test.repeat.heavyMaxCount", heavyTestRepeatMaxCount)
     }
 }
 

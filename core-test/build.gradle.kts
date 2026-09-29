@@ -45,8 +45,9 @@ kotlin {
 		testRuns["test"].executionTask.configure {
 			useJUnitPlatform {
 				// RepeatedTestCapExtensionTest runs these fixtures itself through EngineTestKit;
-				// some of them are meant to fail.
-				excludeTags("cap-fixture")
+				// some of them are meant to fail. Like every other JVM unit-test task, keep
+				// heavy and integration tests out of the CI path — they have their own tasks.
+				excludeTags("cap-fixture", "integration-test", "heavy-test")
 			}
 		}
 	}
@@ -90,7 +91,7 @@ kotlin {
 		val jvmTest by getting {
 			dependencies {
 				// Issue #1110: RepeatedTestCapExtensionTest runs its fixtures through EngineTestKit.
-				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
+				// junit-jupiter-api comes from jvmMain; only the testkit/launcher bits are extra.
 				implementation("org.junit.platform:junit-platform-testkit:$junitPlatformVersion")
 				runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
 				runtimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
