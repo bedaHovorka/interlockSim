@@ -317,11 +317,13 @@ class DefaultNetworkPerceptionPort(
 	 *
 	 * Every facet is materialized here, on the simulation thread. Do not make an
 	 * individual facet lazy: [snapshot] is consumed off-thread, where resolving a
-	 * lazy value could read mutable simulation state. The rule-based dispatcher only
-	 * needs train-count data, but the dispatcher observation used to diagnose Issue
-	 * #893 consumes signals, blocks, and train perceptions. The Issue #751 benchmark
-	 * measured this complete capture at 0.36 ms (0.1% of a 342 ms `shuntingLoop 300`
-	 * run), so retaining the complete, thread-safe snapshot is intentional.
+	 * lazy value could read mutable simulation state. (The lazy lookup maps inside
+	 * [SimulationSnapshot] are fine: they derive only from the already-captured lists.)
+	 * The rule-based dispatcher only needs train-count data, but the dispatcher
+	 * observation used to diagnose Issue #893 consumes signals, blocks, and train
+	 * perceptions. The Issue #751 benchmark measured this complete capture at 0.36 ms
+	 * (0.1% of a 342 ms `shuntingLoop 300` run), so retaining the complete, thread-safe
+	 * snapshot is intentional.
 	 *
 	 * Calls each `allXxx()` bulk query in sequence.  Because kDisco runs on a single
 	 * simulation thread, all five calls observe the same simulation state — no events

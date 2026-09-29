@@ -54,37 +54,26 @@ data class DispatchObservation(
 
 	companion object {
 		/**
-		 * Builds a [DispatchObservation] from the fields a push-based observation source (for
-		 * example `DispatcherObservation` (`:dispatcher-agent`)) carries, without that module's
-		 * type ever being visible here —
-		 * `:core` cannot depend on `:dispatcher-agent` (see the module's `CLAUDE.md`).
+		 * Builds an observation whose stub [SimulationSnapshot] carries only [trainPositions]:
+		 * semaphores, blocks, timetables and train perceptions are empty. For callers that
+		 * convert from a push-based format with no full snapshot, such as `:dispatcher-agent`'s
+		 * `DispatcherObservation` (a type `:core` cannot see).
 		 *
-		 * [Dispatcher.decide] takes a [DispatchObservation] built around the general-purpose
-		 * [SimulationSnapshot], but callers converting from a push-based observation format
-		 * (SP2c.1) typically only have the active trains' positions, not the full snapshot
-		 * ([SemaphoreReading][cz.vutbr.fit.interlockSim.ports.SemaphoreReading]s,
-		 * [BlockOccupancyReading][cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading]s,
-		 * [TimetableReading][cz.vutbr.fit.interlockSim.ports.TimetableReading]s). This factory
-		 * builds the stub [SimulationSnapshot] such a caller needs: [trainPositions] populate
-		 * [SimulationSnapshot.trainPositions] (so [approvedTrainCount] is correct), and
-		 * [SimulationSnapshot.semaphores], [SimulationSnapshot.blocks] and
-		 * [SimulationSnapshot.timetables] are left empty.
+		 * Every parameter is required on purpose, so a caller cannot silently lose block inputs.
 		 *
-		 * @param simTime Simulation time (seconds) to stamp on the stub [SimulationSnapshot].
-		 * @param trainPositions Position/kinematics reading for every currently active
-		 *   (approved) train — becomes [SimulationSnapshot.trainPositions] verbatim.
-		 * @param unapprovedTrains Trains queued but not yet approved, in admission order.
-		 * @param innerBlockInputs All inputs of every inner track block; defaults to
-		 *   [emptyList] for backwards compatibility with bare/early callers.
-		 * @param outerBlockInputs The outer track block input of every InOut–RailSemaphore
-		 *   block; defaults to [emptyList] for backwards compatibility with bare/early callers.
+		 * @param simTime Simulation time (seconds) stamped on the stub snapshot.
+		 * @param trainPositions One reading per active (approved) train, so [approvedTrainCount]
+		 *   is correct.
+		 * @param unapprovedTrains See [DispatchObservation.unapprovedTrains].
+		 * @param innerBlockInputs See [DispatchObservation.innerBlockInputs].
+		 * @param outerBlockInputs See [DispatchObservation.outerBlockInputs].
 		 */
 		fun from(
 			simTime: Double,
 			trainPositions: List<TrainPositionReading>,
 			unapprovedTrains: List<QueuedTrainObservation>,
-			innerBlockInputs: List<BlockInputObservation> = emptyList(),
-			outerBlockInputs: List<BlockInputObservation> = emptyList()
+			innerBlockInputs: List<BlockInputObservation>,
+			outerBlockInputs: List<BlockInputObservation>
 		): DispatchObservation =
 			DispatchObservation(
 				snapshot =
@@ -93,7 +82,8 @@ data class DispatchObservation(
 						semaphores = emptyList(),
 						blocks = emptyList(),
 						trainPositions = trainPositions,
-						timetables = emptyList()
+						timetables = emptyList(),
+						trainPerceptions = emptyList()
 					),
 				unapprovedTrains = unapprovedTrains,
 				innerBlockInputs = innerBlockInputs,

@@ -272,7 +272,7 @@ class KoogDispatchAgentImpl(
 		observation: DispatchObservation,
 		nextHopOutcome: NextHopOutcome
 	): String {
-		val perception = observation.snapshot.trainPerceptions.firstOrNull { it.trainId == trainId }
+		val perception = observation.snapshot.trainPerception(trainId)
 		val clauses = mutableListOf<String>()
 		perception?.destinationInOutName?.takeIf { it.isNotBlank() }?.let {
 			clauses += "exit via \"$it\""

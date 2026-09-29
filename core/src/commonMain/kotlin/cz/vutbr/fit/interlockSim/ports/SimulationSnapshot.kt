@@ -74,68 +74,57 @@ data class SimulationSnapshot(
 ) {
 	// ── Map-backed lookups (#967) ──────────────────────────────────────────
 	//
-	// These lazy maps are deliberately declared in the class body, not as primary-constructor
-	// properties: only primary-constructor properties participate in a data class's generated
-	// equals()/hashCode()/toString()/copy()/componentN(), so keeping the maps here means they
-	// never affect structural equality or the string form of a snapshot, and are never touched
-	// by copy(). They are built once per snapshot instance, on first lookup, and reused by every
-	// subsequent lookup against that same instance.
-	//
-	// associateBy() keeps the LAST entry on a duplicate key; the bulk queries this snapshot is
-	// built from (NetworkPerceptionPort.allXxx()) are documented to return one reading per
-	// semaphore/block/train, so duplicate names are not expected in practice. To preserve the
-	// old firstOrNull-scan semantics exactly regardless of that assumption, the source list is
-	// reversed before associating: the first occurrence then ends up last in iteration order and
-	// wins the overwrite.
+	// Declared in the class body, so they stay out of the data class's equals/hashCode/toString/copy.
+	// Each map is built once per instance, on the first lookup, which is O(1) from then on.
+	// On a duplicate key the first reading wins, exactly like the firstOrNull scans these replace.
 
 	private val semaphoreByName: Map<String, SemaphoreReading> by lazy {
-		semaphores.asReversed().associateBy { it.name }
+		semaphores.associateFirstBy { it.name }
 	}
 
 	private val blockByBlockId: Map<String, BlockOccupancyReading> by lazy {
-		blocks.asReversed().associateBy { it.blockId }
+		blocks.associateFirstBy { it.blockId }
 	}
 
 	private val trainPositionByTrainId: Map<String, TrainPositionReading> by lazy {
-		trainPositions.asReversed().associateBy { it.trainId }
+		trainPositions.associateFirstBy { it.trainId }
 	}
 
 	private val timetableByTrainId: Map<String, TimetableReading> by lazy {
-		timetables.asReversed().associateBy { it.trainId }
+		timetables.associateFirstBy { it.trainId }
 	}
 
 	private val trainPerceptionByTrainId: Map<String, TrainPerceptionReading> by lazy {
-		trainPerceptions.asReversed().associateBy { it.trainId }
+		trainPerceptions.associateFirstBy { it.trainId }
 	}
 
 	/**
 	 * Returns the [SemaphoreReading] whose [SemaphoreReading.name] matches [semaphoreName],
-	 * or `null` if this snapshot contains no such semaphore. O(1) after the first call.
+	 * or `null` if this snapshot contains no such semaphore.
 	 */
 	fun signalAspect(semaphoreName: String): SemaphoreReading? = semaphoreByName[semaphoreName]
 
 	/**
 	 * Returns the [BlockOccupancyReading] whose [BlockOccupancyReading.blockId] matches
-	 * [blockId], or `null` if this snapshot contains no such block. O(1) after the first call.
+	 * [blockId], or `null` if this snapshot contains no such block.
 	 */
 	fun blockOccupancy(blockId: String): BlockOccupancyReading? = blockByBlockId[blockId]
 
 	/**
 	 * Returns the [TrainPositionReading] whose [TrainPositionReading.trainId] matches [trainId],
-	 * or `null` if no such active train appears in this snapshot. O(1) after the first call.
+	 * or `null` if no such active train appears in this snapshot.
 	 */
 	fun trainPosition(trainId: String): TrainPositionReading? = trainPositionByTrainId[trainId]
 
 	/**
 	 * Returns the [TimetableReading] whose [TimetableReading.trainId] matches [trainId], or
-	 * `null` if no such active train appears in this snapshot. O(1) after the first call.
+	 * `null` if no such active train appears in this snapshot.
 	 */
 	fun trainTimetable(trainId: String): TimetableReading? = timetableByTrainId[trainId]
 
 	/**
 	 * Returns the [TrainPerceptionReading] whose [TrainPerceptionReading.trainId] matches
-	 * [trainId], or `null` if no such active train appears in this snapshot. O(1) after the
-	 * first call.
+	 * [trainId], or `null` if no such active train appears in this snapshot.
 	 */
 	fun trainPerception(trainId: String): TrainPerceptionReading? = trainPerceptionByTrainId[trainId]
 
@@ -158,3 +147,7 @@ data class SimulationSnapshot(
 			)
 	}
 }
+
+/** Like [associateBy], but the first element wins on a duplicate key instead of the last. */
+private inline fun <T> List<T>.associateFirstBy(key: (T) -> String): Map<String, T> =
+	buildMap(size) { this@associateFirstBy.forEach { getOrPut(key(it)) { it } } }
