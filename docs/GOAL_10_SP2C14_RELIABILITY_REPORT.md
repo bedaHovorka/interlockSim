@@ -154,14 +154,17 @@ exclude `TIMEOUT_ABORT` and `CRASH` runs from that denominator rather than treat
 `0`; this report does not currently pool them (see the columns actually rendered in §5), and this
 note is here so a future revision that does add such a column does not reintroduce the mistake.
 
-**This "absent is not zero" rule does *not* currently hold for latency on the same aborted
-snapshots — that is a separate, pre-existing defect, not a second instance of the breaker-field
-rule above.** `abortedSnapshot` writes `latencyP50Ms = 0L`, `latencyP95Ms = 0L`, `latencyMaxMs = 0L`
-(`AiSweepDriver.kt`) on both `TIMEOUT_ABORT` and `CRASH` runs — not `null` — and
-`RunReportAggregator`'s latency medians only drop `null` values, so those zeros are currently pulled
-into the arm's T1/T6 latency medians. This is a known gap in the `Long → Long?` widening that
-Issue #834 applied to the latency fields, which missed the abort path; it is not yet tracked in an
-issue.
+**Latency on the same aborted snapshots follows the same "absent is not zero" rule.**
+`abortedSnapshot` writes `latencyP50Ms`, `latencyP95Ms`, and `latencyMaxMs` as `null` — not
+`0L` — on both `TIMEOUT_ABORT` and `CRASH` runs: the killed child JVM recorded no tick latency,
+so there is no measurement to report. `RunReportAggregator`'s latency medians drop `null`
+values, so an aborted run no longer enters the arm's T1/T6 latency medians as a fake
+zero-latency measurement. (Historical note: this was a gap in the `Long → Long?` widening that
+Issue #834 applied to the latency fields, which missed the abort path; it was fixed in the
+#1104 review round together with the breaker-field wording above. Campaign data recorded
+before that fix — including every campaign in this report — pooled those zeros into the
+latency medians; the arm medians in §5 are affected only insofar as aborted runs existed, and
+no campaign's verdict changed because of it.)
 
 ---
 

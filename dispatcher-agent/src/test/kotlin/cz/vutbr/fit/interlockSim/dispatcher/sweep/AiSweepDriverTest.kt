@@ -20,6 +20,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
@@ -151,13 +152,7 @@ class AiSweepDriverTest {
 		val snapshot = written.single()
 		assertThat(snapshot.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
 		assertThat(snapshot.completedNaturally).isEqualTo(false)
-		// Issue #1104: the child JVM was killed before finishAndPersist could run, so the breaker's
-		// terminal state is unknowable from outside. These three fields must stay null -- "not
-		// recorded" -- rather than read as "the breaker never opened" (see DispatcherRunSnapshot's
-		// circuitBreakerState KDoc and GOAL_10_SP2C14_RELIABILITY_REPORT.md §3.4).
-		assertThat(snapshot.circuitBreakerState).isNull()
-		assertThat(snapshot.circuitBreakerTotalSkips).isNull()
-		assertThat(snapshot.circuitBreakerOpenCount).isNull()
+		assertBreakerAndLatencyNotRecorded(snapshot)
 	}
 
 	@Test
@@ -172,7 +167,25 @@ class AiSweepDriverTest {
 
 		assertThat(summary.failed).isEqualTo(1)
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
-		assertThat(written.single().endCause).isEqualTo(RunEndCause.CRASH)
+		val snapshot = written.single()
+		assertThat(snapshot.endCause).isEqualTo(RunEndCause.CRASH)
+		assertBreakerAndLatencyNotRecorded(snapshot)
+	}
+
+	/**
+	 * Issue #1104: a TIMEOUT_ABORT or CRASH child JVM ended before finishAndPersist could run, so
+	 * its breaker state and tick latency are unknowable from outside. Both go through
+	 * abortedSnapshot and must stay null -- "not recorded" -- rather than read as "the breaker never
+	 * opened" or enter RunReportAggregator's latency medians as zeros (see DispatcherRunSnapshot's
+	 * KDoc and GOAL_10_SP2C14_RELIABILITY_REPORT.md §3.4).
+	 */
+	private fun assertBreakerAndLatencyNotRecorded(snapshot: DispatcherRunSnapshot) {
+		assertThat(snapshot.circuitBreakerState).isNull()
+		assertThat(snapshot.circuitBreakerTotalSkips).isNull()
+		assertThat(snapshot.circuitBreakerOpenCount).isNull()
+		assertThat(snapshot.latencyP50Ms).isNull()
+		assertThat(snapshot.latencyP95Ms).isNull()
+		assertThat(snapshot.latencyMaxMs).isNull()
 	}
 
 	@Test

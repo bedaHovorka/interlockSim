@@ -105,9 +105,14 @@ import kotlinx.serialization.Serializable
  * @property latencyP50Ms Median tick latency in milliseconds; `null` when no tick carried a
  *   meaningful latency (e.g. the rule-based arm, or an LLM run whose every cycle failed before
  *   inference started) — *not measured*, never *measured as none* (see
- *   [nearestRankPercentile]'s "absent is not zero" convention).
- * @property latencyP95Ms 95th-percentile tick latency in milliseconds; `null` when unmeasured.
- * @property latencyMaxMs Maximum tick latency in milliseconds; `null` when unmeasured.
+ *   [nearestRankPercentile]'s "absent is not zero" convention). A [RunEndCause.TIMEOUT_ABORT]
+ *   or [RunEndCause.CRASH] snapshot carries `null` here: the killed child JVM recorded no
+ *   tick latency, so `RunReportAggregator` skips the run instead of pooling a zero.
+ * @property latencyP95Ms 95th-percentile tick latency in milliseconds; `null` when unmeasured —
+ *   also `null` on [RunEndCause.TIMEOUT_ABORT] / [RunEndCause.CRASH] snapshots, like
+ *   [latencyP50Ms].
+ * @property latencyMaxMs Maximum tick latency in milliseconds; `null` when unmeasured — also
+ *   `null` on [RunEndCause.TIMEOUT_ABORT] / [RunEndCause.CRASH] snapshots, like [latencyP50Ms].
  * @property actionsByAuthor Count of actions per [ActionAuthor] name.
  * @property unattributedApplies Count of applied decisions whose correlation entry was missing.
  * @property terminalFallbackEngaged Whether the terminal fallback guard engaged during this run.
