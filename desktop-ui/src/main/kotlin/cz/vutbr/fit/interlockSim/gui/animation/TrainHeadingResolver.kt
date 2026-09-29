@@ -101,6 +101,10 @@ class TrainHeadingResolver(
 			if (authoritative != null) {
 				resolveAuthoritativeHeading(trainNumber, authoritative, previousHeading, currentLocation)
 			} else {
+				// No authoritative heading this frame: any pending flip was tracked against an
+				// authoritative reading, so it no longer applies and would otherwise linger stale
+				// across the null-authoritative window (Issue #790).
+				pendingFlipLocations.remove(trainNumber)
 				previousLocation?.let { inferHeading(it, currentLocation) }
 					?: previousHeading
 					?: defaultHeading
@@ -121,6 +125,17 @@ class TrainHeadingResolver(
 	 * @param activeTrainNumbers Train numbers present in the current animation state
 	 */
 	fun retainTrains(activeTrainNumbers: Set<Int>) {
+		// Checking previousLocations covers all three maps: resolveHeading is the only writer of
+		// each, and every call ends by writing previousLocations and previousHeadings, so between
+		// calls the other two maps' keys are always a subset of previousLocations' keys.
+		if (previousLocations.keys.all { it in activeTrainNumbers }) {
+			// Every tracked train is still active: the three retainAll calls below would all be
+			// no-ops. Deliberately re-derived from the resolver's own state on every call rather than
+			// cached against the previous activeTrainNumbers argument (Issue #790): a train
+			// resolved outside that set between two retainTrains calls with the same argument would
+			// otherwise escape pruning, and caching the caller's set risked aliasing a mutable one.
+			return
+		}
 		previousLocations.keys.retainAll(activeTrainNumbers)
 		previousHeadings.keys.retainAll(activeTrainNumbers)
 		pendingFlipLocations.keys.retainAll(activeTrainNumbers)

@@ -135,6 +135,37 @@ without hedging, gives the per-outcome breakdown behind it, and points at SP2c.1
 interface-vs-capacity diagnostic for what the failure does and does not tell us about model
 capability. A negative result is a result.
 
+### 3.4 Absent circuit-breaker fields on a `TIMEOUT_ABORT` or `CRASH` run mean "not recorded", never "never opened"
+
+Issue #1074 (PR #1097) added `circuitBreakerState`, `circuitBreakerTotalSkips`, and
+`circuitBreakerOpenCount` to `DispatcherRunSnapshot`, populated from the run's terminal circuit
+breaker state when `finishAndPersist` runs. A run killed by `AiSweepDriver` for exceeding
+`perRunTimeoutSeconds`, or one that exits without writing a run JSON, never reaches
+`finishAndPersist` — the child JVM is dead or gone — so the synthetic `TIMEOUT_ABORT` and `CRASH`
+snapshots `AiSweepDriver` writes in their place (both via `abortedSnapshot`) always have these three
+fields `null`, the same "absent is not zero" convention already in force for `railwayOutcome`.
+
+**`TIMEOUT_ABORT` is precisely the run class where these figures are most informative.** The
+failure sequence these fields are meant to surface is: LLM stall → breaker opens → run starves →
+per-run timeout — which is exactly a `TIMEOUT_ABORT`. Reading the resulting `null` as "the breaker
+never opened" would silently misread the runs most likely to show an OPEN breaker as breaker-clean,
+inverting the finding. Any analysis that pools or averages these three fields across runs must
+exclude `TIMEOUT_ABORT` and `CRASH` runs from that denominator rather than treat their `null` as
+`0`; this report does not currently pool them (see the columns actually rendered in §5), and this
+note is here so a future revision that does add such a column does not reintroduce the mistake.
+
+**Latency on the same aborted snapshots follows the same "absent is not zero" rule.**
+`abortedSnapshot` writes `latencyP50Ms`, `latencyP95Ms`, and `latencyMaxMs` as `null` — not
+`0L` — on both `TIMEOUT_ABORT` and `CRASH` runs: the killed child JVM recorded no tick latency,
+so there is no measurement to report. `RunReportAggregator`'s latency medians drop `null`
+values, so an aborted run no longer enters the arm's T1/T6 latency medians as a fake
+zero-latency measurement. (Historical note: this was a gap in the `Long → Long?` widening that
+Issue #834 applied to the latency fields, which missed the abort path; it was fixed in the
+#1104 review round together with the breaker-field wording above. Campaign data recorded
+before that fix — including every campaign in this report — pooled those zeros into the
+latency medians; the arm medians in §5 are affected only insofar as aborted runs existed, and
+no campaign's verdict changed because of it.)
+
 ---
 
 ## 4. The gate this report scores against (A4)

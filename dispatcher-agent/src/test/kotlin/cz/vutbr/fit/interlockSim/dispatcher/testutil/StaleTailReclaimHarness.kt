@@ -39,6 +39,7 @@ import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.UncaughtSimulationExceptions
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit

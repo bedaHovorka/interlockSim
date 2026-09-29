@@ -16,7 +16,6 @@ import assertk.assertions.isTrue
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
-import cz.vutbr.fit.interlockSim.dispatcher.testutil.UncaughtSimulationExceptions
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -26,6 +25,7 @@ import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
+import cz.vutbr.fit.interlockSim.testutil.UncaughtSimulationExceptions
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import java.util.concurrent.atomic.AtomicReference

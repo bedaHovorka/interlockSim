@@ -504,7 +504,9 @@ class ForkedJvmSweepProcessRunner : SweepProcessRunner {
  * reads, so such a run counts against the arm exactly as it should.
  *
  * The railway figures are the exception: they are recorded **absent**, not zero. See the comment
- * at the `railwayOutcome` argument below. [fatalScan] follows the same absent-vs-zero rule.
+ * at the `railwayOutcome` argument below. [fatalScan] follows the same absent-vs-zero rule, and so
+ * do the three latency fields and the breaker figures: a killed child JVM recorded no tick
+ * latency and no breaker state, and `RunReportAggregator` skips nulls rather than pooling zeros.
  *
  * @param fatalScan The run's log scanned for FATAL `SimulationException` occurrences before this
  *   snapshot was built, so an aborted or crashed run can still carry the finding — a timeout or a
@@ -535,9 +537,10 @@ internal fun abortedSnapshot(
 		validAt1 = 0.0,
 		correctAt1 = null,
 		oracleAgreementAt1 = null,
-		latencyP50Ms = 0L,
-		latencyP95Ms = 0L,
-		latencyMaxMs = 0L,
+		// Absent, not zero — see this function's KDoc.
+		latencyP50Ms = null,
+		latencyP95Ms = null,
+		latencyMaxMs = null,
 		actionsByAuthor = zeroed(ActionAuthor.entries.map { it.name }),
 		unattributedApplies = 0L,
 		terminalFallbackEngaged = false,

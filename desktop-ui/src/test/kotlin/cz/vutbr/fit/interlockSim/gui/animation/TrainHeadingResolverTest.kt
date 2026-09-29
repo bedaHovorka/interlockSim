@@ -196,6 +196,47 @@ class TrainHeadingResolverTest {
 		assertThat(heading).isEqualTo(east)
 	}
 
+	// ========== Pending-flip cleanup on a null-authoritative frame (#790) ==========
+
+	@Test
+	fun `pending flip is cleared during a null-authoritative frame so a later flip is suppressed fresh`() {
+		resolver.resolveHeading(1, east, at(19f, 8f))
+		resolver.resolveHeading(1, west, at(20f, 8f)) // candidate flip observed at (20,8), suppressed
+		// A null-authoritative frame arrives while the front keeps moving east. Without clearing
+		// the stale pending-flip entry here, it would linger at (20,8) even though it was tracked
+		// against a heading reading that no longer applies.
+		resolver.resolveHeading(1, null, at(30f, 8f))
+		// A new flip appears far from the stale origin (20,8) but at the current location (30,8).
+		// If the stale entry had not been cleared, its origin would already be more than
+		// MOVEMENT_EPSILON away and the flip would be accepted immediately instead of suppressed.
+		val heading = resolver.resolveHeading(1, west, at(31f, 8f))
+		assertThat(heading).isEqualTo(east)
+	}
+
+	@Test
+	fun `after a null-authoritative frame clears the pending flip, a later flip is measured from the new origin`() {
+		resolver.resolveHeading(1, east, at(19f, 8f))
+		resolver.resolveHeading(1, west, at(20f, 8f))
+		resolver.resolveHeading(1, null, at(30f, 8f)) // clears the stale pending-flip entry
+		resolver.resolveHeading(1, west, at(31f, 8f)) // new pending flip recorded at (31,8)
+		// Movement measured from the NEW origin (31,8), not the stale one (20,8).
+		val heading = resolver.resolveHeading(1, west, at(31.02f, 8f))
+		assertThat(heading).isEqualTo(west)
+	}
+
+	@Test
+	fun `the pending-flip clear does not disturb the null-frame fallback chain`() {
+		// The null branch must remove only the pending-flip entry: previousLocations and
+		// previousHeadings keep driving movement inference across the null-authoritative
+		// window. The other fallback tests never start from a pending flip; this one proves
+		// the #790 cleanup takes no other state with it.
+		resolver.resolveHeading(1, east, at(19f, 8f))
+		resolver.resolveHeading(1, west, at(20f, 8f)) // suppressed flip, entry recorded at (20,8)
+		// Null-authoritative frame WITH movement: inferred from (20,8) -> (21,8), i.e. east.
+		val heading = resolver.resolveHeading(1, null, at(21f, 8f))
+		assertThat(heading).isEqualTo(east)
+	}
+
 	// ========== Per-train independence and pruning ==========
 
 	@Test
@@ -234,5 +275,31 @@ class TrainHeadingResolverTest {
 		// A brand-new train reusing number 1 travelling West must not inherit suppression.
 		val heading = resolver.resolveHeading(1, west, at(30f, 8f))
 		assertThat(heading).isEqualTo(west)
+	}
+
+	@Test
+	fun `retainTrains called again with the same active set does not disturb state`() {
+		resolver.resolveHeading(1, east, at(19f, 8f))
+		resolver.resolveHeading(2, west, at(25f, 8f))
+		resolver.retainTrains(setOf(1, 2))
+		// Every tracked train is active: short-circuits before the retainAll calls (#790).
+		resolver.retainTrains(setOf(1, 2))
+		assertThat(resolver.resolveHeading(1, null, at(19f, 8f))).isEqualTo(east)
+		assertThat(resolver.resolveHeading(2, null, at(25f, 8f))).isEqualTo(west)
+	}
+
+	@Test
+	fun `a train resolved between two identical retainTrains calls is still pruned by the second`() {
+		// Issue #790: retainTrains({1}) -> resolveHeading(2, ...) -> retainTrains({1}) must
+		// still prune train 2's state, even though the argument is the same set both times. A guard
+		// that only compares the argument against the previous call's argument misses this: train 2
+		// was never in that argument, so its state would otherwise escape pruning forever.
+		resolver.retainTrains(setOf(1))
+		resolver.resolveHeading(2, west, at(25f, 8f)) // train 2 resolved outside the retained set
+		resolver.retainTrains(setOf(1)) // same argument as the first call
+		// If train 2's state had escaped pruning, this would return the tracked `west`, not the
+		// default heading.
+		val heading = resolver.resolveHeading(2, null, at(25f, 8f))
+		assertThat(heading).isEqualTo(TrainHeadingResolver.DEFAULT_TRAIN_HEADING)
 	}
 }

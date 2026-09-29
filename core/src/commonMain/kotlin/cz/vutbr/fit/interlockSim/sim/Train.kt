@@ -268,6 +268,47 @@ class Train :
 			inName: String,
 			outName: String
 		): String = """train="$trainName" route=$inName->$outName"""
+
+		/**
+		 * Diagnostics for the four `semaphoreAction` "logic error" guards (Issue #1006): each
+		 * message names its own guard and branch so a mismatch is diagnosable without re-deriving
+		 * which check fired. Two of the four were byte-identical before this issue (blocked
+		 * SonarCloud S1192 — see the issue body for why the fix must not be a shared literal).
+		 * `internal` so tests can assert against the exact text without reflection, matching
+		 * [formatApprovalMessage].
+		 */
+		internal fun formatNoTopologicalPathWhileResumingMessage(
+			trainNumber: Int,
+			semaphoreName: String
+		): String =
+			"Train $trainNumber at semaphore $semaphoreName: findReservedPathForTrain returned " +
+				"NoTopologicalPath while resuming. This indicates a logic error - signal should " +
+				"only allow when a topological path exists."
+
+		internal fun formatOwnershipConflictWhileResumingMessage(
+			trainNumber: Int,
+			semaphoreName: String
+		): String =
+			"Train $trainNumber at semaphore $semaphoreName: findReservedPathForTrain returned " +
+				"OwnershipConflict while resuming - the current reservation state does not provide " +
+				"a complete forward path owned by this train. This indicates a logic error - signal " +
+				"should only allow when the path is reserved for this train."
+
+		internal fun formatResumePathNullMessage(
+			trainNumber: Int,
+			semaphoreName: String
+		): String =
+			"Train $trainNumber at semaphore $semaphoreName: resumePath is null after re-fetching " +
+				"the reservation via findReservedPathForTrain. This indicates a logic error - signal " +
+				"should only allow when the re-fetched path is reserved."
+
+		internal fun formatPreExistingPathNullMessage(
+			trainNumber: Int,
+			semaphoreName: String
+		): String =
+			"Train $trainNumber at semaphore $semaphoreName: the pre-existing path is null while " +
+				"starting from near-zero velocity. This indicates a logic error - signal should only " +
+				"allow when path is reserved before starting."
 	}
 
 	// GitHub #62: Support bidirectional train operation (reverse direction)
@@ -963,31 +1004,23 @@ class Train :
 					when (resumeResult) {
 						is PathResult.Available -> resumeResult.path
 						is PathResult.NoTopologicalPath -> {
-							logger.error {
-								"Train $number at semaphore ${semaphore.name}: Signal is allowing but no topological path exists. " +
-									"This indicates a logic error - signal should only allow when path exists."
-							}
+							logger.error { formatNoTopologicalPathWhileResumingMessage(number, semaphore.name) }
 							null
 						}
 						is PathResult.OwnershipConflict -> {
-							logger.error {
-								"Train $number at semaphore ${semaphore.name}: Signal is allowing but path not reserved for this train. " +
-									"This indicates a logic error - signal should only allow when path is reserved."
-							}
+							logger.error { formatOwnershipConflictWhileResumingMessage(number, semaphore.name) }
 							null
 						}
 					}
 				requireSimulationNotNull(resumePath) {
-					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
-						"This indicates a logic error - signal should only allow when path is reserved."
+					formatResumePathNullMessage(number, semaphore.name)
 				}
 				fireStart(semaphore, resumePath)
 			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
 				// Validate path exists before starting
 				requireSimulationNotNull(path) {
-					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
-						"This indicates a logic error - signal should only allow when path is reserved."
+					formatPreExistingPathNullMessage(number, semaphore.name)
 				}
 				fireStart(semaphore, path)
 			} else {

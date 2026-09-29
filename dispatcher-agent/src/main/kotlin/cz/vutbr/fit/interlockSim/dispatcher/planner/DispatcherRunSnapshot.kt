@@ -105,9 +105,14 @@ import kotlinx.serialization.Serializable
  * @property latencyP50Ms Median tick latency in milliseconds; `null` when no tick carried a
  *   meaningful latency (e.g. the rule-based arm, or an LLM run whose every cycle failed before
  *   inference started) — *not measured*, never *measured as none* (see
- *   [nearestRankPercentile]'s "absent is not zero" convention).
- * @property latencyP95Ms 95th-percentile tick latency in milliseconds; `null` when unmeasured.
- * @property latencyMaxMs Maximum tick latency in milliseconds; `null` when unmeasured.
+ *   [nearestRankPercentile]'s "absent is not zero" convention). A [RunEndCause.TIMEOUT_ABORT]
+ *   or [RunEndCause.CRASH] snapshot carries `null` here: the killed child JVM recorded no
+ *   tick latency, so `RunReportAggregator` skips the run instead of pooling a zero.
+ * @property latencyP95Ms 95th-percentile tick latency in milliseconds; `null` when unmeasured —
+ *   also `null` on [RunEndCause.TIMEOUT_ABORT] / [RunEndCause.CRASH] snapshots, like
+ *   [latencyP50Ms].
+ * @property latencyMaxMs Maximum tick latency in milliseconds; `null` when unmeasured — also
+ *   `null` on [RunEndCause.TIMEOUT_ABORT] / [RunEndCause.CRASH] snapshots, like [latencyP50Ms].
  * @property actionsByAuthor Count of actions per [ActionAuthor] name.
  * @property unattributedApplies Count of applied decisions whose correlation entry was missing.
  * @property terminalFallbackEngaged Whether the terminal fallback guard engaged during this run.
@@ -134,11 +139,21 @@ import kotlinx.serialization.Serializable
  * @property loggedFatalSimExceptionFirstMessage The first matching log line (trimmed), verbatim;
  *   `null` whenever [loggedFatalSimExceptionCount] is `null` or `0`.
  * @property circuitBreakerState State of the LLM circuit breaker when the snapshot was captured;
- *   `null` when this run had no LLM circuit breaker or predates this measurement.
+ *   `null` when this run had no LLM circuit breaker or predates this measurement — *not measured*,
+ *   never *measured as never opened*. In particular, a synthetic `TIMEOUT_ABORT` or `CRASH`
+ *   snapshot (written by `AiSweepDriver` via `abortedSnapshot` when a run exceeds
+ *   `perRunTimeoutSeconds`, or exits without writing a run JSON) always has this field `null`: the
+ *   child JVM was killed or exited before it could reach `finishAndPersist`, so its breaker state
+ *   is unknowable from outside, not evidence that the breaker stayed closed. `TIMEOUT_ABORT` is
+ *   exactly the run class most likely to show an OPEN breaker (LLM stall → breaker opens → run
+ *   starves → per-run timeout), so reading its absence as "clean" would misread the runs it most
+ *   needs to flag.
  * @property circuitBreakerTotalSkips Total LLM cycles skipped by the circuit breaker; `null` when
- *   the breaker was not measured.
+ *   the breaker was not measured — see [circuitBreakerState]'s `TIMEOUT_ABORT` / `CRASH` caveat,
+ *   which applies here identically (never read `null` as `0`).
  * @property circuitBreakerOpenCount Number of times the circuit breaker opened; `null` when the
- *   breaker was not measured.
+ *   breaker was not measured — see [circuitBreakerState]'s `TIMEOUT_ABORT` / `CRASH` caveat, which
+ *   applies here identically (never read `null` as `0`).
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
