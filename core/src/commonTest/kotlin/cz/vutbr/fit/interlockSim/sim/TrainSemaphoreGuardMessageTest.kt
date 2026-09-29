@@ -41,9 +41,12 @@ class TrainSemaphoreGuardMessageTest {
 		assertTrue(msg.contains("semaphore S3"), "names the semaphore: $msg")
 		assertTrue(msg.contains("OwnershipConflict"), "names its own PathResult branch: $msg")
 		assertTrue(
-			msg.contains("not (fully) reserved for this train"),
-			"stays accurate for every OwnershipConflict cause -- another owner, partial " +
-				"ownership, or no PathInfo registered, not only a conflicting train: $msg"
+			msg.contains(
+				"the current reservation state does not provide a complete forward path owned by this train"
+			),
+			"stays accurate for every OwnershipConflict cause -- foreign or partial ownership, " +
+				"a separator absent from the registered PathInfo, or a reservation that does not " +
+				"yet reach a forward-facing separator: $msg"
 		)
 	}
 
