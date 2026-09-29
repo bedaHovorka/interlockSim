@@ -60,11 +60,6 @@ val detektFormattingVersion: String by project
 val ktlintVersion: String by project
 val jacocoToolVersion: String by project
 
-// JUnit repeat caps (Issue #1002, enforced since Issue #1110 by :core-test's RepeatedTestCapExtension):
-// typed String, so systemProperty(..., Any) gets no Any? warning.
-val testRepeatMaxCount: String by project
-val heavyTestRepeatMaxCount: String by project
-
 group = "cz.vutbr.fit"
 version = "1.0"
 
@@ -141,8 +136,6 @@ tasks.test {
         // included by the `integrationTest` task below, based on a live reachability probe.
         excludeTags("integration-test", "heavy-test", "ollama-test")
     }
-    systemProperty("interlockSim.test.repeat.maxCount", testRepeatMaxCount)
-    systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
     jvmArgs("-ea")
 
     testLogging {
@@ -179,8 +172,6 @@ val integrationTest by tasks.registering(Test::class) {
         excludeTags("heavy-test", "ollama-test")
     }
 
-    systemProperty("interlockSim.test.repeat.maxCount", testRepeatMaxCount)
-    systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
     jvmArgs("-ea")
     maxParallelForks = 1
 
@@ -242,9 +233,6 @@ val heavyTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("heavy-test")
     }
-
-    systemProperty("interlockSim.test.repeat.maxCount", heavyTestRepeatMaxCount)
-    systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
 
     jvmArgs("-ea")
     maxParallelForks = 1

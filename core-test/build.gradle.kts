@@ -43,7 +43,11 @@ kotlin {
 			jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
 		}
 		testRuns["test"].executionTask.configure {
-			useJUnitPlatform()
+			useJUnitPlatform {
+				// RepeatedTestCapExtensionTest runs these fixtures itself through EngineTestKit;
+				// some of them are meant to fail.
+				excludeTags("cap-fixture")
+			}
 		}
 	}
 
@@ -78,45 +82,21 @@ kotlin {
 				// when compiled outside a test source set — the junit5 variant makes them
 				// available for commonMain JVM compilation of CommonKoinTestBase.
 				implementation(kotlin("test-junit5"))
-				// Issue #1110: RepeatedTestCapExtension (Jupiter extension API) and
-				// RepeatedTestCapProbe (nested launcher run that proves the cap is enforced).
+				// Issue #1110: RepeatedTestCapExtension (Jupiter extension API). Registered by the
+				// static src/jvmMain/resources/META-INF/services file.
 				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
-				implementation("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
+			}
+		}
+		val jvmTest by getting {
+			dependencies {
+				// Issue #1110: RepeatedTestCapExtensionTest runs its fixtures through EngineTestKit.
+				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
+				implementation("org.junit.platform:junit-platform-testkit:$junitPlatformVersion")
+				runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
+				runtimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 			}
 		}
 	}
-}
-
-// ===========================================
-// JUnit extension auto-registration (Issue #1110)
-// ===========================================
-// Generates the ServiceLoader file that registers RepeatedTestCapExtension for JUnit Jupiter's
-// extension auto-detection. Consuming modules enable auto-detection and set the cap on each
-// Test task (junit.jupiter.extensions.autodetection.enabled / interlockSim.test.repeat.maxCount).
-
-val junitExtensionServiceDir = layout.buildDirectory.dir("generated/junitExtensionService")
-
-val generateJUnitExtensionService =
-	tasks.register("generateJUnitExtensionService") {
-		group = "build"
-		description = "Generate META-INF/services registration of the JUnit RepeatedTestCapExtension"
-		val extensionClass = "cz.vutbr.fit.interlockSim.testutil.RepeatedTestCapExtension"
-		val outDirProvider = junitExtensionServiceDir
-		inputs.property("extensionClass", extensionClass)
-		outputs.dir(outDirProvider)
-		doLast {
-			val file =
-				outDirProvider
-					.get()
-					.asFile
-					.resolve("META-INF/services/org.junit.jupiter.api.extension.Extension")
-			file.parentFile.mkdirs()
-			file.writeText("$extensionClass\n")
-		}
-	}
-
-kotlin.sourceSets.named("jvmMain") {
-	resources.srcDir(generateJUnitExtensionService)
 }
 
 // ===========================================

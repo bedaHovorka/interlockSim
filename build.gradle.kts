@@ -67,13 +67,26 @@ val checkKdisco by tasks.registering {
 }
 
 // ===========================================
+// @RepeatedTest repetition caps (Issue #1110)
+// ===========================================
+// Turns on JUnit extension auto-detection for every Test task, so :core-test's
+// RepeatedTestCapExtension (registered in its META-INF/services) runs everywhere. The caps
+// themselves live in the extension and follow the heavy-test tag, not the task.
+
+subprojects {
+    tasks.withType<Test>().configureEach {
+        systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
+    }
+}
+
+// ===========================================
 // Lifecycle delegation tasks
 // ===========================================
 
 tasks.register("test") {
     group = "verification"
     description = "Run the unit tests of every JVM subproject"
-    dependsOn(":core:jvmTest", ":desktop-ui:test", ":dispatcher-agent:test")
+    dependsOn(":core:jvmTest", ":core-test:jvmTest", ":desktop-ui:test", ":dispatcher-agent:test")
 }
 
 tasks.register("integrationTest") {
