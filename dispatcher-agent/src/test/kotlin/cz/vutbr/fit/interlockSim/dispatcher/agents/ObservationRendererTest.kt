@@ -34,7 +34,7 @@ import java.util.Locale
 /**
  * Acceptance-criteria tests for the SP2c.2 renderers (#825):
  *  - Three renderers behind one interface + composite (AC1)
- *  - Determinism: 100× identical bytes (AC3)
+ *  - Determinism: 50× identical bytes (AC3; capped at 50 repetitions by Issue #1110)
  *  - Layout invariant: STATION TOPOLOGY < RECENT TICKS < CURRENT STATE < WHAT YOU CAN DO NOW (AC4)
  *  - No-menu (C9): no numbered-option lines, no option/choose one/select (AC5)
  *  - Token-budget: char-length ceiling (AC6)
@@ -97,26 +97,26 @@ class ObservationRendererTest {
 	// ── AC3: determinism ──────────────────────────────────────────────────────────────────
 
 	@Nested
-	@DisplayName("AC3 — determinism (100×)")
+	@DisplayName("AC3 — determinism (50×)")
 	inner class Determinism {
-		@RepeatedTest(100)
-		@DisplayName("CompactTextRenderer: rendering the same context 100× yields identical bytes")
+		@RepeatedTest(50)
+		@DisplayName("CompactTextRenderer: rendering the same context 50× yields identical bytes")
 		fun compactTextDeterminism() {
 			val first = CompactTextRenderer().render(ctx)
 			val second = CompactTextRenderer().render(ctx)
 			assertThat(first).isEqualTo(second)
 		}
 
-		@RepeatedTest(100)
-		@DisplayName("DeltaRenderer: rendering the same context 100× yields identical bytes")
+		@RepeatedTest(50)
+		@DisplayName("DeltaRenderer: rendering the same context 50× yields identical bytes")
 		fun deltaDeterminism() {
 			val first = DeltaRenderer().render(ctx)
 			val second = DeltaRenderer().render(ctx)
 			assertThat(first).isEqualTo(second)
 		}
 
-		@RepeatedTest(100)
-		@DisplayName("SchematicRenderer: rendering the same context 100× yields identical bytes")
+		@RepeatedTest(50)
+		@DisplayName("SchematicRenderer: rendering the same context 50× yields identical bytes")
 		fun schematicDeterminism() {
 			val renderer = SchematicRenderer(topology)
 			val first = renderer.render(ctx)

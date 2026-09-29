@@ -185,10 +185,17 @@ The default pre-push gate is `test` + `integrationTest`.
 ./gradlew :dispatcher-agent:heavyTest
 ```
 
-Repetition caps (Gradle-enforced via `junit.jupiter.params.repeat.maxCount`):
-`test`/`integrationTest` max **50** repetitions per test method; `heavyTest` up to **1000**.
-Both `test` and `integrationTest` call `excludeTags("heavy-test")`, so a mistagged heavy
-test cannot regress into CI.
+Repetition caps follow the tag: a `heavy-test` test may repeat up to **1000** times, every
+other test up to **50** times per test method. JUnit has no such setting of its own;
+`:core-test`'s `RepeatedTestCapExtension` fails any `@RepeatedTest(n)` above its cap before
+the body runs. The cap values are configurable through gradle.properties
+(`testRepeatMaxCount` / `heavyTestRepeatMaxCount`); `DEFAULT_CAP`/`HEAVY_CAP` are only the
+in-code fallbacks. The root `build.gradle.kts` passes both values to every `Test` task and
+turns on `junit.jupiter.extensions.autodetection.enabled`, so the extension runs in all
+modules; `RepeatedTestCapExtensionTest` in `:core-test` proves the wiring, and each JVM
+module keeps a `RepeatedTestCapWiringTest` tripwire that fails if its tests would run
+uncapped. Every JVM unit-test task (including `:core-test:jvmTest`) also calls
+`excludeTags("heavy-test")`, so a heavy test cannot regress into CI.
 
 The manual-only `aiSweep` dispatcher sweep belongs to the same category — see
 [dispatcher-agent/CLAUDE.md](dispatcher-agent/CLAUDE.md).

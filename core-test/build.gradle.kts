@@ -21,6 +21,8 @@ val koinVersion: String by project
 val kotlinVersion: String by project
 val kdiscoVersion: String by project
 val detektFormattingVersion: String by project
+val junitJupiterVersion: String by project
+val junitPlatformVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -41,7 +43,12 @@ kotlin {
 			jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
 		}
 		testRuns["test"].executionTask.configure {
-			useJUnitPlatform()
+			useJUnitPlatform {
+				// RepeatedTestCapExtensionTest runs these fixtures itself through EngineTestKit;
+				// some of them are meant to fail. Like every other JVM unit-test task, keep
+				// heavy and integration tests out of the CI path — they have their own tasks.
+				excludeTags("cap-fixture", "integration-test", "heavy-test")
+			}
 		}
 	}
 
@@ -76,6 +83,18 @@ kotlin {
 				// when compiled outside a test source set — the junit5 variant makes them
 				// available for commonMain JVM compilation of CommonKoinTestBase.
 				implementation(kotlin("test-junit5"))
+				// Issue #1110: RepeatedTestCapExtension (Jupiter extension API). Registered by the
+				// static src/jvmMain/resources/META-INF/services file.
+				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
+			}
+		}
+		val jvmTest by getting {
+			dependencies {
+				// Issue #1110: RepeatedTestCapExtensionTest runs its fixtures through EngineTestKit.
+				// junit-jupiter-api comes from jvmMain; only the testkit/launcher bits are extra.
+				implementation("org.junit.platform:junit-platform-testkit:$junitPlatformVersion")
+				runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
+				runtimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 			}
 		}
 	}

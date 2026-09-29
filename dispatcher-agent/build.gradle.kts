@@ -60,9 +60,6 @@ val detektFormattingVersion: String by project
 val ktlintVersion: String by project
 val jacocoToolVersion: String by project
 
-// JUnit repeat caps (Issue #1002): typed String, so systemProperty(..., Any) gets no Any? warning.
-val heavyTestRepeatMaxCount: String by project
-
 group = "cz.vutbr.fit"
 version = "1.0"
 
@@ -236,8 +233,6 @@ val heavyTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("heavy-test")
     }
-
-    systemProperty("junit.jupiter.params.repeat.maxCount", heavyTestRepeatMaxCount)
 
     jvmArgs("-ea")
     maxParallelForks = 1
