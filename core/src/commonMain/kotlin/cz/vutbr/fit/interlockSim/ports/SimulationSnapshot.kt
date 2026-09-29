@@ -72,6 +72,62 @@ data class SimulationSnapshot(
 	val timetables: List<TimetableReading>,
 	val trainPerceptions: List<TrainPerceptionReading> = emptyList()
 ) {
+	// ── Map-backed lookups (#967) ──────────────────────────────────────────
+	//
+	// Declared in the class body, so they stay out of the data class's equals/hashCode/toString/copy.
+	// Each map is built once per instance, on the first lookup, which is O(1) from then on.
+	// On a duplicate key the first reading wins, exactly like the firstOrNull scans these replace.
+
+	private val semaphoreByName: Map<String, SemaphoreReading> by lazy {
+		semaphores.associateFirstBy { it.name }
+	}
+
+	private val blockByBlockId: Map<String, BlockOccupancyReading> by lazy {
+		blocks.associateFirstBy { it.blockId }
+	}
+
+	private val trainPositionByTrainId: Map<String, TrainPositionReading> by lazy {
+		trainPositions.associateFirstBy { it.trainId }
+	}
+
+	private val timetableByTrainId: Map<String, TimetableReading> by lazy {
+		timetables.associateFirstBy { it.trainId }
+	}
+
+	private val trainPerceptionByTrainId: Map<String, TrainPerceptionReading> by lazy {
+		trainPerceptions.associateFirstBy { it.trainId }
+	}
+
+	/**
+	 * Returns the [SemaphoreReading] whose [SemaphoreReading.name] matches [semaphoreName],
+	 * or `null` if this snapshot contains no such semaphore.
+	 */
+	fun signalAspect(semaphoreName: String): SemaphoreReading? = semaphoreByName[semaphoreName]
+
+	/**
+	 * Returns the [BlockOccupancyReading] whose [BlockOccupancyReading.blockId] matches
+	 * [blockId], or `null` if this snapshot contains no such block.
+	 */
+	fun blockOccupancy(blockId: String): BlockOccupancyReading? = blockByBlockId[blockId]
+
+	/**
+	 * Returns the [TrainPositionReading] whose [TrainPositionReading.trainId] matches [trainId],
+	 * or `null` if no such active train appears in this snapshot.
+	 */
+	fun trainPosition(trainId: String): TrainPositionReading? = trainPositionByTrainId[trainId]
+
+	/**
+	 * Returns the [TimetableReading] whose [TimetableReading.trainId] matches [trainId], or
+	 * `null` if no such active train appears in this snapshot.
+	 */
+	fun trainTimetable(trainId: String): TimetableReading? = timetableByTrainId[trainId]
+
+	/**
+	 * Returns the [TrainPerceptionReading] whose [TrainPerceptionReading.trainId] matches
+	 * [trainId], or `null` if no such active train appears in this snapshot.
+	 */
+	fun trainPerception(trainId: String): TrainPerceptionReading? = trainPerceptionByTrainId[trainId]
+
 	companion object {
 		/**
 		 * Empty snapshot returned by [NetworkPerceptionPort.snapshot] before the first
@@ -91,3 +147,7 @@ data class SimulationSnapshot(
 			)
 	}
 }
+
+/** Like [associateBy], but the first element wins on a duplicate key instead of the last. */
+private inline fun <T> List<T>.associateFirstBy(key: (T) -> String): Map<String, T> =
+	buildMap(size) { this@associateFirstBy.forEach { getOrPut(key(it)) { it } } }

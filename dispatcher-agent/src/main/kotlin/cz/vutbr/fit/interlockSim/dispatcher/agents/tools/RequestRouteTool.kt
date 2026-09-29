@@ -411,10 +411,7 @@ class RequestRouteTool(
 	 * on the agent driver thread, whereas `trainPerception()` walks live `Train` objects.
 	 */
 	private fun activePerceptionOf(trainId: String): TrainPerceptionReading? =
-		perceptionPort
-			?.snapshot()
-			?.trainPerceptions
-			?.firstOrNull { it.trainId == trainId }
+		perceptionPort?.snapshot()?.trainPerception(trainId)
 
 	/**
 	 * The signal this train is stopped at, or `null` if it is moving or has no signal ahead.
@@ -463,13 +460,7 @@ class RequestRouteTool(
 		// Fallback for callers that supply no static block list: the live snapshot carries the same
 		// ids once the simulation has captured one. Static [blockIds] is preferred because it is
 		// available from the very first cycle, before any capture has happened.
-		val liveBlockIds =
-			perceptionPort
-				?.snapshot()
-				?.blocks
-				?.map { it.blockId }
-				?.toSet()
-				.orEmpty()
-		return if (name in liveBlockIds) RejectionCode.ENDPOINT_IS_BLOCK_ID else RejectionCode.UNKNOWN_ENDPOINT
+		val isLiveBlockId = perceptionPort?.snapshot()?.blockOccupancy(name) != null
+		return if (isLiveBlockId) RejectionCode.ENDPOINT_IS_BLOCK_ID else RejectionCode.UNKNOWN_ENDPOINT
 	}
 }

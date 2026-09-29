@@ -16,10 +16,12 @@ import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.testutil.trainPerceptionReading
 import kotlin.test.Test
 
 /**
@@ -228,6 +230,86 @@ class SimulationSnapshotTest {
 		assertThat(snap.blocks).isEmpty()
 		assertThat(snap.trainPositions).isEmpty()
 		assertThat(snap.timetables).isEmpty()
+	}
+
+	// ── Map-backed lookups (#967) ──────────────────────────────────────────
+	//
+	// Each "keeps the first reading" test also proves the lookup returns a matching reading.
+	// associateBy() alone would keep the LAST entry on a duplicate key; the snapshot must keep
+	// the old firstOrNull-scan semantics instead (first match wins).
+
+	@Test
+	fun `every lookup returns null for an unknown key`() {
+		val snap = SimulationSnapshot.EMPTY
+
+		assertThat(snap.signalAspect("unknownSem")).isNull()
+		assertThat(snap.blockOccupancy("unknownBlock")).isNull()
+		assertThat(snap.trainPosition("unknownTrain")).isNull()
+		assertThat(snap.trainTimetable("unknownTrain")).isNull()
+		assertThat(snap.trainPerception("unknownTrain")).isNull()
+	}
+
+	@Test
+	fun `signalAspect keeps the first reading for a duplicate semaphore name`() {
+		val first = SemaphoreReading("zA", Signal.FREE)
+		val second = SemaphoreReading("zA", Signal.STOP)
+		val snap = SimulationSnapshot.EMPTY.copy(semaphores = listOf(first, second))
+
+		assertThat(snap.signalAspect("zA")).isEqualTo(first)
+	}
+
+	@Test
+	fun `blockOccupancy keeps the first reading for a duplicate block id`() {
+		val first = BlockOccupancyReading("k1", TrackFacility.State.FREE, null)
+		val second = BlockOccupancyReading("k1", TrackFacility.State.OCCUPIED, "Train #1")
+		val snap = SimulationSnapshot.EMPTY.copy(blocks = listOf(first, second))
+
+		assertThat(snap.blockOccupancy("k1")).isEqualTo(first)
+	}
+
+	@Test
+	fun `trainPosition keeps the first reading for a duplicate train id`() {
+		val first = TrainPositionReading("Train #1", 10.0, 2.0, 300.0, "k1")
+		val second = TrainPositionReading("Train #1", 20.0, 0.0, 500.0, "k2")
+		val snap = SimulationSnapshot.EMPTY.copy(trainPositions = listOf(first, second))
+
+		assertThat(snap.trainPosition("Train #1")).isEqualTo(first)
+	}
+
+	@Test
+	fun `trainTimetable keeps the first reading for a duplicate train id`() {
+		val first = TimetableReading("Train #1", "A", "B", 0.0, 60.0)
+		val second = TimetableReading("Train #1", "C", "D", 30.0, 120.0)
+		val snap = SimulationSnapshot.EMPTY.copy(timetables = listOf(first, second))
+
+		assertThat(snap.trainTimetable("Train #1")).isEqualTo(first)
+	}
+
+	@Test
+	fun `trainPerception keeps the first reading for a duplicate train id`() {
+		// Both readings carry the fixture's fixed train id "Train #1"; only the velocity differs.
+		val first = trainPerceptionReading(signalAhead = Signal.FREE, velocity = 10.0)
+		val second = trainPerceptionReading(signalAhead = Signal.FREE, velocity = 0.0)
+		val snap = SimulationSnapshot.EMPTY.copy(trainPerceptions = listOf(first, second))
+
+		assertThat(snap.trainPerception("Train #1")).isEqualTo(first)
+	}
+
+	@Test
+	fun `map-backed lookups do not affect equals hashCode or toString`() {
+		// The lazy lookup maps live in the class body (not the primary constructor), so they
+		// must never leak into the generated data-class members even after being populated.
+		val semaphores = listOf(SemaphoreReading("zA", Signal.FREE))
+		val snap1 = SimulationSnapshot.EMPTY.copy(semaphores = semaphores)
+		val snap2 = SimulationSnapshot.EMPTY.copy(semaphores = semaphores)
+
+		// Populate snap1's lazy maps before comparing, so a leak would show up as inequality
+		// or a hashCode/toString mismatch against the untouched snap2.
+		snap1.signalAspect("zA")
+
+		assertThat(snap1).isEqualTo(snap2)
+		assertThat(snap1.hashCode()).isEqualTo(snap2.hashCode())
+		assertThat(snap1.toString()).isEqualTo(snap2.toString())
 	}
 
 	// ── RouteRequestResult — verify no collision with SP0.3 types ─────────

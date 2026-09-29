@@ -149,9 +149,9 @@ class RuleBasedEmissionStrategy(
 	 * ## SimulationSnapshot stub
 	 *
 	 * [RuleBasedDispatcher] accesses only `snapshot.trainPositions.size` (via
-	 * [DispatchObservation.approvedTrainCount]). The stub fills `trainPositions` with one entry
-	 * per active train (non-QUEUED, non-EXITED) so the count is correct. All other snapshot
-	 * fields are left empty.
+	 * [DispatchObservation.approvedTrainCount]). [DispatchObservation.from] builds the stub
+	 * [SimulationSnapshot] from `activeTrainPositions` — one entry per active train (non-QUEUED,
+	 * non-EXITED) so the count is correct — leaving every other snapshot field empty.
 	 *
 	 * ## Optimistic-projection inaccuracy
 	 *
@@ -174,17 +174,9 @@ class RuleBasedEmissionStrategy(
 					)
 				}
 
-		val snapshot =
-			SimulationSnapshot(
-				simTime = obs.simTime,
-				semaphores = emptyList(),
-				blocks = emptyList(),
-				trainPositions = activeTrainPositions,
-				timetables = emptyList()
-			)
-
-		return DispatchObservation(
-			snapshot = snapshot,
+		return DispatchObservation.from(
+			simTime = obs.simTime,
+			trainPositions = activeTrainPositions,
 			unapprovedTrains =
 				obs.queued.map { queuedTrain ->
 					QueuedTrainObservation(

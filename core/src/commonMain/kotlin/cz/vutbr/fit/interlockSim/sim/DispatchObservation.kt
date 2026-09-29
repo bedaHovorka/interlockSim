@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 
 /**
  * Read-only input to [Dispatcher.decide] — everything a dispatch policy needs to
@@ -50,6 +51,45 @@ data class DispatchObservation(
 ) {
 	/** Number of trains currently approved (active in the simulation). */
 	val approvedTrainCount: Int get() = snapshot.trainPositions.size
+
+	companion object {
+		/**
+		 * Builds an observation whose stub [SimulationSnapshot] carries only [trainPositions]:
+		 * semaphores, blocks, timetables and train perceptions are empty. For callers that
+		 * convert from a push-based format with no full snapshot, such as `:dispatcher-agent`'s
+		 * `DispatcherObservation` (a type `:core` cannot see).
+		 *
+		 * Every parameter is required on purpose, so a caller cannot silently lose block inputs.
+		 *
+		 * @param simTime Simulation time (seconds) stamped on the stub snapshot.
+		 * @param trainPositions One reading per active (approved) train, so [approvedTrainCount]
+		 *   is correct.
+		 * @param unapprovedTrains See [DispatchObservation.unapprovedTrains].
+		 * @param innerBlockInputs See [DispatchObservation.innerBlockInputs].
+		 * @param outerBlockInputs See [DispatchObservation.outerBlockInputs].
+		 */
+		fun from(
+			simTime: Double,
+			trainPositions: List<TrainPositionReading>,
+			unapprovedTrains: List<QueuedTrainObservation>,
+			innerBlockInputs: List<BlockInputObservation>,
+			outerBlockInputs: List<BlockInputObservation>
+		): DispatchObservation =
+			DispatchObservation(
+				snapshot =
+					SimulationSnapshot(
+						simTime = simTime,
+						semaphores = emptyList(),
+						blocks = emptyList(),
+						trainPositions = trainPositions,
+						timetables = emptyList(),
+						trainPerceptions = emptyList()
+					),
+				unapprovedTrains = unapprovedTrains,
+				innerBlockInputs = innerBlockInputs,
+				outerBlockInputs = outerBlockInputs
+			)
+	}
 }
 
 /**
