@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
-import cz.vutbr.fit.interlockSim.util.cellsOfType
+import cz.vutbr.fit.interlockSim.util.cellsByName
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -428,19 +428,11 @@ class DefaultNetworkActuatorPort(
 	 * [DefaultNetworkPerceptionPort.buildSemaphoreCache].
 	 */
 	private fun buildSemaphoreCache(): Map<String, DynamicRailSemaphore> =
-		env
-			.getRailWayNetGrid()
-			.cellsOfType<DynamicRailSemaphore>()
-			.filter { it.name.isNotBlank() }
-			.associateBy { it.name }
+		env.getRailWayNetGrid().cellsByName<DynamicRailSemaphore> { it.name }
 
 	/**
 	 * Scans the grid once to build a name→switch index.
 	 */
 	private fun buildSwitchCache(): Map<String, DynamicRailSwitch> =
-		env
-			.getRailWayNetGrid()
-			.cellsOfType<DynamicRailSwitch>()
-			.filter { it.name.isNotBlank() }
-			.associateBy { it.name }
+		env.getRailWayNetGrid().cellsByName<DynamicRailSwitch> { it.name }
 }

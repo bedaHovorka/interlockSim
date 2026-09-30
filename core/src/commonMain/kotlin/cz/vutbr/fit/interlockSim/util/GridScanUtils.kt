@@ -30,3 +30,32 @@ inline fun <reified R : Cell> RailwayNetGrid<Cell>.cellsOfType(): List<R> {
 	}
 	return result
 }
+
+/**
+ * Returns every cell of type [R] in this grid that has a non-blank [name], indexed by that name:
+ * a [cellsOfType] scan followed by [indexByNonBlankName].
+ *
+ * Duplicate names follow [associateBy]: the cell scanned last wins.
+ *
+ * @param name reads the cell's name (the dynamic cell types expose `name` without a shared supertype)
+ * @since Issue #959 — replaces the scan → filter → `associateBy` chain repeated in the network ports
+ */
+inline fun <reified R : Cell> RailwayNetGrid<Cell>.cellsByName(name: (R) -> String): Map<String, R> =
+	cellsOfType<R>().indexByNonBlankName(name)
+
+/**
+ * Indexes these elements by [name], dropping those whose name is blank. Duplicate names follow
+ * [associateBy]: the last element wins.
+ *
+ * @since Issue #959 — the tail of [cellsByName], for callers that already hold the scanned cells
+ */
+inline fun <T> Iterable<T>.indexByNonBlankName(name: (T) -> String): Map<String, T> {
+	// One pass and one `name` read per element; `result[key] = element` keeps
+	// [associateBy]'s last-wins rule for duplicate names.
+	val result = LinkedHashMap<String, T>()
+	for (element in this) {
+		val key = name(element)
+		if (key.isNotBlank()) result[key] = element
+	}
+	return result
+}

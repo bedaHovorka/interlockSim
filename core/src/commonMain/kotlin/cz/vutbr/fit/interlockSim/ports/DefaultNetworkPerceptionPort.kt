@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.sim.separatorAspect
 import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
+import cz.vutbr.fit.interlockSim.util.indexByNonBlankName
 
 /**
  * Simulation-backed implementation of [NetworkPerceptionPort].
@@ -92,7 +93,7 @@ class DefaultNetworkPerceptionPort(
 	 * Built from [semaphoreCache]; unnamed semaphores are excluded from the index.
 	 */
 	private val semaphoreByName: Map<String, DynamicRailSemaphore> =
-		semaphoreCache.filter { it.name.isNotBlank() }.associateBy { it.name }
+		semaphoreCache.indexByNonBlankName { it.name }
 
 	// ── Block cache built once at construction ─────────────────────────────
 

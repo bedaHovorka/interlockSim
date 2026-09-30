@@ -19,12 +19,16 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -317,6 +321,54 @@ class DispatcherObservationProjectorTest : DispatcherKoinTestBase() {
 					SwitchView("vA", RailSwitch.Conf.MAIN, null),
 					SwitchView("vB", RailSwitch.Conf.MAIN, null)
 				)
+			}
+		}
+
+		/**
+		 * data.xsd does not forbid two switches with the same name. The per-tick view keeps the
+		 * first one in grid-scan order, the same rule StationTopologySerializer applies, so the
+		 * prompt never mixes one cell's type with another cell's position (Issue #959).
+		 */
+		@Test
+		@DisplayName("a switch name shared by two cells reports the first one in grid-scan order")
+		fun duplicateSwitchNameKeepsFirstScanned() {
+			loadShuntingLoopContext().use { context ->
+				val first = mockk<DynamicRailSwitch>(relaxed = true)
+				every { first.name } returns "vX"
+				every { first.conf } returns RailSwitch.Conf.MAIN
+				val second = mockk<DynamicRailSwitch>(relaxed = true)
+				every { second.name } returns "vX"
+				every { second.conf } returns RailSwitch.Conf.BRANCH
+				val cells = listOf(first, second)
+				val grid =
+					object : RailwayNetGrid<Cell> by context.getRailWayNetGrid() {
+						override val cols: Int = cells.size
+						override val rows: Int = 1
+
+						override fun getCellAt(
+							x: Int,
+							y: Int
+						): Cell = cells[x]
+					}
+				val environment =
+					object : SimulationEnvironment by context {
+						override fun getRailWayNetGrid(): RailwayNetGrid<Cell> = grid
+					}
+				val perceptionPort = mockk<NetworkPerceptionPort>()
+				val sensorPort = mockk<DispatchLoopSensorPort>()
+				every { perceptionPort.captureSnapshot() } returns snapshotOf(simTime = 0.0, perceptions = emptyList())
+				every { sensorPort.snapshot() } returns dispatchSnapshotOf(emptyList())
+				val projector =
+					DispatcherObservationProjector(
+						perceptionPort = perceptionPort,
+						dispatchLoopSensorPort = sensorPort,
+						pathReservationRegistry = context.scope.get<PathReservationRegistry>(),
+						environment = environment
+					)
+
+				val observation = projector.projectTick(1L)
+
+				assertThat(observation.switches).containsExactly(SwitchView("vX", RailSwitch.Conf.MAIN, null))
 			}
 		}
 	}

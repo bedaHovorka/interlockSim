@@ -40,6 +40,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -383,6 +384,28 @@ class DefaultPathReservationService(
 	}
 
 	/**
+	 * Every [DynamicRailSemaphore] in this context's grid, in grid-scan order (column by column,
+	 * top to bottom), read once on first use.
+	 *
+	 * Same lifetime and same assumption as [allBlocksCache]: the simulation grid is populated
+	 * only while the context is built and is frozen before this per-context service can be
+	 * obtained, so cells are never added or removed afterwards. Only the semaphores' live state
+	 * changes, and that is read off these references. Lazy for the same reason as
+	 * [allBlocksCache]. Mirrors [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]'s
+	 * semaphore cache.
+	 *
+	 * @since Issue #965 — replaces a full grid scan on every [reservePathToAny] call
+	 */
+	private val allSemaphoresCache: List<DynamicRailSemaphore> by lazy {
+		environment.getRailWayNetGrid().cellsOfType<DynamicRailSemaphore>().also { semaphores ->
+			logger.trace { "allSemaphores: Found ${semaphores.size} semaphore(s) in grid" }
+		}
+	}
+
+	/** All semaphores of this context's grid, from [allSemaphoresCache]; `internal` for tests. */
+	internal fun allSemaphores(): List<DynamicRailSemaphore> = allSemaphoresCache
+
+	/**
 	 * Every block that constitutes [trainId]'s current authority: those the registry records as
 	 * reserved for it, plus those it physically occupies.
 	 *
@@ -482,7 +505,8 @@ class DefaultPathReservationService(
 		trainId: String,
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
-		maxDepth: Int
+		maxDepth: Int,
+		topologicalPaths: Lazy<List<List<TrackSection>>>?
 	): List<List<TrackSection>> {
 		if (start is DynamicInOut && target is DynamicInOut) {
 			val routes = routeFinder.findRoutes(start.staticRef, target.staticRef, environment)
@@ -497,7 +521,7 @@ class DefaultPathReservationService(
 			return routes.map { it.segments }
 		}
 
-		return navigator.findAllTopologicalPaths(start, target, maxDepth)
+		return topologicalPaths?.value ?: navigator.findAllTopologicalPaths(start, target, maxDepth)
 	}
 
 	/**
@@ -531,12 +555,29 @@ class DefaultPathReservationService(
 	 * - Empty paths list → return NoPathExists
 	 * - All paths blocked → return AllPathsBlocked
 	 */
-	@Suppress("LongMethod")
 	override fun reservePath(
 		trainId: String,
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
 		maxDepth: Int
+	): PathReservationService.ReservationResult = reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
+
+	/**
+	 * [reservePath] with the topological candidate paths supplied by the caller (Issue #966).
+	 *
+	 * [topologicalPaths] must be `navigator.findAllTopologicalPaths(start, target, maxDepth)`. It
+	 * replaces that enumeration in the non-InOut↔InOut branch of candidate discovery and is read
+	 * only there, so a caller that already enumerated the paths (for example to sort targets)
+	 * does not enumerate them again. InOut↔InOut requests still go to [RouteFinder]. `null`
+	 * means "enumerate here", exactly as the public overload does.
+	 */
+	@Suppress("LongMethod")
+	internal fun reservePath(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		maxDepth: Int,
+		topologicalPaths: Lazy<List<List<TrackSection>>>?
 	): PathReservationService.ReservationResult {
 		// Step 0 (Issue #893, task A-R1): a route may only start where the train actually is.
 		// Checked BEFORE candidate-path discovery so it also governs the already-owned
@@ -544,7 +585,7 @@ class DefaultPathReservationService(
 		// this train can never reach.
 		rejectNonContiguousStart(trainId, start)?.let { return it }
 
-		val candidatePaths = findCandidatePaths(trainId, start, target, maxDepth)
+		val candidatePaths = findCandidatePaths(trainId, start, target, maxDepth, topologicalPaths)
 
 		if (candidatePaths.isEmpty()) {
 			return PathReservationService.ReservationResult.NoPathExists
@@ -590,46 +631,7 @@ class DefaultPathReservationService(
 				}
 
 			if (forwardBlocks.isEmpty()) {
-				// All blocks in this path are already owned by this train
-				// Configure START semaphore before returning (may be from different position)
-				// configureSemaphoreSignal is idempotent, safe to call multiple times
-				// Issue #904: snapshot BEFORE configureAlreadyOwnedStartSignal so a merge abort
-				// below can reset exactly what THIS call cleared, not a pre-existing reservation's
-				// signal (mirrors Step 2g/2i's own clearedBeforeStart snapshots).
-				val clearedBeforeStart = snapshotClearedSemaphores(trainId)
-				if (blocks.isNotEmpty()) {
-					configureAlreadyOwnedStartSignal(trainId, start, blocks)
-				}
-				// FIX (Goal 10 SP2b.9 follow-up): a redundant re-request for a route this train
-				// already holds to the same target (e.g. a stateless per-cycle LLM dispatcher
-				// re-issuing request_route for a train it already granted a route to, since it
-				// has no memory of its own prior tool calls) must be a no-op here. Re-registering
-				// an identical PathInfo would duplicate every separator in the merge
-				// (PathReservationRegistry.registerPathInfo/mergePathInfo), and a further
-				// redundant call can hit the registry's 3rd-occurrence cycle-abort — silently
-				// discarding the merge while this method still reports Success, an invisible
-				// PathInfo/reality divergence that can strand the train permanently once it
-				// reaches whatever depends on the discarded segment.
-				val existingPathInfo = registry.getPathInfo(trainId)
-				if (existingPathInfo != null && existingPathInfo.target == target) {
-					clearBlockedTracking(trainId)
-					return PathReservationService.ReservationResult.Success(blocks)
-				}
-
-				// FIX (Issue #296): Register PathInfo for already-owned blocks
-				val pathInfo = pathInfoBuilder.buildPathInfo(start, target, path)
-				val mergeOutcome = registry.registerPathInfo(trainId, pathInfo)
-				// Issue #904: this branch acquires no NEW blocks or switches -- the whole point is
-				// that the train already owns everything -- so an abort has nothing to roll back on
-				// that side. The only discrepancy a merge abort can leave here is a signal this call
-				// just (re-)cleared for a merge that never happened; reset it back to STOP (G1),
-				// still report Success since the train's actual block ownership is correct and
-				// unchanged (traffic-simulation-expert ruling, Issue #904).
-				resetSignalsIfMergeAborted(mergeOutcome, trainId, start, clearedBeforeStart)
-
-				// Resolved -- this train is no longer contending for any block.
-				clearBlockedTracking(trainId)
-				return PathReservationService.ReservationResult.Success(blocks)
+				return reserveAlreadyOwnedPath(trainId, start, target, blocks, path)
 			}
 
 			// Step 2b: Check if all forward blocks are available (FREE or RESERVED by THIS train)
@@ -656,226 +658,16 @@ class DefaultPathReservationService(
 				continue
 			}
 
-			// Step 2d: Register ownership in registry (atomic operation, only forward blocks)
-			return when (val result = registry.registerAtomic(trainId, forwardBlocks)) {
-				is PathReservationRegistry.RegistrationResult.Success -> {
-					// Success - path reserved and registered
-
-					// Step 2e: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
-					logger.debug {
-						"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
-					}
-					val pathInfo =
-						pathInfoBuilder.buildPathInfo(
-							start = start,
-							target = target,
-							trackSections = path // path is List<TrackSection> here
-						)
-
-					// Step 2e.5: Release any ORPHAN lock among this candidate's switches --
-					// locked by a stray setUpPath call that never reached
-					// registry.registerSwitches (Issue #1065; see releaseOrphanSwitchLocks).
-					// Must run BEFORE configureSwitchesInPath below: a stale orphan lock would
-					// otherwise masquerade as transient Locked contention and refuse an
-					// otherwise valid candidate. Ordering relative to the priorSwitches snapshot
-					// is irrelevant -- an orphan has no registered owner, so it can never appear
-					// in registry.getSwitches(trainId) in the first place.
-					val candidateSwitches = extractUniqueSwitches(pathInfo)
-					releaseOrphanSwitchLocks(candidateSwitches)
-					// Issue #1076: likewise reclaim STALE foreign ownership among them, so the
-					// candidate never overwrites it; a foreign owner that survives this step
-					// protects a live route and refuses the candidate in configureSwitchesInPath.
-					reclaimStaleForeignSwitchOwnership(trainId, candidateSwitches)
-
-					// Step 2f: Configure and register switches (Issue #300, #291, #742).
-					// A candidate whose switches cannot be configured is physically impossible
-					// and must fail the reservation — see configureAndRegisterSwitches.
-					// Snapshot the switches the train already owns BEFORE this candidate so the
-					// scoped rollback below (and the signal-config rollback in Step 2g) only
-					// release THIS candidate's new switches, never the train's earlier hops.
-					val priorSwitches = registry.getSwitches(trainId).toSet()
-					// Snapshot the semaphore-clearing delta the same way, BEFORE any of this
-					// candidate's Step 2g/2h/2i signal work runs, so a rollback at any of those
-					// steps (including Step 2i's merge-abort rollback, Issue #904) can reset
-					// exactly what THIS candidate cleared (Issue #893 task A5).
-					val clearedBeforeCandidate = snapshotClearedSemaphores(trainId)
-					val switchOutcome = configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)
-					// The candidate has already been rolled back inside configureAndRegisterSwitches
-					// for either failure kind, so try the remaining candidate paths like the other
-					// failure modes (blocks-not-free, atomic-reservation-fail) rather than giving up
-					// early -- SP0.11 review follow-up (was `return AllPathsBlocked(1)`).
-					// recordSwitchConfigFailureIfGeometric only touches geometricFailures for
-					// Unconfigurable (Issue #903: a permanent impossibility, first-hit-wins) -- a
-					// Locked outcome (Issue #1065: SI-5, transient) must fall through to ordinary
-					// contention instead, extracted to keep this branch out of reservePath's own
-					// cyclomatic complexity count.
-					if (switchOutcome != SwitchConfigOutcome.Configured) {
-						geometricFailures =
-							recordSwitchConfigFailureIfGeometric(switchOutcome, geometricFailures, trainId, index)
-						continue
-					}
-
-					// Step 2g: Configure semaphore signal after successful reservation.
-					// A semaphore START is configured for blocks.first() (the block next to it, also on a
-					// route extension, Issue #1062); forwardBlocks (just reserved) only drive an InOut START.
-					if (forwardBlocks.isNotEmpty()) {
-						val signalResult = configureStartSignal(trainId, start, forwardBlocks, blocks.first())
-
-						// Rollback reservation if signal configuration failed
-						// This prevents trains from waiting indefinitely at STOP signals.
-						// SP0.11 review follow-up: use the scoped [rollbackUnconfigurableCandidate]
-						// rather than a full registry.unregister(trainId), which would nuke the
-						// train's ENTIRE pre-existing path on a mid-journey extension. Only this
-						// candidate's forwardBlocks and new switches are
-						// released; the train's earlier hops survive so it keeps waiting for its
-						// through route. The candidate is then rolled back cleanly, so try the
-						// remaining candidate paths like the other failure modes.
-						if (signalResult != StartSignalResult.Configured) {
-							// Issue #903: a G4 rejection is a PERMANENT impossibility, not ordinary
-							// contention -- record it (first-hit-wins) so the fallthrough return can
-							// classify it correctly. A genuine configuration exception stays folded
-							// into ordinary contention/rollback, unchanged.
-							geometricFailures =
-								recordG4FailureOnce(geometricFailures, signalResult, index)
-							// Issue #893 task A5: configureStartSignal can leave a PARTIAL aspect
-							// write behind -- the underlying config call sets the physical aspect
-							// and still throws before recordClearedSemaphore runs. Reset the
-							// before/after delta of clearedSemaphores (covers anything that WAS
-							// recorded), then explicitly drive the candidate START itself back to
-							// STOP for the unrecorded case resetSemaphoreSet's delta cannot see.
-							resetCandidateSignals(trainId, start, clearedBeforeCandidate)
-							rollbackUnconfigurableCandidate(
-								trainId,
-								forwardBlocks,
-								candidateSwitches,
-								priorSwitches
-							)
-							continue
-						}
-					}
-
-					// Step 2h: Configure intermediate semaphore signals along the full path.
-					// reservePath() is called with the entry (InOut/semaphore) and the exit
-					// (InOut/semaphore) as end-points, so the reserved path may pass through
-					// one or more intermediate semaphores.  Step 2g only sets the START
-					// separator's signal; intermediate semaphores remain at STOP unless we
-					// configure them here.  Without this, a train entering a multi-block path
-					// will travel through the first block, stop at the intermediate semaphore
-					// (signal=STOP) and wait forever.
-					// forwardBlocks is passed separately so a route EXTENSION (blocks the train
-					// already owns, plus new ones) only lights boundaries that lead into a new
-					// block -- see [configureIntermediateSemaphores].
-					configureIntermediateSemaphores(trainId, blocks, forwardBlocks.toSet())
-
-					// Step 2i: Register PathInfo metadata (Issue #295/#296 Phase 4; moved here by
-					// Issue #742). Registration happens only after switches AND signals configured
-					// successfully, so no rollback path can leave a poisoned PathInfo behind —
-					// a PathInfo pointing at an unusable route permanently stalls the train
-					// (isPathExtendedBeyond suppresses the corrective re-reservation).
-					// Issue #904: register the FORWARD-ONLY segment, not `pathInfo` (which starts
-					// at the original `start` and would falsely non-contiguous-abort on every
-					// route extension that reuses it, per forwardOnlyPathInfo's KDoc).
-					// The candidate already passed the Step 0a contiguity probe (Step 1.6), so the abort
-					// handling below now covers only Step 0b/0c and the cycle guard.
-					val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
-					val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
-					// If the registry's merge fail-safe STILL aborted
-					// (PathReservationRegistry.mergePathInfo's KDoc lists the four reasons) --
-					// now only the genuinely pathological ones: duplicated new-start, the
-					// direction reversal guard (Issue #944), or the cycle guard -- release
-					// exactly what THIS candidate acquired --
-					// transactionally complete, matching Step 2g's own rollback -- rather than
-					// leaving an orphaned RESERVED tail for OrphanReservationSweeper (which is
-					// not even wired in :fast-sim or bare-:core).
-					if (rollbackIfMergeAborted(
-							mergeOutcome,
-							trainId,
-							start,
-							forwardBlocks,
-							pathInfo,
-							priorSwitches,
-							clearedBeforeCandidate
-						)
-					) {
-						continue
-					}
-					logger.debug {
-						"reservePath: Registered PathInfo for $trainId with ${mergeCandidate.entryDirections.size} entry directions, " +
-							"reserved path has ${mergeCandidate.reservedPath.length()} elements"
-					}
-
-					// Emit BlockReserved only for the blocks THIS call newly reserved
-					// (forwardBlocks). `blocks` also holds the train's already-owned prefix
-					// (Step 2a.5), and each physical block is later released exactly once
-					// (one BlockReleased per block), so a BlockReserved re-emitted for an
-					// owned block left the per-event reservation counters permanently
-					// off-balance: DefaultMetricsCollectionService.activeReservationCount
-					// never returned to zero (the train was never counted as completed) and
-					// DefaultCollisionDetectionService / TemporalConflictDetector over-counted
-					// it the same way (Issue #1081 review; extensions over owned blocks
-					// became dispatcher-reachable with Issue #1060).
-					val simTime = currentSimulationTime()
-					forwardBlocks.forEach { block ->
-						emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
-						// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
-						registry.emit(
-							BlockOccupancyEvent(
-								block = block,
-								type = BlockOccupancyEventType.BLOCK_RESERVED,
-								trainId = trainId,
-								occupant = null,
-								previousState = TrackFacility.State.FREE,
-								newState = TrackFacility.State.RESERVED,
-								simulationTime = simTime
-							)
-						)
-					}
-
-					// Resolved -- this train is no longer contending for any block.
-					clearBlockedTracking(trainId)
-
-					PathReservationService.ReservationResult.Success(blocks)
-				}
-				is PathReservationRegistry.RegistrationResult.Conflict -> {
-					// Registry conflict - rollback block reservations
-					logger.warn {
-						"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}; " +
-							"rolling back ${forwardBlocks.size} forward block(s) for $trainId " +
-							"(${blocks.size - forwardBlocks.size} already-held block(s) untouched)"
-					}
-					// Issue #1025: roll back only the blocks THIS call physically reserved (Step 2c),
-					// which are exactly `forwardBlocks`. `blocks` also holds the train's already-owned
-					// blocks (excluded at Step 2a.5); when those were reserved from this same `start`
-					// on an earlier route, cancelling them drove them RESERVED -> FREE while the
-					// registry and the PathInfo still named this train. Navigation trusts the registry
-					// only, so the train was later routed into the FREE block and
-					// DynamicTrackBlock.enter threw "Wrong state: FREE , expected : RESERVED".
-					// Nothing was registered (registerAtomic is all-or-nothing), so no registry
-					// cleanup is needed.
-					rollbackReservation(start, forwardBlocks)
-					val simTime = currentSimulationTime()
-					emitCustom(
-						BlockEvent.ReservationConflictDetected(
-							block = result.conflictingBlock,
-							trainId = trainId,
-							conflictingTrainId = result.existingOwner,
-							time = simTime
-						)
-					)
-					emitCustom(
-						ConflictDetectedEvent(
-							block = result.conflictingBlock,
-							trainId = trainId,
-							conflictingTrainId = result.existingOwner,
-							time = simTime
-						)
-					)
-					PathReservationService.ReservationResult.Conflict(
-						result.conflictingBlock,
-						result.existingOwner
-					)
-				}
-			}
+			// Step 2d: Register ownership in registry (atomic operation, only forward blocks).
+			// A `null` outcome rejects this candidate and the loop tries the next one, exactly
+			// like the former in-arm `continue`s: nothing follows this call in the loop body.
+			val (updatedGeometricFailures, candidateOutcome) =
+				registerAndFinalizeCandidate(
+					CandidateRequest(trainId, start, target, path, blocks, forwardBlocks, index),
+					geometricFailures
+				)
+			geometricFailures = updatedGeometricFailures
+			candidateOutcome?.let { return it }
 		}
 
 		// All paths tried, all were blocked or impossible.
@@ -891,6 +683,412 @@ class DefaultPathReservationService(
 			divergentFailures,
 			firstBlockedConflict,
 			candidatePaths.size
+		)
+	}
+
+	/**
+	 * Step 2a.5's already-owned early-return branch of [reservePath]'s candidate loop: every
+	 * block of the candidate is already owned by this train, so the branch only (re-)configures
+	 * the START signal and registers/merges the PathInfo, and every exit reports
+	 * [PathReservationService.ReservationResult.Success] (the redundant re-request no-op and
+	 * the merge-abort signal reset are Goal 10 SP2b.9 / Issue #904; the PathInfo registration
+	 * itself is Issue #296). Extracted (SonarCloud S3776, PR #1109) so this branching stays out
+	 * of [reservePath]'s own cognitive complexity.
+	 */
+	private fun reserveAlreadyOwnedPath(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		blocks: List<DynamicTrackBlock>,
+		path: List<TrackSection>
+	): PathReservationService.ReservationResult {
+		// All blocks in this path are already owned by this train
+		// Configure START semaphore before returning (may be from different position)
+		// configureSemaphoreSignal is idempotent, safe to call multiple times
+		// Issue #904: snapshot BEFORE configureAlreadyOwnedStartSignal so a merge abort
+		// below can reset exactly what THIS call cleared, not a pre-existing reservation's
+		// signal (mirrors Step 2g/2i's own clearedBeforeStart snapshots).
+		val clearedBeforeStart = snapshotClearedSemaphores(trainId)
+		if (blocks.isNotEmpty()) {
+			configureAlreadyOwnedStartSignal(trainId, start, blocks)
+		}
+		// FIX (Goal 10 SP2b.9 follow-up): a redundant re-request for a route this train
+		// already holds to the same target (e.g. a stateless per-cycle LLM dispatcher
+		// re-issuing request_route for a train it already granted a route to, since it
+		// has no memory of its own prior tool calls) must be a no-op here. Re-registering
+		// an identical PathInfo would duplicate every separator in the merge
+		// (PathReservationRegistry.registerPathInfo/mergePathInfo), and a further
+		// redundant call can hit the registry's 3rd-occurrence cycle-abort — silently
+		// discarding the merge while this method still reports Success, an invisible
+		// PathInfo/reality divergence that can strand the train permanently once it
+		// reaches whatever depends on the discarded segment.
+		val existingPathInfo = registry.getPathInfo(trainId)
+		if (existingPathInfo != null && existingPathInfo.target == target) {
+			clearBlockedTracking(trainId)
+			return PathReservationService.ReservationResult.Success(blocks)
+		}
+
+		// FIX (Issue #296): Register PathInfo for already-owned blocks
+		val pathInfo = pathInfoBuilder.buildPathInfo(start, target, path)
+		val mergeOutcome = registry.registerPathInfo(trainId, pathInfo)
+		// Issue #904: this branch acquires no NEW blocks or switches -- the whole point is
+		// that the train already owns everything -- so an abort has nothing to roll back on
+		// that side. The only discrepancy a merge abort can leave here is a signal this call
+		// just (re-)cleared for a merge that never happened; reset it back to STOP (G1),
+		// still report Success since the train's actual block ownership is correct and
+		// unchanged (traffic-simulation-expert ruling, Issue #904).
+		resetSignalsIfMergeAborted(mergeOutcome, trainId, start, clearedBeforeStart)
+
+		// Resolved -- this train is no longer contending for any block.
+		clearBlockedTracking(trainId)
+		return PathReservationService.ReservationResult.Success(blocks)
+	}
+
+	/**
+	 * Step 2d of [reservePath]'s candidate loop: registers the atomically reserved candidate
+	 * with the registry and finalizes it, or rolls the registry conflict back. Extracted
+	 * (SonarCloud S3776, PR #1109) so both `when` arms' branching stay out of [reservePath]'s
+	 * own cognitive complexity.
+	 *
+	 * @return the updated [GeometricFailures] (a rejected candidate may record one) and the
+	 *   candidate's terminal result, or `null` when the candidate was rejected and the caller
+	 *   must try the next one -- nothing follows this call in the loop body, so falling
+	 *   through the iteration is exactly the former in-arm `continue`
+	 */
+	private fun registerAndFinalizeCandidate(
+		candidate: CandidateRequest,
+		geometricFailures: GeometricFailures
+	): Pair<GeometricFailures, PathReservationService.ReservationResult?> =
+		when (val result = registry.registerAtomic(candidate.trainId, candidate.forwardBlocks)) {
+			is PathReservationRegistry.RegistrationResult.Success -> {
+				val (failures, preparation) = prepareReservedCandidate(candidate, geometricFailures)
+				if (preparation == null) {
+					failures to null
+				} else {
+					failures to finalizePreparedCandidate(candidate, preparation)
+				}
+			}
+			is PathReservationRegistry.RegistrationResult.Conflict -> {
+				val conflict =
+					rollbackRegistryConflict(
+						candidate.trainId,
+						candidate.start,
+						candidate.forwardBlocks,
+						candidate.blocks,
+						result
+					)
+				geometricFailures to conflict
+			}
+		}
+
+	/**
+	 * Steps 2e-2g of [reservePath]'s candidate loop, on the
+	 * [PathReservationRegistry.RegistrationResult.Success] arm of Step 2d: builds the
+	 * candidate's [cz.vutbr.fit.interlockSim.objects.paths.PathInfo], releases orphan/stale
+	 * switch ownership, configures the candidate's switches and START signal, and snapshots
+	 * what a rollback of either would need. Extracted (SonarCloud S3776, PR #1109) so this
+	 * branching stays out of [reservePath]'s own cognitive complexity.
+	 *
+	 * @return the updated [GeometricFailures] and the [CandidatePreparation] snapshots a
+	 *   successful candidate needs for Steps 2h/2i, or `null` when the candidate was rejected
+	 *   (unconfigurable switch, Issue #742/#903/#1065; failed START signal, Issue #893 task
+	 *   A5 -- both fully rolled back here) and the caller must try the next candidate
+	 */
+	private fun prepareReservedCandidate(
+		candidate: CandidateRequest,
+		geometricFailures: GeometricFailures
+	): Pair<GeometricFailures, CandidatePreparation?> {
+		val (trainId, start, target, path, blocks, forwardBlocks, index) = candidate
+		var failures = geometricFailures
+		// Success - path reserved and registered
+
+		// Step 2e: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
+		logger.debug {
+			"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
+		}
+		val pathInfo =
+			pathInfoBuilder.buildPathInfo(
+				start = start,
+				target = target,
+				trackSections = path // path is List<TrackSection> here
+			)
+
+		// Step 2e.5: Release any ORPHAN lock among this candidate's switches --
+		// locked by a stray setUpPath call that never reached
+		// registry.registerSwitches (Issue #1065; see releaseOrphanSwitchLocks).
+		// Must run BEFORE configureSwitchesInPath below: a stale orphan lock would
+		// otherwise masquerade as transient Locked contention and refuse an
+		// otherwise valid candidate. Ordering relative to the priorSwitches snapshot
+		// is irrelevant -- an orphan has no registered owner, so it can never appear
+		// in registry.getSwitches(trainId) in the first place.
+		val candidateSwitches = extractUniqueSwitches(pathInfo)
+		releaseOrphanSwitchLocks(candidateSwitches)
+		// Issue #1076: likewise reclaim STALE foreign ownership among them, so the
+		// candidate never overwrites it; a foreign owner that survives this step
+		// protects a live route and refuses the candidate in configureSwitchesInPath.
+		reclaimStaleForeignSwitchOwnership(trainId, candidateSwitches)
+
+		// Step 2f: Configure and register switches (Issue #300, #291, #742).
+		// A candidate whose switches cannot be configured is physically impossible
+		// and must fail the reservation — see configureAndRegisterSwitches.
+		// Snapshot the switches the train already owns BEFORE this candidate so the
+		// scoped rollback below (and the signal-config rollback in Step 2g) only
+		// release THIS candidate's new switches, never the train's earlier hops.
+		val priorSwitches = registry.getSwitches(trainId).toSet()
+		// Snapshot the semaphore-clearing delta the same way, BEFORE any of this
+		// candidate's Step 2g/2h/2i signal work runs, so a rollback at any of those
+		// steps (including Step 2i's merge-abort rollback, Issue #904) can reset
+		// exactly what THIS candidate cleared (Issue #893 task A5).
+		val clearedBeforeCandidate = snapshotClearedSemaphores(trainId)
+		val preparation = CandidatePreparation(pathInfo, candidateSwitches, priorSwitches, clearedBeforeCandidate)
+		val switchOutcome = configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)
+		// The candidate has already been rolled back inside configureAndRegisterSwitches
+		// for either failure kind, so try the remaining candidate paths like the other
+		// failure modes (blocks-not-free, atomic-reservation-fail) rather than giving up
+		// early -- SP0.11 review follow-up (was `return AllPathsBlocked(1)`).
+		// recordSwitchConfigFailureIfGeometric only touches geometricFailures for
+		// Unconfigurable (Issue #903: a permanent impossibility, first-hit-wins) -- a
+		// Locked outcome (Issue #1065: SI-5, transient) must fall through to ordinary
+		// contention instead, extracted to keep this branch out of reservePath's own
+		// cyclomatic complexity count.
+		if (switchOutcome != SwitchConfigOutcome.Configured) {
+			failures = recordSwitchConfigFailureIfGeometric(switchOutcome, failures, trainId, index)
+			return failures to null
+		}
+
+		// Step 2g: Configure semaphore signal after successful reservation.
+		// A semaphore START is configured for blocks.first() (the block next to it, also on a
+		// route extension, Issue #1062); forwardBlocks (just reserved) only drive an InOut START.
+		if (forwardBlocks.isNotEmpty()) {
+			val signalResult = configureStartSignal(trainId, start, forwardBlocks, blocks.first())
+
+			// Rollback reservation if signal configuration failed
+			// This prevents trains from waiting indefinitely at STOP signals.
+			// SP0.11 review follow-up: use the scoped [rollbackUnconfigurableCandidate]
+			// rather than a full registry.unregister(trainId), which would nuke the
+			// train's ENTIRE pre-existing path on a mid-journey extension. Only this
+			// candidate's forwardBlocks and new switches are
+			// released; the train's earlier hops survive so it keeps waiting for its
+			// through route. The candidate is then rolled back cleanly, so try the
+			// remaining candidate paths like the other failure modes.
+			if (signalResult != StartSignalResult.Configured) {
+				failures =
+					rollbackFailedStartSignalCandidate(
+						trainId,
+						start,
+						forwardBlocks,
+						signalResult,
+						index,
+						failures,
+						preparation
+					)
+				return failures to null
+			}
+		}
+		return failures to preparation
+	}
+
+	/**
+	 * Step 2g's failed-START-signal rollback (Issue #893 task A5): records the G4 rejection
+	 * (a genuine configuration exception stays ordinary contention, unchanged), resets the
+	 * candidate's cleared signals, and releases the candidate's blocks and switches. Extracted
+	 * (SonarCloud S3776, PR #1109) in the [recordSwitchConfigFailureIfGeometric] take-and-return
+	 * shape so [prepareReservedCandidate] stays under its line threshold.
+	 *
+	 * @return the updated [GeometricFailures] after the G4 recording
+	 */
+	private fun rollbackFailedStartSignalCandidate(
+		trainId: String,
+		start: DynamicPathSeparator,
+		forwardBlocks: List<DynamicTrackBlock>,
+		signalResult: StartSignalResult,
+		index: Int,
+		geometricFailures: GeometricFailures,
+		preparation: CandidatePreparation
+	): GeometricFailures {
+		// Issue #903: a G4 rejection is a PERMANENT impossibility, not ordinary
+		// contention -- record it (first-hit-wins) so the fallthrough return can
+		// classify it correctly. A genuine configuration exception stays folded
+		// into ordinary contention/rollback, unchanged.
+		val failures = recordG4FailureOnce(geometricFailures, signalResult, index)
+		// Issue #893 task A5: configureStartSignal can leave a PARTIAL aspect
+		// write behind -- the underlying config call sets the physical aspect
+		// and still throws before recordClearedSemaphore runs. Reset the
+		// before/after delta of clearedSemaphores (covers anything that WAS
+		// recorded), then explicitly drive the candidate START itself back to
+		// STOP for the unrecorded case resetSemaphoreSet's delta cannot see.
+		resetCandidateSignals(trainId, start, preparation.clearedBeforeCandidate)
+		rollbackUnconfigurableCandidate(
+			trainId,
+			forwardBlocks,
+			preparation.candidateSwitches,
+			preparation.priorSwitches
+		)
+		return failures
+	}
+
+	/**
+	 * Steps 2h/2i of [reservePath]'s candidate loop: configures the intermediate semaphores,
+	 * registers the forward-only PathInfo, emits the reservation events, and reports
+	 * [PathReservationService.ReservationResult.Success]. Extracted (SonarCloud S3776, PR
+	 * #1109) so this branching stays out of [reservePath]'s own cognitive complexity.
+	 *
+	 * @return the candidate's result, or `null` when the PathInfo merge aborted (Issue #904;
+	 *   [rollbackIfMergeAborted] has already released exactly what this candidate acquired)
+	 *   and the caller must try the next candidate
+	 */
+	private fun finalizePreparedCandidate(
+		candidate: CandidateRequest,
+		preparation: CandidatePreparation
+	): PathReservationService.ReservationResult? {
+		val (trainId, start, target, path, blocks, forwardBlocks) = candidate
+		// Step 2h: Configure intermediate semaphore signals along the full path.
+		// reservePath() is called with the entry (InOut/semaphore) and the exit
+		// (InOut/semaphore) as end-points, so the reserved path may pass through
+		// one or more intermediate semaphores.  Step 2g only sets the START
+		// separator's signal; intermediate semaphores remain at STOP unless we
+		// configure them here.  Without this, a train entering a multi-block path
+		// will travel through the first block, stop at the intermediate semaphore
+		// (signal=STOP) and wait forever.
+		// forwardBlocks is passed separately so a route EXTENSION (blocks the train
+		// already owns, plus new ones) only lights boundaries that lead into a new
+		// block -- see [configureIntermediateSemaphores].
+		configureIntermediateSemaphores(trainId, blocks, forwardBlocks.toSet())
+
+		// Step 2i: Register PathInfo metadata (Issue #295/#296 Phase 4; moved here by
+		// Issue #742). Registration happens only after switches AND signals configured
+		// successfully, so no rollback path can leave a poisoned PathInfo behind —
+		// a PathInfo pointing at an unusable route permanently stalls the train
+		// (isPathExtendedBeyond suppresses the corrective re-reservation).
+		// Issue #904: register the FORWARD-ONLY segment, not `pathInfo` (which starts
+		// at the original `start` and would falsely non-contiguous-abort on every
+		// route extension that reuses it, per forwardOnlyPathInfo's KDoc).
+		// The candidate already passed the Step 0a contiguity probe (Step 1.6), so the abort
+		// handling below now covers only Step 0b/0c and the cycle guard.
+		val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
+		val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
+		// If the registry's merge fail-safe STILL aborted
+		// (PathReservationRegistry.mergePathInfo's KDoc lists the four reasons) --
+		// now only the genuinely pathological ones: duplicated new-start, the
+		// direction reversal guard (Issue #944), or the cycle guard -- release
+		// exactly what THIS candidate acquired --
+		// transactionally complete, matching Step 2g's own rollback -- rather than
+		// leaving an orphaned RESERVED tail for OrphanReservationSweeper (which is
+		// not even wired in :fast-sim or bare-:core).
+		if (rollbackIfMergeAborted(
+				mergeOutcome,
+				trainId,
+				start,
+				forwardBlocks,
+				preparation.pathInfo,
+				preparation.priorSwitches,
+				preparation.clearedBeforeCandidate
+			)
+		) {
+			return null
+		}
+		logger.debug {
+			"reservePath: Registered PathInfo for $trainId with ${mergeCandidate.entryDirections.size} entry directions, " +
+				"reserved path has ${mergeCandidate.reservedPath.length()} elements"
+		}
+
+		// Emit BlockReserved only for the blocks THIS call newly reserved (Issue #1081);
+		// the full rationale moved with the code into [emitForwardBlockReservedEvents].
+		emitForwardBlockReservedEvents(trainId, forwardBlocks)
+
+		// Resolved -- this train is no longer contending for any block.
+		clearBlockedTracking(trainId)
+
+		return PathReservationService.ReservationResult.Success(blocks)
+	}
+
+	/**
+	 * Emits [BlockEvent.BlockReserved] (and the legacy [BlockOccupancyEvent]) for each block
+	 * THIS call newly reserved. Extracted (SonarCloud S3776, PR #1109) from Step 2d's success
+	 * arm; the Issue #1081 rationale in the body explains why only [forwardBlocks] -- never
+	 * the already-owned prefix -- is announced.
+	 */
+	private fun emitForwardBlockReservedEvents(
+		trainId: String,
+		forwardBlocks: List<DynamicTrackBlock>
+	) {
+		// Emit BlockReserved only for the blocks THIS call newly reserved
+		// (forwardBlocks). `blocks` also holds the train's already-owned prefix
+		// (Step 2a.5), and each physical block is later released exactly once
+		// (one BlockReleased per block), so a BlockReserved re-emitted for an
+		// owned block left the per-event reservation counters permanently
+		// off-balance: DefaultMetricsCollectionService.activeReservationCount
+		// never returned to zero (the train was never counted as completed) and
+		// DefaultCollisionDetectionService / TemporalConflictDetector over-counted
+		// it the same way (Issue #1081 review; extensions over owned blocks
+		// became dispatcher-reachable with Issue #1060).
+		val simTime = currentSimulationTime()
+		forwardBlocks.forEach { block ->
+			emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
+			// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
+			registry.emit(
+				BlockOccupancyEvent(
+					block = block,
+					type = BlockOccupancyEventType.BLOCK_RESERVED,
+					trainId = trainId,
+					occupant = null,
+					previousState = TrackFacility.State.FREE,
+					newState = TrackFacility.State.RESERVED,
+					simulationTime = simTime
+				)
+			)
+		}
+	}
+
+	/**
+	 * Step 2d's [PathReservationRegistry.RegistrationResult.Conflict] arm: rolls back only
+	 * the forward blocks THIS call reserved (Issue #1025 -- never the train's already-held
+	 * blocks) and emits both conflict events. Extracted (SonarCloud S3776, PR #1109) so the
+	 * arm's branching stays out of [reservePath]'s own cognitive complexity.
+	 */
+	private fun rollbackRegistryConflict(
+		trainId: String,
+		start: DynamicPathSeparator,
+		forwardBlocks: List<DynamicTrackBlock>,
+		blocks: List<DynamicTrackBlock>,
+		result: PathReservationRegistry.RegistrationResult.Conflict
+	): PathReservationService.ReservationResult.Conflict {
+		// Registry conflict - rollback block reservations
+		logger.warn {
+			"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}; " +
+				"rolling back ${forwardBlocks.size} forward block(s) for $trainId " +
+				"(${blocks.size - forwardBlocks.size} already-held block(s) untouched)"
+		}
+		// Issue #1025: roll back only the blocks THIS call physically reserved (Step 2c),
+		// which are exactly `forwardBlocks`. `blocks` also holds the train's already-owned
+		// blocks (excluded at Step 2a.5); when those were reserved from this same `start`
+		// on an earlier route, cancelling them drove them RESERVED -> FREE while the
+		// registry and the PathInfo still named this train. Navigation trusts the registry
+		// only, so the train was later routed into the FREE block and
+		// DynamicTrackBlock.enter threw "Wrong state: FREE , expected : RESERVED".
+		// Nothing was registered (registerAtomic is all-or-nothing), so no registry
+		// cleanup is needed.
+		rollbackReservation(start, forwardBlocks)
+		val simTime = currentSimulationTime()
+		emitCustom(
+			BlockEvent.ReservationConflictDetected(
+				block = result.conflictingBlock,
+				trainId = trainId,
+				conflictingTrainId = result.existingOwner,
+				time = simTime
+			)
+		)
+		emitCustom(
+			ConflictDetectedEvent(
+				block = result.conflictingBlock,
+				trainId = trainId,
+				conflictingTrainId = result.existingOwner,
+				time = simTime
+			)
+		)
+		return PathReservationService.ReservationResult.Conflict(
+			result.conflictingBlock,
+			result.existingOwner
 		)
 	}
 
@@ -1630,6 +1828,54 @@ class DefaultPathReservationService(
 		}
 	}
 
+	/**
+	 * Resolve the track section leading forward from [start], read-only.
+	 *
+	 * 1. Convert [start] to its dynamic wrapper ([SimulationEnvironment.toDynamic] is idempotent).
+	 * 2. Pick the forward segment from the separator's orientation. SPECIAL CASE: an InOut connects
+	 *    bidirectionally at `direction()` ([InOut.getTrackConnectionDirection]); a semaphore's
+	 *    `direction()` is its forward travel direction.
+	 * 3. Look up the separator's grid location and the graph edge assigned to that segment.
+	 *
+	 * Shared by [reservePathToAnyNextSemaphore] (the oriented overload) and
+	 * [findNextReservationTarget] so the two cannot drift (Issue #957).
+	 *
+	 * @param caller name of the calling method, used as the log prefix
+	 * @return the dynamic start and the forward section, or `null` (logged as a warning) when
+	 *   [start] has no grid location or no track section in its forward direction
+	 */
+	private fun resolveForwardSection(
+		start: OrientedPathSeparator,
+		caller: String
+	): Pair<DynamicPathSeparator, TrackSection>? {
+		val dynamicStart = environment.toDynamic(start)
+		val forwardSegment =
+			when (start) {
+				is InOut -> start.getTrackConnectionDirection()
+				is DynamicInOut -> start.getTrackConnectionDirection()
+				else -> start.direction()
+			}
+		logger.debug {
+			"$caller: START=$start orientation=${start.getOrientation()} forwardSegment=$forwardSegment"
+		}
+
+		val location = environment.getRailWayNetGrid().getLocation(start)
+		if (location == null) {
+			logger.warn { "$caller: No location found for $start" }
+			return null
+		}
+		logger.debug { "$caller: Location=$location" }
+
+		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
+		if (next == null) {
+			logger.warn {
+				"$caller: No outgoing track section from $start at $location in direction $forwardSegment"
+			}
+			return null
+		}
+		return dynamicStart to next
+	}
+
 	override fun reservePathToAnyNextSemaphore(
 		trainId: String,
 		start: OrientedPathSeparator
@@ -1638,43 +1884,10 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Finding path from oriented separator $start for $trainId"
 		}
 
-		// Step 1: Convert to dynamic if needed (toDynamic is idempotent)
-		val dynamicStart = environment.toDynamic(start)
-
-		// Step 2: Get next track section based on separator's orientation
-		// For oriented separators, use the direction() method to get the forward segment
-		// SPECIAL CASE: InOut connects bidirectionally at direction() (not anti-direction)
-		val forwardSegment =
-			when (start) {
-				is InOut -> start.getTrackConnectionDirection() // Track connection at direction()
-				is DynamicInOut -> start.getTrackConnectionDirection() // Track connection at direction()
-				else -> start.direction() // Semaphores: direction is forward travel
-			}
-		logger.debug {
-			"reservePathToAnyNextSemaphore: START=$start orientation=${start.getOrientation()} forwardSegment=$forwardSegment"
-		}
-
-		// Step 3: Find the track section connected to the forward segment
-		// Use interface methods (added to SimulationEnvironment for navigation services)
-		val location = environment.getRailWayNetGrid().getLocation(start)
-		if (location == null) {
-			logger.warn {
-				"reservePathToAnyNextSemaphore: No location found for $start"
-			}
-			return PathReservationService.ReservationResult.NoPathExists
-		}
-
-		logger.info {
-			"reservePathToAnyNextSemaphore: Location=$location"
-		}
-
-		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
-		if (next == null) {
-			logger.warn {
-				"reservePathToAnyNextSemaphore: No outgoing track section from $start at $location in direction $forwardSegment"
-			}
-			return PathReservationService.ReservationResult.NoPathExists
-		}
+		// Steps 1–3: resolve the forward track section from the separator's orientation
+		val (dynamicStart, next) =
+			resolveForwardSection(start, "reservePathToAnyNextSemaphore")
+				?: return PathReservationService.ReservationResult.NoPathExists
 
 		logger.info {
 			"reservePathToAnyNextSemaphore: Selected next track section: $next"
@@ -1696,26 +1909,7 @@ class DefaultPathReservationService(
 				(ownerTrainId?.let { ", blocks owned by $it count as free (Issue #1060)" } ?: "")
 		}
 
-		// Mirrors reservePathToAnyNextSemaphore(OrientedPathSeparator) steps 1–3, read-only.
-		val dynamicStart = environment.toDynamic(start)
-		val forwardSegment =
-			when (start) {
-				is InOut -> start.getTrackConnectionDirection()
-				is DynamicInOut -> start.getTrackConnectionDirection()
-				else -> start.direction()
-			}
-		val location = environment.getRailWayNetGrid().getLocation(start)
-		if (location == null) {
-			logger.warn { "findNextReservationTarget: No location found for $start" }
-			return null
-		}
-		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
-		if (next == null) {
-			logger.warn {
-				"findNextReservationTarget: No outgoing track section from $start at $location in direction $forwardSegment"
-			}
-			return null
-		}
+		val (dynamicStart, next) = resolveForwardSection(start, "findNextReservationTarget") ?: return null
 
 		val targets = findNextSemaphoresVia(dynamicStart, next)
 		if (targets.isEmpty()) {
@@ -1910,8 +2104,8 @@ class DefaultPathReservationService(
 		}
 
 		// Add semaphores (except start)
-		// Note: getAllSemaphores() scans the grid to find all DynamicRailSemaphore instances
-		getAllSemaphores().forEach { semaphore ->
+		// Note: allSemaphores() is the grid scan cached once per service (Issue #965)
+		allSemaphores().forEach { semaphore ->
 			if (semaphore != start) {
 				semaphores.add(semaphore)
 			}
@@ -1940,6 +2134,28 @@ class DefaultPathReservationService(
 		// **Why partition before sorting:**
 		// - Ensures ALL opposite-side targets tried before ANY same-side target
 		// - Even if same-side target is closer, opposite-side is preferred
+		//
+		// **Why each InOut's paths are enumerated lazily, once (Issue #966):**
+		// - `sortedBy` evaluates its selector on both sides of every comparison, so enumerating
+		//   inside it ran findAllTopologicalPaths O(n log n) times; the reservation attempt in
+		//   STEP 4 then enumerated the same paths again
+		// - Each InOut is paired with one lazy enumeration shared by the sort key and STEP 4.
+		//   The key is unchanged, and `sortedBy` is stable, so the order is identical
+		// NONE is safe and cheaper: each lazy is created and consumed inside this single
+		// reservePathToAny call, so the SYNCHRONIZED default would only add a lock
+		// acquisition to every `.value` read during the sort (Issue #966).
+		val inOutsWithPaths: List<Pair<DynamicInOut, Lazy<List<List<TrackSection>>>>> =
+			inouts.map { target ->
+				target to
+					lazy(LazyThreadSafetyMode.NONE) {
+						navigator.findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)
+					}
+			}
+		// Note: findAllTopologicalPaths returns empty list if no path exists
+		// Using firstOrNull() gets shortest path (navigator returns sorted by length)
+		// Int.MAX_VALUE ensures unreachable targets sorted last
+		val shortestPathLength: (Pair<DynamicInOut, Lazy<List<List<TrackSection>>>>) -> Int =
+			{ (_, paths) -> paths.value.firstOrNull()?.size ?: Int.MAX_VALUE }
 		val sortedInOuts =
 			when (start) {
 				is OrientedPathSeparator -> {
@@ -1949,20 +2165,12 @@ class DefaultPathReservationService(
 					// Example: if start.orientation = false (points left/backward)
 					//   - oppositeSide = InOuts with orientation = true (right/forward)
 					//   - sameSide = InOuts with orientation = false (left/backward)
-					val (oppositeSide, sameSide) = inouts.partition { it.getOrientation() != startOrientation }
+					val (oppositeSide, sameSide) =
+						inOutsWithPaths.partition { (inout, _) -> inout.getOrientation() != startOrientation }
 
 					// Sort each partition by path length (shortest first)
-					// Note: findAllTopologicalPaths returns empty list if no path exists
-					// Using firstOrNull() gets shortest path (navigator returns sorted by length)
-					// Int.MAX_VALUE ensures unreachable targets sorted last
-					val sortedOpposite =
-						oppositeSide.sortedBy { target ->
-							navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
-						}
-					val sortedSame =
-						sameSide.sortedBy { target ->
-							navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
-						}
+					val sortedOpposite = oppositeSide.sortedBy(shortestPathLength)
+					val sortedSame = sameSide.sortedBy(shortestPathLength)
 
 					// Combine: [shortest opposite-side, ..., longest opposite-side,
 					//           shortest same-side, ..., longest same-side]
@@ -1971,9 +2179,7 @@ class DefaultPathReservationService(
 				else -> {
 					// Start has no orientation info (shouldn't happen for semaphores, but handle gracefully)
 					// Just sort by distance - no orientation preference
-					inouts.sortedBy { target ->
-						navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
-					}
+					inOutsWithPaths.sortedBy(shortestPathLength)
 				}
 			}
 
@@ -1986,10 +2192,13 @@ class DefaultPathReservationService(
 		// - They represent mid-network stopping points (less desirable than InOuts)
 		// - Sorting cost not justified for secondary targets
 		// - If all InOuts blocked, any semaphore is acceptable
-		val sortedTargets: List<DynamicPathSeparator> = sortedInOuts + semaphores
+		// Semaphores carry no precomputed paths: STEP 4 enumerates theirs inside reservePath.
+		val sortedTargetsWithPaths: List<Pair<DynamicPathSeparator, Lazy<List<List<TrackSection>>>?>> =
+			sortedInOuts + semaphores.map { it to null }
 
 		logger.debug {
-			"reservePathToAny: Target order (InOuts first): ${sortedTargets.joinToString(", ")}"
+			"reservePathToAny: Target order (InOuts first): " +
+				sortedTargetsWithPaths.joinToString(", ") { it.first.toString() }
 		}
 
 		// ========================================
@@ -2004,8 +2213,8 @@ class DefaultPathReservationService(
 		// - Trying all paths to find "optimal" would be wasteful (dynamic state changes anyway)
 		var lastResult: PathReservationService.ReservationResult? = null
 
-		for (target in sortedTargets) {
-			val result = reservePath(trainId, start, target)
+		for ((target, topologicalPaths) in sortedTargetsWithPaths) {
+			val result = reservePath(trainId, start, target, DEFAULT_MAX_PATH_DEPTH, topologicalPaths)
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
@@ -2044,65 +2253,18 @@ class DefaultPathReservationService(
 		// STEP 5: All Targets Failed
 		// ========================================
 		// No available path found after trying all targets.
-		if (sortedTargets.isEmpty()) {
+		if (sortedTargetsWithPaths.isEmpty()) {
 			logger.warn { "reservePathToAny: No targets found from $start" }
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
 		logger.warn {
 			"reservePathToAny: No available path from $start for $trainId " +
-				"(tried ${sortedTargets.size} targets, all blocked or unreachable)"
+				"(tried ${sortedTargetsWithPaths.size} targets, all blocked or unreachable)"
 		}
 
 		// Return last failure result (or AllPathsBlocked if no result available)
-		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(sortedTargets.size)
-	}
-
-	/**
-	 * Get all semaphores in the network by scanning the grid.
-	 *
-	 * ## Implementation
-	 *
-	 * Scans the grid using dynamically-obtained dimensions (getCols(), getRows())
-	 * to find all DynamicRailSemaphore instances.
-	 *
-	 * ## Grid Dimensions
-	 *
-	 * No hardcoded dimensions - uses grid.cols and grid.rows for
-	 * dynamic discovery. This is acceptable for reservePathToAny() which is
-	 * called infrequently (only when train needs new path).
-	 *
-	 * ## Type Safety
-	 *
-	 * The environment parameter is typed as SimulationEnvironment, but at runtime
-	 * it's always a SimulationContext (which extends Context). We cast to access
-	 * getRailWayNetGrid() for grid scanning. This is safe because:
-	 * - PathReservationService is only used in simulation mode
-	 * - SimulationContext always implements Context interface
-	 * - All Koin module configurations pass DefaultSimulationContext
-	 *
-	 * @return List of all DynamicRailSemaphore instances in the network
-	 */
-	private fun getAllSemaphores(): List<DynamicRailSemaphore> {
-		// Use interface method (added to SimulationEnvironment for navigation services)
-		val grid = environment.getRailWayNetGrid()
-		val semaphores = mutableListOf<DynamicRailSemaphore>()
-
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell =
-					grid[
-						cz.vutbr.fit.interlockSim.util
-							.Point(x, y)
-					]
-				if (cell is DynamicRailSemaphore) {
-					semaphores.add(cell)
-				}
-			}
-		}
-
-		logger.trace { "getAllSemaphores: Found ${semaphores.size} semaphore(s) in grid" }
-		return semaphores
+		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(sortedTargetsWithPaths.size)
 	}
 
 	// ========== Private helper methods ==========
@@ -2970,6 +3132,39 @@ class DefaultPathReservationService(
 	private data class GeometricFailures(
 		val reason: String? = null,
 		val count: Int = 0
+	)
+
+	/**
+	 * The per-candidate snapshots Step 2f takes before configuring anything (Issue #893 task
+	 * A5 / Issue #904 / Issue #1065): the candidate's [cz.vutbr.fit.interlockSim.objects.paths.PathInfo],
+	 * its switches, the switches the train already owned, and the semaphores already cleared.
+	 * Carried between [prepareReservedCandidate] and [finalizePreparedCandidate] (and into
+	 * [rollbackFailedStartSignalCandidate]) so neither helper exceeds the parameter-count
+	 * threshold. Built only from values that exist before [configureAndRegisterSwitches] runs,
+	 * so building it has no side effects.
+	 */
+	private data class CandidatePreparation(
+		val pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo,
+		val candidateSwitches: List<DynamicRailSwitch>,
+		val priorSwitches: Set<DynamicRailSwitch>,
+		val clearedBeforeCandidate: Set<DynamicRailSemaphore>
+	)
+
+	/**
+	 * The per-candidate slice of one [reservePath] request: the values Step 2d's extracted
+	 * helpers need, unpacked once at each helper's head so the moved candidate-loop body can
+	 * stay verbatim. Built once per candidate iteration (no side effects) and carried so
+	 * [registerAndFinalizeCandidate], [prepareReservedCandidate] and [finalizePreparedCandidate]
+	 * stay under the parameter-count threshold (SonarCloud S3776, PR #1109).
+	 */
+	private data class CandidateRequest(
+		val trainId: String,
+		val start: DynamicPathSeparator,
+		val target: DynamicPathSeparator,
+		val path: List<TrackSection>,
+		val blocks: List<DynamicTrackBlock>,
+		val forwardBlocks: List<DynamicTrackBlock>,
+		val index: Int
 	)
 
 	/**

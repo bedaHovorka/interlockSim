@@ -269,6 +269,11 @@ class DispatcherObservationProjector(
 	 * `lazy` so the single walk runs on the first [captureOnSimThread] (the sim thread) — the same
 	 * construction-time safety [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer.describe]
 	 * relies on, since the kernel has not started mutating live state before the first tick.
+	 *
+	 * A switch name shared by two cells keeps the one scanned FIRST (`distinctBy`), the same rule
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer] applies, so the per-tick
+	 * view and the serialized topology describe the same cell. This is why it does not use
+	 * `cellsByName`, whose `associateBy` keeps the last one.
 	 */
 	private val switches: List<DynamicRailSwitch> by lazy {
 		environment
