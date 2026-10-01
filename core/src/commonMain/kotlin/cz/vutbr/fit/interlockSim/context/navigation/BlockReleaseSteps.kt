@@ -12,11 +12,12 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 
 /**
- * The two per-block steps that end a block's reservation (Issue #961): [releaseBlock] for a block
- * that was announced as reserved, [rollbackBlock] for one a failed attempt reserved without
- * announcing it. Every caller that frees a single block goes through one of them, so the release
- * event is published exactly when a reservation event was. Split out of [PathReservationService] to
- * keep that interface within the detekt function budget, as [ApproachLockedPathRelease] is.
+ * The public per-block step that ends a block's reservation for good (Issue #961): [releaseBlock]
+ * for a block that was announced as reserved. Its rollback-only counterpart, for a block a failed
+ * attempt reserved without announcing it, is [BlockRollbackStep.rollbackBlock], internal to `:core`.
+ * Every caller that frees a single block goes through one of them, so the release event is published
+ * exactly when a reservation event was. Split out of [PathReservationService] to keep that interface
+ * within the detekt function budget, as [ApproachLockedPathRelease] is.
  *
  * @since Issue #961
  */
@@ -41,7 +42,7 @@ interface BlockReleaseSteps {
 	 *
 	 * Use it only for a block that was announced as reserved: the release event it publishes is counted
 	 * against that reservation by the metrics and the conflict and collision detectors. A rollback of a
-	 * block that was never announced uses [rollbackBlock] instead.
+	 * block that was never announced uses [BlockRollbackStep.rollbackBlock] instead.
 	 *
 	 * @param trainId The train releasing the block
 	 * @param block The block to release
@@ -51,27 +52,6 @@ interface BlockReleaseSteps {
 	 * @since Issue #961
 	 */
 	fun releaseBlock(
-		trainId: String,
-		block: DynamicTrackBlock
-	): Boolean
-
-	/**
-	 * Roll back one [block] that a failed reservation attempt reserved for [trainId]: the rollback-only
-	 * step (Issue #961). It undoes the reservation as if it had never happened.
-	 *
-	 * Cancels the block's path setup from its `reservedFrom` when that is set (a failure there is logged,
-	 * not thrown), removes the block from [trainId]'s registration, and reclaims a switch lock that no
-	 * held block protects any more. It resets no signal (the caller undoes the signals it set) and
-	 * publishes **no** release event: the block was never announced as reserved, and a release without
-	 * a reserve unbalances the event counters (Issue #1081). For a block that was announced, use
-	 * [releaseBlock].
-	 *
-	 * @param trainId The train whose failed attempt reserved the block
-	 * @param block The block to roll back
-	 * @return true if the block was removed from [trainId]'s registration
-	 * @since Issue #961
-	 */
-	fun rollbackBlock(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean

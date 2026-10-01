@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.BlockRollbackStep
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.lang.toSignal
@@ -249,9 +250,9 @@ class DefaultInterlockingFacade(
 		logger.debug { "releaseRoute: trainId=$trainId, exitSignal=${exitSignal.name} (audit only)" }
 
 		// Whole-route release through the approach lock (Issue #974): the same release the port's
-		// releaseRouteDetailed performs. A block the train occupies, a block that is approach-locked
-		// and a block inside the hold(1.0) deferral window stay RESERVED and registered (reported as
-		// deferred); every other block and switch of the train is freed. Idempotent: an unknown
+		// releaseRouteDetailed performs. A block the train occupies (it stays OCCUPIED), a block that
+		// is approach-locked and a block inside the hold(1.0) deferral window (both stay RESERVED) stay
+		// registered and are reported as deferred; every other block and switch of the train is freed. Idempotent: an unknown
 		// trainId yields an empty result and touches nothing. Production releases through the port
 		// (NetworkActuatorPort.releaseRouteDetailed); this facade method has no production caller.
 		val release = env.getRoutingServices().getPathReservationService().releasePathDetailed(trainId)
@@ -512,9 +513,7 @@ class DefaultInterlockingFacade(
 		}
 
 		lockSwitches(trainId, runningSwitches, flankSwitches)?.let { switchDenial ->
-			if (fromSeparator != null) {
-				rollbackBlocks(trainId, registered = blocks)
-			}
+			rollbackBlocks(trainId, registered = blocks)
 			return RouteLockOutcome.Denied(switchDenial)
 		}
 
@@ -556,8 +555,7 @@ class DefaultInterlockingFacade(
 	/**
 	 * Undoes what a failed [registerBlocks] / [lockSwitches] round acquired, and nothing else.
 	 *
-	 * Every block in [registered] goes through
-	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.rollbackBlock]: the path
+	 * Every block in [registered] goes through [BlockRollbackStep.rollbackBlock]: the path
 	 * setup is cancelled from the block's own `reservedFrom` (set only on the blocks this round
 	 * reserved, so a registered block whose `setUpPath` never ran or threw is not cancelled), then the
 	 * block leaves the registry and a switch lock it leaves stale is reclaimed. The train's other
@@ -578,6 +576,10 @@ class DefaultInterlockingFacade(
 		registered: List<DynamicTrackBlock>
 	) {
 		val pathReservationService = env.getRoutingServices().getPathReservationService()
+		// The rollback step is internal to :core (PR #1115 review), so it is not on the public service type.
+		check(pathReservationService is BlockRollbackStep) {
+			"PathReservationService ${pathReservationService::class.simpleName} does not support block rollback"
+		}
 		registered.forEach { block ->
 			if (!pathReservationService.rollbackBlock(trainId, block) && registry.getOwner(block) == trainId) {
 				logger.warn {

@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
@@ -41,6 +40,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.util.cellsOfType
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -95,7 +95,8 @@ class DefaultPathReservationService(
 	private val registry: PathReservationRegistry,
 	private val pathInfoBuilder: PathInfoBuilder,
 	private val routeFinder: RouteFinder
-) : PathReservationService {
+) : PathReservationService,
+	BlockRollbackStep {
 	// ── Conflict-vs-routine-contention disambiguation (Issue #612 follow-up) ──
 	//
 	// reservePath() returning AllPathsBlocked is the ORDINARY outcome whenever a
@@ -3963,20 +3964,41 @@ class DefaultPathReservationService(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			approachLockDeferredUntil.remove(block)
+			// Issue #1103: a throwing release listener must not skip the reclaim below; its exception
+			// still propagates afterwards, with a reclaim failure attached as suppressed (PR #1115 review).
+			val listenerFailure =
+				runCatching { emitBlockReleased(block, trainId, currentSimulationTime()) }.exceptionOrNull()
 			try {
-				emitBlockReleased(block, trainId, currentSimulationTime())
-			} finally {
 				// Issue #1065: every committed per-block release passes through here -- Train.Tail's
 				// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
 				// tail release (via releaseBlock) -- so reclaiming a now-stale switch lock here keeps the
 				// invariant continuously true on those paths, rather than discovering it lazily the next
 				// time a train asks for the switch. The rollback paths get the same reclaim from
-				// rollbackBlock (Issue #961). In a finally (Issue #1103): a throwing release listener
-				// must not skip the reclaim; its exception still propagates.
+				// rollbackBlock (Issue #961).
 				reclaimStaleSwitchLocks(block)
+			} catch (e: Exception) {
+				if (listenerFailure == null) throw e
+				listenerFailure.addSuppressed(e)
 			}
+			listenerFailure?.let { throw it }
 		}
 		return released
+	}
+
+	/**
+	 * The ownership guard of [releaseBlock] and [rollbackBlock]: `true` when [trainId] owns [block]. A
+	 * refusal is logged with the [step] name and the actual owner.
+	 */
+	private fun ownsBlock(
+		step: String,
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
+		val owner = registry.getOwner(block)
+		if (owner != trainId) {
+			logger.debug { "$step: refusing $block for '$trainId' (owner='$owner')" }
+		}
+		return owner == trainId
 	}
 
 	override fun releaseBlock(
@@ -3985,12 +4007,7 @@ class DefaultPathReservationService(
 	): Boolean {
 		// Ownership first: cancelling the path setup of a block another train holds would free it
 		// under that train's route.
-		if (registry.getOwner(block) != trainId) {
-			logger.debug {
-				"releaseBlock: not releasing $block for '$trainId' (owner='${registry.getOwner(block)}')"
-			}
-			return false
-		}
+		if (!ownsBlock("releaseBlock", trainId, block)) return false
 		// cancelPathSetup clears reservedFrom, so unregisterBlock's reset below sees only block.ends():
 		// a far START semaphore is not reset here. A caller releasing an un-travelled block resets the
 		// signals first (resetSemaphoresForReleasedBlocks), as RegistryPartialRouteReleaser does.
@@ -4002,6 +4019,8 @@ class DefaultPathReservationService(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean {
+		// Ownership first, as in releaseBlock (PR #1115 review).
+		if (!ownsBlock("rollbackBlock", trainId, block)) return false
 		try {
 			block.reservedFrom?.let { block.cancelPathSetup(it) }
 		} catch (e: Exception) {
@@ -4208,14 +4227,6 @@ class DefaultPathReservationService(
 
 		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
-
-	/**
-	 * Returns the current simulation time, or 0.0 if called outside a simulation context.
-	 *
-	 * Uses [Process.time] which is safe to call from any kDisco process.
-	 * Falls back to 0.0 when called outside simulation (e.g., in unit tests).
-	 */
-	private fun currentSimulationTime(): Double = runCatching { Process.time() }.getOrDefault(0.0)
 
 	/**
 	 * `true` when a train moving into [nextBlock] passes [semaphore] head-on (the semaphore

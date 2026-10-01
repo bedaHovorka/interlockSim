@@ -352,6 +352,20 @@ class PathReservationRegistryTest : KoinTestBase() {
 		}
 
 		@Test
+		fun `an unregisterBlock refused because the block is still reserved keeps the timestamp`() {
+			// PR #1115 review: the realistic refusal is by the owner itself, for a block not yet FREE.
+			now = 7.0
+			val block = blocks.first()
+			clocked.registerAtomic("train1", listOf(block))
+			block.setUpPath(block.ends().first() as DynamicPathSeparator, "train1")
+
+			assertThat(clocked.unregisterBlock("train1", block)).isFalse()
+
+			assertThat(clocked.getRegisteredAtSimTime(block)).isEqualTo(7.0)
+			assertThat(clocked.getOwner(block)).isEqualTo("train1")
+		}
+
+		@Test
 		fun `unregister of a train removes the timestamps of all its blocks`() {
 			clocked.registerAtomic("train1", blocks)
 
@@ -534,6 +548,19 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(registry.isFlankProtected(flankSwitch)).isFalse()
 			assertThat(registry.getSwitchOwner(flankSwitch)).isNull()
 			assertThat(registry.getSwitches("train1")).isEmpty()
+		}
+
+		@Test
+		fun `a switch whose owner holds no block at all is stale ownership`() {
+			// PR #1115 review: the owner has no block entry at all, not just none next to the switch.
+			val (plainSwitch, flankSwitch) = switches().take(2)
+			assertThat(registry.isStaleSwitchOwnership(plainSwitch), "no claim").isFalse()
+			registry.registerSwitches("train1", listOf(plainSwitch))
+			registry.registerFlankSwitches("train1", listOf(flankSwitch))
+
+			assertThat(registry.getBlocks("train1"), "blocks of train1").isEmpty()
+			assertThat(registry.isStaleSwitchOwnership(plainSwitch), "plain claim").isTrue()
+			assertThat(registry.isStaleSwitchOwnership(flankSwitch), "flank claim").isFalse()
 		}
 
 		@Test

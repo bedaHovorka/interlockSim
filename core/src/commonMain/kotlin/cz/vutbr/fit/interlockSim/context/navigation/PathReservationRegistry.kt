@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.Condition
-import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -25,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyNotifier
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -87,16 +87,15 @@ private val logger = KotlinLogging.logger {}
  * #1067); splitting the registry is out of scope for those fixes.
  *
  * @param context Simulation context (needed for PathInfo merging with ArrayPath)
- * @param simTimeSource Current simulation time, read when a block is registered. The default reads
- *   the running kDisco clock and falls back to 0.0 outside a simulation (unit tests), exactly as
- *   `DefaultPathReservationService` does.
+ * @param simTimeSource Current simulation time, read when a block is registered. The default is
+ *   [currentSimulationTime]: the running kDisco clock, 0.0 outside a simulation (unit tests).
  * @since Issue #294 (Phase 2 of Issue #292)
  * @since Issue #296 Phase 8 (PathInfo extension fix)
  */
 @Suppress("TooManyFunctions")
 class PathReservationRegistry(
 	private val context: SimulationContext,
-	private val simTimeSource: () -> Double = { runCatching { Process.time() }.getOrDefault(0.0) }
+	private val simTimeSource: () -> Double = ::currentSimulationTime
 ) : BlockOccupancyNotifier {
 	/**
 	 * Registered external listeners for block occupancy/release events.
@@ -360,13 +359,13 @@ class PathReservationRegistry(
 
 		// Phase 2: All checks passed - register all blocks
 		val blockList = trainToBlocks.getOrPut(trainId) { mutableListOf() }
-		val now = simTimeSource()
 		blocks.forEach { block ->
 			if (block !in blockList) {
 				blockList.add(block)
 			}
 			blockToTrain[block] = trainId
-			blockRegisteredAt.getOrPut(block) { now }
+			// The clock is read only for a newly registered block; it does not advance within this call.
+			blockRegisteredAt.getOrPut(block) { simTimeSource() }
 		}
 
 		return RegistrationResult.Success

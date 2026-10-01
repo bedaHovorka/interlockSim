@@ -50,6 +50,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.assertReservedBlocks
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
@@ -62,6 +63,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.koin.test.inject
 import cz.vutbr.fit.interlockSim.context.navigation.PathRelease as ReleaseOutcome
 
@@ -3934,11 +3936,14 @@ class PathReservationServiceTest : KoinTestBase() {
 
 	/**
 	 * Issue #961: the one public committed-release step ([PathReservationService.releaseBlock]) and the
-	 * one rollback step ([PathReservationService.rollbackBlock]). A committed release publishes the
+	 * one rollback step ([BlockRollbackStep.rollbackBlock]). A committed release publishes the
 	 * release event; a rollback never does, because the block it undoes was never announced as reserved.
 	 */
 	@Nested
 	inner class ReleaseAndRollbackBlock {
+		/** The rollback step is internal to `:core`, so it is reached through the implementation type. */
+		private fun rollbackStep(): DefaultPathReservationService = service as DefaultPathReservationService
+
 		private fun releasedEventsFor(
 			listener: RecordingListener,
 			block: DynamicTrackBlock
@@ -4001,11 +4006,87 @@ class PathReservationServiceTest : KoinTestBase() {
 			val listener = RecordingListener()
 			environment.addBlockOccupancyListener(listener)
 
-			assertThat(service.rollbackBlock("train1", firstBlock)).isTrue()
+			assertThat(rollbackStep().rollbackBlock("train1", firstBlock)).isTrue()
 
 			assertThat(firstBlock.getState()).isEqualTo(TrackFacility.State.FREE)
 			assertThat(registry.getOwner(firstBlock)).isNull()
 			assertThat(releasedEventsFor(listener, firstBlock)).isEmpty()
+		}
+
+		/**
+		 * PR #1115 review (ruling 4): [PathReservationService.releaseBlock] cancels the path setup before its
+		 * signal reset, so for an un-travelled block whose `reservedFrom` is a far route START -- a semaphore
+		 * that is not one of the block's ends -- it leaves that START lit. A caller that first calls
+		 * [PathReservationService.resetSemaphoresForReleasedBlocks], as `RegistryPartialRouteReleaser`
+		 * does, drives it to STOP. Pins both halves of the documented contract.
+		 */
+		@ParameterizedTest(name = "reset signals first = {0}")
+		@ValueSource(booleans = [false, true])
+		fun `releaseBlock resets a far route START only after the caller's own signal reset`(resetFirst: Boolean) {
+			val zA = simulationContext.cellsOfType<DynamicRailSemaphore>().single { it.name == "zA" }
+			val inOutB = simulationContext.getInOuts().single { it.name == "B" }
+			assertReservationSuccess(service.reservePath("t1", zA, inOutB))
+			val farBlock =
+				checkNotNull(service.getReservedBlocks("t1").firstOrNull { it.reservedFrom == zA && zA !in it.ends() }) {
+					"the zA->B route must have a block that zA governs from afar"
+				}
+			assertThat(zA.signal.isAllowing(), "zA cleared for t1").isTrue()
+
+			if (resetFirst) service.resetSemaphoresForReleasedBlocks("t1", listOf(farBlock))
+			assertThat(service.releaseBlock("t1", farBlock)).isTrue()
+
+			assertThat(zA.signal.isAllowing(), "zA still cleared").isEqualTo(!resetFirst)
+		}
+
+		/**
+		 * PR #1115 review: when a release listener throws and the stale-switch reclaim then throws too, the
+		 * listener's exception is the one that propagates, with the reclaim's attached as suppressed. The
+		 * reclaim is made to throw through a mocked block whose only end is a locked switch that fails.
+		 */
+		@Test
+		fun `a failing reclaim after a throwing release listener keeps the listener's exception`() {
+			val failingSwitch = mockk<DynamicRailSwitch>(relaxed = true)
+			every { failingSwitch.locked } throws IllegalStateException("reclaim failure")
+			val block = mockk<DynamicTrackBlock>(relaxed = true)
+			every { block.getState() } returns TrackFacility.State.FREE
+			every { block.occupant } returns null
+			every { block.trainName } returns null
+			every { block.ends() } returns arrayOf(failingSwitch)
+			assertThat(registry.registerAtomic("t1", listOf(block)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			val throwing =
+				BlockOccupancyListener { event ->
+					if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) error("listener failure")
+				}
+			registry.addBlockOccupancyListener(throwing)
+
+			val thrown = runCatching { service.dropFreedBlock("t1", block) }.exceptionOrNull()
+			registry.removeBlockOccupancyListener(throwing)
+
+			assertThat(thrown?.message).isEqualTo("listener failure")
+			assertThat(thrown?.suppressed?.map { it.message }).isEqualTo(listOf("reclaim failure"))
+			assertThat(registry.getOwner(block), "the block left the registry before the event").isNull()
+		}
+
+		/**
+		 * PR #1115 review: a rollback with the wrong train must not cancel the owner's path setup. Without
+		 * the ownership guard the block went FREE under train1's route while the registry, which refuses a
+		 * foreign unregister, kept it registered to train1.
+		 */
+		@Test
+		fun `rollbackBlock refuses a block the train does not own and changes nothing`() {
+			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
+			val firstBlock = success.reservedBlocks.first()
+			val listener = RecordingListener()
+			environment.addBlockOccupancyListener(listener)
+
+			assertThat(rollbackStep().rollbackBlock("otherTrain", firstBlock)).isFalse()
+
+			assertThat(firstBlock.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(firstBlock.trainName).isEqualTo("train1")
+			assertThat(firstBlock.reservedFrom).isNotNull()
+			assertThat(registry.getOwner(firstBlock)).isEqualTo("train1")
+			assertThat(listener.events).isEmpty()
 		}
 
 		/**

@@ -379,9 +379,9 @@ interface InterlockingFacade {
 	 * reserved for [trainId] is released in one call, through the same approach-locked release
 	 * the production port uses ([cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed]).
 	 * A block that is approach-locked, occupied by the train, or inside the deferral window is
-	 * **kept reserved** (deferred) rather than freed, so calling this mid-traverse cannot free a
-	 * block the train still needs; the retained blocks stay registered until a later release or
-	 * the orphan sweep reclaims them. The call does not release locks section-by-section as the
+	 * **kept** (deferred) rather than freed, so calling this mid-traverse cannot free a block the
+	 * train still needs; the kept blocks stay registered until a later release or the orphan sweep
+	 * reclaims them. The call does not release locks section-by-section as the
 	 * train clears blocks. Production code releases through the port, not through this method.
 	 *
 	 * **Signal reset (C4/I4):** The kernel tracks which entry signal it cleared for [trainId]
@@ -391,8 +391,9 @@ interface InterlockingFacade {
 	 * disrupt another train's cleared entry signal.
 	 *
 	 * **On invocation:**
-	 * - Blocks reserved for [trainId] are released (RESERVED → FREE), except approach-locked,
-	 *   occupied or deferral-window blocks, which stay RESERVED.
+	 * - Blocks reserved for [trainId] are released (RESERVED → FREE), except the kept ones, which
+	 *   stay registered to [trainId] with their state unchanged: an occupied block stays OCCUPIED, an
+	 *   approach-locked or deferral-window block stays RESERVED.
 	 * - On a full release, switches locked for [trainId] are unlocked. On a partial (deferred) release
 	 *   only switches left stale are reclaimed: a switch next to a kept block stays locked until that
 	 *   block is released too.

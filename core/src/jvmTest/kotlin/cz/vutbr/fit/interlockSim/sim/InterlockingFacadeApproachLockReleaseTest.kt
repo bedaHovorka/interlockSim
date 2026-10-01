@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * Issue #974: [InterlockingFacade.releaseRoute] runs the approach-locked release, so it keeps an
- * occupied or approach-locked block reserved, exactly as the production port's
+ * occupied or approach-locked block registered (OCCUPIED or RESERVED), exactly as the production port's
  * `releaseRouteDetailed` does. Runs against the real
  * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService] on the `A -- Sem -- B` linear
  * network, where the tail past the semaphore can be freed.
@@ -36,7 +36,7 @@ import org.junit.jupiter.api.Test
 @DisplayName("Issue #974 — the facade's releaseRoute uses the approach lock")
 class InterlockingFacadeApproachLockReleaseTest : KoinTestBase() {
 	@Test
-	fun `releaseRoute keeps an occupied block reserved and frees the tail (Issue 974)`() {
+	fun `releaseRoute keeps an occupied block registered and frees the tail (Issue 974)`() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork()
 		val context = network.context.tracked()
 		val registry = context.scope.get<PathReservationRegistry>()

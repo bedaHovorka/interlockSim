@@ -235,7 +235,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	}
 
 	/**
-	 * Issue #961: the facade rollback now goes through `PathReservationService.rollbackBlock`, which
+	 * Issue #961: the facade rollback now goes through `BlockRollbackStep.rollbackBlock`, which
 	 * reclaims a switch lock left stale by the released block, as every block release has done since
 	 * Issue #1065. Train #other owns vB but holds no block next to it, so nothing protects its lock.
 	 */
