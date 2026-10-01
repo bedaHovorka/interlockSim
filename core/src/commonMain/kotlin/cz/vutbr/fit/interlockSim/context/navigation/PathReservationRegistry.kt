@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyNotifier
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -69,6 +70,16 @@ private val logger = KotlinLogging.logger {}
  *
  * **NOT thread-safe.** All operations assume single-threaded access.
  *
+ * ## Registration timestamps (Issue #975)
+ *
+ * The registry records the simulation time at which each block was registered to its owner
+ * ([getRegisteredAtSimTime]). It is a read-only fact, not a policy: nothing in the registry expires
+ * a reservation. A block keeps its first timestamp while its owner re-registers it, loses it on
+ * every removal ([unregisterBlock], [unregister], [clear] -- every release and rollback path goes
+ * through one of them), and gets a new one if it is registered again later. Deciding when a holding
+ * is stale stays with its caller (`OrphanReservationSweeper` in `:dispatcher-agent`). No production
+ * code reads the timestamps yet -- not even for diagnostics: they are a stepping stone for #975.
+ *
  * ## Size
  *
  * The registry is the single owner of the train -> blocks / switches / PathInfo state, so every
@@ -76,12 +87,15 @@ private val logger = KotlinLogging.logger {}
  * #1067); splitting the registry is out of scope for those fixes.
  *
  * @param context Simulation context (needed for PathInfo merging with ArrayPath)
+ * @param simTimeSource Current simulation time, read when a block is registered. The default is
+ *   [currentSimulationTime]: the running kDisco clock, 0.0 outside a simulation (unit tests).
  * @since Issue #294 (Phase 2 of Issue #292)
  * @since Issue #296 Phase 8 (PathInfo extension fix)
  */
 @Suppress("TooManyFunctions")
 class PathReservationRegistry(
-	private val context: SimulationContext
+	private val context: SimulationContext,
+	private val simTimeSource: () -> Double = ::currentSimulationTime
 ) : BlockOccupancyNotifier {
 	/**
 	 * Registered external listeners for block occupancy/release events.
@@ -186,6 +200,12 @@ class PathReservationRegistry(
 	private val blockToTrain = mutableMapOf<DynamicTrackBlock, String>()
 
 	/**
+	 * Mapping: Block → simulation time it was registered to its current owner (Issue #975).
+	 * Holds exactly the keys of [blockToTrain]; see the class KDoc.
+	 */
+	private val blockRegisteredAt = mutableMapOf<DynamicTrackBlock, Double>()
+
+	/**
 	 * Mapping: Train ID → List of reserved switches (Tier 2)
 	 *
 	 * Tracks railway switches that are locked for specific trains.
@@ -196,31 +216,26 @@ class PathReservationRegistry(
 	private val trainToSwitches = mutableMapOf<String, MutableList<DynamicRailSwitch>>()
 
 	/**
-	 * Mapping: Switch → Owning train ID (Tier 2)
+	 * Mapping: Switch → the owning train's [SwitchClaim] (Tier 2)
 	 *
-	 * Reverse mapping to quickly determine which train owns a given switch.
+	 * Reverse mapping to quickly determine which train owns a given switch, and why.
 	 * Used for conflict detection during path reservation.
 	 *
-	 * @since Issue #291 Fix Trains 4 & 5 Deadlock
-	 */
-	private val switchToTrain = mutableMapOf<DynamicRailSwitch, String>()
-
-	/**
-	 * Switches registered as FLANK protection (Issue #1076 review).
+	 * The claim's [SwitchClaim.isFlank] marks FLANK protection (Issue #1076 review). A facade
+	 * `lockRouteAtomic` grant locks `route.flank` switches that protect a route the switch is NOT
+	 * adjacent to (see `docs/INTERLOCKING_SCOPE_LIMITATIONS.md` §B2). The "owner holds no block
+	 * bounded by it" staleness rule of [isStaleSwitchOwnership] is unsound for such a switch -- a
+	 * live flank grant has no adjacent block by definition -- so a flank claim is never stale while
+	 * it stands. Owner and purpose live in one record (Issue #1103), so every removal
+	 * ([unregisterSwitch], [unregisterSwitches], [clear]) drops the purpose with the claim. The
+	 * purpose is per switch, not per route: if the same train later also registers the switch as a
+	 * running switch, the claim stays a flank claim until release -- the registry cannot tell
+	 * whether the earlier flank route is still live, so it keeps the conservative answer.
 	 *
-	 * A facade `lockRouteAtomic` grant locks `route.flank` switches that protect a route the
-	 * switch is NOT adjacent to (see `docs/INTERLOCKING_SCOPE_LIMITATIONS.md` §B2). The
-	 * "owner holds no block bounded by it" staleness rule of [isStaleSwitchOwnership] is
-	 * unsound for such a switch -- a live flank grant has no adjacent block by definition --
-	 * so a marked switch is never stale while its registration stands. The marker is cleared
-	 * together with the ownership ([unregisterSwitch], [unregisterSwitches], [clear]). It is
-	 * per switch, not per route: if the same train later also registers the switch as a running
-	 * switch, the marker stays until release -- the registry cannot tell whether the earlier
-	 * flank route is still live, so it keeps the conservative answer.
-	 *
-	 * @since Issue #1076
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock; the flank purpose since Issue #1076, in the
+	 *   claim since Issue #1103
 	 */
-	private val flankProtectedSwitches = mutableSetOf<DynamicRailSwitch>()
+	private val switchToTrain = mutableMapOf<DynamicRailSwitch, SwitchClaim>()
 
 	/**
 	 * Mapping: Train ID → PathInfo metadata
@@ -349,6 +364,8 @@ class PathReservationRegistry(
 				blockList.add(block)
 			}
 			blockToTrain[block] = trainId
+			// The clock is read only for a newly registered block; it does not advance within this call.
+			blockRegisteredAt.getOrPut(block) { simTimeSource() }
 		}
 
 		return RegistrationResult.Success
@@ -376,7 +393,7 @@ class PathReservationRegistry(
 	 * ## State Changes
 	 *
 	 * - Removes trainToBlocks[trainId]
-	 * - Removes blockToTrain[block] for all blocks owned by this train
+	 * - Removes blockToTrain[block] and the block's registration timestamp for all blocks owned by this train
 	 * - Removes trainToPathInfo[trainId] (Issue #295/#296)
 	 *
 	 * @param trainId The train identifier
@@ -388,6 +405,7 @@ class PathReservationRegistry(
 		// Remove all blocks from mappings (regardless of state)
 		blocks.forEach { block ->
 			blockToTrain.remove(block)
+			blockRegisteredAt.remove(block)
 		}
 
 		// Remove train entry and PathInfo
@@ -417,7 +435,7 @@ class PathReservationRegistry(
 	 *
 	 * If block is FREE and owned by trainId:
 	 * - Removes block from trainToBlocks[trainId]
-	 * - Removes blockToTrain[block]
+	 * - Removes blockToTrain[block] and the block's registration timestamp
 	 * - If this was the last block, removes trainToBlocks[trainId] (but keeps trainToPathInfo[trainId])
 	 *
 	 * ## PathInfo Lifecycle (Issue #301 Fix)
@@ -473,6 +491,7 @@ class PathReservationRegistry(
 
 		// Remove from mappings
 		blockToTrain.remove(block)
+		blockRegisteredAt.remove(block)
 		trainToBlocks[trainId]?.remove(block)
 
 		val remainingBlocks = trainToBlocks[trainId]?.size ?: 0
@@ -500,6 +519,13 @@ class PathReservationRegistry(
 	 * @return Train ID if block is registered, null otherwise
 	 */
 	fun getOwner(block: DynamicTrackBlock): String? = blockToTrain[block]
+
+	/**
+	 * The simulation time at which [block] was registered to its current owner, or `null` when no
+	 * train holds it (Issue #975). A read-only fact -- see the class KDoc; the registry never
+	 * expires a reservation by it. It has no production reader yet; only tests call it.
+	 */
+	fun getRegisteredAtSimTime(block: DynamicTrackBlock): Double? = blockRegisteredAt[block]
 
 	/**
 	 * Check whether a block is available for a new reservation.
@@ -592,7 +618,8 @@ class PathReservationRegistry(
 	 *
 	 * For each switch:
 	 * - Adds switch to trainToSwitches[trainId]
-	 * - Sets switchToTrain[switch] = trainId
+	 * - Sets switchToTrain[switch] to a plain [SwitchClaim] for trainId (a flank claim the train
+	 *   already holds stays a flank claim)
 	 * - Locks the switch
 	 *
 	 * ## Foreign ownership is rejected atomically (Issue #1076)
@@ -616,10 +643,22 @@ class PathReservationRegistry(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
 	) {
+		registerClaims(trainId, switches, isFlank = false)
+	}
+
+	/**
+	 * [registerSwitches] with the claim's purpose. A plain registration over the train's own flank
+	 * claim keeps it a flank claim -- see [switchToTrain].
+	 */
+	private fun registerClaims(
+		trainId: String,
+		switches: List<DynamicRailSwitch>,
+		isFlank: Boolean
+	) {
 		switches.forEach { switch ->
 			check(!isOwnedByOtherTrain(switch, trainId)) {
 				"registerSwitches: Switch ${switch.staticRef.getName()} is already registered to " +
-					"'${switchToTrain[switch]}' and cannot be registered to '$trainId' (Issue #1076); " +
+					"'${getSwitchOwner(switch)}' and cannot be registered to '$trainId' (Issue #1076); " +
 					"nothing was registered"
 			}
 		}
@@ -633,7 +672,7 @@ class PathReservationRegistry(
 					"registerSwitches: Locked switch ${switch.hashCode()} for '$trainId', locked=${switch.locked}"
 				}
 			}
-			switchToTrain[switch] = trainId
+			switchToTrain[switch] = SwitchClaim(trainId, isFlank || switchToTrain[switch]?.isFlank == true)
 		}
 
 		logger.info {
@@ -644,8 +683,8 @@ class PathReservationRegistry(
 	/**
 	 * Register switches as FLANK protection for a train (Issue #1076 review).
 	 *
-	 * [registerSwitches] (same atomic foreign-owner rejection), then marks the switches as
-	 * flank-protected -- see [flankProtectedSwitches] for why.
+	 * [registerSwitches] (same atomic foreign-owner rejection), with flank claims -- see
+	 * [switchToTrain] for why.
 	 *
 	 * @throws IllegalStateException if any switch is already registered to a different
 	 *   train; no registry state is mutated in that case
@@ -656,17 +695,15 @@ class PathReservationRegistry(
 		switches: List<DynamicRailSwitch>
 	) {
 		if (switches.isEmpty()) return
-		registerSwitches(trainId, switches)
-		flankProtectedSwitches += switches
+		registerClaims(trainId, switches, isFlank = true)
 	}
 
 	/**
-	 * Whether [switch] is currently registered as flank protection -- see
-	 * [flankProtectedSwitches].
+	 * Whether [switch] is currently registered as flank protection -- see [switchToTrain].
 	 *
 	 * @since Issue #1076
 	 */
-	fun isFlankProtected(switch: DynamicRailSwitch): Boolean = switch in flankProtectedSwitches
+	fun isFlankProtected(switch: DynamicRailSwitch): Boolean = switchToTrain[switch]?.isFlank == true
 
 	/**
 	 * Whether [switch] is registered to a train OTHER than [trainId] -- the ownership a
@@ -678,14 +715,14 @@ class PathReservationRegistry(
 		switch: DynamicRailSwitch,
 		trainId: String
 	): Boolean {
-		val owner = switchToTrain[switch]
+		val owner = getSwitchOwner(switch)
 		return owner != null && owner != trainId
 	}
 
 	/**
 	 * Whether [switch]'s ownership protects no live route any more, so it may be released.
 	 *
-	 * Stale iff the switch has an owner, is not flank-protected ([flankProtectedSwitches]), and
+	 * Stale iff the switch has an owner, its claim is not a flank claim ([SwitchClaim.isFlank]), and
 	 * the owner holds no block bounded by it. A route never ends AT a switch
 	 * ([isValidPathInfoEnd], Issue #938), so any switch on a live route has at least one held
 	 * adjacent block, and a train straddling the switch holds both. "No held adjacent block"
@@ -695,9 +732,9 @@ class PathReservationRegistry(
 	 * @since Issue #1076 (the #1065 reclamation predicate, moved here with its flank exception)
 	 */
 	fun isStaleSwitchOwnership(switch: DynamicRailSwitch): Boolean {
-		val owner = switchToTrain[switch] ?: return false
-		if (switch in flankProtectedSwitches) return false
-		return trainToBlocks[owner]?.none { switch in it.ends() } ?: true
+		val claim = switchToTrain[switch] ?: return false
+		if (claim.isFlank) return false
+		return trainToBlocks[claim.trainId]?.none { switch in it.ends() } ?: true
 	}
 
 	/**
@@ -723,7 +760,6 @@ class PathReservationRegistry(
 		switches.forEach { switch ->
 			switch.unlock()
 			switchToTrain.remove(switch)
-			flankProtectedSwitches.remove(switch)
 			logger.info {
 				"unregisterSwitches: Unlocked switch ${switch.hashCode()} for '$trainId', locked=${switch.locked}"
 			}
@@ -764,16 +800,15 @@ class PathReservationRegistry(
 		trainId: String,
 		switch: DynamicRailSwitch
 	): Boolean {
-		if (switchToTrain[switch] != trainId) {
+		if (getSwitchOwner(switch) != trainId) {
 			logger.debug {
 				"unregisterSwitch: Switch ${switch.hashCode()} not owned by '$trainId' " +
-					"(owner='${switchToTrain[switch]}')"
+					"(owner='${getSwitchOwner(switch)}')"
 			}
 			return false
 		}
 		switch.unlock()
 		switchToTrain.remove(switch)
-		flankProtectedSwitches.remove(switch)
 		trainToSwitches[trainId]?.remove(switch)
 		if (trainToSwitches[trainId]?.isEmpty() == true) {
 			trainToSwitches.remove(trainId)
@@ -800,7 +835,13 @@ class PathReservationRegistry(
 	 * @return Train ID if switch is registered, null otherwise
 	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
 	 */
-	fun getSwitchOwner(switch: DynamicRailSwitch): String? = switchToTrain[switch]
+	fun getSwitchOwner(switch: DynamicRailSwitch): String? = switchToTrain[switch]?.trainId
+
+	/**
+	 * The [SwitchClaim] on [switch] -- its owner and purpose in one record -- or `null` when no
+	 * train owns it (Issue #1103).
+	 */
+	internal fun getSwitchClaim(switch: DynamicRailSwitch): SwitchClaim? = switchToTrain[switch]
 
 	/**
 	 * Get all blocks reserved by a train.
@@ -1554,16 +1595,16 @@ class PathReservationRegistry(
 	/**
 	 * Clear all registrations.
 	 *
-	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-train mappings,
-	 * and the flank-protection markers that belong to those switch registrations.
+	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-claim mappings
+	 * (a claim's flank purpose goes with it).
 	 * Used for simulation reset or cleanup.
 	 */
 	fun clear() {
 		trainToBlocks.clear()
 		blockToTrain.clear()
+		blockRegisteredAt.clear()
 		trainToSwitches.clear()
 		switchToTrain.clear()
-		flankProtectedSwitches.clear()
 		trainToPathInfo.clear()
 	}
 

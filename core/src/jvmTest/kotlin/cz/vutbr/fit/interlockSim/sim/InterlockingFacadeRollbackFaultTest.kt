@@ -25,10 +25,12 @@ import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.rollbackMirroringReservationService
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
@@ -57,12 +59,17 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("Issue #1051 — a setUpPath failure rolls back only the failed call's blocks")
 class InterlockingFacadeRollbackFaultTest {
-	/** A FREE, unoccupied block mock — passes `checkRouteFreedom` (see `InterlockingFacadeTest`). */
+	/**
+	 * A FREE, unoccupied block mock — passes `checkRouteFreedom` (see `InterlockingFacadeTest`). Its
+	 * `reservedFrom` is stateful, like the real block's: set by a `setUpPath` that does not throw, so the
+	 * rollback cancels only the blocks this call reserved (Issue #961).
+	 */
 	private fun block(
 		name: String,
 		occupantName: String? = null
-	): DynamicTrackBlock =
-		mockk<DynamicTrackBlock>(relaxed = true).also {
+	): DynamicTrackBlock {
+		var reservedFrom: DynamicPathSeparator? = null
+		return mockk<DynamicTrackBlock>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.trainName } returns null
 			every { it.getState() } returns TrackFacility.State.FREE
@@ -70,7 +77,10 @@ class InterlockingFacadeRollbackFaultTest {
 				occupantName?.let { occ ->
 					mockk<TrackOccupant>(relaxed = true).also { every { it.name } returns occ }
 				}
+			every { it.reservedFrom } answers { reservedFrom }
+			every { it.setUpPath(any(), any()) } answers { reservedFrom = firstArg() }
 		}
+	}
 
 	/** Stateful mock semaphore: assigning `signal` is observable via the getter afterwards. */
 	private fun semaphore(
@@ -103,7 +113,10 @@ class InterlockingFacadeRollbackFaultTest {
 		every { graph.values() } returns blocks
 
 		val registry = PathReservationRegistry(mockk(relaxed = true))
+		// The facade rolls a failed route's blocks back through the service (Issue #961).
+		val reservationService = rollbackMirroringReservationService(registry)
 		val routingServices = mockk<RoutingServices>(relaxed = true)
+		every { routingServices.getPathReservationService() } returns reservationService
 
 		val e = mockk<SimulationEnvironment>(relaxed = true)
 		every { e.getRailWayNetGrid() } returns grid
@@ -189,5 +202,41 @@ class InterlockingFacadeRollbackFaultTest {
 		assertThat(registry.getOwner(u1)).isNull()
 		assertThat(registry.getOwner(u2)).isNull()
 		verify(exactly = 0) { u0.cancelPathSetup(any()) }
+	}
+
+	/**
+	 * PR #1115 review (the warn arm of `rollbackBlocks`): a block whose `cancelPathSetup` throws stays
+	 * RESERVED, so the registry, which drops only a FREE block, keeps it registered to the train. The
+	 * rollback must go on with the other blocks and leave that entry for the train's next release,
+	 * rather than drop it while the block is still physically reserved.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("a block whose cancel fails stays registered to the train; the other blocks are rolled back")
+	fun cancelFailureKeepsTheStillReservedBlockRegistered() {
+		val u1 = block("U1")
+		var u1State = TrackFacility.State.FREE
+		every { u1.getState() } answers { u1State }
+		every { u1.setUpPath(any(), any()) } answers {
+			every { u1.reservedFrom } returns firstArg()
+			u1State = TrackFacility.State.RESERVED
+		}
+		every { u1.cancelPathSetup(any()) } throws IllegalStateException("cancelPathSetup boom")
+		val u2 = block("U2")
+		every { u2.setUpPath(any(), any()) } throws IllegalStateException("setUpPath boom")
+		val s1 = semaphore("S1")
+		val (e, registry) = env(blocks = listOf(u1, u2), semaphores = listOf(s1))
+		val facade = DefaultInterlockingFacade(e, registry)
+
+		// When: U1 reserves, U2's setUpPath throws, and the rollback cannot cancel U1.
+		val response = facade.requestRoute("T1", SignalId("S1"), route(listOf("U1", "U2")), Aspect.Volno)
+
+		// Then: still denied as transient contention; U1 is still RESERVED, so it stays registered to
+		// T1, while U2 (never reserved) leaves the registry.
+		assertDenied(response, reason = "Track section cannot be locked", retryable = true)
+		assertThat(u1.getState()).isEqualTo(TrackFacility.State.RESERVED)
+		assertThat(registry.getOwner(u1)).isEqualTo("T1")
+		assertThat(registry.getOwner(u2)).isNull()
+		verify { u1.cancelPathSetup(s1) }
 	}
 }

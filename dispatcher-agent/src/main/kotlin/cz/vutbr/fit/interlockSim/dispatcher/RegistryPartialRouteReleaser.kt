@@ -29,11 +29,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * precondition requires `occupant == null && state == FREE` — so on its own it cannot drop an
  * un-travelled **RESERVED** block either; it just returns `false`.
  *
- * The working sequence already exists inside `DefaultPathReservationService`, in the private
- * `rollbackUnconfigurableCandidate` used when a candidate path is rejected mid-reservation:
- * `block.cancelPathSetup(reservedFrom)` first, moving RESERVED→FREE, then `unregisterBlock`. This
- * class performs the same two steps from outside, which is why PR #891 can close R4-3 without
- * changing a single file under `core/`.
+ * The working sequence is `block.cancelPathSetup(reservedFrom)` first, moving RESERVED→FREE, then
+ * `unregisterBlock`. PR #891 performed those two steps from out here; since Issue #961 they are one
+ * public service step, [PathReservationService.releaseBlock], which this class calls per block.
  *
  * ## Safety
  *
@@ -140,10 +138,10 @@ class RegistryPartialRouteReleaser(
 		// before the retry re-offers it.
 		val standingProceed = boundarySignals(occupied, eligible).filter { it.signal.isAllowing() }
 
-		// Fail-safe BEFORE any block becomes available to anyone else, and BEFORE cancelPathSetup
-		// (below) clears each block's `reservedFrom` -- resetSemaphoresForReleasedBlocks needs that
-		// field live to recover the governing semaphore/InOut for blocks whose `reservedFrom` is the
-		// route's far-away START rather than a separator locally adjacent to them.
+		// Fail-safe BEFORE any block becomes available to anyone else, and BEFORE releaseBlock's
+		// cancelPathSetup (below) clears each block's `reservedFrom` -- resetSemaphoresForReleasedBlocks
+		// needs that field live to recover the governing semaphore/InOut for blocks whose `reservedFrom`
+		// is the route's far-away START rather than a separator locally adjacent to them.
 		pathReservationService.resetSemaphoresForReleasedBlocks(trainId, eligible)
 
 		if (standingProceed.isNotEmpty()) {
@@ -204,7 +202,9 @@ class RegistryPartialRouteReleaser(
 	}
 
 	/**
-	 * Attempts to release a single [block] from [trainId]'s route.
+	 * Attempts to release a single [block] from [trainId]'s route through the service's one committed
+	 * release step, [PathReservationService.releaseBlock] (Issue #961): it cancels the path setup, and
+	 * then unregisters the block, publishes its release event and reclaims a stale switch lock.
 	 *
 	 * @return the block's stable id if it was successfully released, or `null` if it was skipped.
 	 */
@@ -213,11 +213,9 @@ class RegistryPartialRouteReleaser(
 		block: DynamicTrackBlock
 	): String? {
 		val id = BlockIdentity.stableBlockId(block)
-		val reservedFrom = block.reservedFrom ?: return null
 		val unregistered =
 			try {
-				block.cancelPathSetup(reservedFrom)
-				pathReservationService.unregisterBlock(trainId, block)
+				pathReservationService.releaseBlock(trainId, block)
 			} catch (e: Exception) {
 				logger.warn(e) {
 					"RegistryPartialRouteReleaser: could not release block '$id' of '$trainId'; " +

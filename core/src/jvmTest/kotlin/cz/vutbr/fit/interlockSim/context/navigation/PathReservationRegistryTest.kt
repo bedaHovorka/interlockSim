@@ -276,6 +276,139 @@ class PathReservationRegistryTest : KoinTestBase() {
 		}
 	}
 
+	/**
+	 * Issue #975 (owner decision D5): the registry records when each block was registered, as a
+	 * read-only fact. No expiry lives in the registry; staleness stays the sweeper's own rule.
+	 */
+	@Nested
+	inner class RegistrationTimestamps {
+		private var now = 0.0
+		private lateinit var clocked: PathReservationRegistry
+
+		@BeforeEach
+		fun setUpClock() {
+			now = 0.0
+			clocked = PathReservationRegistry(simulationContext) { now }
+		}
+
+		@Test
+		fun `registering a block records the sim time it was registered at`() {
+			now = 12.5
+
+			clocked.registerAtomic("train1", blocks)
+
+			blocks.forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isEqualTo(12.5)
+			}
+		}
+
+		@Test
+		fun `a block never registered has no timestamp`() {
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first())).isNull()
+		}
+
+		@Test
+		fun `re-registering a block the train already holds keeps its first timestamp`() {
+			now = 10.0
+			clocked.registerAtomic("train1", blocks.take(2))
+
+			now = 40.0
+			clocked.registerAtomic("train1", blocks.take(3))
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks[0]), "already held").isEqualTo(10.0)
+			assertThat(clocked.getRegisteredAtSimTime(blocks[1]), "already held").isEqualTo(10.0)
+			assertThat(clocked.getRegisteredAtSimTime(blocks[2]), "newly registered").isEqualTo(40.0)
+		}
+
+		@Test
+		fun `a conflicting registration records no timestamp`() {
+			clocked.registerAtomic("train1", blocks.take(1))
+
+			val result = clocked.registerAtomic("train2", blocks)
+
+			assertThat(result).isInstanceOf<PathReservationRegistry.RegistrationResult.Conflict>()
+			blocks.drop(1).forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isNull()
+			}
+		}
+
+		@Test
+		fun `unregisterBlock removes the block's timestamp`() {
+			clocked.registerAtomic("train1", blocks)
+
+			assertThat(clocked.unregisterBlock("train1", blocks.first())).isTrue()
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first()), "released block").isNull()
+			assertThat(clocked.getRegisteredAtSimTime(blocks.last()), "still held block").isNotNull()
+		}
+
+		@Test
+		fun `a refused unregisterBlock keeps the timestamp`() {
+			clocked.registerAtomic("train1", blocks)
+
+			assertThat(clocked.unregisterBlock("train2", blocks.first())).isFalse()
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first())).isEqualTo(0.0)
+		}
+
+		@Test
+		fun `an unregisterBlock refused because the block is still reserved keeps the timestamp`() {
+			// PR #1115 review: the realistic refusal is by the owner itself, for a block not yet FREE.
+			now = 7.0
+			val block = blocks.first()
+			clocked.registerAtomic("train1", listOf(block))
+			block.setUpPath(block.ends().first() as DynamicPathSeparator, "train1")
+
+			assertThat(clocked.unregisterBlock("train1", block)).isFalse()
+
+			assertThat(clocked.getRegisteredAtSimTime(block)).isEqualTo(7.0)
+			assertThat(clocked.getOwner(block)).isEqualTo("train1")
+		}
+
+		@Test
+		fun `unregister of a train removes the timestamps of all its blocks`() {
+			clocked.registerAtomic("train1", blocks)
+
+			clocked.unregister("train1")
+
+			blocks.forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isNull()
+			}
+		}
+
+		@Test
+		fun `clear removes every timestamp`() {
+			clocked.registerAtomic("train1", blocks.take(2))
+			clocked.registerAtomic("train2", blocks.drop(2))
+
+			clocked.clear()
+
+			blocks.forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isNull()
+			}
+		}
+
+		@Test
+		fun `a block registered again after its release gets a new timestamp`() {
+			now = 5.0
+			clocked.registerAtomic("train1", blocks.take(1))
+			clocked.unregisterBlock("train1", blocks.first())
+
+			now = 90.0
+			clocked.registerAtomic("train2", blocks.take(1))
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first())).isEqualTo(90.0)
+		}
+
+		@Test
+		fun `the default time source works without a running simulation`() {
+			// The context's own registry uses the default source; no kDisco process is running here.
+			registry.registerAtomic("train1", blocks)
+
+			assertThat(registry.getRegisteredAtSimTime(blocks.first())).isEqualTo(0.0)
+		}
+	}
+
 	@Nested
 	inner class Statistics {
 		@Test
@@ -415,6 +548,67 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(registry.isFlankProtected(flankSwitch)).isFalse()
 			assertThat(registry.getSwitchOwner(flankSwitch)).isNull()
 			assertThat(registry.getSwitches("train1")).isEmpty()
+		}
+
+		@Test
+		fun `a switch whose owner holds no block at all is stale ownership`() {
+			// PR #1115 review: the owner has no block entry at all, not just none next to the switch.
+			val (plainSwitch, flankSwitch) = switches().take(2)
+			assertThat(registry.isStaleSwitchOwnership(plainSwitch), "no claim").isFalse()
+			registry.registerSwitches("train1", listOf(plainSwitch))
+			registry.registerFlankSwitches("train1", listOf(flankSwitch))
+
+			assertThat(registry.getBlocks("train1"), "blocks of train1").isEmpty()
+			assertThat(registry.isStaleSwitchOwnership(plainSwitch), "plain claim").isTrue()
+			assertThat(registry.isStaleSwitchOwnership(flankSwitch), "flank claim").isFalse()
+		}
+
+		@Test
+		fun `a claim records the owner and the purpose in one record`() {
+			// Issue #1103: one record per switch, so the purpose cannot outlive the ownership.
+			val (flankSwitch, plainSwitch) = switches().take(2)
+			registry.registerFlankSwitches("train1", listOf(flankSwitch))
+			registry.registerSwitches("train1", listOf(plainSwitch))
+
+			assertThat(registry.getSwitchClaim(flankSwitch)).isEqualTo(SwitchClaim("train1", isFlank = true))
+			assertThat(registry.getSwitchClaim(plainSwitch)).isEqualTo(SwitchClaim("train1", isFlank = false))
+		}
+
+		@Test
+		fun `every removal drops the purpose with the claim`() {
+			val (first, second) = switches().take(2)
+
+			fun assertNoClaim(
+				switch: DynamicRailSwitch,
+				after: String
+			) {
+				assertThat(registry.getSwitchClaim(switch), "claim after $after").isNull()
+				assertThat(registry.isFlankProtected(switch), "flank after $after").isFalse()
+			}
+			registry.registerFlankSwitches("train1", listOf(first))
+			registry.registerFlankSwitches("train2", listOf(second))
+
+			assertThat(registry.unregisterSwitch("train1", first)).isTrue()
+			assertNoClaim(first, "unregisterSwitch")
+			registry.unregisterSwitches("train2")
+			assertNoClaim(second, "unregisterSwitches")
+
+			registry.registerFlankSwitches("train3", listOf(first))
+			registry.clear()
+			assertNoClaim(first, "clear")
+		}
+
+		@Test
+		fun `a plain re-registration by the same train keeps the flank purpose`() {
+			// The registry cannot tell whether the earlier flank route is still live, so it keeps the
+			// conservative answer until the claim is released.
+			val switch = switches().first()
+			registry.registerFlankSwitches("train1", listOf(switch))
+
+			registry.registerSwitches("train1", listOf(switch))
+
+			assertThat(registry.getSwitchClaim(switch)).isEqualTo(SwitchClaim("train1", isFlank = true))
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
 		}
 
 		@Test

@@ -66,7 +66,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
  * @see PathReservationRegistry
  * @since Issue #294 (Phase 2 of Issue #292)
  */
-interface PathReservationService : ApproachLockedPathRelease {
+interface PathReservationService :
+	ApproachLockedPathRelease,
+	BlockReleaseSteps {
 	/**
 	 * Result of a path reservation attempt.
 	 *
@@ -762,9 +764,9 @@ interface PathReservationService : ApproachLockedPathRelease {
 	 *
 	 * ## Use Case
 	 *
-	 * A dispatcher reclaiming the un-travelled tail of a stalled reservation: after freeing the
-	 * tail's blocks (`cancelPathSetup` + [unregisterBlock]), call this once over those blocks so no
-	 * released block is left reachable through a signal still showing proceed.
+	 * A dispatcher reclaiming the un-travelled tail of a stalled reservation: call this once over the
+	 * tail's blocks BEFORE freeing them with [releaseBlock] (while their `reservedFrom` is still set),
+	 * so no released block is left reachable through a signal still showing proceed.
 	 *
 	 * ## Proven-safe scope
 	 *

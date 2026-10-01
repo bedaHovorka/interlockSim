@@ -43,8 +43,8 @@ import org.junit.jupiter.api.Test
  * A reservation is released in exactly three ways (`PathReservationRegistry`): a train's `Tail`
  * physically leaving a block it entered, the train's journey completing, or an explicit
  * `releasePath`. All three require the train to *consume* the route. Nothing reclaims a route that
- * was granted and never travelled, and the registry keeps no timestamps, so there is no sweeper,
- * timeout or TTL anywhere.
+ * was granted and never travelled, and the registry has no sweeper, timeout or TTL. (Since Issue #975
+ * it records when each block was registered, as a fact only; staleness stays the sweeper's rule.)
  *
  * `MultiTrainLoop` calls `BlockResourceRegistry.releaseFreeResources()` once per iteration as its
  * safety net; `ShuntingLoop` — the loop `shuntingLoopAI` runs — has no equivalent. (It could not
@@ -692,6 +692,65 @@ class OrphanReservationSweeperTest {
 
 		assertThat(releaser.calls, "partial-release calls").isEmpty()
 		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
+	}
+
+	/**
+	 * Issue #975, owner decision D5 risk check. A route is registered in one call, so every block of
+	 * it was reserved at the same moment, and entering a reserved block is not a registry write. A
+	 * train that keeps moving through a long route therefore holds a tail whose NEWEST reservation
+	 * is as old as the route itself. Its progress must keep it safe from the sweeper well past
+	 * [OrphanReservationSweeper.DEFAULT_STALE_AFTER_SIM_SECONDS] after the grant: a rule that judged
+	 * staleness by the newest reservation time alone would offer this tail at t = 75 and throw the
+	 * signals in front of a moving train to STOP.
+	 */
+	@Test
+	@DisplayName("a train still moving through a long route is not swept, however old the route's reservation is")
+	fun movingTrainOnALongRouteIsNotSweptByTheAgeOfItsReservation() {
+		val releaser = RecordingPartialReleaser()
+
+		val sweeper =
+			sweepAll(
+				staleAfterSimSeconds = OrphanReservationSweeper.DEFAULT_STALE_AFTER_SIM_SECONDS,
+				ticks =
+					listOf(
+						// The whole route b1..b5 was granted at t = 0; the train stands on b1.
+						Tick(
+							0.0,
+							listOf(
+								occupied("b1", train),
+								reserved("b2", train),
+								reserved("b3", train),
+								reserved("b4", train),
+								reserved("b5", train)
+							),
+							activeTrains = listOf(train)
+						),
+						// One block every 25 s, and nothing new is registered on the way.
+						Tick(
+							25.0,
+							listOf(
+								occupied("b2", train),
+								reserved("b3", train),
+								reserved("b4", train),
+								reserved("b5", train)
+							),
+							activeTrains = listOf(train)
+						),
+						Tick(
+							50.0,
+							listOf(occupied("b3", train), reserved("b4", train), reserved("b5", train)),
+							activeTrains = listOf(train)
+						),
+						// 75 s after the grant, 25 s after the last progress.
+						Tick(75.0, listOf(occupied("b4", train), reserved("b5", train)), activeTrains = listOf(train)),
+						Tick(95.0, listOf(occupied("b4", train), reserved("b5", train)), activeTrains = listOf(train))
+					),
+				partialReleaser = releaser
+			)
+
+		assertThat(releaser.calls, "partial-release calls").isEmpty()
+		assertThat(sweeper.partialReleaseCount, "partialReleaseCount").isEqualTo(0)
+		verify(exactly = 0) { actuatorPort.releaseRouteDetailed(any()) }
 	}
 
 	@Test

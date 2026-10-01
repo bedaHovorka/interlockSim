@@ -600,8 +600,8 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 	}
 
 	/**
-	 * A releaser whose service refuses `unregisterBlock` once for [failing], so the releaser falls back to
-	 * `dropFreedBlock`, which then fails as [failure] says.
+	 * A releaser whose service's `releaseBlock` cancels [failing]'s path setup and then refuses it once,
+	 * so the releaser falls back to `dropFreedBlock`, which then fails as [failure] says.
 	 */
 	private fun releaserWithFailingFallbackFor(
 		failing: DynamicTrackBlock,
@@ -611,12 +611,13 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		var refused = false
 		val flaky =
 			object : PathReservationService by real {
-				override fun unregisterBlock(
+				override fun releaseBlock(
 					trainId: String,
 					block: DynamicTrackBlock
 				): Boolean {
-					if (block != failing || refused) return real.unregisterBlock(trainId, block)
+					if (block != failing || refused) return real.releaseBlock(trainId, block)
 					refused = true
+					cancelPathSetupOf(block)
 					return false
 				}
 
@@ -733,7 +734,7 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		assertThat(signals.map { it.signal.name }, "aspects").isEqualTo(aspectsBefore)
 	}
 
-	/** How the service's `unregisterBlock` fails once, after `cancelPathSetup` has made the block FREE. */
+	/** How the service's `releaseBlock` fails once, after its `cancelPathSetup` has made the block FREE. */
 	enum class UnregisterFailure {
 		/** Throws before unregistering: the block stays owned. */
 		THROWS,
@@ -745,7 +746,10 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		THROWS_AFTER_UNREGISTERING
 	}
 
-	/** A releaser whose service fails `unregisterBlock` once for [failing] as [failure] says, then behaves normally. */
+	/**
+	 * A releaser whose service's `releaseBlock` fails once for [failing] as [failure] says, after the
+	 * path setup was cancelled (the step `releaseBlock` takes before it unregisters), then behaves normally.
+	 */
 	private fun releaserFailingOnceFor(
 		failing: DynamicTrackBlock,
 		failure: UnregisterFailure
@@ -754,23 +758,34 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		var failed = false
 		val flaky =
 			object : PathReservationService by real {
-				override fun unregisterBlock(
+				override fun releaseBlock(
 					trainId: String,
 					block: DynamicTrackBlock
 				): Boolean {
-					if (block != failing || failed) return real.unregisterBlock(trainId, block)
+					if (block != failing || failed) return real.releaseBlock(trainId, block)
 					failed = true
 					return when (failure) {
-						UnregisterFailure.THROWS -> error("simulated unregister failure")
-						UnregisterFailure.REFUSES -> false
+						UnregisterFailure.THROWS -> {
+							cancelPathSetupOf(block)
+							error("simulated unregister failure")
+						}
+						UnregisterFailure.REFUSES -> {
+							cancelPathSetupOf(block)
+							false
+						}
 						UnregisterFailure.THROWS_AFTER_UNREGISTERING -> {
-							real.unregisterBlock(trainId, block)
+							real.releaseBlock(trainId, block)
 							error("simulated failure after unregistering")
 						}
 					}
 				}
 			}
 		return RegistryPartialRouteReleaser(registry(), flaky)
+	}
+
+	/** The first step of `releaseBlock`: frees a RESERVED block from the separator it was reserved from. */
+	private fun cancelPathSetupOf(block: DynamicTrackBlock) {
+		block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
 	}
 
 	/**

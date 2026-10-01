@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
@@ -41,6 +40,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.util.cellsOfType
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -95,7 +95,8 @@ class DefaultPathReservationService(
 	private val registry: PathReservationRegistry,
 	private val pathInfoBuilder: PathInfoBuilder,
 	private val routeFinder: RouteFinder
-) : PathReservationService {
+) : PathReservationService,
+	BlockRollbackStep {
 	// ── Conflict-vs-routine-contention disambiguation (Issue #612 follow-up) ──
 	//
 	// reservePath() returning AllPathsBlocked is the ORDINARY outcome whenever a
@@ -1786,11 +1787,12 @@ class DefaultPathReservationService(
 
 	/**
 	 * Release the blocks of a bypass-rollback candidate (the wrongly reserved path that did not
-	 * use the required next block). Mirrors [rollbackUnconfigurableCandidate]'s block loop:
-	 * `cancelPathSetup` runs under a per-block try, and [registry.unregisterBlock] runs in a
-	 * `finally` so a `cancelPathSetup` throw no longer leaks a block still registered to the train.
-	 * Uses `block.reservedFrom` (not the caller's `start`) so the cancel targets the separator the
-	 * block was actually reserved from.
+	 * use the required next block). Each block goes through [rollbackBlock], like
+	 * [rollbackUnconfigurableCandidate]'s: `cancelPathSetup` from the block's own `reservedFrom` (not
+	 * the caller's `start`) under a try, then the registry entry, the approach-lock deferral and any
+	 * stale switch lock. Unlike that rollback, each block that leaves the registry is then announced as
+	 * released, because the candidate's successful [reservePath] already announced it as reserved
+	 * (Issue #961).
 	 *
 	 * Only the candidate's NEW blocks — those not in [blocksBefore] (the train's ownership
 	 * snapshot taken before this candidate's [reservePath]) — are released. A bypass candidate's
@@ -1805,25 +1807,18 @@ class DefaultPathReservationService(
 		reservedBlocks: List<DynamicTrackBlock>,
 		blocksBefore: Set<DynamicTrackBlock>
 	) {
+		val simTime = currentSimulationTime()
 		reservedBlocks.forEach { block ->
 			// Skip blocks the train already owned before this candidate: they belong to a live
 			// reservation and must not be cancelled or unregistered.
 			if (block in blocksBefore) {
 				return@forEach
 			}
-			try {
-				val reservedFrom = block.reservedFrom
-				if (reservedFrom != null) {
-					block.cancelPathSetup(reservedFrom)
-				}
-			} catch (e: Exception) {
-				logger.warn(e) {
-					"reservePathToAnyNextSemaphore: Failed to release block during rollback: ${block.staticRef}"
-				}
-			} finally {
-				// Registry cleanup MUST run even if cancelPathSetup throws, otherwise
-				// a failed rollback leaks a block still registered to the train.
-				registry.unregisterBlock(trainId, block)
+			// Unlike every other rollback, this candidate's reservePath SUCCEEDED and announced each
+			// new block as reserved, so each block it rolls back is announced as released, exactly
+			// once, or the event-driven reservation counters never return to zero (Issue #961, #1081).
+			if (rollbackBlock(trainId, block)) {
+				emitBlockReleased(block, trainId, simTime)
 			}
 		}
 	}
@@ -3757,7 +3752,9 @@ class DefaultPathReservationService(
 	 * earlier reserved path, and that path must survive so the train simply keeps waiting
 	 * for its through route.
 	 *
-	 * - Cancels path setup and unregisters ONLY the freshly reserved [forwardBlocks]
+	 * - Cancels path setup and unregisters ONLY the freshly reserved [forwardBlocks], each through
+	 *   [rollbackBlock] (which also reclaims a switch lock left stale and publishes no release
+	 *   event, since every caller runs before [reservePath] announces the blocks -- Issue #961)
 	 * - Unlocks AND unregisters ONLY this candidate's switches that are not part of the
 	 *   train's pre-existing registered switches (switches locked/registered by the train's
 	 *   earlier hops stay locked and registered). [PathReservationRegistry.unregisterSwitch]
@@ -3784,18 +3781,8 @@ class DefaultPathReservationService(
 		priorSwitches: Set<DynamicRailSwitch>
 	) {
 		releaseCandidateSwitches(trainId, switches.filterNot { it in priorSwitches })
-		for (block in forwardBlocks) {
-			try {
-				val reservedFrom = block.reservedFrom
-				if (reservedFrom != null) {
-					block.cancelPathSetup(reservedFrom)
-				}
-			} catch (e: Exception) {
-				logger.warn(e) { "rollbackUnconfigurableCandidate: Failed to release block $block" }
-			} finally {
-				registry.unregisterBlock(trainId, block)
-			}
-		}
+		// No release event: these blocks were rolled back before reservePath announced them (Issue #961).
+		forwardBlocks.forEach { rollbackBlock(trainId, it) }
 		logger.debug {
 			"rollbackUnconfigurableCandidate: Rolled back unconfigurable candidate for $trainId " +
 				"(${forwardBlocks.size} block(s), ${switches.size} switch(es) checked)"
@@ -3977,19 +3964,76 @@ class DefaultPathReservationService(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			approachLockDeferredUntil.remove(block)
-			emitBlockReleased(block, trainId, currentSimulationTime())
-			// Issue #1065: every PRODUCTION block release passes through here -- Train.Tail's
-			// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
-			// tail release -- so reclaiming a now-stale switch lock here keeps the invariant
-			// continuously true on those paths, rather than discovering it lazily the next time
-			// a train asks for the switch. The scoped rollback paths
-			// (rollbackUnconfigurableCandidate, releaseBypassRollbackBlocks) call
-			// registry.unregisterBlock directly and bypass this; there a stale lock survives at
-			// worst until the next adjacent-block release or journey end -- bounded
-			// over-locking, not a safety issue.
-			reclaimStaleSwitchLocks(block)
+			// Issue #1103: a throwing release listener must not skip the reclaim below; its exception
+			// still propagates afterwards, with a reclaim failure attached as suppressed (PR #1115 review).
+			val listenerFailure =
+				runCatching { emitBlockReleased(block, trainId, currentSimulationTime()) }.exceptionOrNull()
+			try {
+				// Issue #1065: every committed per-block release passes through here -- Train.Tail's
+				// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
+				// tail release (via releaseBlock) -- so reclaiming a now-stale switch lock here keeps the
+				// invariant continuously true on those paths, rather than discovering it lazily the next
+				// time a train asks for the switch. The rollback paths get the same reclaim from
+				// rollbackBlock (Issue #961).
+				reclaimStaleSwitchLocks(block)
+			} catch (e: Exception) {
+				if (listenerFailure == null) throw e
+				listenerFailure.addSuppressed(e)
+			}
+			listenerFailure?.let { throw it }
 		}
 		return released
+	}
+
+	/**
+	 * The ownership guard of [releaseBlock] and [rollbackBlock]: `true` when [trainId] owns [block]. A
+	 * refusal is logged with the [step] name and the actual owner.
+	 */
+	private fun ownsBlock(
+		step: String,
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
+		val owner = registry.getOwner(block)
+		if (owner != trainId) {
+			logger.debug { "$step: refusing $block for '$trainId' (owner='$owner')" }
+		}
+		return owner == trainId
+	}
+
+	override fun releaseBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
+		// Ownership first: cancelling the path setup of a block another train holds would free it
+		// under that train's route.
+		if (!ownsBlock("releaseBlock", trainId, block)) return false
+		// cancelPathSetup clears reservedFrom, so unregisterBlock's reset below sees only block.ends():
+		// a far START semaphore is not reset here. A caller releasing an un-travelled block resets the
+		// signals first (resetSemaphoresForReleasedBlocks), as RegistryPartialRouteReleaser does.
+		block.reservedFrom?.let { block.cancelPathSetup(it) }
+		return unregisterBlock(trainId, block)
+	}
+
+	override fun rollbackBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
+		// Ownership first, as in releaseBlock (PR #1115 review).
+		if (!ownsBlock("rollbackBlock", trainId, block)) return false
+		try {
+			block.reservedFrom?.let { block.cancelPathSetup(it) }
+		} catch (e: Exception) {
+			// Logged, not thrown: the registry cleanup below must still run. A block left RESERVED
+			// stays registered, because the registry only drops a FREE block.
+			logger.warn(e) { "rollbackBlock: failed to cancel the path setup of $block for '$trainId'" }
+		}
+		val unregistered = registry.unregisterBlock(trainId, block)
+		if (unregistered) {
+			approachLockDeferredUntil.remove(block)
+			reclaimStaleSwitchLocks(block)
+		}
+		return unregistered
 	}
 
 	/**
@@ -4020,10 +4064,21 @@ class DefaultPathReservationService(
 	/**
 	 * Issue #1076: reclaim STALE foreign ownership among [switches] before a candidate for
 	 * [trainId] touches them, so the candidate never has to overwrite it (see
-	 * [PathReservationRegistry.registerSwitches]). Such ownership typically survives because a
+	 * [PathReservationRegistry.registerSwitches]). Such ownership used to survive mainly because a
 	 * scoped rollback path released the owner's adjacent blocks via
 	 * [PathReservationRegistry.unregisterBlock] directly, bypassing [dropFreedBlock]'s
-	 * reclamation. A foreign owner that survives this step is live and refuses the candidate in
+	 * reclamation; since Issue #961 those paths reclaim through [rollbackBlock]. This step stays
+	 * (Issue #1103 item 1) because two paths can still leave ownership stale. (A throwing
+	 * release-event listener no longer can: [dropFreedBlock] reclaims in a `finally`.)
+	 * - The dispatcher's partial-route releaser has a last-resort fallback that drops a FREE block
+	 *   with [PathReservationRegistry.unregisterBlock] directly, with no reclaim. It fires only when
+	 *   the service failed BEFORE unregistering the block; a throw during the release event leaves
+	 *   the block already unregistered, so the fallback short-circuits.
+	 * - The registry is public: [PathReservationRegistry.registerSwitches] accepts a switch the
+	 *   train holds no adjacent block for, and a direct [PathReservationRegistry.unregisterBlock]
+	 *   reclaims nothing.
+	 *
+	 * A foreign owner that survives this step is live and refuses the candidate in
 	 * [configureSwitchesInPath] instead.
 	 *
 	 * @since Issue #1076
@@ -4172,14 +4227,6 @@ class DefaultPathReservationService(
 
 		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
-
-	/**
-	 * Returns the current simulation time, or 0.0 if called outside a simulation context.
-	 *
-	 * Uses [Process.time] which is safe to call from any kDisco process.
-	 * Falls back to 0.0 when called outside simulation (e.g., in unit tests).
-	 */
-	private fun currentSimulationTime(): Double = runCatching { Process.time() }.getOrDefault(0.0)
 
 	/**
 	 * `true` when a train moving into [nextBlock] passes [semaphore] head-on (the semaphore

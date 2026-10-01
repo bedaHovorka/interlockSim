@@ -25,8 +25,21 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * `PathReservationRegistry` releases a reservation in exactly three ways: a train's `Tail`
  * physically leaving a block it entered (`unregisterBlock`), the train's journey completing
  * (`releaseTrainReservations`), or an explicit `releasePath`. Every one of them requires the train
- * to *consume* the route. A route that is granted and never travelled is therefore permanent — the
- * registry keeps no timestamps, and there is no sweeper, timeout or TTL anywhere in it.
+ * to *consume* the route. A route that is granted and never travelled is therefore permanent — there
+ * is no sweeper, timeout or TTL anywhere in the registry.
+ *
+ * ## Registration timestamps are a fact, not this sweeper's rule (Issue #975)
+ *
+ * The registry records when each block was registered (`getRegisteredAtSimTime`). That is a
+ * read-only fact; the registry expires nothing by it, and staleness stays this sweeper's own rule
+ * (see Policy). The per-block age is deliberately **not** the rule. A route is registered in one
+ * call, so all its blocks share one timestamp, and entering a reserved block is not a registry write
+ * (only the `Tail` leaving a rear block is, and that removes a timestamp rather than adding one). A
+ * train still moving through a long route therefore holds a tail whose newest timestamp is the
+ * route's grant time, however far it has advanced: judged by that age it would be swept, and the
+ * signals in front of it thrown to STOP, while it is making progress. The held-set-unchanged rule
+ * below is the progress signal — it restarts on every block the train enters — and it also keeps
+ * the Issue #1025 approach-lock postponement, where a booked tail block restarts the clock.
  *
  * `MultiTrainLoop` runs `BlockResourceRegistry.releaseFreeResources()` once per iteration as its
  * safety net. `ShuntingLoop` — the loop `shuntingLoopAI` runs — has none, and could not use that
