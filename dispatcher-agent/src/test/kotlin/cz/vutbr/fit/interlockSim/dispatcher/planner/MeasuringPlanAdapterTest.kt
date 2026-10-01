@@ -624,6 +624,29 @@ class MeasuringPlanAdapterTest {
 			assertThat(breakerLines).isNotEmpty()
 			assertThat(breakerLines.first()).contains("state=OPEN")
 		}
+
+		/**
+		 * #1113 review round: the final summary must also carry the #988 comparability note —
+		 * this adapter's successRate now credits LLM_SILENT_ALL_MOVING, a tick a pre-#988 run
+		 * scored as a fallback, so GUI/headless consumers of the summary need the warning in
+		 * the log itself (parallel to DefaultDispatcherRunRecorder's note).
+		 */
+		@Test
+		fun `logFinalSummary emits the #988 comparability note`() {
+			val agent = mockk<KoogDispatchAgent>()
+			val fallback = mockk<Dispatcher>()
+			val adapter = measuring(agent, fallback)
+
+			adapter.logFinalSummary()
+
+			val noteLines =
+				appender.list
+					.map { it.formattedMessage }
+					.filter { it.contains("not comparable to pre-#988") }
+			assertThat(noteLines).isNotEmpty()
+			assertThat(noteLines.first()).contains("[MeasuringPlanAdapter] note:")
+			assertThat(noteLines.first()).contains("LLM_SILENT_ALL_MOVING")
+		}
 	}
 
 	// ── onTick log text (Issue #713 Task 10) ─────────────────────────────────
@@ -778,11 +801,11 @@ class MeasuringPlanAdapterTest {
 					)
 				}
 
-			// 3 rounds x 8 outcomes = 24 ticks, so cycles 10 and 20 take the checkpoint branch.
+			// 3 rounds of every outcome (at least 24 ticks), so cycles 10 and 20 take the checkpoint branch.
 			repeat(3) { oneOfEach.forEach { record -> adapter.onTick(record) } }
 
 			// Reaching this line at all is the assertion: no onTick call threw.
-			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(24L)
+			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(3L * TickOutcome.entries.size)
 		}
 	}
 

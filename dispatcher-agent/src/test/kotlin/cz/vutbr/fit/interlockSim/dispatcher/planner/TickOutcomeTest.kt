@@ -42,7 +42,7 @@ class TickOutcomeTest {
 	@DisplayName("tickClass mapping")
 	inner class TickClassMapping {
 		@ParameterizedTest
-		@EnumSource(TickOutcome::class, names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED"])
+		@EnumSource(TickOutcome::class, names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED", "LLM_SILENT_ALL_MOVING"])
 		fun `success outcomes map to TickClass SUCCESS`(outcome: TickOutcome) {
 			assertThat(outcome.tickClass).isEqualTo(TickClass.SUCCESS)
 		}
@@ -66,15 +66,15 @@ class TickOutcomeTest {
 		}
 
 		@Test
-		fun `every TickOutcome is covered and buckets split 3-1-2-2 across the four classes`() {
+		fun `every TickOutcome is covered and buckets split 4-1-2-2 across the four classes`() {
 			// The `when` in tickClass is exhaustive, so a future TickOutcome value added
 			// without updating the mapping would fail to compile. This test additionally
-			// pins down the exact 3-SUCCESS / 1-NONACTIONABLE / 2-DEGRADED / 2-RUN_FAILURE
+			// pins down the exact 4-SUCCESS / 1-NONACTIONABLE / 2-DEGRADED / 2-RUN_FAILURE
 			// split from the Issue #842/#927 taxonomy table, so a wrong (but still exhaustive)
 			// reassignment is still caught.
 			val byClass = TickOutcome.entries.groupingBy { it.tickClass }.eachCount()
 
-			assertThat(byClass[TickClass.SUCCESS]).isEqualTo(3)
+			assertThat(byClass[TickClass.SUCCESS]).isEqualTo(4)
 			assertThat(byClass[TickClass.NONACTIONABLE]).isEqualTo(1)
 			assertThat(byClass[TickClass.DEGRADED]).isEqualTo(2)
 			assertThat(byClass[TickClass.RUN_FAILURE]).isEqualTo(2)
@@ -87,7 +87,7 @@ class TickOutcomeTest {
 	@DisplayName("countsAsLlmSuccess mapping")
 	inner class CountsAsLlmSuccessMapping {
 		@ParameterizedTest
-		@EnumSource(TickOutcome::class, names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED"])
+		@EnumSource(TickOutcome::class, names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED", "LLM_SILENT_ALL_MOVING"])
 		fun `success outcomes count as LLM success`(outcome: TickOutcome) {
 			assertThat(outcome.countsAsLlmSuccess).isTrue()
 		}
@@ -95,7 +95,7 @@ class TickOutcomeTest {
 		@ParameterizedTest
 		@EnumSource(
 			TickOutcome::class,
-			names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED"],
+			names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED", "LLM_SILENT_ALL_MOVING"],
 			mode = org.junit.jupiter.params.provider.EnumSource.Mode.EXCLUDE
 		)
 		fun `non-success outcomes do not count as LLM success`(outcome: TickOutcome) {
@@ -108,6 +108,11 @@ class TickOutcomeTest {
 	@Nested
 	@DisplayName("countsTowardActionableRate mapping")
 	inner class CountsTowardActionableRateMapping {
+		@Test
+		fun `LLM_SILENT_ALL_MOVING counts toward the actionable-rate denominator`() {
+			assertThat(TickOutcome.LLM_SILENT_ALL_MOVING.countsTowardActionableRate).isTrue()
+		}
+
 		@ParameterizedTest
 		@EnumSource(TickOutcome::class, names = ["LLM_SILENT_NONACTIONABLE"])
 		fun `LLM_SILENT_NONACTIONABLE does not count toward the actionable-rate denominator`(outcome: TickOutcome) {

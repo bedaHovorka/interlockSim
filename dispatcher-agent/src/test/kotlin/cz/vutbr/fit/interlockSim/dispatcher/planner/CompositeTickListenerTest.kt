@@ -9,12 +9,15 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
@@ -24,8 +27,10 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -70,7 +75,8 @@ class CompositeTickListenerTest {
 	private fun koogAdapter(
 		koogAgent: KoogDispatchAgent,
 		fallback: Dispatcher,
-		inferenceTimeout: Duration = Duration.ofSeconds(30)
+		inferenceTimeout: Duration = Duration.ofSeconds(30),
+		cycleHistory: CycleHistory = CycleHistory(capacity = 0)
 	): KoogAgentPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
 		coEvery { agentFactory.createAgent(any()) } returns koogAgent
@@ -81,7 +87,8 @@ class CompositeTickListenerTest {
 			fallback,
 			inferenceTimeout,
 			ActuatorCommandQueue(),
-			SinkHolder()
+			SinkHolder(),
+			cycleHistory
 		)
 	}
 
@@ -137,5 +144,51 @@ class CompositeTickListenerTest {
 		runBlocking { driver.runCycle() }
 
 		assertThat(seenByEarly).isEqualTo(listOf(TickOutcome.LLM_ACTIONS))
+	}
+
+	@Test
+	@DisplayName("a throwing delegate does not starve the delegates registered after it")
+	fun `a throwing delegate does not starve the delegates registered after it`() {
+		val composite = CompositeTickListener()
+		val seen = mutableListOf<TickOutcome>()
+		composite.addListener(PlannerTickListener { error("boom") })
+		composite.addListener(PlannerTickListener { seen += it.outcome })
+
+		composite.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 1.0))
+
+		assertThat(seen).isEqualTo(listOf(TickOutcome.LLM_ACTIONS))
+	}
+
+	@Test
+	@DisplayName("a delegate that throws CancellationException propagates it")
+	fun `a delegate that throws CancellationException propagates it`() {
+		val composite = CompositeTickListener()
+		val seen = mutableListOf<TickOutcome>()
+		composite.addListener(PlannerTickListener { throw CancellationException("cancelled") })
+		composite.addListener(PlannerTickListener { seen += it.outcome })
+
+		assertFailure { composite.onTick(TickRecord(TickOutcome.LLM_ACTIONS, 1.0)) }
+			.isInstanceOf(CancellationException::class)
+		assertThat(seen).isEqualTo(emptyList<TickOutcome>())
+	}
+
+	@Test
+	@DisplayName("a throwing listener cannot break plan(): it returns, history records, outcome is unaffected")
+	fun `a throwing listener cannot break plan`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns listOf(DispatchDecision.NoAction)
+		val fallback = mockk<Dispatcher>()
+		val history = CycleHistory(capacity = 5)
+		val adapter = koogAdapter(koogAgent, fallback, cycleHistory = history)
+
+		val seenAfter = mutableListOf<TickOutcome>()
+		adapter.addTickListener(PlannerTickListener { error("listener failure") })
+		adapter.addTickListener(PlannerTickListener { seenAfter += it.outcome })
+
+		runBlocking { adapter.plan(observation) }
+
+		assertThat(history.snapshot().map { it.outcome }).isEqualTo(listOf(TickOutcome.LLM_ACTIONS))
+		assertThat(seenAfter).isEqualTo(listOf(TickOutcome.LLM_ACTIONS))
+		coVerify(exactly = 0) { fallback.decide(any()) }
 	}
 }

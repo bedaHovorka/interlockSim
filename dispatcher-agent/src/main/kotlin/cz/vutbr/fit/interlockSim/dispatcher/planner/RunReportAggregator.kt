@@ -152,6 +152,7 @@ class RunReportAggregator(
 				"LLM_NO_OP",
 				"LLM_REPAIRED",
 				"LLM_SILENT_NONACTIONABLE",
+				"LLM_SILENT_ALL_MOVING",
 				"TIMEOUT_NOOP",
 				"RULE_FALLBACK",
 				"Actionable Rate",
@@ -371,6 +372,7 @@ class RunReportAggregator(
 						"| ${byOutcome[TickOutcome.LLM_NO_OP.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.LLM_REPAIRED.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.LLM_SILENT_NONACTIONABLE.name] ?: 0L} " +
+						"| ${byOutcome[TickOutcome.LLM_SILENT_ALL_MOVING.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.TIMEOUT_NOOP.name] ?: 0L} " +
 						"| ${byOutcome[TickOutcome.RULE_FALLBACK.name] ?: 0L} " +
 						"| ${fmtRate(snap.actionableTickRate)} " +
@@ -706,7 +708,11 @@ class RunReportAggregator(
 				"across the cell's runs. **Not comparable to pre-#834 runs:** #834 reclassified idle ticks " +
 				"(former `RULE_FALLBACK`) to `LLM_NO_OP` and REVISED's cap-full `no_op` converts former " +
 				"fallback ticks into LLM successes, so this rate is structurally higher than a pre-#834 " +
-				"run's even at identical railway behaviour — read it as a within-#834 comparison only."
+				"run's even at identical railway behaviour — read it as a within-#834 comparison only. " +
+				"Likewise, from #988 a silent tick with every train moving and a path ahead counts as a " +
+				"success (`LLM_SILENT_ALL_MOVING`), so BOTH LLM Success and Actionable Rate rise for the same " +
+				"railway behaviour (relabelled former `LLM_SILENT_NONACTIONABLE` ticks count in numerator " +
+				"and denominator); only runs from the same side of the change are comparable."
 		)
 		sb.appendLine(
 			"- **Invalid-action rate** — rejected actions ÷ emitted actions (`rejectionsByCode` sum " +

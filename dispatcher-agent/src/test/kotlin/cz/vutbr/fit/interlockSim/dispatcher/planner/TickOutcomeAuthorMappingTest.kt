@@ -25,7 +25,7 @@ import org.junit.jupiter.params.provider.EnumSource
 @DisplayName("TickOutcome.toActionAuthor mapping (SP2c.20 follow-up)")
 class TickOutcomeAuthorMappingTest {
 	@ParameterizedTest
-	@EnumSource(TickOutcome::class, names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED"])
+	@EnumSource(TickOutcome::class, names = ["LLM_ACTIONS", "LLM_NO_OP", "LLM_REPAIRED", "LLM_SILENT_ALL_MOVING"])
 	@DisplayName("LLM-success outcomes map to ActionAuthor.LLM")
 	fun llmSuccessMapsToLlm(outcome: TickOutcome) {
 		assertThat(outcome.toActionAuthor).isEqualTo(ActionAuthor.LLM)

@@ -28,8 +28,11 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
@@ -101,6 +104,46 @@ class KoogAgentPlanAdapterTest {
 			outerBlockInputs = emptyList()
 		)
 
+	/**
+	 * One [TrainPositionReading] for [trainId] at [velocity] — shared by the
+	 * observation builders so the reading's default fields cannot drift apart (#1113 review round).
+	 */
+	private fun createTrainPosition(
+		trainId: String,
+		velocity: Double
+	): TrainPositionReading =
+		TrainPositionReading(
+			trainId = trainId,
+			velocity = velocity,
+			acceleration = 0.0,
+			totalDistance = 0.0,
+			frontSectionName = null
+		)
+
+	/**
+	 * One [TrainPerceptionReading] for [trainId] at [velocity], with a signal ahead named
+	 * [signalAheadName] (or none). Shared by the observation builders like [createTrainPosition].
+	 */
+	private fun createTrainPerception(
+		trainId: String,
+		velocity: Double,
+		signalAheadName: String?
+	): TrainPerceptionReading =
+		TrainPerceptionReading(
+			trainId = trainId,
+			signalAheadName = signalAheadName,
+			signalAheadAspect = null,
+			distanceToSignalAheadMetres = 100.0,
+			currentSpeedLimitMps = 20.0,
+			velocity = velocity,
+			acceleration = 0.0,
+			totalDistance = 0.0,
+			frontSectionName = null,
+			destinationInOutName = "B",
+			scheduledArrivalTime = 0.0,
+			isDwelling = false
+		)
+
 	private fun observationWithQueue(
 		unapprovedTrains: List<QueuedTrainObservation>,
 		approvedTrainCount: Int
@@ -110,19 +153,207 @@ class KoogAgentPlanAdapterTest {
 				SimulationSnapshot.EMPTY.copy(
 					trainPositions =
 						List(approvedTrainCount) { index ->
-							TrainPositionReading(
-								trainId = "active-$index",
-								velocity = 0.0,
-								acceleration = 0.0,
-								totalDistance = 0.0,
-								frontSectionName = null
-							)
+							createTrainPosition(trainId = "active-$index", velocity = 0.0)
 						}
 				),
 			unapprovedTrains = unapprovedTrains,
 			innerBlockInputs = emptyList(),
 			outerBlockInputs = emptyList()
 		)
+
+	/**
+	 * Builds an observation with one train per entry of [trains] (id to velocity), each carrying a
+	 * [TrainPerceptionReading] unless it is listed in [withoutPerception]. A train has a path ahead
+	 * (a `signalAheadName`) unless it is listed in [withoutSignalAhead].
+	 */
+	private fun observationWithPerceptions(
+		trains: Map<String, Double>,
+		withoutPerception: Set<String> = emptySet(),
+		withoutSignalAhead: Set<String> = emptySet(),
+		unapprovedTrains: List<QueuedTrainObservation> = emptyList(),
+		innerBlockInputs: List<BlockInputObservation> = emptyList(),
+		outerBlockInputs: List<BlockInputObservation> = emptyList()
+	): DispatchObservation =
+		DispatchObservation(
+			snapshot =
+				SimulationSnapshot.EMPTY.copy(
+					trainPositions = trains.map { (id, velocity) -> createTrainPosition(id, velocity) },
+					trainPerceptions =
+						trains
+							.filterKeys { it !in withoutPerception }
+							.map { (id, velocity) ->
+								createTrainPerception(
+									trainId = id,
+									velocity = velocity,
+									signalAheadName = if (id in withoutSignalAhead) null else "S-$id"
+								)
+							}
+				),
+			unapprovedTrains = unapprovedTrains,
+			innerBlockInputs = innerBlockInputs,
+			outerBlockInputs = outerBlockInputs
+		)
+
+	/** Runs one silent cycle on [observation] with a nothing-actionable fallback; returns the outcome. */
+	private fun silentCycleOutcome(
+		observation: DispatchObservation,
+		fallback: Dispatcher,
+		result: (List<DispatchDecision>) -> Unit = {}
+	): TickOutcome {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
+
+		result(runBlocking { planAdapter.plan(observation) })
+
+		assertThat(recorded).hasSize(1)
+		return recorded.first().outcome
+	}
+
+	@Test
+	fun `silent cycle with every train moving and a path ahead reports LLM_SILENT_ALL_MOVING without fallback`() {
+		val fallback = mockk<Dispatcher>()
+		var returned: List<DispatchDecision>? = null
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(mapOf("t1" to 5.0, "t2" to 3.0)),
+				fallback
+			) { returned = it }
+
+		assertThat(outcome).isEqualTo(TickOutcome.LLM_SILENT_ALL_MOVING)
+		assertThat(returned).isNotNull().isEmpty()
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	private fun blockInput(
+		state: TrackFacility.State = TrackFacility.State.OCCUPIED,
+		approaching: Boolean = true,
+		pathSetUpToward: Boolean = false,
+		extendedBeyond: Boolean = false,
+		awaitingExtension: Boolean = false
+	) = BlockInputObservation(
+		blockId = "b1",
+		towardSemaphoreName = "S-t1",
+		toSeparatorName = "sep",
+		state = state,
+		ownerTrainId = "t1",
+		isApproachingThisInput = approaching,
+		pathSetUpTowardThisInput = pathSetUpToward,
+		pathAlreadyExtendedBeyond = extendedBeyond,
+		awaitingRouteExtension = awaitingExtension
+	)
+
+	private fun outcomeWithBlockInput(
+		input: BlockInputObservation,
+		inner: Boolean = true
+	): TickOutcome {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val obs =
+			observationWithPerceptions(
+				mapOf("t1" to 5.0),
+				innerBlockInputs = if (inner) listOf(input) else emptyList(),
+				outerBlockInputs = if (inner) emptyList() else listOf(input)
+			)
+		return silentCycleOutcome(obs, fallback)
+	}
+
+	@Test
+	fun `moving train approaching a not-yet-extended occupied block input keeps the fallback`() {
+		assertThat(outcomeWithBlockInput(blockInput())).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+		assertThat(outcomeWithBlockInput(blockInput(), inner = false)).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+	}
+
+	@Test
+	fun `moving train approaching a reserved block with path set up toward it keeps the fallback`() {
+		val input = blockInput(state = TrackFacility.State.RESERVED, pathSetUpToward = true)
+
+		assertThat(outcomeWithBlockInput(input)).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+	}
+
+	@Test
+	fun `moving train awaiting route extension keeps the fallback even when the path looks extended`() {
+		val input = blockInput(extendedBeyond = true, awaitingExtension = true)
+
+		assertThat(outcomeWithBlockInput(input)).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+	}
+
+	@Test
+	fun `block inputs that are extended, not approaching or free do not block ALL_MOVING`() {
+		val inputs =
+			listOf(
+				blockInput(extendedBeyond = true),
+				blockInput(approaching = false),
+				blockInput(state = TrackFacility.State.RESERVED, pathSetUpToward = true, extendedBeyond = true),
+				blockInput(state = TrackFacility.State.RESERVED, pathSetUpToward = false),
+				blockInput(state = TrackFacility.State.FREE)
+			)
+		inputs.forEach {
+			assertThat(outcomeWithBlockInput(it)).isEqualTo(TickOutcome.LLM_SILENT_ALL_MOVING)
+		}
+	}
+
+	@Test
+	fun `silent cycle with one standing train takes the fallback path`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+
+		val outcome = silentCycleOutcome(observationWithPerceptions(mapOf("t1" to 5.0, "t2" to 0.0)), fallback)
+
+		assertThat(outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `silent cycle with a train lacking perception takes the fallback path`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.ApproveTrain("x"))
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(mapOf("t1" to 5.0, "t2" to 5.0), withoutPerception = setOf("t2")),
+				fallback
+			)
+
+		assertThat(outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `silent cycle with a queued train takes the fallback path even when all active trains move`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.ApproveTrain("Train #1"))
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(
+					mapOf("t1" to 5.0),
+					unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A"))
+				),
+				fallback
+			)
+
+		assertThat(outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `silent cycle with a moving train that has no path ahead takes the fallback path`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(mapOf("t1" to 5.0), withoutSignalAhead = setOf("t1")),
+				fallback
+			)
+
+		assertThat(outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
 
 	@Test
 	fun `non-empty decisions from the LLM are returned as-is and fallback is not invoked`() {

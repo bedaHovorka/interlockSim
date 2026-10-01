@@ -173,8 +173,35 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 8`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_CIRCUIT_BREAKER_STATS)
+	fun `current schema version is 9`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME)
+	}
+
+	/**
+	 * Issue #988 (schema version 9). `ticksByOutcome` is keyed by enum name, so a version-8 file
+	 * (written before [TickOutcome.LLM_SILENT_ALL_MOVING] existed) still decodes unchanged.
+	 */
+	@Test
+	fun `a version-8 fixture without the all-moving key still loads`() {
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V8_JSON)
+
+		assertThat(decoded.schemaVersion).isEqualTo(SCHEMA_VERSION_WITH_CIRCUIT_BREAKER_STATS)
+		assertThat(decoded.ticksByOutcomeTyped()[TickOutcome.LLM_SILENT_ALL_MOVING]).isNull()
+		assertThat(decoded.llmSuccessRate).isEqualTo(0.75)
+	}
+
+	@Test
+	fun `serialization round-trips a non-zero LLM_SILENT_ALL_MOVING count`() {
+		val snap =
+			snapshotWith(
+				ticksByOutcome = mapOf(TickOutcome.LLM_SILENT_ALL_MOVING.name to 3L),
+				totalTicks = 3L
+			)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+
+		assertThat(decoded.ticksByOutcomeTyped()[TickOutcome.LLM_SILENT_ALL_MOVING]).isEqualTo(3L)
 	}
 
 	/**
@@ -350,6 +377,9 @@ class DispatcherRunSnapshotTest {
 		/** Issue #1074 added circuit-breaker end-of-run measurements. */
 		private const val SCHEMA_VERSION_WITH_CIRCUIT_BREAKER_STATS: Int = 8
 
+		/** Issue #988 added the [TickOutcome.LLM_SILENT_ALL_MOVING] tick outcome. */
+		private const val SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME: Int = 9
+
 		private val json =
 			Json {
 				prettyPrint = true
@@ -397,6 +427,51 @@ class DispatcherRunSnapshotTest {
 				"c7Clean": true,
 				"completedNaturally": true,
 				"endCause": "NATURAL_COMPLETION"
+			}
+			""".trimIndent()
+
+		/** A literal schema-version-8 document: has `actionableTickRate` and circuit-breaker stats. */
+		private val SCHEMA_V8_JSON =
+			"""
+			{
+				"schemaVersion": 8,
+				"runId": "legacy-v8-001",
+				"arm": "RULE_BASED",
+				"params": {
+					"tickPeriodMs": 500,
+					"historyN": 10,
+					"temperature": 0.0,
+					"maxActionsPerTick": 3,
+					"model": "",
+					"seed": null
+				},
+				"totalTicks": 4,
+				"ticksByOutcome": { "LLM_ACTIONS": 3, "RULE_FALLBACK": 1 },
+				"timeoutNoOpByCause": { "DEADLINE_MISS": 0 },
+				"llmSuccessRate": 0.75,
+				"actionableTickRate": 0.75,
+				"noOpRate": 0.0,
+				"invalidOutputRate": 0.0,
+				"repairSuccessRate": 0.0,
+				"emittedByActionType": {},
+				"rejectionsByCode": {},
+				"applyFailuresByCode": {},
+				"validAt1": 0.0,
+				"correctAt1": null,
+				"oracleAgreementAt1": null,
+				"latencyP50Ms": 100,
+				"latencyP95Ms": 200,
+				"latencyMaxMs": 300,
+				"actionsByAuthor": {},
+				"unattributedApplies": 0,
+				"terminalFallbackEngaged": false,
+				"terminalFallbackTickIndex": null,
+				"c7Clean": true,
+				"completedNaturally": true,
+				"endCause": "NATURAL_COMPLETION",
+				"circuitBreakerState": "CLOSED",
+				"circuitBreakerTotalSkips": 0,
+				"circuitBreakerOpenCount": 0
 			}
 			""".trimIndent()
 	}

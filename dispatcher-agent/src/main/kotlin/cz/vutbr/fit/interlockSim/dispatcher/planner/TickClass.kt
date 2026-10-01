@@ -16,8 +16,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * "how worried should an operator watching the run be" — the three buckets a dashboard or
  * alerting rule actually needs:
  *
- * - [SUCCESS]: the tick produced a correct outcome (an action, an explicit no-op, or a
- *   successful single-shot repair). Nothing to look at.
+ * - [SUCCESS]: the tick produced a correct outcome (an action, an explicit no-op, a
+ *   successful single-shot repair, or a silent tick with every train moving with a path ahead,
+ *   [TickOutcome.LLM_SILENT_ALL_MOVING]). Nothing to look at.
  * - [NONACTIONABLE]: the LLM answered silently, and the tick turned out to be safe — the
  *   fallback oracle independently confirmed zero legal actions existed
  *   ([TickOutcome.LLM_SILENT_NONACTIONABLE]). Not [DEGRADED] (nothing intervened; the LLM's

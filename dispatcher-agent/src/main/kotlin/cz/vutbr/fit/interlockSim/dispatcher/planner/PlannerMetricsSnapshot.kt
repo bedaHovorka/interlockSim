@@ -39,6 +39,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * | [TickOutcome.LLM_ACTIONS] | success | the LLM emitted valid actions |
  * | [TickOutcome.LLM_NO_OP] | success | the LLM explicitly and correctly did nothing |
  * | [TickOutcome.LLM_REPAIRED] | success | the single repair attempt produced valid output |
+ * | [TickOutcome.LLM_SILENT_ALL_MOVING] | success | silent tick, every train moving with a path ahead (Issue #988) |
  * | [TickOutcome.LLM_SILENT_NONACTIONABLE] | **fallback** | preserves the rate of every run recorded before this migration — see below |
  * | [TickOutcome.TIMEOUT_NOOP] | fallback | the harness applied a safe do-nothing |
  * | [TickOutcome.LLM_EXCEPTION] | fallback | the LLM path threw |
