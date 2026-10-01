@@ -1,18 +1,20 @@
 name: Gradle Build with Kotlin 2.0 and Java 21
 
-# Why `on: push` with no branch filter and no `pull_request` trigger (#1020): every commit
-# runs CI exactly once (a pull_request trigger would double-run pushes to PR branches).
-# Copilot-authored pushes also stick at "action_required" on Sonar until an owner-pushed
-# commit runs, so every push must produce exactly one CI run. Side effect: tag pushes run
-# CI too; sonarqube.yml skips the scan for them. The Sonar scan itself lives in
+# Why `on: push` with no branch filter and no `pull_request` trigger (#1020):
+# (a) a pull_request trigger would double-run each PR commit, so every commit runs CI
+#     exactly once, on push;
+# (b) separately, Copilot-authored pushes stick at "action_required" on Sonar until an
+#     owner-pushed commit runs; the trigger does not change that.
+# Side effect: tag pushes run CI too; sonarqube.yml skips the scan for them. The Sonar scan itself lives in
 # sonarqube.yml, triggered by workflow_run after this workflow completes.
 
 on:
   push:  # Every push, any branch — no PR trigger, so each commit runs CI exactly once.
   workflow_dispatch:  # Allow manual trigger
 
-# Asymmetric with sonarqube.yml (it never cancels develop); harmless, see the note there.
-
+# This workflow cancels superseded runs on every branch, develop included. A cancelled
+# develop run ends with conclusion 'cancelled', so sonarqube.yml (which requires
+# conclusion == 'success') never analyzes that commit; the next develop push covers it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -116,7 +118,6 @@ jobs:
     # The sonar-inputs-<sha> artifact feeds sonarqube.yml (workflow_run): it reuses the
     # compiled classes, test XML and JaCoCo XML plus the raw .exec files, so the Sonar run
     # is self-sufficient for coverage and does not rebuild. if: always() uploads on failure too.
-
     - name: Upload Sonar inputs
       uses: actions/upload-artifact@v4
       if: always()
@@ -305,15 +306,16 @@ jobs:
       run: ./gradlew :fast-sim:ktlintCheck --no-daemon --stacktrace
 
     - name: detekt (strict) for :fast-sim
-      if: always()
+      if: ${{ !cancelled() }}
+      timeout-minutes: 5
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./gradlew :fast-sim:detekt --no-daemon
+      run: ./gradlew :fast-sim:detekt --no-daemon --stacktrace
 
     - name: Upload detekt SARIF
-      if: always()
-      uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52  # v3.38.2
+      if: ${{ !cancelled() && hashFiles('fast-sim/build/reports/detekt/detekt.sarif') != '' }}
+      uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
       with:
         sarif_file: fast-sim/build/reports/detekt/detekt.sarif
         category: fast-sim-detekt
