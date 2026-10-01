@@ -206,6 +206,13 @@ Users can save the complete state of a running simulation at any point and resto
 
 **Dependencies:** Goal 7 (speed control), Goal 8 (pause)
 
+**Upstream status:** Dependencies (Goals 7, 8) complete; **blocked upstream** on kdisco#42/#43/#44 (SP1 #677). All three are open:
+- `bedaHovorka/kdisco#42` — read-only enumeration of the pending event queue
+- `bedaHovorka/kdisco#43` — capturable / restorable live RNG state
+- `bedaHovorka/kdisco#44` — public resume entry point from captured state
+
+Do not schedule Goal 5 as ready to start until these land.
+
 **Implementation Notes:**
 - Requires serialization of kDisco process state
 - Consider versioning for save file compatibility
@@ -523,8 +530,9 @@ Users can connect two stations with a real inter-station track and give each sta
   the station, and has an entry signal ("vjezdové návěstidlo") in the direction toward the
   station, with a distant signal ("předvěst") ahead of it at braking distance ("zábrzdná
   vzdálenost").
-- **Negotiation protocol:** reuse the merged inter-agent message protocol — sealed `Message` and
-  8 speech acts in `dispatcher-agent/.../lang/proto/Message.kt` (PR #765) — and the operating
+- **Negotiation protocol:** build on the inter-agent message protocol (sealed `Message`, 8 speech
+  acts). It was removed from `develop` by PR #980 (b3512707); #996 restores it, so Goal 12 builds
+  on #996, not on merged code. Use it together with the operating
   language of the Czech railway rules ("dopravní předpisy"). Dispatchers renegotiate direction
   often.
 - **Programmatic wiring only.** Editor support for inter-station tracks is a later stage.
@@ -590,7 +598,7 @@ the 20-train stress case livelocks. The plan must cover:
 - A large review of kDisco for deadlocks, race conditions, and weak points, including research
   into existing scanners — this produces **new kDisco issues that become prerequisites of this
   goal**
-- At least the kDisco package upgrade (kdisco#53)
+- No open kDisco blocker; the package rename (kdisco#53) is consumed
 - During the work, write the realistic demands on Goal 9B into an extra `.md` file as part of each
   task — at least a revision, as a retrospective
 
@@ -900,7 +908,7 @@ away from this phase.
 | Goal | Title | Months | Rationale | Tracking |
 |------|-------|--------|-----------|----------|
 | 6 | Performance Metrics | 2 | No dependencies; foundation for Goals 13, 17, 18 | #659 |
-| 5 | Save/Restore State | 3 | Dependencies (Goals 7, 8) already complete; foundation for Goals 15, 18 | #666 |
+| 5 | Save/Restore State | 3 | Dependencies (Goals 7, 8) complete; **blocked upstream** on kdisco#42/#43/#44 (SP1 #677); foundation for Goals 15, 18 | #666 |
 | 4 | Interlocking Validation | 4 | Depends on Goal 2 (done) + Goal 3 (Phase 0) | #660 |
 | 11 | Track Physics: Gradients and Curves | 3 | No dependencies. **Very Low priority** — kept because the differential-equation solver must stay in the application | #664, #665 |
 | 14 | Custom Train Types | 2 | No dependencies | #667 |

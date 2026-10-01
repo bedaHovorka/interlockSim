@@ -29,7 +29,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 
 **Focus Areas:**
 1. **Simulation Engine**
-   - kDisco 0.6.1-SNAPSHOT (Phase 1 migration complete 2026-03-20; Koin injection now allowed in sim/)
+   - kDisco (version comes from `kdiscoVersion` in `gradle.properties`; Phase 1 migration complete 2026-03-20; Koin injection now allowed in sim/)
    - `:fast-sim` native CLI subproject (linuxX64, PR #421)
    - Discrete-event simulation patterns
    - Event scheduling and timing correctness
