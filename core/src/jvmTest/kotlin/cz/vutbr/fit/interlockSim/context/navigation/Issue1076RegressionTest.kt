@@ -109,8 +109,8 @@ class Issue1076RegressionTest : KoinTestBase() {
 	@DisplayName("a same-position candidate over a STALE foreign switch succeeds by reclamation, never by stealing")
 	fun staleForeignOwnershipIsReclaimedInsteadOfStolen() {
 		// Given: vA is registered to a train that holds NO block bounded by it -- the stale window
-		// from the issue. A rollback no longer leaves it (Issue #961); a direct registry caller still
-		// can, and so can a throwing release listener (see the Issue #1103 test below).
+		// from the issue. A rollback (Issue #961) and a throwing release listener (Issue #1103) no
+		// longer leave it; a direct registry caller still can, and only Step 2e.5 heals that.
 		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
 		assertThat(switchVA.locked).isTrue()
 
@@ -247,17 +247,16 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	/**
-	 * Issue #1103 item 1: why Step 2e.5 stays. A block release drops the block from the registry, then
-	 * publishes the release event, then reclaims the stale switch locks. A release-event listener that
-	 * throws skips the reclaim, so the released train keeps vA although it holds no block bounded by it.
-	 * Only Step 2e.5 heals that before the next candidate needs vA.
+	 * Issue #1103: a block release drops the block from the registry, publishes the release event,
+	 * then reclaims the stale switch locks. The reclaim runs in a `finally`, so a release-event
+	 * listener that throws can no longer leave the released train owning vA; its exception still
+	 * reaches the caller.
 	 */
 	@Test
 	@Timeout(30, unit = TimeUnit.SECONDS)
-	@DisplayName("ownership left stale by a throwing release listener is reclaimed by the next candidate")
-	fun ownershipLeftStaleByAThrowingReleaseListenerIsReclaimedByTheNextCandidate() {
-		// Given: OTHER_OWNER reserves zA -> doB1 over vA and releases every block while a listener
-		// throws on each release event.
+	@DisplayName("a throwing release listener does not skip the reclaim")
+	fun aThrowingReleaseListenerDoesNotSkipTheReclaim() {
+		// Given: OTHER_OWNER reserves zA -> doB1 over vA, and a listener throws on every release event.
 		val reserved = service.reservePath(OTHER_OWNER, semaphoreZA, semaphoreDoB1)
 		assertThat(reserved).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(OTHER_OWNER)
@@ -266,23 +265,19 @@ class Issue1076RegressionTest : KoinTestBase() {
 				if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) error("listener failure")
 			}
 		registry.addBlockOccupancyListener(throwing)
-		registry.getBlocks(OTHER_OWNER).forEach { block ->
-			runCatching { service.releaseBlock(OTHER_OWNER, block) }
-		}
+
+		// When: the owner releases every block.
+		val outcomes =
+			registry.getBlocks(OTHER_OWNER).map { block -> runCatching { service.releaseBlock(OTHER_OWNER, block) } }
 		registry.removeBlockOccupancyListener(throwing)
 
-		// The released train holds no block, yet still owns vA: the stale ownership this test is about.
+		// Then: every release still propagated the listener's exception...
+		assertThat(outcomes.map { it.exceptionOrNull()?.message }.distinct()).containsExactly("listener failure")
+		// ...and the reclaim ran anyway: the released train owns no switch, and vA is unlocked.
 		assertThat(registry.getBlocks(OTHER_OWNER)).isEmpty()
-		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(OTHER_OWNER)
-		assertThat(registry.isStaleSwitchOwnership(switchVA)).isTrue()
-
-		// When: the candidate asks for the same route.
-		val result = service.reservePath(CANDIDATE, semaphoreZA, semaphoreDoB1)
-
-		// Then: Step 2e.5 reclaimed vA, so the candidate owns it and both maps agree.
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(CANDIDATE)
 		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
+		assertThat(registry.getSwitchOwner(switchVA)).isNull()
+		assertThat(switchVA.locked).isFalse()
 	}
 
 	/**

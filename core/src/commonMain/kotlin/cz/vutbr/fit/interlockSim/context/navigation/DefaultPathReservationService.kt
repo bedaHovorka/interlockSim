@@ -3963,14 +3963,18 @@ class DefaultPathReservationService(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			approachLockDeferredUntil.remove(block)
-			emitBlockReleased(block, trainId, currentSimulationTime())
-			// Issue #1065: every committed per-block release passes through here -- Train.Tail's
-			// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
-			// tail release (via releaseBlock) -- so reclaiming a now-stale switch lock here keeps the
-			// invariant continuously true on those paths, rather than discovering it lazily the next
-			// time a train asks for the switch. The rollback paths get the same reclaim from
-			// rollbackBlock (Issue #961).
-			reclaimStaleSwitchLocks(block)
+			try {
+				emitBlockReleased(block, trainId, currentSimulationTime())
+			} finally {
+				// Issue #1065: every committed per-block release passes through here -- Train.Tail's
+				// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
+				// tail release (via releaseBlock) -- so reclaiming a now-stale switch lock here keeps the
+				// invariant continuously true on those paths, rather than discovering it lazily the next
+				// time a train asks for the switch. The rollback paths get the same reclaim from
+				// rollbackBlock (Issue #961). In a finally (Issue #1103): a throwing release listener
+				// must not skip the reclaim; its exception still propagates.
+				reclaimStaleSwitchLocks(block)
+			}
 		}
 		return released
 	}
@@ -4042,13 +4046,12 @@ class DefaultPathReservationService(
 	 * scoped rollback path released the owner's adjacent blocks via
 	 * [PathReservationRegistry.unregisterBlock] directly, bypassing [dropFreedBlock]'s
 	 * reclamation; since Issue #961 those paths reclaim through [rollbackBlock]. This step stays
-	 * (Issue #1103 item 1) because three paths can still leave ownership stale:
-	 * - [dropFreedBlock] drops the block from the registry, then publishes the release event, then
-	 *   reclaims. A release-event listener that throws skips the reclaim. Every committed per-block
-	 *   release runs through it (Train.Tail via [unregisterBlock], [releaseBlock], the approach-lock
-	 *   partial release), and the dispatcher's partial-route releaser contains such a throw.
-	 * - That releaser's last-resort fallback drops a FREE block with
-	 *   [PathReservationRegistry.unregisterBlock] directly, with no reclaim.
+	 * (Issue #1103 item 1) because two paths can still leave ownership stale. (A throwing
+	 * release-event listener no longer can: [dropFreedBlock] reclaims in a `finally`.)
+	 * - The dispatcher's partial-route releaser has a last-resort fallback that drops a FREE block
+	 *   with [PathReservationRegistry.unregisterBlock] directly, with no reclaim. It fires only when
+	 *   the service failed BEFORE unregistering the block; a throw during the release event leaves
+	 *   the block already unregistered, so the fallback short-circuits.
 	 * - The registry is public: [PathReservationRegistry.registerSwitches] accepts a switch the
 	 *   train holds no adjacent block for, and a direct [PathReservationRegistry.unregisterBlock]
 	 *   reclaims nothing.
