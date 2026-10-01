@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -123,6 +124,148 @@ class KoogAgentPlanAdapterTest {
 			innerBlockInputs = emptyList(),
 			outerBlockInputs = emptyList()
 		)
+
+	/**
+	 * Builds an observation with one train per entry of [trains] (id to velocity), each carrying a
+	 * [TrainPerceptionReading] unless it is listed in [withoutPerception]. A train has a path ahead
+	 * (a `signalAheadName`) unless it is listed in [withoutSignalAhead].
+	 */
+	private fun observationWithPerceptions(
+		trains: Map<String, Double>,
+		withoutPerception: Set<String> = emptySet(),
+		withoutSignalAhead: Set<String> = emptySet(),
+		unapprovedTrains: List<QueuedTrainObservation> = emptyList()
+	): DispatchObservation =
+		DispatchObservation(
+			snapshot =
+				SimulationSnapshot.EMPTY.copy(
+					trainPositions =
+						trains.map { (id, velocity) ->
+							TrainPositionReading(
+								trainId = id,
+								velocity = velocity,
+								acceleration = 0.0,
+								totalDistance = 0.0,
+								frontSectionName = null
+							)
+						},
+					trainPerceptions =
+						trains
+							.filterKeys { it !in withoutPerception }
+							.map { (id, velocity) ->
+								TrainPerceptionReading(
+									trainId = id,
+									signalAheadName = if (id in withoutSignalAhead) null else "S-$id",
+									signalAheadAspect = null,
+									distanceToSignalAheadMetres = 100.0,
+									currentSpeedLimitMps = 20.0,
+									velocity = velocity,
+									acceleration = 0.0,
+									totalDistance = 0.0,
+									frontSectionName = null,
+									destinationInOutName = "B",
+									scheduledArrivalTime = 0.0,
+									isDwelling = false
+								)
+							}
+				),
+			unapprovedTrains = unapprovedTrains,
+			innerBlockInputs = emptyList(),
+			outerBlockInputs = emptyList()
+		)
+
+	/** Runs one silent cycle on [observation] with a nothing-actionable fallback; returns the outcome. */
+	private fun silentCycleOutcome(
+		observation: DispatchObservation,
+		fallback: Dispatcher,
+		result: (List<DispatchDecision>) -> Unit = {}
+	): TickOutcome {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } returns emptyList()
+		val recorded = mutableListOf<TickRecord>()
+		val planAdapter = adapter(koogAgent, fallback)
+		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
+
+		result(runBlocking { planAdapter.plan(observation) })
+
+		assertThat(recorded).hasSize(1)
+		return recorded.first().outcome
+	}
+
+	@Test
+	fun `silent cycle with every train moving and a path ahead reports LLM_SILENT_ALL_MOVING without fallback`() {
+		val fallback = mockk<Dispatcher>()
+		var returned: List<DispatchDecision>? = null
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(mapOf("t1" to 5.0, "t2" to 3.0)),
+				fallback
+			) { returned = it }
+
+		assertThat(outcome).isEqualTo(TickOutcome.LLM_SILENT_ALL_MOVING)
+		assertThat(returned).isNotNull().isEmpty()
+		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `silent cycle with one standing train takes the fallback path`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+
+		val outcome = silentCycleOutcome(observationWithPerceptions(mapOf("t1" to 5.0, "t2" to 0.0)), fallback)
+
+		assertThat(outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `silent cycle with a train lacking perception takes the fallback path`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.ApproveTrain("x"))
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(mapOf("t1" to 5.0, "t2" to 5.0), withoutPerception = setOf("t2")),
+				fallback
+			)
+
+		assertThat(outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `silent cycle with a queued train takes the fallback path even when all active trains move`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.ApproveTrain("Train #1"))
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(
+					mapOf("t1" to 5.0),
+					unapprovedTrains = listOf(QueuedTrainObservation("Train #1", "A"))
+				),
+				fallback
+			)
+
+		assertThat(outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
+
+	@Test
+	fun `silent cycle with a moving train that has no path ahead takes the fallback path`() {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+
+		val outcome =
+			silentCycleOutcome(
+				observationWithPerceptions(mapOf("t1" to 5.0), withoutSignalAhead = setOf("t1")),
+				fallback
+			)
+
+		assertThat(outcome).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+		coVerify(exactly = 1) { fallback.decide(any()) }
+	}
 
 	@Test
 	fun `non-empty decisions from the LLM are returned as-is and fallback is not invoked`() {

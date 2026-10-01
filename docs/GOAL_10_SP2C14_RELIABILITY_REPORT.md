@@ -198,6 +198,10 @@ The seven sections below are named and ordered exactly as `RunReportAggregator.r
 produces them. **T5 (Author Attribution) is the A4 gate's autonomy input and is called out first
 among the per-arm detail tables**, per this issue's acceptance criteria.
 
+> **Comparability note (#988, 2026-10):** from this point a silent tick with every train moving
+> and a path ahead counts as an LLM success (`LLM_SILENT_ALL_MOVING`) and skips the rule
+> fallback, which raises the T1/T7 success columns. Runs recorded earlier are not comparable.
+
 ### T1 — Arm Comparison (reliability)
 
 **Campaign A — `historyN = 3` (#847's grid), 20 LLM runs + 10 control runs**

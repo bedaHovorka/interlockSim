@@ -114,6 +114,10 @@ import kotlin.time.TimeSource
  *    a genuine miss, reported as [TickOutcome.RULE_FALLBACK]; if it too finds nothing legal to
  *    do, the tick was never actionable, reported as [TickOutcome.LLM_SILENT_NONACTIONABLE] —
  *    see [runFallback]'s "Outcome classification" KDoc.
+ *    **Exception (Issue #988):** when the silent cycle is observed with every active train moving
+ *    and holding a reserved path ahead, and no train is queued (see [allTrainsMovingWithPathAhead]),
+ *    nothing needed dispatching — the fallback is **not** consulted and the tick is reported as
+ *    [TickOutcome.LLM_SILENT_ALL_MOVING], an LLM success.
  * 4. LLM times out → fall back to [fallbackDispatcher]
  * 5. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
  *
@@ -503,6 +507,17 @@ class KoogAgentPlanAdapter(
 			}
 			reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime, latencyMs)
 			emptyList()
+		} else if (allTrainsMovingWithPathAhead(observation)) {
+			// Issue #988: a silent cycle while every active train is moving with a reserved path
+			// ahead and nobody is queued — nothing needed dispatching. Score it as an LLM success
+			// and do NOT consult the fallback (it has nothing to add and would mis-score the tick).
+			logger.debug {
+				"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions while all " +
+					"trains move with a path ahead — reporting LLM_SILENT_ALL_MOVING, not falling back " +
+					"(simTime=${observation.snapshot.simTime})"
+			}
+			reportTick(TickOutcome.LLM_SILENT_ALL_MOVING, observation.snapshot.simTime, latencyMs)
+			emptyList()
 		} else {
 			// The LLM completed a cycle but neither acted via tools nor returned a decision,
 			// and the station is NOT idle (there is an active or queued train the LLM left
@@ -725,6 +740,36 @@ class KoogAgentPlanAdapter(
 		observation.snapshot !== SimulationSnapshot.EMPTY &&
 			observation.approvedTrainCount == 0 &&
 			observation.unapprovedTrains.isEmpty()
+
+	/**
+	 * Whether the observation proves that every active train is moving with a reserved path ahead
+	 * and no train is waiting for approval, so a silent LLM cycle left nothing undone (Issue #988).
+	 *
+	 * All of the following must hold, otherwise the pre-#988 fallback path runs:
+	 * - the snapshot is not the [SimulationSnapshot.EMPTY] placeholder (checked by reference, see
+	 *   [isIdleStation]);
+	 * - [DispatchObservation.unapprovedTrains] is empty — a queued train needs the fallback to be
+	 *   admitted;
+	 * - there is at least one train position;
+	 * - for every train position a perception exists, its `velocity` is above zero and its
+	 *   `signalAheadName` is non-null (null means no path is reserved ahead). A missing
+	 *   perception means "not proven" and also falls through to the fallback.
+	 *
+	 * The signal aspect is deliberately not part of the predicate: a train that is moving with a
+	 * reserved path ahead is being served by the interlocking whatever the next aspect shows
+	 * (a red aspect simply means it will brake to a stop, and a standing train fails the velocity
+	 * check on a later tick); the aspect alone cannot say whether a dispatcher action is owed.
+	 */
+	private fun allTrainsMovingWithPathAhead(observation: DispatchObservation): Boolean {
+		val snapshot = observation.snapshot
+		return snapshot !== SimulationSnapshot.EMPTY &&
+			observation.unapprovedTrains.isEmpty() &&
+			snapshot.trainPositions.isNotEmpty() &&
+			snapshot.trainPositions.all { position ->
+				val perception = snapshot.trainPerception(position.trainId)
+				perception != null && perception.velocity > 0.0 && perception.signalAheadName != null
+			}
+	}
 
 	/**
 	 * Publishes one completed cycle to the tick listener and to [cycleHistory].

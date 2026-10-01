@@ -34,6 +34,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * | [LLM_ACTIONS] | ≥ 1 valid action emitted and accepted by the action validator | [TickClass.SUCCESS] | yes | yes |
  * | [LLM_NO_OP] | LLM **explicitly** emitted `no_op` | [TickClass.SUCCESS] | yes | yes |
  * | [LLM_REPAIRED] | First output invalid; the single repair attempt produced valid output | [TickClass.SUCCESS] | yes (also `repairSuccessCount`) | yes |
+ * | [LLM_SILENT_ALL_MOVING] | LLM answered silently while every active train was moving with a path ahead and none was queued (Issue #988) | [TickClass.SUCCESS] | yes | yes |
  * | [LLM_SILENT_NONACTIONABLE] | LLM answered silently (no tool emissions, no decisions) and the fallback oracle confirmed there was nothing legal to do | [TickClass.NONACTIONABLE] | no | **no** |
  * | [TIMEOUT_NOOP] | Safe do-nothing applied by the harness; carries a [TimeoutNoOpCause] | [TickClass.DEGRADED] | no | yes |
  * | [LLM_EXCEPTION] | Non-cancellation throwable from the LLM path | [TickClass.DEGRADED] | no | yes |
@@ -62,6 +63,16 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * two-way split it replaces) but is not a liveness guarantee: a run can still fail to progress
  * while reporting a clean actionable-rate. The A4 gate is therefore actionable-rate **and**
  * railway outcome (see [RunReportAggregator.runPassed]), never actionable-rate alone.
+ *
+ * ## [LLM_SILENT_ALL_MOVING] (Issue #988)
+ *
+ * A silent cycle used to be scored through the fallback oracle even when the railway was visibly
+ * healthy: every active train moving, each with a reserved path ahead, and nobody queued. That is
+ * a decisive, observation-only proof that nothing needed dispatching, so the tick is now scored as
+ * an LLM success and the rule fallback is skipped. Unlike [LLM_SILENT_NONACTIONABLE] the proof does
+ * not rest on the rule dispatcher's opinion, which is why this outcome is a success. Runs recorded
+ * before #988 are not comparable: the same ticks were scored [LLM_SILENT_NONACTIONABLE] or
+ * [RULE_FALLBACK] there.
  *
  * ## Why [TickClass.NONACTIONABLE] and not [TickClass.DEGRADED] (Issue #927)
  *
@@ -151,6 +162,14 @@ enum class TickOutcome {
 	LLM_SILENT_NONACTIONABLE,
 
 	/**
+	 * LLM answered silently (no tool emissions, no decisions) while every active train was moving
+	 * with a reserved path ahead and no train was queued for approval (Issue #988). Nothing needed
+	 * dispatching, so the silence is correct and the rule fallback is not consulted. Counts as an
+	 * LLM success. See `KoogAgentPlanAdapter.allTrainsMovingWithPathAhead` for the exact predicate.
+	 */
+	LLM_SILENT_ALL_MOVING,
+
+	/**
 	 * Safe do-nothing applied by the harness because the LLM did not produce a usable result
 	 * this tick. Always carried together with a [TimeoutNoOpCause] on [TickRecord].
 	 */
@@ -186,7 +205,9 @@ enum class TickOutcome {
 val TickOutcome.tickClass: TickClass
 	get() =
 		when (this) {
-			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED -> TickClass.SUCCESS
+			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED,
+			TickOutcome.LLM_SILENT_ALL_MOVING
+			-> TickClass.SUCCESS
 			TickOutcome.LLM_SILENT_NONACTIONABLE -> TickClass.NONACTIONABLE
 			TickOutcome.TIMEOUT_NOOP, TickOutcome.LLM_EXCEPTION -> TickClass.DEGRADED
 			TickOutcome.LLM_ABANDONED, TickOutcome.RULE_FALLBACK -> TickClass.RUN_FAILURE
@@ -222,6 +243,8 @@ val TickOutcome.countsTowardActionableRate: Boolean
  *
  * - LLM-success outcomes ([TickOutcome.LLM_ACTIONS], [TickOutcome.LLM_NO_OP],
  *   [TickOutcome.LLM_REPAIRED]) → [ActionAuthor.LLM].
+ * - [TickOutcome.LLM_SILENT_ALL_MOVING] → [ActionAuthor.LLM] (Issue #988): a [TickClass.SUCCESS]
+ *   silent tick; no decisions were posted, and the cycle was an LLM cycle.
  * - [TickOutcome.LLM_SILENT_NONACTIONABLE] → [ActionAuthor.LLM] as well, despite not being a
  *   [TickClass.SUCCESS] outcome: no decisions were posted either way (the tick was silent), so
  *   the author tag only affects attribution bookkeeping, not safety — and the cycle that produced
@@ -235,7 +258,7 @@ val TickOutcome.toActionAuthor: ActionAuthor
 	get() =
 		when (this) {
 			TickOutcome.LLM_ACTIONS, TickOutcome.LLM_NO_OP, TickOutcome.LLM_REPAIRED,
-			TickOutcome.LLM_SILENT_NONACTIONABLE
+			TickOutcome.LLM_SILENT_NONACTIONABLE, TickOutcome.LLM_SILENT_ALL_MOVING
 			-> ActionAuthor.LLM
 			TickOutcome.TIMEOUT_NOOP, TickOutcome.LLM_EXCEPTION -> ActionAuthor.TIMEOUT_NOOP
 			TickOutcome.LLM_ABANDONED, TickOutcome.RULE_FALLBACK -> ActionAuthor.RULE_FALLBACK

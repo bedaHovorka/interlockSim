@@ -249,8 +249,12 @@ data class DispatcherRunSnapshot(
 		 *   [circuitBreakerOpenCount] so a rule-fallback tick caused by an OPEN circuit breaker can
 		 *   be distinguished from a completed LLM attempt that genuinely failed. The fields default
 		 *   to `null`, preserving the fact that older JSON did not record breaker statistics.
+		 * - **9** — Issue #988, `LLM_SILENT_ALL_MOVING` tick outcome. [ticksByOutcome] is keyed by
+		 *   enum name, so no field changed shape and every version 1-8 file still decodes. Those
+		 *   runs scored the same ticks as [TickOutcome.LLM_SILENT_NONACTIONABLE] or
+		 *   [TickOutcome.RULE_FALLBACK], so their rates are not comparable.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 8
+		const val CURRENT_SCHEMA_VERSION: Int = 9
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

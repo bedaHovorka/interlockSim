@@ -778,11 +778,11 @@ class MeasuringPlanAdapterTest {
 					)
 				}
 
-			// 3 rounds x 8 outcomes = 24 ticks, so cycles 10 and 20 take the checkpoint branch.
+			// 3 rounds of every outcome (at least 24 ticks), so cycles 10 and 20 take the checkpoint branch.
 			repeat(3) { oneOfEach.forEach { record -> adapter.onTick(record) } }
 
 			// Reaching this line at all is the assertion: no onTick call threw.
-			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(24L)
+			assertThat(adapter.getMetricsSnapshot().totalCycles).isEqualTo(3L * TickOutcome.entries.size)
 		}
 	}
 

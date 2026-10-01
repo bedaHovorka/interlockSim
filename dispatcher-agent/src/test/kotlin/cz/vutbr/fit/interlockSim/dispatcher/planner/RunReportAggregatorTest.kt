@@ -359,6 +359,15 @@ class RunReportAggregatorTest {
 	}
 
 	@Test
+	fun `renderMarkdown per-run detail table has an LLM_SILENT_ALL_MOVING column`() {
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "allmoving")))
+		val md = aggregator.renderMarkdown(listOf(report))
+
+		val hasColumn = md.contains("| LLM_SILENT_ALL_MOVING |")
+		assertThat(hasColumn).isTrue()
+	}
+
+	@Test
 	fun `renderMarkdown output is English only — no Czech strings`() {
 		val snapshots = (1..10).map { i -> runSnapshot(runId = "en$i") }
 		val report = aggregator.aggregate(snapshots)
