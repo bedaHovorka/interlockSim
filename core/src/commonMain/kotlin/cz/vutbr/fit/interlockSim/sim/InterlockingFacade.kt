@@ -50,10 +50,12 @@ import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
  *
  * ## Release Contract
  *
- * When a train vacates its path via [releaseRoute]:
- * - The kernel **progressively** releases the rušení závěru (lock release)
- * - Locks are released incrementally as the train physically clears blocks
- * - (Progressive release is deferred to SP3.5; initial MVP releases the entire route atomically)
+ * [releaseRoute] releases the whole route in one call, through the approach lock (Issue #974):
+ * - Every block and switch reserved for the train is released, except blocks that are
+ *   approach-locked, occupied or inside the deferral window; those stay reserved and are
+ *   reported as deferred by the underlying release
+ * - The entry signal the kernel cleared is reset to STOP
+ * - There is no progressive, block-by-block release in this facade
  *
  * ## Safety Guarantees (§1, §7, §8 of Issue #533)
  *
@@ -371,7 +373,7 @@ interface InterlockingFacade {
 	): RouteResponse
 
 	/**
-	 * Release a route — progressively clear locks as the train vacates blocks.
+	 * Release a route — the whole route in one call, through the approach lock.
 	 *
 	 * **Whole-route release with the approach lock (Issue #974):** every block and switch
 	 * reserved for [trainId] is released in one call, through the same approach-locked release

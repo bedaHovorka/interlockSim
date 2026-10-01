@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -79,9 +80,12 @@ class InterlockingFacadeApproachLockReleaseTest : KoinTestBase() {
 				)
 			).reservedBlocks
 		val head = blocks.first()
+		// The deferral below depends on this fixture state; fail loudly if it changes.
+		assertThat(network.semaphore.signal.isAllowing(), "the reservation lit the semaphore").isTrue()
+		assertThat(head.getState(), "the head is RESERVED before the release").isEqualTo(TrackFacility.State.RESERVED)
 
-		// The start signal is lit, the intermediate one is STOP: the train waiting at A is
-		// committed to the head, which the approach lock keeps; the tail is freed.
+		// The reservation lit the semaphore, so the train is committed to the head: the approach
+		// lock keeps it; the tail is freed.
 		DefaultInterlockingFacade(context, registry).releaseRoute(trainId, SignalId("any"))
 
 		assertThat(registry.getBlocks(trainId).toSet(), "the approach-locked head stays registered")

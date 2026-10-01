@@ -48,8 +48,9 @@ private val logger = KotlinLogging.logger {}
  *   (mirrors [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]). An unknown name
  *   anywhere in the requested route is treated as a denial (fail closed), not as "assumed free".
  *
- * - **Progressive lock release:** The current MVP releases the entire route atomically.
- *   SP3.5 will implement progressive release (block-by-block as the train physically clears).
+ * - **Whole-route release:** [releaseRoute] releases the entire route in one call through the
+ *   approach lock (Issue #974); approach-locked, occupied and deferral-window blocks are kept
+ *   reserved. There is no progressive, block-by-block release in this facade.
  *
  * - **Switch position mapping:** [SwitchPosition] (PLUS/MINUS, route-spec layer) and
  *   [RailSwitch.Conf] (MAIN/BRANCH, domain object layer) are disjoint in the codebase;
@@ -68,7 +69,7 @@ private val logger = KotlinLogging.logger {}
  * @property registry The [PathReservationRegistry] SHARED with the context's
  *              `PathReservationService` (same scoped instance — see `CoreModule`). Using the
  *              same registry means a route granted here is correctly released later by
- *              `PathReservationService.releasePath()` in [releaseRoute].
+ *              `PathReservationService.releasePathDetailed()` in [releaseRoute].
  *
  * @since Issue #572 (SP3.4 — Goal 10)
  */
