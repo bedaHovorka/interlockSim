@@ -146,22 +146,20 @@ interface PathReservationService :
 		 * a different origin. Collapsing the two hides a dispatcher-output defect inside a
 		 * routine-traffic counter.
 		 *
-		 * A train with **no** footprint at all (neither registered nor occupied blocks) is not
-		 * subject to this check: that is a train still waiting outside the network, whose route
-		 * legitimately starts at an entry InOut.
+		 * ## Who guards which route-origin case (ruling D8)
 		 *
-		 * ## ⚠ Half the malformation, by ruling
+		 * | Origin case | Guarded by |
+		 * |---|---|
+		 * | Train on the network (footprint non-empty) | kernel: `DefaultPathReservationService.rejectNonContiguousStart`, which returns this result |
+		 * | Train queued for admission (footprint empty) | tool: `RequestRouteTool.queuedOriginError`; self-disabled when the tool has no InOut names or no `DispatchLoopSensorPort` |
+		 * | Any other caller of `reservePath` | no queued-train protection |
 		 *
-		 * That exemption is why this result covers only trains that are already **on** the
-		 * network. The other half of Issue #893 — a route requested from a mid-station Signal for
-		 * a train still **queued** for admission — has an empty footprint and passes vacuously
-		 * here. It is guarded solely at the tool layer, by
-		 * `RequestRouteTool.queuedOriginError`, which itself self-disables when that tool is
-		 * built with no InOut-name set or with no `DispatchLoopSensorPort`. Callers reaching
-		 * `reservePath` by any other route get no protection against the queued-train form.
-		 *
-		 * Tightening the vacuous arm to close it would reject every legitimate train-entry
-		 * reservation, so the split is deliberate (binding traffic-simulation-expert ruling).
+		 * Ruling D8 (2026-10-01, traffic-simulation-expert): the tool layer stays the owner of the
+		 * queued-train half. A train with **no** footprint at all (neither registered nor occupied
+		 * blocks) passes the kernel check vacuously, because tightening it would reject every
+		 * legitimate train-entry reservation (an entry InOut with an empty footprint, by design).
+		 * Pinned by `PathReservationServiceTest` ("queued train with empty footprint passes the
+		 * kernel contiguity check vacuously"). Other KDocs link here instead of repeating this.
 		 *
 		 * @property startName Name of the offending start separator (or its `toString()` when
 		 *   the separator carries no name).
@@ -245,7 +243,8 @@ interface PathReservationService :
 	 * one of the blocks the train holds in the [PathReservationRegistry] or physically occupies.
 	 * A request that fails this is rejected with [ReservationResult.NonContiguousStart] before
 	 * any path finding happens — reserving elsewhere would lock track the train cannot reach.
-	 * A train with no footprint at all (still outside the network) is exempt.
+	 * A train with no footprint (still outside the network) is exempt; which layer guards that
+	 * case is in the table at [ReservationResult.NonContiguousStart].
 	 *
 	 * ## Algorithm
 	 *

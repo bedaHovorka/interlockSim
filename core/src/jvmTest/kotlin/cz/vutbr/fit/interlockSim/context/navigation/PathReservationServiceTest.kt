@@ -58,6 +58,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -3410,6 +3411,24 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result = service.reservePath("phantom-train", findSemaphoreByName("doA1"), inOutA)
 
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		}
+
+		/**
+		 * Regression pin for ruling D8 (#972): the kernel cannot see a queued train, so a route
+		 * from a mid-station signal for a train with an empty footprint is not refused with
+		 * `NonContiguousStart`. That half is owned by `RequestRouteTool.queuedOriginError`.
+		 */
+		@Test
+		@DisplayName(
+			"queued train with empty footprint passes the kernel contiguity check vacuously " +
+				"(guarded by RequestRouteTool.queuedOriginError, D8)"
+		)
+		fun queuedTrainWithEmptyFootprintPassesVacuously() {
+			val inOutA = simulationContext.getInOuts().single { it.name == "A" }
+			// doA1 is a mid-station signal, not an InOut: for a queued train this origin is wrong.
+			val result = service.reservePath("queued-train", findSemaphoreByName("doA1"), inOutA)
+
+			assertThat(result).isNotInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
 		}
 
 		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
