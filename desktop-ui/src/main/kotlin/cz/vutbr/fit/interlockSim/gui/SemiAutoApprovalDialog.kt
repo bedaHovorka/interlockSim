@@ -146,9 +146,9 @@ class SemiAutoApprovalDialog(
 				add(JLabel(value))
 			}
 
-		detailsPanel.add(labelRow("Decision:", decisionTypeName(decision)))
+		detailsPanel.add(labelRow("Decision:", decision.kind.displayName))
 
-		val trainId = trainIdOf(decision)
+		val trainId = decision.trainName
 		if (trainId != null) {
 			detailsPanel.add(labelRow("Train:", trainId))
 		}
@@ -292,28 +292,6 @@ class SemiAutoApprovalDialog(
 			}
 			return result
 		}
-
-		private fun decisionTypeName(decision: DispatchDecision): String =
-			when (decision) {
-				is DispatchDecision.ApproveTrain -> "Approve Train"
-				is DispatchDecision.ReservePath -> "Reserve Path"
-				is DispatchDecision.HoldTrain -> "Hold Train"
-				is DispatchDecision.SetSignalAspect -> "Set Signal Aspect"
-				is DispatchDecision.SetSwitchPosition -> "Set Switch Position"
-				is DispatchDecision.ReleaseRoute -> "Release Route"
-				is DispatchDecision.RequestRoute -> "Request Route"
-				is DispatchDecision.NoAction -> "No Action"
-			}
-
-		private fun trainIdOf(decision: DispatchDecision): String? =
-			when (decision) {
-				is DispatchDecision.ApproveTrain -> decision.trainId
-				is DispatchDecision.ReservePath -> decision.trainId
-				is DispatchDecision.HoldTrain -> decision.trainId
-				is DispatchDecision.ReleaseRoute -> decision.trainName
-				is DispatchDecision.RequestRoute -> decision.trainName
-				else -> null
-			}
 
 		private fun routeOf(decision: DispatchDecision): String? =
 			when (decision) {

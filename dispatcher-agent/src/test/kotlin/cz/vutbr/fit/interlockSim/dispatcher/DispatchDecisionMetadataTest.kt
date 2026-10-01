@@ -22,9 +22,10 @@ import org.junit.jupiter.params.provider.MethodSource
 /**
  * Exhaustive-branch coverage for the SP2c.17 (#840) decision-metadata projections
  * [commandTypeName] and [extractTrainId] — top-level `internal` extensions over the sealed
- * [DispatchDecision] type. Both are `when` *expressions* over all 8 subtypes, so the compiler
- * already enforces exhaustiveness; these tests pin the per-subtype string/identifier mapping so
- * a future subtype addition or a rename is caught here rather than producing a wrong
+ * [DispatchDecision] type. Since #969 both read the common [DispatchDecision.kind] and
+ * [DispatchDecision.trainName] members, so this table now pins the
+ * [cz.vutbr.fit.interlockSim.sim.DispatchDecisionKind] tool names and the train identifier per
+ * subtype, so a rename is caught here rather than producing a wrong
  * [cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome.DroppedInvalid] payload.
  *
  * @since Issue #840 (SP2c.17 — correlated async outcome channel)
@@ -66,9 +67,8 @@ class DispatchDecisionMetadataTest {
 
 		/**
 		 * One example of every [DispatchDecision] subtype paired with its expected
-		 * [commandTypeName] and [extractTrainId] outputs. Adding a subtype to the sealed class
-		 * without extending this table leaves a compile error in [commandTypeName]/[extractTrainId]
-		 * first; once added there, this table should be extended to keep the mapping pinned.
+		 * [commandTypeName] and [extractTrainId] outputs. A new subtype must implement the
+		 * abstract `kind` and `trainName` members; extend this table to keep its mapping pinned.
 		 */
 		private fun decisionsWithExpected(): List<Triple<DispatchDecision, String, String>> =
 			listOf(
@@ -81,6 +81,13 @@ class DispatchDecisionMetadataTest {
 				Triple(DispatchDecision.ReservePath("T-4", "zA", "InOut-B"), "reserve_path", "T-4"),
 				Triple(DispatchDecision.HoldTrain("T-5", 1.0), "hold_train", "T-5"),
 				Triple(DispatchDecision.SetSignalAspect("doA1", Signal.STOP), "set_signal_aspect", ""),
+				// A train-attributed SetSignalAspect still reports "" (#969): its trainName is
+				// reservation-tracker attribution, and DroppedInvalid.trainId must not change.
+				Triple(
+					DispatchDecision.SetSignalAspect("doA1", Signal.FREE, trainName = "T-6"),
+					"set_signal_aspect",
+					""
+				),
 				Triple(DispatchDecision.SetSwitchPosition("vA", RailSwitch.Conf.MAIN), "set_switch_position", ""),
 				Triple(DispatchDecision.NoAction, "no_action", "")
 			)

@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionKind
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
@@ -1125,41 +1126,22 @@ class DispatchDecisionApplier(
  * Returns the tool name for this decision type, used in
  * [AppliedOutcome.DroppedInvalid.commandType] to identify which tool was attempted.
  *
- * Top-level `internal` so exhaustive-branch coverage can be asserted directly by tests
- * without constructing a [DispatchDecisionApplier] — the function is a pure projection of
- * the sealed [DispatchDecision] type and references no applier state.
+ * Top-level `internal` so the mapping can be asserted directly by tests without constructing
+ * a [DispatchDecisionApplier]. Reads [DispatchDecisionKind.commandType] since Issue #969.
  */
-internal fun DispatchDecision.commandTypeName(): String =
-	when (this) {
-		is DispatchDecision.RequestRoute -> "request_route"
-		// The LLM-facing tool name is `cancel_route` (see CancelRouteTool). This projection
-		// feeds AppliedOutcome.DroppedInvalid.commandType, which both renderers emit
-		// verbatim to the model, so it must speak the current tool name — not the retired
-		// `release_route`.
-		is DispatchDecision.ReleaseRoute -> "cancel_route"
-		is DispatchDecision.ApproveTrain -> "approve_train"
-		is DispatchDecision.ReservePath -> "reserve_path"
-		is DispatchDecision.HoldTrain -> "hold_train"
-		is DispatchDecision.SetSignalAspect -> "set_signal_aspect"
-		is DispatchDecision.SetSwitchPosition -> "set_switch_position"
-		DispatchDecision.NoAction -> "no_action"
-	}
+internal fun DispatchDecision.commandTypeName(): String = kind.commandType
 
 /**
  * Returns the train identifier carried by this decision, or an empty string when no train
- * identifier is applicable (e.g. [DispatchDecision.NoAction]).
+ * identifier is applicable (e.g. [DispatchDecision.NoAction]). Reads
+ * [DispatchDecision.trainName] since Issue #969, except for [DispatchDecision.SetSignalAspect].
  *
  * Top-level `internal` for the same reason as [commandTypeName] — pure projection, no
  * applier state, exhaustively testable.
  */
 internal fun DispatchDecision.extractTrainId(): String =
-	when (this) {
-		is DispatchDecision.RequestRoute -> trainName
-		is DispatchDecision.ReleaseRoute -> trainName
-		is DispatchDecision.ApproveTrain -> trainId
-		is DispatchDecision.ReservePath -> trainId
-		is DispatchDecision.HoldTrain -> trainId
-		is DispatchDecision.SetSignalAspect -> ""
-		is DispatchDecision.SetSwitchPosition -> ""
-		DispatchDecision.NoAction -> ""
-	}
+	// SetSignalAspect keeps the empty identifier it had before #969 even when it carries a
+	// trainName: the value reaches the model through AppliedOutcome.DroppedInvalid, and the
+	// trainName on SetSignalAspect is attribution for the reservation tracker, not the
+	// command's subject. Changing it would change what the agent is told.
+	if (kind == DispatchDecisionKind.SET_SIGNAL_ASPECT) "" else trainName ?: ""
