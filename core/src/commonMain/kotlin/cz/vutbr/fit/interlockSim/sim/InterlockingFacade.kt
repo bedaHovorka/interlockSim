@@ -393,7 +393,9 @@ interface InterlockingFacade {
 	 * **On invocation:**
 	 * - Blocks reserved for [trainId] are released (RESERVED → FREE), except approach-locked,
 	 *   occupied or deferral-window blocks, which stay RESERVED.
-	 * - Switches locked for [trainId] are unlocked.
+	 * - On a full release, switches locked for [trainId] are unlocked. On a partial (deferred) release
+	 *   only switches left stale are reclaimed: a switch next to a kept block stays locked until that
+	 *   block is released too.
 	 * - The entry signal the kernel cleared for [trainId] is reset to STOP (safe aspect).
 	 * - If [trainId] has no active route, the call succeeds silently (idempotent).
 	 *

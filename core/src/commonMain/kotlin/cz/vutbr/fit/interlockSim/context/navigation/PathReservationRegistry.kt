@@ -77,7 +77,8 @@ private val logger = KotlinLogging.logger {}
  * a reservation. A block keeps its first timestamp while its owner re-registers it, loses it on
  * every removal ([unregisterBlock], [unregister], [clear] -- every release and rollback path goes
  * through one of them), and gets a new one if it is registered again later. Deciding when a holding
- * is stale stays with its caller (`OrphanReservationSweeper` in `:dispatcher-agent`).
+ * is stale stays with its caller (`OrphanReservationSweeper` in `:dispatcher-agent`). No production
+ * code reads the timestamps yet -- not even for diagnostics: they are a stepping stone for #975.
  *
  * ## Size
  *
@@ -523,7 +524,7 @@ class PathReservationRegistry(
 	/**
 	 * The simulation time at which [block] was registered to its current owner, or `null` when no
 	 * train holds it (Issue #975). A read-only fact -- see the class KDoc; the registry never
-	 * expires a reservation by it.
+	 * expires a reservation by it. It has no production reader yet; only tests call it.
 	 */
 	fun getRegisteredAtSimTime(block: DynamicTrackBlock): Double? = blockRegisteredAt[block]
 

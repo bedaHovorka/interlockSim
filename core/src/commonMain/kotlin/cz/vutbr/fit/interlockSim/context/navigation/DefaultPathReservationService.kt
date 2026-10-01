@@ -3991,6 +3991,9 @@ class DefaultPathReservationService(
 			}
 			return false
 		}
+		// cancelPathSetup clears reservedFrom, so unregisterBlock's reset below sees only block.ends():
+		// a far START semaphore is not reset here. A caller releasing an un-travelled block resets the
+		// signals first (resetSemaphoresForReleasedBlocks), as RegistryPartialRouteReleaser does.
 		block.reservedFrom?.let { block.cancelPathSetup(it) }
 		return unregisterBlock(trainId, block)
 	}

@@ -567,6 +567,11 @@ class DefaultInterlockingFacade(
 	 *
 	 * No release event is published: this facade locks blocks through the registry and `setUpPath`,
 	 * never through `reservePath`, so none of them was announced as reserved (Issue #961, #1081).
+	 *
+	 * **Precondition:** every block in [registered] was FREE and unowned before this round's
+	 * `setUpPath`. That holds because [checkRouteFreedom] refuses the route when any block fails
+	 * [PathReservationRegistry.isBlockAvailable], which rejects a block any train owns -- so a rollback
+	 * here never cancels a reservation that existed before this round.
 	 */
 	private fun rollbackBlocks(
 		trainId: String,

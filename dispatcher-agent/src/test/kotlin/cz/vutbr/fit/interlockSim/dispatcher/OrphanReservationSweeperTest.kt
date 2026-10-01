@@ -710,7 +710,7 @@ class OrphanReservationSweeperTest {
 
 		val sweeper =
 			sweepAll(
-				staleAfterSimSeconds = 60.0,
+				staleAfterSimSeconds = OrphanReservationSweeper.DEFAULT_STALE_AFTER_SIM_SECONDS,
 				ticks =
 					listOf(
 						// The whole route b1..b5 was granted at t = 0; the train stands on b1.
@@ -728,7 +728,12 @@ class OrphanReservationSweeperTest {
 						// One block every 25 s, and nothing new is registered on the way.
 						Tick(
 							25.0,
-							listOf(occupied("b2", train), reserved("b3", train), reserved("b4", train), reserved("b5", train)),
+							listOf(
+								occupied("b2", train),
+								reserved("b3", train),
+								reserved("b4", train),
+								reserved("b5", train)
+							),
 							activeTrains = listOf(train)
 						),
 						Tick(
