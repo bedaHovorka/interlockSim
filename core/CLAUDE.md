@@ -29,6 +29,13 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
   where concurrent stdout/stderr forwarding corrupts Gradle's binary test-result
   index (`Multiple entries with same key`) even when all tests pass. Do not
   re-enable without confirming the upstream fix.
+  The same writer race also hits JVM test tasks as `Could not write XML test
+  results` with 0 real failures: once on `:desktop-ui`/`:dispatcher-agent`
+  `integrationTest` ([#1011](https://github.com/bedaHovorka/interlockSim/issues/1011)),
+  and on 2026-10-01 under heavy machine load (load average ~90) on
+  `:core:integrationTest` and `:desktop-ui:test`, for the same classes in two
+  consecutive runs. Gate evidence is therefore taken from a complete re-run's
+  XML, never from the failed attempt.
 - **`generateNativeResourceRoot`** generates `NATIVE_RESOURCE_ROOTS` with
   **absolute** paths to the resource directories of `:core` and `:core-test`.
   A relocated native binary fails at its first `Resources.read()` — a known
