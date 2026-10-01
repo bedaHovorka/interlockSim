@@ -104,7 +104,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * nowhere else, so a Signal origin is always wrong. See [queuedOriginError], including why the rule
  * is "an InOut" rather than "the entry InOut". The kernel's footprint-aware check covers only
  * trains already on the network; the layer split is the table at
- * `PathReservationService.ReservationResult.NonContiguousStart` (ruling D8).
+ * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
+ * (ruling D8).
  *
  */
 class RequestRouteTool(
@@ -374,7 +375,8 @@ class RequestRouteTool(
 	 * existing "cannot depart FROM the destination" rule this pins the origin exactly on a
 	 * two-InOut network such as `vyhybna.xml`, and is a strict improvement on larger ones. This is
 	 * the only guard for a queued train (its footprint is empty, so the kernel's contiguity check
-	 * passes vacuously); see the table at `PathReservationService.ReservationResult.NonContiguousStart`
+	 * passes vacuously); see the table at
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
 	 * (ruling D8).
 	 *
 	 * Disabled (returns `null`) when [inOutNames] is empty — without it every origin would look

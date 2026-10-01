@@ -3398,6 +3398,9 @@ class PathReservationServiceTest : KoinTestBase() {
 		 * Pins ruling P4(ii): a train with no footprint anywhere passes vacuously, whatever
 		 * its start. Tightening this arm would break every train-entry caller.
 		 *
+		 * Also the regression pin for ruling D8 (#972): the kernel cannot see a queued train, so a
+		 * mid-station origin for one is not refused here; `RequestRouteTool.queuedOriginError` owns that half.
+		 *
 		 * Uses doA1 -> A rather than doA1 -> doB1: doA1 faces B->A (see
 		 * [SignalReleaseTests] / [StartDirectionTests]), so a doA1 -> doB1 request is rejected
 		 * by the unrelated G4 rear-facing-START guard (Issue #893 task A1) regardless of
@@ -3406,29 +3409,15 @@ class PathReservationServiceTest : KoinTestBase() {
 		 * (Issue #1064).
 		 */
 		@Test
+		@DisplayName(
+			"queued train with empty footprint passes the kernel contiguity check vacuously " +
+				"(guarded by RequestRouteTool.queuedOriginError, D8)"
+		)
 		fun `a train with no footprint at all passes vacuously`() {
 			val inOutA = simulationContext.getInOuts().single { it.name == "A" }
 			val result = service.reservePath("phantom-train", findSemaphoreByName("doA1"), inOutA)
 
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-		}
-
-		/**
-		 * Regression pin for ruling D8 (#972): the kernel cannot see a queued train, so a route
-		 * from a mid-station signal for a train with an empty footprint is not refused with
-		 * `NonContiguousStart`. That half is owned by `RequestRouteTool.queuedOriginError`.
-		 */
-		@Test
-		@DisplayName(
-			"queued train with empty footprint passes the kernel contiguity check vacuously " +
-				"(guarded by RequestRouteTool.queuedOriginError, D8)"
-		)
-		fun queuedTrainWithEmptyFootprintPassesVacuously() {
-			val inOutA = simulationContext.getInOuts().single { it.name == "A" }
-			// doA1 is a mid-station signal, not an InOut: for a queued train this origin is wrong.
-			val result = service.reservePath("queued-train", findSemaphoreByName("doA1"), inOutA)
-
-			assertThat(result).isNotInstanceOf<PathReservationService.ReservationResult.NonContiguousStart>()
 		}
 
 		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {

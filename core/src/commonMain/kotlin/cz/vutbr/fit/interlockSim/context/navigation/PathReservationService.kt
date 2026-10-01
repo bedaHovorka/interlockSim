@@ -150,16 +150,17 @@ interface PathReservationService :
 		 *
 		 * | Origin case | Guarded by |
 		 * |---|---|
-		 * | Train on the network (footprint non-empty) | kernel: `DefaultPathReservationService.rejectNonContiguousStart`, which returns this result |
-		 * | Train queued for admission (footprint empty) | tool: `RequestRouteTool.queuedOriginError`; self-disabled when the tool has no InOut names or no `DispatchLoopSensorPort` |
+		 * | Train on the network (footprint non-empty) | kernel, `rejectNonContiguousStart` (this result) |
+		 * | Train queued for admission (footprint empty) | tool, `RequestRouteTool.queuedOriginError`;
+		 *   self-disabled with no InOut names or no `DispatchLoopSensorPort` |
 		 * | Any other caller of `reservePath` | no queued-train protection |
 		 *
 		 * Ruling D8 (2026-10-01, traffic-simulation-expert): the tool layer stays the owner of the
 		 * queued-train half. A train with **no** footprint at all (neither registered nor occupied
 		 * blocks) passes the kernel check vacuously, because tightening it would reject every
 		 * legitimate train-entry reservation (an entry InOut with an empty footprint, by design).
-		 * Pinned by `PathReservationServiceTest` ("queued train with empty footprint passes the
-		 * kernel contiguity check vacuously"). Other KDocs link here instead of repeating this.
+		 * Pinned by `PathReservationServiceTest` ("a train with no footprint at all passes
+		 * vacuously"). Other KDocs link here instead of repeating this.
 		 *
 		 * @property startName Name of the offending start separator (or its `toString()` when
 		 *   the separator carries no name).
