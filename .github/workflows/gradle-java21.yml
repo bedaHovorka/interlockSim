@@ -1,8 +1,17 @@
 name: Gradle Build with Kotlin 2.0 and Java 21
 
+# Why `on: push` with no branch filter and no `pull_request` trigger (#1020): every commit
+# runs CI exactly once (a pull_request trigger would double-run pushes to PR branches).
+# Copilot-authored pushes also stick at "action_required" on Sonar until an owner-pushed
+# commit runs, so every push must produce exactly one CI run. Side effect: tag pushes run
+# CI too; sonarqube.yml skips the scan for them. The Sonar scan itself lives in
+# sonarqube.yml, triggered by workflow_run after this workflow completes.
+
 on:
   push:  # Every push, any branch — no PR trigger, so each commit runs CI exactly once.
   workflow_dispatch:  # Allow manual trigger
+
+# Asymmetric with sonarqube.yml (it never cancels develop); harmless, see the note there.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -103,6 +112,10 @@ jobs:
       # unqualified jacocoTestReport name selects every module's report task, so no
       # module is named on this line either.
       run: ./gradlew jacocoTestReport jacocoAggregatedReport --no-daemon --stacktrace
+
+    # The sonar-inputs-<sha> artifact feeds sonarqube.yml (workflow_run): it reuses the
+    # compiled classes, test XML and JaCoCo XML plus the raw .exec files, so the Sonar run
+    # is self-sufficient for coverage and does not rebuild. if: always() uploads on failure too.
 
     - name: Upload Sonar inputs
       uses: actions/upload-artifact@v4
