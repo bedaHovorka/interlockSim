@@ -266,6 +266,7 @@ jobs:
     permissions:
       contents: read      # checkout
       packages: read      # GitHub Packages (kDisco dependency)
+      security-events: write  # upload detekt SARIF to code scanning
     timeout-minutes: 30
     needs: [build]  # Gate: don't spend native build time unless JVM build passes
 
@@ -302,6 +303,20 @@ jobs:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew :fast-sim:ktlintCheck --no-daemon --stacktrace
+
+    - name: detekt (strict) for :fast-sim
+      if: always()
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./gradlew :fast-sim:detekt --no-daemon
+
+    - name: Upload detekt SARIF
+      if: always()
+      uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52  # v3.38.2
+      with:
+        sarif_file: fast-sim/build/reports/detekt/detekt.sarif
+        category: fast-sim-detekt
 
     - name: Build fast-sim native binary (release)
       timeout-minutes: 20

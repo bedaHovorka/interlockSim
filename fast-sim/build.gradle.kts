@@ -120,6 +120,7 @@ detekt {
     ignoreFailures = false
     baseline = file("${rootProject.projectDir}/detekt-baseline.xml")
     parallel = true
+    basePath = rootProject.projectDir.absolutePath
 }
 
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
@@ -130,7 +131,7 @@ tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
         html.required.set(true)
         xml.required.set(true)
         txt.required.set(true)
-        sarif.required.set(false)
+        sarif.required.set(true)
         md.required.set(false)
     }
 }
