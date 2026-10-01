@@ -22,7 +22,8 @@ plugins {
     // Version: sonarPluginVersion in gradle.properties (read by buildSrc/build.gradle.kts),
     // which also records why it is pinned where it is.
     id("org.sonarqube")
-    jacoco
+    // JaCoCo engine pin and the aggregate report path, shared with the modules (buildSrc).
+    id("interlocksim.jacoco")
 }
 
 // Load versions from gradle.properties
@@ -35,7 +36,6 @@ val junitJupiterVersion: String by project
 val assertkVersion: String by project
 val mockkVersion: String by project
 val koinVersion: String by project
-val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -212,12 +212,13 @@ tasks.named("sonar") {
 // Aggregated JaCoCo Report (cross-module)
 // ===========================================
 
-// Pin the aggregate's engine to the same version the modules pin: without this the
-// report every module's xmlReportPaths consumes floats on Gradle's default, and a
-// Gradle upgrade can silently swap the engine behind the cross-module coverage.
-jacoco {
-    toolVersion = jacocoToolVersion
-}
+// interlocksim.jacoco (applied above) pins the aggregate's engine to the same version the
+// modules pin: without that the report every module's xmlReportPaths consumes would float on
+// Gradle's default. It also publishes the aggregate's XML path as the extra property
+// aggregatedCoverageReport, the one place both this task and the modules' Sonar paths read it.
+
+// Read at project level: inside the task block below, `extra` would be the task's own.
+val aggregatedCoverageReport = project.extra["aggregatedCoverageReport"] as String
 
 val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
     group = "verification"
@@ -249,7 +250,7 @@ val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
         // The HTML site (13 MB, about 1200 files per CI run) had no consumer, so
         // stop generating it; the per-module HTML reports stay for local browsing.
         xml.required.set(true)
-        xml.outputLocation.set(file("build/reports/jacoco/aggregated/jacocoTestReport.xml"))
+        xml.outputLocation.set(file(aggregatedCoverageReport))
         html.required.set(false)
         csv.required.set(false)
     }

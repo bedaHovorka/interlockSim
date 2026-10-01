@@ -66,11 +66,11 @@ WORKDIR /build
 COPY --chown=builder:builder gradlew /build/
 COPY --chown=builder:builder gradlew.bat /build/
 COPY --chown=builder:builder gradle/ /build/gradle/
-# buildSrc holds the interlocksim.* convention plugins every module script applies
-COPY --chown=builder:builder buildSrc/ /build/buildSrc/
 RUN chmod +x gradlew
 
 # Layer 2: Copy build configuration files (cached until config changes)
+# buildSrc holds the interlocksim.* convention plugins every module script applies
+COPY --chown=builder:builder buildSrc/ /build/buildSrc/
 COPY --chown=builder:builder settings.gradle.kts /build/
 COPY --chown=builder:builder gradle.properties /build/
 COPY --chown=builder:builder build.gradle.kts /build/

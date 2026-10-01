@@ -17,6 +17,9 @@ dependencies {
 	// types (KotlinMultiplatformExtension, ...). A plugin on this classpath only sees classes
 	// on this classpath, so the Kotlin Gradle plugin has to sit here too; the module scripts
 	// then apply kotlin("jvm") / kotlin("multiplatform") from it.
+	// It is here only so detekt/ktlint/sonar can see KGP types: buildSrc itself compiles with
+	// Gradle's embedded Kotlin, so a convention plugin must not call KGP APIs directly without
+	// checking that the embedded compiler can read this KGP version.
 	implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
 	implementation("io.gitlab.arturbosch.detekt:detekt-gradle-plugin:$detektPluginVersion")
 	implementation("org.jlleitschuh.gradle:ktlint-gradle:$ktlintPluginVersion")

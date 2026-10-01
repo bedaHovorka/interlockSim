@@ -20,7 +20,11 @@ plugins {
 
 val sonarModule = extensions.create<SonarModuleExtension>("sonarModule")
 
-extensions.getByName<SonarExtension>("sonar").properties {
+val sonar =
+	extensions.findByName("sonar") as? SonarExtension
+		?: error("interlocksim.sonar-module needs org.sonarqube applied at the root project")
+
+sonar.properties {
 	property(
 		"sonar.junit.reportPaths",
 		sonarModule.junitReportPaths.get().joinToString(","),
