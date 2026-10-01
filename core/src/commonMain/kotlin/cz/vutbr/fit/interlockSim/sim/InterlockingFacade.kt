@@ -373,13 +373,14 @@ interface InterlockingFacade {
 	/**
 	 * Release a route — progressively clear locks as the train vacates blocks.
 	 *
-	 * **Implementation note (SP3.4 initial MVP):**
-	 * This implementation performs **atomic release of the entire route** — every block and
-	 * switch reserved for [trainId] is released in one call, and the signal the kernel cleared in
-	 * the matching [requestRoute] call is reset to STOP. It does **not** release locks
-	 * section-by-section as the train physically clears blocks. **Do not call this until the train
-	 * has fully vacated the route** — calling it mid-traverse releases blocks the train still
-	 * occupies, which is unsafe. Progressive (section-by-section) release is deferred to SP3.5.
+	 * **Whole-route release with the approach lock (Issue #974):** every block and switch
+	 * reserved for [trainId] is released in one call, through the same approach-locked release
+	 * the production port uses ([cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed]).
+	 * A block that is approach-locked, occupied by the train, or inside the deferral window is
+	 * **kept reserved** (deferred) rather than freed, so calling this mid-traverse cannot free a
+	 * block the train still needs; the retained blocks stay registered until a later release or
+	 * the orphan sweep reclaims them. The call does not release locks section-by-section as the
+	 * train clears blocks. Production code releases through the port, not through this method.
 	 *
 	 * **Signal reset (C4/I4):** The kernel tracks which entry signal it cleared for [trainId]
 	 * during [requestRoute]. [exitSignal] is **for logging/audit only** and is NOT used to select
@@ -388,8 +389,9 @@ interface InterlockingFacade {
 	 * disrupt another train's cleared entry signal.
 	 *
 	 * **On invocation:**
-	 * - All blocks reserved for [trainId] are released (state transitions: RESERVED/OCCUPIED → FREE).
-	 * - All switches locked for [trainId] are unlocked.
+	 * - Blocks reserved for [trainId] are released (RESERVED → FREE), except approach-locked,
+	 *   occupied or deferral-window blocks, which stay RESERVED.
+	 * - Switches locked for [trainId] are unlocked.
 	 * - The entry signal the kernel cleared for [trainId] is reset to STOP (safe aspect).
 	 * - If [trainId] has no active route, the call succeeds silently (idempotent).
 	 *

@@ -20,6 +20,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathRelease
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
@@ -46,6 +47,7 @@ import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -284,7 +286,8 @@ class InterlockingFacadeTest : KoinTestBase() {
 			blocks: Collection<DynamicTrackBlock> = emptyList(),
 			switches: Collection<DynamicRailSwitch> = emptyList(),
 			semaphores: Collection<DynamicRailSemaphore> = emptyList(),
-			releasePathThrows: Boolean = false
+			releasePathThrows: Boolean = false,
+			deferredBlocks: Collection<DynamicTrackBlock> = emptyList()
 		): Pair<SimulationEnvironment, PathReservationRegistry> {
 			val cells: List<Cell> = switches.toList() + semaphores.toList()
 			val grid = mockk<RailwayNetGrid<Cell>>(relaxed = true)
@@ -314,23 +317,32 @@ class InterlockingFacadeTest : KoinTestBase() {
 			every { reservationService.hasClearedSignals(any()) } answers {
 				clearedSemaphores[firstArg<String>()]?.isNotEmpty() == true
 			}
+
+			// Mirrors DefaultPathReservationService's release: a block in [deferredBlocks] is kept
+			// reserved and registered (the approach lock's outcome), every other block of the train
+			// is freed together with its switches and cleared signals.
+			fun release(trainId: String): PathRelease {
+				val owned = registry.getBlocks(trainId)
+				val kept = owned.filter { it in deferredBlocks }
+				val released = owned - kept.toSet()
+				registry.getSwitches(trainId).forEach { it.unlock() }
+				registry.unregisterSwitches(trainId)
+				released.forEach { registry.unregisterBlock(trainId, it) }
+				if (kept.isEmpty()) registry.unregister(trainId)
+				clearedSemaphores.remove(trainId)?.forEach { sem ->
+					if (semaphoreClearedFor[sem] == trainId) {
+						semaphoreClearedFor.remove(sem)
+						sem.signal = Signal.STOP
+					}
+				}
+				return PathRelease(released, kept)
+			}
 			if (releasePathThrows) {
 				every { reservationService.releasePath(any()) } throws IllegalStateException("releasePath boom")
+				every { reservationService.releasePathDetailed(any()) } throws IllegalStateException("releasePath boom")
 			} else {
-				every { reservationService.releasePath(any()) } answers {
-					val trainId = firstArg<String>()
-					val released = registry.getBlocks(trainId)
-					registry.getSwitches(trainId).forEach { it.unlock() }
-					registry.unregister(trainId)
-					registry.unregisterSwitches(trainId)
-					clearedSemaphores.remove(trainId)?.forEach { sem ->
-						if (semaphoreClearedFor[sem] == trainId) {
-							semaphoreClearedFor.remove(sem)
-							sem.signal = Signal.STOP
-						}
-					}
-					released
-				}
+				every { reservationService.releasePath(any()) } answers { release(firstArg()).released }
+				every { reservationService.releasePathDetailed(any()) } answers { release(firstArg()) }
 			}
 
 			val routingServices = mockk<RoutingServices>(relaxed = true)
@@ -634,7 +646,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 		}
 
 		@Test
-		@DisplayName("I1: releaseRoute propagates releasePath failures instead of swallowing them")
+		@DisplayName("I1: releaseRoute propagates releasePathDetailed failures instead of swallowing them")
 		fun releaseRouteDoesNotSwallowExceptions() {
 			val u1 = block("U1")
 			val v1 = switch("V1")
@@ -649,10 +661,10 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
 				routeS1S2(running = listOf(plusSetting))
-			// Grant succeeds — releasePath is not called on a successful grant.
+			// Grant succeeds — release is not called on a successful grant.
 			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
-			// releaseRoute must let the releasePath failure propagate (no silent swallow).
+			// releaseRoute must let the releasePathDetailed failure propagate (no silent swallow).
 			assertThrows<IllegalStateException> {
 				facade.releaseRoute("T1", SignalId("S1"))
 			}
@@ -735,12 +747,43 @@ class InterlockingFacadeTest : KoinTestBase() {
 
 			facade.releaseRoute("T1", SignalId("S1"))
 
-			// All-or-nothing MVP: every block and switch for T1 is released at once.
+			// Nothing is deferred here, so every block and switch for T1 is released at once.
 			assertThat(registry.getOwner(u1)).isNull()
 			assertThat(registry.getOwner(u2)).isNull()
 			assertThat(v1.locked).isFalse()
 			assertThat(v2.locked).isFalse()
 			assertThat(s1.signal).isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		@DisplayName("Issue #974: releaseRoute keeps an approach-locked block reserved and frees the rest")
+		fun releaseRouteKeepsDeferredBlockReserved() {
+			val u1 = block("U1")
+			val u2 = block("U2")
+			val v1 = switch("V1")
+			val s1 = semaphore("S1", Signal.STOP)
+			val (e, registry) =
+				env(
+					blocks = listOf(u1, u2),
+					switches = listOf(v1),
+					semaphores = listOf(s1),
+					deferredBlocks = listOf(u1)
+				)
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				routeS1S2(blocks = listOf(BlockId("U1"), BlockId("U2")), running = listOf(plusSetting))
+			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			facade.releaseRoute("T1", SignalId("S1"))
+
+			// Same outcome as the port's releaseRouteDetailed: the deferred block stays registered...
+			assertThat(registry.getOwner(u1)).isEqualTo("T1")
+			assertThat(registry.getOwner(u2)).isNull()
+			assertThat(v1.locked).isFalse()
+			// ...but the entry signal is still reset, so no proceed aspect guards the kept block.
+			assertThat(s1.signal).isEqualTo(Signal.STOP)
+			val service = e.getRoutingServices().getPathReservationService()
+			verify(exactly = 1) { service.releasePathDetailed("T1") }
 		}
 
 		// ── requestRouteByEndpoints (SP3.5, Issue #573) ─────────────────────

@@ -32,7 +32,7 @@ The simulator has **one** release path (the six call sites in [PATH_RESERVATION_
    This covers the *admission* hazard: a train is never given proceed authority over unreserved track at entry.
 2. **Live-aspect re-read at every semaphore** — the train's `Front` consults the signal when it reaches the semaphore's decision point (`Train.kt` ~:440-461): on `Signal.STOP` it halts and suspends in `waitUntil(allowingSignal(...))`. The aspect consulted is the live one, not one sighted earlier and acted upon past the decision point, and the kinematics stop the train exactly at the signal boundary (no overrun physics — see §B3).
 
-The *storno* time-release timer is a real-world defence against a human driver who has already sighted a (soon-cancelled) proceed aspect and can no longer be stopped short of the signal. This simulator has no such driver: a cancellation reverts the aspect to STOP, and a train approaching the now-cancelled boundary reads STOP and halts there. Note precisely which mechanism the absence of the timer rests on: **`releaseRoute` has no stopped-train/velocity guard — after a cancellation removes the reservation, reservation gating alone no longer protects a train that was previously cleared.** Safety therefore rides on the live-aspect re-read plus the ideal stop at the boundary, not on "reservation before clear" alone. (gemma4 Phase 4 Q2 ruling: SIMPLIFICATION-ACCEPTABLE.)
+The *storno* time-release timer is a real-world defence against a human driver who has already sighted a (soon-cancelled) proceed aspect and can no longer be stopped short of the signal. This simulator has no such driver: a cancellation reverts the aspect to STOP, and a train approaching the now-cancelled boundary reads STOP and halts there. Note precisely which mechanism the absence of the timer rests on: **the release has no stopped-train/velocity guard of its own — its guard is the approach lock (a block that is approach-locked, occupied or inside the deferral window is kept reserved, Issues #1050 and #974), and once a cancellation does remove a reservation, reservation gating alone no longer protects a train that was previously cleared.** Safety therefore rides on the live-aspect re-read plus the ideal stop at the boundary, not on "reservation before clear" alone. (gemma4 Phase 4 Q2 ruling: SIMPLIFICATION-ACCEPTABLE.)
 
 **Invariant for future changes:** any change to braking, signal response, or the admission gate must preserve "the train consults the live aspect at the semaphore and stops at the boundary on STOP". Weakening that invariant (e.g. caching a previously-seen proceed aspect, letting a train carry velocity past a reverted signal, or adding overrun physics) silently imports exactly the hazard the *storno* timer exists to prevent — at which point approach locking becomes mandatory here too.
 
@@ -40,7 +40,7 @@ A grep of `core/src/commonMain` and `dispatcher-agent/src/main` confirms that "s
 
 ### The "cancelled between clearance and first movement" edge case — measured (#834, SP2c.11)
 
-The one moment the guard-less `releaseRoute` noted above could bite hardest is the narrowest one: after `Train.actions()`'s admission gate (`waitUntil { isPathReservedForTrain(...) }`) has passed but before the `Front` has moved a metre. The `Front`'s first loop iteration sits at the entry `InOut` with `current == null`, and `Train.kt`'s `if (path == null || next == null) { if (where is DynamicInOut) break }` makes a missing route there an immediate exit from the movement loop rather than the wait-for-dispatcher branch every later position takes.
+The one moment the release's missing velocity guard (noted above) could bite hardest is the narrowest one: after `Train.actions()`'s admission gate (`waitUntil { isPathReservedForTrain(...) }`) has passed but before the `Front` has moved a metre. The `Front`'s first loop iteration sits at the entry `InOut` with `current == null`, and `Train.kt`'s `if (path == null || next == null) { if (where is DynamicInOut) break }` makes a missing route there an immediate exit from the movement loop rather than the wait-for-dispatcher branch every later position takes.
 
 Two things were established about it, and neither required a `core/` change:
 
@@ -89,7 +89,7 @@ Real interlocking has three distinct locking mechanisms with different release c
 2. **Route locking** (*Závěr*) — the route itself, released progressively behind the train.
 3. **Section locking** (track-circuit hold) — a section stays locked while physically occupied, independent of route.
 
-The simulator has **one** release path that conflates all three: `releasePath` / `unregister` / `unregisterBlock` free a block when it transitions to FREE (on `leave()`) or when the route is cancelled, with no separate approach-timer or section-circuit distinction.
+The simulator has **one** release path that conflates all three: `releasePath` / `unregister` / `unregisterBlock` (and the approach-locked `releasePathDetailed`, which the production port's `releaseRouteDetailed` and the facade's `releaseRoute` both use and which keeps approach-locked, occupied and deferral-window blocks reserved) free a block when it transitions to FREE (on `leave()`) or when the route is cancelled, with no separate approach-timer or section-circuit distinction.
 
 ### Mapping to ESA-11 terminology
 

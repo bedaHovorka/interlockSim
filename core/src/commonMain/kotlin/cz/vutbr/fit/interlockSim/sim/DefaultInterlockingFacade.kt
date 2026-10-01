@@ -247,14 +247,17 @@ class DefaultInterlockingFacade(
 	) {
 		logger.debug { "releaseRoute: trainId=$trainId, exitSignal=${exitSignal.name} (audit only)" }
 
-		// Release all blocks and switches reserved for this train (shared registry — see the
-		// class KDoc — so this clears everything locked by requestRoute()). releasePath is
-		// idempotent: an unknown trainId yields an empty list and touches nothing.
-		// Plain releasePath, NOT releasePathDetailed: this facade is test-only today; a
-		// production caller must go through the approach-locked release (Issue #1050), or it
-		// can free a block a train is mid-booking inside the hold(1.0) window.
-		val releasedBlocks = env.getRoutingServices().getPathReservationService().releasePath(trainId)
-		logger.info { "Released ${releasedBlocks.size} blocks for trainId=$trainId" }
+		// Whole-route release through the approach lock (Issue #974): the same release the port's
+		// releaseRouteDetailed performs. A block the train occupies, a block that is approach-locked
+		// and a block inside the hold(1.0) deferral window stay RESERVED and registered (reported as
+		// deferred); every other block and switch of the train is freed. Idempotent: an unknown
+		// trainId yields an empty result and touches nothing. Production releases through the port
+		// (NetworkActuatorPort.releaseRouteDetailed); this facade method has no production caller.
+		val release = env.getRoutingServices().getPathReservationService().releasePathDetailed(trainId)
+		logger.info {
+			"Released ${release.released.size} blocks for trainId=$trainId; " +
+				"${release.deferred.size} blocks deferred (kept reserved)"
+		}
 
 		// C4/I4: reset exactly the entry signal the kernel cleared for this train. The caller's
 		// exitSignal is audit-only and never selects a signal to reset, so a caller error (wrong
