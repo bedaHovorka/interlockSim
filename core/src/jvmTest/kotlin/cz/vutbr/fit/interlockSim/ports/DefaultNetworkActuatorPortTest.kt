@@ -529,7 +529,8 @@ class DefaultNetworkActuatorPortTest {
 		 * carries a [InterlockingFacade.RouteResponse.DenialCause.ConditionFailed] cause with a
 		 * retryable flag. The facade branch must preserve that flag (and the reason) into
 		 * [RouteRequestResult.ConditionFailed] rather than collapsing transient contention onto the
-		 * permanent [RouteRequestResult.NoRouteExists] side the way [DenialCause.Other] does.
+		 * permanent [RouteRequestResult.NoRouteExists] side the way the residual `DenialCause.Other`
+		 * did before Issue #968 removed it.
 		 */
 		@ParameterizedTest
 		@CsvSource("true", "false")

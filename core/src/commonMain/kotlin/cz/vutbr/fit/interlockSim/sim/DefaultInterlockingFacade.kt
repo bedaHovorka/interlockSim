@@ -15,7 +15,6 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.lang.toSignal
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
-import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchPosition
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchSetting
@@ -301,110 +300,11 @@ class DefaultInterlockingFacade(
 		val toEndpoint =
 			resolveEndpoint(toEndpointName) ?: return unresolvedEndpointDenial(toEndpointName)
 
-		return when (
-			val result =
-				env
-					.getRoutingServices()
-					.getPathReservationService()
-					.reservePath(trainId, fromEndpoint, toEndpoint)
-		) {
-			is PathReservationService.ReservationResult.Success -> {
-				// Every physically reserved block must be represented here, even if unnamed —
-				// silently dropping unnamed blocks (via mapNotNull on the name) would undercount
-				// blocksCount downstream in DefaultNetworkActuatorPort.requestRoute's
-				// RouteRequestResult.Reserved, which is what the dispatcher/tool caller observes.
-				val blocks = result.reservedBlocks.mapIndexed { index, b -> BlockId(b.name ?: "unnamed-$index") }
-				val route =
-					TrainRoute(
-						from = SignalId(fromEndpointName),
-						to = SignalId(toEndpointName),
-						running = emptyList(),
-						blocks = blocks
-					)
-				logger.info {
-					"Route GRANTED (by endpoints) for trainId=$trainId: " +
-						"${blocks.size} blocks reserved ($fromEndpointName → $toEndpointName)"
-				}
-				InterlockingFacade.RouteResponse.Granted(Aspect.Volno, route)
-			}
-			is PathReservationService.ReservationResult.NoPathExists -> {
-				logger.info {
-					"Route DENIED for trainId=$trainId: no path exists " +
-						"$fromEndpointName → $toEndpointName"
-				}
-				InterlockingFacade.RouteResponse.Denied(
-					"No path exists: $fromEndpointName → $toEndpointName",
-					InterlockingFacade.RouteResponse.DenialCause.NoPath
-				)
-			}
-			is PathReservationService.ReservationResult.AllPathsBlocked -> {
-				logger.info {
-					"Route DENIED for trainId=$trainId: all paths blocked " +
-						"(attempts: ${result.attemptedPaths}, $fromEndpointName → $toEndpointName)"
-				}
-				InterlockingFacade.RouteResponse.Denied(
-					"All paths blocked ($fromEndpointName → $toEndpointName, " +
-						"attempts: ${result.attemptedPaths})",
-					// The same count that is formatted into the reason above, now also carried
-					// machine-readably: before Issue #834 task alpha-7a the facade branch of
-					// DefaultNetworkActuatorPort reported attemptedPaths=0 for every denial,
-					// contradicting RouteRequestResult.AllPathsBlocked's own contract.
-					InterlockingFacade.RouteResponse.DenialCause.AllPathsBlocked(result.attemptedPaths)
-				)
-			}
-			is PathReservationService.ReservationResult.Conflict -> {
-				val blockName = result.conflictingBlock.name ?: "?"
-				logger.info {
-					"Route DENIED for trainId=$trainId: conflict at block $blockName " +
-						"(train ${result.existingOwner})"
-				}
-				InterlockingFacade.RouteResponse.Denied(
-					"Block $blockName occupied by train ${result.existingOwner}",
-					// The cause carries the block's REAL name (null when unnamed), not the "?"
-					// placeholder the human-readable reason substitutes, so a caller can identify
-					// the block rather than re-parse the text.
-					InterlockingFacade.RouteResponse.DenialCause.Conflict(
-						blockName = result.conflictingBlock.name,
-						existingOwner = result.existingOwner
-					)
-				)
-			}
-			is PathReservationService.ReservationResult.NonContiguousStart -> {
-				// Issue #893 (task A-R1b): the requested origin is nowhere near this train. The
-				// reason string already names the origin and the legal alternatives, so it is
-				// forwarded as-is; the NonContiguousStart cause lets DefaultNetworkActuatorPort
-				// map this denial to RouteRequestResult.OriginNotContiguous.
-				logger.info {
-					"Route DENIED for trainId=$trainId: non-contiguous origin ($fromEndpointName): ${result.reason}"
-				}
-				InterlockingFacade.RouteResponse.Denied(
-					result.reason,
-					InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart
-				)
-			}
-			is PathReservationService.ReservationResult.GeometricallyImpossible -> {
-				// Issue #903: a permanent impossibility (rear-facing START or unconfigurable
-				// switch), not ordinary contention. The GeometricallyImpossible cause lets
-				// DefaultNetworkActuatorPort map this denial to its own
-				// RouteRequestResult.GeometricallyImpossible, excluded from the contention bucket.
-				logger.info {
-					"Route DENIED for trainId=$trainId: geometrically impossible " +
-						"($fromEndpointName → $toEndpointName): ${result.reason}"
-				}
-				InterlockingFacade.RouteResponse.Denied(
-					result.reason,
-					InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible(result.reason)
-				)
-			}
-			is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
-				// Issue #1066: nothing was mutated and no block was busy, so not AllPathsBlocked.
-				logger.info { "Route DENIED for trainId=$trainId: diverges from held route: ${result.reason}" }
-				InterlockingFacade.RouteResponse.Denied(
-					"Route already continues toward ${result.heldTarget}; extend from it or cancel the route first",
-					InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute(result.heldTarget, result.reason)
-				)
-			}
-		}
+		return env
+			.getRoutingServices()
+			.getPathReservationService()
+			.reservePath(trainId, fromEndpoint, toEndpoint)
+			.toRouteResponse(trainId, fromEndpointName, toEndpointName)
 	}
 
 	/**

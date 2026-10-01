@@ -121,7 +121,8 @@ interface InterlockingFacade {
 			 *
 			 * @property attemptedPaths Number of topological candidate paths that were checked —
 			 *   the kernel's own `candidatePaths.size`, forwarded unchanged. A denial with no
-			 *   candidate-path count behind it is [Other], never this.
+			 *   candidate-path count behind it is never this — it names its own cause
+			 *   ([UnresolvedEndpoint], [ConditionFailed]).
 			 */
 			data class AllPathsBlocked(
 				val attemptedPaths: Int
@@ -198,14 +199,12 @@ interface InterlockingFacade {
 
 			/**
 			 * One of the four ESA-11 route conditions ([requestRoute]) failed. Distinct from
-			 * [Other] (the endpoint-resolution residual): this cause has a four-condition denial
-			 * behind it, not an unresolvable endpoint, and it carries a [retryable] flag so a
-			 * caller routing it through
+			 * [UnresolvedEndpoint], an endpoint-resolution refusal: this cause has a
+			 * four-condition denial behind it, not an unresolvable endpoint, and it carries a
+			 * [retryable] flag so a caller routing it through
 			 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.requestRoute]'s
 			 * `classifyDenial` does not collapse transient contention onto the permanent
-			 * [NoPath]/[NonContiguousStart] side the way [Other] →
-			 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.RouteRequestResult.NoRouteExists]
-			 * would.
+			 * [NoPath]/[NonContiguousStart] side.
 			 *
 			 * `retryable` is decided per underlying reason at the denial site (a
 			 * traffic-simulation-expert ruling, sanity-checked with gemma4):
@@ -253,21 +252,6 @@ interface InterlockingFacade {
 			data class UnresolvedEndpoint(
 				val endpointName: String
 			) : DenialCause
-
-			/**
-			 * Residual cause: a denial with no reservation outcome behind it and no four-condition
-			 * failure behind it either, so no candidate-path count, conflicting owner, or
-			 * retryability flag exists to report.
-			 *
-			 * No production path produces it since Issue #973: the endpoint-resolution failures of
-			 * [requestRouteByEndpoints] carry [UnresolvedEndpoint], and four-condition
-			 * [requestRoute] denials use [ConditionFailed].
-			 *
-			 * Callers must **not** classify this as contention — there is no count to report and
-			 * a retry is not indicated. See
-			 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.requestRoute].
-			 */
-			data object Other : DenialCause
 		}
 
 		/**
@@ -280,13 +264,14 @@ interface InterlockingFacade {
 		 *                 Suitable for dispatcher operator display and agent LLM context.
 		 *                 **Prose only** — never parse it; branch on [cause] instead.
 		 * @property cause Machine-readable discriminant for this denial (Issue #834, task
-		 *   alpha-7a). Defaults to [DenialCause.Other], the residual cause, so a denial raised
-		 *   without a reservation outcome behind it can never be mistaken for contention.
-		 *   [requestRouteByEndpoints] populates it from the kernel result it already holds.
+		 *   alpha-7a). Required, with no default and no residual cause (Issue #968): every site
+		 *   that raises a denial names the cause that produced it, so a denial can never be
+		 *   mistaken for contention by omission. [requestRouteByEndpoints] populates it from the
+		 *   kernel result it already holds.
 		 */
 		data class Denied(
 			val reason: String,
-			val cause: DenialCause = DenialCause.Other
+			val cause: DenialCause
 		) : RouteResponse
 	}
 
@@ -376,10 +361,9 @@ interface InterlockingFacade {
 	 * @return [RouteResponse.Granted] with a minimal [TrainRoute] (block list from reservation) if
 	 *         the path was reserved; otherwise [RouteResponse.Denied] with an English reason **and**
 	 *         a [RouteResponse.DenialCause] identifying which reservation outcome produced it
-	 *         (Issue #834, task alpha-7a). Every implementation must set a cause other than
-	 *         [RouteResponse.DenialCause.Other] whenever the corresponding
+	 *         (Issue #834, task alpha-7a): the cause the corresponding
 	 *         [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult]
-	 *         is available, and [RouteResponse.DenialCause.UnresolvedEndpoint] for an endpoint name
+	 *         maps to, and [RouteResponse.DenialCause.UnresolvedEndpoint] for an endpoint name
 	 *         it cannot resolve (Issue #973), so callers never have to parse the reason text.
 	 * @since Issue #573 (SP3.5 — Goal 10)
 	 */

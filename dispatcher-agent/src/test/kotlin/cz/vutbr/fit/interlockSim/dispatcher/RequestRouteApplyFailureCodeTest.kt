@@ -43,6 +43,9 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 
 /**
  * Regression tests proving [DispatchDecisionApplier]'s `RequestRoute` path reports the correct
@@ -117,6 +120,54 @@ class RequestRouteApplyFailureCodeTest {
 		every { env.getRailWayNetGrid() } returns grid
 		every { env.getRoutingServices() } returns routingServices
 		return DefaultNetworkActuatorPort(env = env, interlockingFacade = facade)
+	}
+
+	// ── One exhaustive port → applier mapping (Issue #968, owner ruling D7) ──
+
+	/**
+	 * Issue #968: [DispatchDecisionApplier]'s `applyRequestRoute` is the one mapping across the
+	 * port → applier boundary, an exhaustive `when` over [RouteRequestResult] with no `else`.
+	 * This table pins the [ApplyFailureCode] each subtype yields (`null` for `Reserved`);
+	 * [failureCodeTableCoversEveryRouteRequestResultSubtype] makes a new subtype fail here until
+	 * it is named.
+	 */
+	@ParameterizedTest(name = "{0} -> {1}")
+	@MethodSource("cz.vutbr.fit.interlockSim.dispatcher.RequestRouteApplyFailureCodeTest#failureCodeTable")
+	@DisplayName("each RouteRequestResult subtype yields its ApplyFailureCode")
+	fun eachRouteRequestResultYieldsItsFailureCode(
+		result: RouteRequestResult,
+		expected: ApplyFailureCode?
+	) {
+		val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
+		every { networkActuator.requestRoute(any(), any(), any()) } returns result
+		val outcomes = mutableListOf<ActionOutcome>()
+		val queue = ActuatorCommandQueue()
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = networkActuator,
+				onApproveTrain = {},
+				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
+			)
+
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		applier.onControlStep()
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().applyFailure).isEqualTo(expected)
+	}
+
+	/**
+	 * `sealedSubclasses` reports **direct** subclasses only; the hierarchy is flat today, so a
+	 * deeper subtype would need this guard to recurse.
+	 */
+	@Test
+	@DisplayName("the failure-code table covers every RouteRequestResult subtype")
+	fun failureCodeTableCoversEveryRouteRequestResultSubtype() {
+		val results = failureCodeTable().map { it.get()[0] as RouteRequestResult }
+
+		assertThat(RouteRequestResult::class.sealedSubclasses).hasSize(results.size)
+		assertThat(results.map { it::class }.toSet()).isEqualTo(RouteRequestResult::class.sealedSubclasses.toSet())
 	}
 
 	@Test
@@ -739,5 +790,33 @@ class RequestRouteApplyFailureCodeTest {
 			)
 		}
 		return prompts.single()
+	}
+
+	companion object {
+		@JvmStatic
+		fun failureCodeTable(): List<Arguments> =
+			listOf(
+				Arguments.of(RouteRequestResult.Reserved("T1", 2), null),
+				Arguments.of(RouteRequestResult.NoRouteExists("zA", "doA1"), ApplyFailureCode.NO_ROUTE_EXISTS),
+				Arguments.of(RouteRequestResult.UnresolvedEndpoint("doA1"), ApplyFailureCode.UNRESOLVED_ENDPOINT),
+				Arguments.of(RouteRequestResult.AllPathsBlocked(3), ApplyFailureCode.ALL_PATHS_BLOCKED),
+				Arguments.of(RouteRequestResult.Conflict("U7", "T2"), ApplyFailureCode.CONFLICT),
+				Arguments.of(
+					RouteRequestResult.OriginNotContiguous("zA", "T1 holds no block bounded by 'zA'"),
+					ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS
+				),
+				Arguments.of(
+					RouteRequestResult.ConditionFailed("Block U7 occupied by train T2", retryable = true),
+					ApplyFailureCode.CONDITION_FAILED
+				),
+				Arguments.of(
+					RouteRequestResult.GeometricallyImpossible("START semaphore faces away"),
+					ApplyFailureCode.GEOMETRICALLY_IMPOSSIBLE
+				),
+				Arguments.of(
+					RouteRequestResult.DivergesFromHeldRoute("doB2", "diverges"),
+					ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE
+				)
+			)
 	}
 }

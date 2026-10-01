@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
+import cz.vutbr.fit.interlockSim.sim.toRouteResponse
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsByName
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -104,96 +105,45 @@ class DefaultNetworkActuatorPort(
 		// Endpoint existence is validated first (preserving the IllegalArgumentException
 		// contract for unknown names), then the facade handles C1/C3/C4 safety checks.
 		val facade = interlockingFacade
-		if (facade != null) {
-			requireEndpoint(fromEndpointName)
-			requireEndpoint(toEndpointName)
-			return when (val response = facade.requestRouteByEndpoints(trainName, fromEndpointName, toEndpointName)) {
-				is InterlockingFacade.RouteResponse.Granted ->
-					RouteRequestResult.Reserved(
-						trainName = trainName,
-						blocksCount = response.lockedRoute.blocks.size
-					)
-				is InterlockingFacade.RouteResponse.Denied -> {
-					logger.debug {
-						"requestRoute: denied by interlocking for $trainName " +
-							"($fromEndpointName → $toEndpointName): ${response.reason}"
-					}
-					classifyDenial(trainName, fromEndpointName, toEndpointName, response)
-				}
+		val response =
+			if (facade != null) {
+				requireEndpoint(fromEndpointName)
+				requireEndpoint(toEndpointName)
+				facade.requestRouteByEndpoints(trainName, fromEndpointName, toEndpointName)
+			} else {
+				// Legacy path (no facade): direct PathReservationService.reservePath. Used by the
+				// :fast-sim native binary and tests that run without Koin DI. It composes the very
+				// same two mappings the facade path uses (Issue #968): the kernel result goes
+				// through ReservationResult.toRouteResponse, then through classifyDenial below, so
+				// the two branches cannot classify one kernel outcome differently.
+				val from = requireEndpoint(fromEndpointName)
+				val to = requireEndpoint(toEndpointName)
+				pathReservationService
+					.reservePath(trainName, from, to)
+					.toRouteResponse(trainName, fromEndpointName, toEndpointName)
 			}
-		}
-
-		// Legacy path (no facade): direct PathReservationService.reservePath.
-		// Used by :fast-sim native binary and tests that run without Koin DI.
-		val from = requireEndpoint(fromEndpointName)
-		val to = requireEndpoint(toEndpointName)
-
-		return when (val result = pathReservationService.reservePath(trainName, from, to)) {
-			is PathReservationService.ReservationResult.Success ->
+		return when (response) {
+			is InterlockingFacade.RouteResponse.Granted ->
 				RouteRequestResult.Reserved(
 					trainName = trainName,
-					blocksCount = result.reservedBlocks.size
+					blocksCount = response.lockedRoute.blocks.size
 				)
-			is PathReservationService.ReservationResult.NoPathExists -> {
-				logger.debug { "requestRoute: no topology path $fromEndpointName → $toEndpointName" }
-				RouteRequestResult.NoRouteExists(fromEndpointName, toEndpointName)
-			}
-			is PathReservationService.ReservationResult.AllPathsBlocked -> {
+			is InterlockingFacade.RouteResponse.Denied -> {
 				logger.debug {
-					"requestRoute: all paths blocked $fromEndpointName → $toEndpointName " +
-						"(attempted: ${result.attemptedPaths})"
+					"requestRoute: denied for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${response.reason}"
 				}
-				RouteRequestResult.AllPathsBlocked(result.attemptedPaths)
-			}
-			is PathReservationService.ReservationResult.Conflict -> {
-				// A path exists but a block along it is already owned by another train.
-				// Surface who is blocking so a dispatcher can wait for that specific train
-				// rather than collapsing this into AllPathsBlocked (which would discard the
-				// owner/block and report attemptedPaths=0, contradicting its own contract).
-				logger.warn {
-					"requestRoute: conflict reserving $fromEndpointName → $toEndpointName for " +
-						"$trainName — block '${result.conflictingBlock.name ?: "unnamed"}' " +
-						"owned by '${result.existingOwner}'"
-				}
-				RouteRequestResult.Conflict(
-					blockName = result.conflictingBlock.name,
-					existingOwner = result.existingOwner
-				)
-			}
-			is PathReservationService.ReservationResult.NonContiguousStart -> {
-				// The train is nowhere near fromEndpointName; reserving would lock track it can
-				// never reach. Surfaced as its own result rather than folded into AllPathsBlocked
-				// so the caller can tell "ask again later" from "ask for a different origin".
-				logger.warn {
-					"requestRoute: non-contiguous origin for $trainName " +
-						"($fromEndpointName → $toEndpointName): ${result.reason}"
-				}
-				RouteRequestResult.OriginNotContiguous(fromEndpointName, result.reason)
-			}
-			is PathReservationService.ReservationResult.GeometricallyImpossible -> {
-				// Issue #903: a permanent impossibility (rear-facing START or unconfigurable
-				// switch), not ordinary contention. Surfaced as its own result rather than folded
-				// into AllPathsBlocked, same reasoning as NonContiguousStart above.
-				logger.warn {
-					"requestRoute: geometrically impossible route for $trainName " +
-						"($fromEndpointName → $toEndpointName): ${result.reason}"
-				}
-				RouteRequestResult.GeometricallyImpossible(result.reason)
-			}
-			is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
-				// Issue #1066: no block was busy; the request does not continue the held route.
-				logger.warn {
-					"requestRoute: route diverges from the held route for $trainName " +
-						"($fromEndpointName → $toEndpointName): ${result.reason}"
-				}
-				RouteRequestResult.DivergesFromHeldRoute(result.heldTarget, result.reason)
+				classifyDenial(trainName, fromEndpointName, toEndpointName, response)
 			}
 		}
 	}
 
 	/**
-	 * Translates an [InterlockingFacade.RouteResponse.Denied] into the [RouteRequestResult] the
-	 * legacy/no-facade branch of [requestRoute] would produce for the very same kernel outcome.
+	 * The **one** mapping across the facade → port boundary (Issue #968, owner ruling D7):
+	 * translates an [InterlockingFacade.RouteResponse.Denied] into its [RouteRequestResult]. Both
+	 * branches of [requestRoute] go through it — the legacy/no-facade branch after
+	 * [cz.vutbr.fit.interlockSim.sim.toRouteResponse] — so one kernel outcome always classifies
+	 * the same way.
 	 *
 	 * ## Why this is exhaustive, with no `else`
 	 *
@@ -212,18 +162,18 @@ class DefaultNetworkActuatorPort(
 	 *   booking the failure as ordinary contention, which the sweep's invalid-output metric
 	 *   deliberately excludes.
 	 *
-	 * The mapping is chosen so that **identical `ReservationResult` ⇒ identical
-	 * `RouteRequestResult` on both branches**; see the branch-equivalence property in
-	 * `DefaultNetworkActuatorPortTest`.
+	 * Since Issue #968 **identical `ReservationResult` ⇒ identical `RouteRequestResult` on both
+	 * branches** holds by construction (one shared chain), and the branch-equivalence property in
+	 * `DefaultNetworkActuatorPortTest` still pins it.
 	 *
 	 * [InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint] — an endpoint name the
 	 * kernel could not resolve, so the refusal never reached pathfinding — maps to
 	 * [RouteRequestResult.UnresolvedEndpoint] naming that endpoint (Issue #973). It has no
 	 * legacy/no-facade counterpart: that branch has no endpoint-resolution step of its own.
 	 *
-	 * [InterlockingFacade.RouteResponse.DenialCause.Other] — a denial with no reservation behind
-	 * it, so no candidate-path count exists — maps to `NoRouteExists`, never to `AllPathsBlocked`:
-	 * a fabricated count of `0` is worse than no count, and such a denial is not contention.
+	 * There is no residual cause: the former `DenialCause.Other`, which collapsed onto
+	 * `NoRouteExists`, was removed by Issue #968 once no production path produced it, so every
+	 * denial names its cause at the site that raises it.
 	 *
 	 * @since Issue #834 (SP2c.11 — Goal 10, task alpha-7a)
 	 */
@@ -276,20 +226,10 @@ class DefaultNetworkActuatorPort(
 				}
 				RouteRequestResult.UnresolvedEndpoint(cause.endpointName)
 			}
-			is InterlockingFacade.RouteResponse.DenialCause.Other -> {
-				// Residual: the kernel denied without attempting a reservation, so no
-				// candidate-path count and no owning train exist.
-				// Reported as a permanent refusal rather than contention -- see this method's KDoc.
-				logger.warn {
-					"requestRoute: denied without a reservation outcome for $trainName " +
-						"($fromEndpointName → $toEndpointName): ${response.reason}"
-				}
-				RouteRequestResult.NoRouteExists(fromEndpointName, toEndpointName)
-			}
 			is InterlockingFacade.RouteResponse.DenialCause.ConditionFailed -> {
 				// A four-condition requestRoute refusal (Issue #834 review finding #2): the kernel
 				// denied before/without a reservation-service outcome, so there is no candidate-path
-				// count and no owning train — but unlike Other, the retryability flag is meaningful
+				// count and no owning train — but the retryability flag is meaningful
 				// (a block occupied by another train is transient; an empty route is permanent).
 				// Preserve the flag rather than collapsing onto NoRouteExists (which would mislabel
 				// transient contention as permanent) or AllPathsBlocked (which would invent a count).
