@@ -94,7 +94,7 @@ class AlgorithmicTrainDecisionPolicy : TrainDecisionPolicy {
 			return TrainAccelerationDecision(
 				target,
 				0.0,
-				"Dispatcher hold order active; braking to a stand"
+				listOf("Dispatcher hold order active; braking to a stand")
 			)
 		}
 		return ReactiveTrainDecider.decide(reading)

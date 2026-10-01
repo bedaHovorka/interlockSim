@@ -52,15 +52,17 @@ enum class AccelerationTarget {
  * @property target The qualitative intent (accelerate / coast / brake).
  * @property targetSpeedMps The permitted target speed in **m/s** (≥ 0) the agent should
  *   command. `0.0` means "stop as quickly as physics allow".
- * @property rationale Short human-readable explanation of why this target was chosen,
- *   for logging and observability.
+ * @property rationale Short human-readable explanation entries of why this target was chosen,
+ *   for logging and observability. Mirrors [DispatchDecision.rationale] on purpose (#799): any
+ *   site that logs it must use `toRationaleLogSuffix()`, so both decision families share one
+ *   log shape.
  *
  * @since Issue #553 (SP2a.2 — Goal 10 reactive train agent)
  */
 data class TrainAccelerationDecision(
 	val target: AccelerationTarget,
 	val targetSpeedMps: Double,
-	val rationale: String
+	val rationale: List<String>
 ) {
 	init {
 		require(targetSpeedMps >= 0.0) { "targetSpeedMps must be >= 0, was $targetSpeedMps" }

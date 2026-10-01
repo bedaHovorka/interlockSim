@@ -11,6 +11,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
@@ -175,6 +176,25 @@ class AlgorithmicTrainDecisionPolicyTest {
 		val decision = policy.decide(reading(signalAhead = Signal.FREE, velocity = 12.0))
 		assertThat(decision.target).isEqualTo(AccelerationTarget.BRAKE)
 		assertThat(decision.targetSpeedMps).isEqualTo(0.0)
+	}
+
+	// ── Rationale content (#799) ───────────────────────────────────────
+
+	@Test
+	fun `hold override rationale is the dispatcher hold entry`() {
+		val policy = AlgorithmicTrainDecisionPolicy()
+		policy.acceptDirective(TrainDirective.HoldImmediately)
+		val decision = policy.decide(reading(signalAhead = Signal.FREE, velocity = 12.0))
+		assertThat(decision.rationale).containsExactly("Dispatcher hold order active; braking to a stand")
+	}
+
+	@Test
+	fun `rationale shares the dispatch decision log suffix shape`() {
+		val policy = AlgorithmicTrainDecisionPolicy()
+		policy.acceptDirective(TrainDirective.HoldImmediately)
+		val decision = policy.decide(reading(signalAhead = Signal.FREE, velocity = 12.0))
+		assertThat(decision.rationale.toRationaleLogSuffix())
+			.isEqualTo(" | rationale: [Dispatcher hold order active; braking to a stand]")
 	}
 
 	// ── Invariants ─────────────────────────────────────────────────────

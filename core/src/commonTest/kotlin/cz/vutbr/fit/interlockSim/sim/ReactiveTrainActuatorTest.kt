@@ -49,7 +49,7 @@ class ReactiveTrainActuatorTest {
 	@Test
 	fun `applyDecision ACCELERATE forwards targetSpeedMps to setTargetSpeed`() {
 		val actuator = RecordingActuator()
-		val decision = TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 20.0, "Volno ahead")
+		val decision = TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 20.0, listOf("Volno ahead"))
 
 		ReactiveTrainActuator.applyDecision(decision, actuator)
 
@@ -62,7 +62,7 @@ class ReactiveTrainActuatorTest {
 	@Test
 	fun `applyDecision COAST forwards targetSpeedMps to setTargetSpeed`() {
 		val actuator = RecordingActuator()
-		val decision = TrainAccelerationDecision(AccelerationTarget.COAST, 30.0, "At permitted speed")
+		val decision = TrainAccelerationDecision(AccelerationTarget.COAST, 30.0, listOf("At permitted speed"))
 
 		ReactiveTrainActuator.applyDecision(decision, actuator)
 
@@ -72,7 +72,7 @@ class ReactiveTrainActuatorTest {
 	@Test
 	fun `applyDecision COAST with zero speed calls setTargetSpeed with 0`() {
 		val actuator = RecordingActuator()
-		val decision = TrainAccelerationDecision(AccelerationTarget.COAST, 0.0, "Holding stop at STOP signal")
+		val decision = TrainAccelerationDecision(AccelerationTarget.COAST, 0.0, listOf("Holding stop at STOP signal"))
 
 		ReactiveTrainActuator.applyDecision(decision, actuator)
 
@@ -84,7 +84,7 @@ class ReactiveTrainActuatorTest {
 	@Test
 	fun `applyDecision BRAKE with zero targetSpeed calls setTargetSpeed with 0`() {
 		val actuator = RecordingActuator()
-		val decision = TrainAccelerationDecision(AccelerationTarget.BRAKE, 0.0, "STOP signal ahead")
+		val decision = TrainAccelerationDecision(AccelerationTarget.BRAKE, 0.0, listOf("STOP signal ahead"))
 
 		ReactiveTrainActuator.applyDecision(decision, actuator)
 
@@ -95,7 +95,7 @@ class ReactiveTrainActuatorTest {
 	fun `applyDecision BRAKE with partial targetSpeed caps to that speed`() {
 		// Výstraha case: braking toward a speed limit below current velocity
 		val actuator = RecordingActuator()
-		val decision = TrainAccelerationDecision(AccelerationTarget.BRAKE, 6.0, "Výstraha; brake to 6 m/s")
+		val decision = TrainAccelerationDecision(AccelerationTarget.BRAKE, 6.0, listOf("Výstraha; brake to 6 m/s"))
 
 		ReactiveTrainActuator.applyDecision(decision, actuator)
 
@@ -108,7 +108,7 @@ class ReactiveTrainActuatorTest {
 	fun `applyDecision always produces exactly one setTargetSpeed call`() {
 		val actuator = RecordingActuator()
 		ReactiveTrainActuator.applyDecision(
-			TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 15.0, "run"),
+			TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 15.0, listOf("run")),
 			actuator
 		)
 		assertEquals(1, actuator.speedHistory.size)
@@ -157,11 +157,11 @@ class ReactiveTrainActuatorTest {
 		val actuator = RecordingActuator()
 
 		ReactiveTrainActuator.applyDecision(
-			TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 20.0, "run"),
+			TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 20.0, listOf("run")),
 			actuator
 		)
 		ReactiveTrainActuator.applyDecision(
-			TrainAccelerationDecision(AccelerationTarget.BRAKE, 0.0, "stop"),
+			TrainAccelerationDecision(AccelerationTarget.BRAKE, 0.0, listOf("stop")),
 			actuator
 		)
 
@@ -174,7 +174,7 @@ class ReactiveTrainActuatorTest {
 
 		ReactiveTrainActuator.holdAtStation(30.0, actuator)
 		ReactiveTrainActuator.applyDecision(
-			TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 25.0, "resume"),
+			TrainAccelerationDecision(AccelerationTarget.ACCELERATE, 25.0, listOf("resume")),
 			actuator
 		)
 
@@ -187,7 +187,7 @@ class ReactiveTrainActuatorTest {
 	@Test
 	fun `TrainAccelerationDecision rejects negative targetSpeedMps`() {
 		assertFailsWith<IllegalArgumentException> {
-			TrainAccelerationDecision(AccelerationTarget.BRAKE, -1.0, "invalid")
+			TrainAccelerationDecision(AccelerationTarget.BRAKE, -1.0, listOf("invalid"))
 		}
 	}
 }
