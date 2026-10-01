@@ -4041,10 +4041,20 @@ class DefaultPathReservationService(
 	 * [PathReservationRegistry.registerSwitches]). Such ownership used to survive mainly because a
 	 * scoped rollback path released the owner's adjacent blocks via
 	 * [PathReservationRegistry.unregisterBlock] directly, bypassing [dropFreedBlock]'s
-	 * reclamation; since Issue #961 those paths reclaim through [rollbackBlock], and this step
-	 * remains the guard for ownership left stale any other way (a registry caller outside this
-	 * service, such as the interlocking facade's switch registration). A foreign owner that
-	 * survives this step is live and refuses the candidate in [configureSwitchesInPath] instead.
+	 * reclamation; since Issue #961 those paths reclaim through [rollbackBlock]. This step stays
+	 * (Issue #1103 item 1) because three paths can still leave ownership stale:
+	 * - [dropFreedBlock] drops the block from the registry, then publishes the release event, then
+	 *   reclaims. A release-event listener that throws skips the reclaim. Every committed per-block
+	 *   release runs through it (Train.Tail via [unregisterBlock], [releaseBlock], the approach-lock
+	 *   partial release), and the dispatcher's partial-route releaser contains such a throw.
+	 * - That releaser's last-resort fallback drops a FREE block with
+	 *   [PathReservationRegistry.unregisterBlock] directly, with no reclaim.
+	 * - The registry is public: [PathReservationRegistry.registerSwitches] accepts a switch the
+	 *   train holds no adjacent block for, and a direct [PathReservationRegistry.unregisterBlock]
+	 *   reclaims nothing.
+	 *
+	 * A foreign owner that survives this step is live and refuses the candidate in
+	 * [configureSwitchesInPath] instead.
 	 *
 	 * @since Issue #1076
 	 */

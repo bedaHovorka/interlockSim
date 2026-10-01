@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -23,6 +24,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -105,9 +108,9 @@ class Issue1076RegressionTest : KoinTestBase() {
 	@Timeout(30, unit = TimeUnit.SECONDS)
 	@DisplayName("a same-position candidate over a STALE foreign switch succeeds by reclamation, never by stealing")
 	fun staleForeignOwnershipIsReclaimedInsteadOfStolen() {
-		// Given: vA is registered to a train that holds NO block bounded by it -- the exact stale
-		// window from the issue (a scoped rollback released the owner's adjacent blocks via
-		// registry.unregisterBlock, which bypasses dropFreedBlock's reclamation).
+		// Given: vA is registered to a train that holds NO block bounded by it -- the stale window
+		// from the issue. A rollback no longer leaves it (Issue #961); a direct registry caller still
+		// can, and so can a throwing release listener (see the Issue #1103 test below).
 		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
 		assertThat(switchVA.locked).isTrue()
 
@@ -214,6 +217,71 @@ class Issue1076RegressionTest : KoinTestBase() {
 
 		assertThat(switchVA.locked).isFalse()
 		assertThat(registry.getSwitchOwner(switchVA)).isNull()
+		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
+	}
+
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("the owner's own partial release next to its flank switch keeps the flank claim (Issue #1103)")
+	fun ownersPartialReleaseKeepsTheFlankClaim() {
+		// Given: OTHER_OWNER holds two blocks -- one bounded by vA, one elsewhere on the zA -> doB1
+		// route -- and holds vA as a FLANK grant.
+		val nextToVA = blockNearVAOffCandidatePath()
+		val elsewhere =
+			simulationContext.routeBlocksOf(semaphoreZA, semaphoreDoB1).first { switchVA !in it.ends() }
+		assertThat(registry.registerAtomic(OTHER_OWNER, listOf(nextToVA, elsewhere)))
+			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+		registry.registerFlankSwitches(OTHER_OWNER, listOf(switchVA))
+
+		// When: the owner passes and releases the block next to vA, so it holds no block bounded by vA
+		// any more -- a plain claim would be stale now and reclaimed by the per-block release.
+		nextToVA.setUpPath(nextToVA.ends().first { it != switchVA } as DynamicPathSeparator, OTHER_OWNER)
+		assertThat(service.passAndRelease(OTHER_OWNER, nextToVA)).isTrue()
+
+		// Then: the claim survives in one record, owner and purpose together.
+		assertThat(registry.getBlocks(OTHER_OWNER)).containsExactly(elsewhere)
+		assertThat(registry.getSwitchClaim(switchVA)).isEqualTo(SwitchClaim(OTHER_OWNER, isFlank = true))
+		assertThat(registry.isFlankProtected(switchVA)).isTrue()
+		assertThat(registry.isStaleSwitchOwnership(switchVA)).isFalse()
+		assertThat(switchVA.locked).isTrue()
+	}
+
+	/**
+	 * Issue #1103 item 1: why Step 2e.5 stays. A block release drops the block from the registry, then
+	 * publishes the release event, then reclaims the stale switch locks. A release-event listener that
+	 * throws skips the reclaim, so the released train keeps vA although it holds no block bounded by it.
+	 * Only Step 2e.5 heals that before the next candidate needs vA.
+	 */
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("ownership left stale by a throwing release listener is reclaimed by the next candidate")
+	fun ownershipLeftStaleByAThrowingReleaseListenerIsReclaimedByTheNextCandidate() {
+		// Given: OTHER_OWNER reserves zA -> doB1 over vA and releases every block while a listener
+		// throws on each release event.
+		val reserved = service.reservePath(OTHER_OWNER, semaphoreZA, semaphoreDoB1)
+		assertThat(reserved).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(OTHER_OWNER)
+		val throwing =
+			BlockOccupancyListener { event ->
+				if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) error("listener failure")
+			}
+		registry.addBlockOccupancyListener(throwing)
+		registry.getBlocks(OTHER_OWNER).forEach { block ->
+			runCatching { service.releaseBlock(OTHER_OWNER, block) }
+		}
+		registry.removeBlockOccupancyListener(throwing)
+
+		// The released train holds no block, yet still owns vA: the stale ownership this test is about.
+		assertThat(registry.getBlocks(OTHER_OWNER)).isEmpty()
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(OTHER_OWNER)
+		assertThat(registry.isStaleSwitchOwnership(switchVA)).isTrue()
+
+		// When: the candidate asks for the same route.
+		val result = service.reservePath(CANDIDATE, semaphoreZA, semaphoreDoB1)
+
+		// Then: Step 2e.5 reclaimed vA, so the candidate owns it and both maps agree.
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(CANDIDATE)
 		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
 	}
 

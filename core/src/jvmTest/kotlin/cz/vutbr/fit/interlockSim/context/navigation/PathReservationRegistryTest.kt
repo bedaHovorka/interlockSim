@@ -418,6 +418,54 @@ class PathReservationRegistryTest : KoinTestBase() {
 		}
 
 		@Test
+		fun `a claim records the owner and the purpose in one record`() {
+			// Issue #1103: one record per switch, so the purpose cannot outlive the ownership.
+			val (flankSwitch, plainSwitch) = switches().take(2)
+			registry.registerFlankSwitches("train1", listOf(flankSwitch))
+			registry.registerSwitches("train1", listOf(plainSwitch))
+
+			assertThat(registry.getSwitchClaim(flankSwitch)).isEqualTo(SwitchClaim("train1", isFlank = true))
+			assertThat(registry.getSwitchClaim(plainSwitch)).isEqualTo(SwitchClaim("train1", isFlank = false))
+		}
+
+		@Test
+		fun `every removal drops the purpose with the claim`() {
+			val (first, second) = switches().take(2)
+
+			fun assertNoClaim(
+				switch: DynamicRailSwitch,
+				after: String
+			) {
+				assertThat(registry.getSwitchClaim(switch), "claim after $after").isNull()
+				assertThat(registry.isFlankProtected(switch), "flank after $after").isFalse()
+			}
+			registry.registerFlankSwitches("train1", listOf(first))
+			registry.registerFlankSwitches("train2", listOf(second))
+
+			assertThat(registry.unregisterSwitch("train1", first)).isTrue()
+			assertNoClaim(first, "unregisterSwitch")
+			registry.unregisterSwitches("train2")
+			assertNoClaim(second, "unregisterSwitches")
+
+			registry.registerFlankSwitches("train3", listOf(first))
+			registry.clear()
+			assertNoClaim(first, "clear")
+		}
+
+		@Test
+		fun `a plain re-registration by the same train keeps the flank purpose`() {
+			// The registry cannot tell whether the earlier flank route is still live, so it keeps the
+			// conservative answer until the claim is released.
+			val switch = switches().first()
+			registry.registerFlankSwitches("train1", listOf(switch))
+
+			registry.registerSwitches("train1", listOf(switch))
+
+			assertThat(registry.getSwitchClaim(switch)).isEqualTo(SwitchClaim("train1", isFlank = true))
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
+		}
+
+		@Test
 		fun `registerFlankSwitches on an empty list registers nothing`() {
 			registry.registerFlankSwitches("train1", emptyList())
 
