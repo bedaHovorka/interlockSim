@@ -104,6 +104,46 @@ class KoogAgentPlanAdapterTest {
 			outerBlockInputs = emptyList()
 		)
 
+	/**
+	 * One [TrainPositionReading] for [trainId] at [velocity] — shared by the
+	 * observation builders so the reading's default fields cannot drift apart (#1113 review round).
+	 */
+	private fun createTrainPosition(
+		trainId: String,
+		velocity: Double
+	): TrainPositionReading =
+		TrainPositionReading(
+			trainId = trainId,
+			velocity = velocity,
+			acceleration = 0.0,
+			totalDistance = 0.0,
+			frontSectionName = null
+		)
+
+	/**
+	 * One [TrainPerceptionReading] for [trainId] at [velocity], with a signal ahead named
+	 * [signalAheadName] (or none). Shared by the observation builders like [createTrainPosition].
+	 */
+	private fun createTrainPerception(
+		trainId: String,
+		velocity: Double,
+		signalAheadName: String?
+	): TrainPerceptionReading =
+		TrainPerceptionReading(
+			trainId = trainId,
+			signalAheadName = signalAheadName,
+			signalAheadAspect = null,
+			distanceToSignalAheadMetres = 100.0,
+			currentSpeedLimitMps = 20.0,
+			velocity = velocity,
+			acceleration = 0.0,
+			totalDistance = 0.0,
+			frontSectionName = null,
+			destinationInOutName = "B",
+			scheduledArrivalTime = 0.0,
+			isDwelling = false
+		)
+
 	private fun observationWithQueue(
 		unapprovedTrains: List<QueuedTrainObservation>,
 		approvedTrainCount: Int
@@ -113,13 +153,7 @@ class KoogAgentPlanAdapterTest {
 				SimulationSnapshot.EMPTY.copy(
 					trainPositions =
 						List(approvedTrainCount) { index ->
-							TrainPositionReading(
-								trainId = "active-$index",
-								velocity = 0.0,
-								acceleration = 0.0,
-								totalDistance = 0.0,
-								frontSectionName = null
-							)
+							createTrainPosition(trainId = "active-$index", velocity = 0.0)
 						}
 				),
 			unapprovedTrains = unapprovedTrains,
@@ -143,33 +177,15 @@ class KoogAgentPlanAdapterTest {
 		DispatchObservation(
 			snapshot =
 				SimulationSnapshot.EMPTY.copy(
-					trainPositions =
-						trains.map { (id, velocity) ->
-							TrainPositionReading(
-								trainId = id,
-								velocity = velocity,
-								acceleration = 0.0,
-								totalDistance = 0.0,
-								frontSectionName = null
-							)
-						},
+					trainPositions = trains.map { (id, velocity) -> createTrainPosition(id, velocity) },
 					trainPerceptions =
 						trains
 							.filterKeys { it !in withoutPerception }
 							.map { (id, velocity) ->
-								TrainPerceptionReading(
+								createTrainPerception(
 									trainId = id,
-									signalAheadName = if (id in withoutSignalAhead) null else "S-$id",
-									signalAheadAspect = null,
-									distanceToSignalAheadMetres = 100.0,
-									currentSpeedLimitMps = 20.0,
 									velocity = velocity,
-									acceleration = 0.0,
-									totalDistance = 0.0,
-									frontSectionName = null,
-									destinationInOutName = "B",
-									scheduledArrivalTime = 0.0,
-									isDwelling = false
+									signalAheadName = if (id in withoutSignalAhead) null else "S-$id"
 								)
 							}
 				),

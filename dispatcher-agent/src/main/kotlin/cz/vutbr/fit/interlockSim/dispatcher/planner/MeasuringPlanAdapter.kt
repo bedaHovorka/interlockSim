@@ -246,6 +246,13 @@ class MeasuringPlanAdapter(
 			"[MeasuringPlanAdapter] note: successRate is reclassified in #834 and not comparable " +
 				"to pre-#834 runs (re-keyed onto TickOutcome in #713 without reclassifying any outcome)"
 		}
+		// Issue #988: successRate above also credits LLM_SILENT_ALL_MOVING — the same silent
+		// tick a pre-#988 run scored as a fallback (LLM_SILENT_NONACTIONABLE), so the two figures
+		// cannot be compared across the change (see DefaultDispatcherRunRecorder's parallel note).
+		logger.info {
+			"[MeasuringPlanAdapter] note: successRate rises from #988 on " +
+				"(LLM_SILENT_ALL_MOVING) and is not comparable to pre-#988 runs"
+		}
 	}
 
 	// ── Internal helpers ──────────────────────────────────────────────────────

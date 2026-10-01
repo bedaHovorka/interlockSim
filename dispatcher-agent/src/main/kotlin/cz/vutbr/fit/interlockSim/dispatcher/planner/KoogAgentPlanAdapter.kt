@@ -452,9 +452,13 @@ class KoogAgentPlanAdapter(
 	}
 
 	/**
-	 * The success-path branching (acted via tools / idle station / silent-non-idle station) that
-	 * used to sit inline in [plan] — extracted so [plan] can reach it after either a first-try or a
-	 * retried [InferenceAttempt.Success], both indistinguishable from here on.
+	 * The success-path branching (acted via tools / idle station / all-moving / silent-non-idle
+	 * station) that used to sit inline in [plan] — extracted so [plan] can reach it after either
+	 * a first-try or a retried [InferenceAttempt.Success], both indistinguishable from here on.
+	 *
+	 * Written as a subjectless `when` (Sonar kotlin:S6511) so the four endings read as the
+	 * dispatch table they are; each arm delegates to a named branch fun that owns its own
+	 * logging and tick report.
 	 *
 	 * @param latencyMs Elapsed time of whichever attempt succeeded, from [attemptInference]'s mark.
 	 */
@@ -463,76 +467,110 @@ class KoogAgentPlanAdapter(
 		latencyMs: Long,
 		observation: DispatchObservation
 	): List<DispatchDecision> =
-		if (sinkHolder.actedThisCycle() || decisions.isNotEmpty()) {
-			// The LLM acted via its actuator tools (the emissions were already posted to the
-			// queue through sinkHolder.current) and/or returned decisions directly. Either way
-			// the LLM did its job this cycle — do NOT fall back (would double-dispatch). An
-			// empty returned list with tool emissions is the normal, successful outcome:
-			// decideAsync always returns empty (see KoogDispatchAgentImpl); the load-bearing
-			// signal is the emission counter.
-			//
-			// The `decisions.isNotEmpty()` disjunct is therefore dead-on-purpose under the
-			// current KoogDispatchAgentImpl: decideAsync posts every decision through actuator
-			// tools and returns an empty list, so `decisions` is always empty here. It is kept
-			// as a defensive guard against a future decideAsync that returns decisions directly
-			// (the contract allows it — `plan` returns `List<DispatchDecision>`); if that ever
-			// ships, this disjunct is what makes those decisions count instead of silently
-			// falling back. Do not reason about it as a live path today.
-			//
-			// The emitted actions further split LLM_ACTIONS from LLM_NO_OP (Issue #834,
-			// required change 2): a cycle whose only tool emission(s) were an explicit no_op
-			// is a no-op tick, not an action tick, even though actedThisCycle() is true for
-			// both (see SinkHolder's KDoc on why no_op counts as "acted" for the
-			// double-dispatch guard). The classifier is shared with the failure path
-			// ([outcomeFromEmissions]) so the two cannot drift apart.
-			run {
-				val outcome = outcomeFromEmissions()
-				logger.debug {
-					"KoogAgentPlanAdapter: LLM cycle acted via tools " +
-						"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
-						"(simTime=${observation.snapshot.simTime}); not falling back"
-				}
-				reportTick(outcome, observation.snapshot.simTime, latencyMs)
-				decisions
-			}
-		} else if (isIdleStation(observation)) {
-			// The LLM completed a cycle with no decisions and no tool emissions, and the
-			// station is idle — no active or queued trains, so there is genuinely nothing to
-			// dispatch. This is a correct, healthy outcome (Issue #834), not a failure: report
-			// it as LLM_NO_OP and do NOT consult the fallback dispatcher (there is nothing for
-			// it to do either, and consulting it would mis-score a correct cycle as a
-			// rule-based-fallback run failure — the exact defect #834 reports).
-			logger.debug {
-				"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions on " +
-					"an idle station (no active or queued trains) — reporting LLM_NO_OP, not " +
-					"falling back (simTime=${observation.snapshot.simTime})"
-			}
-			reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime, latencyMs)
-			emptyList()
-		} else if (allTrainsMovingWithPathAhead(observation)) {
-			// Issue #988: a silent cycle while every active train is moving with a reserved path
-			// ahead and nobody is queued — nothing needed dispatching. Score it as an LLM success
-			// and do NOT consult the fallback (it has nothing to add and would mis-score the tick).
-			logger.debug {
-				"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions while all " +
-					"trains move with a path ahead — reporting LLM_SILENT_ALL_MOVING, not falling back " +
-					"(simTime=${observation.snapshot.simTime})"
-			}
-			reportTick(TickOutcome.LLM_SILENT_ALL_MOVING, observation.snapshot.simTime, latencyMs)
-			emptyList()
-		} else {
-			// The LLM completed a cycle but neither acted via tools nor returned a decision,
-			// and the station is NOT idle (there is an active or queued train the LLM left
-			// unaddressed). Consult the fallback dispatcher either way — to get real
-			// decisions, or to discover there are none (Issue #927): a fallback that itself
-			// finds nothing legal to do means this tick was never actionable in the first
-			// place, not a genuine dispatch miss. runFallback classifies the reported
-			// TickOutcome from the returned decision list — see its KDoc.
-			runFallback(observation = observation, latencyMs = latencyMs, outcomeFromFallbackOracle = true) {
-				logger.warn {
-					"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
-						"consulting rule-based fallback (simTime=${observation.snapshot.simTime})"
-				}
+		when {
+			sinkHolder.actedThisCycle() || decisions.isNotEmpty() ->
+				reportActedCycle(decisions, latencyMs, observation)
+
+			isIdleStation(observation) ->
+				reportIdleStationNoOp(latencyMs, observation)
+
+			allTrainsMovingWithPathAhead(observation) ->
+				reportAllMovingSilent(latencyMs, observation)
+
+			else ->
+				consultFallbackOnSilentCycle(latencyMs, observation)
+		}
+
+	/**
+	 * The [handleSuccess] arm for a cycle that acted — via actuator tools (the emissions were
+	 * already posted to the queue through sinkHolder.current) and/or by returning decisions
+	 * directly. Either way the LLM did its job this cycle — do NOT fall back (would
+	 * double-dispatch). An empty returned list with tool emissions is the normal, successful
+	 * outcome: decideAsync always returns empty (see KoogDispatchAgentImpl); the load-bearing
+	 * signal is the emission counter.
+	 *
+	 * The `decisions.isNotEmpty()` disjunct in [handleSuccess] is therefore dead-on-purpose
+	 * under the current KoogDispatchAgentImpl: decideAsync posts every decision through actuator
+	 * tools and returns an empty list, so `decisions` is always empty here. It is kept as a
+	 * defensive guard against a future decideAsync that returns decisions directly (the
+	 * contract allows it — `plan` returns `List<DispatchDecision>`); if that ever ships, this
+	 * disjunct is what makes those decisions count instead of silently falling back. Do not
+	 * reason about it as a live path today.
+	 *
+	 * The emitted actions further split LLM_ACTIONS from LLM_NO_OP (Issue #834, required
+	 * change 2): a cycle whose only tool emission(s) were an explicit no_op is a no-op tick,
+	 * not an action tick, even though actedThisCycle() is true for both (see SinkHolder's KDoc
+	 * on why no_op counts as "acted" for the double-dispatch guard). The classifier is shared
+	 * with the failure path ([outcomeFromEmissions]) so the two cannot drift apart.
+	 */
+	private fun reportActedCycle(
+		decisions: List<DispatchDecision>,
+		latencyMs: Long,
+		observation: DispatchObservation
+	): List<DispatchDecision> {
+		val outcome = outcomeFromEmissions()
+		logger.debug {
+			"KoogAgentPlanAdapter: LLM cycle acted via tools " +
+				"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
+				"(simTime=${observation.snapshot.simTime}); not falling back"
+		}
+		reportTick(outcome, observation.snapshot.simTime, latencyMs)
+		return decisions
+	}
+
+	/**
+	 * The [handleSuccess] arm for a silent cycle on an idle station — no active or queued
+	 * trains, so there is genuinely nothing to dispatch. This is a correct, healthy outcome
+	 * (Issue #834), not a failure: report it as LLM_NO_OP and do NOT consult the fallback
+	 * dispatcher (there is nothing for it to do either, and consulting it would mis-score a
+	 * correct cycle as a rule-based-fallback run failure — the exact defect #834 reports).
+	 */
+	private fun reportIdleStationNoOp(
+		latencyMs: Long,
+		observation: DispatchObservation
+	): List<DispatchDecision> {
+		logger.debug {
+			"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions on " +
+				"an idle station (no active or queued trains) — reporting LLM_NO_OP, not " +
+				"falling back (simTime=${observation.snapshot.simTime})"
+		}
+		reportTick(TickOutcome.LLM_NO_OP, observation.snapshot.simTime, latencyMs)
+		return emptyList()
+	}
+
+	/**
+	 * The [handleSuccess] arm for a silent cycle while every active train is moving with a
+	 * reserved path ahead and nobody is queued (Issue #988) — nothing needed dispatching.
+	 * Score it as an LLM success and do NOT consult the fallback (it has nothing to add and
+	 * would mis-score the tick).
+	 */
+	private fun reportAllMovingSilent(
+		latencyMs: Long,
+		observation: DispatchObservation
+	): List<DispatchDecision> {
+		logger.debug {
+			"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions while all " +
+				"trains move with a path ahead — reporting LLM_SILENT_ALL_MOVING, not falling back " +
+				"(simTime=${observation.snapshot.simTime})"
+		}
+		reportTick(TickOutcome.LLM_SILENT_ALL_MOVING, observation.snapshot.simTime, latencyMs)
+		return emptyList()
+	}
+
+	/**
+	 * The [handleSuccess] arm for a silent cycle on a station that is NOT idle (there is an
+	 * active or queued train the LLM left unaddressed): consult the fallback dispatcher, so
+	 * its decisions are dispatched or it confirms the tick was never actionable (Issue #927).
+	 * [runFallback]'s KDoc owns the outcome classification for that consultation.
+	 */
+	private fun consultFallbackOnSilentCycle(
+		latencyMs: Long,
+		observation: DispatchObservation
+	): List<DispatchDecision> =
+		runFallback(observation = observation, latencyMs = latencyMs, outcomeFromFallbackOracle = true) {
+			logger.warn {
+				"KoogAgentPlanAdapter: LLM cycle produced no decisions and no tool emissions — " +
+					"consulting rule-based fallback (simTime=${observation.snapshot.simTime})"
 			}
 		}
 
@@ -773,7 +811,8 @@ class KoogAgentPlanAdapter(
 				val perception = snapshot.trainPerception(position.trainId)
 				perception != null && perception.velocity > 0.0 && perception.signalAheadName != null
 			} &&
-			(observation.innerBlockInputs + observation.outerBlockInputs).none { needsPathExtension(it) }
+			observation.innerBlockInputs.none { needsPathExtension(it) } &&
+			observation.outerBlockInputs.none { needsPathExtension(it) }
 	}
 
 	/**

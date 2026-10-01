@@ -10,14 +10,26 @@
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import ch.qos.logback.classic.Logger as LogbackLogger
 
 /**
  * Unit tests for [DefaultDispatcherRunRecorder].
@@ -506,6 +518,65 @@ class DefaultDispatcherRunRecorderTest {
 		r.finish(RunEndCause.MANUAL_STOP)
 		// Must not throw even though every railway figure is null.
 		r.logFinalSummary()
+	}
+
+	// ── logFinalSummary log text (#1113 review round) ────────────────────────
+
+	/**
+	 * Verifies the integration point: [DefaultDispatcherRunRecorder.logFinalSummary] actually
+	 * emits the #988 comparability note, not just that the figures underneath it are correct —
+	 * the note is what tells a reader of the log that the printed `llmSuccessRate` and
+	 * `actionableTickRate` cannot be compared with a pre-#988 run's (Issue #988).
+	 *
+	 * Follows the same Logback `ListAppender` pattern as `MeasuringPlanAdapterTest`'s
+	 * `LogFinalSummaryLogText`: an appender attached to the root logger plus temporarily raising
+	 * both the root and the `cz.vutbr.fit.interlockSim.dispatcher` package logger to INFO,
+	 * because `logback-test.xml` pins the dispatcher package to WARN which would otherwise
+	 * suppress the INFO-level note regardless of the root level.
+	 */
+	@Nested
+	@DisplayName("logFinalSummary logs the comparability notes")
+	inner class LogFinalSummaryLogText {
+		private lateinit var appender: ListAppender<ILoggingEvent>
+		private lateinit var rootLogger: LogbackLogger
+		private lateinit var dispatcherLogger: LogbackLogger
+		private var originalRootLevel: Level = Level.WARN
+		private var originalDispatcherLevel: Level = Level.WARN
+
+		@BeforeEach
+		fun attachAppender() {
+			rootLogger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as LogbackLogger
+			dispatcherLogger =
+				LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.dispatcher") as LogbackLogger
+			originalRootLevel = rootLogger.level
+			originalDispatcherLevel = dispatcherLogger.level
+			rootLogger.level = Level.INFO
+			dispatcherLogger.level = Level.INFO
+			appender = ListAppender()
+			rootLogger.addAppender(appender)
+			appender.start()
+		}
+
+		@AfterEach
+		fun detachAppender() {
+			rootLogger.detachAppender(appender)
+			rootLogger.level = originalRootLevel
+			dispatcherLogger.level = originalDispatcherLevel
+		}
+
+		@Test
+		fun `logFinalSummary emits the #988 comparability note`() {
+			recorder().logFinalSummary()
+
+			val noteLines =
+				appender.list
+					.map { it.formattedMessage }
+					.filter { it.contains("not comparable to pre-#988") }
+			assertThat(noteLines).isNotEmpty()
+			assertThat(noteLines.first()).contains("[DispatcherRunRecorder] note:")
+			assertThat(noteLines.first()).contains("llmSuccessRate and actionableTickRate")
+			assertThat(noteLines.first()).contains("LLM_SILENT_ALL_MOVING")
+		}
 	}
 
 	// ── Helpers ─────────────────────────────────────────────────────────────
