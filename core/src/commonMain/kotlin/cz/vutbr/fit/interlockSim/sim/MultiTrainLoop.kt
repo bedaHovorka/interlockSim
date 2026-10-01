@@ -468,9 +468,20 @@ open class MultiTrainLoop(
 	 * Register this method as the snapshot provider via
 	 * `collisionDetectionService.registerTrainSnapshotProvider(multiTrainLoop::getTrainSnapshot)`.
 	 *
-	 * Safe to call from any thread: the lookup walks the immutable copy-on-write snapshot
-	 * described on [approvedTrains]. The per-train values it reads (velocity, distance) are
-	 * still sampled while the simulation runs, so the snapshot is a point-in-time estimate.
+	 * **Threading (Issue #1028):** in production this runs on the kDisco simulation thread. Its
+	 * only production caller is `DefaultCollisionDetectionService.evaluatePredictiveTtc`, reached
+	 * from `handleBlockEvent` for [cz.vutbr.fit.interlockSim.sim.events.BlockEvent.BlockReserved]
+	 * and `BlockReleased` — block events emitted through kDisco `emitCustom` while a simulation
+	 * process runs. There it reads the train's live values between events, consistently.
+	 *
+	 * Safe to call from any other thread too (only tests do so, e.g.
+	 * `ExampleRegistryCollisionWiringTest` and `MultiTrainLoopSnapshotRaceTest`): the lookup walks
+	 * the immutable copy-on-write snapshot described on [approvedTrains], and the returned
+	 * [TrainSnapshot] is already an immutable value. Its velocity is a continuous value read live.
+	 * Its totalDistance adds the traversed-blocks length (a discrete field) to the live integrated
+	 * position, so an off-thread caller can catch that pair torn — off by up to one section
+	 * length — not only stale: a point-in-time estimate, not a value consistent with any one
+	 * simulation instant.
 	 *
 	 * @param trainId The identifier of the queried train (matches [Train.name]).
 	 * @return A [TrainSnapshot] capturing the train's current velocity, position, and length;

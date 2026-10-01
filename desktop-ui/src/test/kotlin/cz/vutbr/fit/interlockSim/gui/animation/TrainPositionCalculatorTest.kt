@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.Train
+import cz.vutbr.fit.interlockSim.sim.TrainFrontIdentity
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.every
@@ -36,7 +37,9 @@ import org.koin.test.inject
 class TrainPositionCalculatorTest : KoinTestBase() {
 	private lateinit var context: SimulationContext
 	private lateinit var calculator: TrainPositionCalculator
-	private lateinit var mockTrain: Train
+
+	/** No entry separator known yet — the calculator falls back to the section's own end order. */
+	private val noEntry: PathSeparator? = null
 	private val processFactory: SimulationProcessFactory by inject()
 
 	/**
@@ -55,11 +58,6 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 				?.separatorPositionCache ?: emptyMap()
 
 		calculator = TrainPositionCalculator(context, cache)
-
-		// Create mock train for tests
-		// For simplicity, return null for entrySeparator (uses fallback arbitrary order)
-		mockTrain = mockk<Train>(relaxed = true)
-		every { mockTrain.trainEntrySeparator } returns null
 	}
 
 	@Test
@@ -78,7 +76,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Null track section - should return null
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				mockTrain,
+				noEntry,
 				null,
 				50.0
 			)
@@ -92,7 +90,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val trackSection = getFirstTrackSection()
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				mockTrain,
+				noEntry,
 				trackSection,
 				0.0
 			)
@@ -109,7 +107,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val sectionLength = trackSection?.length() ?: 0.0
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				mockTrain,
+				noEntry,
 				trackSection,
 				sectionLength / 2.0
 			)
@@ -126,7 +124,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val sectionLength = trackSection?.length() ?: 0.0
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				mockTrain,
+				noEntry,
 				trackSection,
 				sectionLength
 			)
@@ -143,7 +141,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val sectionLength = trackSection?.length() ?: 0.0
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				mockTrain,
+				noEntry,
 				trackSection,
 				sectionLength * 2.0
 			)
@@ -166,13 +164,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val end1Dynamic = context.toDynamic(ends[1])
 		assertThat(end1Dynamic).isNotNull()
 
-		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns end1Dynamic
+		val entry: PathSeparator? = end1Dynamic
 
 		val sectionLength = trackSection.length()
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				trainWithEntry,
+				entry,
 				trackSection,
 				sectionLength * 2.0 // Beyond end
 			)
@@ -202,7 +199,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				mockTrain,
+				noEntry,
 				trackSection,
 				20.0 // Beyond end
 			)
@@ -216,7 +213,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val trackSection = getFirstTrackSection()
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				mockTrain,
+				noEntry,
 				trackSection,
 				-10.0
 			)
@@ -248,14 +245,13 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Cast to DynamicPathSeparator: in simulation context all separators are dynamic wrappers
 		val end0Dynamic = ends[0] as? DynamicPathSeparator
 		assertThat(end0Dynamic).isNotNull() // Fails if section end is not a dynamic wrapper
-		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
+		val entry: PathSeparator? = end0Dynamic
 
 		// Calculate position at 25% — train is closer to the entry end than to the exit end
 		val sectionLength = trackSection.length()
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				trainWithEntry,
+				entry,
 				trackSection,
 				sectionLength * 0.25
 			)
@@ -287,14 +283,13 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Cast to DynamicPathSeparator: in simulation context all separators are dynamic wrappers
 		val end1Dynamic = ends[1] as? DynamicPathSeparator
 		assertThat(end1Dynamic).isNotNull() // Fails if section end is not a dynamic wrapper
-		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns end1Dynamic
+		val entry: PathSeparator? = end1Dynamic
 
 		// Calculate position at 25% — train is closer to the entry end than to the exit end
 		val sectionLength = trackSection.length()
 		val gridLocation =
 			calculator.calculateTrainGridLocation(
-				trainWithEntry,
+				entry,
 				trackSection,
 				sectionLength * 0.25
 			)
@@ -323,7 +318,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val ends = trackSection!!.ends()
 		assertThat(ends.size >= 2).isEqualTo(true)
 
-		// Create mock train with entry separator that doesn't match either end
+		// Entry separator that does not match either end
 		// Use a different separator from the network
 		val allSeparators =
 			context
@@ -335,12 +330,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 			allSeparators.firstOrNull { it !== ends[0] && it !== ends[1] }
 		assertThat(differentSeparator).isNotNull()
 
-		val trainWithDifferentEntry = mockk<Train>(relaxed = true)
-		every { trainWithDifferentEntry.trainEntrySeparator } returns differentSeparator!!
+		val differentEntry: PathSeparator? = differentSeparator!!
 
 		// Calculate position - should fall back to arbitrary order
 		val sectionLength = trackSection.length()
-		val gridLocation = calculator.calculateTrainGridLocation(trainWithDifferentEntry, trackSection, sectionLength / 2.0)
+		val gridLocation = calculator.calculateTrainGridLocation(differentEntry, trackSection, sectionLength / 2.0)
 
 		assertThat(gridLocation).isNotNull()
 		// Should still return valid position using fallback order
@@ -361,13 +355,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// ends[0] must be a DynamicPathSeparator in simulation context (all separators are wrapped)
 		val end0Dynamic = ends[0] as? DynamicPathSeparator
 		assertThat(end0Dynamic).isNotNull()
-		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
+		val entry: PathSeparator? = end0Dynamic
 
 		// Test at start (distance = 0)
 		val gridLocationStart =
 			calculator.calculateTrainGridLocation(
-				trainWithEntry,
+				entry,
 				trackSection,
 				0.0
 			)
@@ -377,7 +370,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val sectionLength = trackSection.length()
 		val gridLocationEnd =
 			calculator.calculateTrainGridLocation(
-				trainWithEntry,
+				entry,
 				trackSection,
 				sectionLength
 			)
@@ -405,11 +398,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(end0Dynamic).isNotNull()
 		assertThat(end1Dynamic).isNotNull()
 
-		val trainFromEnd0 = mockk<Train>(relaxed = true)
-		every { trainFromEnd0.trainEntrySeparator } returns end0Dynamic
+		val entryFromEnd0: PathSeparator? = end0Dynamic
 
-		val trainFromEnd1 = mockk<Train>(relaxed = true)
-		every { trainFromEnd1.trainEntrySeparator } returns end1Dynamic
+		val entryFromEnd1: PathSeparator? = end1Dynamic
 
 		// Use 25% (asymmetric) — at midpoint both trains would land at the same position,
 		// so 50% cannot verify that direction selection is actually working
@@ -418,13 +409,13 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 		val positionFromEnd0 =
 			calculator.calculateTrainGridLocation(
-				trainFromEnd0,
+				entryFromEnd0,
 				trackSection,
 				quarterPoint
 			)
 		val positionFromEnd1 =
 			calculator.calculateTrainGridLocation(
-				trainFromEnd1,
+				entryFromEnd1,
 				trackSection,
 				quarterPoint
 			)
@@ -443,7 +434,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	@Test
 	fun testCalculateTrainHeadingRadians_nullSection() {
 		// Null section - cannot resolve a heading
-		val heading = calculator.calculateTrainHeadingRadians(mockTrain, null)
+		val heading = calculator.calculateTrainHeadingRadians(noEntry, null)
 		assertThat(heading).isNull()
 	}
 
@@ -457,10 +448,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 		val end0Dynamic = ends[0] as? DynamicPathSeparator
 		assertThat(end0Dynamic).isNotNull()
-		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
+		val entry: PathSeparator? = end0Dynamic
 
-		val heading = calculator.calculateTrainHeadingRadians(trainWithEntry, trackSection)
+		val heading = calculator.calculateTrainHeadingRadians(entry, trackSection)
 		assertThat(heading).isNotNull()
 
 		// Heading must equal atan2(exit - entry): entering from ends[0], exit is ends[1]
@@ -498,13 +488,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(end0Dynamic).isNotNull()
 		assertThat(end1Dynamic).isNotNull()
 
-		val trainFromEnd0 = mockk<Train>(relaxed = true)
-		every { trainFromEnd0.trainEntrySeparator } returns end0Dynamic
-		val trainFromEnd1 = mockk<Train>(relaxed = true)
-		every { trainFromEnd1.trainEntrySeparator } returns end1Dynamic
+		val entryFromEnd0: PathSeparator? = end0Dynamic
+		val entryFromEnd1: PathSeparator? = end1Dynamic
 
-		val headingFromEnd0 = calculator.calculateTrainHeadingRadians(trainFromEnd0, trackSection)
-		val headingFromEnd1 = calculator.calculateTrainHeadingRadians(trainFromEnd1, trackSection)
+		val headingFromEnd0 = calculator.calculateTrainHeadingRadians(entryFromEnd0, trackSection)
+		val headingFromEnd1 = calculator.calculateTrainHeadingRadians(entryFromEnd1, trackSection)
 		assertThat(headingFromEnd0).isNotNull()
 		assertThat(headingFromEnd1).isNotNull()
 
@@ -514,5 +502,61 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 			diff -= 2 * kotlin.math.PI
 		}
 		assertThat(kotlin.math.abs(kotlin.math.abs(diff) - kotlin.math.PI) < 1e-6).isEqualTo(true)
+	}
+
+	// ========== Deprecated Train-Overload Delegation (Issues #1030, #1028) ==========
+
+	// These two tests deliberately exercise the deprecated overloads; all other code must use
+	// the entrySeparator-based overloads, and -Werror keeps that boundary loud everywhere else.
+	@Test
+	@Suppress("DEPRECATION")
+	fun testDeprecatedTrainOverloads_delegateThroughFrontIdentity() {
+		// The deprecated overloads must delegate through Train.frontIdentity — the published,
+		// #788-corrected entry separator — not through the live getters.
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+
+		val ends = trackSection!!.ends()
+		assertThat(ends.size >= 2).isEqualTo(true)
+		val end1Dynamic = ends[1] as? DynamicPathSeparator
+		assertThat(end1Dynamic).isNotNull()
+
+		val identity =
+			TrainFrontIdentity(
+				section = trackSection,
+				entrySeparator = end1Dynamic,
+				onNext = true,
+				previousBlocksLength = 0.0
+			)
+		val train = mockk<Train>()
+		every { train.frontIdentity } returns identity
+
+		val sectionLength = trackSection.length()
+		val viaDeprecatedPosition =
+			calculator.calculateTrainGridLocation(train, trackSection, sectionLength * 0.25)
+		val viaNewPosition =
+			calculator.calculateTrainGridLocation(end1Dynamic, trackSection, sectionLength * 0.25)
+		assertThat(viaDeprecatedPosition).isEqualTo(viaNewPosition)
+
+		val viaDeprecatedHeading = calculator.calculateTrainHeadingRadians(train, trackSection)
+		val viaNewHeading = calculator.calculateTrainHeadingRadians(end1Dynamic, trackSection)
+		assertThat(viaDeprecatedHeading).isEqualTo(viaNewHeading)
+	}
+
+	@Test
+	@Suppress("DEPRECATION")
+	fun testDeprecatedTrainOverloads_delegateThroughNotEnteredIdentity() {
+		// Before entry the published identity carries no entry separator; the deprecated
+		// overloads must behave exactly like an explicitly passed null.
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+
+		val train = mockk<Train>()
+		every { train.frontIdentity } returns TrainFrontIdentity.NOT_ENTERED
+
+		assertThat(calculator.calculateTrainGridLocation(train, trackSection, 10.0))
+			.isEqualTo(calculator.calculateTrainGridLocation(noEntry, trackSection, 10.0))
+		assertThat(calculator.calculateTrainHeadingRadians(train, trackSection))
+			.isEqualTo(calculator.calculateTrainHeadingRadians(noEntry, trackSection))
 	}
 }

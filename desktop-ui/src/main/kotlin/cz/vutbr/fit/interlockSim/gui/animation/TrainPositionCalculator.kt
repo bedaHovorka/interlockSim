@@ -56,9 +56,11 @@ import kotlin.math.atan2
  *     simulationContext,
  *     simulationContext.separatorPositionCache
  * )
+ * val identity = train.frontIdentity // one read, see TrainFrontIdentity
  * val gridLocation = calculator.calculateTrainGridLocation(
- *     currentSection = train.getCurrentSection(),
- *     distanceAlongSection = 45.0 // meters
+ *     entrySeparator = identity.entrySeparator,
+ *     currentSection = identity.section,
+ *     distanceAlongSection = identity.publishedPosition(train.frontIntegratedPosition)
  * )
  * // gridLocation is a Point with interpolated coordinates
  * ```
@@ -83,13 +85,13 @@ class TrainPositionCalculator(
 	/**
 	 * Calculate train's grid location via linear interpolation along a track section.
 	 *
-	 * Uses the train's entry separator to determine interpolation direction, ensuring
+	 * Uses the front's entry separator to determine interpolation direction, ensuring
 	 * monotonic progression from entry → exit as distance increases. This prevents
 	 * visual oscillation that occurs when using unordered endpoints.
 	 *
 	 * ## Algorithm
 	 *
-	 * 1. Get entry separator from train (where it entered the section)
+	 * 1. Take the entry separator (where the front entered the section)
 	 * 2. Get exit separator via section.getSecondEnd(entry)
 	 * 3. Calculate progress ratio: `ratio = distance / sectionLength`
 	 * 4. Interpolate position: `position = entry + (exit - entry) * ratio`
@@ -111,13 +113,16 @@ class TrainPositionCalculator(
 	 * - **Zero-length section:** Returns entry position
 	 * - **Null section:** Returns null (cannot calculate)
 	 *
-	 * @param train Train object to query for entry separator
+	 * @param entrySeparator The end of [currentSection] through which the train's front entered it,
+	 *   or null when unknown. Taken as a parameter rather than read from the train so the caller
+	 *   can pass it from the same [cz.vutbr.fit.interlockSim.sim.Train.frontIdentity] read as
+	 *   [currentSection] — a consistent pair even off the simulation thread (Issues #1030, #1028).
 	 * @param currentSection Track section the train is currently on
 	 * @param distanceAlongSection Distance traveled along section in meters
 	 * @return Continuous grid coordinates for train rendering, or null if position cannot be calculated
 	 */
 	fun calculateTrainGridLocation(
-		train: cz.vutbr.fit.interlockSim.sim.Train,
+		entrySeparator: PathSeparator?,
 		currentSection: TrackSection?,
 		distanceAlongSection: Double
 	): PointF? {
@@ -140,13 +145,13 @@ class TrainPositionCalculator(
 		if (distanceAlongSection > sectionLength && sectionLength > 0.0) {
 			// Distance exceeds section length - train is in transition window
 			// Return position at section exit to prevent jumping
-			val entrySeparator = train.trainEntrySeparator
 			val ends = currentSection.ends()
 			if (ends.isEmpty()) {
 				return null
 			}
 
-			// Use trainEntrySeparator to find the computed exit separator; fall back to arbitrary ends if unavailable (e.g. at spawn).
+			// Use entrySeparator to find the computed exit separator; fall back to arbitrary ends
+			// if unavailable (e.g. at spawn).
 			val computedExitSeparator = if (entrySeparator != null) currentSection.getSecondEnd(entrySeparator) else null
 
 			// Return null when the entry end has no grid position.
@@ -160,7 +165,7 @@ class TrainPositionCalculator(
 		}
 
 		// NORMAL CASE: Calculate interpolated position using entry separator
-		val (entryPos, exitPos) = resolveEntryExitPositions(train, currentSection) ?: return null
+		val (entryPos, exitPos) = resolveEntryExitPositions(entrySeparator, currentSection) ?: return null
 
 		// Handle zero-length sections
 		if (sectionLength <= 0.0) {
@@ -178,6 +183,34 @@ class TrainPositionCalculator(
 	}
 
 	/**
+	 * Legacy overload: takes the train instead of its published entry separator, and delegates
+	 * to [calculateTrainGridLocation] with the entry separator of
+	 * [cz.vutbr.fit.interlockSim.sim.Train.frontIdentity] — the published, #788-corrected value,
+	 * not the live getter.
+	 *
+	 * The [currentSection] and [distanceAlongSection] still come from the caller, so off the
+	 * simulation thread they can belong to a different instant than the published entry
+	 * separator (see the `@Deprecated` message for the migration, Issues #1030, #1028).
+	 *
+	 * @param train Train whose published entry separator is used
+	 * @param currentSection Track section the train is currently on
+	 * @param distanceAlongSection Distance traveled along section in meters
+	 * @return Continuous grid coordinates for train rendering, or null if position cannot be calculated
+	 */
+	@Deprecated(
+		message = "pass one Train.frontIdentity read's values to the entrySeparator-based overload (#1030, #1028)",
+		level = DeprecationLevel.WARNING
+	)
+	fun calculateTrainGridLocation(
+		train: cz.vutbr.fit.interlockSim.sim.Train,
+		currentSection: TrackSection?,
+		distanceAlongSection: Double
+	): PointF? {
+		val identity = train.frontIdentity
+		return calculateTrainGridLocation(identity.entrySeparator, currentSection, distanceAlongSection)
+	}
+
+	/**
 	 * Calculate the train's heading (nose direction) from the current section's travel direction.
 	 *
 	 * The heading is derived from the authoritative entry → exit direction of the track
@@ -187,19 +220,20 @@ class TrainPositionCalculator(
 	 * front/tail swap that occurred when the renderer inferred heading from position deltas
 	 * that momentarily became zero or slightly negative at segment crossings.
 	 *
-	 * @param train Train object to query for entry separator
+	 * @param entrySeparator The end of [currentSection] through which the train's front entered it,
+	 *   or null when unknown — see [calculateTrainGridLocation]
 	 * @param currentSection Track section the train front is currently on
 	 * @return Heading angle in radians (atan2 of exit − entry), or null if not resolvable
 	 *         (e.g. no entry separator yet, missing grid positions, or a zero-length step)
 	 */
 	fun calculateTrainHeadingRadians(
-		train: cz.vutbr.fit.interlockSim.sim.Train,
+		entrySeparator: PathSeparator?,
 		currentSection: TrackSection?
 	): Double? {
 		if (currentSection == null) {
 			return null
 		}
-		val (entryPos, exitPos) = resolveEntryExitPositions(train, currentSection) ?: return null
+		val (entryPos, exitPos) = resolveEntryExitPositions(entrySeparator, currentSection) ?: return null
 		val dx = (exitPos.x - entryPos.x).toDouble()
 		val dy = (exitPos.y - entryPos.y).toDouble()
 		if (dx == 0.0 && dy == 0.0) {
@@ -209,16 +243,38 @@ class TrainPositionCalculator(
 	}
 
 	/**
+	 * Legacy Train-taking overload — the same pattern, the same mixed-instant caveat, and the
+	 * same migration path as the deprecated [calculateTrainGridLocation] Train overload: it
+	 * delegates to [calculateTrainHeadingRadians] with the entry separator of
+	 * [cz.vutbr.fit.interlockSim.sim.Train.frontIdentity], not the live getter.
+	 *
+	 * @param train Train whose published entry separator is used
+	 * @param currentSection Track section the train front is currently on
+	 * @return Heading angle in radians, or null if not resolvable — see [calculateTrainHeadingRadians]
+	 */
+	@Deprecated(
+		message = "pass one Train.frontIdentity read's values to the entrySeparator-based overload (#1030, #1028)",
+		level = DeprecationLevel.WARNING
+	)
+	fun calculateTrainHeadingRadians(
+		train: cz.vutbr.fit.interlockSim.sim.Train,
+		currentSection: TrackSection?
+	): Double? {
+		val identity = train.frontIdentity
+		return calculateTrainHeadingRadians(identity.entrySeparator, currentSection)
+	}
+
+	/**
 	 * Resolve the entry and exit grid positions of the train on its current section.
 	 *
-	 * Uses the train's entry separator to orient interpolation so it always progresses
+	 * Uses the front's entry separator to orient interpolation so it always progresses
 	 * from entry (ratio 0.0) to exit (ratio 1.0). Falls back to the section's declared
 	 * end order when the entry separator is unavailable (e.g. at spawn).
 	 *
 	 * @return Pair of (entryPos, exitPos) grid positions, or null if positions cannot be resolved
 	 */
 	private fun resolveEntryExitPositions(
-		train: cz.vutbr.fit.interlockSim.sim.Train,
+		entrySeparator: PathSeparator?,
 		currentSection: TrackSection
 	): Pair<Point, Point>? {
 		val ends = currentSection.ends()
@@ -227,7 +283,6 @@ class TrainPositionCalculator(
 			return null
 		}
 
-		val entrySeparator = train.trainEntrySeparator
 		if (entrySeparator == null) {
 			// No entry separator available yet - use arbitrary order
 			val end0Pos = getGridPosition(ends[0]) ?: return null

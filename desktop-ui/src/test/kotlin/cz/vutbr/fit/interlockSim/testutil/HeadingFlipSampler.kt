@@ -64,7 +64,7 @@ class HeadingFlipSampler(
 		for (train in trains) {
 			val trainNumber = train.trainNumber
 			val section = train.frontSection ?: continue
-			val heading = calculator.calculateTrainHeadingRadians(train, section) ?: continue
+			val heading = calculator.calculateTrainHeadingRadians(train.trainEntrySeparator, section) ?: continue
 			val entry = train.trainEntrySeparator
 
 			// The RESOLVED heading (what the renderer draws) must never flip either — the
@@ -109,7 +109,7 @@ class HeadingFlipSampler(
 	) {
 		val trainNumber = train.trainNumber
 		val location =
-			calculator.calculateTrainGridLocation(train, section, train.frontPosition)
+			calculator.calculateTrainGridLocation(train.trainEntrySeparator, section, train.frontPosition)
 				?: return
 		val resolved = resolver.resolveHeading(trainNumber, rawHeading, location)
 		val prev = prevResolvedHeading[trainNumber]

@@ -520,6 +520,9 @@ class Train :
 			// Initialize entry separator for animation (train enters network here).
 			// Only the Front writes it — see [isFront].
 			if (isFront) this@Train.entrySeparator = where
+			// Kept for clarity: the publication after the `next` lookup below follows with no
+			// suspension point in between and dominates this one.
+			publishFrontIdentity()
 
 			// The reserved-path answer for `where` that the end of the previous iteration already
 			// obtained, handed to the query at the top of this one (Issue #963). It is set only
@@ -610,6 +613,7 @@ class Train :
 						}
 					}
 				next = path?.getNext(current)
+				publishFrontIdentity()
 
 				if (path == null || next == null) {
 					// Destination (where is DynamicInOut && current != null) is handled at the
@@ -660,6 +664,7 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
+				publishFrontIdentity()
 				// kDisco 0.6.0 renamed Variable.isActive()/Continuous.isActive() (which returned
 				// `_pred != null` = "in the active integration list") to isStarted(). The Process
 				// base class now owns isActive() with a different meaning (process lifecycle
@@ -747,6 +752,10 @@ class Train :
 					}
 				next = upcoming
 				onNext = upcoming != null
+				// One publication for the whole crossing block above: it has no suspension point,
+				// so no reader on this thread sees the intermediate states, and readers on other
+				// threads must not either (Issues #1030, #1028).
+				publishFrontIdentity()
 			}
 
 			stop()
@@ -890,12 +899,37 @@ class Train :
 		 * [publishedEntrySeparator]: the length of the traversed section at the boundary (the
 		 * front stands at its far end), the integrated position otherwise.
 		 *
+		 * [TrainFrontIdentity.publishedPosition] is this rule's off-thread counterpart — the two
+		 * must stay in step.
+		 *
 		 * Publishing both together is what keeps the rendered position unchanged. At the
 		 * boundary the raw pair interpolates from the exit end at ratio ~0 and the published
 		 * pair interpolates from the entry end at ratio 1 — the same point, reached from the
 		 * other side, now with the travel direction the right way round.
 		 */
 		internal fun publishedPosition(): Double = traversedSectionAtExit()?.length() ?: position.state
+
+		/**
+		 * Publishes the [Front]'s discrete identity to [Train.frontIdentity] for off-thread
+		 * readers (Issues #1030, #1028). [actions] calls it at the end of each discrete front
+		 * mutation; a no-op for the [Tail]. It only reads the fields it publishes, so the
+		 * simulation itself is unaffected.
+		 *
+		 * It runs [publishedEntrySeparator] on the simulation thread at every publication, and
+		 * cannot throw given the invariant: when [onNext] is false and [current] is non-null, the
+		 * [Train.entrySeparator] is an end of [current], so the `getSecondEnd` / `toDynamic` lookup
+		 * resolves.
+		 */
+		private fun publishFrontIdentity() {
+			if (!isFront) return
+			this@Train.frontIdentity =
+				TrainFrontIdentity(
+					section = getSection(),
+					entrySeparator = publishedEntrySeparator(),
+					onNext = onNext,
+					previousBlocksLength = totalLengthOfPreviousBlocks
+				)
+		}
 
 		internal fun getTailSection(): TrackSection? = getSection()
 	}
@@ -1571,6 +1605,28 @@ class Train :
 	 */
 	private var entrySeparator: DynamicPathSeparator? = null
 
+	/**
+	 * The front's discrete identity — section, published entry separator, boundary flag and the
+	 * length of the sections already traversed — as one immutable value for readers on other
+	 * threads, the Swing EDT above all (Issues #1030, #1028). See [TrainFrontIdentity].
+	 *
+	 * Written only on the simulation thread, by the [Front] (see [Site.isFront]), at the end of
+	 * each discrete front mutation in [Site.actions]; there is no suspension point inside such a
+	 * mutation, so every published value is one the simulation thread itself would read between
+	 * events. `@Volatile` makes each assignment visible to other threads together with everything
+	 * written before it. The simulation-thread getters ([frontSection], [trainEntrySeparator],
+	 * [frontPosition], [totalDistance]) keep reading the live fields directly.
+	 *
+	 * The continuous values (position, velocity, acceleration) are not in it: kDisco integrates
+	 * them and its RK stages write trial values, so they stay stale-tolerant live reads
+	 * ([frontIntegratedPosition], [getVelocity], [getAcceleration]).
+	 *
+	 * [TrainFrontIdentity.NOT_ENTERED] until the train enters the network.
+	 */
+	@kotlin.concurrent.Volatile
+	var frontIdentity: TrainFrontIdentity = TrainFrontIdentity.NOT_ENTERED
+		private set
+
 	private val number: Int
 
 	private var length: Double
@@ -2160,6 +2216,24 @@ class Train :
 	 */
 	val frontPosition: Double
 		get() = front.publishedPosition()
+
+	/**
+	 * The front's integrated position within its current section, as kDisco integrates it —
+	 * rebased to ~0 at every crossing and, unlike [frontPosition], without the Issue #788
+	 * boundary correction.
+	 *
+	 * A live, stale-tolerant read of a continuous value: an off-thread reader combines it with
+	 * one [frontIdentity] read through [TrainFrontIdentity.totalDistance] and
+	 * [TrainFrontIdentity.publishedPosition]. The crossing block rebases it a few statements before
+	 * publishing the new identity, so an EDT read can pair the old identity (`onNext = true`,
+	 * section B) with this already-rebased value (about 0) and draw the front at the start of B for
+	 * one frame — a one-section backward jump. Not a regression (the old live getters showed the
+	 * same); a seqlock-style `crossingInProgress` flag is the follow-up if it is ever wanted.
+	 *
+	 * @since Issues #1030, #1028
+	 */
+	val frontIntegratedPosition: Double
+		get() = front.getPosition()
 
 	/**
 	 * Total distance traveled by the train's front since departure.
