@@ -16,6 +16,14 @@ package cz.vutbr.fit.interlockSim.sim.collision
  * All fields are captured at a single simulation instant; the snapshot is
  * not updated as the simulation advances.
  *
+ * **Threading (Issue #1028):** an immutable value, safe to hand to any thread once built. In
+ * production it is built on the kDisco simulation thread by
+ * [cz.vutbr.fit.interlockSim.sim.MultiTrainLoop.getTrainSnapshot], called from
+ * [DefaultCollisionDetectionService]'s predictive TTC evaluation on block events emitted
+ * through kDisco `emitCustom`, so its fields belong to one simulation instant. A snapshot built
+ * off the simulation thread (tests only) reads the continuous values live and is a
+ * stale-tolerant estimate instead.
+ *
  * @property trainId   Unique train identifier (matches registry keys).
  * @property velocity  Current velocity in m/s (≥ 0.0).
  * @property totalDistance Total distance traveled by the train's front since

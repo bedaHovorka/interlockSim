@@ -41,7 +41,9 @@ private val logger = KotlinLogging.logger {}
  *
  * - Trains are collected from occupied track blocks (via TrackOccupant interface)
  * - Grid positions calculated via linear interpolation along track sections
- * - Uses the public Train API: trainNumber, frontSection, frontPosition
+ * - Uses the public Train API: trainNumber, frontIdentity, frontIntegratedPosition
+ * - Reads [Train.frontIdentity] once per train, so section, entry separator and distance stay
+ *   consistent on the EDT (Issues #1030, #1028)
  *
  * ## Usage
  *
@@ -168,35 +170,44 @@ object AnimationStateCapture {
 	 *
 	 * Also determines train color based on origin InOut for directional color rendering.
 	 *
+	 * Runs on the Swing EDT while the simulation thread keeps moving the train, so the front's
+	 * discrete state is taken from **one** read of [Train.frontIdentity]: section, entry
+	 * separator and the traversed-blocks part of the distance always belong together. Only the
+	 * continuous values (integrated position, velocity, acceleration) are read live, and are
+	 * stale-tolerant by design (Issues #1030, #1028).
+	 *
 	 * @param train Train to capture state from
 	 * @param positionCalculator Calculator for grid position interpolation
 	 * @return Immutable train state snapshot
 	 */
-	private fun captureTrainState(
+	internal fun captureTrainState(
 		train: Train,
 		positionCalculator: TrainPositionCalculator
 	): TrainState {
+		// Identity first, live position second: a newer identity is always published after the
+		// position it describes, so this order never pairs a new identity with an old position.
+		val identity = train.frontIdentity
+		val integratedPosition = train.frontIntegratedPosition
 		val trainNumber = train.trainNumber
-		val position = train.totalDistance
+		val position = identity.totalDistance(integratedPosition)
 		val velocity = train.getVelocity()
 		val acceleration = train.getAcceleration()
 		val length = train.trainLength
 
 		// Calculate grid location for train front
-		val currentSection = train.frontSection
-		val frontPosition = train.frontPosition
+		val currentSection = identity.section
 		val frontGridLocation =
 			positionCalculator.calculateTrainGridLocation(
-				train = train,
+				entrySeparator = identity.entrySeparator,
 				currentSection = currentSection,
-				distanceAlongSection = frontPosition
+				distanceAlongSection = identity.publishedPosition(integratedPosition)
 			)
 
 		// Authoritative heading from the section's entry → exit direction (never reverses at
 		// block boundaries), used by the renderer instead of fragile frame-delta inference.
 		val headingRadians =
 			positionCalculator.calculateTrainHeadingRadians(
-				train = train,
+				entrySeparator = identity.entrySeparator,
 				currentSection = currentSection
 			)
 

@@ -95,8 +95,9 @@ class BoundaryHeadingAndPositionRegressionTest : HeadingSamplerTestBase() {
 		for (train in loop.getApprovedTrains()) {
 			val trainNumber = train.trainNumber
 			val section = train.frontSection ?: continue
-			val heading = calculator.calculateTrainHeadingRadians(train, section) ?: continue
-			val location = calculator.calculateTrainGridLocation(train, section, train.frontPosition) ?: continue
+			val entry = train.trainEntrySeparator
+			val heading = calculator.calculateTrainHeadingRadians(entry, section) ?: continue
+			val location = calculator.calculateTrainGridLocation(entry, section, train.frontPosition) ?: continue
 
 			previousHeading[trainNumber]?.let { previous ->
 				val delta = normalizeAngleDiff(heading - previous)

@@ -160,8 +160,8 @@ class StraightRunHeadingFlipRegressionTest : HeadingSamplerTestBase() {
 		every { train.trainNumber } returns trainNumber
 		every { train.frontSection } returns section
 		every { train.trainEntrySeparator } returns null
-		every { calculator.calculateTrainHeadingRadians(train, section) } returns 0.0
-		every { calculator.calculateTrainGridLocation(train, section, train.frontPosition) } returns PointF(1f, 1f)
+		every { calculator.calculateTrainHeadingRadians(null, section) } returns 0.0
+		every { calculator.calculateTrainGridLocation(null, section, train.frontPosition) } returns PointF(1f, 1f)
 		return train
 	}
 
@@ -171,7 +171,7 @@ class StraightRunHeadingFlipRegressionTest : HeadingSamplerTestBase() {
 		calculator: TrainPositionCalculator
 	): Train =
 		sampleableTrain(trainNumber, calculator).also {
-			every { calculator.calculateTrainHeadingRadians(it, it.frontSection) } returns null
+			every { calculator.calculateTrainHeadingRadians(it.trainEntrySeparator, it.frontSection) } returns null
 		}
 
 	/**
