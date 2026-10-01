@@ -17,8 +17,9 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
+import cz.vutbr.fit.interlockSim.testutil.frontMismatches
 import cz.vutbr.fit.interlockSim.testutil.isWestToEastEntryEnd
 import cz.vutbr.fit.interlockSim.testutil.multiTrainSpecs
 import cz.vutbr.fit.interlockSim.testutil.sameStatic
@@ -47,14 +48,18 @@ import kotlin.math.abs
  * must equal the live getters. Removing the end-of-crossing publication, or moving it before the
  * mutation, leaves a stale identity behind for the queries after the last crossing, which this
  * test catches.
+ *
+ * The `consistentQueries > 0` witness comes from the **Tail** site's queries: the front's own
+ * non-crossing (origin) query is skipped — its identity has no section yet — and its later
+ * iterations consume the carried path result without querying, so on this signal-free topology
+ * only the Tail's queries land in the consistent branch. A future change to the Tail's query
+ * pattern would surface as a `consistentQueries = 0` failure, never as a false pass.
  */
 @DisplayName("Train.frontIdentity is not torn inside the crossing block (Issue #1030)")
 class TrainFrontIdentityCrossingTearTest : KoinTestBase() {
 	private companion object {
 		const val END_TIME: Long = 600L
 		const val TRAIN_LENGTH: Double = 40.0
-		const val SECTION_LENGTH: Double = 100.0
-		const val SPEED_LIMIT: Double = 80.0
 		const val DISTANCE_TOLERANCE: Double = 1.0e-9
 	}
 
@@ -62,19 +67,10 @@ class TrainFrontIdentityCrossingTearTest : KoinTestBase() {
 	private var tornLiveQueries = 0
 	private var consistentQueries = 0
 
+	// The shared 4-block linear fixture: the one-way straight line A → Sem1..Sem3 → B, grid x
+	// grows along the route, four 100 m blocks at 80 m/s, all semaphores STOP.
 	private fun straightLine(): DefaultSimulationContext =
-		TestContextBuilder()
-			.withInOut("A", 1, 1, true)
-			.withSemaphore(3, 3, false)
-			.withSemaphore(5, 5, false)
-			.withSemaphore(7, 7, false)
-			.withInOut("B", 9, 9, false)
-			.withConnection(1, 1, 3, 3, SECTION_LENGTH, SPEED_LIMIT)
-			.withConnection(3, 3, 5, 5, SECTION_LENGTH, SPEED_LIMIT)
-			.withConnection(5, 5, 7, 7, SECTION_LENGTH, SPEED_LIMIT)
-			.withConnection(7, 7, 9, 9, SECTION_LENGTH, SPEED_LIMIT)
-			.buildSimulationContext()
-			.tracked()
+		TestTopologies.linearPathWithSemaphoreSequenceSimulation(semaphoreCount = 3).tracked()
 
 	private fun inspect(
 		columns: Map<PathSeparator, Int>,
@@ -106,12 +102,7 @@ class TrainFrontIdentityCrossingTearTest : KoinTestBase() {
 			return
 		}
 		consistentQueries++
-		val matches =
-			idSection === liveSection &&
-				idEntry === liveEntry &&
-				identity.publishedPosition(train.frontIntegratedPosition) == train.frontPosition &&
-				identity.totalDistance(train.frontIntegratedPosition) == train.totalDistance
-		if (!matches) {
+		if (identity.frontMismatches(train).isNotEmpty()) {
 			problems.add("query from ${separatorLabel(queried)}: consistent live state, but the identity is stale")
 		}
 	}

@@ -21,8 +21,9 @@ package cz.vutbr.fit.interlockSim.sim.collision
  * [cz.vutbr.fit.interlockSim.sim.MultiTrainLoop.getTrainSnapshot], called from
  * [DefaultCollisionDetectionService]'s predictive TTC evaluation on block events emitted
  * through kDisco `emitCustom`, so its fields belong to one simulation instant. A snapshot built
- * off the simulation thread (tests only) reads the continuous values live and is a
- * stale-tolerant estimate instead.
+ * off the simulation thread (tests only) reads velocity and distance live: the velocity is a
+ * stale-tolerant continuous value, and the totalDistance — a discrete traversed-blocks length
+ * plus a continuous position — can even be torn, off by up to one section length.
  *
  * @property trainId   Unique train identifier (matches registry keys).
  * @property velocity  Current velocity in m/s (≥ 0.0).

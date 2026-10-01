@@ -17,8 +17,9 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.frontMismatches
 import cz.vutbr.fit.interlockSim.testutil.multiTrainSpecs
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.runSampled
@@ -66,13 +67,7 @@ class TrainFrontIdentityTest : KoinTestBase() {
 			if (identity.entrySeparator != null) enteredFrames++
 			if (identity.onNext) onNextFrames++
 			if (!identity.onNext && identity.section != null) boundaryFrames++
-			val problems =
-				buildList {
-					if (identity.section !== train.frontSection) add("section")
-					if (identity.entrySeparator !== train.trainEntrySeparator) add("entrySeparator")
-					if (identity.publishedPosition(integrated) != train.frontPosition) add("publishedPosition")
-					if (identity.totalDistance(integrated) != train.totalDistance) add("totalDistance")
-				}
+			val problems = identity.frontMismatches(train)
 			if (problems.isNotEmpty()) {
 				mismatches.add(
 					"train #${train.trainNumber}: stale $problems — identity=(entry=" +
@@ -122,19 +117,7 @@ class TrainFrontIdentityTest : KoinTestBase() {
 	@DisplayName("identity matches the live getters through an arrival run")
 	fun `identity matches the live getters through an arrival run`() {
 		// 4-block linear topology: A -> Sem1 -> Sem2 -> Sem3 -> B (4 x 100 m).
-		val ctx =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(3, 3, false)
-				.withSemaphore(5, 5, false)
-				.withSemaphore(7, 7, false)
-				.withInOut("B", 9, 9, false)
-				.withConnection(1, 1, 3, 3, 100.0, 80.0)
-				.withConnection(3, 3, 5, 5, 100.0, 80.0)
-				.withConnection(5, 5, 7, 7, 100.0, 80.0)
-				.withConnection(7, 7, 9, 9, 100.0, 80.0)
-				.buildSimulationContext()
-				.tracked()
+		val ctx = TestTopologies.linearPathWithSemaphoreSequenceSimulation(semaphoreCount = 3).tracked()
 		val loop =
 			MultiTrainLoop(
 				context = ctx,

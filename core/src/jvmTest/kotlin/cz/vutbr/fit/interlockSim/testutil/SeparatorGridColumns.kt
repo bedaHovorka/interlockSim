@@ -20,16 +20,16 @@ import java.util.IdentityHashMap
  * (identity). Built once, so a reader thread can look columns up without scanning the grid.
  */
 fun separatorGridColumns(context: SimulationContext): Map<PathSeparator, Int> {
-	val columns = IdentityHashMap<PathSeparator, Int>()
 	val grid = context.getRailWayNetGrid()
-	for (x in 0 until grid.cols) {
-		for (y in 0 until grid.rows) {
-			val separator = grid.getCellAt(x, y) as? PathSeparator ?: continue
-			columns[DynamicWrapperUtils.unwrapToStatic(separator) ?: separator] = x
-		}
+	val columns = IdentityHashMap<PathSeparator, Int>()
+	for (separator in context.cellsOfType<PathSeparator>()) {
+		columns[keyOf(separator)] = grid.getLocation(separator)?.x ?: continue
 	}
 	return columns
 }
+
+/** The static separator a [PathSeparator] (dynamic wrapper or static) is keyed by. */
+private fun keyOf(separator: PathSeparator): PathSeparator = DynamicWrapperUtils.unwrapToStatic(separator) ?: separator
 
 /**
  * Whether [entry] is the end a train running west to east (towards growing grid columns) enters
@@ -44,7 +44,7 @@ fun isWestToEastEntryEnd(
 	section: TrackSection,
 	entry: PathSeparator
 ): Boolean {
-	fun column(separator: PathSeparator): Int? = columns[DynamicWrapperUtils.unwrapToStatic(separator) ?: separator]
+	fun column(separator: PathSeparator): Int? = columns[keyOf(separator)]
 	val ends = section.ends()
 	if (ends.none { sameStatic(it, entry) }) return false
 	val entryColumn = column(entry) ?: return false

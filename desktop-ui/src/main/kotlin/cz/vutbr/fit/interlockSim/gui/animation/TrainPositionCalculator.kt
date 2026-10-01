@@ -183,6 +183,34 @@ class TrainPositionCalculator(
 	}
 
 	/**
+	 * Legacy overload: takes the train instead of its published entry separator, and delegates
+	 * to [calculateTrainGridLocation] with the entry separator of
+	 * [cz.vutbr.fit.interlockSim.sim.Train.frontIdentity] — the published, #788-corrected value,
+	 * not the live getter.
+	 *
+	 * The [currentSection] and [distanceAlongSection] still come from the caller, so off the
+	 * simulation thread they can belong to a different instant than the published entry
+	 * separator (see the `@Deprecated` message for the migration, Issues #1030, #1028).
+	 *
+	 * @param train Train whose published entry separator is used
+	 * @param currentSection Track section the train is currently on
+	 * @param distanceAlongSection Distance traveled along section in meters
+	 * @return Continuous grid coordinates for train rendering, or null if position cannot be calculated
+	 */
+	@Deprecated(
+		message = "pass one Train.frontIdentity read's values to the entrySeparator-based overload (#1030, #1028)",
+		level = DeprecationLevel.WARNING
+	)
+	fun calculateTrainGridLocation(
+		train: cz.vutbr.fit.interlockSim.sim.Train,
+		currentSection: TrackSection?,
+		distanceAlongSection: Double
+	): PointF? {
+		val identity = train.frontIdentity
+		return calculateTrainGridLocation(identity.entrySeparator, currentSection, distanceAlongSection)
+	}
+
+	/**
 	 * Calculate the train's heading (nose direction) from the current section's travel direction.
 	 *
 	 * The heading is derived from the authoritative entry → exit direction of the track
@@ -212,6 +240,28 @@ class TrainPositionCalculator(
 			return null
 		}
 		return atan2(dy, dx)
+	}
+
+	/**
+	 * Legacy Train-taking overload — the same pattern, the same mixed-instant caveat, and the
+	 * same migration path as the deprecated [calculateTrainGridLocation] Train overload: it
+	 * delegates to [calculateTrainHeadingRadians] with the entry separator of
+	 * [cz.vutbr.fit.interlockSim.sim.Train.frontIdentity], not the live getter.
+	 *
+	 * @param train Train whose published entry separator is used
+	 * @param currentSection Track section the train front is currently on
+	 * @return Heading angle in radians, or null if not resolvable — see [calculateTrainHeadingRadians]
+	 */
+	@Deprecated(
+		message = "pass one Train.frontIdentity read's values to the entrySeparator-based overload (#1030, #1028)",
+		level = DeprecationLevel.WARNING
+	)
+	fun calculateTrainHeadingRadians(
+		train: cz.vutbr.fit.interlockSim.sim.Train,
+		currentSection: TrackSection?
+	): Double? {
+		val identity = train.frontIdentity
+		return calculateTrainHeadingRadians(identity.entrySeparator, currentSection)
 	}
 
 	/**

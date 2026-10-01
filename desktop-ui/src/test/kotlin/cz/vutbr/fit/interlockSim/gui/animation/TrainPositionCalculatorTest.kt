@@ -18,6 +18,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.Train
+import cz.vutbr.fit.interlockSim.sim.TrainFrontIdentity
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.every
@@ -500,5 +502,61 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 			diff -= 2 * kotlin.math.PI
 		}
 		assertThat(kotlin.math.abs(kotlin.math.abs(diff) - kotlin.math.PI) < 1e-6).isEqualTo(true)
+	}
+
+	// ========== Deprecated Train-Overload Delegation (Issues #1030, #1028) ==========
+
+	// These two tests deliberately exercise the deprecated overloads; all other code must use
+	// the entrySeparator-based overloads, and -Werror keeps that boundary loud everywhere else.
+	@Test
+	@Suppress("DEPRECATION")
+	fun testDeprecatedTrainOverloads_delegateThroughFrontIdentity() {
+		// The deprecated overloads must delegate through Train.frontIdentity — the published,
+		// #788-corrected entry separator — not through the live getters.
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+
+		val ends = trackSection!!.ends()
+		assertThat(ends.size >= 2).isEqualTo(true)
+		val end1Dynamic = ends[1] as? DynamicPathSeparator
+		assertThat(end1Dynamic).isNotNull()
+
+		val identity =
+			TrainFrontIdentity(
+				section = trackSection,
+				entrySeparator = end1Dynamic,
+				onNext = true,
+				previousBlocksLength = 0.0
+			)
+		val train = mockk<Train>()
+		every { train.frontIdentity } returns identity
+
+		val sectionLength = trackSection.length()
+		val viaDeprecatedPosition =
+			calculator.calculateTrainGridLocation(train, trackSection, sectionLength * 0.25)
+		val viaNewPosition =
+			calculator.calculateTrainGridLocation(end1Dynamic, trackSection, sectionLength * 0.25)
+		assertThat(viaDeprecatedPosition).isEqualTo(viaNewPosition)
+
+		val viaDeprecatedHeading = calculator.calculateTrainHeadingRadians(train, trackSection)
+		val viaNewHeading = calculator.calculateTrainHeadingRadians(end1Dynamic, trackSection)
+		assertThat(viaDeprecatedHeading).isEqualTo(viaNewHeading)
+	}
+
+	@Test
+	@Suppress("DEPRECATION")
+	fun testDeprecatedTrainOverloads_delegateThroughNotEnteredIdentity() {
+		// Before entry the published identity carries no entry separator; the deprecated
+		// overloads must behave exactly like an explicitly passed null.
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+
+		val train = mockk<Train>()
+		every { train.frontIdentity } returns TrainFrontIdentity.NOT_ENTERED
+
+		assertThat(calculator.calculateTrainGridLocation(train, trackSection, 10.0))
+			.isEqualTo(calculator.calculateTrainGridLocation(noEntry, trackSection, 10.0))
+		assertThat(calculator.calculateTrainHeadingRadians(train, trackSection))
+			.isEqualTo(calculator.calculateTrainHeadingRadians(noEntry, trackSection))
 	}
 }

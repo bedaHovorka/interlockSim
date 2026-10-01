@@ -477,9 +477,11 @@ open class MultiTrainLoop(
 	 * Safe to call from any other thread too (only tests do so, e.g.
 	 * `ExampleRegistryCollisionWiringTest` and `MultiTrainLoopSnapshotRaceTest`): the lookup walks
 	 * the immutable copy-on-write snapshot described on [approvedTrains], and the returned
-	 * [TrainSnapshot] is already an immutable value. Its velocity and distance are continuous
-	 * values read live while the simulation runs, so an off-thread caller gets a stale-tolerant
-	 * point-in-time estimate — not a value consistent with any one simulation instant.
+	 * [TrainSnapshot] is already an immutable value. Its velocity is a continuous value read live.
+	 * Its totalDistance adds the traversed-blocks length (a discrete field) to the live integrated
+	 * position, so an off-thread caller can catch that pair torn — off by up to one section
+	 * length — not only stale: a point-in-time estimate, not a value consistent with any one
+	 * simulation instant.
 	 *
 	 * @param trainId The identifier of the queried train (matches [Train.name]).
 	 * @return A [TrainSnapshot] capturing the train's current velocity, position, and length;

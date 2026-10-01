@@ -899,6 +899,9 @@ class Train :
 		 * [publishedEntrySeparator]: the length of the traversed section at the boundary (the
 		 * front stands at its far end), the integrated position otherwise.
 		 *
+		 * [TrainFrontIdentity.publishedPosition] is this rule's off-thread counterpart — the two
+		 * must stay in step.
+		 *
 		 * Publishing both together is what keeps the rendered position unchanged. At the
 		 * boundary the raw pair interpolates from the exit end at ratio ~0 and the published
 		 * pair interpolates from the entry end at ratio 1 — the same point, reached from the

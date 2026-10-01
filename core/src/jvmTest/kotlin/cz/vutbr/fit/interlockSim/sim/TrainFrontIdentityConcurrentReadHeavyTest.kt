@@ -14,7 +14,9 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.testutil.ConcurrentReadProbeResult
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.isWestToEastEntryEnd
@@ -29,8 +31,6 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger {}
 
@@ -68,6 +68,77 @@ class TrainFrontIdentityConcurrentReadHeavyTest : KoinTestBase() {
 
 	private fun endsLabel(section: TrackSection): String = section.ends().joinToString("..") { separatorLabel(it) }
 
+	/**
+	 * Tallies of the reader thread's checks. The reader thread is their only writer, and the
+	 * assertions run after [probeConcurrentReads] joined it (the join is the happens-before
+	 * edge), so plain fields are enough — a shared atomic per check would cost more than the
+	 * reads under test and would shrink the race window this stress test exists to maximize
+	 * (see `ConcurrentReadProbe`).
+	 */
+	private class IdentityCheckCounters {
+		var checked = 0L
+		var torn = 0L
+		var wrongDirection = 0L
+		var firstTorn: String? = null
+		var firstWrongDirection: String? = null
+	}
+
+	/**
+	 * One reader-thread check of one train's identity: internally consistent when the entry
+	 * separator it names is an end of the section it names and — every train here runs west to
+	 * east, towards growing grid columns — the end in the smaller column (see the class KDoc
+	 * for why both checks are needed).
+	 */
+	private fun checkTrainIdentity(
+		train: Train,
+		columns: Map<PathSeparator, Int>,
+		counters: IdentityCheckCounters
+	) {
+		val identity = train.frontIdentity
+		val section = identity.section ?: return
+		val entry = identity.entrySeparator ?: return
+		counters.checked++
+		if (section.ends().none { sameStatic(it, entry) }) {
+			counters.torn++
+			if (counters.firstTorn == null) {
+				counters.firstTorn =
+					"train #${train.trainNumber}: entry ${separatorLabel(entry)} " +
+					"is not an end of ${endsLabel(section)}"
+			}
+		} else if (!isWestToEastEntryEnd(columns, section, entry)) {
+			// The crossing-block tear pairs a section with its own exit end.
+			counters.wrongDirection++
+			if (counters.firstWrongDirection == null) {
+				counters.firstWrongDirection =
+					"train #${train.trainNumber}: entry ${separatorLabel(entry)} " +
+					"is the exit end of ${endsLabel(section)}"
+			}
+		}
+	}
+
+	/** Logs what the probe saw, then asserts the outcome the test method's name promises. */
+	private fun assertProbeOutcome(
+		result: ConcurrentReadProbeResult,
+		loop: MultiTrainLoop,
+		counters: IdentityCheckCounters
+	) {
+		logger.info {
+			"Issue #1030 identity probe: reads=${result.totalReads} checked=${counters.checked} " +
+				"torn=${counters.torn} wrongDirection=${counters.wrongDirection} " +
+				"exited=${loop.getTrainsExited()} failures=${result.failures}"
+		}
+
+		assertThat(result.failures, name = "no exception escaped the simulation or an identity read").isEmpty()
+		assertThat(counters.checked, name = "identities with a section and an entry were read")
+			.isGreaterThan(0L)
+		assertThat(loop.getTrainsExited(), name = "trains completed their journeys").isGreaterThan(0)
+		assertThat(counters.torn, name = "torn identities (first: ${counters.firstTorn})").isEqualTo(0L)
+		assertThat(
+			counters.wrongDirection,
+			name = "identities entered through the exit end (first: ${counters.firstWrongDirection})"
+		).isEqualTo(0L)
+	}
+
 	private fun sixBlockLine(): DefaultSimulationContext =
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)
@@ -101,11 +172,7 @@ class TrainFrontIdentityConcurrentReadHeavyTest : KoinTestBase() {
 		ctx.setMainProcess(loop)
 
 		val columns = separatorGridColumns(ctx)
-		val checkedIdentities = AtomicLong(0)
-		val tornIdentities = AtomicLong(0)
-		val wrongDirectionIdentities = AtomicLong(0)
-		val firstTorn = AtomicReference<String?>(null)
-		val firstWrongDirection = AtomicReference<String?>(null)
+		val counters = IdentityCheckCounters()
 
 		val result =
 			probeConcurrentReads(
@@ -114,45 +181,12 @@ class TrainFrontIdentityConcurrentReadHeavyTest : KoinTestBase() {
 				threadNamePrefix = "issue-1030",
 				readOnce = {
 					for (train in loop.getApprovedTrains()) {
-						val identity = train.frontIdentity
-						val section = identity.section ?: continue
-						val entry = identity.entrySeparator ?: continue
-						checkedIdentities.incrementAndGet()
-						if (section.ends().none { sameStatic(it, entry) }) {
-							tornIdentities.incrementAndGet()
-							firstTorn.compareAndSet(
-								null,
-								"train #${train.trainNumber}: entry ${separatorLabel(entry)} " +
-									"is not an end of ${endsLabel(section)}"
-							)
-						} else if (!isWestToEastEntryEnd(columns, section, entry)) {
-							// The crossing-block tear pairs a section with its own exit end.
-							wrongDirectionIdentities.incrementAndGet()
-							firstWrongDirection.compareAndSet(
-								null,
-								"train #${train.trainNumber}: entry ${separatorLabel(entry)} " +
-									"is the exit end of ${endsLabel(section)}"
-							)
-						}
+						checkTrainIdentity(train, columns, counters)
 					}
 				},
 				runSimulation = { ctx.run() }
 			)
 
-		logger.info {
-			"Issue #1030 identity probe: reads=${result.totalReads} checked=${checkedIdentities.get()} " +
-				"torn=${tornIdentities.get()} wrongDirection=${wrongDirectionIdentities.get()} " +
-				"exited=${loop.getTrainsExited()} failures=${result.failures}"
-		}
-
-		assertThat(result.failures, name = "no exception escaped the simulation or an identity read").isEmpty()
-		assertThat(checkedIdentities.get(), name = "identities with a section and an entry were read")
-			.isGreaterThan(0L)
-		assertThat(loop.getTrainsExited(), name = "trains completed their journeys").isGreaterThan(0)
-		assertThat(tornIdentities.get(), name = "torn identities (first: ${firstTorn.get()})").isEqualTo(0L)
-		assertThat(
-			wrongDirectionIdentities.get(),
-			name = "identities entered through the exit end (first: ${firstWrongDirection.get()})"
-		).isEqualTo(0L)
+		assertProbeOutcome(result, loop, counters)
 	}
 }
