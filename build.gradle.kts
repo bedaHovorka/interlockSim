@@ -8,22 +8,20 @@
 
 plugins {
     // Declare versions for subprojects (apply false — subprojects opt in).
-    // kotlin/ktlint/detekt/burst/mokkery versions all come from gradle.properties
-    // via pluginManagement in settings.gradle.kts.
+    // kotlin/burst/mokkery versions come from gradle.properties via pluginManagement in
+    // settings.gradle.kts. ktlint, detekt and org.sonarqube are on the buildSrc classpath
+    // (convention plugins interlocksim.*), so they carry no version here. The Kotlin Gradle
+    // plugin is on that classpath too, at the same kotlinVersion (see buildSrc/build.gradle.kts).
     kotlin("jvm") apply false
     kotlin("multiplatform") apply false
     id("com.gradleup.shadow") version "8.3.8" apply false
-    id("org.jlleitschuh.gradle.ktlint") apply false
-    id("io.gitlab.arturbosch.detekt") apply false
     id("me.champeau.jmh") version "0.7.2" apply false
     id("app.cash.burst") apply false
     id("dev.mokkery") apply false
 
-    // 7.3.1 is the newest safe release, not the newest release. Do not bump blindly:
-    //   7.0.0 - fixes the Gradle 9 cross-project configuration resolution error (#1000)
-    //   7.2.0 to 7.2.2 - marked DO NOT UPGRADE by SonarSource (sources dropped from analysis)
-    //   7.4.0 - open regression SCANGRADLE-441: sonarResolver loses task dependencies
-    id("org.sonarqube") version "7.3.1.8318"
+    // Version: sonarPluginVersion in gradle.properties (read by buildSrc/build.gradle.kts),
+    // which also records why it is pinned where it is.
+    id("org.sonarqube")
     jacoco
 }
 
@@ -37,7 +35,6 @@ val junitJupiterVersion: String by project
 val assertkVersion: String by project
 val mockkVersion: String by project
 val koinVersion: String by project
-val javaVersion: String by project
 val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"

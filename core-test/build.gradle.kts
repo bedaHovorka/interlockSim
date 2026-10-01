@@ -12,7 +12,7 @@
 
 plugins {
 	kotlin("multiplatform")
-	id("io.gitlab.arturbosch.detekt")
+	id("interlocksim.detekt")
 }
 
 // Load versions from root gradle.properties
@@ -20,7 +20,6 @@ val assertkVersion: String by project
 val koinVersion: String by project
 val kotlinVersion: String by project
 val kdiscoVersion: String by project
-val detektFormattingVersion: String by project
 val junitJupiterVersion: String by project
 val junitPlatformVersion: String by project
 
@@ -118,34 +117,11 @@ if (isLinuxHost) {
 // Detekt Configuration
 // ===========================================
 
-// :core-test holds legacy-adjacent test support code; use permissive detekt.yml (not strict).
+// :core-test holds legacy-adjacent test support code; the interlocksim.detekt convention
+// plugin (buildSrc) applies the permissive detekt.yml (not strict). Only the source root is
+// this module's own.
 detekt {
-	config.setFrom(files("${rootProject.projectDir}/detekt.yml"))
-	buildUponDefaultConfig = true
-	allRules = false
 	source.setFrom("src/commonMain/kotlin")
-	ignoreFailures = false
-	baseline = file("${rootProject.projectDir}/detekt-baseline.xml")
-	parallel = true
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-	jvmTarget = "21"
-	reports {
-		html.required.set(true)
-		xml.required.set(true)
-		txt.required.set(true)
-		sarif.required.set(false)
-		md.required.set(false)
-	}
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
-	jvmTarget = "21"
-}
-
-dependencies {
-	detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 // Suppress automatic SonarQube sub-module detection for :core-test.

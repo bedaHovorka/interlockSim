@@ -8,12 +8,9 @@
 
 plugins {
     kotlin("multiplatform")
-    id("io.gitlab.arturbosch.detekt")
-    id("org.jlleitschuh.gradle.ktlint")
+    id("interlocksim.detekt")
+    id("interlocksim.ktlint")
 }
-
-val ktlintVersion: String by project
-val detektFormattingVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -112,56 +109,18 @@ if (isLinuxHost) {
 
 // :fast-sim is entirely new Kotlin code (not converted from Java), so detekt-strict.yml applies.
 // See CLAUDE.md: "detekt-strict.yml — strict rules for new Kotlin code written from scratch".
+// The rest of the setup (and all of ktlint) comes from the interlocksim.detekt and
+// interlocksim.ktlint convention plugins (buildSrc), except SARIF output (see below). Detekt
+// runs on the JVM regardless of the compilation target, so the plugin's jvmTarget = "21" is the
+// analysis engine's, not the binary's.
 detekt {
     config.setFrom(files("${rootProject.projectDir}/detekt-strict.yml"))
-    buildUponDefaultConfig = true
-    allRules = false
     source.setFrom("src/linuxX64Main/kotlin")
-    ignoreFailures = false
-    baseline = file("${rootProject.projectDir}/detekt-baseline.xml")
-    parallel = true
-    basePath = rootProject.projectDir.absolutePath
 }
 
+// CI uploads this report to GitHub code scanning (#1017); the convention plugin turns SARIF off.
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    // Detekt runs on the JVM as a static analysis tool regardless of the compilation
-    // target. jvmTarget here refers to Detekt's analysis engine, not the native binary.
-    jvmTarget = "21"
-    reports {
-        html.required.set(true)
-        xml.required.set(true)
-        txt.required.set(true)
-        sarif.required.set(true)
-        md.required.set(false)
-    }
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
-    jvmTarget = "21"
-}
-
-dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
-}
-
-// ===========================================
-// Ktlint Configuration
-// ===========================================
-
-ktlint {
-    version.set(ktlintVersion)
-    verbose.set(true)
-    outputToConsole.set(true)
-    enableExperimentalRules.set(false)
-    android.set(false)
-    filter {
-        exclude("**/generated/**")
-        exclude("**/build/**")
-    }
-    reporters {
-        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN)
-        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.CHECKSTYLE)
-    }
+    reports.sarif.required.set(true)
 }
 
 // ===========================================

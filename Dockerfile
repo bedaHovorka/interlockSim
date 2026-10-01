@@ -59,6 +59,8 @@ ENV KONAN_DATA_DIR=/home/builder/.konan
 COPY --chown=builder:builder gradlew /build/interlockSim/
 COPY --chown=builder:builder gradlew.bat /build/interlockSim/
 COPY --chown=builder:builder gradle/ /build/interlockSim/gradle/
+# buildSrc holds the interlocksim.* convention plugins every module script applies
+COPY --chown=builder:builder buildSrc/ /build/interlockSim/buildSrc/
 RUN chmod +x gradlew
 
 # Layer 2: Copy build configuration files (cached until config changes)

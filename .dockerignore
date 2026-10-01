@@ -1,5 +1,8 @@
 # Build artifacts - NEVER send to Docker daemon
 build/
+buildSrc/build/
+buildSrc/.gradle/
+buildSrc/.kotlin/
 jar/
 doc/
 lib/

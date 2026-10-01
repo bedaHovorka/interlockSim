@@ -38,11 +38,12 @@ import java.time.Duration
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
-    id("io.gitlab.arturbosch.detekt")
-    id("org.jlleitschuh.gradle.ktlint")
+    id("interlocksim.detekt")
+    id("interlocksim.ktlint")
     id("app.cash.burst")
     id("dev.mokkery")
-    jacoco
+    id("interlocksim.jacoco")
+    id("interlocksim.sonar-module")
 }
 
 // Load versions from root gradle.properties
@@ -60,10 +61,7 @@ val coroutinesVersion: String by project
 val xmlutilVersion: String by project
 val serializationVersion: String by project
 val kotlinxIoVersion: String by project
-val ktlintVersion: String by project
 val atomicfuVersion: String by project
-val detektFormattingVersion: String by project
-val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -435,14 +433,6 @@ val heavyTest by tasks.registering(Test::class) {
 // SonarQube Configuration
 // ===========================================
 
-// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
-// resolves a relative coverage path against THIS module's base directory.
-val aggregatedCoverageReport: String =
-    rootProject.layout.buildDirectory
-        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
-        .get()
-        .asFile.absolutePath
-
 // The Kotlin analyzer needs the dependency classpath (sonar.java.libraries) for type
 // resolution. The Gradle plugin auto-detects it from the java plugin's source sets, which a
 // Kotlin Multiplatform project does not have, so :core has to supply it.
@@ -468,6 +458,13 @@ val sonarJavaLibraries by tasks.registering {
     }
 }
 
+// sonar.junit.reportPaths and sonar.coverage.jacoco.xmlReportPaths come from the
+// interlocksim.sonar-module convention plugin (buildSrc), which adds the cross-module aggregate.
+sonarModule {
+    coverageReport.set(layout.buildDirectory.file("reports/jacoco/jvmTest/jacocoTestReport.xml"))
+    junitReportPaths.set(listOf("build/test-results/jvmTest", "build/test-results/integrationTest"))
+}
+
 // :core declares its own Sonar paths. The root build.gradle.kts deliberately lists none,
 // so nothing is indexed twice (Issue #762).
 //
@@ -491,17 +488,6 @@ sonar {
             "sonar.java.libraries",
             if (librariesFile.isFile) librariesFile.readText() else "",
         )
-        property(
-            "sonar.junit.reportPaths",
-            "build/test-results/jvmTest,build/test-results/integrationTest",
-        )
-        property(
-            "sonar.coverage.jacoco.xmlReportPaths",
-            listOf(
-                file("build/reports/jacoco/jvmTest/jacocoTestReport.xml").absolutePath,
-                aggregatedCoverageReport,
-            ).joinToString(","),
-        )
         // nativeMain compiles to linuxX64. JaCoCo cannot instrument native code; that
         // coverage comes from :core:linuxX64Test instead. Paths are module-relative.
         // RequireFunctions.kt declares all nine public functions inline, so the compiler copies
@@ -523,10 +509,7 @@ sonar {
 // JaCoCo Configuration
 // ===========================================
 
-jacoco {
-    toolVersion = jacocoToolVersion
-}
-
+// The engine pin comes from the interlocksim.jacoco convention plugin (buildSrc).
 val jacocoTestReport by tasks.registering(JacocoReport::class) {
     dependsOn(tasks.named("jvmTest"))
     mustRunAfter(tasks.named("integrationTest"))
@@ -558,58 +541,15 @@ tasks.named("jvmTest") {
 // Detekt Configuration
 // ===========================================
 
+// Shared settings come from the interlocksim.detekt convention plugin (buildSrc); only the
+// source roots are this module's own. Ktlint is configured entirely by interlocksim.ktlint.
 detekt {
-    config.setFrom(files("${rootProject.projectDir}/detekt.yml"))
-    buildUponDefaultConfig = true
-    allRules = false
     source.setFrom(
         "src/commonMain/kotlin",
         "src/commonTest/kotlin",
         "src/jvmMain/kotlin",
         "src/jvmTest/kotlin",
     )
-    ignoreFailures = false
-    baseline = file("${rootProject.projectDir}/detekt-baseline.xml")
-    parallel = true
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    jvmTarget = "21"
-    reports {
-        html.required.set(true)
-        xml.required.set(true)
-        txt.required.set(true)
-        sarif.required.set(false)
-        md.required.set(false)
-    }
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
-    jvmTarget = "21"
-}
-
-dependencies {
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
-}
-
-// ===========================================
-// Ktlint Configuration
-// ===========================================
-
-ktlint {
-    version.set(ktlintVersion)
-    verbose.set(true)
-    outputToConsole.set(true)
-    enableExperimentalRules.set(false)
-    android.set(false)
-    filter {
-        exclude("**/generated/**")
-        exclude("**/build/**")
-    }
-    reporters {
-        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN)
-        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.CHECKSTYLE)
-    }
 }
 
 // ===========================================

@@ -38,9 +38,10 @@ import java.net.Socket
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
-    id("io.gitlab.arturbosch.detekt")
-    id("org.jlleitschuh.gradle.ktlint")
-    jacoco
+    id("interlocksim.detekt")
+    id("interlocksim.ktlint")
+    id("interlocksim.jacoco")
+    id("interlocksim.sonar-module")
 }
 
 // Load versions from root gradle.properties
@@ -56,9 +57,6 @@ val coroutinesVersion: String by project
 val koogVersion: String by project
 val serializationVersion: String by project
 val mockwebserverVersion: String by project
-val detektFormattingVersion: String by project
-val ktlintVersion: String by project
-val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -125,8 +123,6 @@ dependencies {
     // transitively; add explicitly for test code that uses runBlocking (e.g. AgentLoopDriverTest).
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
-
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 tasks.test {
@@ -299,51 +295,17 @@ tasks.named("compileKotlin") {
 // Detekt configuration
 // ===========================================
 
+// Shared settings (and ktlint) come from the interlocksim.detekt and interlocksim.ktlint
+// convention plugins (buildSrc); only the source root is this module's own.
 detekt {
-    config.setFrom(files("${rootProject.projectDir}/detekt.yml"))
-    buildUponDefaultConfig = true
-    allRules = false
     source.setFrom("src/main/kotlin")
-    ignoreFailures = false
-    baseline = file("${rootProject.projectDir}/detekt-baseline.xml")
-    parallel = true
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    jvmTarget = "21"
-    reports {
-        html.required.set(true)
-        xml.required.set(true)
-        txt.required.set(true)
-        sarif.required.set(false)
-        md.required.set(false)
-    }
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
-    jvmTarget = "21"
-}
-
-// ===========================================
-// Ktlint Configuration
-// ===========================================
-
-// Only the engine pin, nothing else: the version comes from gradle.properties
-// (ktlintVersion) instead of floating with the plugin default, so every module
-// checks with the same engine. This module has no generated sources, so it needs
-// none of :core's filters.
-ktlint {
-    version.set(ktlintVersion)
 }
 
 // ===========================================
 // JaCoCo Report Configuration
 // ===========================================
 
-jacoco {
-    toolVersion = jacocoToolVersion
-}
-
+// The engine pin comes from the interlocksim.jacoco convention plugin (buildSrc).
 tasks.named<JacocoReport>("jacocoTestReport") {
     dependsOn(tasks.named("test"))
     mustRunAfter(tasks.named("integrationTest"))
@@ -367,14 +329,6 @@ tasks.named<JacocoReport>("jacocoTestReport") {
     }
 }
 
-// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
-// resolves a relative coverage path against THIS module's base directory.
-val aggregatedCoverageReport: String =
-    rootProject.layout.buildDirectory
-        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
-        .get()
-        .asFile.absolutePath
-
 // ===========================================
 // SonarQube per-module configuration
 // ===========================================
@@ -387,6 +341,13 @@ val aggregatedCoverageReport: String =
 //
 // Fix: declare sources/tests explicitly here so the scanner uses ONLY this configuration
 // for the :dispatcher-agent module. The root sonar{} block intentionally omits these paths.
+// The report paths (JUnit results, JaCoCo XML plus the cross-module aggregate) go through the
+// interlocksim.sonar-module convention plugin (buildSrc).
+
+sonarModule {
+    coverageReport.set(layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml"))
+    junitReportPaths.set(listOf("build/test-results/test", "build/test-results/integrationTest"))
+}
 
 sonar {
     properties {
@@ -394,16 +355,5 @@ sonar {
         property("sonar.tests", "src/test/kotlin")
         property("sonar.java.binaries", "build/classes/kotlin/main")
         property("sonar.java.test.binaries", "build/classes/kotlin/test")
-        property(
-            "sonar.junit.reportPaths",
-            "build/test-results/test,build/test-results/integrationTest",
-        )
-        property(
-            "sonar.coverage.jacoco.xmlReportPaths",
-            listOf(
-                file("build/reports/jacoco/test/jacocoTestReport.xml").absolutePath,
-                aggregatedCoverageReport,
-            ).joinToString(","),
-        )
     }
 }
