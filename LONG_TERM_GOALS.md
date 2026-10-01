@@ -598,7 +598,7 @@ the 20-train stress case livelocks. The plan must cover:
 - A large review of kDisco for deadlocks, race conditions, and weak points, including research
   into existing scanners — this produces **new kDisco issues that become prerequisites of this
   goal**
-- No open kDisco blocker; the package rename (kdisco#53) is consumed
+- No open kDisco issue blocks Goal 1B yet (the package rename kdisco#53 is consumed; kdisco#42/#43/#44 block Goal 5)
 - During the work, write the realistic demands on Goal 9B into an extra `.md` file as part of each
   task — at least a revision, as a retrospective
 

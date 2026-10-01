@@ -1,7 +1,7 @@
 # Documentation Index
 
-Index of everything under `docs/`. Entries marked "(history, YYYY-MM)" are dated records of
-finished work: they are kept for context and are not maintained. Unmarked entries are living
+Index of everything under `docs/`. Entries marked "(history, YYYY-MM)" (the month is given where the file states a date; otherwise just
+"(history)") are records of finished work: they are kept for context and are not maintained. Unmarked entries are living
 documents. Project-wide rules live in the root [CLAUDE.md](../CLAUDE.md) and [TEAM.md](../TEAM.md).
 
 Directories covered as a single history entry (their files are not listed one by one):
@@ -39,10 +39,9 @@ Directories covered as a single history entry (their files are not listed one by
 
 ## Grid parameterization (2026-01 design set)
 
-Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), the navigation guide for this set.
+Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), the navigation guide for this set (history, 2026-01).
 
 - [GRID_TRANSFORMER_VS_INIT_MAPPING.md](GRID_TRANSFORMER_VS_INIT_MAPPING.md) - relationship between `GridTransformer.transformGrid()` and `initializeDynamicMapping()`.
-- [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md) - navigation guide for the design set (history, 2026-01).
 - [GRID_PARAMETERIZATION_INDEX.md](GRID_PARAMETERIZATION_INDEX.md) - earlier index of the design documents (history, 2026-01).
 - [GRID_PARAMETERIZATION_SUMMARY.md](GRID_PARAMETERIZATION_SUMMARY.md) - executive summary of the design (history, 2026-01).
 - [GRID_PARAMETERIZATION_DESIGN.md](GRID_PARAMETERIZATION_DESIGN.md) - full design for issue #139 (history, 2026-01).
