@@ -1,250 +1,125 @@
-# Grid Parameterization Documentation Index
-
-**Purpose:** Navigation guide for grid parameterization design and implementation documents
-**Issue:** [#139](https://github.com/bedaHovorka/interlockSim/issues/139) - Grid Parameterization Design (Phase 1 of [#131](https://github.com/bedaHovorka/interlockSim/issues/131))
-**Status:** Design Phase Complete - Awaiting Review
-**Created:** 2026-01-18
-**Authors:** kotlin-tech-lead, traffic-simulation-expert
+# Documentation Index
+
+Index of everything under `docs/`. Entries marked "(history, YYYY-MM)" are dated records of
+finished work: they are kept for context and are not maintained. Unmarked entries are living
+documents. Project-wide rules live in the root [CLAUDE.md](../CLAUDE.md) and [TEAM.md](../TEAM.md).
+
+Directories covered as a single history entry (their files are not listed one by one):
+`superpowers/plans/`, `superpowers/specs/`, `election/`, `issues/`. The `diagrams/` and
+`images/` directories are covered by their owner entries below.
+
+## Guides and conventions
+
+- [KOTLIN_STYLE_GUIDE.md](KOTLIN_STYLE_GUIDE.md) - coding conventions, DI with Koin, test fixtures, build environment.
+- [FEDORA_DOCKER_X11_SETUP.md](FEDORA_DOCKER_X11_SETUP.md) - running GUI containers on Fedora with SELinux and X11.
+- [SP1_5_OLLAMA_EXECUTOR_SETUP.md](SP1_5_OLLAMA_EXECUTOR_SETUP.md) - configuring the local Ollama executor for the Goal 10 dispatcher.
+- [CZECH_RAILWAY_TERMINOLOGY.md](CZECH_RAILWAY_TERMINOLOGY.md) - Czech-to-English railway term reference and translation guide.
+- [TRAIN_PUBLIC_API_USAGE.md](TRAIN_PUBLIC_API_USAGE.md) - how to use the public `Train` API from animation and observers.
+- [TRAIN_PUBLIC_API_QUICK_REF.md](TRAIN_PUBLIC_API_QUICK_REF.md) - quick reference of the property-style `Train` accessors.
+- [PATH_DISCOVERY_MIGRATION_GUIDE.md](PATH_DISCOVERY_MIGRATION_GUIDE.md) - migrating from the deprecated mixed-concern path APIs to the path discovery services.
+- [MANUAL_TEST_PLAN_GOAL_3.md](MANUAL_TEST_PLAN_GOAL_3.md) - manual test plan for Goal 3 (collision detection).
+- [KOIN_SCOPE_LIFECYCLE_TESTS.md](KOIN_SCOPE_LIFECYCLE_TESTS.md) - what the Koin scope lifecycle tests cover and how they work.
+- [CHANGELOG.md](CHANGELOG.md) - release changelog (Keep a Changelog format).
+
+## Architecture
+
+- [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) - path reservation, signal clearing invariants, route release.
+- [PATH_DISCOVERY_ARCHITECTURE.md](PATH_DISCOVERY_ARCHITECTURE.md) - separated static, reservation, and navigation path APIs.
+- [STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md](STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md) - separation of the static track model from dynamic simulation state.
+- [GRAPH_PARAMETERIZATION_ARCHITECTURE.md](GRAPH_PARAMETERIZATION_ARCHITECTURE.md) - graph parameterization architecture (issue #277).
+- [ANIMATION_ARCHITECTURE.md](ANIMATION_ARCHITECTURE.md) - animated simulation GUI architecture.
+- [CONTEXT_REFACTORING_DESIGN.md](CONTEXT_REFACTORING_DESIGN.md) - editing/simulation context split design and its history.
+- [INTERLOCKING_SCOPE_LIMITATIONS.md](INTERLOCKING_SCOPE_LIMITATIONS.md) - deliberate interlocking simplifications.
+- [ENGINE_CONTINUOUS_RATIONALE.md](ENGINE_CONTINUOUS_RATIONALE.md) - why `Engine` extends `Continuous`.
+- [SIMULATION_SPEED_CONTROL.md](SIMULATION_SPEED_CONTROL.md) - live wall-clock speed control for the animated simulation.
+- [FAST_SIM_BENCHMARK.md](FAST_SIM_BENCHMARK.md) - native versus JVM performance benchmark of the fast-sim binary.
+- [diagrams/README.md](diagrams/README.md) - PlantUML sources (`diagrams/*.puml`) and rendered images of the context architecture.
+- [grid-parameterization-architecture.puml](grid-parameterization-architecture.puml) - PlantUML class diagram of the grid parameterization design.
+- [grid-transformation-flow.puml](grid-transformation-flow.puml) - PlantUML flow of the editing-to-simulation grid transformation.
+
+## Grid parameterization (2026-01 design set)
+
+Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), the navigation guide for this set.
+
+- [GRID_TRANSFORMER_VS_INIT_MAPPING.md](GRID_TRANSFORMER_VS_INIT_MAPPING.md) - relationship between `GridTransformer.transformGrid()` and `initializeDynamicMapping()`.
+- [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md) - navigation guide for the design set (history, 2026-01).
+- [GRID_PARAMETERIZATION_INDEX.md](GRID_PARAMETERIZATION_INDEX.md) - earlier index of the design documents (history, 2026-01).
+- [GRID_PARAMETERIZATION_SUMMARY.md](GRID_PARAMETERIZATION_SUMMARY.md) - executive summary of the design (history, 2026-01).
+- [GRID_PARAMETERIZATION_DESIGN.md](GRID_PARAMETERIZATION_DESIGN.md) - full design for issue #139 (history, 2026-01).
+- [GRID_TRANSFORMATION_DESIGN.md](GRID_TRANSFORMATION_DESIGN.md) - transformation algorithm design (history, 2026-01).
+- [GRID_PARAMETERIZATION_IMPLEMENTATION.md](GRID_PARAMETERIZATION_IMPLEMENTATION.md) - implementation summary for issue #131 (history, 2026-01).
+- [GRID_TRANSFORMER_TEST_FIXES.md](GRID_TRANSFORMER_TEST_FIXES.md) - list of `GridTransformerTest` compilation fixes (history, 2026-01).
+
+## Goal 10 reports (dated)
+
+- [GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md](GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md) - LLM model evaluation for the dispatcher agent role (SP3.1, #534).
+- [GOAL_10_SP2C14_RELIABILITY_REPORT.md](GOAL_10_SP2C14_RELIABILITY_REPORT.md) - dispatcher reliability report (SP2c.14, #837).
+- [GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md](GOAL_10_SP2C15_FRONTIER_DIAGNOSTIC_SETUP.md) - setup for the frontier-model diagnostic run (SP2c.15, #838, 2026-08).
+- [GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md](GOAL_10_SP2C25_DECISION_VOCABULARY_AUDIT.md) - `RuleBasedDispatcher` decision-vocabulary audit (SP2c.25, #848).
+- [GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md](GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md) - paused-clock feasibility and headless-pacing ruling (SP2c.26, #849, 2026-08).
+- [GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md](GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md) - Ollama capability audit: seed, format and tools, `num_ctx`, `maxIterations` (SP2c.27, #850).
+
+## History
+
+Dated summaries, retrospectives, decisions, and reports. Kept for context; do not treat as current.
+
+### AnimatedSim milestone
+
+- [ANIMATED_SIM_MILESTONE_PREP.md](ANIMATED_SIM_MILESTONE_PREP.md) - milestone preparation analysis (history, 2026-01).
+- [ANIMATED_SIM_SIMPLIFICATION_ANALYSIS.md](ANIMATED_SIM_SIMPLIFICATION_ANALYSIS.md) - which backlog issues simplify the milestone (history, 2026-01).
+- [ANIMATED_SIM_STATUS_MEETING_2026_02_04.md](ANIMATED_SIM_STATUS_MEETING_2026_02_04.md) - team status meeting (history, 2026-02).
+- [ANIMATED_SIM_MILESTONE_COMPLETE.md](ANIMATED_SIM_MILESTONE_COMPLETE.md) - milestone completion report (history, 2026-02).
+- [ISSUE_273_TEST_EXECUTION_REPORT.md](ISSUE_273_TEST_EXECUTION_REPORT.md) - manual testing and quality verification report, issue #273 (history, 2026-02).
+- [IMPLEMENTATION_SUMMARY_ISSUE_205.md](IMPLEMENTATION_SUMMARY_ISSUE_205.md) - Frame integration of animation components, issue #205 (history, 2026-02).
+- [MANUAL_TEST_PLAN_ISSUE_205.md](MANUAL_TEST_PLAN_ISSUE_205.md) - manual test plan for issue #205 (history, 2026-02).
+
+### Context and factory refactoring
+
+- [CONTEXT_INHERITANCE_INCOMPATIBILITY.md](CONTEXT_INHERITANCE_INCOMPATIBILITY.md) - why `SimulationContext` cannot extend `EditingContext`, issue #153 (history, 2026-01).
+- [ISSUE_153_RETROSPECTIVE.md](ISSUE_153_RETROSPECTIVE.md) - retrospective of issue #153 (history, 2026-01).
+- [CONTEXT_REFACTORING_PHASE6_SUMMARY.md](CONTEXT_REFACTORING_PHASE6_SUMMARY.md) - phase 6 summary of the context refactoring (history, 2026-02).
+- [FACTORY_PATTERN_IMPLEMENTATION.md](FACTORY_PATTERN_IMPLEMENTATION.md) - factory pattern implementation summary (history, 2026-01).
+- [ISSUE_214_IMPLEMENTATION_SUMMARY.md](ISSUE_214_IMPLEMENTATION_SUMMARY.md) - pre-wrapping all tracks at initialization, issue #214 (history, 2026-02).
+- [ISSUE_214_VISUAL_EXPLANATION.md](ISSUE_214_VISUAL_EXPLANATION.md) - before/after diagram of the track wrapping strategy (history, 2026-02).
+- [IMPLEMENTATION_SUMMARY_ISSUE_220.md](IMPLEMENTATION_SUMMARY_ISSUE_220.md) - Koin scope lifecycle tests, issue #220 (history, 2026-02).
+- [ISSUE_219_IMPLEMENTATION.md](ISSUE_219_IMPLEMENTATION.md) - migrating the Koin performance test to JMH, issue #219 (history).
+- [MOCKK_MIGRATION_PHASE4_RETROSPECTIVE.md](MOCKK_MIGRATION_PHASE4_RETROSPECTIVE.md) - MockK migration phase 4 retrospective, issue #332 (history, 2026-02).
+- [JAVA21-MIGRATION-SUMMARY.md](JAVA21-MIGRATION-SUMMARY.md) - Java 11 to Java 21 migration summary (history, 2026-01).
+
+### Fixes, tests, and implementation summaries
+
+- [TRAIN_PUBLIC_API_IMPLEMENTATION.md](TRAIN_PUBLIC_API_IMPLEMENTATION.md) - technical summary of the public `Train` API (history, 2026-02).
+- [TRAIN_PASSIVATION_FIX.md](TRAIN_PASSIVATION_FIX.md) - train stops completely when no path is available (history).
+- [SIGNAL_CONFIG_ROLLBACK_FIX.md](SIGNAL_CONFIG_ROLLBACK_FIX.md) - signal configuration rollback bug fix (history, 2026-03).
+- [RESOURCE_LEAK_IMPROVEMENTS.md](RESOURCE_LEAK_IMPROVEMENTS.md) - exception safety and resource leak improvements (history, 2026-01).
+- [PRAHA_SWITCH_IMPROVEMENTS.md](PRAHA_SWITCH_IMPROVEMENTS.md) - switch layout improvements for the Praha hlavní nádraží XML (history, 2026-02).
+- [PR_306_IMPLEMENTATION_SUMMARY.md](PR_306_IMPLEMENTATION_SUMMARY.md) - review points implemented for PR #306 (history).
+- [INTEGRATION_TESTS_SUMMARY.md](INTEGRATION_TESTS_SUMMARY.md) - end-to-end integration test implementation summary (history).
+- [TEST_COVERAGE_SUMMARY.md](TEST_COVERAGE_SUMMARY.md) - context package coverage improvement summary (history).
+- [TEST_COVERAGE_POLISH.md](TEST_COVERAGE_POLISH.md) - coverage polish for cells, tracks, and xml packages (history).
+- [ISSUE_280_ANALYSIS_PLAN.md](ISSUE_280_ANALYSIS_PLAN.md) - analysis plan for the zero-acceleration train deadlock, issue #280 (history, 2026-01).
+
+### Planning and backlog analysis
 
----
+- [BACKLOG_PRIORITY_ANALYSIS.md](BACKLOG_PRIORITY_ANALYSIS.md) - backlog prioritization by dependency impact (history, 2026-01).
+- [backlog-dependency-graph.md](backlog-dependency-graph.md) - dependency graph of backlog issues (history, 2026-01).
 
-## Quick Navigation
+### Simulation library decision (2026-02)
 
-### Architecture Diagrams
-- **[Context Hierarchy](diagrams/context-hierarchy.svg)** - Context class inheritance structure
-- **[Context Transformation](diagrams/context-transformation.svg)** - Editing → Simulation workflow
-- **[Factory Pattern](diagrams/factory-pattern.svg)** - Factory relationships and DI
-- **[Grid Parameterization](grid-parameterization-architecture.puml)** - Grid type hierarchy
-- **[Grid Transformation Flow](grid-transformation-flow.puml)** - Transformation process
-
-### Start Here
-- **[GRID_PARAMETERIZATION_INDEX.md](./GRID_PARAMETERIZATION_INDEX.md)** - Complete navigation guide and quick reference
-
-### For Quick Understanding (5-10 minutes)
-- **[GRID_PARAMETERIZATION_SUMMARY.md](./GRID_PARAMETERIZATION_SUMMARY.md)** - Executive summary with key decisions and tables
-
-### For Implementation (45-60 minutes)
-- **[GRID_PARAMETERIZATION_DESIGN.md](./GRID_PARAMETERIZATION_DESIGN.md)** - Complete architectural design with type hierarchy, identity contracts, rendering protocol, and implementation roadmap
-
-### For Simulation Experts
-- **[GRID_TRANSFORMATION_DESIGN.md](./GRID_TRANSFORMATION_DESIGN.md)** - Grid transformation algorithm, path reconstruction, simulation correctness, and safety invariants
-
-### Visual Diagrams
+Superseded: the Kalasim migration plan was dropped on 2026-08-24; kDisco is the engine.
 
-#### Context Architecture (Issue #153)
-- **[diagrams/context-hierarchy.puml](diagrams/context-hierarchy.puml)** - Context class hierarchy (PlantUML)
-- **[diagrams/context-transformation.puml](diagrams/context-transformation.puml)** - Context transformation flow (PlantUML)
-- **[diagrams/factory-pattern.puml](diagrams/factory-pattern.puml)** - Factory pattern integration (PlantUML)
-- See [diagrams/README.md](diagrams/README.md) for details
+- [SIMULATION_LIBRARY_DECISION.md](SIMULATION_LIBRARY_DECISION.md) - jDisco to Kalasim decision, round 1 (history, 2026-02).
+- [SIMULATION_LIBRARY_DECISION_ROUND2.md](SIMULATION_LIBRARY_DECISION_ROUND2.md) - migration road selection, round 2 (history, 2026-02).
+- [SIMULATION_LIBRARY_DECISION_VERIFICATION.md](SIMULATION_LIBRARY_DECISION_VERIFICATION.md) - calculation verification of the decision documents (history, 2026-02).
+- [VERIFICATION_SUMMARY.md](VERIFICATION_SUMMARY.md) - summary of that verification (history, 2026-02).
+- [DECISION_AUDIT_AND_EXPERTISE.md](DECISION_AUDIT_AND_EXPERTISE.md) - independent audit of both decision rounds (history, 2026-02).
+- [SIMULATION_LIBRARY_ROAD_MAP.md](SIMULATION_LIBRARY_ROAD_MAP.md) - jDisco to kDisco to Kalasim roadmap (history, 2026-02).
+- [simulation-approach-analysis.md](simulation-approach-analysis.md) - simulation backend approach analysis (history).
+- [jdisco-research.md](jdisco-research.md) - research report on the jDisco library (history).
 
-#### Grid Parameterization (Issue #131)
-- **[grid-parameterization-architecture.puml](./grid-parameterization-architecture.puml)** - Type hierarchy and architecture diagram (PlantUML)
-- **[grid-transformation-flow.puml](./grid-transformation-flow.puml)** - Transformation flow diagram (PlantUML)
+### Directories (history, indexed as one entry each)
 
----
-
-## Documentation Overview
-
-This design deliverable provides comprehensive architecture documentation for implementing grid parameterization in the interlockSim railway simulator. The documentation is organized into complementary perspectives:
-
-### Architecture Perspective (kotlin-tech-lead)
-
-**Focus:** Type hierarchy, interfaces, class relationships, identity contracts, rendering patterns
-
-**Key Documents:**
-1. **GRID_PARAMETERIZATION_DESIGN.md** (56 KB)
-   - Current architecture analysis
-   - Type hierarchy design with UML
-   - Identity preservation contracts (===, ==, hashCode)
-   - CellRenderer abstraction strategy (Visitor pattern)
-   - Context transformation design
-   - Test impact analysis (662 existing tests, 45-65 new tests)
-   - 4-phase implementation roadmap (12-15 days)
-   - Architectural trade-offs
-
-2. **GRID_PARAMETERIZATION_SUMMARY.md** (11 KB)
-   - Executive summary for quick understanding
-   - Key architectural decisions in table format
-   - Success criteria and next steps
-
-3. **grid-parameterization-architecture.puml** (9 KB)
-   - Complete type hierarchy diagram
-   - Static vs. dynamic separation
-   - Grid infrastructure with type parameters
-   - Rendering infrastructure (Visitor pattern)
-
-4. **grid-transformation-flow.puml** (4 KB)
-   - Step-by-step transformation flow
-   - Decision points and parallel processes
-
-### Simulation Perspective (traffic-simulation-expert)
-
-**Focus:** Grid transformation algorithm, path reconstruction, physics preservation, safety invariants
-
-**Key Document:**
-- **GRID_TRANSFORMATION_DESIGN.md** (33 KB)
-  - Grid transformation algorithm with pseudocode (O(n+e) complexity)
-  - Path reconstruction strategy for simulation
-  - 5 correctness invariants (lengths, speeds, topology, states, identity)
-  - 5 railway safety invariants (SI-1 through SI-5)
-  - Physics preservation analysis (Train equations unaffected)
-  - Timing preservation guarantee (transformation before jDisco activation)
-  - jDisco integration considerations
-  - Risk assessment and edge cases
-  - Example scenarios (vyhybna.xml walkthrough)
-  - Implementation recommendations
-
-### Navigation Guide
-
-**GRID_PARAMETERIZATION_INDEX.md** provides:
-- Document structure overview
-- Navigation by task, role, and implementation phase
-- Quick reference cards (identity, rendering, transformation)
-- Review checklist
-- Approval signatures section
-
----
-
-## How to View PlantUML Diagrams
-
-### Option 1: Online (No Installation)
-1. Copy the contents of `.puml` file
-2. Go to https://www.plantuml.com/plantuml/uml/
-3. Paste and view
-
-### Option 2: VS Code (Recommended for Development)
-1. Install "PlantUML" extension by jebbs
-2. Open `.puml` file in VS Code
-3. Press `Alt+D` to preview
-
-### Option 3: Local Rendering
-```bash
-# Install PlantUML (requires Java)
-brew install plantuml  # macOS
-sudo apt install plantuml  # Linux
-
-# Render diagram
-plantuml docs/grid-parameterization-architecture.puml
-# Output: grid-parameterization-architecture.png
-```
-
----
-
-## Design Highlights
-
-### Core Architecture Decisions
-
-1. **Type Hierarchy**
-   - Static objects: `RailSwitch`, `RailSemaphore`, `InOut` (immutable configuration)
-   - Dynamic wrappers: `DynamicRailSwitch`, `DynamicRailSemaphore`, `DynamicInOut` (mutable state)
-   - Identity based on wrapped static object
-
-2. **Identity Preservation**
-   ```kotlin
-   // Uses System.identityHashCode() for stable hash
-   override fun hashCode(): Int = System.identityHashCode(static)
-
-   // IdentityHashMap ensures single wrapper per static object
-   private val dynamicMap: IdentityHashMap<PathSeparator, DynamicPathSeparator>
-   ```
-
-3. **Rendering Strategy**
-   - Replaces reflection with Visitor pattern
-   - Type-safe dispatch at compile time
-   - Dynamic wrappers delegate to static objects
-
-4. **Grid Parameterization**
-   ```kotlin
-   // Type parameterized grid
-   class Array2DMap<T : Cell> { ... }
-
-   // Editing context with static cells
-   class DefaultEditingContext : AbstractRailwayNetGrid<Cell>
-
-   // Simulation context with dynamic wrappers
-   class DefaultSimulationContext : AbstractRailwayNetGrid<Cell>
-   ```
-
-5. **Transformation Algorithm**
-   - Time complexity: O(n + e) where n=cells, e=edges
-   - Memory overhead: ~1.5 KB for typical network
-   - Three phases: separators → tracks → validation
-   - Completes before jDisco scheduler activation
-
----
-
-## Implementation Roadmap
-
-| Phase | Days | Deliverables | Risk |
-|-------|------|--------------|------|
-| 1. Grid Parameterization | 3 | Parameterized `Array2DMap<T : Cell>`, 10-15 tests | Low |
-| 2. Rendering Protocol | 4 | Visitor pattern, 15-20 tests | Medium |
-| 3. Context Transformation | 3 | Factory method, 10-15 tests | Medium |
-| 4. Identity Validation | 2 | Identity tests, benchmarks | Low |
-
-**Total:** 12-15 days
-
----
-
-## Test Impact Analysis
-
-**Existing Tests:** 662 total (628 passing, 34 skipped)
-
-**Affected Categories:**
-- **HIGH Impact:** Context tests (~80 tests) - require updates
-- **MEDIUM Impact:** Cell tests (~50 tests) - add rendering protocol
-- **LOW-MEDIUM Impact:** Simulation tests (~150 tests) - verify no ClassCastException
-
-**New Tests Needed:** 45-65 tests across 4 categories
-
----
-
-## Success Criteria
-
-Grid transformation implementation is complete when:
-
-- [ ] All existing tests pass (662 tests)
-- [ ] New transformation tests pass (45-65 tests)
-- [ ] Golden output unchanged for vyhybna.xml
-- [ ] ShuntingLoop example produces same results
-- [ ] Code coverage ≥ 51% (baseline maintained)
-- [ ] All documentation updated
-
----
-
-## Required Approvals
-
-Before implementation begins, this design requires approval from:
-
-- [ ] **kotlin-tech-lead** - Design completeness
-- [ ] **traffic-simulation-expert** - Simulation correctness
-- [ ] **railway-civil-engineer** - Domain correctness
-- [ ] **java-senior-dev** - Legacy compatibility
-
----
-
-## Related Documentation
-
-### Prerequisites
-1. `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Phase 4 wrapper pattern
-2. `CONTEXT_REFACTORING_DESIGN.md` - Context hierarchy design
-3. `FACTORY_PATTERN_IMPLEMENTATION.md` - SimulationProcessFactory pattern
-
-### Related Issues
-- [#131](https://github.com/bedaHovorka/interlockSim/issues/131) - Grid Parameterization (parent epic)
-- [#98](https://github.com/bedaHovorka/interlockSim/issues/98) - Context Refactoring
-- [#100](https://github.com/bedaHovorka/interlockSim/issues/100) - Static/Dynamic Separation
-
----
-
-## Questions or Feedback?
-
-**During Review:** Comment on GitHub issue [#139](https://github.com/bedaHovorka/interlockSim/issues/139)
-
-**During Implementation:** Refer to [GRID_PARAMETERIZATION_INDEX.md](./GRID_PARAMETERIZATION_INDEX.md) for navigation
-
----
-
-**Document Version:** 1.0
-**Last Updated:** 2026-01-18
-**Status:** Design Phase Complete - Awaiting Review
+- `superpowers/plans/` - dated implementation plans, 2026-03 to 2026-06 (history).
+- `superpowers/specs/` - dated design specs that accompany those plans, 2026-03 to 2026-06 (history).
+- `election/` - the 2026-04-14 backlog election record (history, 2026-04).
+- `issues/` - write-ups of individual resolved or investigated issues (#80, #291, #311), with its own README (history, 2026-02).

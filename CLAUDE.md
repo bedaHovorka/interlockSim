@@ -276,7 +276,9 @@ SARIF; the other modules' detekt runs locally and in the Docker test stage. Buil
 **Thesis:** LaTeX sources in `text/`, build with `docker compose up text`
 (outputs to `artifacts/text/bakalarka.pdf`).
 
-Key documents in `docs/` (the directory holds ~75 files; start with these):
+Full index: [docs/README.md](docs/README.md)
+
+Key documents in `docs/` (the full list is in the index above; start with these):
 
 - [KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) - coding conventions, DI patterns, build environment
 - [PATH_RESERVATION_ARCHITECTURE.md](docs/PATH_RESERVATION_ARCHITECTURE.md) and
