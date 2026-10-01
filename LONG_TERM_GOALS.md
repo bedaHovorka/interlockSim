@@ -422,7 +422,7 @@ the governing text):
 | **Non-goal** | The LLM is not responsible for action legality and is **not inside the safety envelope**. The interlocking shields all actions. |
 | **Non-goal** | **No deterministic policy component may originate a dispatching action during an LLM run.** |
 | **Paramount example** | `vyhybna.xml` proves **reliability under autonomy**, not optimality. Praha is where a non-deterministic policy has something to win. |
-| **Determinism (P8)** | What is delivered is **prompt determinism**: the same recorded snapshot sequence produces a byte-identical prompt sequence. A sampling **seed cannot reach Ollama through Koog 1.1.1**, so decode determinism is not available on the tool-calling path. It is reachable only on a future JSON-only decision mode. |
+| **Determinism (P8)** | What is delivered is **prompt determinism**: the same recorded snapshot sequence produces a byte-identical prompt sequence. A sampling **seed cannot reach Ollama through Koog 1.1.1 (as of 2026-08)**, so decode determinism is not available on the tool-calling path. It is reachable only on a future JSON-only decision mode. |
 
 **Measured A4 outcome** (`docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`, 60 runs,
 `qwen2.5:7b-instruct`, `vyhybna.xml`, 600 simulated seconds):

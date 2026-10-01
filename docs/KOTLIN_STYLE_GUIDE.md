@@ -89,8 +89,8 @@ max_line_length = 120
 Ktlint, Detekt, the JaCoCo pin, and shared Sonar report-path wiring are configured in the convention plugins
 `buildSrc/src/main/kotlin/interlocksim.*.gradle.kts` (detekt, ktlint, jacoco, sonar-module). Each module applies
 the relevant plugins and keeps module-specific source roots, report locations, exclusions, and task wiring:
-- **Ktlint 1.6.0** - Code formatting (respects .editorconfig)
-- **Detekt 1.23.8** - Static analysis (conservative rules in detekt.yml)
+- **Ktlint** - Code formatting (respects .editorconfig; version comes from `ktlintPluginVersion` and `ktlintVersion` in `gradle.properties`)
+- **Detekt** - Static analysis (conservative rules in detekt.yml; version comes from `detektPluginVersion` in `gradle.properties`)
 
 ## Kotlin Conversion Conventions
 
@@ -596,7 +596,7 @@ See `detekt.yml` for complete configuration with detailed comments.
 
 ### Overview
 
-InterlockSim uses **Koin 3.5.6** for dependency injection - a lightweight (~1MB), Kotlin-native DI framework. Koin provides clean dependency management without static fields, code generation, or AOP/proxies.
+InterlockSim uses **Koin** (version comes from `koinVersion` in `gradle.properties`) for dependency injection - a lightweight (~1MB), Kotlin-native DI framework. Koin provides clean dependency management without static fields, code generation, or AOP/proxies.
 
 **Key Benefits:**
 - ✅ Eliminates companion object proliferation
@@ -1794,18 +1794,17 @@ Which parameterized annotation to use?
 ### Dependency Management
 
 Dependencies are managed via Gradle with fallback strategy:
-- **kDisco 0.6.1** (version from `kdiscoVersion` in `gradle.properties`) - Discrete event simulation library (Kotlin Multiplatform, replaces jDisco)
+- **kDisco** (version comes from `kdiscoVersion` in `gradle.properties`) - Discrete event simulation library (Kotlin Multiplatform, replaces jDisco)
   - Repository: https://github.com/bedaHovorka/kdisco
   - Published to GitHub Packages: `https://maven.pkg.github.com/bedaHovorka/kdisco`
   - Fallback order: `mavenLocal()` (local cache) → GitHub Packages → build fails
   - Requires GitHub authentication for package download unless installed locally (see below)
-- **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
-- **AssertK 0.28.1** - Fluent Kotlin assertion library
-- **MockK 1.13.14** - Kotlin-native mocking framework (supports sealed classes, coroutines)
-- **Mockito 5.21.0** - Java mocking framework (deprecated, being phased out in favor of MockK)
-- **kotlin-logging-jvm 7.0.3** - Kotlin logging wrapper (lambda-based lazy evaluation)
-- **SLF4J 2.0.17** + **Logback 1.5.23** - Logging backend (used by kotlin-logging)
-- **Koin 3.5.6** - Kotlin-native dependency injection framework (adopted 2026-01-12, migration complete)
+- **JUnit 5** - Testing framework (JUnit Jupiter API and Engine; version comes from `junitJupiterVersion` in `gradle.properties`)
+- **AssertK** - Fluent Kotlin assertion library (version comes from `assertkVersion` in `gradle.properties`)
+- **MockK** - Kotlin-native mocking framework (supports sealed classes, coroutines; version comes from `mockkVersion` in `gradle.properties`)
+- **kotlin-logging-jvm** - Kotlin logging wrapper (lambda-based lazy evaluation; version comes from `kotlinLoggingVersion` in `gradle.properties`)
+- **SLF4J** + **Logback** - Logging backend (used by kotlin-logging; version comes from `slf4jVersion` and `logbackVersion` in `gradle.properties`)
+- **Koin** - Kotlin-native dependency injection framework (adopted 2026-01-12, migration complete; version comes from `koinVersion` in `gradle.properties`)
 
 Gradle automatically downloads dependencies during the build. Configuration files:
 - `build.gradle.kts` - Build configuration and dependency declarations
@@ -1849,8 +1848,8 @@ Then run Gradle normally. Because `mavenLocal()` is checked before GitHub Packag
 
 Verify installation:
 ```bash
-ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/0.5.0/
-# Should show: kdisco-core-jvm-0.5.0.jar, kdisco-core-jvm-0.5.0.pom
+ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/<kdiscoVersion>/
+# Should show: kdisco-core-jvm-<kdiscoVersion>.jar, kdisco-core-jvm-<kdiscoVersion>.pom
 ```
 
 ### Gradle Build Commands

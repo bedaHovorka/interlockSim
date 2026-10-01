@@ -55,13 +55,13 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 - **Java**: JDK 21 or later (Java 21 LTS minimum)
 - **Build Tool**: Gradle (wrapper included)
 - **Dependencies**: Automatically managed via Gradle (versions in `gradle.properties`)
-  - `cz.ksimulantenbande.kdisco:kdisco-core` 0.6.1-SNAPSHOT (from GitHub Packages, or `mavenLocal()`)
-  - Koin 3.5.6 - dependency injection
-  - Koog 1.1.1 - LLM agent framework, used by `:dispatcher-agent`
-  - JUnit 5.11.4 (from Maven Central)
-  - assertk 0.28.1 - assertions
-  - MockK 1.13.14 - Kotlin-native mocking for sealed classes
-  - Burst 2.12.2 and Mokkery 3.3.0 - multiplatform test parameterization and mocking
+  - `cz.ksimulantenbande.kdisco:kdisco-core` (from GitHub Packages, or `mavenLocal()`; version comes from `kdiscoVersion` in `gradle.properties`)
+  - Koin - dependency injection (version comes from `koinVersion` in `gradle.properties`)
+  - Koog - LLM agent framework, used by `:dispatcher-agent` (version comes from `koogVersion` in `gradle.properties`)
+  - JUnit 5 (from Maven Central; version comes from `junitJupiterVersion` in `gradle.properties`)
+  - assertk - assertions (version comes from `assertkVersion` in `gradle.properties`)
+  - MockK - Kotlin-native mocking for sealed classes (version comes from `mockkVersion` in `gradle.properties`)
+  - Burst and Mokkery - multiplatform test parameterization and mocking (version comes from `burstVersion` and `mokkeryVersion` in `gradle.properties`)
 
 ### Optional (for thesis documentation):
 - LaTeX, gnuplot, make, wmf2eps, sed
@@ -575,7 +575,7 @@ The following loggers are pre-configured in `logback.xml`:
 
 ## Testing
 
-Comprehensive JUnit 5.11.4 test suite with assertk 0.28.1 assertions. Tests live in each
+Comprehensive JUnit 5 test suite with assertk assertions (JUnit version comes from `junitJupiterVersion` in `gradle.properties`; assertk version comes from `assertkVersion` in `gradle.properties`). Tests live in each
 subproject: `core/src/{commonTest,jvmTest}/kotlin/`, `desktop-ui/src/test/kotlin/`,
 `dispatcher-agent/src/test/kotlin/` and `fast-sim/src/linuxX64Test/kotlin/`.
 

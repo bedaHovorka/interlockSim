@@ -47,7 +47,7 @@ Returns to agents for LLM calls (SP1.6+)
 
 (This is what Koog's `simpleOllamaAIExecutor()` convenience function does internally; we
 construct it directly since that function's module, `ai.koog:prompt-executor-llms-all`, isn't
-published as a standalone artifact at the pinned Koog 1.0.0 — see `OllamaSimpleExecutor`'s
+published as a standalone artifact at the pinned Koog version (version comes from `koogVersion` in `gradle.properties`) — see `OllamaSimpleExecutor`'s
 class doc.)
 
 ## Setup Instructions
