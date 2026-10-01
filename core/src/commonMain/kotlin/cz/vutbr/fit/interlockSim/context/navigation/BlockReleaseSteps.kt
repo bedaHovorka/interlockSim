@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  *
  * @since Issue #961
  */
-interface BlockReleaseSteps {
+fun interface BlockReleaseSteps {
 	/**
 	 * Release one [block] of [trainId]'s route for good: the committed-release step (Issue #961).
 	 *

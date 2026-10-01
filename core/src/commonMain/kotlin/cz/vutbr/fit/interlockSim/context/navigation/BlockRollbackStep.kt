@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  *
  * @since Issue #961
  */
-internal interface BlockRollbackStep {
+internal fun interface BlockRollbackStep {
 	/**
 	 * Roll back one [block] that a failed reservation attempt reserved for [trainId]: the rollback-only
 	 * step (Issue #961). It undoes the reservation as if it had never happened.
