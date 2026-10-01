@@ -217,6 +217,13 @@ class DefaultDispatcherRunRecorder(
 			"[DispatcherRunRecorder] note: llmSuccessRate is reclassified in #834 and not comparable " +
 				"to pre-#834 runs"
 		}
+		// Issue #988: silent ticks with every train moving and a path ahead are relabelled from
+		// LLM_SILENT_NONACTIONABLE to LLM_SILENT_ALL_MOVING (an LLM success), which raises both
+		// llmSuccessRate and actionableTickRate for the same railway behaviour.
+		logger.info {
+			"[DispatcherRunRecorder] note: llmSuccessRate and actionableTickRate rise from #988 on " +
+				"(LLM_SILENT_ALL_MOVING) and are not comparable to pre-#988 runs"
+		}
 		// Issue #927: actionableTickRate is a defaulted, not a genuinely measured, figure for any
 		// snapshot decoded from a pre-#927 (schema version < 6) file — those files predate
 		// TickOutcome.LLM_SILENT_NONACTIONABLE entirely, so the recorder that produced them could

@@ -70,10 +70,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * healthy: every active train moving, each with a reserved path ahead, nobody queued and no route
  * extension pending (the signal aspect is not used; a pending extension blocks the branch). That is
  * an observation-only proof that nothing needed dispatching, so the tick is now scored as
- * an LLM success and the rule fallback is skipped. Unlike [LLM_SILENT_NONACTIONABLE] the proof does
- * not rest on the rule dispatcher's opinion, which is why this outcome is a success. Runs recorded
- * before #988 are not comparable: the same ticks were scored [LLM_SILENT_NONACTIONABLE] or
- * [RULE_FALLBACK] there.
+ * an LLM success and the rule fallback is skipped. The branch mirrors the rule dispatcher's own
+ * reserve conditions (a pending route extension keeps the fallback), so skipping it loses no
+ * action. Runs recorded before #988 are not comparable: with `RuleBasedDispatcher` as the
+ * fallback, the same ticks could only have been scored [LLM_SILENT_NONACTIONABLE] there.
  *
  * ## Why [TickClass.NONACTIONABLE] and not [TickClass.DEGRADED] (Issue #927)
  *
@@ -165,8 +165,9 @@ enum class TickOutcome {
 	/**
 	 * LLM answered silently (no tool emissions, no decisions) while every active train was moving
 	 * with a reserved path ahead, no train was queued for approval and no route extension was
-	 * pending on any block input (Issue #988). Nothing needed dispatching, so the silence is correct and the rule fallback is not consulted. Counts as an
-	 * LLM success. See `KoogAgentPlanAdapter.allTrainsMovingWithPathAhead` for the exact predicate.
+	 * pending on any block input (Issue #988). Nothing needed dispatching, so the silence is
+	 * correct and the rule fallback is not consulted. Counts as an LLM success. See
+	 * `KoogAgentPlanAdapter.allTrainsMovingWithPathAhead` for the exact predicate.
 	 */
 	LLM_SILENT_ALL_MOVING,
 

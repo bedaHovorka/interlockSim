@@ -251,8 +251,9 @@ data class DispatcherRunSnapshot(
 		 *   to `null`, preserving the fact that older JSON did not record breaker statistics.
 		 * - **9** — Issue #988, `LLM_SILENT_ALL_MOVING` tick outcome. [ticksByOutcome] is keyed by
 		 *   enum name, so no field changed shape and every version 1-8 file still decodes. Those
-		 *   runs scored the same ticks as [TickOutcome.LLM_SILENT_NONACTIONABLE] or
-		 *   [TickOutcome.RULE_FALLBACK], so their rates are not comparable.
+		 *   runs scored the same ticks as [TickOutcome.LLM_SILENT_NONACTIONABLE]
+		 *   (the only outcome possible with `RuleBasedDispatcher` as the fallback), so their rates
+		 *   are not comparable.
 		 */
 		const val CURRENT_SCHEMA_VERSION: Int = 9
 

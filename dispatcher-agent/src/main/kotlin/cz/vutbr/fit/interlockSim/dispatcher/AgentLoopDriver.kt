@@ -206,9 +206,9 @@ class AgentLoopDriver(
 	private var lastTickOutcome: TickOutcome? = null
 
 	init {
-		// The listener fires synchronously inside plannerTickSource.plan()'s suspend body — all
-		// four call sites (LLM actions, idle no-op, and both runFallback branches) run inline in
-		// KoogAgentPlanAdapter.plan, not in a spawned coroutine — so lastTickOutcome is always
+		// The listener fires synchronously inside plannerTickSource.plan()'s suspend body — every
+		// call site (LLM actions, idle no-op, all-moving silent tick, both runFallback branches) runs
+		// inline in KoogAgentPlanAdapter.plan, not in a spawned coroutine — so lastTickOutcome is always
 		// fresh by the time plan() returns below in runCycle(). A throw from this listener (or
 		// from any other) is caught by CompositeTickListener and cannot fail the cycle (Issue #999).
 		plannerTickSource?.addTickListener(

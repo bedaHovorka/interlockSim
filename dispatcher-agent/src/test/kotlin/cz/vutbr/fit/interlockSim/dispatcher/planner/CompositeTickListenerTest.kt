@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
@@ -188,5 +189,6 @@ class CompositeTickListenerTest {
 
 		assertThat(history.snapshot().map { it.outcome }).isEqualTo(listOf(TickOutcome.LLM_ACTIONS))
 		assertThat(seenAfter).isEqualTo(listOf(TickOutcome.LLM_ACTIONS))
+		coVerify(exactly = 0) { fallback.decide(any()) }
 	}
 }

@@ -67,7 +67,7 @@ class CompositeTickListener(
 				throw e
 			} catch (e: Exception) {
 				logger.warn(e) {
-					"Tick listener ${delegate::class.qualifiedName} threw while handling outcome " +
+					"Tick listener ${delegate::class.java.name} threw while handling outcome " +
 						"${record.outcome}; continuing with the remaining listeners"
 				}
 			}

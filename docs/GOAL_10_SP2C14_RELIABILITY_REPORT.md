@@ -200,7 +200,8 @@ among the per-arm detail tables**, per this issue's acceptance criteria.
 
 > **Comparability note (#988, 2026-10):** from this point a silent tick with every train moving
 > and a path ahead counts as an LLM success (`LLM_SILENT_ALL_MOVING`) and skips the rule
-> fallback, which raises the T1/T7 success columns. Runs recorded earlier are not comparable.
+> fallback, which raises the T1/T7 success columns. Runs recorded earlier are not comparable:
+> with `RuleBasedDispatcher` as the fallback, those ticks were scored `LLM_SILENT_NONACTIONABLE`.
 
 ### T1 — Arm Comparison (reliability)
 

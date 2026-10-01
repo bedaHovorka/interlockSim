@@ -710,7 +710,9 @@ class RunReportAggregator(
 				"fallback ticks into LLM successes, so this rate is structurally higher than a pre-#834 " +
 				"run's even at identical railway behaviour — read it as a within-#834 comparison only. " +
 				"Likewise, from #988 a silent tick with every train moving and a path ahead counts as a " +
-				"success (`LLM_SILENT_ALL_MOVING`), so earlier runs are not comparable."
+				"success (`LLM_SILENT_ALL_MOVING`), so BOTH LLM Success and Actionable Rate rise for the same " +
+				"railway behaviour (relabelled former `LLM_SILENT_NONACTIONABLE` ticks count in numerator " +
+				"and denominator); only runs from the same side of the change are comparable."
 		)
 		sb.appendLine(
 			"- **Invalid-action rate** — rejected actions ÷ emitted actions (`rejectionsByCode` sum " +
