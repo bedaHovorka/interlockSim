@@ -67,8 +67,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * ## [LLM_SILENT_ALL_MOVING] (Issue #988)
  *
  * A silent cycle used to be scored through the fallback oracle even when the railway was visibly
- * healthy: every active train moving, each with a reserved path ahead, and nobody queued. That is
- * a decisive, observation-only proof that nothing needed dispatching, so the tick is now scored as
+ * healthy: every active train moving, each with a reserved path ahead, nobody queued and no route
+ * extension pending (the signal aspect is not used; a pending extension blocks the branch). That is
+ * an observation-only proof that nothing needed dispatching, so the tick is now scored as
  * an LLM success and the rule fallback is skipped. Unlike [LLM_SILENT_NONACTIONABLE] the proof does
  * not rest on the rule dispatcher's opinion, which is why this outcome is a success. Runs recorded
  * before #988 are not comparable: the same ticks were scored [LLM_SILENT_NONACTIONABLE] or
@@ -163,8 +164,8 @@ enum class TickOutcome {
 
 	/**
 	 * LLM answered silently (no tool emissions, no decisions) while every active train was moving
-	 * with a reserved path ahead and no train was queued for approval (Issue #988). Nothing needed
-	 * dispatching, so the silence is correct and the rule fallback is not consulted. Counts as an
+	 * with a reserved path ahead, no train was queued for approval and no route extension was
+	 * pending on any block input (Issue #988). Nothing needed dispatching, so the silence is correct and the rule fallback is not consulted. Counts as an
 	 * LLM success. See `KoogAgentPlanAdapter.allTrainsMovingWithPathAhead` for the exact predicate.
 	 */
 	LLM_SILENT_ALL_MOVING,

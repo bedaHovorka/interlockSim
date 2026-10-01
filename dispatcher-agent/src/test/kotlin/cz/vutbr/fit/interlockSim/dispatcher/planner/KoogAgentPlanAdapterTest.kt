@@ -28,9 +28,11 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
@@ -134,7 +136,9 @@ class KoogAgentPlanAdapterTest {
 		trains: Map<String, Double>,
 		withoutPerception: Set<String> = emptySet(),
 		withoutSignalAhead: Set<String> = emptySet(),
-		unapprovedTrains: List<QueuedTrainObservation> = emptyList()
+		unapprovedTrains: List<QueuedTrainObservation> = emptyList(),
+		innerBlockInputs: List<BlockInputObservation> = emptyList(),
+		outerBlockInputs: List<BlockInputObservation> = emptyList()
 	): DispatchObservation =
 		DispatchObservation(
 			snapshot =
@@ -170,8 +174,8 @@ class KoogAgentPlanAdapterTest {
 							}
 				),
 			unapprovedTrains = unapprovedTrains,
-			innerBlockInputs = emptyList(),
-			outerBlockInputs = emptyList()
+			innerBlockInputs = innerBlockInputs,
+			outerBlockInputs = outerBlockInputs
 		)
 
 	/** Runs one silent cycle on [observation] with a nothing-actionable fallback; returns the outcome. */
@@ -206,6 +210,74 @@ class KoogAgentPlanAdapterTest {
 		assertThat(outcome).isEqualTo(TickOutcome.LLM_SILENT_ALL_MOVING)
 		assertThat(returned).isNotNull().isEmpty()
 		coVerify(exactly = 0) { fallback.decide(any()) }
+	}
+
+	private fun blockInput(
+		state: TrackFacility.State = TrackFacility.State.OCCUPIED,
+		approaching: Boolean = true,
+		pathSetUpToward: Boolean = false,
+		extendedBeyond: Boolean = false,
+		awaitingExtension: Boolean = false
+	) = BlockInputObservation(
+		blockId = "b1",
+		towardSemaphoreName = "S-t1",
+		toSeparatorName = "sep",
+		state = state,
+		ownerTrainId = "t1",
+		isApproachingThisInput = approaching,
+		pathSetUpTowardThisInput = pathSetUpToward,
+		pathAlreadyExtendedBeyond = extendedBeyond,
+		awaitingRouteExtension = awaitingExtension
+	)
+
+	private fun outcomeWithBlockInput(
+		input: BlockInputObservation,
+		inner: Boolean = true
+	): TickOutcome {
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val obs =
+			observationWithPerceptions(
+				mapOf("t1" to 5.0),
+				innerBlockInputs = if (inner) listOf(input) else emptyList(),
+				outerBlockInputs = if (inner) emptyList() else listOf(input)
+			)
+		return silentCycleOutcome(obs, fallback)
+	}
+
+	@Test
+	fun `moving train approaching a not-yet-extended occupied block input keeps the fallback`() {
+		assertThat(outcomeWithBlockInput(blockInput())).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+		assertThat(outcomeWithBlockInput(blockInput(), inner = false)).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+	}
+
+	@Test
+	fun `moving train approaching a reserved block with path set up toward it keeps the fallback`() {
+		val input = blockInput(state = TrackFacility.State.RESERVED, pathSetUpToward = true)
+
+		assertThat(outcomeWithBlockInput(input)).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+	}
+
+	@Test
+	fun `moving train awaiting route extension keeps the fallback even when the path looks extended`() {
+		val input = blockInput(extendedBeyond = true, awaitingExtension = true)
+
+		assertThat(outcomeWithBlockInput(input)).isEqualTo(TickOutcome.LLM_SILENT_NONACTIONABLE)
+	}
+
+	@Test
+	fun `block inputs that are extended, not approaching or free do not block ALL_MOVING`() {
+		val inputs =
+			listOf(
+				blockInput(extendedBeyond = true),
+				blockInput(approaching = false),
+				blockInput(state = TrackFacility.State.RESERVED, pathSetUpToward = true, extendedBeyond = true),
+				blockInput(state = TrackFacility.State.RESERVED, pathSetUpToward = false),
+				blockInput(state = TrackFacility.State.FREE)
+			)
+		inputs.forEach {
+			assertThat(outcomeWithBlockInput(it)).isEqualTo(TickOutcome.LLM_SILENT_ALL_MOVING)
+		}
 	}
 
 	@Test

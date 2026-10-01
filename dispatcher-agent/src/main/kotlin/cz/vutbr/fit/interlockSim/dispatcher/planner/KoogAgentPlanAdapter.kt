@@ -16,7 +16,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
@@ -753,12 +755,14 @@ class KoogAgentPlanAdapter(
 	 * - there is at least one train position;
 	 * - for every train position a perception exists, its `velocity` is above zero and its
 	 *   `signalAheadName` is non-null (null means no path is reserved ahead). A missing
-	 *   perception means "not proven" and also falls through to the fallback.
+	 *   perception means "not proven" and also falls through to the fallback;
+	 * - no block input (inner or outer) is one where the fallback would reserve a path
+	 *   ([needsPathExtension]): a moving train with a signal ahead may still be owed a route
+	 *   extension, and without it the train brakes to a stop.
 	 *
-	 * The signal aspect is deliberately not part of the predicate: a train that is moving with a
-	 * reserved path ahead is being served by the interlocking whatever the next aspect shows
-	 * (a red aspect simply means it will brake to a stop, and a standing train fails the velocity
-	 * check on a later tick); the aspect alone cannot say whether a dispatcher action is owed.
+	 * The signal aspect is deliberately not part of the predicate: it cannot say whether a
+	 * dispatcher action is owed. A pending route extension, checked through the block inputs,
+	 * is what blocks this branch.
 	 */
 	private fun allTrainsMovingWithPathAhead(observation: DispatchObservation): Boolean {
 		val snapshot = observation.snapshot
@@ -768,8 +772,27 @@ class KoogAgentPlanAdapter(
 			snapshot.trainPositions.all { position ->
 				val perception = snapshot.trainPerception(position.trainId)
 				perception != null && perception.velocity > 0.0 && perception.signalAheadName != null
-			}
+			} &&
+			(observation.innerBlockInputs + observation.outerBlockInputs).none { needsPathExtension(it) }
 	}
+
+	/**
+	 * Whether the rule-based fallback would reserve a forward path from [input]. Mirrors the state
+	 * conditions of `RuleBasedDispatcher.checkInput` (it does not model the same-tick separator
+	 * claim or a missing next separator, so it may say `true` where the dispatcher would defer,
+	 * which only keeps the fallback and is therefore safe):
+	 * - OCCUPIED: the train approaches this input and either the path is not yet extended beyond it
+	 *   or the route extension is awaited;
+	 * - RESERVED: a path is set up toward this input and is not yet extended beyond it;
+	 * - FREE: never.
+	 */
+	private fun needsPathExtension(input: BlockInputObservation): Boolean =
+		when (input.state) {
+			TrackFacility.State.FREE -> false
+			TrackFacility.State.OCCUPIED ->
+				input.isApproachingThisInput && (!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension)
+			TrackFacility.State.RESERVED -> input.pathSetUpTowardThisInput && !input.pathAlreadyExtendedBeyond
+		}
 
 	/**
 	 * Publishes one completed cycle to the tick listener and to [cycleHistory].

@@ -430,7 +430,49 @@ class DispatcherRunSnapshotTest {
 			}
 			""".trimIndent()
 
-		/** A version-8 document: the v5 fixture re-stamped, as no field changed shape in between. */
-		private val SCHEMA_V8_JSON = SCHEMA_V5_JSON.replace("\"schemaVersion\": 5", "\"schemaVersion\": 8")
+		/** A literal schema-version-8 document: has `actionableTickRate` and circuit-breaker stats. */
+		private val SCHEMA_V8_JSON =
+			"""
+			{
+				"schemaVersion": 8,
+				"runId": "legacy-v8-001",
+				"arm": "RULE_BASED",
+				"params": {
+					"tickPeriodMs": 500,
+					"historyN": 10,
+					"temperature": 0.0,
+					"maxActionsPerTick": 3,
+					"model": "",
+					"seed": null
+				},
+				"totalTicks": 4,
+				"ticksByOutcome": { "LLM_ACTIONS": 3, "RULE_FALLBACK": 1 },
+				"timeoutNoOpByCause": { "DEADLINE_MISS": 0 },
+				"llmSuccessRate": 0.75,
+				"actionableTickRate": 0.75,
+				"noOpRate": 0.0,
+				"invalidOutputRate": 0.0,
+				"repairSuccessRate": 0.0,
+				"emittedByActionType": {},
+				"rejectionsByCode": {},
+				"applyFailuresByCode": {},
+				"validAt1": 0.0,
+				"correctAt1": null,
+				"oracleAgreementAt1": null,
+				"latencyP50Ms": 100,
+				"latencyP95Ms": 200,
+				"latencyMaxMs": 300,
+				"actionsByAuthor": {},
+				"unattributedApplies": 0,
+				"terminalFallbackEngaged": false,
+				"terminalFallbackTickIndex": null,
+				"c7Clean": true,
+				"completedNaturally": true,
+				"endCause": "NATURAL_COMPLETION",
+				"circuitBreakerState": "CLOSED",
+				"circuitBreakerTotalSkips": 0,
+				"circuitBreakerOpenCount": 0
+			}
+			""".trimIndent()
 	}
 }
