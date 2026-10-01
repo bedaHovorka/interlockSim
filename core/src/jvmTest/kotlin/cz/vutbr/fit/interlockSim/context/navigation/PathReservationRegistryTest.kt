@@ -276,6 +276,125 @@ class PathReservationRegistryTest : KoinTestBase() {
 		}
 	}
 
+	/**
+	 * Issue #975 (owner decision D5): the registry records when each block was registered, as a
+	 * read-only fact. No expiry lives in the registry; staleness stays the sweeper's own rule.
+	 */
+	@Nested
+	inner class RegistrationTimestamps {
+		private var now = 0.0
+		private lateinit var clocked: PathReservationRegistry
+
+		@BeforeEach
+		fun setUpClock() {
+			now = 0.0
+			clocked = PathReservationRegistry(simulationContext) { now }
+		}
+
+		@Test
+		fun `registering a block records the sim time it was registered at`() {
+			now = 12.5
+
+			clocked.registerAtomic("train1", blocks)
+
+			blocks.forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isEqualTo(12.5)
+			}
+		}
+
+		@Test
+		fun `a block never registered has no timestamp`() {
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first())).isNull()
+		}
+
+		@Test
+		fun `re-registering a block the train already holds keeps its first timestamp`() {
+			now = 10.0
+			clocked.registerAtomic("train1", blocks.take(2))
+
+			now = 40.0
+			clocked.registerAtomic("train1", blocks.take(3))
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks[0]), "already held").isEqualTo(10.0)
+			assertThat(clocked.getRegisteredAtSimTime(blocks[1]), "already held").isEqualTo(10.0)
+			assertThat(clocked.getRegisteredAtSimTime(blocks[2]), "newly registered").isEqualTo(40.0)
+		}
+
+		@Test
+		fun `a conflicting registration records no timestamp`() {
+			clocked.registerAtomic("train1", blocks.take(1))
+
+			val result = clocked.registerAtomic("train2", blocks)
+
+			assertThat(result).isInstanceOf<PathReservationRegistry.RegistrationResult.Conflict>()
+			blocks.drop(1).forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isNull()
+			}
+		}
+
+		@Test
+		fun `unregisterBlock removes the block's timestamp`() {
+			clocked.registerAtomic("train1", blocks)
+
+			assertThat(clocked.unregisterBlock("train1", blocks.first())).isTrue()
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first()), "released block").isNull()
+			assertThat(clocked.getRegisteredAtSimTime(blocks.last()), "still held block").isNotNull()
+		}
+
+		@Test
+		fun `a refused unregisterBlock keeps the timestamp`() {
+			clocked.registerAtomic("train1", blocks)
+
+			assertThat(clocked.unregisterBlock("train2", blocks.first())).isFalse()
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first())).isEqualTo(0.0)
+		}
+
+		@Test
+		fun `unregister of a train removes the timestamps of all its blocks`() {
+			clocked.registerAtomic("train1", blocks)
+
+			clocked.unregister("train1")
+
+			blocks.forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isNull()
+			}
+		}
+
+		@Test
+		fun `clear removes every timestamp`() {
+			clocked.registerAtomic("train1", blocks.take(2))
+			clocked.registerAtomic("train2", blocks.drop(2))
+
+			clocked.clear()
+
+			blocks.forEach { block ->
+				assertThat(clocked.getRegisteredAtSimTime(block), "timestamp of $block").isNull()
+			}
+		}
+
+		@Test
+		fun `a block registered again after its release gets a new timestamp`() {
+			now = 5.0
+			clocked.registerAtomic("train1", blocks.take(1))
+			clocked.unregisterBlock("train1", blocks.first())
+
+			now = 90.0
+			clocked.registerAtomic("train2", blocks.take(1))
+
+			assertThat(clocked.getRegisteredAtSimTime(blocks.first())).isEqualTo(90.0)
+		}
+
+		@Test
+		fun `the default time source works without a running simulation`() {
+			// The context's own registry uses the default source; no kDisco process is running here.
+			registry.registerAtomic("train1", blocks)
+
+			assertThat(registry.getRegisteredAtSimTime(blocks.first())).isEqualTo(0.0)
+		}
+	}
+
 	@Nested
 	inner class Statistics {
 		@Test

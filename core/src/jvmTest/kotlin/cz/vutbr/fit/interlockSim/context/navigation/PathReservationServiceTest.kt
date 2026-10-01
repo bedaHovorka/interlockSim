@@ -4038,6 +4038,25 @@ class PathReservationServiceTest : KoinTestBase() {
 			}
 			assertThat(listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }).isEmpty()
 		}
+
+		@Test
+		fun `candidate rollback removes the reservation timestamps it recorded (Issue 975)`() {
+			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
+			success.reservedBlocks.forEach { block ->
+				assertThat(registry.getRegisteredAtSimTime(block), "timestamp of $block after reserve").isNotNull()
+			}
+
+			(service as DefaultPathReservationService).rollbackUnconfigurableCandidate(
+				trainId = "train1",
+				forwardBlocks = success.reservedBlocks,
+				switches = emptyList(),
+				priorSwitches = emptySet()
+			)
+
+			success.reservedBlocks.forEach { block ->
+				assertThat(registry.getRegisteredAtSimTime(block), "timestamp of $block after rollback").isNull()
+			}
+		}
 	}
 
 	private class RecordingListener : BlockOccupancyListener {

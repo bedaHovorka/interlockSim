@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.Condition
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -69,6 +70,15 @@ private val logger = KotlinLogging.logger {}
  *
  * **NOT thread-safe.** All operations assume single-threaded access.
  *
+ * ## Registration timestamps (Issue #975)
+ *
+ * The registry records the simulation time at which each block was registered to its owner
+ * ([getRegisteredAtSimTime]). It is a read-only fact, not a policy: nothing in the registry expires
+ * a reservation. A block keeps its first timestamp while its owner re-registers it, loses it on
+ * every removal ([unregisterBlock], [unregister], [clear] -- every release and rollback path goes
+ * through one of them), and gets a new one if it is registered again later. Deciding when a holding
+ * is stale stays with its caller (`OrphanReservationSweeper` in `:dispatcher-agent`).
+ *
  * ## Size
  *
  * The registry is the single owner of the train -> blocks / switches / PathInfo state, so every
@@ -76,12 +86,16 @@ private val logger = KotlinLogging.logger {}
  * #1067); splitting the registry is out of scope for those fixes.
  *
  * @param context Simulation context (needed for PathInfo merging with ArrayPath)
+ * @param simTimeSource Current simulation time, read when a block is registered. The default reads
+ *   the running kDisco clock and falls back to 0.0 outside a simulation (unit tests), exactly as
+ *   `DefaultPathReservationService` does.
  * @since Issue #294 (Phase 2 of Issue #292)
  * @since Issue #296 Phase 8 (PathInfo extension fix)
  */
 @Suppress("TooManyFunctions")
 class PathReservationRegistry(
-	private val context: SimulationContext
+	private val context: SimulationContext,
+	private val simTimeSource: () -> Double = { runCatching { Process.time() }.getOrDefault(0.0) }
 ) : BlockOccupancyNotifier {
 	/**
 	 * Registered external listeners for block occupancy/release events.
@@ -184,6 +198,12 @@ class PathReservationRegistry(
 	 * Mapping: Block → Owning train ID
 	 */
 	private val blockToTrain = mutableMapOf<DynamicTrackBlock, String>()
+
+	/**
+	 * Mapping: Block → simulation time it was registered to its current owner (Issue #975).
+	 * Holds exactly the keys of [blockToTrain]; see the class KDoc.
+	 */
+	private val blockRegisteredAt = mutableMapOf<DynamicTrackBlock, Double>()
 
 	/**
 	 * Mapping: Train ID → List of reserved switches (Tier 2)
@@ -339,11 +359,13 @@ class PathReservationRegistry(
 
 		// Phase 2: All checks passed - register all blocks
 		val blockList = trainToBlocks.getOrPut(trainId) { mutableListOf() }
+		val now = simTimeSource()
 		blocks.forEach { block ->
 			if (block !in blockList) {
 				blockList.add(block)
 			}
 			blockToTrain[block] = trainId
+			blockRegisteredAt.getOrPut(block) { now }
 		}
 
 		return RegistrationResult.Success
@@ -371,7 +393,7 @@ class PathReservationRegistry(
 	 * ## State Changes
 	 *
 	 * - Removes trainToBlocks[trainId]
-	 * - Removes blockToTrain[block] for all blocks owned by this train
+	 * - Removes blockToTrain[block] and the block's registration timestamp for all blocks owned by this train
 	 * - Removes trainToPathInfo[trainId] (Issue #295/#296)
 	 *
 	 * @param trainId The train identifier
@@ -383,6 +405,7 @@ class PathReservationRegistry(
 		// Remove all blocks from mappings (regardless of state)
 		blocks.forEach { block ->
 			blockToTrain.remove(block)
+			blockRegisteredAt.remove(block)
 		}
 
 		// Remove train entry and PathInfo
@@ -412,7 +435,7 @@ class PathReservationRegistry(
 	 *
 	 * If block is FREE and owned by trainId:
 	 * - Removes block from trainToBlocks[trainId]
-	 * - Removes blockToTrain[block]
+	 * - Removes blockToTrain[block] and the block's registration timestamp
 	 * - If this was the last block, removes trainToBlocks[trainId] (but keeps trainToPathInfo[trainId])
 	 *
 	 * ## PathInfo Lifecycle (Issue #301 Fix)
@@ -468,6 +491,7 @@ class PathReservationRegistry(
 
 		// Remove from mappings
 		blockToTrain.remove(block)
+		blockRegisteredAt.remove(block)
 		trainToBlocks[trainId]?.remove(block)
 
 		val remainingBlocks = trainToBlocks[trainId]?.size ?: 0
@@ -495,6 +519,13 @@ class PathReservationRegistry(
 	 * @return Train ID if block is registered, null otherwise
 	 */
 	fun getOwner(block: DynamicTrackBlock): String? = blockToTrain[block]
+
+	/**
+	 * The simulation time at which [block] was registered to its current owner, or `null` when no
+	 * train holds it (Issue #975). A read-only fact -- see the class KDoc; the registry never
+	 * expires a reservation by it.
+	 */
+	fun getRegisteredAtSimTime(block: DynamicTrackBlock): Double? = blockRegisteredAt[block]
 
 	/**
 	 * Check whether a block is available for a new reservation.
@@ -1571,6 +1602,7 @@ class PathReservationRegistry(
 	fun clear() {
 		trainToBlocks.clear()
 		blockToTrain.clear()
+		blockRegisteredAt.clear()
 		trainToSwitches.clear()
 		switchToTrain.clear()
 		trainToPathInfo.clear()
