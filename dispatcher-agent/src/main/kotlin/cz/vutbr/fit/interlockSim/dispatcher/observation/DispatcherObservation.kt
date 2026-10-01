@@ -227,6 +227,23 @@ sealed interface AppliedOutcome {
 	) : AppliedOutcome
 
 	/**
+	 * `request_route` was refused before pathfinding because [endpointName] — one of
+	 * [fromEndpointName]/[toEndpointName] — is not an endpoint of this network. No topology search
+	 * ran, so this is not [NoRoute]; the agent has to name an endpoint that exists.
+	 *
+	 * @since Issue #973
+	 */
+	data class UnresolvedEndpoint(
+		val trainId: String,
+		val fromEndpointName: String,
+		val toEndpointName: String,
+		/** The requested endpoint name the kernel could not resolve, verbatim. */
+		val endpointName: String,
+		override val id: CommandId,
+		override val tickIndex: Long
+	) : AppliedOutcome
+
+	/**
 	 * `request_route` failed because the requested origin is not contiguous with the train's own
 	 * position: it bounds none of the blocks the train holds or occupies, so the train could
 	 * never have reached the route.

@@ -241,6 +241,17 @@ class DispatchDecisionApplierTest {
 		}
 
 		@Test
+		@DisplayName("UnresolvedEndpoint result does not throw")
+		fun unresolvedEndpoint_doesNotThrow() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.UnresolvedEndpoint(endpointName = "zA")
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
 		@DisplayName("GeometricallyImpossible result does not throw")
 		fun geometricallyImpossible_doesNotThrow() {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns

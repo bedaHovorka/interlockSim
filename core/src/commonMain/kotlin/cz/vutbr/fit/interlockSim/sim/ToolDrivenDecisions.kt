@@ -168,6 +168,12 @@ private fun DispatchDecision.RequestRoute.requestRouteAndLog(
 				"$logPrefix: RequestRoute no route exists $fromEndpointName → $toEndpointName for $trainName"
 			}
 
+		is RouteRequestResult.UnresolvedEndpoint ->
+			toolDrivenLogger.warn {
+				"$logPrefix: RequestRoute unresolved endpoint '${result.endpointName}' for $trainName " +
+					"($fromEndpointName → $toEndpointName)"
+			}
+
 		is RouteRequestResult.OriginNotContiguous ->
 			toolDrivenLogger.warn {
 				"$logPrefix: RequestRoute origin not contiguous for $trainName — ${result.reason}"

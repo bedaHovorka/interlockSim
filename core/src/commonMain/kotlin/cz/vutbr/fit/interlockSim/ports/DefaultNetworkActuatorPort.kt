@@ -216,6 +216,11 @@ class DefaultNetworkActuatorPort(
 	 * `RouteRequestResult` on both branches**; see the branch-equivalence property in
 	 * `DefaultNetworkActuatorPortTest`.
 	 *
+	 * [InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint] — an endpoint name the
+	 * kernel could not resolve, so the refusal never reached pathfinding — maps to
+	 * [RouteRequestResult.UnresolvedEndpoint] naming that endpoint (Issue #973). It has no
+	 * legacy/no-facade counterpart: that branch has no endpoint-resolution step of its own.
+	 *
 	 * [InterlockingFacade.RouteResponse.DenialCause.Other] — a denial with no reservation behind
 	 * it, so no candidate-path count exists — maps to `NoRouteExists`, never to `AllPathsBlocked`:
 	 * a fabricated count of `0` is worse than no count, and such a denial is not contention.
@@ -262,9 +267,18 @@ class DefaultNetworkActuatorPort(
 				}
 				RouteRequestResult.OriginNotContiguous(fromEndpointName, response.reason)
 			}
+			is InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint -> {
+				// Issue #973: the refusal never reached pathfinding, so it is not "no topological
+				// path" -- name the endpoint the caller has to correct instead.
+				logger.warn {
+					"requestRoute: unresolved endpoint '${cause.endpointName}' for $trainName " +
+						"($fromEndpointName → $toEndpointName): ${response.reason}"
+				}
+				RouteRequestResult.UnresolvedEndpoint(cause.endpointName)
+			}
 			is InterlockingFacade.RouteResponse.DenialCause.Other -> {
-				// Residual: the kernel denied without attempting a reservation (e.g. an endpoint
-				// it could not resolve), so no candidate-path count and no owning train exist.
+				// Residual: the kernel denied without attempting a reservation, so no
+				// candidate-path count and no owning train exist.
 				// Reported as a permanent refusal rather than contention -- see this method's KDoc.
 				logger.warn {
 					"requestRoute: denied without a reservation outcome for $trainName " +

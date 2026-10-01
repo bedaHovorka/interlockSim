@@ -28,8 +28,9 @@ package cz.vutbr.fit.interlockSim.dispatcher
  * and excluded from the invalid-output rate.
  *
  * [ALL_PATHS_BLOCKED], [CONFLICT], and [NO_ROUTE_EXISTS] map one-to-one to the `:core`
- * `RouteRequestResult` non-success sealed subtypes they mirror; [ORIGIN_NOT_CONTIGUOUS] and
- * [CONDITION_FAILED] mirror the remaining two. All are read-only.
+ * `RouteRequestResult` non-success sealed subtypes they mirror; [UNRESOLVED_ENDPOINT],
+ * [ORIGIN_NOT_CONTIGUOUS], [CONDITION_FAILED], [GEOMETRICALLY_IMPOSSIBLE] and
+ * [DIVERGES_FROM_HELD_ROUTE] mirror the remaining ones. All are read-only.
  */
 enum class ApplyFailureCode {
 	/**
@@ -51,13 +52,26 @@ enum class ApplyFailureCode {
 	CONFLICT,
 
 	/**
-	 * No route exists in the network topology between the requested endpoints, or the interlocking
-	 * kernel refused before topology lookup was attempted (Issue #834).
+	 * The network topology was searched and holds no path between the requested endpoints.
 	 *
-	 * Maps to `RouteRequestResult.NoRouteExists` (`:core`, read-only), whose KDoc documents both
-	 * producing outcomes and why the second one is not reported as contention.
+	 * Maps to `RouteRequestResult.NoRouteExists` (`:core`, read-only). A refusal that never
+	 * reached pathfinding is [UNRESOLVED_ENDPOINT], not this code (Issue #973).
 	 */
 	NO_ROUTE_EXISTS,
+
+	/**
+	 * The interlocking kernel refused before pathfinding because it could not resolve an endpoint
+	 * name of the request to an InOut or Semaphore of this network.
+	 *
+	 * Maps to `RouteRequestResult.UnresolvedEndpoint` (`:core`, read-only).
+	 *
+	 * **Is** an LLM failure, like [NO_ROUTE_EXISTS]: the identical request fails until the
+	 * dispatcher names an endpoint that exists. Not contention, so excluded from
+	 * [ALL_PATHS_BLOCKED].
+	 *
+	 * @since Issue #973
+	 */
+	UNRESOLVED_ENDPOINT,
 
 	/**
 	 * The `approve_train` command was applied but the admission callback rejected the train

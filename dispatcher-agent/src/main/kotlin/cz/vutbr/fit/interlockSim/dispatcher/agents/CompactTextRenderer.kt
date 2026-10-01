@@ -206,6 +206,11 @@ class CompactTextRenderer : ObservationRenderer {
 			is AppliedOutcome.NoRoute ->
 				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : NO_ROUTE"
 
+			// Issue #973: refused before pathfinding -- name the endpoint the model has to correct.
+			is AppliedOutcome.UnresolvedEndpoint ->
+				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
+					"UNRESOLVED_ENDPOINT (${outcome.endpointName})"
+
 			// Issue #893: minimal exhaustiveness branch, deliberately in the same shape as its
 			// siblings. Surfacing the full `reason` text to the model is the beta rendering task.
 			is AppliedOutcome.OriginNotContiguous ->

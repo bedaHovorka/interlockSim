@@ -228,6 +228,54 @@ class RequestRouteApplyFailureCodeTest {
 	}
 
 	/**
+	 * Issue #973: a refusal that never reached pathfinding (an endpoint the kernel could not
+	 * resolve) is counted under its own code, not under [ApplyFailureCode.NO_ROUTE_EXISTS], which
+	 * now means only "the topology was searched and holds no path". The published outcome names
+	 * the unresolved endpoint so the model learns which name to correct.
+	 */
+	@Test
+	@DisplayName(
+		"UnresolvedEndpoint -> APPLIED_THEN_FAILED, applyFailure UNRESOLVED_ENDPOINT, outcome names the endpoint"
+	)
+	fun unresolvedEndpointIsAppliedThenFailed() {
+		val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
+		every { networkActuator.requestRoute(any(), any(), any()) } returns
+			RouteRequestResult.UnresolvedEndpoint("Nope")
+		val outcomes = mutableListOf<ActionOutcome>()
+		var decisionAppliedCount = 0
+		val correlationMap = CommandCorrelationMap()
+		val outcomeChannel = AppliedOutcomeChannel()
+		val queue = ActuatorCommandQueue(correlationMap = correlationMap)
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = networkActuator,
+				onApproveTrain = {},
+				onDecisionApplied = { decisionAppliedCount++ },
+				correlationMap = correlationMap,
+				outcomeSink = outcomeChannel,
+				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
+			)
+
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "Nope", "InOut-B")))
+		applier.onControlStep()
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().phase).isEqualTo(ActionPhase.APPLIED_THEN_FAILED)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.UNRESOLVED_ENDPOINT)
+		assertThat(decisionAppliedCount).isEqualTo(1)
+
+		val published = outcomeChannel.drainSince(0L)
+		assertThat(published).hasSize(1)
+		assertThat(published.first()).isInstanceOf(AppliedOutcome.UnresolvedEndpoint::class)
+		val unresolved = published.first() as AppliedOutcome.UnresolvedEndpoint
+		assertThat(unresolved.trainId).isEqualTo("T1")
+		assertThat(unresolved.fromEndpointName).isEqualTo("Nope")
+		assertThat(unresolved.toEndpointName).isEqualTo("InOut-B")
+		assertThat(unresolved.endpointName).isEqualTo("Nope")
+	}
+
+	/**
 	 * The contiguity rejection (Issue #893, task A-R1) must be countable on its own.
 	 *
 	 * `DefaultPathReservationService.reservePath` now refuses a route whose start is not
@@ -639,6 +687,30 @@ class RequestRouteApplyFailureCodeTest {
 		// The rendered prompt must carry the Issue #1066 guidance, not a bare retryable "blocked".
 		val prompt = renderPrompt(divergent)
 		assertThat(prompt).contains("extend from doB2 or cancel the route first")
+	}
+
+	/**
+	 * Issue #973: the `DenialCause.UnresolvedEndpoint` discriminant survives the facade-wired
+	 * `DefaultNetworkActuatorPort` into [AppliedOutcome.UnresolvedEndpoint] and
+	 * [ApplyFailureCode.UNRESOLVED_ENDPOINT], never into the `NoRouteExists` bucket.
+	 */
+	@Test
+	@DisplayName("UnresolvedEndpoint through a facade-wired port -> UNRESOLVED_ENDPOINT + outcome names the endpoint")
+	fun unresolvedEndpointThroughFacadeWiredPortPublishesNamedOutcome() {
+		val (outcomes, published) =
+			applyThroughFacadeWiredPort(
+				InterlockingFacade.RouteResponse.Denied(
+					"Unknown route endpoint: doA1",
+					InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint("doA1")
+				)
+			)
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.UNRESOLVED_ENDPOINT)
+		assertThat(published).hasSize(1)
+		val unresolved = published.first() as AppliedOutcome.UnresolvedEndpoint
+		assertThat(unresolved.endpointName).isEqualTo("doA1")
+		assertThat(renderPrompt(unresolved)).contains("endpoint 'doA1' does not exist on this network.")
 	}
 
 	/**

@@ -699,6 +699,13 @@ class DispatchDecisionApplier(
 				}
 				onFailedReservation()
 			}
+			is RouteRequestResult.UnresolvedEndpoint -> {
+				logger.warn {
+					"ReservePath: unresolved endpoint '${result.endpointName}' for ${decision.trainId} " +
+						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName})"
+				}
+				onFailedReservation()
+			}
 			is RouteRequestResult.OriginNotContiguous -> {
 				logger.warn {
 					"ReservePath: origin '${decision.fromSemaphoreName}' is not contiguous " +
@@ -871,6 +878,10 @@ class DispatchDecisionApplier(
 				}
 				ApplyFailureCode.NO_ROUTE_EXISTS
 			}
+			is RouteRequestResult.UnresolvedEndpoint -> {
+				handleRequestRouteUnresolvedEndpoint(decision, result, correlation)
+				ApplyFailureCode.UNRESOLVED_ENDPOINT
+			}
 			is RouteRequestResult.OriginNotContiguous -> {
 				handleRequestRouteOriginNotContiguous(decision, result, correlation)
 				ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS
@@ -887,6 +898,37 @@ class DispatchDecisionApplier(
 				handleRequestRouteDivergesFromHeldRoute(decision, result, correlation)
 				ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE
 			}
+		}
+	}
+
+	/**
+	 * Handles the [RouteRequestResult.UnresolvedEndpoint] branch of [applyRequestRoute] —
+	 * extracted for the same reason as [handleRequestRouteOriginNotContiguous] (detekt LongMethod
+	 * budget).
+	 *
+	 * Publishes [AppliedOutcome.UnresolvedEndpoint] so the agent learns which endpoint name it has
+	 * to correct, instead of being told that no route exists between the endpoints.
+	 *
+	 * @since Issue #973
+	 */
+	private fun handleRequestRouteUnresolvedEndpoint(
+		decision: DispatchDecision.RequestRoute,
+		result: RouteRequestResult.UnresolvedEndpoint,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.warn {
+			"DispatchDecisionApplier: RequestRoute unresolved endpoint '${result.endpointName}' for " +
+				"${decision.trainName} (${decision.fromEndpointName} → ${decision.toEndpointName})"
+		}
+		publishOutcome(correlation) {
+			AppliedOutcome.UnresolvedEndpoint(
+				trainId = decision.trainName,
+				fromEndpointName = decision.fromEndpointName,
+				toEndpointName = decision.toEndpointName,
+				endpointName = result.endpointName,
+				id = it.id,
+				tickIndex = it.tickIndex
+			)
 		}
 	}
 

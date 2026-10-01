@@ -372,6 +372,12 @@ class KoogDispatchAgentImpl(
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — no route exists between these endpoints."
 
+			// Issue #973: refused before pathfinding -- the topology was never searched, so name the
+			// endpoint the model has to correct instead of claiming no route exists.
+			is AppliedOutcome.UnresolvedEndpoint ->
+				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
+					"REFUSED — endpoint '${outcome.endpointName}' does not exist on this network."
+
 			// The kernel's reason already names the offending origin and every legal alternative
 			// for this train, so it is carried through verbatim rather than paraphrased.
 			is AppliedOutcome.OriginNotContiguous ->

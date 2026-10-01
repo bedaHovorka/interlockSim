@@ -239,13 +239,29 @@ interface InterlockingFacade {
 			) : DenialCause
 
 			/**
+			 * The refusal never reached pathfinding: [requestRouteByEndpoints] could not resolve
+			 * [endpointName] to an InOut or Semaphore of this network, so no reservation was
+			 * attempted and no candidate-path count or owning train exists to report.
+			 *
+			 * Permanent for the requested name: retrying is pointless until the caller names an
+			 * endpoint that exists. Distinct from [NoPath], which means the topology was searched
+			 * and holds no path.
+			 *
+			 * @property endpointName The requested endpoint name that did not resolve, verbatim.
+			 * @since Issue #973
+			 */
+			data class UnresolvedEndpoint(
+				val endpointName: String
+			) : DenialCause
+
+			/**
 			 * Residual cause: a denial with no reservation outcome behind it and no four-condition
 			 * failure behind it either, so no candidate-path count, conflicting owner, or
 			 * retryability flag exists to report.
 			 *
-			 * Covers the endpoint-resolution failures of [requestRouteByEndpoints] (an unknown
-			 * endpoint name). Four-condition [requestRoute] denials use [ConditionFailed], not
-			 * this cause.
+			 * No production path produces it since Issue #973: the endpoint-resolution failures of
+			 * [requestRouteByEndpoints] carry [UnresolvedEndpoint], and four-condition
+			 * [requestRoute] denials use [ConditionFailed].
 			 *
 			 * Callers must **not** classify this as contention — there is no count to report and
 			 * a retry is not indicated. See
@@ -363,7 +379,8 @@ interface InterlockingFacade {
 	 *         (Issue #834, task alpha-7a). Every implementation must set a cause other than
 	 *         [RouteResponse.DenialCause.Other] whenever the corresponding
 	 *         [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult]
-	 *         is available, so callers never have to parse the reason text.
+	 *         is available, and [RouteResponse.DenialCause.UnresolvedEndpoint] for an endpoint name
+	 *         it cannot resolve (Issue #973), so callers never have to parse the reason text.
 	 * @since Issue #573 (SP3.5 — Goal 10)
 	 */
 	fun requestRouteByEndpoints(

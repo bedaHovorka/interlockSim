@@ -91,9 +91,10 @@ interface NetworkActuatorPort {
 	 *   the network throws [IllegalArgumentException] (unknown names must fail fast — they are
 	 *   not "no route").
 	 *
-	 * [RouteRequestResult.NoRouteExists] is returned when no topological path connects the
-	 * requested endpoints, and also for a residual kernel refusal that never reached
-	 * pathfinding — see that type's own KDoc.  [RouteRequestResult.Conflict] is returned when a
+	 * [RouteRequestResult.NoRouteExists] is returned when the topology was searched and no path
+	 * connects the requested endpoints.  [RouteRequestResult.UnresolvedEndpoint] is returned when
+	 * the kernel refused before pathfinding because it could not resolve an endpoint name — see
+	 * that type's own KDoc.  [RouteRequestResult.Conflict] is returned when a
 	 * path exists but a block along it is already owned by another train — it carries the
 	 * conflicting block name and the owning train name so a dispatcher can wait for that
 	 * specific train rather than retrying blindly.
@@ -289,17 +290,12 @@ sealed class RouteRequestResult {
 	 * No route was established between the requested endpoints, and retrying the identical
 	 * request will always yield the same result.  The dispatcher should log this as an error.
 	 *
-	 * Two kernel outcomes produce it:
-	 *
-	 * - **No topological path** — the endpoints are as requested, but the topology graph connects
-	 *   no path between them (e.g. disconnected sub-networks).  Maps from
-	 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NoPathExists].
-	 * - **A residual interlocking refusal that never reached pathfinding** — the kernel denied
-	 *   before attempting a reservation, so no candidate-path count and no owning train exist to
-	 *   report.  Maps from
-	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]
-	 *   (Issue #834): it is reported here rather than as [AllPathsBlocked] because there is no
-	 *   count to report and the refusal is not contention.
+	 * Means only one thing: **the topology was searched and holds no path** — the endpoints are
+	 * as requested, but the topology graph connects no path between them (e.g. disconnected
+	 * sub-networks).  Maps from
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NoPathExists].
+	 * A refusal that never reached pathfinding because an endpoint name did not resolve is
+	 * [UnresolvedEndpoint], not this result (Issue #973).
 	 *
 	 * Note: an unknown (non-existent) endpoint name is **not** this result — it throws
 	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute], which validates endpoint
@@ -311,6 +307,28 @@ sealed class RouteRequestResult {
 	data class NoRouteExists(
 		val fromEndpointName: String,
 		val toEndpointName: String
+	) : RouteRequestResult()
+
+	/**
+	 * The kernel refused before pathfinding because it could not resolve [endpointName] to an
+	 * InOut or Semaphore of this network: no topology search ran, so no candidate-path count and
+	 * no owning train exist to report.  Maps from
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint].
+	 *
+	 * Permanent, like [NoRouteExists]: retrying the identical request always fails until the
+	 * caller names an endpoint that exists.  Unlike [NoRouteExists], it names the endpoint to
+	 * correct rather than claiming the topology holds no path.
+	 *
+	 * Produced on the facade path only; the legacy/no-facade path has no endpoint-resolution step
+	 * of its own.  [DefaultNetworkActuatorPort.requestRoute] validates endpoint names and throws
+	 * [IllegalArgumentException] first, so through that port this result is reached only when the
+	 * facade's own resolution disagrees with the port's.
+	 *
+	 * @property endpointName The requested endpoint name that did not resolve, verbatim.
+	 * @since Issue #973
+	 */
+	data class UnresolvedEndpoint(
+		val endpointName: String
 	) : RouteRequestResult()
 
 	/**
@@ -387,8 +405,8 @@ sealed class RouteRequestResult {
 	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.requestRoute] path). Maps from
 	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.ConditionFailed].
 	 *
-	 * Distinct from [NoRouteExists] (which carries the endpoint-resolution residual
-	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]) and
+	 * Distinct from [NoRouteExists] (the topology was searched and holds no path), from
+	 * [UnresolvedEndpoint] (an endpoint name did not resolve) and
 	 * from [AllPathsBlocked]/[Conflict] (which carry a candidate-path count / a blocking owner
 	 * from the reservation service): a four-condition refusal does not go through pathfinding, so
 	 * neither a count nor an owner exists to report. The [retryable] flag is the only

@@ -377,35 +377,35 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		/**
-		 * Test F-g (Issue #834, task alpha-7a) — the rewrite of the former
+		 * Test F-g (Issue #834, task alpha-7a; split by Issue #973) — the rewrite of the former
 		 * `deniedMapsToAllPathsBlocked`, which pinned the defect: it asserted that EVERY facade
 		 * denial became `AllPathsBlocked(0)`, i.e. that the kernel's reason was discarded and a
 		 * count that contradicts [RouteRequestResult.AllPathsBlocked]'s own contract
 		 * (`attemptedPaths` = number of candidate paths actually checked) was invented.
 		 *
-		 * Its replacement pins the **residual** case only:
-		 * [InterlockingFacade.RouteResponse.DenialCause.Other] — a denial with no reservation
-		 * outcome behind it, so no candidate-path count exists. Per invariant I5 such a denial must
-		 * never be reported as contention; it lands in [RouteRequestResult.NoRouteExists], the
-		 * permanent-refusal bucket a dispatcher must not blindly retry.
+		 * Since Issue #973 an endpoint-resolution refusal carries its own cause,
+		 * [InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint], and lands in
+		 * [RouteRequestResult.UnresolvedEndpoint] naming the endpoint — neither contention nor
+		 * [RouteRequestResult.NoRouteExists], which now means only "the topology was searched and
+		 * holds no path".
 		 */
 		@Test
-		@DisplayName("Denied with the residual cause (Other) maps to NoRouteExists, never AllPathsBlocked")
-		fun deniedWithResidualCauseMapsToNoRouteExists() {
-			val a = inOut("A")
-			val b = inOut("B")
+		@DisplayName("Denied with an UnresolvedEndpoint cause maps to UnresolvedEndpoint, never NoRouteExists")
+		fun deniedWithUnresolvedEndpointMapsToUnresolvedEndpoint() {
+			val a = inOut("Nope")
+			val b = inOut("InOut-B")
 			val facade = mockk<InterlockingFacade>()
-			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
-				InterlockingFacade.RouteResponse.Denied("Unknown route endpoint: A")
+			every { facade.requestRouteByEndpoints("T1", "Nope", "InOut-B") } returns
+				InterlockingFacade.RouteResponse.Denied(
+					"Unknown route endpoint: Nope",
+					InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint("Nope")
+				)
 
 			val result =
 				portWithFacade(inOuts = listOf(a, b), facade = facade)
-					.requestRoute("T1", "A", "B")
+					.requestRoute("T1", "Nope", "InOut-B")
 
-			assertThat(result).isInstanceOf<RouteRequestResult.NoRouteExists>()
-			result as RouteRequestResult.NoRouteExists
-			assertThat(result.fromEndpointName).isEqualTo("A")
-			assertThat(result.toEndpointName).isEqualTo("B")
+			assertThat(result).isEqualTo(RouteRequestResult.UnresolvedEndpoint("Nope"))
 		}
 
 		/**
@@ -676,8 +676,9 @@ class DefaultNetworkActuatorPortTest {
 		 *
 		 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade.requestRouteByEndpoints] denies
 		 * an unresolvable endpoint name before it ever calls `reservePath`, so no candidate-path
-		 * count exists. Per invariant I5 that denial must not be reported as contention — it
-		 * carries the residual cause and classifies as [RouteRequestResult.NoRouteExists].
+		 * count exists. Per invariant I5 that denial must not be reported as contention — since
+		 * Issue #973 it carries [InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint]
+		 * naming the endpoint and classifies as [RouteRequestResult.UnresolvedEndpoint].
 		 *
 		 * This state is currently unreachable *through the port* (which pre-validates endpoint
 		 * names and throws [IllegalArgumentException] first — see `unknownEndpointThrowsWithFacade`
@@ -685,8 +686,8 @@ class DefaultNetworkActuatorPortTest {
 		 * defined answer rather than an accidental one.
 		 */
 		@Test
-		@DisplayName("unknown-endpoint denial carries the residual cause, never a contention cause")
-		fun unknownEndpointDenialIsResidualNotContention() {
+		@DisplayName("unknown-endpoint denial carries the UnresolvedEndpoint cause, never a contention cause")
+		fun unknownEndpointDenialIsUnresolvedEndpointNotContention() {
 			val a = inOut("A")
 			val (e, _) = env(inOuts = listOf(a))
 			val graph = mockk<ExtendedUnorientedGraph<Point, DynamicTrackBlock, Cell.Segment>>(relaxed = true)
@@ -698,7 +699,8 @@ class DefaultNetworkActuatorPortTest {
 
 			assertThat(response).isInstanceOf<InterlockingFacade.RouteResponse.Denied>()
 			response as InterlockingFacade.RouteResponse.Denied
-			assertThat(response.cause).isEqualTo(InterlockingFacade.RouteResponse.DenialCause.Other)
+			assertThat(response.cause)
+				.isEqualTo(InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint("NOPE"))
 		}
 	}
 

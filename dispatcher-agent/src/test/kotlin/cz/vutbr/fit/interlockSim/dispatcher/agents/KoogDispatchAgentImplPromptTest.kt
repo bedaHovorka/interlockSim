@@ -344,4 +344,35 @@ class KoogDispatchAgentImplPromptTest {
 		assertThat(prompts[0]).contains("REFUSED — the train's route already continues toward doB2")
 		assertThat(prompts[0]).contains("extend from doB2 or cancel the route first")
 	}
+
+	// ── Issue #973: UnresolvedEndpoint names the endpoint that does not exist ─────────────────
+
+	/**
+	 * A refusal that never reached pathfinding must name the endpoint the model has to correct,
+	 * not claim "no route exists between these endpoints" (which now means only that the topology
+	 * was searched and holds no path).
+	 */
+	@Test
+	@DisplayName("UnresolvedEndpoint names the endpoint that does not exist on this network")
+	fun unresolvedEndpointNamesTheMissingEndpoint() {
+		val channel = AppliedOutcomeChannel()
+		channel.publish(
+			AppliedOutcome.UnresolvedEndpoint(
+				trainId = "T-1",
+				fromEndpointName = "Nope",
+				toEndpointName = "InOut-B",
+				endpointName = "Nope",
+				id = CommandId(1L),
+				tickIndex = 1L
+			)
+		)
+		val (agent, prompts) = agentCapturingPrompts(channel)
+
+		runBlocking { agent.decideAsync(emptyObservation()) }
+
+		assertThat(prompts).hasSize(1)
+		assertThat(prompts[0]).contains(
+			"request_route for \"T-1\" (Nope -> InOut-B): REFUSED — endpoint 'Nope' does not exist on this network."
+		)
+	}
 }
