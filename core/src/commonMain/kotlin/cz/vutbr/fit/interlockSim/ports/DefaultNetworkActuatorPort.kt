@@ -208,8 +208,8 @@ class DefaultNetworkActuatorPort(
 			}
 			is InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart -> {
 				// Issue #893 (task A-R1b): the kernel identified this specifically as a
-				// non-contiguous-origin rejection (ReservationResult.NonContiguousStart). Map it
-				// the same way the legacy/no-facade branch does, reason preserved verbatim -- the
+				// non-contiguous-origin rejection (ReservationResult.NonContiguousStart). Both
+				// branches reach this mapping (#968); the reason is preserved verbatim -- the
 				// agent prompt renders it unchanged (AppliedOutcome.OriginNotContiguous).
 				logger.warn {
 					"requestRoute: non-contiguous origin for $trainName " +
@@ -248,8 +248,8 @@ class DefaultNetworkActuatorPort(
 			}
 			is InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible -> {
 				// Issue #903: the kernel identified this specifically as a permanent geometric
-				// impossibility (ReservationResult.GeometricallyImpossible). Map it the same way
-				// the legacy/no-facade branch does, reason preserved verbatim.
+				// impossibility (ReservationResult.GeometricallyImpossible). Both branches reach
+				// this mapping (#968); the reason is preserved verbatim.
 				logger.warn {
 					"requestRoute: geometrically impossible route for $trainName " +
 						"($fromEndpointName → $toEndpointName): ${cause.reason}"
@@ -257,7 +257,7 @@ class DefaultNetworkActuatorPort(
 				RouteRequestResult.GeometricallyImpossible(cause.reason)
 			}
 			is InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute -> {
-				// Issue #1066: same mapping as the legacy/no-facade branch, reason preserved.
+				// Issue #1066: both branches reach this mapping (#968); the reason is preserved.
 				logger.warn {
 					"requestRoute: route diverges from the held route for $trainName " +
 						"($fromEndpointName → $toEndpointName): ${cause.reason}"

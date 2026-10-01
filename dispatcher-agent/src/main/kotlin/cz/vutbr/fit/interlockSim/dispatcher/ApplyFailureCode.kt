@@ -66,8 +66,8 @@ enum class ApplyFailureCode {
 	 * Maps to `RouteRequestResult.UnresolvedEndpoint` (`:core`, read-only).
 	 *
 	 * **Is** an LLM failure, like [NO_ROUTE_EXISTS]: the identical request fails until the
-	 * dispatcher names an endpoint that exists. Not contention, so excluded from
-	 * [ALL_PATHS_BLOCKED].
+	 * dispatcher names an endpoint that exists. Not contention, so not counted in
+	 * ALL_PATHS_BLOCKED's contention bucket.
 	 *
 	 * @since Issue #973
 	 */

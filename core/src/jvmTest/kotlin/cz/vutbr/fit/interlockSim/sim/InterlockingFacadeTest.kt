@@ -147,7 +147,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 		response as InterlockingFacade.RouteResponse.Denied
 		assertThat(response.reason).isNotEmpty()
 		// Review finding #2 (Issue #834): an empty route is a permanent dispatcher output defect,
-		// so its cause is ConditionFailed(retryable = false), not the residual Other.
+		// so its cause is ConditionFailed(retryable = false), not a contention cause.
 		assertThat(response.cause)
 			.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
 		assertThat((response.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isFalse()
@@ -392,7 +392,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			assertThat(reason).isNotEmpty()
 			assertThat(registry.getOwner(u1)).isNull()
 			// Review finding #2 (Issue #834): a block occupied by another train is transient
-			// contention, so its cause is ConditionFailed(retryable = true), never the residual Other.
+			// contention, so its cause is ConditionFailed(retryable = true), never a permanent cause.
 			assertThat(denied.cause)
 				.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
 			assertThat((denied.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isTrue()

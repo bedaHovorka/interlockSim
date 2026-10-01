@@ -151,9 +151,10 @@ interface PathReservationService :
 		 * | Origin case | Guarded by |
 		 * |---|---|
 		 * | Train on the network (footprint non-empty) | kernel, `rejectNonContiguousStart` (this result) |
-		 * | Train queued for admission (footprint empty) | tool, `RequestRouteTool.queuedOriginError`;
-		 *   self-disabled with no InOut names or no `DispatchLoopSensorPort` |
+		 * | Train queued (footprint empty) | tool, `RequestRouteTool.queuedOriginError` (self-disabling, see below) |
 		 * | Any other caller of `reservePath` | no queued-train protection |
+		 *
+		 * The tool guard is self-disabled with no InOut names or no `DispatchLoopSensorPort`.
 		 *
 		 * Ruling D8 (2026-10-01, traffic-simulation-expert): the tool layer stays the owner of the
 		 * queued-train half. A train with **no** footprint at all (neither registered nor occupied
