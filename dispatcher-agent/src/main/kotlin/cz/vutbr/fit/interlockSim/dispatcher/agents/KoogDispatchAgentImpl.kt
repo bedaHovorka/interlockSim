@@ -328,6 +328,9 @@ class KoogDispatchAgentImpl(
 	 *   [AppliedOutcome.OriginNotContiguous.reason] is carried through **verbatim** — it already
 	 *   names the offending origin and the legal alternatives, and paraphrasing it would drop
 	 *   exactly the information this block exists to surface.
+	 * - [AppliedOutcome.GeometricallyImpossible] is rendered apart from
+	 *   [AppliedOutcome.OriginNotContiguous] (a permanent refusal, #1007) with its reason verbatim,
+	 *   and neither rendering carries a retry hint (D9).
 	 * - [AppliedOutcome.Conflicted.blockName] is deliberately **not** rendered — no block id
 	 *   belongs next to train-facing context; only the conflicting train ([AppliedOutcome.Conflicted.existingOwner])
 	 *   is named.
@@ -385,11 +388,11 @@ class KoogDispatchAgentImpl(
 					"REFUSED — ${outcome.reason}"
 
 			// Issue #903: a permanent impossibility (rear-facing START or unconfigurable switch),
-			// not ordinary contention -- the model must not retry the identical request. The
-			// kernel's reason is carried through verbatim, same reasoning as OriginNotContiguous.
+			// not ordinary contention. Issue #1007 (D9): rendered apart from OriginNotContiguous and
+			// carrying no retry hint. The kernel's reason is carried through verbatim.
 			is AppliedOutcome.GeometricallyImpossible ->
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
-					"REFUSED — ${outcome.reason}"
+					"REFUSED — geometrically impossible, this origin can never reach that target: ${outcome.reason}"
 
 			// Issue #1066: no block was busy -- the model must not retry the identical request. Tell
 			// it what to do instead of "all paths blocked".

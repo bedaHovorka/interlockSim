@@ -15,6 +15,7 @@ import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
@@ -127,6 +128,37 @@ class KoogDispatchAgentImplPromptTest {
 
 		assertThat(prompts).hasSize(1)
 		assertThat(prompts[0]).contains(reason)
+	}
+
+	// ── #1007 (D9): GeometricallyImpossible is a permanent refusal, distinct from OriginNotContiguous ──
+
+	@Test
+	@DisplayName("GeometricallyImpossible renders as a permanent refusal, distinct from OriginNotContiguous")
+	fun geometricallyImpossibleRenderedApartFromOriginNotContiguous() {
+		val reason = "START signal zA faces away from InOut-B"
+
+		fun promptFor(outcome: AppliedOutcome): String {
+			val channel = AppliedOutcomeChannel()
+			channel.publish(outcome)
+			val (agent, prompts) = agentCapturingPrompts(channel)
+			runBlocking { agent.decideAsync(emptyObservation()) }
+			assertThat(prompts).hasSize(1)
+			return prompts[0]
+		}
+
+		val impossible =
+			promptFor(AppliedOutcome.GeometricallyImpossible("T-1", "zA", "InOut-B", reason, CommandId(1L), 1L))
+		val notContiguous =
+			promptFor(AppliedOutcome.OriginNotContiguous("T-1", "zA", "InOut-B", reason, CommandId(1L), 1L))
+
+		assertThat(impossible).contains(
+			"- request_route for \"T-1\" (zA -> InOut-B): REFUSED — geometrically impossible, " +
+				"this origin can never reach that target: $reason"
+		)
+		assertThat(notContiguous).contains("(zA -> InOut-B): REFUSED — $reason")
+		assertThat(impossible).isNotEqualTo(notContiguous)
+		assertThat(impossible.lowercase()).doesNotContain("retry")
+		assertThat(notContiguous.lowercase()).doesNotContain("retry")
 	}
 
 	// ── AC3: Conflicted omits the raw block id ─────────────────────────────────
