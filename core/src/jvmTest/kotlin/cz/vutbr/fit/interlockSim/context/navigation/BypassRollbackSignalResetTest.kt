@@ -13,7 +13,9 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotInstanceOf
+import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -24,6 +26,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -116,6 +120,39 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		assertThat(litSemaphoreNames())
 			.withMessage("no reservation survives this call, so no proceed aspect may either")
 			.isEmpty()
+	}
+
+	/**
+	 * Issue #961: unlike every other rollback, the bypass rollback undoes a candidate whose `reservePath`
+	 * SUCCEEDED, and that success already announced its blocks as reserved. Each of those blocks must be
+	 * announced as released too, exactly once, or the counters the metrics and the conflict and collision
+	 * detectors keep from these events never return to zero (Issue #1081). The rollback also leaves no
+	 * registry entry and no stale switch ownership behind.
+	 */
+	@Test
+	@DisplayName("a rolled-back bypass candidate publishes one release for every reserve it published")
+	fun bypassRollbackBalancesItsReservationEvents() {
+		val registry: PathReservationRegistry = context.scope.get()
+		val sem1 = semaphoreNamed("sem1")
+		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		requiredNext.setUpPath(sem1, "other-train")
+		val events = mutableListOf<BlockOccupancyEvent>()
+		service.addBlockOccupancyListener { event -> if (event.trainId == "train1") events += event }
+
+		service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
+
+		val reserved = events.filter { it.type == BlockOccupancyEventType.BLOCK_RESERVED }.map { it.block }
+		val released = events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }.map { it.block }
+		assertThat(reserved)
+			.withMessage("the bypass candidate must have been reserved and announced, or this test is vacuous")
+			.isNotEmpty()
+		assertThat(released.sortedBy { it.hashCode() })
+			.withMessage("every block announced as reserved must be announced as released exactly once")
+			.isEqualTo(reserved.sortedBy { it.hashCode() })
+		reserved.forEach { block ->
+			assertThat(registry.getOwner(block)).withMessage("owner of rolled-back block $block").isNull()
+		}
+		assertThat(registry.getSwitches("train1")).withMessage("switch ownership after the rollback").isEmpty()
 	}
 
 	@Test

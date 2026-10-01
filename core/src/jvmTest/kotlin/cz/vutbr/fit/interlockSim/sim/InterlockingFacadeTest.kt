@@ -41,6 +41,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.mirrorRollbackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import io.mockk.every
@@ -300,6 +301,8 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val semaphoreClearedFor = mutableMapOf<DynamicRailSemaphore, String>()
 
 			val reservationService = mockk<PathReservationService>(relaxed = true)
+			// The facade rolls a failed route's blocks back through the service (Issue #961).
+			reservationService.mirrorRollbackBlock(registry)
 			every { reservationService.recordExternalClearedSemaphore(any(), any()) } answers {
 				val trainId = firstArg<String>()
 				val sem = secondArg<DynamicRailSemaphore>()

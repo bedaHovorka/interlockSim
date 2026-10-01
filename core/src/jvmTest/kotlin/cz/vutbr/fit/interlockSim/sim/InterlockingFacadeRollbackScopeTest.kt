@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
@@ -32,6 +33,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -143,6 +146,37 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		assertHeld(held, train)
 	}
 
+	/**
+	 * Issue #961: the facade locks a route through the registry and `setUpPath`, not through
+	 * `PathReservationService.reservePath`, so no reservation event is ever published for its blocks.
+	 * Its rollback must therefore publish no release event either: a release without a matching
+	 * reserve sends the per-event reservation counters negative (Issue #1081).
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("a facade rollback publishes no release for a block it never announced as reserved")
+	fun facadeRollbackPublishesNoEventForAnUnannouncedBlock() {
+		val train = "Train #1051"
+		val held = holdRouteViaService(train)
+		val (next, route) = secondRoute(excluding = held)
+		lockSwitchByOther("Train #other")
+		val facade = DefaultInterlockingFacade(context, registry)
+		val events = mutableListOf<BlockOccupancyEvent>()
+		service.addBlockOccupancyListener { event -> events += event }
+
+		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.Volno)
+
+		assertDeniedWithReason(response, "Switch vB is locked or reserved by another train")
+		assertReleased(next)
+		assertThat(events.filter { it.type == BlockOccupancyEventType.BLOCK_RESERVED })
+			.withMessage("the facade never announces a block it locks as reserved")
+			.isEmpty()
+		assertThat(events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED })
+			.withMessage("so its rollback must not announce one as released")
+			.isEmpty()
+		assertHeld(held, train)
+	}
+
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("a route denied before registration changes nothing")
@@ -178,6 +212,9 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 
 		val (next, route) = secondRoute(excluding = held)
 		val switch = lockSwitchByOther("Train #other")
+		// Train #other also holds a block next to vB, so its lock is live: the rollback leaves it alone
+		// (a lock whose owner holds no block next to the switch is reclaimed, see below).
+		registry.registerAtomic("Train #other", listOf(blockNextTo(switch, excluding = held + next)))
 		val facade = DefaultInterlockingFacade(context, registry)
 
 		val first = facade.requestRoute(train, SignalId("zA"), route, Aspect.Volno)
@@ -195,6 +232,33 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		assertThat(registry.getSwitchOwner(switch)).isEqualTo(train)
 		assertHeld(held, train)
 		assertThat(registry.getPathInfo(train)).isNotNull()
+	}
+
+	/**
+	 * Issue #961: the facade rollback now goes through `PathReservationService.rollbackBlock`, which
+	 * reclaims a switch lock left stale by the released block, as every block release has done since
+	 * Issue #1065. Train #other owns vB but holds no block next to it, so nothing protects its lock.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("a facade rollback reclaims a switch lock whose owner holds no block next to it")
+	fun facadeRollbackReclaimsAStaleForeignSwitchLock() {
+		val train = "Train #1051"
+		val held = holdRouteViaService(train)
+		val (next, route) = secondRoute(excluding = held)
+		val switch = lockSwitchByOther("Train #other")
+		assertThat(switch in next.ends())
+			.withMessage("the rolled-back block must border vB, or the reclaim is not exercised")
+			.isTrue()
+		val facade = DefaultInterlockingFacade(context, registry)
+
+		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.Volno)
+
+		assertDeniedWithReason(response, "Switch vB is locked or reserved by another train")
+		assertReleased(next)
+		assertThat(registry.getSwitchOwner(switch)).withMessage("owner of the stale lock").isNull()
+		assertThat(switch.locked).withMessage("the stale lock must be released").isFalse()
+		assertHeld(held, train)
 	}
 
 	@Test
@@ -274,6 +338,17 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		assertThat(switch.locked).withMessage("the switch must be locked by $other").isTrue()
 		return switch
 	}
+
+	/** A block bordering [switch] that is not in [excluding]. */
+	private fun blockNextTo(
+		switch: DynamicRailSwitch,
+		excluding: List<DynamicTrackBlock>
+	): DynamicTrackBlock =
+		context
+			.getGraph()
+			.values()
+			.filterIsInstance<DynamicTrackBlock>()
+			.first { block -> switch in block.ends() && block !in excluding }
 
 	/** The request must be [Denied][InterlockingFacade.RouteResponse.Denied] with exactly [expected] as its reason. */
 	private fun assertDeniedWithReason(

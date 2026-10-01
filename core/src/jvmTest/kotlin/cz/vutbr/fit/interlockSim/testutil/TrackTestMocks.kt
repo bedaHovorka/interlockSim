@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -259,4 +260,20 @@ fun PathReservationService.passAndRelease(
 	block.enter(occupant)
 	block.leave(occupant)
 	return unregisterBlock(trainId, block)
+}
+
+/**
+ * Makes a mocked [PathReservationService]'s `rollbackBlock` do what the real one does to a block and to
+ * [registry]: cancel the path setup from the block's `reservedFrom` when that is set (a failure is
+ * swallowed, as the real service logs it), then drop the block from the registry. The stale-switch
+ * reclaim is left out, as mocked switches carry no adjacency. For tests that drive the interlocking
+ * facade over mocked network elements (Issue #961).
+ */
+fun PathReservationService.mirrorRollbackBlock(registry: PathReservationRegistry) {
+	every { rollbackBlock(any(), any()) } answers {
+		val trainId = firstArg<String>()
+		val block = secondArg<DynamicTrackBlock>()
+		runCatching { block.reservedFrom?.let { block.cancelPathSetup(it) } }
+		registry.unregisterBlock(trainId, block)
+	}
 }

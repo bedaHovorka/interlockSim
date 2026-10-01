@@ -17,6 +17,7 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
 import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
@@ -25,10 +26,12 @@ import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.mirrorRollbackBlock
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
@@ -57,12 +60,17 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("Issue #1051 — a setUpPath failure rolls back only the failed call's blocks")
 class InterlockingFacadeRollbackFaultTest {
-	/** A FREE, unoccupied block mock — passes `checkRouteFreedom` (see `InterlockingFacadeTest`). */
+	/**
+	 * A FREE, unoccupied block mock — passes `checkRouteFreedom` (see `InterlockingFacadeTest`). Its
+	 * `reservedFrom` is stateful, like the real block's: set by a `setUpPath` that does not throw, so the
+	 * rollback cancels only the blocks this call reserved (Issue #961).
+	 */
 	private fun block(
 		name: String,
 		occupantName: String? = null
-	): DynamicTrackBlock =
-		mockk<DynamicTrackBlock>(relaxed = true).also {
+	): DynamicTrackBlock {
+		var reservedFrom: DynamicPathSeparator? = null
+		return mockk<DynamicTrackBlock>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.trainName } returns null
 			every { it.getState() } returns TrackFacility.State.FREE
@@ -70,7 +78,10 @@ class InterlockingFacadeRollbackFaultTest {
 				occupantName?.let { occ ->
 					mockk<TrackOccupant>(relaxed = true).also { every { it.name } returns occ }
 				}
+			every { it.reservedFrom } answers { reservedFrom }
+			every { it.setUpPath(any(), any()) } answers { reservedFrom = firstArg() }
 		}
+	}
 
 	/** Stateful mock semaphore: assigning `signal` is observable via the getter afterwards. */
 	private fun semaphore(
@@ -103,7 +114,11 @@ class InterlockingFacadeRollbackFaultTest {
 		every { graph.values() } returns blocks
 
 		val registry = PathReservationRegistry(mockk(relaxed = true))
+		// The facade rolls a failed route's blocks back through the service (Issue #961).
+		val reservationService = mockk<PathReservationService>(relaxed = true)
+		reservationService.mirrorRollbackBlock(registry)
 		val routingServices = mockk<RoutingServices>(relaxed = true)
+		every { routingServices.getPathReservationService() } returns reservationService
 
 		val e = mockk<SimulationEnvironment>(relaxed = true)
 		every { e.getRailWayNetGrid() } returns grid

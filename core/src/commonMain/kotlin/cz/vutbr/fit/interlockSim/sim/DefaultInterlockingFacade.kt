@@ -140,8 +140,7 @@ class DefaultInterlockingFacade(
 		 */
 		data class Locked(
 			val blocks: List<DynamicTrackBlock>,
-			val switches: List<DynamicRailSwitch>,
-			val fromSeparator: DynamicPathSeparator?
+			val switches: List<DynamicRailSwitch>
 		) : RouteLockOutcome
 
 		data class Denied(
@@ -510,12 +509,12 @@ class DefaultInterlockingFacade(
 
 		lockSwitches(trainId, runningSwitches, flankSwitches)?.let { switchDenial ->
 			if (fromSeparator != null) {
-				rollbackBlocks(trainId, reserved = blocks, registered = blocks, fromSeparator = fromSeparator)
+				rollbackBlocks(trainId, registered = blocks)
 			}
 			return RouteLockOutcome.Denied(switchDenial)
 		}
 
-		return RouteLockOutcome.Locked(blocks, switches, fromSeparator)
+		return RouteLockOutcome.Locked(blocks, switches)
 	}
 
 	/**
@@ -538,15 +537,13 @@ class DefaultInterlockingFacade(
 			PathReservationRegistry.RegistrationResult.Success -> Unit
 		}
 
-		val reservedSoFar = mutableListOf<DynamicTrackBlock>()
 		try {
 			for (block in blocks) {
 				block.setUpPath(fromSeparator, trainId)
-				reservedSoFar.add(block)
 			}
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to reserve blocks for trainId=$trainId: ${e.message}" }
-			rollbackBlocks(trainId, reserved = reservedSoFar, registered = blocks, fromSeparator = fromSeparator)
+			rollbackBlocks(trainId, registered = blocks)
 			return ConditionDenial("Track section cannot be locked", retryable = true)
 		}
 		return null
@@ -555,29 +552,31 @@ class DefaultInterlockingFacade(
 	/**
 	 * Undoes what a failed [registerBlocks] / [lockSwitches] round acquired, and nothing else.
 	 *
-	 * Physically cancels only the [reserved] blocks, then drops the registry entry of every block in
-	 * [registered] one by one. The train's other registry entries, the blocks it already holds from an
-	 * earlier route, and its `PathInfo` are left alone: `PathReservationRegistry.unregister` would
-	 * drop all of them while the blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
+	 * Every block in [registered] goes through
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.rollbackBlock]: the path
+	 * setup is cancelled from the block's own `reservedFrom` (set only on the blocks this round
+	 * reserved, so a registered block whose `setUpPath` never ran or threw is not cancelled), then the
+	 * block leaves the registry and a switch lock it leaves stale is reclaimed. The train's other
+	 * registry entries, the blocks it already holds from an earlier route, and its `PathInfo` are left
+	 * alone: `PathReservationRegistry.unregister` would drop all of them while the blocks stay RESERVED
+	 * (Issue #1051, same shape as Issue #1025).
 	 *
-	 * The physical cancel runs first because `unregisterBlock` only releases a FREE block.
+	 * No release event is published: this facade locks blocks through the registry and `setUpPath`,
+	 * never through `reservePath`, so none of them was announced as reserved (Issue #961, #1081).
 	 */
 	private fun rollbackBlocks(
 		trainId: String,
-		reserved: List<DynamicTrackBlock>,
-		registered: List<DynamicTrackBlock>,
-		fromSeparator: DynamicPathSeparator
+		registered: List<DynamicTrackBlock>
 	) {
-		reserved.forEach { block ->
-			runCatching { block.cancelPathSetup(fromSeparator) }
-				.onFailure { e ->
-					logger.warn(e) {
-						"Rollback could not cancel the path setup of block ${block.name ?: "?"} " +
-							"for trainId=$trainId; its registry entry survives until the train's next release reclaims it"
-					}
+		val pathReservationService = env.getRoutingServices().getPathReservationService()
+		registered.forEach { block ->
+			if (!pathReservationService.rollbackBlock(trainId, block) && registry.getOwner(block) == trainId) {
+				logger.warn {
+					"Rollback could not release block ${block.name ?: "?"} for trainId=$trainId; " +
+						"its registry entry survives until the train's next release reclaims it"
 				}
+			}
 		}
-		registered.forEach { registry.unregisterBlock(trainId, it) }
 	}
 
 	/**
@@ -599,16 +598,7 @@ class DefaultInterlockingFacade(
 		locks: RouteLockOutcome.Locked
 	) {
 		locks.switches.forEach { registry.unregisterSwitch(trainId, it) }
-		// `fromSeparator` is null only when `blocks` is empty (lockRouteAtomic's own denial),
-		// so a null guard here would guard a no-op rollback.
-		locks.fromSeparator?.let { fromSeparator ->
-			rollbackBlocks(
-				trainId,
-				reserved = locks.blocks,
-				registered = locks.blocks,
-				fromSeparator = fromSeparator
-			)
-		}
+		rollbackBlocks(trainId, registered = locks.blocks)
 	}
 
 	/**
