@@ -150,7 +150,8 @@ class TrainPositionCalculator(
 				return null
 			}
 
-			// Use entrySeparator to find the computed exit separator; fall back to arbitrary ends if unavailable (e.g. at spawn).
+			// Use entrySeparator to find the computed exit separator; fall back to arbitrary ends
+			// if unavailable (e.g. at spawn).
 			val computedExitSeparator = if (entrySeparator != null) currentSection.getSecondEnd(entrySeparator) else null
 
 			// Return null when the entry end has no grid position.

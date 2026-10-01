@@ -28,14 +28,21 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
  * events, and its RK stages write trial values into them, so they can only be read live and
  * stale-tolerant. Combine them with an identity through [totalDistance] and [publishedPosition].
  *
+ * **Known limit:** the crossing block rebases the integrated position a few statements before it
+ * publishes the new identity, so an EDT read can pair the old identity (`onNext = true`, section
+ * B) with the already-rebased live position (about 0) and draw the front at the start of B for one
+ * frame — a one-section backward jump. This is not a regression (the old live getters showed the
+ * same); a seqlock-style `crossingInProgress` flag is the follow-up if it is ever wanted.
+ *
  * @property section the section the front is in (or entering) — what [Train.frontSection]
  *   returned at publication; null before the front has entered any section
  * @property entrySeparator the end of [section] through which the front entered it, with the
  *   Issue #788 boundary correction applied — what [Train.trainEntrySeparator] returned at
  *   publication; null before the train has entered the network
- * @property onNext whether the front is entering the upcoming section ([section] is the next
- *   section); false while it is inside [section] or stands at its far end with nothing reserved
- *   beyond it (the Issue #788 boundary state)
+ * @property onNext whether [section] is the section the front is traversing (`Site.next`). It is
+ *   true while the front traverses a section; it is false only before the first traversal starts
+ *   (at the origin, where [section] is null) and in the Issue #788 boundary state, where the front
+ *   stands at the far end of [section] with nothing reserved beyond it
  * @property previousBlocksLength the total length of the sections the front has fully traversed
  * @since Issues #1030, #1028
  */

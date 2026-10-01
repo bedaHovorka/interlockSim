@@ -520,6 +520,8 @@ class Train :
 			// Initialize entry separator for animation (train enters network here).
 			// Only the Front writes it — see [isFront].
 			if (isFront) this@Train.entrySeparator = where
+			// Kept for clarity: the publication after the `next` lookup below follows with no
+			// suspension point in between and dominates this one.
 			publishFrontIdentity()
 
 			// The reserved-path answer for `where` that the end of the previous iteration already
@@ -909,6 +911,11 @@ class Train :
 		 * readers (Issues #1030, #1028). [actions] calls it at the end of each discrete front
 		 * mutation; a no-op for the [Tail]. It only reads the fields it publishes, so the
 		 * simulation itself is unaffected.
+		 *
+		 * It runs [publishedEntrySeparator] on the simulation thread at every publication, and
+		 * cannot throw given the invariant: when [onNext] is false and [current] is non-null, the
+		 * [Train.entrySeparator] is an end of [current], so the `getSecondEnd` / `toDynamic` lookup
+		 * resolves.
 		 */
 		private fun publishFrontIdentity() {
 			if (!isFront) return
@@ -2214,7 +2221,11 @@ class Train :
 	 *
 	 * A live, stale-tolerant read of a continuous value: an off-thread reader combines it with
 	 * one [frontIdentity] read through [TrainFrontIdentity.totalDistance] and
-	 * [TrainFrontIdentity.publishedPosition].
+	 * [TrainFrontIdentity.publishedPosition]. The crossing block rebases it a few statements before
+	 * publishing the new identity, so an EDT read can pair the old identity (`onNext = true`,
+	 * section B) with this already-rebased value (about 0) and draw the front at the start of B for
+	 * one frame — a one-section backward jump. Not a regression (the old live getters showed the
+	 * same); a seqlock-style `crossingInProgress` flag is the follow-up if it is ever wanted.
 	 *
 	 * @since Issues #1030, #1028
 	 */

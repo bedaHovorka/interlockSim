@@ -59,7 +59,8 @@ class AnimationStateCaptureTrainStateTest {
 	@Test
 	@DisplayName("inside a section: identity section and entry, integrated position along it")
 	fun `capture inside a section uses the identity and the integrated position`() {
-		val train = trainWith(TrainFrontIdentity(section, entry, onNext = true, previousBlocksLength = PREVIOUS_BLOCKS))
+		val train =
+			trainWith(TrainFrontIdentity(section, entry, onNext = true, previousBlocksLength = PREVIOUS_BLOCKS))
 		every { calculator.calculateTrainGridLocation(entry, section, INTEGRATED_POSITION) } returns PointF(3f, 4f)
 		every { calculator.calculateTrainHeadingRadians(entry, section) } returns HEADING
 
@@ -73,7 +74,8 @@ class AnimationStateCaptureTrainStateTest {
 	@Test
 	@DisplayName("at the Issue #788 boundary: the front stands at the far end of the identity section")
 	fun `capture at the boundary places the front at the section end`() {
-		val train = trainWith(TrainFrontIdentity(section, entry, onNext = false, previousBlocksLength = PREVIOUS_BLOCKS))
+		val train =
+			trainWith(TrainFrontIdentity(section, entry, onNext = false, previousBlocksLength = PREVIOUS_BLOCKS))
 		every { calculator.calculateTrainGridLocation(entry, section, SECTION_LENGTH) } returns PointF(5f, 6f)
 		every { calculator.calculateTrainHeadingRadians(entry, section) } returns HEADING
 
