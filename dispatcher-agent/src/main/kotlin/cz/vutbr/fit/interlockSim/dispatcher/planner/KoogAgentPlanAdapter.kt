@@ -351,13 +351,12 @@ class KoogAgentPlanAdapter(
 		// null so the next cycle retries rather than the whole run being demoted to rule-based by
 		// one transient fault.
 		//
-		// HAZARD (issue #999, narrowed by #1058): this catch also swallows a tick-listener throw if
-		// one somehow occurred during getOrCreateAgent — it cannot today (no reportTick call sits
-		// inside this try), so the hazard is dormant, unlike before #1058 when this same catch also
-		// wrapped every reportTick call for the whole cycle. Widening this try back to cover the
-		// rest of the cycle would reintroduce that: a fallback whose own `decide()` throws (see
-		// "exception fallback that also throws still records the tick before propagating") would be
-		// caught here too and produce a second, spurious fallback attempt.
+		// Issue #999: a tick-listener throw can no longer reach any catch in this method —
+		// [CompositeTickListener] isolates every delegate — so this try/catch only ever sees
+		// agent-creation failures. Widening it to cover the rest of the cycle would still be
+		// wrong: a fallback whose own `decide()` throws (see "exception fallback that also throws
+		// still records the tick before propagating") would be caught here too and produce a
+		// second, spurious fallback attempt.
 		val a =
 			try {
 				getOrCreateAgent()

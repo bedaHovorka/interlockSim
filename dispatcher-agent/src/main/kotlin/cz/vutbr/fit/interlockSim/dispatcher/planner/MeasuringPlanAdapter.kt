@@ -118,14 +118,13 @@ class MeasuringPlanAdapter(
 	 * @param record What happened this tick and when.
 	 */
 	override fun onTick(record: TickRecord) {
-		// MUST NOT THROW. [CompositeTickListener] deliberately does not swallow delegate
-		// exceptions, and this adapter is registered first (ExampleRegistry builds it before
-		// AgentLoopDriver's init registers its own listener), so a throw here would abort the
-		// fan-out and silently starve the driver's attribution listener and the run recorder —
-		// re-opening the Issue #843 class of defect where every per-run JSON reported
-		// totalTicks = 0. Every statement below is total: the counter map is pre-populated for
-		// all TickOutcome entries so getValue cannot miss, the snapshot's require() is satisfied
-		// by construction (see getMetricsSnapshot), and the logging lambdas are lazy. Pinned by
+		// Should not throw, though a throw is now contained (Issue #999): [CompositeTickListener]
+		// catches and logs a delegate's exception and carries on, so it can no longer starve the
+		// driver's attribution listener and the run recorder (the Issue #843 class of defect where
+		// every per-run JSON reported totalTicks = 0). A throw here would still lose this tick's
+		// metrics, so every statement below is total: the counter map is pre-populated for all
+		// TickOutcome entries so getValue cannot miss, the snapshot's require() is satisfied by
+		// construction (see getMetricsSnapshot), and the logging lambdas are lazy. Pinned by
 		// MeasuringPlanAdapterTest."onTick never throws ...".
 		outcomeCounters.getValue(record.outcome).incrementAndGet()
 		val cycles = cycleCount.incrementAndGet()

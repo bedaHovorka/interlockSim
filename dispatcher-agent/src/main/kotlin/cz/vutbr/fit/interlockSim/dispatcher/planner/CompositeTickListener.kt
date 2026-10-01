@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
+import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -37,9 +39,15 @@ import java.util.concurrent.CopyOnWriteArrayList
  * ticks may already be in flight, so it needs a concurrent structure to let a listener be added
  * without external synchronization.
  *
- * Exceptions are **not** swallowed, mirroring [CompositeActionOutcomeSink]: a delegate that
- * throws aborts the fan-out and propagates to the caller, which is the caller entitled to decide
- * what a broken tick observer means.
+ * ## Failure isolation (Issue #999)
+ *
+ * Each delegate is invoked inside its own `try/catch`: a delegate that throws is logged at WARN
+ * (listener class name and outcome) and the fan-out continues with the next delegate. A tick
+ * observer is purely observational, and letting its throw escape would starve the later
+ * listeners, skip the cycle-history record, drop the fallback decisions, mask the oracle
+ * exception and count toward the driver loop's consecutive-failure limit. A
+ * [CancellationException] is the one exception that is rethrown, so structured concurrency still
+ * works.
  *
  * @since Issue #713 (Task 9 — compilation warnings elimination round; prerequisite for Task 10)
  */
@@ -52,6 +60,21 @@ class CompositeTickListener(
 	}
 
 	override fun onTick(record: TickRecord) {
-		delegates.forEach { it.onTick(record) }
+		for (delegate in delegates) {
+			try {
+				delegate.onTick(record)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				logger.warn(e) {
+					"Tick listener ${delegate::class.qualifiedName} threw while handling outcome " +
+						"${record.outcome}; continuing with the remaining listeners"
+				}
+			}
+		}
+	}
+
+	private companion object {
+		private val logger = KotlinLogging.logger {}
 	}
 }
