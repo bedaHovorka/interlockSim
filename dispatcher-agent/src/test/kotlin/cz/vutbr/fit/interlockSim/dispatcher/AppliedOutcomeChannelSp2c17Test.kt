@@ -38,11 +38,15 @@ import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
+
+/** Logger of `:core`'s `ToolDrivenDecisions.kt` (kotlin-logging drops the `Kt` file-class suffix). */
+private const val TOOL_DRIVEN_LOGGER = "cz.vutbr.fit.interlockSim.sim.ToolDrivenDecisions"
 
 /**
  * Acceptance-criteria tests for the SP2c.17 correlated async outcome channel (#840).
@@ -371,14 +375,16 @@ class AppliedOutcomeChannelSp2c17Test {
 		fun releaseRouteDeferredRenderedPartial() {
 			every { networkActuator.releaseRouteDetailed("T-087") } returns RouteRelease(true, listOf("k1"))
 
-			// The applier's deferred log is INFO, and the test config keeps the root logger at
-			// WARN: raise the applier's level and capture its output for the duration of the test.
-			val applierLogger = LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier") as Logger
+			// The deferred log is INFO, and the test config keeps the root logger at WARN: raise the
+			// level and capture the output for the duration of the test. Since Issue #960 the applier
+			// logs through the shared core helper applyToolDrivenToActuator, so the line comes from
+			// that file's logger.
+			val toolDrivenLogger = LoggerFactory.getLogger(TOOL_DRIVEN_LOGGER) as Logger
 			val appender = ListAppender<ILoggingEvent>().also { it.start() }
 			// Restore this saved level, not a fixed one: a fixed level leaks into later test classes.
-			val originalLevel = applierLogger.level
-			applierLogger.level = Level.INFO
-			applierLogger.addAppender(appender)
+			val originalLevel = toolDrivenLogger.level
+			toolDrivenLogger.level = Level.INFO
+			toolDrivenLogger.addAppender(appender)
 			try {
 				correlationMap.newCycle()
 				val (queue, applier) = makeWiredApplier()
@@ -394,8 +400,8 @@ class AppliedOutcomeChannelSp2c17Test {
 				val deferredLog = appender.list.map { it.formattedMessage }.single { "only partly released" in it }
 				assertThat(deferredLog).contains("k1")
 			} finally {
-				applierLogger.detachAppender(appender)
-				applierLogger.level = originalLevel
+				toolDrivenLogger.detachAppender(appender)
+				toolDrivenLogger.level = originalLevel
 			}
 		}
 
@@ -612,6 +618,27 @@ class AppliedOutcomeChannelSp2c17Test {
 			assertThat(outcome.fromEndpointName).isEqualTo("doA1")
 			assertThat(outcome.toEndpointName).isEqualTo("InOut-B")
 			assertThat(outcome.reason).contains("not contiguous")
+			verify(exactly = 1) { networkActuator.requestRoute("T-087", "doA1", "InOut-B") }
+		}
+
+		@Test
+		@DisplayName("request_route reserved is published as Reserved and asks the actuator once (Issue #960)")
+		fun requestRouteReservedIsPublished() {
+			every {
+				networkActuator.requestRoute("T-087", "doA1", "InOut-B")
+			} returns RouteRequestResult.Reserved("T-087", 3)
+
+			correlationMap.newCycle()
+			val (queue, applier) = makeWiredApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "doA1", "InOut-B")))
+			applier.onControlStep()
+
+			val outcome = outcomeSink.drainSince(0L).single() as AppliedOutcome.Reserved
+			assertThat(outcome.trainId).isEqualTo("T-087")
+			assertThat(outcome.fromEndpointName).isEqualTo("doA1")
+			assertThat(outcome.toEndpointName).isEqualTo("InOut-B")
+			assertThat(outcome.blocksCount).isEqualTo(3)
+			verify(exactly = 1) { networkActuator.requestRoute("T-087", "doA1", "InOut-B") }
 		}
 	}
 

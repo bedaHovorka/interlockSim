@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -92,6 +93,23 @@ class ToolDrivenDecisionsRequestRouteTest {
 		verify(exactly = 1) { actuator.requestRoute("T-1082", "zA", "doB1") }
 	}
 
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("results")
+	fun `every result branch is reported through onOutcome exactly once (Issue 960)`(result: RouteRequestResult) {
+		val actuator =
+			mockk<NetworkActuatorPort>().also {
+				every { it.requestRoute("T-1082", "zA", "doB1") } returns result
+			}
+		val outcomes = mutableListOf<ToolDrivenOutcome>()
+
+		DispatchDecision
+			.RequestRoute("T-1082", "zA", "doB1")
+			.applyToolDrivenToActuator(actuator, "unit-test") { outcomes += it }
+
+		assertThat(outcomes).isEqualTo(listOf<ToolDrivenOutcome>(ToolDrivenOutcome.RouteRequested(result)))
+		verify(exactly = 1) { actuator.requestRoute("T-1082", "zA", "doB1") }
+	}
+
 	companion object {
 		/**
 		 * One row per [RouteRequestResult] subtype: the result the actuator returns, and a
@@ -132,5 +150,9 @@ class ToolDrivenDecisionsRequestRouteTest {
 					"diverges from the held route for T-1082 — new path starts at zA but the stored path ends at doB2"
 				)
 			)
+
+		/** The result column of [resultsAndExpectedFragments], for the callback test. */
+		@JvmStatic
+		fun results(): Stream<Arguments> = resultsAndExpectedFragments().map { Arguments.of(it.get()[0]) }
 	}
 }

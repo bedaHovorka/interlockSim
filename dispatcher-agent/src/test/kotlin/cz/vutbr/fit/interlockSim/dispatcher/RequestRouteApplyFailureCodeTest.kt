@@ -41,6 +41,7 @@ import cz.vutbr.fit.interlockSim.testutil.coversEverySealedSubclassOf
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -151,6 +152,9 @@ class RequestRouteApplyFailureCodeTest {
 
 		assertThat(outcomes).hasSize(1)
 		assertThat(outcomes.first().applyFailure).isEqualTo(expected)
+		// Issue #960: the applier routes the call through the shared core helper; the actuator
+		// must still be asked exactly once per applied decision.
+		verify(exactly = 1) { networkActuator.requestRoute("T1", "zA", "doA1") }
 	}
 
 	@Test
