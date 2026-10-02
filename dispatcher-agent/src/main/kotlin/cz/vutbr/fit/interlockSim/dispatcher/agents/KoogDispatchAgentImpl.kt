@@ -388,8 +388,7 @@ class KoogDispatchAgentImpl(
 					"REFUSED — ${outcome.reason}"
 
 			// Issue #903: a permanent impossibility (rear-facing START or unconfigurable switch),
-			// not ordinary contention. Issue #1007 (D9): rendered apart from OriginNotContiguous and
-			// carrying no retry hint. The kernel's reason is carried through verbatim.
+			// not ordinary contention. The kernel's reason is carried through verbatim.
 			is AppliedOutcome.GeometricallyImpossible ->
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — geometrically impossible, this origin can never reach that target: ${outcome.reason}"

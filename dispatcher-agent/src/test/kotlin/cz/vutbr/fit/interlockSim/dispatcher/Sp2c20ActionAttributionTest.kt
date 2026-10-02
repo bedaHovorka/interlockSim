@@ -503,7 +503,7 @@ class Sp2c20ActionAttributionTest {
 				}
 			val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
 			every { networkActuator.requestRoute(any(), any(), any()) } throws
-				IllegalArgumentException("Unknown endpoint")
+				IllegalArgumentException("bad request argument")
 			val queue = ActuatorCommandQueue()
 			val applier =
 				DispatchDecisionApplier(

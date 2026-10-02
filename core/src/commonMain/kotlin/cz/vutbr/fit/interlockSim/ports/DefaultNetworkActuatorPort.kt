@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.toRouteResponse
+import cz.vutbr.fit.interlockSim.sim.unresolvedEndpointDenial
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsByName
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -101,79 +102,47 @@ class DefaultNetworkActuatorPort(
 	): RouteRequestResult {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }
 
-		// SP3.5: route through the interlocking safety kernel when wired in production.
-		// Endpoint existence is validated first (preserving the IllegalArgumentException
-		// contract for unknown names), then the facade handles C1/C3/C4 safety checks.
-		val facade = interlockingFacade
+		// SP3.5: route through the interlocking safety kernel when wired in production. An endpoint
+		// name that does not resolve comes back as a DenialCause.UnresolvedEndpoint denial on both
+		// branches (Issue #973); only a blank train name throws.
 		val response =
-			if (facade != null) {
-				requireEndpoint(fromEndpointName)
-				requireEndpoint(toEndpointName)
-				facade.requestRouteByEndpoints(trainName, fromEndpointName, toEndpointName)
-			} else {
-				// Legacy path (no facade): direct PathReservationService.reservePath. Used by the
-				// :fast-sim native binary and tests that run without Koin DI. It composes the very
-				// same two mappings the facade path uses (Issue #968): the kernel result goes
-				// through ReservationResult.toRouteResponse, then through classifyDenial below, so
-				// the two branches cannot classify one kernel outcome differently.
-				val from = requireEndpoint(fromEndpointName)
-				val to = requireEndpoint(toEndpointName)
-				pathReservationService
-					.reservePath(trainName, from, to)
-					.toRouteResponse(trainName, fromEndpointName, toEndpointName)
-			}
+			interlockingFacade?.requestRouteByEndpoints(trainName, fromEndpointName, toEndpointName)
+				?: reserveWithoutFacade(trainName, fromEndpointName, toEndpointName)
 		return when (response) {
 			is InterlockingFacade.RouteResponse.Granted ->
 				RouteRequestResult.Reserved(
 					trainName = trainName,
 					blocksCount = response.lockedRoute.blocks.size
 				)
-			is InterlockingFacade.RouteResponse.Denied -> {
-				logger.debug {
-					"requestRoute: denied for $trainName " +
-						"($fromEndpointName → $toEndpointName): ${response.reason}"
-				}
+			is InterlockingFacade.RouteResponse.Denied ->
 				classifyDenial(trainName, fromEndpointName, toEndpointName, response)
-			}
 		}
 	}
 
 	/**
-	 * The **one** mapping across the facade → port boundary (Issue #968, owner ruling D7):
-	 * translates an [InterlockingFacade.RouteResponse.Denied] into its [RouteRequestResult]. Both
-	 * branches of [requestRoute] go through it — the legacy/no-facade branch after
-	 * [cz.vutbr.fit.interlockSim.sim.toRouteResponse] — so one kernel outcome always classifies
-	 * the same way.
+	 * Legacy path (no facade), used by the `:fast-sim` native binary and tests that run without Koin
+	 * DI: resolves both endpoints and calls [PathReservationService.reservePath] directly.
+	 */
+	private fun reserveWithoutFacade(
+		trainName: String,
+		fromEndpointName: String,
+		toEndpointName: String
+	): InterlockingFacade.RouteResponse {
+		val from = resolveEndpoint(fromEndpointName) ?: return unresolvedEndpointDenial(fromEndpointName)
+		val to = resolveEndpoint(toEndpointName) ?: return unresolvedEndpointDenial(toEndpointName)
+		return pathReservationService
+			.reservePath(trainName, from, to)
+			.toRouteResponse(trainName, fromEndpointName, toEndpointName)
+	}
+
+	/**
+	 * The **one** mapping across the facade → port boundary (Issue #968, owner ruling D7): translates
+	 * an [InterlockingFacade.RouteResponse.Denied] into its [RouteRequestResult]. Both branches of
+	 * [requestRoute] go through it, so one kernel outcome always classifies the same way.
 	 *
-	 * ## Why this is exhaustive, with no `else`
-	 *
-	 * This `when` branches on [InterlockingFacade.RouteResponse.DenialCause] with no fallback, so
-	 * adding a cause is a **compile error here** rather than a silent collapse. That compile-time
-	 * property is the entire point of the type: its absence is what produced the defect Issue #834
-	 * task alpha-7a fixes. Before that task every denial except the contiguity rejection became
-	 * `AllPathsBlocked(0)`, which
-	 *
-	 * - made [cz.vutbr.fit.interlockSim.ports.RouteRequestResult.NoRouteExists] and
-	 *   [cz.vutbr.fit.interlockSim.ports.RouteRequestResult.Conflict] production-unreachable on
-	 *   this branch (the LLM dispatcher always wires a facade),
-	 * - reported `attemptedPaths = 0`, contradicting that result's own contract and reaching the
-	 *   model as *"all paths blocked (0 path(s) attempted)"*, and
-	 * - told the agent to retry, on a later tick, a request that could never succeed — while
-	 *   booking the failure as ordinary contention, which the sweep's invalid-output metric
-	 *   deliberately excludes.
-	 *
-	 * Since Issue #968 **identical `ReservationResult` ⇒ identical `RouteRequestResult` on both
-	 * branches** holds by construction (one shared chain), and the branch-equivalence property in
-	 * `DefaultNetworkActuatorPortTest` still pins it.
-	 *
-	 * [InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint] — an endpoint name the
-	 * kernel could not resolve, so the refusal never reached pathfinding — maps to
-	 * [RouteRequestResult.UnresolvedEndpoint] naming that endpoint (Issue #973). It has no
-	 * legacy/no-facade counterpart: that branch has no endpoint-resolution step of its own.
-	 *
-	 * There is no residual cause: the former `DenialCause.Other`, which collapsed onto
-	 * `NoRouteExists`, was removed by Issue #968 once no production path produced it, so every
-	 * denial names its cause at the site that raises it.
+	 * The `when` branches on [InterlockingFacade.RouteResponse.DenialCause] with no `else`, so a new
+	 * cause is a compile error here rather than a silent collapse (the defect Issue #834 task
+	 * alpha-7a fixed).
 	 *
 	 * @since Issue #834 (SP2c.11 — Goal 10, task alpha-7a)
 	 */
@@ -207,10 +176,8 @@ class DefaultNetworkActuatorPort(
 				)
 			}
 			is InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart -> {
-				// Issue #893 (task A-R1b): the kernel identified this specifically as a
-				// non-contiguous-origin rejection (ReservationResult.NonContiguousStart). Both
-				// branches reach this mapping (#968); the reason is preserved verbatim -- the
-				// agent prompt renders it unchanged (AppliedOutcome.OriginNotContiguous).
+				// Issue #893 (task A-R1b): the reason is preserved verbatim -- the agent prompt
+				// renders it unchanged (AppliedOutcome.OriginNotContiguous).
 				logger.warn {
 					"requestRoute: non-contiguous origin for $trainName " +
 						"($fromEndpointName → $toEndpointName): ${response.reason}"
@@ -247,9 +214,7 @@ class DefaultNetworkActuatorPort(
 				RouteRequestResult.ConditionFailed(response.reason, cause.retryable)
 			}
 			is InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible -> {
-				// Issue #903: the kernel identified this specifically as a permanent geometric
-				// impossibility (ReservationResult.GeometricallyImpossible). Both branches reach
-				// this mapping (#968); the reason is preserved verbatim.
+				// Issue #903: a permanent geometric impossibility; the reason is preserved verbatim.
 				logger.warn {
 					"requestRoute: geometrically impossible route for $trainName " +
 						"($fromEndpointName → $toEndpointName): ${cause.reason}"
@@ -257,7 +222,7 @@ class DefaultNetworkActuatorPort(
 				RouteRequestResult.GeometricallyImpossible(cause.reason)
 			}
 			is InterlockingFacade.RouteResponse.DenialCause.DivergesFromHeldRoute -> {
-				// Issue #1066: both branches reach this mapping (#968); the reason is preserved.
+				// Issue #1066: the reason is preserved.
 				logger.warn {
 					"requestRoute: route diverges from the held route for $trainName " +
 						"($fromEndpointName → $toEndpointName): ${cause.reason}"
@@ -363,19 +328,12 @@ class DefaultNetworkActuatorPort(
 
 	/**
 	 * Returns the [DynamicPathSeparator] for [name], searching both [inOutByName] and
-	 * [semaphoreByName].  Throws [IllegalArgumentException] if the name is not recognised
-	 * as either an InOut or a Semaphore in this network.
+	 * [semaphoreByName], or `null` if the name is neither an InOut nor a Semaphore of this network.
 	 *
 	 * Partial paths (InOut → Semaphore or Semaphore → InOut) are valid in addition to the
 	 * full end-to-end (InOut → InOut) form, so both element types are accepted here.
 	 */
-	private fun requireEndpoint(name: String): DynamicPathSeparator =
-		(inOutByName[name] ?: semaphoreByName[name])
-			?: throw IllegalArgumentException(
-				"Unknown endpoint '$name' in network " +
-					"(known InOuts: ${inOutByName.keys.sorted()}, " +
-					"known Semaphores: ${semaphoreByName.keys.sorted()})"
-			)
+	private fun resolveEndpoint(name: String): DynamicPathSeparator? = inOutByName[name] ?: semaphoreByName[name]
 
 	/**
 	 * Scans the grid once to build a name→semaphore index.  Mirrors the strategy in

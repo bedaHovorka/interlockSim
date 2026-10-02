@@ -24,10 +24,8 @@ private val logger = KotlinLogging.logger {}
  * [DefaultInterlockingFacade.requestRouteByEndpoints] returns.
  *
  * The `when` is exhaustive with no `else`, so a new `ReservationResult` subtype is a compile error
- * here rather than a silent collapse. Both callers share it: the facade, and the legacy/no-facade
- * branch of [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.requestRoute], which
- * composes this function with the port's own `DenialCause` mapping — so the two branches can no
- * longer classify the same kernel outcome differently (Issue #834 task alpha-7a).
+ * here rather than a silent collapse. Both the facade and the port's legacy/no-facade branch call
+ * it, then share the port's `classifyDenial`.
  *
  * Every payload is forwarded from the kernel result unchanged; nothing is newly computed.
  *
@@ -136,3 +134,21 @@ internal fun PathReservationService.ReservationResult.toRouteResponse(
 			)
 		}
 	}
+
+/**
+ * The denial for an endpoint name that does not resolve to an InOut or a Semaphore of this network.
+ * No reservation is attempted, so there is no candidate-path count and no owning train to report:
+ * classifying it as contention would invent a count that does not exist and tell the caller to
+ * retry a request that can never succeed (Issue #834), and reporting it as
+ * [InterlockingFacade.RouteResponse.DenialCause.NoPath] would claim a topology search that never
+ * ran (Issue #973).
+ *
+ * Shared by [DefaultInterlockingFacade.requestRouteByEndpoints] and the legacy/no-facade branch of
+ * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort.requestRoute], so both build the
+ * same denial.
+ */
+internal fun unresolvedEndpointDenial(endpointName: String): InterlockingFacade.RouteResponse.Denied =
+	InterlockingFacade.RouteResponse.Denied(
+		"Unknown route endpoint: $endpointName",
+		InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint(endpointName)
+	)

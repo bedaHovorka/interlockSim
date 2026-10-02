@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
@@ -20,6 +19,7 @@ import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause
+import cz.vutbr.fit.interlockSim.testutil.coversEverySealedSubclassOf
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
@@ -49,18 +49,10 @@ class ReservationResultMappingTest {
 		assertThat(result().toRouteResponse("T1", "A", "B")).isEqualTo(expected)
 	}
 
-	/**
-	 * `sealedSubclasses` reports **direct** subclasses only; the hierarchy is flat today, so a
-	 * deeper subtype would need this guard to recurse.
-	 */
 	@Test
 	@DisplayName("the sample table covers every ReservationResult subtype")
 	fun providerCoversEverySubtype() {
-		val samples = rows.map { it.result() }
-
-		assertThat(ReservationResult::class.sealedSubclasses).hasSize(samples.size)
-		assertThat(samples.map { it::class }.toSet())
-			.isEqualTo(ReservationResult::class.sealedSubclasses.toSet())
+		assertThat(rows.map { it.result() }).coversEverySealedSubclassOf(ReservationResult::class)
 	}
 
 	/** One table row: the result is built only when the row runs (see [block]). */

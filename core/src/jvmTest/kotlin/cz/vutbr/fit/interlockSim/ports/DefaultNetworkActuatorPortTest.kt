@@ -39,14 +39,18 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause
+import cz.vutbr.fit.interlockSim.testutil.coversEverySealedSubclassOf
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.MethodSource
 import kotlin.test.assertFailsWith
@@ -170,23 +174,21 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("unknown fromEndpointName throws IllegalArgumentException")
-		fun unknownFromThrows() {
+		@DisplayName("unknown fromEndpointName returns UnresolvedEndpoint naming it")
+		fun unknownFromIsUnresolvedEndpoint() {
 			val b = inOut("B")
 			val p = port(inOuts = listOf(b))
-			assertFailsWith<IllegalArgumentException> {
-				p.requestRoute("T1", "NOPE", "B")
-			}
+			assertThat(p.requestRoute("T1", "NOPE", "B"))
+				.isEqualTo(RouteRequestResult.UnresolvedEndpoint("NOPE"))
 		}
 
 		@Test
-		@DisplayName("unknown toEndpointName throws IllegalArgumentException")
-		fun unknownToThrows() {
+		@DisplayName("unknown toEndpointName returns UnresolvedEndpoint naming it")
+		fun unknownToIsUnresolvedEndpoint() {
 			val a = inOut("A")
 			val p = port(inOuts = listOf(a))
-			assertFailsWith<IllegalArgumentException> {
-				p.requestRoute("T1", "A", "NOPE")
-			}
+			assertThat(p.requestRoute("T1", "A", "NOPE"))
+				.isEqualTo(RouteRequestResult.UnresolvedEndpoint("NOPE"))
 		}
 
 		@Test
@@ -327,14 +329,13 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("unknown endpoint (neither InOut nor Semaphore) throws IllegalArgumentException")
-		fun unknownEndpointThrows() {
+		@DisplayName("unknown endpoint (neither InOut nor Semaphore) returns UnresolvedEndpoint")
+		fun unknownEndpointIsUnresolvedEndpoint() {
 			val a = inOut("A")
 			val s1 = semaphore("S1")
 			val p = port(inOuts = listOf(a), cells = mapOf((0 to 0) to s1))
-			assertFailsWith<IllegalArgumentException> {
-				p.requestRoute("T1", "A", "UNKNOWN")
-			}
+			assertThat(p.requestRoute("T1", "A", "UNKNOWN"))
+				.isEqualTo(RouteRequestResult.UnresolvedEndpoint("UNKNOWN"))
 		}
 	}
 
@@ -350,6 +351,35 @@ class DefaultNetworkActuatorPortTest {
 		): DefaultNetworkActuatorPort {
 			val (e, _) = env(inOuts, cells)
 			return DefaultNetworkActuatorPort(env = e, interlockingFacade = facade)
+		}
+
+		/**
+		 * The one mapping across the facade → port boundary (Issue #968, owner ruling D7):
+		 * `classifyDenial` is private, so this table drives it through the public `requestRoute`
+		 * with a mocked facade. [denialCausesCoverEverySubtype] is the "a new variant cannot pass
+		 * unnoticed" promise.
+		 */
+		@ParameterizedTest(name = "{0}")
+		@MethodSource("cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPortTest#denialCauseSamples")
+		@DisplayName("each DenialCause maps to its RouteRequestResult")
+		fun mapsEachDenialCause(
+			cause: DenialCause,
+			expected: RouteRequestResult
+		) {
+			val facade = mockk<InterlockingFacade>()
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied(DENIAL_REASON, cause)
+
+			val result = portWithFacade(inOuts = listOf(inOut("A"), inOut("B")), facade = facade).requestRoute("T1", "A", "B")
+
+			assertThat(result).isEqualTo(expected)
+		}
+
+		@Test
+		@DisplayName("the DenialCause sample table covers every DenialCause subtype")
+		fun denialCausesCoverEverySubtype() {
+			assertThat(denialCauseSamples().map { it.get()[0] as DenialCause })
+				.coversEverySealedSubclassOf(DenialCause::class)
 		}
 
 		@Test
@@ -377,7 +407,7 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		/**
-		 * Test F-g (Issue #834, task alpha-7a; split by Issue #973) — the rewrite of the former
+		 * Test F-g (Issue #834, task alpha-7a) — the rewrite of the former
 		 * `deniedMapsToAllPathsBlocked`, which pinned the defect: it asserted that EVERY facade
 		 * denial became `AllPathsBlocked(0)`, i.e. that the kernel's reason was discarded and a
 		 * count that contradicts [RouteRequestResult.AllPathsBlocked]'s own contract
@@ -392,7 +422,6 @@ class DefaultNetworkActuatorPortTest {
 		@Test
 		@DisplayName("Denied with an UnresolvedEndpoint cause maps to UnresolvedEndpoint, never NoRouteExists")
 		fun deniedWithUnresolvedEndpointMapsToUnresolvedEndpoint() {
-			val a = inOut("Nope")
 			val b = inOut("InOut-B")
 			val facade = mockk<InterlockingFacade>()
 			every { facade.requestRouteByEndpoints("T1", "Nope", "InOut-B") } returns
@@ -402,7 +431,7 @@ class DefaultNetworkActuatorPortTest {
 				)
 
 			val result =
-				portWithFacade(inOuts = listOf(a, b), facade = facade)
+				portWithFacade(inOuts = listOf(b), facade = facade)
 					.requestRoute("T1", "Nope", "InOut-B")
 
 			assertThat(result).isEqualTo(RouteRequestResult.UnresolvedEndpoint("Nope"))
@@ -529,8 +558,7 @@ class DefaultNetworkActuatorPortTest {
 		 * carries a [InterlockingFacade.RouteResponse.DenialCause.ConditionFailed] cause with a
 		 * retryable flag. The facade branch must preserve that flag (and the reason) into
 		 * [RouteRequestResult.ConditionFailed] rather than collapsing transient contention onto the
-		 * permanent [RouteRequestResult.NoRouteExists] side the way the residual `DenialCause.Other`
-		 * did before Issue #968 removed it.
+		 * permanent [RouteRequestResult.NoRouteExists] side.
 		 */
 		@ParameterizedTest
 		@CsvSource("true", "false")
@@ -557,16 +585,20 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("unknown endpoint throws IllegalArgumentException even when facade is wired")
-		fun unknownEndpointThrowsWithFacade() {
+		@DisplayName("unknown endpoint is passed to the facade unchecked; the port does not pre-validate")
+		fun unknownEndpointReachesTheFacade() {
 			val a = inOut("A")
 			val facade = mockk<InterlockingFacade>()
+			every { facade.requestRouteByEndpoints("T1", "A", "UNKNOWN") } returns
+				InterlockingFacade.RouteResponse.Denied(
+					"Unknown route endpoint: UNKNOWN",
+					InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint("UNKNOWN")
+				)
 
-			val p = portWithFacade(inOuts = listOf(a), facade = facade)
+			val result = portWithFacade(inOuts = listOf(a), facade = facade).requestRoute("T1", "A", "UNKNOWN")
 
-			assertFailsWith<IllegalArgumentException> {
-				p.requestRoute("T1", "A", "UNKNOWN")
-			}
+			assertThat(result).isEqualTo(RouteRequestResult.UnresolvedEndpoint("UNKNOWN"))
+			verify(exactly = 1) { facade.requestRouteByEndpoints("T1", "A", "UNKNOWN") }
 		}
 
 		@Test
@@ -659,17 +691,11 @@ class DefaultNetworkActuatorPortTest {
 		 * Guards [reservationResults] against silently going stale: a new
 		 * [PathReservationService.ReservationResult] subtype must be added to the provider, or
 		 * [branchesAgree] would stop covering it while still passing.
-		 *
-		 * Limitation: `sealedSubclasses` reports **direct** subclasses only, so a subtype nested
-		 * one level deeper (a sealed subtype of a subtype) would escape this guard. The hierarchy
-		 * is flat today; deepening it means extending this check to recurse.
 		 */
 		@Test
 		@DisplayName("the equivalence provider covers every ReservationResult subtype")
 		fun providerCoversEveryReservationResultSubtype() {
-			val covered = reservationResults().map { it::class }.toSet()
-
-			assertThat(covered).isEqualTo(PathReservationService.ReservationResult::class.sealedSubclasses.toSet())
+			assertThat(reservationResults()).coversEverySealedSubclassOf(PathReservationService.ReservationResult::class)
 		}
 
 		/**
@@ -681,10 +707,8 @@ class DefaultNetworkActuatorPortTest {
 		 * Issue #973 it carries [InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint]
 		 * naming the endpoint and classifies as [RouteRequestResult.UnresolvedEndpoint].
 		 *
-		 * This state is currently unreachable *through the port* (which pre-validates endpoint
-		 * names and throws [IllegalArgumentException] first — see `unknownEndpointThrowsWithFacade`
-		 * above), but it is reachable for every other facade caller, so the classifier needs a
-		 * defined answer rather than an accidental one.
+		 * The port passes unknown names straight to the facade (see
+		 * `unknownEndpointReachesTheFacade` above), so this denial is what a caller of the port gets.
 		 */
 		@Test
 		@DisplayName("unknown-endpoint denial carries the UnresolvedEndpoint cause, never a contention cause")
@@ -1037,6 +1061,34 @@ class DefaultNetworkActuatorPortTest {
 	}
 
 	companion object {
+		private const val DENIAL_REASON = "kernel reason"
+
+		/** One [DenialCause] subtype per row, with the [RouteRequestResult] it must map to. */
+		@JvmStatic
+		fun denialCauseSamples(): List<Arguments> =
+			listOf(
+				Arguments.of(DenialCause.NoPath, RouteRequestResult.NoRouteExists("A", "B")),
+				Arguments.of(DenialCause.AllPathsBlocked(3), RouteRequestResult.AllPathsBlocked(3)),
+				Arguments.of(DenialCause.Conflict("U7", "T2"), RouteRequestResult.Conflict("U7", "T2")),
+				Arguments.of(
+					DenialCause.NonContiguousStart,
+					RouteRequestResult.OriginNotContiguous("A", DENIAL_REASON)
+				),
+				Arguments.of(DenialCause.UnresolvedEndpoint("A"), RouteRequestResult.UnresolvedEndpoint("A")),
+				Arguments.of(
+					DenialCause.ConditionFailed(true),
+					RouteRequestResult.ConditionFailed(DENIAL_REASON, true)
+				),
+				Arguments.of(
+					DenialCause.GeometricallyImpossible("faces away"),
+					RouteRequestResult.GeometricallyImpossible("faces away")
+				),
+				Arguments.of(
+					DenialCause.DivergesFromHeldRoute("doB2", "diverges"),
+					RouteRequestResult.DivergesFromHeldRoute("doB2", "diverges")
+				)
+			)
+
 		/**
 		 * One instance of every [PathReservationService.ReservationResult] subtype, feeding the
 		 * branch-equivalence property in [FacadeLegacyEquivalence] (Issue #834, task alpha-7a).

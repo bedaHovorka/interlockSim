@@ -130,21 +130,22 @@ class KoogDispatchAgentImplPromptTest {
 		assertThat(prompts[0]).contains(reason)
 	}
 
+	/** Publishes [outcome], runs one decision and returns the single prompt the agent built. */
+	private fun promptFor(outcome: AppliedOutcome): String {
+		val channel = AppliedOutcomeChannel()
+		channel.publish(outcome)
+		val (agent, prompts) = agentCapturingPrompts(channel)
+		runBlocking { agent.decideAsync(emptyObservation()) }
+		assertThat(prompts).hasSize(1)
+		return prompts[0]
+	}
+
 	// ── #1007 (D9): GeometricallyImpossible is a permanent refusal, distinct from OriginNotContiguous ──
 
 	@Test
 	@DisplayName("GeometricallyImpossible renders as a permanent refusal, distinct from OriginNotContiguous")
 	fun geometricallyImpossibleRenderedApartFromOriginNotContiguous() {
 		val reason = "START signal zA faces away from InOut-B"
-
-		fun promptFor(outcome: AppliedOutcome): String {
-			val channel = AppliedOutcomeChannel()
-			channel.publish(outcome)
-			val (agent, prompts) = agentCapturingPrompts(channel)
-			runBlocking { agent.decideAsync(emptyObservation()) }
-			assertThat(prompts).hasSize(1)
-			return prompts[0]
-		}
 
 		val impossible =
 			promptFor(AppliedOutcome.GeometricallyImpossible("T-1", "zA", "InOut-B", reason, CommandId(1L), 1L))
@@ -157,7 +158,9 @@ class KoogDispatchAgentImplPromptTest {
 		)
 		assertThat(notContiguous).contains("(zA -> InOut-B): REFUSED — $reason")
 		assertThat(impossible).isNotEqualTo(notContiguous)
-		assertThat(impossible.lowercase()).doesNotContain("retry")
+		// Only the outcome line is checked, so unrelated prompt text mentioning "retry" cannot break this.
+		val impossibleLine = impossible.lines().single { it.contains("geometrically impossible") }
+		assertThat(impossibleLine.lowercase()).doesNotContain("retry")
 		assertThat(notContiguous.lowercase()).doesNotContain("retry")
 	}
 
@@ -387,23 +390,19 @@ class KoogDispatchAgentImplPromptTest {
 	@Test
 	@DisplayName("UnresolvedEndpoint names the endpoint that does not exist on this network")
 	fun unresolvedEndpointNamesTheMissingEndpoint() {
-		val channel = AppliedOutcomeChannel()
-		channel.publish(
-			AppliedOutcome.UnresolvedEndpoint(
-				trainId = "T-1",
-				fromEndpointName = "Nope",
-				toEndpointName = "InOut-B",
-				endpointName = "Nope",
-				id = CommandId(1L),
-				tickIndex = 1L
+		val prompt =
+			promptFor(
+				AppliedOutcome.UnresolvedEndpoint(
+					trainId = "T-1",
+					fromEndpointName = "Nope",
+					toEndpointName = "InOut-B",
+					endpointName = "Nope",
+					id = CommandId(1L),
+					tickIndex = 1L
+				)
 			)
-		)
-		val (agent, prompts) = agentCapturingPrompts(channel)
 
-		runBlocking { agent.decideAsync(emptyObservation()) }
-
-		assertThat(prompts).hasSize(1)
-		assertThat(prompts[0]).contains(
+		assertThat(prompt).contains(
 			"request_route for \"T-1\" (Nope -> InOut-B): REFUSED — endpoint 'Nope' does not exist on this network."
 		)
 	}

@@ -300,7 +300,7 @@ class AppliedOutcomeChannelSp2c17Test {
 		fun droppedInvalidPublishedOnException() {
 			every {
 				networkActuator.requestRoute(any(), any(), any())
-			} throws IllegalArgumentException("Unknown endpoint: XYZ")
+			} throws IllegalArgumentException("bad request argument: XYZ")
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
@@ -314,7 +314,7 @@ class AppliedOutcomeChannelSp2c17Test {
 			outcome as AppliedOutcome.DroppedInvalid
 			assertThat(outcome.commandType).isEqualTo("request_route")
 			assertThat(outcome.trainId).isEqualTo("T-087")
-			assertThat(outcome.message).contains("Unknown endpoint: XYZ")
+			assertThat(outcome.message).contains("bad request argument: XYZ")
 		}
 
 		@Test
@@ -322,7 +322,7 @@ class AppliedOutcomeChannelSp2c17Test {
 		fun droppedInvalidRenderedInPrompt() {
 			every {
 				networkActuator.requestRoute(any(), any(), any())
-			} throws IllegalArgumentException("Unknown endpoint: XYZ")
+			} throws IllegalArgumentException("bad request argument: XYZ")
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
@@ -335,7 +335,7 @@ class AppliedOutcomeChannelSp2c17Test {
 			val rendered = CompactTextRenderer().render(ctx)
 
 			assertThat(rendered).contains("request_route T-087 : DROPPED")
-			assertThat(rendered).contains("Unknown endpoint: XYZ")
+			assertThat(rendered).contains("bad request argument: XYZ")
 		}
 	}
 

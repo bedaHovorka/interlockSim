@@ -37,6 +37,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
+import cz.vutbr.fit.interlockSim.testutil.coversEverySealedSubclassOf
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -81,14 +82,16 @@ class RequestRouteApplyFailureCodeTest {
 	private fun applierWithSink(
 		networkActuator: NetworkActuatorPort,
 		outcomes: MutableList<ActionOutcome>
-	): DispatchDecisionApplier {
+	): Pair<ActuatorCommandQueue, DispatchDecisionApplier> {
 		val queue = ActuatorCommandQueue()
-		return DispatchDecisionApplier(
-			queue = queue,
-			networkActuator = networkActuator,
-			onApproveTrain = {},
-			actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
-		)
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = networkActuator,
+				onApproveTrain = {},
+				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
+			)
+		return queue to applier
 	}
 
 	// ── Task A-R1b helpers (Issue #893) ─────────────────────────────────────
@@ -105,12 +108,12 @@ class RequestRouteApplyFailureCodeTest {
 	/**
 	 * Builds a real [DefaultNetworkActuatorPort] wired with [facade] -- exactly how
 	 * `DispatcherAgentModule` wires `NetworkActuatorPort` in production (Issue #573, SP3.5).
-	 * "zA"/"doA1" are registered as InOuts so `requireEndpoint` accepts them, matching the
-	 * endpoint names every other test in this file already uses.
+	 * "zA"/"doA1" are registered as InOuts so they resolve, matching the endpoint names every
+	 * other test in this file already uses.
 	 *
 	 * @since Issue #893 (phase alpha, task A-R1b)
 	 */
-	private fun facadeWiredPort(facade: InterlockingFacade): NetworkActuatorPort {
+	private fun facadeWiredPort(facade: InterlockingFacade?): NetworkActuatorPort {
 		val grid = mockk<RailwayNetGrid<Cell>>(relaxed = true)
 		every { grid.cols } returns 0
 		every { grid.rows } returns 0
@@ -141,14 +144,7 @@ class RequestRouteApplyFailureCodeTest {
 		val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
 		every { networkActuator.requestRoute(any(), any(), any()) } returns result
 		val outcomes = mutableListOf<ActionOutcome>()
-		val queue = ActuatorCommandQueue()
-		val applier =
-			DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = networkActuator,
-				onApproveTrain = {},
-				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
-			)
+		val (queue, applier) = applierWithSink(networkActuator, outcomes)
 
 		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
 		applier.onControlStep()
@@ -157,17 +153,11 @@ class RequestRouteApplyFailureCodeTest {
 		assertThat(outcomes.first().applyFailure).isEqualTo(expected)
 	}
 
-	/**
-	 * `sealedSubclasses` reports **direct** subclasses only; the hierarchy is flat today, so a
-	 * deeper subtype would need this guard to recurse.
-	 */
 	@Test
 	@DisplayName("the failure-code table covers every RouteRequestResult subtype")
 	fun failureCodeTableCoversEveryRouteRequestResultSubtype() {
-		val results = failureCodeTable().map { it.get()[0] as RouteRequestResult }
-
-		assertThat(RouteRequestResult::class.sealedSubclasses).hasSize(results.size)
-		assertThat(results.map { it::class }.toSet()).isEqualTo(RouteRequestResult::class.sealedSubclasses.toSet())
+		assertThat(failureCodeTable().map { it.get()[0] as RouteRequestResult })
+			.coversEverySealedSubclassOf(RouteRequestResult::class)
 	}
 
 	@Test
@@ -292,31 +282,12 @@ class RequestRouteApplyFailureCodeTest {
 		val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
 		every { networkActuator.requestRoute(any(), any(), any()) } returns
 			RouteRequestResult.UnresolvedEndpoint("Nope")
-		val outcomes = mutableListOf<ActionOutcome>()
-		var decisionAppliedCount = 0
-		val correlationMap = CommandCorrelationMap()
-		val outcomeChannel = AppliedOutcomeChannel()
-		val queue = ActuatorCommandQueue(correlationMap = correlationMap)
-		val applier =
-			DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = networkActuator,
-				onApproveTrain = {},
-				onDecisionApplied = { decisionAppliedCount++ },
-				correlationMap = correlationMap,
-				outcomeSink = outcomeChannel,
-				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
-			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "Nope", "InOut-B")))
-		applier.onControlStep()
+		val (outcomes, published) = applyThroughPort(networkActuator, "Nope", "InOut-B")
 
 		assertThat(outcomes).hasSize(1)
 		assertThat(outcomes.first().phase).isEqualTo(ActionPhase.APPLIED_THEN_FAILED)
 		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.UNRESOLVED_ENDPOINT)
-		assertThat(decisionAppliedCount).isEqualTo(1)
-
-		val published = outcomeChannel.drainSince(0L)
 		assertThat(published).hasSize(1)
 		assertThat(published.first()).isInstanceOf(AppliedOutcome.UnresolvedEndpoint::class)
 		val unresolved = published.first() as AppliedOutcome.UnresolvedEndpoint
@@ -324,6 +295,22 @@ class RequestRouteApplyFailureCodeTest {
 		assertThat(unresolved.fromEndpointName).isEqualTo("Nope")
 		assertThat(unresolved.toEndpointName).isEqualTo("InOut-B")
 		assertThat(unresolved.endpointName).isEqualTo("Nope")
+	}
+
+	/**
+	 * Issue #973, owner choice 2026-10-03: an endpoint name that does not exist in the network no
+	 * longer throws out of the real [DefaultNetworkActuatorPort] on the legacy (no facade) path. It
+	 * is reported as [ApplyFailureCode.UNRESOLVED_ENDPOINT], never as `DROPPED_INVALID`. The facade
+	 * path is covered by `unresolvedEndpointThroughFacadeWiredPortPublishesNamedOutcome`.
+	 */
+	@Test
+	@DisplayName("an unknown endpoint through a real facade-free port -> UNRESOLVED_ENDPOINT, not DROPPED_INVALID")
+	fun unknownEndpointThroughRealPortIsUnresolvedEndpoint() {
+		val (outcomes, published) = applyThroughPort(facadeWiredPort(null), "ghost", "doA1")
+
+		assertThat(outcomes).hasSize(1)
+		assertThat(outcomes.first().applyFailure).isEqualTo(ApplyFailureCode.UNRESOLVED_ENDPOINT)
+		assertThat((published.single() as AppliedOutcome.UnresolvedEndpoint).endpointName).isEqualTo("ghost")
 	}
 
 	/**
@@ -423,7 +410,7 @@ class RequestRouteApplyFailureCodeTest {
 	/**
 	 * Review finding #2 (Issue #834): a four-condition interlocking refusal (route freedom / C1,
 	 * switch / C2, atomic lock / C3-C4, signal un-clearable) is its own denial cause, distinct from
-	 * the endpoint-resolution residual [RouteRequestResult.NoRouteExists]. The new
+	 * [RouteRequestResult.NoRouteExists]. The new
 	 * [RouteRequestResult.ConditionFailed] carries a `retryable` flag so transient contention is
 	 * not mislabelled as a permanent defect. This test pins only the applier's mapping; the
 	 * facade-wired sibling below proves reachability through the production wiring.
@@ -544,7 +531,15 @@ class RequestRouteApplyFailureCodeTest {
 	): Pair<List<ActionOutcome>, List<AppliedOutcome>> {
 		val facade = mockk<InterlockingFacade>()
 		every { facade.requestRouteByEndpoints("T1", "zA", "doA1") } returns denial
+		return applyThroughPort(facadeWiredPort(facade), "zA", "doA1")
+	}
 
+	/** Applies one `RequestRoute` for train "T1" through [port] and returns what the applier reported and published. */
+	private fun applyThroughPort(
+		port: NetworkActuatorPort,
+		from: String,
+		to: String
+	): Pair<List<ActionOutcome>, List<AppliedOutcome>> {
 		val correlationMap = CommandCorrelationMap()
 		val outcomeChannel = AppliedOutcomeChannel()
 		val queue = ActuatorCommandQueue(correlationMap = correlationMap)
@@ -552,14 +547,14 @@ class RequestRouteApplyFailureCodeTest {
 		val applier =
 			DispatchDecisionApplier(
 				queue = queue,
-				networkActuator = facadeWiredPort(facade),
+				networkActuator = port,
 				onApproveTrain = {},
 				correlationMap = correlationMap,
 				outcomeSink = outcomeChannel,
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", from, to)))
 		applier.onControlStep()
 
 		return outcomes to outcomeChannel.drainSince(0L)
@@ -667,8 +662,7 @@ class RequestRouteApplyFailureCodeTest {
 	 * [ApplyFailureCode.CONDITION_FAILED] through the facade-wired port, with the `retryable` flag
 	 * and the reason prose intact in [AppliedOutcome.ConditionFailed]. This is the wiring
 	 * `DispatcherAgentModule` builds in production; the four-condition `requestRoute` is not the
-	 * production path (production goes through `requestRouteByEndpoints`, where `Other` is the
-	 * genuine endpoint-resolution residual), but the branch is total so a future caller routing
+	 * production path (production goes through `requestRouteByEndpoints`), but the branch is total so a future caller routing
 	 * four-condition denials through the port gets the right code instead of a collapsed
 	 * `ALL_PATHS_BLOCKED`.
 	 */

@@ -353,11 +353,11 @@ class DispatchDecisionApplier(
 	 * ## Per-decision exception isolation
 	 *
 	 * Tool-driven decisions ([DispatchDecision.RequestRoute] etc.) can carry
-	 * LLM-hallucinated string arguments (an endpoint name that doesn't exist in this
-	 * network). [NetworkActuatorPort.requestRoute]'s `requireEndpoint` check throws
-	 * [IllegalArgumentException] for that case — correct for its other, trusted callers
-	 * (an unknown endpoint there really is a caller bug), but for the LLM tool path it is
-	 * a routine, expected external-input error, not a bug. Without the guard below, that
+	 * LLM-hallucinated string arguments (for example a blank train name). An unknown endpoint
+	 * name no longer throws: [NetworkActuatorPort.requestRoute] returns
+	 * `RouteRequestResult.UnresolvedEndpoint` for it (Issue #973). Other argument checks still
+	 * throw [IllegalArgumentException], which for the LLM tool path is a routine, expected
+	 * external-input error, not a bug. Without the guard below, such an
 	 * exception propagated out of this method and killed the entire kDisco simulation
 	 * thread (confirmed via a live local-model run), after which the simulation stopped
 	 * dispatching anything at all. Each decision is applied in its own try/catch so one

@@ -219,4 +219,27 @@ class RequestRouteToolTest {
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)
 	}
+
+	/**
+	 * The second self-disable case from the D8 table: without a `DispatchLoopSensorPort` the tool
+	 * cannot tell who is queued, so the guard falls through and the `doB1` origin passes.
+	 */
+	@Test
+	@DisplayName("the queued-origin guard is disabled when the tool has no sensor port")
+	fun queuedOriginGuardDisabledWithoutSensorPort() {
+		val tool =
+			RequestRouteTool(
+				SinkHolder(),
+				endpoints,
+				perceptionPort(),
+				sensorPort = null,
+				inOutNames = inOuts
+			)
+		val result =
+			runBlocking {
+				tool.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
 }

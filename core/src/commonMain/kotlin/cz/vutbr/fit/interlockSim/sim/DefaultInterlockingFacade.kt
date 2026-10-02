@@ -272,20 +272,6 @@ class DefaultInterlockingFacade(
 		}
 	}
 
-	/**
-	 * The denial for an endpoint name [requestRouteByEndpoints] cannot resolve. No reservation is
-	 * attempted, so there is no candidate-path count and no owning train to report: classifying it
-	 * as contention would invent a count that does not exist and tell the caller to retry a request
-	 * that can never succeed (Issue #834), and reporting it as
-	 * [InterlockingFacade.RouteResponse.DenialCause.NoPath] would claim a topology search that
-	 * never ran (Issue #973).
-	 */
-	private fun unresolvedEndpointDenial(endpointName: String): InterlockingFacade.RouteResponse.Denied =
-		InterlockingFacade.RouteResponse.Denied(
-			"Unknown route endpoint: $endpointName",
-			InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint(endpointName)
-		)
-
 	override fun requestRouteByEndpoints(
 		trainId: String,
 		fromEndpointName: String,

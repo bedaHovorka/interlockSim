@@ -88,9 +88,9 @@ interface InterlockingFacade {
 		 *
 		 * ## Why this exists (Issue #834, task alpha-7a)
 		 *
-		 * [requestRouteByEndpoints] already distinguishes all four
+		 * [requestRouteByEndpoints] already distinguishes every
 		 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult]
-		 * failures, but before this type existed it threw every one of them into the free-text
+		 * failure, but before this type existed it threw every one of them into the free-text
 		 * [Denied.reason]. [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort] had
 		 * nothing to branch on, so on its facade branch — the one production always takes —
 		 * every denial except the contiguity rejection collapsed to
@@ -263,11 +263,8 @@ interface InterlockingFacade {
 		 *                 CLAUDE.md "Language: English Only" rule.
 		 *                 Suitable for dispatcher operator display and agent LLM context.
 		 *                 **Prose only** — never parse it; branch on [cause] instead.
-		 * @property cause Machine-readable discriminant for this denial (Issue #834, task
-		 *   alpha-7a). Required, with no default and no residual cause (Issue #968): every site
-		 *   that raises a denial names the cause that produced it, so a denial can never be
-		 *   mistaken for contention by omission. [requestRouteByEndpoints] populates it from the
-		 *   kernel result it already holds.
+		 * @property cause Machine-readable discriminant for this denial; branch on this, not on
+		 *   [reason] (Issue #834, task alpha-7a).
 		 */
 		data class Denied(
 			val reason: String,

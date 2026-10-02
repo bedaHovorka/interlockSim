@@ -27,10 +27,8 @@ package cz.vutbr.fit.interlockSim.dispatcher
  * predict since it never runs pathfinding. It is reported separately from validator rejections
  * and excluded from the invalid-output rate.
  *
- * [ALL_PATHS_BLOCKED], [CONFLICT], and [NO_ROUTE_EXISTS] map one-to-one to the `:core`
- * `RouteRequestResult` non-success sealed subtypes they mirror; [UNRESOLVED_ENDPOINT],
- * [ORIGIN_NOT_CONTIGUOUS], [CONDITION_FAILED], [GEOMETRICALLY_IMPOSSIBLE] and
- * [DIVERGES_FROM_HELD_ROUTE] mirror the remaining ones. All are read-only.
+ * Each non-success code mirrors exactly one `:core` `RouteRequestResult` subtype. All are
+ * read-only.
  */
 enum class ApplyFailureCode {
 	/**

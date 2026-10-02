@@ -85,6 +85,8 @@ kotlin {
 				// Issue #1110: RepeatedTestCapExtension (Jupiter extension API). Registered by the
 				// static src/jvmMain/resources/META-INF/services file.
 				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
+				// SealedCoverageAssertions uses KClass.sealedSubclasses, which needs kotlin-reflect.
+				implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
 			}
 		}
 		val jvmTest by getting {
