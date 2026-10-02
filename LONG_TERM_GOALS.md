@@ -598,9 +598,13 @@ the 20-train stress case livelocks. The plan must cover:
 - A large review of kDisco for deadlocks, race conditions, and weak points, including research
   into existing scanners — this produces **new kDisco issues that become prerequisites of this
   goal**
-- No open kDisco issue blocks Goal 1B yet (the package rename kdisco#53 is consumed; kdisco#42/#43/#44 block Goal 5)
 - During the work, write the realistic demands on Goal 9B into an extra `.md` file as part of each
   task — at least a revision, as a retrospective
+
+kDisco prerequisites known today: the package rename (kdisco#53) is consumed. kdisco#42/#43/#44 block
+Goal 5, not this goal. kdisco#83 (filed from #1112: unhandled process exceptions are absorbed instead of
+reaching the embedder) is open and is the kind of weak point the review above must classify as a
+prerequisite or not.
 
 **Exit condition:** #591's failing tests are green at the end of the whole plan. That issue is
 therefore created **last** in the plan. It runs with low traffic — long lambda times in the

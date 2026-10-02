@@ -1,8 +1,9 @@
 # Documentation Index
 
-Index of everything under `docs/`. Entries marked "(history, YYYY-MM)" (the month is given where the file states a date; otherwise just
-"(history)") are records of finished work: they are kept for context and are not maintained. Unmarked entries are living
-documents. Project-wide rules live in the root [CLAUDE.md](../CLAUDE.md) and [TEAM.md](../TEAM.md).
+Index of everything under `docs/`. Entries marked "(history, YYYY-MM)" (the month comes from the file's own date or from git
+history; otherwise just "(history)") are records of finished work: they are kept for context and are not maintained. Entries
+under "Goal 10 reports (dated)" record a measurement or ruling at a point in time and are kept verbatim. All other entries are
+living documents. Project-wide rules live in the root [CLAUDE.md](../CLAUDE.md) and [TEAM.md](../TEAM.md).
 
 Directories covered as a single history entry (their files are not listed one by one):
 `superpowers/plans/`, `superpowers/specs/`, `election/`, `issues/`. The `diagrams/` and
@@ -19,7 +20,6 @@ Directories covered as a single history entry (their files are not listed one by
 - [PATH_DISCOVERY_MIGRATION_GUIDE.md](PATH_DISCOVERY_MIGRATION_GUIDE.md) - migrating from the deprecated mixed-concern path APIs to the path discovery services.
 - [MANUAL_TEST_PLAN_GOAL_3.md](MANUAL_TEST_PLAN_GOAL_3.md) - manual test plan for Goal 3 (collision detection).
 - [KOIN_SCOPE_LIFECYCLE_TESTS.md](KOIN_SCOPE_LIFECYCLE_TESTS.md) - what the Koin scope lifecycle tests cover and how they work.
-- [CHANGELOG.md](CHANGELOG.md) - release changelog (Keep a Changelog format).
 
 ## Architecture
 
@@ -32,7 +32,7 @@ Directories covered as a single history entry (their files are not listed one by
 - [INTERLOCKING_SCOPE_LIMITATIONS.md](INTERLOCKING_SCOPE_LIMITATIONS.md) - deliberate interlocking simplifications.
 - [ENGINE_CONTINUOUS_RATIONALE.md](ENGINE_CONTINUOUS_RATIONALE.md) - why `Engine` extends `Continuous`.
 - [SIMULATION_SPEED_CONTROL.md](SIMULATION_SPEED_CONTROL.md) - live wall-clock speed control for the animated simulation.
-- [FAST_SIM_BENCHMARK.md](FAST_SIM_BENCHMARK.md) - native versus JVM performance benchmark of the fast-sim binary.
+- [FAST_SIM_BENCHMARK.md](FAST_SIM_BENCHMARK.md) - native versus JVM performance benchmark of the fast-sim binary (history, 2026-03; a measurement at that date, #418).
 - [diagrams/README.md](diagrams/README.md) - PlantUML sources (`diagrams/*.puml`) and rendered images of the context architecture.
 - [grid-parameterization-architecture.puml](grid-parameterization-architecture.puml) - PlantUML class diagram of the grid parameterization design.
 - [grid-transformation-flow.puml](grid-transformation-flow.puml) - PlantUML flow of the editing-to-simulation grid transformation.
@@ -87,6 +87,7 @@ Dated summaries, retrospectives, decisions, and reports. Kept for context; do no
 
 ### Fixes, tests, and implementation summaries
 
+- [CHANGELOG.md](CHANGELOG.md) - early changelog fork, last updated 2026-02; superseded by the root [CHANGELOG.md](../CHANGELOG.md), which is the maintained one (history, 2026-02).
 - [TRAIN_PUBLIC_API_IMPLEMENTATION.md](TRAIN_PUBLIC_API_IMPLEMENTATION.md) - technical summary of the public `Train` API (history, 2026-02).
 - [TRAIN_PASSIVATION_FIX.md](TRAIN_PASSIVATION_FIX.md) - train stops completely when no path is available (history).
 - [SIGNAL_CONFIG_ROLLBACK_FIX.md](SIGNAL_CONFIG_ROLLBACK_FIX.md) - signal configuration rollback bug fix (history, 2026-03).
@@ -121,4 +122,4 @@ Superseded: the Kalasim migration plan was dropped on 2026-08-24; kDisco is the 
 - `superpowers/plans/` - dated implementation plans, 2026-03 to 2026-06 (history).
 - `superpowers/specs/` - dated design specs that accompany those plans, 2026-03 to 2026-06 (history).
 - `election/` - the 2026-04-14 backlog election record (history, 2026-04).
-- `issues/` - write-ups of individual resolved or investigated issues (#80, #291, #311), with its own README (history, 2026-02).
+- `issues/` - write-ups of individual resolved or investigated issues (#80, #291, #311), with its own README (history, 2026-02 to 2026-03).
