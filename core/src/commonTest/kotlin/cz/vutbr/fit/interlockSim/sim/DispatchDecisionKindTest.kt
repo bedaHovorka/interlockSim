@@ -85,6 +85,9 @@ class DispatchDecisionKindTest {
 			)
 		)
 
+	/** One decision per subtype, for the JVM-only sealed-coverage tripwire in jvmTest. */
+	internal fun samples(): List<DispatchDecision> = rows.map { it.decision }
+
 	@Test
 	fun everySubtypeReportsItsKind() {
 		rows.forEach { assertEquals(it.kind, it.decision.kind, "kind of ${it.decision}") }

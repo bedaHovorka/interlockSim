@@ -221,7 +221,8 @@ private fun DispatchDecision.RequestRoute.requestRouteAndLog(
 		is RouteRequestResult.ConditionFailed ->
 			toolDrivenLogger.warn {
 				"$logPrefix: RequestRoute four-condition refusal for $trainName " +
-					"(${if (result.retryable) "transient" else "permanent"}): ${result.reason}"
+					"($fromEndpointName → $toEndpointName${if (result.retryable) ", transient" else ", permanent"}): " +
+					result.reason
 			}
 
 		is RouteRequestResult.GeometricallyImpossible ->
@@ -231,7 +232,8 @@ private fun DispatchDecision.RequestRoute.requestRouteAndLog(
 
 		is RouteRequestResult.DivergesFromHeldRoute ->
 			toolDrivenLogger.warn {
-				"$logPrefix: RequestRoute diverges from the held route for $trainName — ${result.reason}"
+				"$logPrefix: RequestRoute diverges from the held route for $trainName " +
+					"(held target ${result.heldTarget}) — ${result.reason}"
 			}
 	}
 	return result

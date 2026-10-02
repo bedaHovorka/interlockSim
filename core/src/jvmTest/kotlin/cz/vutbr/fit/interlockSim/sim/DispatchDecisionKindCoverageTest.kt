@@ -10,20 +10,21 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.testutil.coversEverySealedSubclassOf
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * JVM-only tripwire for Issue #969: every [DispatchDecision] subtype has its own
- * [DispatchDecisionKind]. Reflection over sealed subclasses is not available on
- * Kotlin/Native, so this sibling of the commonTest `DispatchDecisionKindTest` lives in jvmTest.
+ * JVM-only tripwire for Issue #969: the sample table of the commonTest `DispatchDecisionKindTest`
+ * names every [DispatchDecision] subtype, so a new subtype fails the build until it has a row (and
+ * with it a [DispatchDecisionKind]). Reflection over sealed subclasses is not available on
+ * Kotlin/Native, so this sibling lives in jvmTest.
  */
 @DisplayName("DispatchDecisionKind covers every DispatchDecision subtype (#969)")
 class DispatchDecisionKindCoverageTest {
 	@Test
-	@DisplayName("one DispatchDecisionKind entry per sealed DispatchDecision subtype")
-	fun oneKindPerSealedSubtype() {
-		assertThat(DispatchDecision::class.sealedSubclasses.size).isEqualTo(DispatchDecisionKind.entries.size)
+	@DisplayName("the DispatchDecisionKindTest table has one row per sealed DispatchDecision subtype")
+	fun tableCoversEverySealedSubtype() {
+		assertThat(DispatchDecisionKindTest().samples()).coversEverySealedSubclassOf(DispatchDecision::class)
 	}
 }

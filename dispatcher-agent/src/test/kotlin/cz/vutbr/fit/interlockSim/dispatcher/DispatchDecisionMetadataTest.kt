@@ -23,7 +23,7 @@ import org.junit.jupiter.params.provider.MethodSource
  * Exhaustive-branch coverage for the SP2c.17 (#840) decision-metadata projections
  * [commandTypeName] and [extractTrainId] — top-level `internal` extensions over the sealed
  * [DispatchDecision] type. Since #969 both read the common [DispatchDecision.kind] and
- * [DispatchDecision.trainName] members, so this table now pins the
+ * [DispatchDecision.trainName] members. This table pins the
  * [cz.vutbr.fit.interlockSim.sim.DispatchDecisionKind] tool names and the train identifier per
  * subtype, so a rename is caught here rather than producing a wrong
  * [cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome.DroppedInvalid] payload.

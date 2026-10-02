@@ -139,7 +139,7 @@ class ToolDrivenDecisionsRequestRouteTest {
 				),
 				Arguments.of(
 					RouteRequestResult.ConditionFailed("semaphore zA faces away", retryable = false),
-					"four-condition refusal for T-1082 (permanent): semaphore zA faces away"
+					"four-condition refusal for T-1082 (zA → doB1, permanent): semaphore zA faces away"
 				),
 				Arguments.of(
 					RouteRequestResult.GeometricallyImpossible("start signal zA faces away"),
@@ -147,7 +147,8 @@ class ToolDrivenDecisionsRequestRouteTest {
 				),
 				Arguments.of(
 					RouteRequestResult.DivergesFromHeldRoute("doB2", "new path starts at zA but the stored path ends at doB2"),
-					"diverges from the held route for T-1082 — new path starts at zA but the stored path ends at doB2"
+					"diverges from the held route for T-1082 (held target doB2) — " +
+						"new path starts at zA but the stored path ends at doB2"
 				)
 			)
 

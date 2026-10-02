@@ -17,8 +17,6 @@ import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
-import cz.vutbr.fit.interlockSim.ports.RouteRelease
-import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -33,7 +31,8 @@ import java.util.stream.Stream
 /**
  * Issue #960: [applyToolDrivenToActuator] reports what the actuator answered through its
  * `onOutcome` callback, so the asynchronous applier can build its observation outcome from the
- * shared helper instead of inlining a copy of it.
+ * shared helper instead of inlining a copy of it. The ReleaseRoute and RequestRoute callback cases
+ * live in [ToolDrivenDecisionsReleaseRouteTest] and [ToolDrivenDecisionsRequestRouteTest].
  */
 @DisplayName("applyToolDrivenToActuator reports its outcome through onOutcome (Issue #960)")
 class ToolDrivenDecisionsOutcomeCallbackTest {
@@ -72,30 +71,6 @@ class ToolDrivenDecisionsOutcomeCallbackTest {
 
 		assertThat(outcomes).isEqualTo(listOf<ToolDrivenOutcome>(ToolDrivenOutcome.SwitchSet(applied)))
 		verify(exactly = 1) { actuator.setSwitchPosition("v1", RailSwitch.Conf.BRANCH) }
-	}
-
-	@Test
-	fun `ReleaseRoute reports the RouteRelease the actuator returned exactly once`() {
-		val release = RouteRelease(anyReleased = true, deferredBlockIds = listOf("k1"))
-		val actuator =
-			mockk<NetworkActuatorPort>().also { every { it.releaseRouteDetailed("T-1") } returns release }
-
-		val outcomes = applyCollecting(DispatchDecision.ReleaseRoute("T-1"), actuator)
-
-		assertThat(outcomes).isEqualTo(listOf<ToolDrivenOutcome>(ToolDrivenOutcome.RouteReleased(release)))
-		verify(exactly = 1) { actuator.releaseRouteDetailed("T-1") }
-	}
-
-	@Test
-	fun `RequestRoute reports the RouteRequestResult the actuator returned exactly once`() {
-		val result = RouteRequestResult.Reserved("T-1", 2)
-		val actuator =
-			mockk<NetworkActuatorPort>().also { every { it.requestRoute("T-1", "zA", "doB1") } returns result }
-
-		val outcomes = applyCollecting(DispatchDecision.RequestRoute("T-1", "zA", "doB1"), actuator)
-
-		assertThat(outcomes).isEqualTo(listOf<ToolDrivenOutcome>(ToolDrivenOutcome.RouteRequested(result)))
-		verify(exactly = 1) { actuator.requestRoute("T-1", "zA", "doB1") }
 	}
 
 	@Test

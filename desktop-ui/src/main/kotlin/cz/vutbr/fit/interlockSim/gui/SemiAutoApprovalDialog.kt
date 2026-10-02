@@ -148,9 +148,9 @@ class SemiAutoApprovalDialog(
 
 		detailsPanel.add(labelRow("Decision:", decision.kind.displayName))
 
-		val trainId = decision.trainName
-		if (trainId != null) {
-			detailsPanel.add(labelRow("Train:", trainId))
+		val trainName = decision.trainName
+		if (trainName != null) {
+			detailsPanel.add(labelRow("Train:", trainName))
 		}
 
 		val route = routeOf(decision)

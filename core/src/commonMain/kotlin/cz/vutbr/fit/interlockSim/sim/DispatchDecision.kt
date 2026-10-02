@@ -247,7 +247,10 @@ sealed class DispatchDecision {
 	 *   closing the tracking-contract hole an untracked signal write would otherwise leave (G5,
 	 *   Issue #893 task A6). Attribution-only: no production code currently constructs a
 	 *   [SetSignalAspect] decision that reaches an applier (`PathCommandTranslator.translate` has
-	 *   no production caller), so this property changes no live behavior.
+	 *   no production caller), so this property changes no live behavior. The semi-auto approval
+	 *   dialog shows this value as the "Train:" row, but `extractTrainId` (`:dispatcher-agent`)
+	 *   deliberately reports an empty identifier for this subtype, so the model is told nothing
+	 *   about it in `AppliedOutcome.DroppedInvalid`.
 	 * @property rationale Rule-evaluation strings explaining this signal command
 	 *   (empty for dispatchers that do not record rationale).
 	 *
@@ -360,6 +363,13 @@ sealed class DispatchDecision {
  *   retired `release_route`.
  * @property displayName The human-readable label shown in the semi-auto approval dialog
  *   (`:desktop-ui`).
+ *
+ * `AuthoredAction.decisionKind` (as set by `DispatchDecisionApplier`) and
+ * `Sp2c21MetricsRecorder.normaliseDecision` (`:dispatcher-agent`) deliberately use the class
+ * simple name (e.g. `"ApproveTrain"`), not [commandType] or [displayName], and must not be
+ * switched to [DispatchDecision.kind]: the run-JSON and metrics keys would change. The
+ * validator-rejection path in `KoogAgentFactory` sets `decisionKind` to the LLM tool name
+ * instead; this PR leaves that as it is.
  *
  * @since Issue #969
  */
