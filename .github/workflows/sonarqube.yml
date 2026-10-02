@@ -15,10 +15,13 @@ on:
     types: [ completed ]
   workflow_dispatch:  # Allow manual trigger
 
-# Known asymmetry, harmless: in a workflow_run context github.ref is the default branch
-# ref, not the tag, so a tag run's group falls back to the develop ref and shares one group
-# with develop workflow_dispatch runs, while cancel-in-progress compares head_branch !=
-# 'develop' (true for a tag run). Unify if the trigger is reworked.
+# Known asymmetry: in a workflow_run context github.ref is the default branch ref, not the
+# tag, so a tag run's group falls back to the develop ref and shares one group with develop
+# workflow_dispatch runs, while cancel-in-progress compares head_branch != 'develop' (true
+# for a tag run, whose head_branch is empty). Effect: a tag push cancels a develop
+# workflow_dispatch analysis that is still running, then exits at the tag skip below. A
+# workflow_run analysis of develop is in the group "develop" (no refs/ prefix) and is not
+# affected. Unify if the trigger is reworked.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
   # Never cancel a trunk analysis mid-flight: develop is the branch whose history and
@@ -43,6 +46,8 @@ jobs:
       actions: read         # download the artifact from the triggering run
       packages: read        # GitHub Packages (kDisco dependency)
     timeout-minutes: 35  # a workflow_dispatch run builds and tests everything itself
+    # Known operational quirk: a workflow_run triggered by a Copilot-authored push sits at
+    # "action_required" (new-actor approval) until an owner-pushed commit runs this workflow.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
@@ -141,7 +146,10 @@ jobs:
         # Branch and PR values are user input (a ref may legally contain quotes, $ and
         # more), so they are interpolated ONLY here, into environment variables — never
         # into the run script below, where the same bytes would be shell code (CWE-78).
-        # The script quotes every one of them at its use sites.
+        # The script quotes every one of them at its use sites. If a second consumer of
+        # the workflow_run payload appears (for example a PR-decoration comment step),
+        # hoist these EVENT_* entries to job level and have it read them from there, so
+        # it cannot bypass this indirection by interpolating raw github.event.* again.
         EVENT_NAME: ${{ github.event_name }}
         # A workflow_run carries the branch that was built in head_branch — except for
         # a tag push, where no branch exists and head_branch is null. Never fall back

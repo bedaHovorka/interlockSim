@@ -1,12 +1,10 @@
 name: Gradle Build with Kotlin 2.0 and Java 21
 
-# Why `on: push` with no branch filter and no `pull_request` trigger (#1020):
-# (a) a pull_request trigger would double-run each PR commit, so every commit runs CI
-#     exactly once, on push;
-# (b) separately, Copilot-authored pushes stick at "action_required" on Sonar until an
-#     owner-pushed commit runs; the trigger does not change that.
-# Side effect: tag pushes run CI too; sonarqube.yml skips the scan for them. The Sonar scan itself lives in
-# sonarqube.yml, triggered by workflow_run after this workflow completes.
+# Why `on: push` with no branch filter and no `pull_request` trigger (#1020): a
+# pull_request trigger would double-run each PR commit, so every commit runs CI exactly
+# once, on push. Side effect: tag pushes run CI too; sonarqube.yml skips the scan for them.
+# The Sonar scan itself lives in sonarqube.yml, triggered by workflow_run after this
+# workflow completes.
 
 on:
   push:  # Every push, any branch — no PR trigger, so each commit runs CI exactly once.
@@ -306,6 +304,7 @@ jobs:
       run: ./gradlew :fast-sim:ktlintCheck --no-daemon --stacktrace
 
     - name: detekt (strict) for :fast-sim
+      # Runs after a ktlint failure on purpose (not success()), so the SARIF is still produced.
       if: ${{ !cancelled() }}
       timeout-minutes: 5
       env:
@@ -315,6 +314,7 @@ jobs:
 
     - name: Upload detekt SARIF
       if: ${{ !cancelled() && hashFiles('fast-sim/build/reports/detekt/detekt.sarif') != '' }}
+      timeout-minutes: 5
       uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
       with:
         sarif_file: fast-sim/build/reports/detekt/detekt.sarif

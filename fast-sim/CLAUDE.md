@@ -43,4 +43,5 @@ Tests use `kotlin.test` only — no JUnit, no test tags. Benchmarking:
 This module opts into `detekt-strict.yml` (`fast-sim/build.gradle.kts`,
 `config.setFrom(...)`) because it is new Kotlin code, never converted from
 Java — see the root CLAUDE.md "Code Quality" section.
-Detekt findings are uploaded to GitHub code scanning (category `fast-sim-detekt`) on every push.
+Detekt findings are uploaded to GitHub code scanning (category `fast-sim-detekt`) on every
+push whose `build` job passes (the `fast-sim` CI job runs after it).
