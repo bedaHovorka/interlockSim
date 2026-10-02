@@ -1,5 +1,11 @@
 name: SonarQube Analysis
 
+# Why workflow_run instead of a second job in gradle-java21.yml (#1020): its payload carries
+# pull_requests[], the only PR context available for a push (gradle-java21.yml has no
+# pull_request trigger); a merged job would need an API query to find the PR.
+# Tag-push edge: a tag push triggers CI, and its workflow_run has no head_branch; the
+# scan is skipped for it rather than falling back to the default branch's analysis.
+
 on:
   # The trigger couples by workflow NAME: renaming "Gradle Build with Kotlin 2.0 and
   # Java 21" in gradle-java21.yml silently breaks this trigger. The name's "2.0" is
@@ -9,6 +15,13 @@ on:
     types: [ completed ]
   workflow_dispatch:  # Allow manual trigger
 
+# Known asymmetry: in a workflow_run context github.ref is the default branch ref, not the
+# tag, so a tag run's group falls back to the develop ref and shares one group with develop
+# workflow_dispatch runs, while cancel-in-progress compares head_branch != 'develop' (true
+# for a tag run, whose head_branch is empty). Effect: a tag push cancels a develop
+# workflow_dispatch analysis that is still running, then exits at the tag skip below. A
+# workflow_run analysis of develop is in the group "develop" (no refs/ prefix) and is not
+# affected. Unify if the trigger is reworked.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
   # Never cancel a trunk analysis mid-flight: develop is the branch whose history and
@@ -33,6 +46,8 @@ jobs:
       actions: read         # download the artifact from the triggering run
       packages: read        # GitHub Packages (kDisco dependency)
     timeout-minutes: 35  # a workflow_dispatch run builds and tests everything itself
+    # Known operational quirk: a workflow_run triggered by a Copilot-authored push sits at
+    # "action_required" (new-actor approval) until an owner-pushed commit runs this workflow.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
@@ -70,6 +85,8 @@ jobs:
     - name: Make Gradle wrapper executable
       run: chmod +x gradlew
 
+    # Fetches the sonar-inputs-<sha> artifact that gradle-java21.yml uploaded for this exact
+    # head_sha; the artifact name and run-id come from the workflow_run payload.
     # A workflow_dispatch run has no triggering workflow_run, so there is no artifact to
     # download (the name would resolve to "sonar-inputs-" with an empty run-id). Such a run
     # builds and tests everything itself instead — that is what the reuse flag below buys.
@@ -129,7 +146,10 @@ jobs:
         # Branch and PR values are user input (a ref may legally contain quotes, $ and
         # more), so they are interpolated ONLY here, into environment variables — never
         # into the run script below, where the same bytes would be shell code (CWE-78).
-        # The script quotes every one of them at its use sites.
+        # The script quotes every one of them at its use sites. If a second consumer of
+        # the workflow_run payload appears (for example a PR-decoration comment step),
+        # hoist these EVENT_* entries to job level and have it read them from there, so
+        # it cannot bypass this indirection by interpolating raw github.event.* again.
         EVENT_NAME: ${{ github.event_name }}
         # A workflow_run carries the branch that was built in head_branch — except for
         # a tag push, where no branch exists and head_branch is null. Never fall back

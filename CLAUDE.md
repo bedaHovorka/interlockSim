@@ -266,7 +266,8 @@ there is no pull_request trigger, so each commit runs CI exactly once: Java 21 c
 tests, `ktlintCheck`, JAR packaging (90-day artifact retention), dependency caching, and
 the `sonar-inputs` artifact that the SonarCloud workflow
 (`.github/workflows/sonarqube.yml`) reuses to enforce the quality gate on PRs.
-CI never runs `heavyTest`, `aiSweep`, or `detekt`. Build status:
+CI never runs `heavyTest` or `aiSweep`. CI runs detekt only for `:fast-sim`, to upload its
+SARIF; the other modules' detekt runs locally and in the Docker test stage. Build status:
 [GitHub Actions](https://github.com/bedaHovorka/interlockSim/actions)
 
 ## Documentation
