@@ -70,7 +70,7 @@ interface TrainDecisionPolicy {
 	 * @param reading The train's first-person perception snapshot, produced by
 	 *   [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.trainPerception].
 	 * @return The acceleration-target decision (qualitative intent + permitted target
-	 *   speed in m/s + rationale string).
+	 *   speed in m/s + rationale entries).
 	 */
 	fun decide(reading: TrainPerceptionReading): TrainAccelerationDecision
 

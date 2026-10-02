@@ -11,6 +11,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
@@ -235,6 +236,49 @@ class ReactiveTrainDeciderTest {
 		assertThat(decision.target).isEqualTo(AccelerationTarget.ACCELERATE)
 		// S60 = 16.67 m/s < track limit 30 → immediate aspect governs.
 		assertThat(decision.targetSpeedMps).isCloseTo(Signal.S60.allowedSpeed(), delta = 1e-9)
+	}
+
+	// ── Rationale content (#799) ───────────────────────────────────────────
+
+	@Test
+	fun `rationale for no reserved path is the hold entry`() {
+		val decision = ReactiveTrainDecider.decide(trainPerceptionReading(signalAhead = null, velocity = 12.0))
+		assertThat(decision.rationale).containsExactly("No path reserved ahead; hold")
+	}
+
+	@Test
+	fun `rationale for STOP signal ahead is the brake entry`() {
+		val decision = ReactiveTrainDecider.decide(trainPerceptionReading(signalAhead = Signal.STOP, velocity = 15.0))
+		assertThat(decision.rationale).containsExactly("STOP signal ahead; brake to a stand")
+	}
+
+	@Test
+	fun `rationale for no second signal is the clear ahead entry`() {
+		val decision =
+			ReactiveTrainDecider.decide(
+				trainPerceptionReading(signalAhead = Signal.S60, nextSignalAhead = null, velocity = 5.0)
+			)
+		assertThat(decision.rationale)
+			.containsExactly("Clear ahead (no second signal); run to permitted speed")
+	}
+
+	@Test
+	fun `rationale for allowing second signal is the Volno entry`() {
+		val decision =
+			ReactiveTrainDecider.decide(
+				trainPerceptionReading(signalAhead = Signal.FREE, nextSignalAhead = Signal.FREE, velocity = 5.0)
+			)
+		assertThat(decision.rationale).containsExactly("Volno ahead; run to permitted speed")
+	}
+
+	@Test
+	fun `rationale for STOP second signal is the Vystraha entry`() {
+		val decision =
+			ReactiveTrainDecider.decide(
+				trainPerceptionReading(signalAhead = Signal.FREE, nextSignalAhead = Signal.STOP, velocity = 5.0)
+			)
+		assertThat(decision.rationale)
+			.containsExactly("Výstraha (next signal STOP); reduce speed to stop at second signal")
 	}
 
 	// ── Invariants ─────────────────────────────────────────────────────────

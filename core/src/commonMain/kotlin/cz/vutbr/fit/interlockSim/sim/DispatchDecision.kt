@@ -319,7 +319,8 @@ sealed class DispatchDecision {
  * ([applyToolDrivenToActuator]) and the asynchronous `:dispatcher-agent`
  * `DispatchDecisionApplier` path cannot drift apart — both append this exact suffix
  * to their applied-decision DEBUG log lines.  Co-located with [DispatchDecision]
- * because it formats [DispatchDecision.rationale].
+ * because it formats [DispatchDecision.rationale]; [TrainAccelerationDecision.rationale]
+ * mandates the same formatter (#799), so both decision families share one log shape.
  *
  * @since Issue #560 (SP2b.5 — Goal 10)
  */

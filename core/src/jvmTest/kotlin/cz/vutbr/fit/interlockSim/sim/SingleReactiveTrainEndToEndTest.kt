@@ -119,7 +119,7 @@ class SingleReactiveTrainEndToEndTest : KoinTestBase() {
 			object : TrainDecisionPolicy {
 				override fun decide(reading: TrainPerceptionReading): TrainAccelerationDecision {
 					callCounts.add(reading.trainId)
-					return TrainAccelerationDecision(AccelerationTarget.BRAKE, 0.0, "test-policy")
+					return TrainAccelerationDecision(AccelerationTarget.BRAKE, 0.0, listOf("test-policy"))
 				}
 			}
 

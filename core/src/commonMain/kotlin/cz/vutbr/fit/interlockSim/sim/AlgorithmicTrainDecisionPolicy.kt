@@ -37,8 +37,8 @@ private val logger = KotlinLogging.logger {}
  *
  * When the dispatcher issues a [TrainDirective.HoldAt] or [TrainDirective.HoldImmediately]
  * via [acceptDirective], [holdActive] is set to `true` and [decide] returns
- * `(BRAKE, 0.0, "Dispatcher hold order active; braking to a stand")` regardless of what the
- * perception says, overriding the reactive algorithm completely.
+ * `(BRAKE, 0.0, listOf("Dispatcher hold order active; braking to a stand"))` regardless of what
+ * the perception says, overriding the reactive algorithm completely.
  *
  * The hold is cleared only when the dispatcher sends [TrainDirective.RouteGranted], which
  * resets [holdActive] to `false`. A [TrainDirective.RouteDenied] does **not** activate a hold:
@@ -94,7 +94,7 @@ class AlgorithmicTrainDecisionPolicy : TrainDecisionPolicy {
 			return TrainAccelerationDecision(
 				target,
 				0.0,
-				"Dispatcher hold order active; braking to a stand"
+				listOf("Dispatcher hold order active; braking to a stand")
 			)
 		}
 		return ReactiveTrainDecider.decide(reading)

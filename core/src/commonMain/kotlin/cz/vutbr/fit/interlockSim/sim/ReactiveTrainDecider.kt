@@ -80,9 +80,9 @@ object ReactiveTrainDecider {
 		val (targetSpeed, reason) =
 			when {
 				// No reserved path ahead — no movement authority.
-				immediate == null -> 0.0 to "No path reserved ahead; hold"
+				immediate == null -> 0.0 to listOf("No path reserved ahead; hold")
 				// Red immediate signal — stop at the signal.
-				immediate == Signal.STOP -> 0.0 to "STOP signal ahead; brake to a stand"
+				immediate == Signal.STOP -> 0.0 to listOf("STOP signal ahead; brake to a stand")
 				else -> permittedTargetForAllowingSignal(reading, immediate, next)
 			}
 
@@ -98,17 +98,18 @@ object ReactiveTrainDecider {
 		reading: TrainPerceptionReading,
 		immediate: Signal,
 		next: Signal?
-	): Pair<Double, String> {
+	): Pair<Double, List<String>> {
 		val base = minOf(reading.currentSpeedLimitMps, immediate.allowedSpeed())
 		return when {
 			// No second signal on the reserved route (near destination InOut): immediate governs.
-			next == null -> base to "Clear ahead (no second signal); run to permitted speed"
+			next == null -> base to listOf("Clear ahead (no second signal); run to permitted speed")
 			// Volno ahead: cap by the second signal's allowed speed as well.
-			next.isAllowing() -> minOf(base, next.allowedSpeed()) to "Volno ahead; run to permitted speed"
+			next.isAllowing() -> minOf(base, next.allowedSpeed()) to listOf("Volno ahead; run to permitted speed")
 			// Výstraha: second signal is STOP — brake so the train can stop by it.
 			else -> {
 				val brakeToStop = brakingSpeedWithin(reading.distanceToSignalAheadMetres)
-				minOf(base, brakeToStop) to "Výstraha (next signal STOP); reduce speed to stop at second signal"
+				minOf(base, brakeToStop) to
+					listOf("Výstraha (next signal STOP); reduce speed to stop at second signal")
 			}
 		}
 	}
