@@ -4,7 +4,7 @@
       <verify-metadata>true</verify-metadata>
       <verify-signatures>false</verify-signatures>
       <trusted-artifacts>
-         <trust group="cz\.ksimulantenbande\.kdisco" regex="true" reason="kDisco is our own engine; it may be published to mavenLocal (docs/KOTLIN_STYLE_GUIDE.md 'Offline fallback'), so its checksum is not stable across machines (#1001)"/>
+         <trust group="cz\.ksimulantenbande\.kdisco" regex="true" reason="kDisco is our own engine; it may be published to mavenLocal (docs/KOTLIN_STYLE_GUIDE.md 'Offline / Local Maven Fallback'), so its checksum is not stable across machines (#1001)"/>
       </trusted-artifacts>
    </configuration>
    <components>

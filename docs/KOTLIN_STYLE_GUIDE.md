@@ -1875,10 +1875,20 @@ POMs. The same command covers `buildSrc`, which uses the root build's verificati
 adds new entries but does not remove stale ones; delete entries for versions that are gone when
 the diff is meant to be tidy.
 
+When `sonarPluginVersion` or anything else on the Sonar path changes, also run
+`./gradlew --write-verification-metadata sha256 --refresh-dependencies sonar` (without
+`SONAR_TOKEN` it stops at "Not authorized" after dependency resolution, which is fine) and
+`./gradlew --write-verification-metadata sha256 dependencies` to mirror the Dockerfile's first
+command. The Sonar scanner library resolves only when the `sonar` task runs, and CI's SonarCloud
+workflow resolves it on a cold runner, so an entry missing here fails there.
+
 The kDisco group (`cz.ksimulantenbande.kdisco`) is trusted, not checksummed: kDisco is our own
 engine, and it may be published to `mavenLocal()` (see the offline fallback above), where a local
 build produces a different jar checksum than the GitHub Packages one. A fixed checksum would break
-that documented flow on every machine.
+that documented flow on every machine. kDisco is also published as SNAPSHOT builds during
+development, and a republish changes the checksum even on GitHub Packages, so the trust is
+necessary. The trade-off: a compromised kDisco artifact would not be detected by checksum
+verification (acceptable for our own engine; kDisco's transitive dependencies are still verified).
 
 Kotlin/Native limit: verification covers only what Gradle resolves as a dependency (for example
 `kotlin-native-prebuilt`). Anything the Kotlin/Native toolchain downloads into `~/.konan` on its own
