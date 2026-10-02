@@ -1852,6 +1852,39 @@ ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/<kdiscoVersion>/
 # Should show: kdisco-core-jvm-<kdiscoVersion>.jar, kdisco-core-jvm-<kdiscoVersion>.pom
 ```
 
+**Dependency Verification:**
+
+`gradle/verification-metadata.xml` pins the SHA-256 checksum of every artifact Gradle resolves —
+library jars, POMs and Gradle module metadata, Gradle plugins (including the ones the `buildSrc`
+convention plugins put on the classpath), and the detached tool configurations (detekt, ktlint,
+JaCoCo, the Kotlin compiler). Signatures are not checked (sha256 only, #1001). Gradle verifies on
+every build, so a dependency whose checksum is missing or differs fails the build with
+"Dependency verification failed"; CI and the Docker build pick the file up without extra
+configuration (`COPY gradle/` copies it).
+
+To bump a dependency, change its version and regenerate the file with one command, then commit
+the diff together with the version change:
+```bash
+./gradlew --write-verification-metadata sha256 --refresh-dependencies build detekt ktlintCheck integrationTest :core:linuxX64Test :desktop-ui:jmhJar
+```
+The real tasks must run, because Gradle records only what it actually resolves (`--dry-run`
+resolves nothing). `--refresh-dependencies` is part of the command on purpose: without it Gradle
+answers BOM and parent POMs from its metadata cache and does not record them, and the next build
+with an empty `buildSrc/build` (CI, Docker, a fresh clone) fails verification on exactly those
+POMs. The same command covers `buildSrc`, which uses the root build's verification file. Gradle
+adds new entries but does not remove stale ones; delete entries for versions that are gone when
+the diff is meant to be tidy.
+
+The kDisco group (`cz.ksimulantenbande.kdisco`) is trusted, not checksummed: kDisco is our own
+engine, and it may be published to `mavenLocal()` (see the offline fallback above), where a local
+build produces a different jar checksum than the GitHub Packages one. A fixed checksum would break
+that documented flow on every machine.
+
+Kotlin/Native limit: verification covers only what Gradle resolves as a dependency (for example
+`kotlin-native-prebuilt`). Anything the Kotlin/Native toolchain downloads into `~/.konan` on its own
+(LLVM, sysroots and other dependencies of the toolchain) is outside Gradle's dependency resolution
+and is not verified by this file.
+
 ### Gradle Build Commands
 
 **Clean and build (includes tests and uber JAR):**
