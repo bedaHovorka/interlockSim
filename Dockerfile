@@ -62,6 +62,8 @@ COPY --chown=builder:builder gradle/ /build/interlockSim/gradle/
 RUN chmod +x gradlew
 
 # Layer 2: Copy build configuration files (cached until config changes)
+# buildSrc holds the interlocksim.* convention plugins every module script applies
+COPY --chown=builder:builder buildSrc/ /build/interlockSim/buildSrc/
 COPY --chown=builder:builder settings.gradle.kts /build/interlockSim/
 COPY --chown=builder:builder gradle.properties /build/interlockSim/
 COPY --chown=builder:builder build.gradle.kts /build/interlockSim/

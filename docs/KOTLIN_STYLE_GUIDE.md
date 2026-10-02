@@ -86,9 +86,11 @@ max_line_length = 120
 
 #### build.gradle.kts
 
-Ktlint and Detekt plugins are configured in `build.gradle.kts`:
-- **Ktlint 1.5.0** - Code formatting (respects .editorconfig)
-- **Detekt 1.23.7** - Static analysis (conservative rules in detekt.yml)
+Ktlint, Detekt, the JaCoCo pin, and shared Sonar report-path wiring are configured in the convention plugins
+`buildSrc/src/main/kotlin/interlocksim.*.gradle.kts` (detekt, ktlint, jacoco, sonar-module). Each module applies
+the relevant plugins and keeps module-specific source roots, report locations, exclusions, and task wiring:
+- **Ktlint 1.6.0** - Code formatting (respects .editorconfig)
+- **Detekt 1.23.8** - Static analysis (conservative rules in detekt.yml)
 
 ## Kotlin Conversion Conventions
 
@@ -1807,6 +1809,7 @@ Dependencies are managed via Gradle with fallback strategy:
 
 Gradle automatically downloads dependencies during the build. Configuration files:
 - `build.gradle.kts` - Build configuration and dependency declarations
+- `buildSrc/src/main/kotlin/interlocksim.*.gradle.kts` - Convention plugins for detekt, ktlint, jacoco and sonar-module
 - `settings.gradle.kts` - Project settings
 - `gradle.properties` - Version management and build properties
 

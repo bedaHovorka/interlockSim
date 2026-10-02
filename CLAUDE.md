@@ -104,6 +104,7 @@ Gradle subprojects (see `settings.gradle.kts`):
 
 Other locations:
 
+- `buildSrc/` - Convention plugins `interlocksim.*` (detekt, ktlint, jacoco, sonar-module) applied by the module scripts
 - `docs/` - Project documentation
 - `text/` - LaTeX thesis sources
 - `desktop-ui/build/libs/interlockSim.jar` - Packaged application (produced by `shadowJar`)

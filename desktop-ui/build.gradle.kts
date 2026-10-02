@@ -11,12 +11,14 @@ plugins {
     kotlin("jvm")
     application
     id("com.gradleup.shadow")
-    jacoco
-    id("org.jlleitschuh.gradle.ktlint")
-    id("io.gitlab.arturbosch.detekt")
+    id("interlocksim.jacoco")
+    id("interlocksim.ktlint")
+    id("interlocksim.detekt")
+    id("interlocksim.sonar-module")
     id("me.champeau.jmh")
-    // NOTE: sonarqube NOT applied here — root handles it
-    // NOTE: versions are declared once in root build.gradle.kts (apply false)
+    // NOTE: org.sonarqube is NOT applied here — root handles it
+    // NOTE: shadow/jmh versions are declared once in root build.gradle.kts (apply false);
+    // the interlocksim.* convention plugins live in buildSrc
 }
 
 // Load versions from gradle.properties
@@ -33,9 +35,6 @@ val javaVersion: String by project
 val kotlinVersion: String by project
 val jmhVersion: String by project
 val coroutinesVersion: String by project
-val ktlintVersion: String by project
-val detektFormattingVersion: String by project
-val jacocoToolVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -70,8 +69,6 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
-
-    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:$detektFormattingVersion")
 }
 
 application {
@@ -435,10 +432,7 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
 // JaCoCo Code Coverage
 // ===========================================
 
-jacoco {
-    toolVersion = jacocoToolVersion
-}
-
+// The engine pin comes from the interlocksim.jacoco convention plugin (buildSrc).
 tasks.test {
     finalizedBy(tasks.jacocoTestReport)
 }
@@ -487,33 +481,21 @@ tasks.jacocoTestCoverageVerification {
 // SonarQube — this module's own report paths
 // ===========================================
 
-// Absolute path to the root project's cross-module JaCoCo report. Absolute, because Sonar
-// resolves a relative coverage path against THIS module's base directory.
-val aggregatedCoverageReport: String =
-    rootProject.layout.buildDirectory
-        .file("reports/jacoco/aggregated/jacocoTestReport.xml")
-        .get()
-        .asFile.absolutePath
-
 // The org.sonarqube plugin is NOT declared in this subproject's plugins {} block. The root
 // project applies it and the plugin propagates its extension to every subproject, so the
 // sonar {} DSL is available here without an explicit apply.
 //
 // sonar.sources, sonar.tests, sonar.java.binaries and sonar.java.libraries are all
 // auto-detected from this module's java source sets — only the report paths need declaring.
+// They go through the interlocksim.sonar-module convention plugin (buildSrc), which adds the
+// cross-module aggregate report.
+sonarModule {
+    coverageReport.set(layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml"))
+    junitReportPaths.set(listOf("build/test-results/test", "build/test-results/integrationTest"))
+}
+
 sonar {
     properties {
-        property(
-            "sonar.junit.reportPaths",
-            "build/test-results/test,build/test-results/integrationTest",
-        )
-        property(
-            "sonar.coverage.jacoco.xmlReportPaths",
-            listOf(
-                file("build/reports/jacoco/test/jacocoTestReport.xml").absolutePath,
-                aggregatedCoverageReport,
-            ).joinToString(","),
-        )
         // Swing widgets with no headless test path. Paths are module-relative.
         property(
             "sonar.coverage.exclusions",
@@ -534,19 +516,10 @@ sonar {
 // Ktlint Configuration
 // ===========================================
 
+// The shared setup comes from the interlocksim.ktlint convention plugin (buildSrc); this
+// module adds an HTML report on top of its PLAIN and CHECKSTYLE reports.
 ktlint {
-    version.set(ktlintVersion)
-    verbose.set(true)
-    outputToConsole.set(true)
-    enableExperimentalRules.set(false)
-    android.set(false)
-    filter {
-        exclude("**/generated/**")
-        exclude("**/build/**")
-    }
     reporters {
-        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN)
-        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.CHECKSTYLE)
         reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.HTML)
     }
 }
@@ -560,35 +533,21 @@ tasks
 // Detekt Configuration
 // ===========================================
 
+// Shared settings come from the interlocksim.detekt convention plugin (buildSrc); only the
+// source roots and the fixed report locations below are this module's own.
 detekt {
-    config.setFrom(files("${rootProject.projectDir}/detekt.yml"))
-    buildUponDefaultConfig = true
-    allRules = false
     source.setFrom(
         "src/main/kotlin",
         "src/test/kotlin",
     )
-    ignoreFailures = false
-    baseline = file("${rootProject.projectDir}/detekt-baseline.xml")
-    parallel = true
 }
 
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    jvmTarget = "21"
     reports {
-        html.required.set(true)
         html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/detekt/detekt.html"))
-        xml.required.set(true)
         xml.outputLocation.set(file("${layout.buildDirectory.get()}/reports/detekt/detekt.xml"))
-        txt.required.set(true)
         txt.outputLocation.set(file("${layout.buildDirectory.get()}/reports/detekt/detekt.txt"))
-        sarif.required.set(false)
-        md.required.set(false)
     }
-}
-
-tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
-    jvmTarget = "21"
 }
 
 // ===========================================
@@ -620,10 +579,6 @@ tasks.register("verifyKoinConfiguration") {
             |  ✓ EditingContextFactory: single -> XMLContextFactory
             |  ✓ SimulationContextFactory: single -> XMLContextFactory
             |  ✓ Contexts NOT singletons: Factory pattern preserved
-            |
-            |Critical Constraints:
-            |  ❌ sim/ package: Excluded from DI (traffic-simulation-expert requirement)
-            |  ✓ Deferred until DSOL/Kalasim migration
             |
             |Build Configuration:
             |  ✓ Koin Version: $koinVersion
@@ -664,15 +619,12 @@ tasks.register("koinStatus") {
             |Phase 1: Safe Foundation (util, xml packages) - ✅ COMPLETE (2026-01-12)
             |Phase 2: Context System (context package)     - ✅ COMPLETE (2026-01-12)
             |Phase 4: Domain Objects (objects package)     - ✅ COMPLETE (2026-01-12)
+            |Phase 5+: Simulation Core (sim package)       - ✅ done (kDisco Phase 1, 2026-03-20)
             |
             |PENDING PHASES:
             |
             |Phase 3: GUI Components (gui package)         - ⏳ READY TO START
             |Phase 5: CI/CD Enhancement                    - ⏳ READY TO START
-            |
-            |DEFERRED PHASES:
-            |
-            |Phase 5+: Simulation Core (sim package)       - ❌ DEFERRED (pending Kalasim migration)
             |
             |For more information:
             |  - docs/KOTLIN_STYLE_GUIDE.md (Dependency Injection with Koin)

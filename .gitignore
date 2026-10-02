@@ -59,6 +59,8 @@ lib/
 # Gradle artifacts
 .gradle/
 .gradle-build-cache/
+buildSrc/build/
+buildSrc/.gradle/
 
 # SonarQube and code analysis
 .sonar/
