@@ -1898,6 +1898,11 @@ development, and a republish changes the checksum even on GitHub Packages, so th
 necessary. The trade-off: a compromised kDisco artifact would not be detected by checksum
 verification (acceptable for our own engine; kDisco's transitive dependencies are still verified).
 
+A second group, `com.gradle`, is trusted for the same kind of reason: the Develocity and Common Custom User Data
+plugins are injected in CI only, by `gradle/actions/setup-gradle` (`build-scan-publish: true`), and their version is
+owned by the SHA-pinned action, not by this build, so a pinned checksum would break on every action bump. The
+trade-off is the same as for kDisco: those artifacts are not checksum-verified.
+
 Kotlin/Native limit: verification covers only what Gradle resolves as a dependency (for example
 `kotlin-native-prebuilt`). Anything the Kotlin/Native toolchain downloads into `~/.konan` on its own
 (LLVM, sysroots and other dependencies of the toolchain) is outside Gradle's dependency resolution
