@@ -33,8 +33,8 @@ cd ~/work/interlockSim
 
 Verify installation:
 ```bash
-ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/0.5.0/
-# Should show: kdisco-core-jvm-0.5.0.jar, kdisco-core-jvm-0.5.0.pom
+ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/<kdiscoVersion>/
+# Should show: kdisco-core-jvm-<kdiscoVersion>.jar, kdisco-core-jvm-<kdiscoVersion>.pom  (version comes from `kdiscoVersion` in gradle.properties)
 ```
 
 ## Overview
