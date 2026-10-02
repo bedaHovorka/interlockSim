@@ -52,7 +52,7 @@ enum class AccelerationTarget {
  * @property target The qualitative intent (accelerate / coast / brake).
  * @property targetSpeedMps The permitted target speed in **m/s** (≥ 0) the agent should
  *   command. `0.0` means "stop as quickly as physics allow".
- * @property rationale Short human-readable explanation entries of why this target was chosen,
+ * @property rationale Short human-readable entries explaining why this target was chosen,
  *   for logging and observability. Mirrors [DispatchDecision.rationale] on purpose (#799): any
  *   site that logs it must use `toRationaleLogSuffix()`, so both decision families share one
  *   log shape.

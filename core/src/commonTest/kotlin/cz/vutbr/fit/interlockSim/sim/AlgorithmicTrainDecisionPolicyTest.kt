@@ -188,6 +188,8 @@ class AlgorithmicTrainDecisionPolicyTest {
 		assertThat(decision.rationale).containsExactly("Dispatcher hold order active; braking to a stand")
 	}
 
+	// Cross-family contract pin (#799): the train rationale must format through the same
+	// shared suffix as DispatchDecision — this is the only exact pin of that log shape here.
 	@Test
 	fun `rationale shares the dispatch decision log suffix shape`() {
 		val policy = AlgorithmicTrainDecisionPolicy()
