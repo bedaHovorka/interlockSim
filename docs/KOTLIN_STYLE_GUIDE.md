@@ -1865,8 +1865,15 @@ configuration (`COPY gradle/` copies it).
 To bump a dependency, change its version and regenerate the file with one command, then commit
 the diff together with the version change:
 ```bash
-./gradlew --write-verification-metadata sha256 --refresh-dependencies build detekt ktlintCheck integrationTest :core:linuxX64Test :desktop-ui:jmhJar
+mkdir -p /tmp/empty-m2
+./gradlew -Dmaven.repo.local=/tmp/empty-m2 --write-verification-metadata sha256 --refresh-dependencies build detekt ktlintCheck integrationTest :core:linuxX64Test :desktop-ui:jmhJar
 ```
+`-Dmaven.repo.local` must point at an empty directory, because `mavenLocal()` comes first in
+`settings.gradle.kts` and `~/.m2` may hold artifacts with only a `.jar` and `.pom` and no Gradle
+Module Metadata. A regeneration that reads them from `~/.m2` never records the `.module` files
+that CI and Docker (no `~/.m2`) download from Maven Central, so their builds fail verification.
+With an empty local repository kDisco comes from GitHub Packages (credentials from `.env`), which
+needs no checksum because the group is trusted (see below).
 The real tasks must run, because Gradle records only what it actually resolves (`--dry-run`
 resolves nothing). `--refresh-dependencies` is part of the command on purpose: without it Gradle
 answers BOM and parent POMs from its metadata cache and does not record them, and the next build
@@ -1876,9 +1883,10 @@ adds new entries but does not remove stale ones; delete entries for versions tha
 the diff is meant to be tidy.
 
 When `sonarPluginVersion` or anything else on the Sonar path changes, also run
-`./gradlew --write-verification-metadata sha256 --refresh-dependencies sonar` (without
+`./gradlew -Dmaven.repo.local=/tmp/empty-m2 --write-verification-metadata sha256
+--refresh-dependencies sonar` (without
 `SONAR_TOKEN` it stops at "Not authorized" after dependency resolution, which is fine) and
-`./gradlew --write-verification-metadata sha256 dependencies` to mirror the Dockerfile's first
+`./gradlew -Dmaven.repo.local=/tmp/empty-m2 --write-verification-metadata sha256 dependencies` to mirror the Dockerfile's first
 command. The Sonar scanner library resolves only when the `sonar` task runs, and CI's SonarCloud
 workflow resolves it on a cold runner, so an entry missing here fails there.
 
