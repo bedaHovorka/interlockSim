@@ -25,15 +25,17 @@
 #        docker compose up app
 #
 #        # Run simulation with example:
-#        docker compose run app java -jar interlockSim.jar example shuntingLoop 60
+#        docker compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
 #
 #        # Run the AI dispatcher example (needs Ollama; -ea keeps assertions on, as in
-#        # the image's default CMD -- an explicit `java -jar` override drops it otherwise):
-#        docker compose --profile ollama up -d ollama
+#        # the image's default CMD -- an explicit `java -jar` override drops it otherwise).
+#        # --wait blocks until the ollama healthcheck passes (model pulled); a plain
+#        # `up -d` returns at once and `run app` does not wait for the pull:
+#        docker compose --profile ollama up -d --wait ollama
 #        docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
 #
 #        # Run simulation with custom XML:
-#        docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
+#        docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
 #
 #      GitHub Packages authentication:
 #        Set GITHUB_ACTOR and GITHUB_TOKEN and EXPORT them before building. The
@@ -82,10 +84,12 @@ services:
       # 11434) and a native `ollama serve`. On Windows/macOS Docker Desktop set
       # OLLAMA_BASE_URL=http://host.docker.internal:11434 (in .env or the shell) instead.
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
-    # Optional dependency (Compose 2.20+): with `--profile ollama` the app waits until the
-    # `ollama` service is healthy (model pulled, API answering); without the profile the
-    # service is not part of the project and `app` starts as before (e.g. against a native
-    # Ollama, or without AI at all).
+    # Optional dependency (Compose 2.20+). It only takes effect when `--profile ollama` is on
+    # the SAME command as `app` (e.g. `docker compose --profile ollama up app`): then `app`
+    # waits until `ollama` is healthy (model pulled, API answering). Without the profile the
+    # service is not part of the project, this dependency is skipped and `app` starts at
+    # once (native Ollama, or no AI). So a separate `run app` does NOT wait for a pull in
+    # progress: start Ollama first with `docker compose --profile ollama up -d --wait ollama`.
     depends_on:
       ollama:
         condition: service_healthy
@@ -209,17 +213,18 @@ services:
   #
   # Usage:
   #   # CPU-only (default, slowest but works everywhere)
-  #   docker compose up -d ollama
+  #   docker compose up -d --wait ollama    # --wait blocks until the healthcheck passes
   #
   #   # GPU with CUDA (fast, requires NVIDIA GPU + nvidia-container-toolkit)
   #   #   1. Uncomment the deploy.resources.reservations.devices block below.
   #   #   2. export OLLAMA_MAX_VRAM=8589934592   # optional 8GB VRAM cap
-  #   docker compose up -d ollama
+  #   docker compose up -d --wait ollama
   #
   #   # Then run integrationTest which auto-detects localhost:11434, no config needed
   #   ./gradlew :dispatcher-agent:integrationTest
   #
-  #   # Or run the AI example inside the app container (reads OLLAMA_BASE_URL)
+  #   # Or run the AI example inside the app container (reads OLLAMA_BASE_URL); run it only
+  #   # after the `up -d --wait` above has returned -- `run app` itself does not wait
   #   docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
   ollama-port-check:
     profiles: ["ollama"]
@@ -231,8 +236,8 @@ services:
       - -c
       - |
         if nc -z localhost 11434 2>/dev/null; then
-          echo "A native Ollama already listens on port 11434; the compose ollama service is skipped on purpose (this exit 1 is not a broken compose file)."
-          echo "Use OLLAMA_BASE_URL=http://localhost:11434 with it (the default for the app service) and run the app without --profile ollama."
+          echo "Port 11434 is already in use (a native Ollama, or the compose ollama service already running); not starting another one on purpose (this exit 1 is not a broken compose file)."
+          echo "Whichever it is, point the app at it with OLLAMA_BASE_URL=http://localhost:11434 (the default for the app service) and run the app without --profile ollama."
           exit 1
         fi
         echo "Port 11434 is free -- proceeding to start the Ollama container."
