@@ -77,7 +77,7 @@ class MultiTrainLoopSnapshotRaceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 45, unit = TimeUnit.SECONDS)
+	@Timeout(value = 5, unit = TimeUnit.MINUTES)
 	@DisplayName("getTrainSnapshot and getApprovedTrains never throw while the simulation mutates the approved set")
 	fun `approved train readers are safe off the simulation thread`() {
 		val ctx: DefaultSimulationContext =

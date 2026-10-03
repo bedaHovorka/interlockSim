@@ -1636,7 +1636,10 @@ governs (a method's samples are its slowest invocation per run), including the s
 `ShuntingLoopRegressionTest`, whose 120 s timeout is the regression assertion itself. The October
 2026 pass also left alone the classes whose methods are tagged `ollama-test` (their runtime is the
 live Ollama server, not the test) and the two `SimulationSpeedPerformanceTest` methods whose own
-KDoc or body names the `@Timeout` as their budget. To re-run it: collect the JUnit XML of four or more
+KDoc or body names the `@Timeout` as their budget. A test that hands an in-body join to a
+termination-asserting helper (`MultiTrainLoopSnapshotRaceTest` and `ShuntingLoopApprovedTrainsRaceTest`
+pass `JOIN_TIMEOUT_MILLIS` to `ConcurrentReadProbe`) keeps its `@Timeout` at the next grid step above
+that join, so the helper's diagnostic fires first. To re-run it: collect the JUnit XML of four or more
 gate runs (copy `*/build/test-results/{jvmTest,test,integrationTest}/` after each run), map each
 `classname`/`name` to its `@Timeout` line (JUnit reports the display name, so `@DisplayName`,
 backticked names and `[n] …`/`repetition n of m` invocation names must be mapped back to the method;
