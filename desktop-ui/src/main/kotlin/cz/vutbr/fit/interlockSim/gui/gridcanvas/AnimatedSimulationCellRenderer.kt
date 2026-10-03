@@ -71,6 +71,10 @@ private val logger = KotlinLogging.logger {}
  * - [AnimationController.currentState] is EDT-confined
  * - Graphics2D operations are inherently EDT-only
  * - No synchronization needed (single-threaded rendering)
+ * - Two reads bypass the captured state and come live from the cell (Issue #1008):
+ *   [DynamicInOut.occupied], a @Volatile field written by the simulation thread, and, only when
+ *   no switch state was captured, [DynamicRailSwitch.locked] — a plain field, the same fallback
+ *   as the switch configuration
  *
  * ## Performance
  *
@@ -245,7 +249,7 @@ class AnimatedSimulationCellRenderer(
 		// Draw only the active direction (inherits graphics context color)
 		drawSegments(g, *activeSegments.toTypedArray())
 
-		if (capturedState?.locked ?: cell.locked) drawLockMark(g)
+		if (capturedState?.locked ?: cell.locked) drawLockMark(g, staticSwitch)
 	}
 
 	/**

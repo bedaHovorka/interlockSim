@@ -72,7 +72,7 @@ open class SimulationCellRenderer(
 		// Draw only the active direction to indicate switch position
 		drawSegments(g, *activeSegments.toTypedArray())
 
-		if (cell.locked) drawLockMark(g)
+		if (cell.locked) drawLockMark(g, cell.staticRef)
 	}
 
 	override fun draw(

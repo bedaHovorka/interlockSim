@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
@@ -33,33 +34,53 @@ import java.io.File
 import javax.imageio.ImageIO
 
 /**
- * Renders a locked switch, an unlocked switch, an occupied InOut, a free InOut and a locked switch
- * set to its branch (the diagonal leg runs towards the padlock corner) off-screen at
- * the canvas's default 16 px cell size — the top row with [SimulationCellRenderer], the bottom row
- * with [AnimatedSimulationCellRenderer] — on the canvas's black background, and checks that only
- * the locked switch shows the padlock colour and only the occupied InOut the occupancy tint.
+ * Renders the Issue #1008 indicators off-screen at the canvas's default 16 px cell size on its black
+ * background, with [SimulationCellRenderer] and with [AnimatedSimulationCellRenderer]:
+ * every simple switch type in both HORIZONTAL and VERTICAL orientation, in MAIN and BRANCH, unlocked
+ * and locked, plus an occupied and a free InOut.
  *
- * When the system property [PNG_PATH_PROPERTY] names a file, the image is also written there,
+ * Checks: a locked switch shows [AnimationColors.SWITCH_LOCKED] pixels and an unlocked one none; no
+ * padlock pixel lies on, or next to, a pixel that either switch configuration draws as track (so the
+ * trunk and both legs keep a one-pixel gap); only the occupied InOut shows the occupancy tint.
+ *
+ * When the system property [PNG_PATH_PROPERTY] names a file, the whole sheet is also written there,
  * scaled up [PNG_SCALE] times with nearest-neighbour sampling, for a visual review. Unset, nothing
- * is written.
+ * is written. Sheet layout per renderer (static block on top, animated below): one row per
+ * orientation and lock state (HORIZONTAL unlocked, HORIZONTAL locked, VERTICAL unlocked, VERTICAL
+ * locked), columns = each switch type in MAIN then BRANCH; a last row holds the occupied and the
+ * free InOut.
  */
 @DisplayName("Issue #1008 indicators render off-screen")
 class CellRendererIndicatorsImageTest {
 	private companion object {
 		const val PNG_PATH_PROPERTY = "interlockSim.rendererIndicators.pngPath"
 		const val CELL = 16
-		const val COLUMNS = 5
-		const val ROWS = 2
 		const val PNG_SCALE = 8
-		const val LOCKED_SWITCH = 0
-		const val UNLOCKED_SWITCH = 1
-		const val OCCUPIED_IN_OUT = 2
-		const val FREE_IN_OUT = 3
-		const val LOCKED_BRANCH_SWITCH = 4
+		const val GAP = 4
+		val ORIENTATIONS = listOf(Cell.SpatialType.HORIZONTAL, Cell.SpatialType.VERTICAL)
+		val TYPES = RailSwitch.Type.entries.filter { it.kind == RailSwitch.Kind.SIMPLE }
+		val CONFS = listOf(RailSwitch.Conf.MAIN, RailSwitch.Conf.BRANCH)
+		val COLUMNS = TYPES.size * CONFS.size
+		val ROWS_PER_RENDERER = ORIENTATIONS.size * 2 + 1
 	}
 
-	private fun newSwitch(): DynamicRailSwitch =
-		DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+	private val controller = mockk<AnimationController>().also { every { it.currentState } returns AnimationState.EMPTY }
+	private val renderers: List<CellRenderer> =
+		listOf(SimulationCellRenderer(CELL, CELL), AnimatedSimulationCellRenderer(CELL, CELL, controller))
+
+	private val sheet =
+		BufferedImage(COLUMNS * (CELL + GAP), renderers.size * ROWS_PER_RENDERER * (CELL + GAP), BufferedImage.TYPE_INT_RGB)
+
+	private fun newSwitch(
+		spatialType: Cell.SpatialType,
+		type: RailSwitch.Type,
+		conf: RailSwitch.Conf,
+		locked: Boolean
+	): DynamicRailSwitch =
+		DynamicRailSwitch(RailSwitch(spatialType, type)).apply {
+			if (conf != this.conf) changeConf()
+			if (locked) lock()
+		}
 
 	private fun newInOut(occupied: Boolean): DynamicInOut {
 		val staticInOut = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
@@ -74,82 +95,98 @@ class CellRendererIndicatorsImageTest {
 		return spyk(inOut).also { every { it.occupied } returns true }
 	}
 
-	private fun cells(): List<Cell> =
-		listOf(
-			newSwitch().apply { lock() },
-			newSwitch(),
-			newInOut(true),
-			newInOut(false),
-			newSwitch().apply {
-				changeConf()
-				lock()
-			}
-		)
-
-	@Test
-	fun `only the locked switch shows the padlock and only the occupied InOut the tint`() {
-		val controller = mockk<AnimationController>()
-		every { controller.currentState } returns AnimationState.EMPTY
-		val renderers =
-			listOf(
-				SimulationCellRenderer(CELL, CELL),
-				AnimatedSimulationCellRenderer(CELL, CELL, controller)
-			)
-
-		val image = BufferedImage(COLUMNS * CELL, ROWS * CELL, BufferedImage.TYPE_INT_RGB)
+	/** Renders [cell] alone into a fresh black cell image and copies it onto the sheet at ([column], [row]). */
+	private fun render(
+		renderer: CellRenderer,
+		cell: Cell,
+		column: Int,
+		row: Int
+	): BufferedImage {
+		val image = BufferedImage(CELL, CELL, BufferedImage.TYPE_INT_RGB)
 		val g = image.createGraphics()
 		try {
 			g.color = Color.BLACK
-			g.fillRect(0, 0, image.width, image.height)
-			renderers.forEachIndexed { row, renderer ->
-				cells().forEachIndexed { column, cell ->
-					g.translate(column * CELL, row * CELL)
-					g.clipRect(0, 0, CELL, CELL)
-					g.color = AnimationColors.DEFAULT_TRACK
-					renderer.draw(g, cell)
-					g.clip = null
-					g.translate(-column * CELL, -row * CELL)
-				}
-			}
+			g.fillRect(0, 0, CELL, CELL)
+			g.color = AnimationColors.DEFAULT_TRACK
+			renderer.draw(g, cell)
 		} finally {
 			g.dispose()
 		}
-
-		for (row in 0 until ROWS) {
-			assertThat(count(image, row, LOCKED_SWITCH, AnimationColors.SWITCH_LOCKED)).isGreaterThan(0)
-			assertThat(count(image, row, UNLOCKED_SWITCH, AnimationColors.SWITCH_LOCKED)).isEqualTo(0)
-			assertThat(count(image, row, OCCUPIED_IN_OUT, AnimationColors.TRACK_OCCUPIED)).isGreaterThan(0)
-			assertThat(count(image, row, FREE_IN_OUT, AnimationColors.TRACK_OCCUPIED)).isEqualTo(0)
-			assertThat(count(image, row, LOCKED_BRANCH_SWITCH, AnimationColors.SWITCH_LOCKED)).isGreaterThan(0)
+		val sheetGraphics = sheet.createGraphics()
+		try {
+			sheetGraphics.drawImage(image, column * (CELL + GAP), row * (CELL + GAP), null)
+		} finally {
+			sheetGraphics.dispose()
 		}
-
-		System.getProperty(PNG_PATH_PROPERTY)?.let { writeScaled(image, File(it)) }
+		return image
 	}
 
-	private fun count(
-		image: BufferedImage,
-		row: Int,
-		column: Int,
-		color: Color
-	): Int {
-		var matches = 0
-		for (y in row * CELL until (row + 1) * CELL) {
-			for (x in column * CELL until (column + 1) * CELL) {
-				if (image.getRGB(x, y) == color.rgb) matches++
+	@Test
+	fun `padlocks keep clear of every track pixel and only the occupied InOut is tinted`() {
+		renderers.forEachIndexed { block, renderer ->
+			val firstRow = block * ROWS_PER_RENDERER
+			ORIENTATIONS.forEachIndexed { o, spatialType ->
+				TYPES.forEachIndexed { t, type ->
+					checkSwitch(renderer, spatialType, type, firstRow + 2 * o, t * CONFS.size)
+				}
 			}
+			val inOutRow = firstRow + ORIENTATIONS.size * 2
+			val occupied = render(renderer, newInOut(true), 0, inOutRow)
+			val free = render(renderer, newInOut(false), 1, inOutRow)
+			assertThat(pixels(occupied, AnimationColors.TRACK_OCCUPIED).size).isGreaterThan(0)
+			assertThat(pixels(free, AnimationColors.TRACK_OCCUPIED)).isEmpty()
 		}
-		return matches
+
+		System.getProperty(PNG_PATH_PROPERTY)?.let { writeScaled(File(it)) }
 	}
 
-	private fun writeScaled(
-		image: BufferedImage,
-		target: File
+	private fun checkSwitch(
+		renderer: CellRenderer,
+		spatialType: Cell.SpatialType,
+		type: RailSwitch.Type,
+		unlockedRow: Int,
+		firstColumn: Int
 	) {
-		val scaled = BufferedImage(image.width * PNG_SCALE, image.height * PNG_SCALE, BufferedImage.TYPE_INT_RGB)
+		val track = mutableSetOf<Pair<Int, Int>>()
+		CONFS.forEachIndexed { c, conf ->
+			val unlocked = render(renderer, newSwitch(spatialType, type, conf, locked = false), firstColumn + c, unlockedRow)
+			assertThat(pixels(unlocked, AnimationColors.SWITCH_LOCKED)).isEmpty()
+			track += nonBackgroundPixels(unlocked)
+		}
+		CONFS.forEachIndexed { c, conf ->
+			val locked = render(renderer, newSwitch(spatialType, type, conf, locked = true), firstColumn + c, unlockedRow + 1)
+			val mark = pixels(locked, AnimationColors.SWITCH_LOCKED)
+			val label = "${renderer::class.simpleName} $spatialType $type $conf"
+			assertThat(mark.size, label).isGreaterThan(0)
+			// No padlock pixel on, or 8-adjacent to, a pixel either configuration draws as track.
+			val touching = mark.filter { (x, y) -> (-1..1).any { dx -> (-1..1).any { dy -> (x + dx to y + dy) in track } } }
+			assertThat(touching, label).isEmpty()
+			// The trunk itself (rows 7-8 for HORIZONTAL, columns 7-8 for VERTICAL) carries no padlock pixel.
+			val onTrunk =
+				mark.filter { (x, y) -> (if (spatialType == Cell.SpatialType.HORIZONTAL) y else x) in CELL / 2 - 1..CELL / 2 }
+			assertThat(onTrunk, label).isEmpty()
+			// The padlock hides no track pixel: everything else matches the unlocked rendering.
+			assertThat(nonBackgroundPixels(locked) - mark.toSet() - track, label).isEqualTo(emptySet())
+		}
+	}
+
+	private fun allPixels(image: BufferedImage): List<Pair<Int, Int>> =
+		(0 until image.height).flatMap { y -> (0 until image.width).map { x -> x to y } }
+
+	private fun pixels(
+		image: BufferedImage,
+		color: Color
+	): List<Pair<Int, Int>> = allPixels(image).filter { (x, y) -> image.getRGB(x, y) == color.rgb }
+
+	private fun nonBackgroundPixels(image: BufferedImage): Set<Pair<Int, Int>> =
+		allPixels(image).filter { (x, y) -> image.getRGB(x, y) != Color.BLACK.rgb }.toSet()
+
+	private fun writeScaled(target: File) {
+		val scaled = BufferedImage(sheet.width * PNG_SCALE, sheet.height * PNG_SCALE, BufferedImage.TYPE_INT_RGB)
 		val g = scaled.createGraphics()
 		try {
 			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR)
-			g.drawImage(image, 0, 0, scaled.width, scaled.height, null)
+			g.drawImage(sheet, 0, 0, scaled.width, scaled.height, null)
 		} finally {
 			g.dispose()
 		}

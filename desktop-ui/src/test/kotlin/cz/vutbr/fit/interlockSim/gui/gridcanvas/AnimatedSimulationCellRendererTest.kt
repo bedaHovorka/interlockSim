@@ -405,8 +405,8 @@ class AnimatedSimulationCellRendererTest {
 
 		renderer.draw(graphics, dynamicSwitch)
 
-		verify { graphics.fillRect(12, 12, 5, 5) }
-		verify { graphics.drawArc(12, 10, 5, 5, 0, 180) }
+		// 20 px cell, branch leg G downwards: padlock right of centre in the top half
+		verifyLockMarkAt20Px()
 		verify { graphics.color = AnimationColors.SWITCH_LOCKED }
 		// The padlock restores the colour it found.
 		assertThat(colorSlot.captured).isEqualTo(AnimationColors.DEFAULT_TRACK)
@@ -423,7 +423,6 @@ class AnimatedSimulationCellRendererTest {
 		renderer.draw(graphics, dynamicSwitch)
 
 		verify(exactly = 0) { graphics.fillRect(any(), any(), any(), any()) }
-		verify(exactly = 0) { graphics.drawArc(any(), any(), any(), any(), any(), any()) }
 	}
 
 	@Test
@@ -435,8 +434,7 @@ class AnimatedSimulationCellRendererTest {
 
 		renderer.draw(graphics, dynamicSwitch)
 
-		verify { graphics.fillRect(12, 12, 5, 5) }
-		verify { graphics.drawArc(12, 10, 5, 5, 0, 180) }
+		verifyLockMarkAt20Px()
 	}
 
 	@Test
@@ -448,7 +446,6 @@ class AnimatedSimulationCellRendererTest {
 		renderer.draw(graphics, dynamicSwitch)
 
 		verify(exactly = 0) { graphics.fillRect(any(), any(), any(), any()) }
-		verify(exactly = 0) { graphics.drawArc(any(), any(), any(), any(), any(), any()) }
 	}
 
 	@Test
@@ -716,6 +713,16 @@ class AnimatedSimulationCellRendererTest {
 	}
 
 	// ========== Helper Methods ==========
+
+	/** Padlock of a HORIZONTAL SIMPLE_RIGHT_FALSE switch in a 20 px cell: shackle bar, two legs, 6x3 body. */
+	private fun verifyLockMarkAt20Px() {
+		verifyOrder {
+			graphics.fillRect(13, 1, 4, 1)
+			graphics.fillRect(13, 2, 1, 2)
+			graphics.fillRect(16, 2, 1, 2)
+			graphics.fillRect(12, 4, 6, 3)
+		}
+	}
 
 	private fun stateWithSwitch(switchState: SwitchState): AnimationState =
 		AnimationState(
