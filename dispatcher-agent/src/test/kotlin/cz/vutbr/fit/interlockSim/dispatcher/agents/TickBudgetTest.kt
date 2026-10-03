@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 @DisplayName("SP2c.5/SP2c.10 — TickBudget implementations (#828, #833)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class TickBudgetTest {
 	@Test
 	@DisplayName("DeadlineTickBudget passes a fast block's result through unchanged")

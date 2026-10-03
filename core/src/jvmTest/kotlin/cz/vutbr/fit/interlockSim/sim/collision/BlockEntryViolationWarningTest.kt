@@ -59,7 +59,7 @@ class BlockEntryViolationWarningTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("BlockEntryViolation emitted via emitCustom is delivered to collision warning listeners")
 	fun blockEntryViolationDeliveredToListeners() {
 		val ctx = singleTrainContext()
@@ -91,7 +91,7 @@ class BlockEntryViolationWarningTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("autoHaltTrainOnViolation=true invokes the registered halt callback")
 	fun autoHaltCallbackIsInvokedWhenEnabled() {
 		val ctx = singleTrainContext()
@@ -127,7 +127,7 @@ class BlockEntryViolationWarningTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("autoHaltTrainOnViolation=false (default) does not invoke the halt callback")
 	fun haltCallbackNotCalledWhenDisabled() {
 		val ctx = singleTrainContext()

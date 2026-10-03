@@ -105,7 +105,7 @@ class Issue905OriginNoPathErrorStopRegressionTest : KoinTestBase() {
 	 * 3. The misconfigured origin InOut is named (quoted) in the message, not elided.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `origin NoTopologicalPath fires errorStop after the bounded retries`() {
 		val context = loadVyhybnaContext()
 		val inOutNames = context.getInOuts().map { it.name }

@@ -44,7 +44,7 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `controlStepListener is invoked once per iteration`() {
 		val context = loadVyhybnaContext()
 		// Initialize dynamic wrapper map before creating ShuntingLoop.
@@ -65,7 +65,7 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `approveQueuedTrain moves a queued train into the approved set`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()

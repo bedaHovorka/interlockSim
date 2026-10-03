@@ -79,7 +79,7 @@ class MetricsIntegrationTest : KoinTestBase() {
 	 *   counting works on real events (Train #1 completes ~49.5s).
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `metrics service collects non-trivial KPIs over a real ShuntingLoop run`() {
 		val context = createConfiguredSimulation(endTime = STANDARD_END_TIME)
 

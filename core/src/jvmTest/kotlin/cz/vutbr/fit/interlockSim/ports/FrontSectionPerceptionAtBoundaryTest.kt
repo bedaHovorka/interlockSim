@@ -66,7 +66,7 @@ class FrontSectionPerceptionAtBoundaryTest : KoinTestBase() {
 	private val perceptionViolations = mutableListOf<String>()
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("frontSectionName still reports the traversed block at the boundary")
 	fun `frontSectionName keeps reporting the traversed block while the front stands at the boundary`() {
 		// 4-block linear topology: A -> Sem1 -> Sem2 -> Sem3 -> B (4 x 100 m), same as

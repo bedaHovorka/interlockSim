@@ -93,7 +93,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("blocks held from an earlier service route survive a route denied by a locked switch")
 	fun heldBlocksSurviveSwitchLockDenial() {
 		val train = "Train #1051"
@@ -121,7 +121,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("blocks held from an earlier facade route survive the same denial")
 	fun facadeHeldBlocksSurviveSwitchLockDenial() {
 		val train = "Train #1051"
@@ -153,7 +153,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	 * reserve sends the per-event reservation counters negative (Issue #1081).
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a facade rollback publishes no release for a block it never announced as reserved")
 	fun facadeRollbackPublishesNoEventForAnUnannouncedBlock() {
 		val train = "Train #1051"
@@ -178,7 +178,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a route denied before registration changes nothing")
 	fun occupiedRouteBlockDenialLeavesHeldRouteUntouched() {
 		val train = "Train #1051"
@@ -204,7 +204,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("after the switch lock clears, the denied route is granted on retry")
 	fun retryAfterSwitchLockDenialIsGranted() {
 		val train = "Train #1051"
@@ -240,7 +240,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	 * Issue #1065. Train #other owns vB but holds no block next to it, so nothing protects its lock.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a facade rollback reclaims a switch lock whose owner holds no block next to it")
 	fun facadeRollbackReclaimsAStaleForeignSwitchLock() {
 		val train = "Train #1051"
@@ -262,7 +262,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an un-clearable signal rolls back only the failed call's locks")
 	fun unClearableSignalRollsBackOnlyTheFailedCall() {
 		val train = "Train #1051"

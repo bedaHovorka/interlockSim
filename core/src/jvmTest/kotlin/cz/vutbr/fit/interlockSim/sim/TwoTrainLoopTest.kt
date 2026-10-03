@@ -173,7 +173,7 @@ class TwoTrainLoopTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 300, unit = TimeUnit.SECONDS)
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("100 consecutive runs: no deadlock, deterministic ordering and runtime")
 	fun `two train concurrency is deterministic across 50 runs`() {
 		val results = mutableListOf<RunResult>()
@@ -234,7 +234,7 @@ class TwoTrainLoopTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Single run leaves the network clean")
 	fun `two train loop leaves no occupied resources`() {
 		val result = runOnce(0)

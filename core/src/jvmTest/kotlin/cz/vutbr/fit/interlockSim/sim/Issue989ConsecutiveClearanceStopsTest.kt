@@ -52,7 +52,7 @@ class Issue989ConsecutiveClearanceStopsTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the train stands a clearance short of each signal in the sequence, then exits")
 	fun trainStopsShortOfEachSignalInTheSequence() {
 		val topology = TestTopologies.linearPathWithSemaphoreSequenceNetwork(semaphoreCount = 2)

@@ -137,7 +137,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - Simulation starts and completes within timeout
 		 */
 		@Test
-		@Timeout(value = 30, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `simulation initializes and starts successfully`() {
 			// Arrange: Create simulation context configured with ShuntingLoop (10s end time)
 			val (context, loop) = createConfiguredSimulation(endTime = 10L)
@@ -166,7 +166,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - No infinite loops or deadlocks
 		 */
 		@Test
-		@Timeout(value = 15, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `short simulation completes within timeout`() {
 			// Arrange: Create simulation context with 5s end time
 			val (context, loop) = createConfiguredSimulation(endTime = 5L)
@@ -203,7 +203,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * but we can verify simulation behavior indirectly through context state.
 		 */
 		@Test
-		@Timeout(value = 30, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `trains are generated and enter approval queue`() {
 			// Arrange: Create simulation context with 30s end time
 			val (context, loop) = createConfiguredSimulation(endTime = 30L)
@@ -243,7 +243,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - Simulation completes successfully (no infinite loops)
 		 */
 		@Test
-		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `trains move through system without deadlock (Issue 280 regression)`() {
 			// Arrange: Create simulation context with 350s end time
 			val (context, loop) = createConfiguredSimulation(endTime = 350L)
@@ -279,7 +279,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - Both trains eventually exit the system
 		 */
 		@Test
-		@Timeout(value = 90, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `multiple trains operate concurrently without collision`() {
 			// Arrange: Create simulation context with 500s end time
 			val (context, loop) = createConfiguredSimulation(endTime = 500L)
@@ -320,7 +320,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - Simulation completes successfully
 		 */
 		@Test
-		@Timeout(value = 120, unit = TimeUnit.SECONDS)
+		@Timeout(value = 20, unit = TimeUnit.SECONDS)
 		fun `full simulation run - all trains exit successfully`() {
 			// Arrange: Create simulation context with 600s end time
 			val simulationEndTime = 600L
@@ -363,7 +363,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - Reports show trains making progress (not stuck)
 		 */
 		@Test
-		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `simulation produces valid performance reports`() {
 			// Arrange: Create simulation context with 100s end time
 			val (context, loop) = createConfiguredSimulation(endTime = 100L)
@@ -406,7 +406,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - Simulation runs without crashes
 		 */
 		@Test
-		@Timeout(value = 30, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@Tag("integration-test")
 		fun `shunting loop discovers and uses both k1 and k2 paths`() {
 			// Arrange: Create simulation context
@@ -490,7 +490,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - Both trains reach end of their journey
 		 */
 		@Test
-		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@Tag("integration-test")
 		fun `both trains complete journey using consistent path navigation`() {
 			// Arrange: Create simulation context with enough time for both trains
@@ -542,7 +542,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * Run simulation past the deadlock time (300s) and verify completion.
 		 */
 		@Test
-		@Timeout(value = 90, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `Issue 280 - trains do not deadlock at semaphores`() {
 			// Arrange: Create simulation context past deadlock time
 			val simulationTime = 350L
@@ -577,7 +577,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * Run simulation and verify trains successfully reserve paths and exit.
 		 */
 		@Test
-		@Timeout(value = 90, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		fun `Issue 275 - trains do not deadlock in path reservation cache`() {
 			// Arrange: Create simulation context to exercise path reservation
 			val (context, loop) = createConfiguredSimulation(endTime = 400L)
@@ -609,7 +609,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * - All trains complete their journeys
 		 */
 		@Test
-		@Timeout(value = 180, unit = TimeUnit.SECONDS)
+		@Timeout(value = 30, unit = TimeUnit.SECONDS)
 		fun `long running simulation completes successfully`() {
 			// Arrange: Create simulation context for stress test
 			val simulationTime = 1000L

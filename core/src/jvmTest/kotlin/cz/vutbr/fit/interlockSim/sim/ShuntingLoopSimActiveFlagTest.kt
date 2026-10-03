@@ -44,7 +44,7 @@ class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
 		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `signalStopped clears the flag mid-run from another thread and the run still finishes`() {
 		val context = loadVyhybnaContext()
 		// Initialize dynamic wrapper map before creating ShuntingLoop.
@@ -90,7 +90,7 @@ class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `natural completion clears the flag without any signalStopped call`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -103,7 +103,7 @@ class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `errorStop clears the flag through DefaultSimulationContext's core stop lifecycle`() {
 		// Mirrors the production InOutWorker/Train path (InOutWorker.kt:60,177): a fatal error
 		// during simulation calls env.errorStop(e), which never reached ShuntingLoop.signalStopped

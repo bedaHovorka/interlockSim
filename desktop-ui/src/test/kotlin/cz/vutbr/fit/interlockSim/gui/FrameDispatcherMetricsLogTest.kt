@@ -88,7 +88,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("logFinalSummary is called when a MeasuringPlanAdapter is in scope and the simulation stops")
 	fun logsFinalSummaryWhenAdapterPresent() {
 		val context = createMockShuntingContext()
@@ -108,7 +108,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stopping a simulation without a MeasuringPlanAdapter in scope does not throw")
 	fun noThrowWhenAdapterAbsent() {
 		val context = createMockShuntingContext()
@@ -121,7 +121,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	// ── SP2c.22 (#845) — DispatcherRunRecorder integration ───────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName(
 		"SP2c.22: finish and logFinalSummary called on DispatcherRunRecorder when simulation stops (MANUAL_STOP path)"
 	)
@@ -155,7 +155,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	 * side and by the manual-stop test above on the other.
 	 */
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName(
 		"SP2c.22 + #930: finish called with RunEndCause.STARVED when a simulation that moved " +
 			"nothing finishes on its own"
@@ -191,7 +191,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	 * that reports one completed journey is enough — no real simulation is needed.
 	 */
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("#930: finish called with RunEndCause.NATURAL_COMPLETION when the railway made progress")
 	fun runRecorderFinishCalledWithNaturalCompletionCauseOnHealthyRailway() {
 		val context = createMockShuntingContext()
@@ -209,7 +209,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("SP2c.22: stopping without a DispatcherRunRecorder in scope does not throw")
 	fun noThrowWhenRunRecorderAbsent() {
 		val context = createMockShuntingContext()
@@ -222,7 +222,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	// ── Issue #1072 — end-of-run animation + agent release ─────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("#1072: STOPPED pauses the AnimationController (manual stop)")
 	fun animationPausedOnManualStop() {
 		val context = createMockShuntingContext()
@@ -254,7 +254,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("#1096 review: the Koog agent is released after persistence, not before (STOPPED path)")
 	fun releaseHappensAfterPersistenceOnStop() {
 		val context = createMockShuntingContext()
@@ -279,7 +279,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("#1072: natural completion pauses the AnimationController and releases the Koog agent")
 	fun animationPausedAndAgentReleasedOnNaturalCompletion() {
 		val context = createMockShuntingContext()
@@ -296,7 +296,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("#1072: startSimulation restarts animation after a previous STOPPED pause")
 	fun startSimulationRestartsPausedAnimation() {
 		val context = createMockShuntingContext()

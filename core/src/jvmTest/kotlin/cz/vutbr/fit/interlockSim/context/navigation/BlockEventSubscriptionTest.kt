@@ -38,7 +38,7 @@ class BlockEventSubscriptionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("onBlockEvent delivers BlockReserved and BlockReleased for both trains")
 	fun blockEventsDeliveredForBothTrains() {
 		val ctx = twoTrainLinearContext()
@@ -70,7 +70,7 @@ class BlockEventSubscriptionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Per-block order: BlockReserved → OccupancySet → OccupancyCleared → BlockReleased")
 	fun blockEventOrderIsCorrectPerBlock() {
 		val ctx = twoTrainLinearContext()
@@ -110,7 +110,7 @@ class BlockEventSubscriptionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("onSimulationEvent delivers kdisco process lifecycle events")
 	fun rawKdiscoEventsDelivered() {
 		val ctx = twoTrainLinearContext()
@@ -136,7 +136,7 @@ class BlockEventSubscriptionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Listener registered after run() is ignored (context is frozen)")
 	fun listenerAfterRunIsIgnored() {
 		val ctx = twoTrainLinearContext()

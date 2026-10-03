@@ -119,7 +119,7 @@ class Issue905OriginAbandonRegressionTest : KoinTestBase() {
 	 * proceeds.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `train recovers from origin OwnershipConflict and completes journey`() {
 		val context = loadVyhybnaContext()
 		assertThat(context.getInOuts()).isNotEmpty()

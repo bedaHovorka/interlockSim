@@ -46,7 +46,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #833 (SP2c.10 — Goal 10 timing regimes F1+F2)
  */
 @DisplayName("SP2c.10/P8 — F1 prompt-determinism golden-file (#833)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class PromptDeterminismTest {
 	private val renderer = CompactTextRenderer()
 	private val ctx = RendererFixtures.tick41Context

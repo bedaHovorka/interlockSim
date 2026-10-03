@@ -108,7 +108,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 	)
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the train stands at the green signal where navigation holds it")
 	fun theTrainStandsAtTheGreenSignalWhereNavigationHoldsIt() {
 		val outcome = runScenario()
@@ -121,7 +121,7 @@ class OwnershipConflictStandRestartTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the train restarts once navigation lets it go")
 	fun theTrainRestartsOnceNavigationLetsItGo() {
 		val outcome = runScenario()

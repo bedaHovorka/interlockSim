@@ -143,7 +143,7 @@ class SemaphoreActionGuardRegressionTest : KoinTestBase() {
 
 	@ParameterizedTest(name = "{0}")
 	@MethodSource("failedReFetches")
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("resuming from a STOP signal onto a failed re-fetch fails loudly")
 	fun resumingFromStopOntoAFailedReFetchFailsLoudly(
 		injectedFailure: PathResult,
@@ -157,7 +157,7 @@ class SemaphoreActionGuardRegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("starting from a stand with an allowing signal and a null path fails loudly")
 	fun startingFromAStandWithAllowingSignalAndNullPathFailsLoudly() {
 		val outcome = runGuardScenario(stopBranch = false, injectedFailure = PathResult.OwnershipConflict)

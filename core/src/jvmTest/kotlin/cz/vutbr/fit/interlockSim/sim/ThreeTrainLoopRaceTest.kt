@@ -97,7 +97,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	 */
 	@Order(1)
 	@RepeatedTest(50)
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("ThreeTrainLoop run completes cleanly")
 	fun eachRunCompletesCleanly() {
 		val startNs = System.nanoTime()
@@ -152,7 +152,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	 */
 	@Order(2)
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("50-run aggregate: statistics and runtime stability")
 	fun aggregate50RunStatistics() {
 		assertThat(results.size, name = "recorded run count").isEqualTo(EXPECTED_RUNS)

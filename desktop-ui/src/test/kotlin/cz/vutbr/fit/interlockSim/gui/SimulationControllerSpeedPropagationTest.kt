@@ -44,9 +44,11 @@ import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationC
  * even if the test fails early, so the sim thread always unblocks and daemon threads
  * do not linger across tests.
  *
- * The 30-second timeouts accommodate busy CI runners where thread scheduling can be
- * delayed by several seconds (CI uses `maxParallelForks = availableProcessors()`
- * with multiple JVM forks competing for CPU).
+ * Three tests carry 10-second timeouts, re-baselined from measured runtimes (#753:
+ * 3 x p95 with a 10-second floor); their `startedLatch.await(30 s)` waits are longer, so a
+ * sim thread that never starts fails through the timeout rather than the latch assertion.
+ * [nullMainProcessNoOp] keeps 30 seconds: its measured runtime under parallel load
+ * (CI uses `maxParallelForks = availableProcessors()`) is above what the rule allows.
  */
 @DisplayName("SimulationController -> SpeedControllable propagation")
 class SimulationControllerSpeedPropagationTest {
@@ -99,7 +101,7 @@ class SimulationControllerSpeedPropagationTest {
 		}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed propagates to a SpeedControllable main process while running")
 	fun setSpeedReachesSpeedControllable() {
 		val process = FakeSpeedyMainProcess()
@@ -119,7 +121,7 @@ class SimulationControllerSpeedPropagationTest {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed before start applies on next start (desiredSpeed propagation)")
 	fun preStartSpeedAppliedOnStart() {
 		val process = FakeSpeedyMainProcess()
@@ -138,7 +140,7 @@ class SimulationControllerSpeedPropagationTest {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed is a safe no-op when main process is not SpeedControllable")
 	fun nonControllableMainProcessNoOp() {
 		val ctx = mockContext(PlainMainProcess())

@@ -43,7 +43,7 @@ import kotlin.io.path.readText
 @DisplayName("SP2c.24 — ForkedJvmSweepProcessRunner forks a real child JVM (#847)")
 class ForkedJvmSweepProcessRunnerTest {
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a child that exits normally reports its exit code, gets its -D properties and is logged")
 	fun launchesChildAndCapturesOutput(
 		@TempDir tempDir: Path
@@ -79,7 +79,7 @@ class ForkedJvmSweepProcessRunnerTest {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a child that overruns its budget is killed and reported as timedOut with no exit code")
 	fun killsChildThatExceedsItsTimeout(
 		@TempDir tempDir: Path

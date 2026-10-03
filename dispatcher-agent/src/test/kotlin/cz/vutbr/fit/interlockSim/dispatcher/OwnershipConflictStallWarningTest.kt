@@ -126,7 +126,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	 * asserted per train, not per run.
 	 */
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun stallWarningNamesTheTrainOnce() {
 		val realNav = context.getRoutingServices().getTrainNavigationService()
 		val stalledTrainId = AtomicReference<String?>(null)
@@ -183,7 +183,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	 * assertion.
 	 */
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun cleanBaselineRunLogsNoStallWarning() {
 		val loop = runShuntingLoop(context, SIM_END_TIME)
 
@@ -203,7 +203,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	 * reserved") is thus pinned, not left untested — the Issue #943 origin-vs-under-way distinction.
 	 */
 	@Test
-	@Timeout(value = 240, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun originStallWarningNamesTheTrainOnce() {
 		val realNav = context.getRoutingServices().getTrainNavigationService()
 		val stalledTrainId = AtomicReference<String?>(null)
@@ -269,7 +269,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	 * again, so the train re-stalls and must WARN a second time from its own new clock.
 	 */
 	@Test
-	@Timeout(value = 360, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun stallWarnsTwiceAfterResolveAndRestall() {
 		val realNav = context.getRoutingServices().getTrainNavigationService()
 		val stalledTrainId = AtomicReference<String?>(null)
@@ -398,7 +398,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	 * `tickPeriodMs` imposes a wall-clock floor above the control-step period.
 	 */
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun cleanBaselineRunLogsNoStallWarningLiftedStack() {
 		val liftedContext = fixture.loadShuntingLoopContext()
 		try {

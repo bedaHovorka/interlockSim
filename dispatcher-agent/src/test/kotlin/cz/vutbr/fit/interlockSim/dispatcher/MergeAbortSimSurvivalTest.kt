@@ -196,7 +196,7 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a pathological merge on the sim thread does not kill the run")
 	fun pathologicalMergeOnSimThreadDoesNotKillTheRun() {
 		// Initialise the dynamic wrapper map before constructing the loop (see ExampleRegistry).
@@ -258,7 +258,7 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName(
 		"a reservePath call whose merge could not succeed leaves no orphaned tail -- " +
 			"nothing for the sweeper to reclaim (Issues #904, #1066)"
@@ -309,7 +309,7 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("inertness: a clean vyhybna baseline run trips neither merge-abort WARN")
 	fun cleanBaselineRunLogsNoMergeAbortWarning() {
 		val loop = runShuntingLoop(context, SIM_END_TIME)
@@ -322,7 +322,7 @@ class MergeAbortSimSurvivalTest : DispatcherKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName(
 		"a candidate needing a live route's switch in the OTHER position is refused, " +
 			"never silently re-thrown (Issue #1065)"

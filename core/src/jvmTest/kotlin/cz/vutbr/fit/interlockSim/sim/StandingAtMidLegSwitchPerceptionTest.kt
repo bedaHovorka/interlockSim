@@ -83,7 +83,7 @@ class StandingAtMidLegSwitchPerceptionTest : KoinTestBase() {
 	)
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Perception excludes the section behind the front while standing at vB")
 	fun standingTrainAtMidLegSwitchReportsRemainingSectionDistance() {
 		val outcome = runScenario()

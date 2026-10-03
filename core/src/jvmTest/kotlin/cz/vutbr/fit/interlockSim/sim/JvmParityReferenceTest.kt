@@ -108,7 +108,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `invariant 1 - at least 1 train generated`() {
 		val (_, summary) = runSimulationAndCollect()
 		val trainCountMatch = Regex("""(\d+) trains""").find(summary)
@@ -118,21 +118,21 @@ class JvmParityReferenceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `invariant 2 - simulation completes without exceptions`() {
 		runSimulationAndCollect()
 		// Implicit assertion: reaching this line means the simulation completed without throwing
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `invariant 3 - events are non-empty`() {
 		val (events, _) = runSimulationAndCollect()
 		assertThat(events).isNotEmpty()
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `invariant 4 - all events have non-negative timestamps`() {
 		val (events, _) = runSimulationAndCollect()
 		events.forEach { line ->
@@ -144,7 +144,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `invariant 5 - events are in chronological order`() {
 		val (events, _) = runSimulationAndCollect()
 		val timestamps =
@@ -165,7 +165,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `invariant 7 - exact train counts match cross-platform constants`() {
 		val run = runSimulation()
 		assertThat(run.trainsEntered, name = "trains entered").isEqualTo(EXPECTED_TRAINS_ENTERED)
@@ -173,7 +173,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `invariant 6 - summary statistics are present and reasonable`() {
 		val (_, summary) = runSimulationAndCollect()
 		assertThat(summary.startsWith("---"), name = "Summary starts with ---").isTrue()

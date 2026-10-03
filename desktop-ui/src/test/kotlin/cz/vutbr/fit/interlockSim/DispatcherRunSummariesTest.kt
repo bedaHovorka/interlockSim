@@ -62,7 +62,7 @@ class DispatcherRunSummariesTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an AI example reports planner, sweeper and decision-rate summaries")
 	fun aiExampleReportsEverySummary() {
 		val context = createExample("createShuntingLoopAIExample", "shuntingLoopAI")
@@ -82,7 +82,7 @@ class DispatcherRunSummariesTest : KoinTestBase() {
 	 * against this baseline, so the baseline's tick-to-cycle chain has to be readable too.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the rule-based example reports a decision rate but has no LLM planner summary")
 	fun ruleBasedExampleReportsDecisionRateOnly() {
 		val context = createExample("createShuntingLoopExample", "shuntingLoop")
@@ -100,7 +100,7 @@ class DispatcherRunSummariesTest : KoinTestBase() {
 	 * runs, so stray output would be actively harmful.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("a dispatcher-free example reports nothing rather than a row of zeroes")
 	fun syncExampleReportsNothing() {
 		val context = createExample("createShuntingLoopSyncExample", "shuntingLoopSync")

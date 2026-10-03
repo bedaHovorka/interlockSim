@@ -80,7 +80,7 @@ class DispatcherObservationProjectorLiveRunTest : DispatcherKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName(
 		"a live run publishes a golden tick: real vA/vB switches, and a well-formed reservation " +
 			"once a train holds a path"

@@ -84,7 +84,7 @@ class Issue797StoppedAtAllowingSignalTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("shuntingLoop(1024s) leaves no train stopped at an allowing signal")
 	fun noTrainIsLeftStoppedInFrontOfAnAllowingSignal() {
 		val context =

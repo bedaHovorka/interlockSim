@@ -83,7 +83,7 @@ class CollisionDetectionIntegrationTest : KoinTestBase() {
 	 * - The simulation terminates normally (no deadlock).
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Two trains competing for same path emit exactly one ReservationConflict; no deadlock")
 	fun twoTrainsCompetingForSamePath_emitsOneConflictAndNoDeadlock() {
 		val ctx = newContext()
@@ -144,7 +144,7 @@ class CollisionDetectionIntegrationTest : KoinTestBase() {
 	 * - Auto-pause is NOT triggered here (disabled via [DefaultCollisionDetectionService.autoPauseOnCritical]).
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("BlockEntryViolation emitted mid-enter is delivered to warning listeners")
 	fun blockEntryViolationEmittedMidEnter_isDeliveredToListeners() {
 		val ctx = newContext()
@@ -197,7 +197,7 @@ class CollisionDetectionIntegrationTest : KoinTestBase() {
 	 * routine multi-train choreography.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Normal sequential two-train run produces zero collision warnings")
 	fun normalTwoTrainRun_producesZeroCollisionWarnings() {
 		val ctx = newContext()

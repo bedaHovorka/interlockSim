@@ -83,7 +83,7 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("A restrictive flip mid-leg with braking room brakes the train instead of snapping it to zero")
 	fun restrictiveFlipMidLegBrakesInsteadOfSnapping() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH_BLOCK_LENGTH)
@@ -125,7 +125,7 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("A restrictive flip while accelerating brakes at the room threshold, not at the flip")
 	fun restrictiveFlipWhileAcceleratingBrakesAtTheRoomThreshold() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH_BLOCK_LENGTH)

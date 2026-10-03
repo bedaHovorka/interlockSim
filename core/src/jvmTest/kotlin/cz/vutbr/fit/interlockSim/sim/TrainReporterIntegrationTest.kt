@@ -66,7 +66,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("TRAIN_CONTINUOUS enabled — reporter actions() fires and train exits cleanly")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun trainReporterEnabledPathCoverage() {
 		// ShuntingLoop.ENABLED_REPORT_TYPES includes TRAIN_CONTINUOUS — no extra setup needed
 		loadVyhybnaContext().use { ctx ->
@@ -90,7 +90,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("Short simulation run — TrainReporter terminates without hanging")
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun trainReporterTerminatesCleanly() {
 		// `ShuntingLoop(ctx, 10L)` runs until simulation time 10 (`endTime`),
 		// with at most 2 concurrent trains active at once.
@@ -116,7 +116,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	@Test
 	@DisplayName("TRAIN_CONTINUOUS disabled — TrainReporter fires 0 reporting events")
 	@Tag("integration-test")
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun trainReporterDisabledNoEvents() {
 		// Use a simple linear path context where SimpleTestProcess acts as main process.
 		// SimpleTestProcess does NOT call addReportTypes(TRAIN_CONTINUOUS), so
@@ -157,7 +157,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	@Test
 	@DisplayName("TRAIN_CONTINUOUS enabled — reporter fires at ≥ 12 events in 30 s (≈ 1 Hz lower bound)")
 	@Tag("integration-test")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun trainReporterRateLowerBound() {
 		// Same setup as trainReporterEnabledPathCoverage but with tighter bounds:
 		// - Lower bound: >= 12 proves ~1 Hz cadence (not spurious single event)

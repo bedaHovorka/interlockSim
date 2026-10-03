@@ -82,7 +82,7 @@ class Issue989VyhybnaMultiSectionStopTest : KoinTestBase() {
 		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the train stands a clearance short of doB1 after the switch and the rear-facing signal")
 	fun trainStopsAClearanceShortOfDoB1AcrossTheMultiSectionApproach() {
 		val context = loadVyhybnaContext().tracked()

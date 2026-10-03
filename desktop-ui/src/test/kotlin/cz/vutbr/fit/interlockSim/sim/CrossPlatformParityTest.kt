@@ -150,7 +150,7 @@ class CrossPlatformParityTest {
 		}
 
 	@Test
-	@Timeout(value = 300, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun `JVM and native produce structurally equivalent output`() {
 		assumeTrue(JAR_PATH.exists()) {
 			"JVM JAR not found at ${JAR_PATH.absolutePath} — run ./gradlew :desktop-ui:shadowJar first"

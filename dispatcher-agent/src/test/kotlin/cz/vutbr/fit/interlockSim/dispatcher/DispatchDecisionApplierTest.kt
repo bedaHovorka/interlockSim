@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicReference
  * @since Issue #731 (SP0.9 — Goal 10)
  */
 @DisplayName("DispatchDecisionApplier — drain and apply decisions via actuator ports")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class DispatchDecisionApplierTest {
 	private lateinit var networkActuator: NetworkActuatorPort
 	private val approvedTrains = mutableListOf<String>()

@@ -94,7 +94,7 @@ class DispatcherCollisionValidationTest : DispatcherKoinTestBase() {
 	 * to match the headless (no-operator) usage pattern (Goal 3 SP5 headless contract).
 	 */
 	@Test
-	@Timeout(60, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("zero Goal 3 collision warnings with lifted dispatcher stack (SP2b.7 safety net)")
 	fun dispatcherRoutingProducesZeroCollisionWarnings() {
 		val context = fixture.loadShuntingLoopContext().tracked()

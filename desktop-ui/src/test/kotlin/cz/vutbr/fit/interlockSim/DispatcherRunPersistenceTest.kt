@@ -76,7 +76,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("finishing a run writes one JSON that readAll can load back")
 	fun finishedRunRoundTrips(
 		@TempDir root: Path
@@ -101,7 +101,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an LLM run JSON records its circuit breaker end state and counters")
 	fun persistedLlmRunCarriesCircuitBreakerStats(
 		@TempDir root: Path
@@ -118,7 +118,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the JSON lands under the arm directory the aggregator groups by")
 	fun writtenUnderTheArmDirectory() {
 		val context = createAiContext()
@@ -141,7 +141,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * counted twice by #846's aggregator and quietly inflate the N of an "N ≥ 10 runs" claim.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	@DisplayName("persisting twice writes the run only once")
 	fun persistingTwiceWritesOnce(
 		@TempDir root: Path
@@ -161,7 +161,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * `runCount >= 10` off exactly these files.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a dispatcher-free example persists nothing")
 	fun dispatcherFreeExamplePersistsNothing(
 		@TempDir root: Path
@@ -197,7 +197,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * wired source from an unwired one.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a persisted run carries the railway figures read from its loop and metrics service")
 	fun persistedRunCarriesRailwayOutcomes(
 		@TempDir root: Path
@@ -227,7 +227,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * every simulation context regardless of which process drives it.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an example that is not a ShuntingLoop reports its loop figures as absent, not zero")
 	fun nonShuntingLoopExampleReportsLoopFiguresAsAbsent() {
 		val context = createExample("createMultiTrainLoopExample", "multiTrainLoop")
@@ -261,7 +261,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * not folded into `RailwayOutcome` (see the PR), so it is not otherwise observable.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("railwayOutcomeFrom invokes the leak gauge on the scoped metrics service (Issue #936)")
 	fun railwayOutcomeFromInvokesLeakGauge() {
 		val context = createAiContext()

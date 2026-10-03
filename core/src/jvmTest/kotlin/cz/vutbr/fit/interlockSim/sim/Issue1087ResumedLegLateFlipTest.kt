@@ -208,7 +208,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 			.maxOrNull() ?: 0.0
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a restrictive flip while coasting at the resumed cap brakes the train to the stop line")
 	fun restrictiveFlipWhileCoastingAtTheResumedCapBrakesToTheStopLine() {
 		val run =
@@ -260,7 +260,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a restrictive flip while coasting at the line-speed cap after a FREE clear brakes to the stop line")
 	fun restrictiveFlipWhileCoastingAtTheLineSpeedCapBrakesToTheStopLine() {
 		val run =
@@ -319,7 +319,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a restrictive flip exactly when the braking room runs out still brakes to the stop line")
 	fun restrictiveFlipExactlyAtTheBrakingRoomBoundaryStillBrakesToTheStopLine() {
 		val cap = Signal.S40.allowedSpeed()

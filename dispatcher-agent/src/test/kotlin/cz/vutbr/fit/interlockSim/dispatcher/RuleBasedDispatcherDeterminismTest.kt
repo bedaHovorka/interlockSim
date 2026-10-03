@@ -108,7 +108,7 @@ class RuleBasedDispatcherDeterminismTest : DispatcherKoinTestBase() {
 	 * against it.  A failure in any repetition indicates non-determinism.
 	 */
 	@RepeatedTest(10)
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("vyhybna.xml run produces identical outcome (Goal 10 A3)")
 	fun ruleBasedDispatcherIsFullyDeterministic(info: RepetitionInfo) {
 		val result = runner.executeRun()

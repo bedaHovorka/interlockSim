@@ -106,7 +106,7 @@ private const val MAX_TOLERATED_CONFLICT_EVENTS = 1
  */
 @DisplayName("Issue #814 — admission keeps firing and stale route replays never stall a train")
 @Tag("integration-test")
-@Timeout(3, unit = TimeUnit.MINUTES)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
 

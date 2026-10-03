@@ -52,7 +52,7 @@ import kotlin.math.abs
  * @since Issue #849 (SP2c.26 — Goal 10 F1 paused-clock spike)
  */
 @DisplayName("F1 paused-clock spike — speed-multiplier and real-time-sync interaction (#849)")
-@Timeout(120, unit = TimeUnit.SECONDS)
+@Timeout(45, unit = TimeUnit.SECONDS)
 class PausedClockSpeedMultiplierInteractionTest : IntegrationKoinTestBase() {
 	@ParameterizedTest(name = "speed {0}x")
 	@ValueSource(doubles = [1.0, 2.0, 5.0])

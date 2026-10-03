@@ -151,7 +151,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		 * @since Issue #593 (Goal 9 SP7)
 		 */
 		@Test
-		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@DisplayName(
 			"same-block reservation emits ConflictDetectedEvent and auto-resolver records choice in DispatcherPreferenceStore"
 		)
@@ -247,7 +247,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		 * @since Issue #593 (Goal 9 SP7)
 		 */
 		@Test
-		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@DisplayName("converging-path projections trigger TemporalConflictEvent within the 30 s lookahead window")
 		fun convergingPathProjections_triggersTemporalConflictEvent_withinThirtySecondLookaheadWindow() {
 			val ctx = createShuntingLoopContext()
@@ -326,7 +326,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		 * @since Issue #593 (Goal 9 SP7)
 		 */
 		@Test
-		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@DisplayName("DefaultConflictResolver generates HoldTrain and Reroute candidates ranked by ConflictResolutionRanker")
 		fun holdTrainAndReroute_areBothGeneratedAndRankedByConflictResolutionRanker() {
 			createShuntingLoopContext().use { simCtx ->
@@ -483,7 +483,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		 * @since Issue #593 (Goal 9 SP7)
 		 */
 		@Test
-		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@DisplayName("sequential same-path reservations produce no ConflictDetectedEvent")
 		fun sequentialSamePathReservations_produceNoConflictDetectedEvent() {
 			val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
@@ -543,7 +543,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		 * @since Issue #593 (Goal 9 SP7)
 		 */
 		@Test
-		@Timeout(value = 30, unit = TimeUnit.SECONDS)
+		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@DisplayName("non-overlapping projected occupancies on the same block produce no TemporalConflictEvent")
 		fun nonOverlappingProjectedOccupancies_produceNoTemporalConflictEvent() {
 			val ctx = createShuntingLoopContext()

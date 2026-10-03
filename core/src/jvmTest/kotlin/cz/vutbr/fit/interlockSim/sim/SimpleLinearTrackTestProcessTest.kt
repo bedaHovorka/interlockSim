@@ -61,7 +61,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 	/** Scenario 1: train follows a pre-reserved path A→B and makes genuine forward progress. */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `train follows reserved path and makes forward progress`() {
 		val ctx = loadLinearContext()
 		val inOuts = ctx.getInOuts().toList()
@@ -90,7 +90,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 	/** Scenario 2: train halts at semaphore when path is not reserved. */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `train halts at semaphore when path not reserved`() {
 		val ctx = loadLinearContext()
 		// No reservation — train should enter but not exit.
@@ -108,7 +108,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 	/** Scenario 3: second train waits while first holds a conflicting reservation. */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `second train waits for conflicting first train`() {
 		val ctx = loadLinearContext()
 		val inOuts = ctx.getInOuts().toList()
@@ -156,7 +156,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 	/** Scenario 4: blocked train resumes after reservation is released. */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `blocked train resumes after path release`() {
 		val ctx = loadLinearContext()
 		val inOuts = ctx.getInOuts().toList()
@@ -211,7 +211,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 	 * block's length is direct evidence the A->Sem crossing was located correctly.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `train crosses both block boundaries and reaches destination`() {
 		val ctx = loadLinearContext()
 		val inOuts = ctx.getInOuts().toList()

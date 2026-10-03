@@ -98,7 +98,7 @@ class ShuntingLoopLiftedDriverIntegrationTest : DispatcherKoinTestBase() {
 	 * between the driver and the kDisco sim thread is pinned.
 	 */
 	@Test
-	@Timeout(60, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("all trains exit and zero conflict events (lock-step, lifted stack)")
 	fun allTrainsExitWithNoConflictEvents() {
 		val context = fixture.loadShuntingLoopContext().tracked()

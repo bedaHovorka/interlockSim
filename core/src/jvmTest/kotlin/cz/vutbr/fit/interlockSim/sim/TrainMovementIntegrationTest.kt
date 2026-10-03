@@ -94,7 +94,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	 * auto-generated train names ("Train #1", "Train #2", etc.).
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `simulation completes with pre-reserved path`() {
 		// Arrange: Load vyhybna.xml (shunting loop configuration)
 		TestFixtures.loadShuntingXml().use { xml ->
@@ -142,7 +142,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	 * ShuntingLoop manages reservation lifecycle end-to-end via InOutWorker.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `simulation handles train lifecycle without pre-reservations`() {
 		// Arrange: Load vyhybna.xml
 		TestFixtures.loadShuntingXml().use { xml ->
@@ -191,7 +191,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	 * reservation for "PreTest-1" adds additional contention.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `simulation manages path contention with pre-reservation`() {
 		// Arrange: Load vyhybna.xml
 		TestFixtures.loadShuntingXml().use { xml ->
@@ -245,7 +245,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	 * released their reservations.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `full simulation lifecycle releases all resources`() {
 		// Arrange: Load vyhybna.xml
 		TestFixtures.loadShuntingXml().use { xml ->

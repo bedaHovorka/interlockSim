@@ -84,7 +84,7 @@ class SimulationSpeedPerformanceTest : IntegrationKoinTestBase() {
 	 * headroom for OS scheduling jitter on contended CI runners.
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(20, unit = TimeUnit.SECONDS)
 	@DisplayName("overhead vs raw context.run() is negligible (< 5% CI-safe; target < 1%)")
 	fun runnerOverheadIsNegligible() {
 		val sleepMs = 3_000L

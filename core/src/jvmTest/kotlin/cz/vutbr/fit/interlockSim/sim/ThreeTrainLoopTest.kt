@@ -58,7 +58,7 @@ class ThreeTrainLoopTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `three trains on vyhybna all enter and exit`() {
 		val ctx = loadVyhybnaContext()
 		val process = ThreeTrainLoop(ctx, endTime = 400L)

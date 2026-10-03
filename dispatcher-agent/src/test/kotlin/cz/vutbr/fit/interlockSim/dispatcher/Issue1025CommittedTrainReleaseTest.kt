@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 class Issue1025CommittedTrainReleaseTest : DispatcherKoinTestBase() {
 	@Test
-	@Timeout(value = 3, unit = TimeUnit.MINUTES)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `releasing the next block of a train committed at a proceed aspect frees nothing and the train books it`() =
 		Issue1025CommittedTrainReleaseScenario.runOnceAndAssert(
 			TestFixtures.newShuntingSimulationContext().tracked()
