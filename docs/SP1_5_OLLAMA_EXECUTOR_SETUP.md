@@ -178,10 +178,12 @@ export OLLAMA_BASE_URL=http://my-ollama:11434
 **Compose wiring (Stage B, Issue #924, done):** `docker-compose.yml` passes `OLLAMA_BASE_URL`
 (default `http://localhost:11434`) to the `app` service, which keeps `network_mode: host`, and
 `app` depends optionally on the `ollama` service (profile `ollama`), whose healthcheck is false
-until the model is pulled. Sequence:
+until the model is pulled. The dependency only takes effect when `--profile ollama` is on the same
+command as `app`; a separate `docker compose run app …` does not wait, so start Ollama with
+`up -d --wait` (blocks on the healthcheck) first. Sequence:
 
 ```bash
-docker compose --profile ollama up -d ollama
+docker compose --profile ollama up -d --wait ollama
 docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
 ```
 
