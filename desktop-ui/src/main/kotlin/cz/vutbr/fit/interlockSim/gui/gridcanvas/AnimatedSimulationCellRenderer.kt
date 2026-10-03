@@ -71,6 +71,10 @@ private val logger = KotlinLogging.logger {}
  * - [AnimationController.currentState] is EDT-confined
  * - Graphics2D operations are inherently EDT-only
  * - No synchronization needed (single-threaded rendering)
+ * - Two reads bypass the captured state and come live from the cell (Issue #1008):
+ *   [DynamicInOut.occupied], a @Volatile field written by the simulation thread, and, only when
+ *   no switch state was captured, [DynamicRailSwitch.locked] — a plain field, the same fallback
+ *   as the switch configuration
  *
  * ## Performance
  *
@@ -188,9 +192,10 @@ class AnimatedSimulationCellRenderer(
 	/**
 	 * Render InOut (entry/exit point) with light gray color.
 	 *
-	 * InOut cells represent connections to the external railway network
-	 * and do not have dynamic state (no occupation tracking). They are
-	 * rendered in light gray to distinguish them from track blocks.
+	 * InOut cells represent connections to the external railway network. They are
+	 * rendered in light gray to distinguish them from track blocks; while a train is queued
+	 * at or entering through this InOut ([DynamicInOut.occupied], read live) the cell is tinted in
+	 * [AnimationColors.TRACK_OCCUPIED] first (Issue #1008).
 	 *
 	 * @param g Graphics context for rendering
 	 * @param cell Dynamic InOut cell to render
@@ -199,7 +204,7 @@ class AnimatedSimulationCellRenderer(
 		g: Graphics2D,
 		cell: DynamicInOut
 	) {
-		drawAnimatedInOut(g, cell.staticRef.direction())
+		drawAnimatedInOut(g, cell.staticRef.direction(), cell.occupied)
 	}
 
 	/**
@@ -213,8 +218,11 @@ class AnimatedSimulationCellRenderer(
 	 * are not rendered, providing a clear indication of which route was set through
 	 * the switch at that moment in time.
 	 *
+	 * A locked switch gets a padlock mark (Issue #1008), from the captured lock state.
+	 *
 	 * **Fallback behavior:** If switch state is not available in the animation state
-	 * (e.g., during initialization), falls back to using the current cell configuration.
+	 * (e.g., during initialization), falls back to using the current cell configuration
+	 * and lock state.
 	 *
 	 * @param g Graphics context for rendering
 	 * @param cell Dynamic rail switch cell to render
@@ -240,6 +248,8 @@ class AnimatedSimulationCellRenderer(
 
 		// Draw only the active direction (inherits graphics context color)
 		drawSegments(g, *activeSegments.toTypedArray())
+
+		if (capturedState?.locked ?: cell.locked) drawLockMark(g, staticSwitch, AnimationColors.SWITCH_LOCKED)
 	}
 
 	/**
@@ -285,8 +295,10 @@ class AnimatedSimulationCellRenderer(
 
 	private fun drawAnimatedInOut(
 		g: Graphics2D,
-		direction: Cell.Segment
+		direction: Cell.Segment,
+		occupied: Boolean = false
 	) {
+		if (occupied) drawOccupancyTint(g, AnimationColors.TRACK_OCCUPIED)
 		// Keep the entry/exit connection visible without reusing the legacy center circle
 		// that looked like the previous train marker in animated mode.
 		g.color = AnimationColors.DEFAULT_TRACK

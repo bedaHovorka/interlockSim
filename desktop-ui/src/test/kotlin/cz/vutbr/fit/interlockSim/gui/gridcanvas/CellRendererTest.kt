@@ -18,11 +18,16 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import java.awt.Graphics2D
 
 /**
@@ -284,5 +289,92 @@ class CellRendererTest {
 		// Then - verify correct polymorphic draw method was invoked
 		verify(atLeast = 1) { graphicsMock.drawLine(0, 8, 8, 8) }
 		verify(atLeast = 1) { graphicsMock.drawLine(16, 8, 8, 8) }
+	}
+
+	// ========== Issue #1008: switch-locked and InOut-occupancy indicators (16x16 cell) ==========
+
+	@Test
+	fun `SimulationCellRenderer draws a padlock on a locked DynamicRailSwitch`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		dynamicSwitch.lock()
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicSwitch)
+
+		// Branch leg G leaves downwards, so the padlock sits right of centre in the top half:
+		// shackle bar, two legs, then the 5x3 body, one pixel row clear of the trunk (rows 7-8).
+		verifyOrder {
+			graphicsMock.fillRect(11, 1, 3, 1)
+			graphicsMock.fillRect(11, 2, 1, 1)
+			graphicsMock.fillRect(13, 2, 1, 1)
+			graphicsMock.fillRect(10, 3, 5, 3)
+		}
+	}
+
+	@ParameterizedTest(name = "{0} {1}: shackle at ({2}, {3}), body at ({4}, {5})")
+	@CsvSource(
+		"HORIZONTAL, SIMPLE_LEFT_FALSE, 11, 10, 10, 12",
+		"HORIZONTAL, SIMPLE_LEFT_TRUE, 11, 1, 10, 3",
+		"HORIZONTAL, SIMPLE_RIGHT_FALSE, 11, 1, 10, 3",
+		"HORIZONTAL, SIMPLE_RIGHT_TRUE, 11, 10, 10, 12",
+		"VERTICAL, SIMPLE_LEFT_FALSE, 2, 10, 1, 12",
+		"VERTICAL, SIMPLE_LEFT_TRUE, 11, 10, 10, 12",
+		"VERTICAL, SIMPLE_RIGHT_FALSE, 11, 10, 10, 12",
+		"VERTICAL, SIMPLE_RIGHT_TRUE, 2, 10, 1, 12"
+	)
+	fun `SimulationCellRenderer places the padlock opposite the branch leg`(
+		spatialType: Cell.SpatialType,
+		type: RailSwitch.Type,
+		shackleX: Int,
+		shackleY: Int,
+		bodyX: Int,
+		bodyY: Int
+	) {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(spatialType, type))
+		dynamicSwitch.lock()
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicSwitch)
+
+		verify { graphicsMock.fillRect(shackleX, shackleY, 3, 1) }
+		verify { graphicsMock.fillRect(bodyX, bodyY, 5, 3) }
+	}
+
+	@Test
+	fun `SimulationCellRenderer draws no padlock on an unlocked DynamicRailSwitch`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicSwitch)
+
+		verify(exactly = 0) { graphicsMock.fillRect(any(), any(), any(), any()) }
+	}
+
+	@Test
+	fun `SimulationCellRenderer tints an occupied DynamicInOut before drawing it`() {
+		val dynamicInOut = spyk(createDynamicInOut(InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)))
+		every { dynamicInOut.occupied } returns true
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicInOut)
+
+		verify { graphicsMock.fillRect(0, 0, 16, 16) }
+		verify { graphicsMock.drawLine(0, 8, 8, 8) }
+		verify { graphicsMock.fillOval(4, 4, 8, 8) }
+		verifyOrder {
+			graphicsMock.fillRect(0, 0, 16, 16)
+			graphicsMock.drawLine(0, 8, 8, 8)
+		}
+	}
+
+	@Test
+	fun `SimulationCellRenderer does not tint a free DynamicInOut`() {
+		val dynamicInOut = createDynamicInOut(InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL))
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicInOut)
+
+		verify(exactly = 0) { graphicsMock.fillRect(any(), any(), any(), any()) }
+		verify { graphicsMock.fillOval(4, 4, 8, 8) }
 	}
 }

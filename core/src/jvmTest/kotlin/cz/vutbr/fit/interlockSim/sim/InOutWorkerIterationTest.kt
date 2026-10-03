@@ -10,8 +10,11 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
@@ -68,6 +71,18 @@ class InOutWorkerIterationTest : KoinTestBase() {
 	@DisplayName("Two trains: second train waits while first occupies path, then both complete")
 	fun `iteration processes two sequential trains both completing successfully`() {
 		val ctx = loadLinearContext()
+		val entry = ctx.getInOuts().first { it.name == "A" }
+		// The renderer reads `occupied` from the grid cell, so the InOut listened on here must be that
+		// very object, not an equal wrapper (equals compares the wrapped static InOut).
+		val gridCell = ctx.getRailWayNetGrid().single { entry == it.value }.value
+		assertThat(gridCell).isSameInstanceAs(entry)
+		val trains = mutableListOf<Train>()
+		// Each occupied event paired with how many trains have already left the entry queue
+		// (a train leaves the queue only after its front has moved, so totalDistance > 0).
+		val occupiedEvents = mutableListOf<Pair<Boolean, Int>>()
+		entry.addPropertyChangeListener { event ->
+			occupiedEvents += (event.newValue as Boolean) to trains.count { it.totalDistance > 0.0 }
+		}
 		val process =
 			runSimpleLinearTrackScenario(
 				ctx,
@@ -76,12 +91,18 @@ class InOutWorkerIterationTest : KoinTestBase() {
 					listOf(
 						trainSpecAB(inTime = 1.0, outTime = 40.0),
 						trainSpecAB(inTime = 2.0, outTime = 80.0)
-					)
+					),
+				onTrainCreated = { trains += it }
 			).process
 
 		// Both trains must have been approved and entered the network.
 		assertThat(process.getTrainsEntered()).isEqualTo(2)
 		// Combined block transitions confirm both trains made forward progress.
 		assertThat(process.getAllBlockTransitions().values.sum()).isGreaterThan(0)
+		// Issue #1008: the entry InOut turns occupied once, when the first train arrives, stays
+		// occupied when the first train leaves (the second one still waits in the queue), and
+		// turns free only when the last train has left.
+		assertThat(occupiedEvents).containsExactly(true to 0, false to 2)
+		assertThat(entry.occupied).isFalse()
 	}
 }

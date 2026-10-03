@@ -16,10 +16,13 @@ import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
 import cz.vutbr.fit.interlockSim.gui.animation.SignalState
+import cz.vutbr.fit.interlockSim.gui.animation.SwitchState
 import cz.vutbr.fit.interlockSim.gui.animation.TrackState
 import cz.vutbr.fit.interlockSim.gui.animation.TrainState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -32,7 +35,9 @@ import cz.vutbr.fit.interlockSim.util.PointF
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.spyk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.awt.Color
@@ -389,6 +394,102 @@ class AnimatedSimulationCellRendererTest {
 		verify(exactly = 0) { graphics.fillOval(any(), any(), any(), any()) }
 	}
 
+	// ========== Issue #1008: switch-locked and InOut-occupancy indicators (20x20 cell) ==========
+
+	@Test
+	fun `draw DynamicRailSwitch with captured locked state draws a padlock`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		every { animationController.currentState } returns
+			stateWithSwitch(SwitchState(dynamicSwitch.staticRef, dynamicSwitch.conf, locked = true))
+		graphics.color = AnimationColors.DEFAULT_TRACK
+
+		renderer.draw(graphics, dynamicSwitch)
+
+		// 20 px cell, branch leg G downwards: padlock right of centre in the top half
+		verifyLockMarkAt20Px()
+		verify { graphics.color = AnimationColors.SWITCH_LOCKED }
+		// The padlock restores the colour it found.
+		assertThat(colorSlot.captured).isEqualTo(AnimationColors.DEFAULT_TRACK)
+	}
+
+	@Test
+	fun `draw DynamicRailSwitch prefers the captured unlocked state over a locked live cell`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		dynamicSwitch.lock()
+		every { animationController.currentState } returns
+			stateWithSwitch(SwitchState(dynamicSwitch.staticRef, dynamicSwitch.conf, locked = false))
+		graphics.color = AnimationColors.DEFAULT_TRACK
+
+		renderer.draw(graphics, dynamicSwitch)
+
+		verify(exactly = 0) { graphics.fillRect(any(), any(), any(), any()) }
+	}
+
+	@Test
+	fun `draw DynamicRailSwitch without captured state falls back to the live locked flag`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		dynamicSwitch.lock()
+		every { animationController.currentState } returns AnimationState.EMPTY
+		graphics.color = AnimationColors.DEFAULT_TRACK
+
+		renderer.draw(graphics, dynamicSwitch)
+
+		verifyLockMarkAt20Px()
+	}
+
+	@Test
+	fun `draw unlocked DynamicRailSwitch without captured state draws no padlock`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		every { animationController.currentState } returns AnimationState.EMPTY
+		graphics.color = AnimationColors.DEFAULT_TRACK
+
+		renderer.draw(graphics, dynamicSwitch)
+
+		verify(exactly = 0) { graphics.fillRect(any(), any(), any(), any()) }
+	}
+
+	@Test
+	fun `draw occupied DynamicInOut in animated mode tints the cell and keeps the connector colour`() {
+		val staticInOut = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
+		val dynamicInOut =
+			spyk(
+				DynamicInOut(
+					staticInOut,
+					createDynamicInstance(staticInOut.inSemaphore),
+					createDynamicInstance(staticInOut.outSemaphore)
+				)
+			)
+		every { dynamicInOut.occupied } returns true
+		graphics.color = Color.BLACK
+
+		renderer.draw(graphics, dynamicInOut)
+
+		verify { graphics.fillRect(0, 0, 20, 20) }
+		verify(exactly = 0) { graphics.fillOval(any(), any(), any(), any()) }
+		verifyOrder {
+			graphics.color = AnimationColors.TRACK_OCCUPIED
+			graphics.fillRect(0, 0, 20, 20)
+			graphics.color = AnimationColors.DEFAULT_TRACK
+			graphics.drawLine(any(), any(), any(), any())
+		}
+		assertThat(colorSlot.captured).isEqualTo(AnimationColors.DEFAULT_TRACK)
+	}
+
+	@Test
+	fun `draw free DynamicInOut in animated mode does not tint the cell`() {
+		val staticInOut = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
+		val dynamicInOut =
+			DynamicInOut(
+				staticInOut,
+				createDynamicInstance(staticInOut.inSemaphore),
+				createDynamicInstance(staticInOut.outSemaphore)
+			)
+
+		renderer.draw(graphics, dynamicInOut)
+
+		verify(exactly = 0) { graphics.fillRect(any(), any(), any(), any()) }
+	}
+
 	@Test
 	fun `drawTrain renders blue train body trailing behind eastbound front`() {
 		// Seed the renderer's previous-position cache so the next frame resolves an eastbound heading.
@@ -612,6 +713,25 @@ class AnimatedSimulationCellRendererTest {
 	}
 
 	// ========== Helper Methods ==========
+
+	/** Padlock of a HORIZONTAL SIMPLE_RIGHT_FALSE switch in a 20 px cell: shackle bar, two legs, 6x3 body. */
+	private fun verifyLockMarkAt20Px() {
+		verifyOrder {
+			graphics.fillRect(13, 1, 4, 1)
+			graphics.fillRect(13, 2, 1, 2)
+			graphics.fillRect(16, 2, 1, 2)
+			graphics.fillRect(12, 4, 6, 3)
+		}
+	}
+
+	private fun stateWithSwitch(switchState: SwitchState): AnimationState =
+		AnimationState(
+			simulationTime = 0.0,
+			trainStates = emptyMap(),
+			trackStates = emptyMap(),
+			signalStates = emptyMap(),
+			switchStates = mapOf(switchState.railSwitch to switchState)
+		)
 	// (Mock factories moved to TrackTestMocks.kt - Phase 4, 2026-02-05)
 
 	private fun renderTrainToImage(trainState: TrainState): BufferedImage {

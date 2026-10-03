@@ -13,6 +13,8 @@ import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -21,15 +23,20 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
  * Dynamic wrapper for InOut separating static and dynamic properties.
  *
  * **Static properties** (delegated from wrapped InOut): name, orientation, spatialType
- * **Dynamic properties** (via semaphores): Signal states of inSemaphore (via DynamicRailSemaphore)
+ * **Dynamic properties**:
+ * - Signal states live in the embedded semaphores ([inSemaphore], [outSemaphore], both
+ *   [DynamicRailSemaphore] wrappers).
+ * - [occupied] is true while at least one train is queued at this entry InOut: trains still
+ *   waiting for their entry route, and the train currently entering until its tail has started
+ *   (`Train.actions` → `out()`). Exit traffic does not set it. Unlike block occupancy, a train
+ *   counted here may not yet be on the network. It is set by
+ *   [cz.vutbr.fit.interlockSim.sim.InOutWorker] and announced to the listeners registered with
+ *   [addPropertyChangeListener] as a `ContextChangeEvent("occupied", old, new)`.
  *
  * This wrapper uses the static InOut object for:
  * - Stable identity (equals/hashCode based on static object)
  * - Immutable configuration (name, position, orientation)
  * - Type compatibility with existing code
- *
- * The dynamic state is primarily in the embedded semaphores, so this wrapper
- * mainly provides access to DynamicRailSemaphore wrappers for the in/out semaphores.
  *
  * Part of Phase 4: Static/Dynamic property separation (bedaHovorka/interlockSim#92)
  *
@@ -47,6 +54,56 @@ class DynamicInOut(
 	val name: String
 		get() = staticRef.getName()
 	// orientation and direction() are delegated from OrientedPathSeparator
+
+	/**
+	 * Dynamic property: true while at least one train is queued at this entry InOut: trains still
+	 * waiting for their entry route, and the train currently entering until its tail has started
+	 * (`Train.actions` → `out()`). Exit traffic does not set it. Unlike block occupancy, a train
+	 * counted here may not yet be on the network.
+	 *
+	 * Written by the simulation thread through [setOccupied]; @Volatile because the Swing EDT
+	 * reads it live while rendering.
+	 */
+	@kotlin.concurrent.Volatile
+	var occupied: Boolean = false
+		private set
+
+	/**
+	 * Listeners for InOut state changes.
+	 * Copy-on-write list — @Volatile guarantees cross-thread visibility.
+	 */
+	@kotlin.concurrent.Volatile
+	private var listeners: List<ContextPropertyChangeListener> = emptyList()
+
+	/**
+	 * Sets [occupied]. Called by [cz.vutbr.fit.interlockSim.sim.InOutWorker] whenever its entry
+	 * queue may have changed.
+	 *
+	 * Idempotent: an event is fired only if the state changes.
+	 */
+	internal fun setOccupied(value: Boolean) {
+		if (occupied == value) return
+
+		val oldOccupied = occupied
+		occupied = value
+		listeners.forEach { it.propertyChange(ContextChangeEvent("occupied", oldOccupied, value)) }
+	}
+
+	/**
+	 * Registers a listener to be notified of InOut state changes.
+	 *
+	 * @param listener the listener to add
+	 */
+	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners = listeners + listener
+	}
+
+	/**
+	 * Unregisters a listener from receiving InOut state change notifications.
+	 */
+	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners = listeners - listener
+	}
 
 	/**
 	 * Equality based on the static object (stable identity).

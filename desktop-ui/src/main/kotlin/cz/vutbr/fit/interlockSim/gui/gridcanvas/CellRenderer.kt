@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import java.awt.BasicStroke
+import java.awt.Color
 import java.awt.Graphics2D
 import java.lang.Math.round
 import java.util.EnumMap
@@ -104,6 +105,65 @@ abstract class CellRenderer(
 		g.fillPolygon(xs, ys, 3)
 		g.drawPolygon(xs, ys, 3)
 		g.transform = transform
+	}
+
+	/**
+	 * Draws a small padlock in [color] that marks a locked [railSwitch] (Issue #1008); the simulation
+	 * renderers pass `AnimationColors.SWITCH_LOCKED`. The caller's colour is restored.
+	 *
+	 * The glyph is 5/16 of the cell square (5x5 px at 16 px): a body 3/16 high across the full
+	 * glyph width, under a shackle one pixel narrower on each side (a top bar and two legs).
+	 *
+	 * It sits in the half of the cell opposite the switch's branch leg and keeps at least one pixel
+	 * clear of the trunk line:
+	 * - HORIZONTAL switch: right of centre, in the top half when the branch leaves downwards and in
+	 *   the bottom half when it leaves upwards.
+	 * - VERTICAL switch: below centre, in the left half when the branch leaves to the right and in
+	 *   the right half when it leaves to the left.
+	 */
+	protected fun drawLockMark(
+		g: Graphics2D,
+		railSwitch: RailSwitch,
+		color: Color
+	) {
+		val branch = railSwitch.getBranchSegments().first()
+		val vertical = railSwitch.getSpatialType() == Cell.SpatialType.VERTICAL
+		val nearEdgeX = cellWidth / 16
+		val nearEdgeY = cellHeight / 16
+		val farSideX = cellWidth * 5 / 8
+		val farSideY = cellHeight * 5 / 8
+		val x = if (vertical && branch.dx > 0) nearEdgeX else farSideX
+		val y = if (!vertical && branch.dy > 0) nearEdgeY else farSideY
+
+		val glyphWidth = cellWidth * 5 / 16
+		val glyphHeight = cellHeight * 5 / 16
+		val bodyHeight = cellHeight * 3 / 16
+		val unit = maxOf(1, cellWidth / 16)
+		val bodyTop = y + glyphHeight - bodyHeight
+
+		val oldColor = g.color
+		g.color = color
+		// Shackle: top bar and two legs, one unit narrower than the body on each side
+		g.fillRect(x + unit, y, glyphWidth - 2 * unit, unit)
+		g.fillRect(x + unit, y + unit, unit, bodyTop - y - unit)
+		g.fillRect(x + glyphWidth - 2 * unit, y + unit, unit, bodyTop - y - unit)
+		// Body
+		g.fillRect(x, bodyTop, glyphWidth, bodyHeight)
+		g.color = oldColor
+	}
+
+	/**
+	 * Fills the whole cell with [color] (Issue #1008: an occupied InOut). Call it before the cell's
+	 * own drawing so the track stays visible on top; the caller's colour is restored.
+	 */
+	protected fun drawOccupancyTint(
+		g: Graphics2D,
+		color: Color
+	) {
+		val oldColor = g.color
+		g.color = color
+		g.fillRect(0, 0, cellWidth, cellHeight)
+		g.color = oldColor
 	}
 
 	// Protected helper methods for common static cell rendering logic
