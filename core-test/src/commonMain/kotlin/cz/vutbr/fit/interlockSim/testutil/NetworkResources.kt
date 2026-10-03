@@ -48,6 +48,9 @@ object NetworkResources {
 	/** Two parallel tracks with independent InOut pairs. */
 	val TWO_TRACKS_PARALLEL_XML: String by lazy { fixture("two-tracks-parallel.xml") }
 
+	/** Praha Hlavní Nádraží — large station topology for scale validation. */
+	val PRAHA_HLAVNI_NADRAZI_XML: String by lazy { fixture("praha-hlavni-nadrazi.xml") }
+
 	/** Small grid with two InOut elements (used for grid/cell tests). */
 	val EMPTY_GRID_XML: String by lazy { fixture("empty-grid.xml") }
 }
