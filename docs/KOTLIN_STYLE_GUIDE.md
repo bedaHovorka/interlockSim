@@ -1852,6 +1852,70 @@ ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/<kdiscoVersion>/
 # Should show: kdisco-core-jvm-<kdiscoVersion>.jar, kdisco-core-jvm-<kdiscoVersion>.pom
 ```
 
+**Dependency Verification:**
+
+`gradle/verification-metadata.xml` pins the SHA-256 checksum of every artifact Gradle resolves —
+library jars, POMs and Gradle module metadata, Gradle plugins (including the ones the `buildSrc`
+convention plugins put on the classpath), and the detached tool configurations (detekt, ktlint,
+JaCoCo, the Kotlin compiler). Signatures are not checked (sha256 only, #1001). Gradle verifies on
+every build, so a dependency whose checksum is missing or differs fails the build with
+"Dependency verification failed"; CI and the Docker build pick the file up without extra
+configuration (`COPY gradle/` copies it).
+
+To bump a dependency, change its version and regenerate the file with one command, then commit
+the diff together with the version change:
+```bash
+mkdir -p /tmp/empty-m2
+set -a; source .env; set +a
+./gradlew -Dmaven.repo.local=/tmp/empty-m2 --write-verification-metadata sha256 --refresh-dependencies build detekt ktlintCheck integrationTest :core:linuxX64Test :desktop-ui:jmhJar
+```
+`set -a; source .env; set +a` exports the GitHub Packages credentials into the environment —
+the build reads `GITHUB_ACTOR`/`GITHUB_TOKEN` (or the `gpr.user`/`gpr.key` Gradle properties),
+not `.env` itself (`settings.gradle.kts`). Do it once per shell; the other
+`--write-verification-metadata` commands in this section need it too.
+`-Dmaven.repo.local` must point at an empty directory, because `mavenLocal()` comes first in
+`settings.gradle.kts` and `~/.m2` may hold artifacts with only a `.jar` and `.pom` and no Gradle
+Module Metadata. A regeneration that reads them from `~/.m2` never records the `.module` files
+that CI and Docker (no `~/.m2`) download from Maven Central, so their builds fail verification.
+With an empty local repository kDisco comes from GitHub Packages (credentials from `.env`), which
+needs no checksum because the group is trusted (see below).
+The real tasks must run, because Gradle records only what it actually resolves (`--dry-run`
+resolves nothing). `--refresh-dependencies` is part of the command on purpose: without it Gradle
+answers BOM and parent POMs from its metadata cache and does not record them, and the next build
+with an empty `buildSrc/build` (CI, Docker, a fresh clone) fails verification on exactly those
+POMs. The same command covers `buildSrc`, which uses the root build's verification file. Gradle
+adds new entries but does not remove stale ones; delete entries for versions that are gone when
+the diff is meant to be tidy.
+
+When `sonarPluginVersion` or anything else on the Sonar path changes, also run
+`./gradlew -Dmaven.repo.local=/tmp/empty-m2 --write-verification-metadata sha256
+--refresh-dependencies sonar` (without
+`SONAR_TOKEN` it stops at "Not authorized" after dependency resolution, which is fine) and
+`./gradlew -Dmaven.repo.local=/tmp/empty-m2 --write-verification-metadata sha256 dependencies` to mirror the Dockerfile's first
+command. The Sonar scanner library resolves only when the `sonar` task runs, and CI's SonarCloud
+workflow resolves it on a cold runner, so an entry missing here fails there.
+
+The kDisco group (`cz.ksimulantenbande.kdisco`) is trusted, not checksummed: kDisco is our own
+engine, and it may be published to `mavenLocal()` (see the offline fallback above), where a local
+build produces a different jar checksum than the GitHub Packages one. A fixed checksum would break
+that documented flow on every machine. kDisco is also published as SNAPSHOT builds during
+development, and a republish changes the checksum even on GitHub Packages, so the trust is
+necessary. The trade-off: a compromised kDisco artifact would not be detected by checksum
+verification (acceptable for our own engine; kDisco's transitive dependencies are still verified).
+
+Two CI-only plugins, `com.gradle:develocity-gradle-plugin` and
+`com.gradle:common-custom-user-data-gradle-plugin`, are trusted by exact module name (not the
+whole `com.gradle` group) for the same kind of reason: they are injected in CI only, by
+`gradle/actions/setup-gradle` (`build-scan-publish: true`), and their version is owned by the
+SHA-pinned action, not by this build, so a pinned checksum would break on every action bump.
+The trade-off is the same as for kDisco: those two modules are not checksum-verified, but any
+other current or future artifact under `com.gradle` still is.
+
+Kotlin/Native limit: verification covers only what Gradle resolves as a dependency (for example
+`kotlin-native-prebuilt`). Anything the Kotlin/Native toolchain downloads into `~/.konan` on its own
+(LLVM, sysroots and other dependencies of the toolchain) is outside Gradle's dependency resolution
+and is not verified by this file.
+
 ### Gradle Build Commands
 
 **Clean and build (includes tests and uber JAR):**
