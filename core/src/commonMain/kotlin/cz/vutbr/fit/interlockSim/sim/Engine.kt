@@ -151,8 +151,22 @@ internal class Engine(
 	 */
 	private fun approachMargin(): Double {
 		if (!accelerate) return -1.0
-		val halfSpeedMargin = targetSpeed / 2.0 - host.getVelocity()
-		return minOf(halfSpeedMargin, brakingRoomMargin())
+		return minOf(speedMargin(AccelerationStopTest.TO_HALF_SPEED), brakingRoomMargin())
+	}
+
+	/**
+	 * The margin form of [test]'s own speed condition for the current leg: non-positive exactly
+	 * when [AccelerationStopTest.condition] holds for [targetSpeed] and the host's velocity
+	 * (Issue #760). `x - y <= 0` holds exactly when `x <= y`, and halving is exact, so the
+	 * crossing waits that use it end on the same predicate the old step polls tested.
+	 */
+	private fun speedMargin(test: AccelerationStopTest): Double {
+		val v = host.getVelocity()
+		return when (test) {
+			AccelerationStopTest.ACCELERATION_ENDED -> targetSpeed - v
+			AccelerationStopTest.DECELERATION_ENDED -> v - targetSpeed
+			AccelerationStopTest.TO_HALF_SPEED -> targetSpeed / 2.0 - v
+		}
 	}
 
 	override suspend fun actions() {
@@ -176,22 +190,29 @@ internal class Engine(
 		}
 		start()
 
-		// The approach is the one wait located by root-finding: its exit is a threshold the
-		// train crosses while accelerating, so a whole-step overshoot costs braking room the
-		// short block does not have (Issue #1014; Issue #760 tracks the rest).
+		// Every wait of a leg is located by root-finding (Issue #1014 for the approach; Issue #760
+		// for the `accelerateTo` arm below, [resumeAtAspectCap] and [brakeToStopLine]), so no exit
+		// is a whole step late. Each guard is non-positive exactly when the predicate a step poll used to test
+		// holds: -1.0 while `accelerate` is false, the leg's [speedMargin], and a discrete term
+		// at -1.0 or 1.0. Here that term is [brakingRoomMargin] (Issue #1057) instead, bounded by
+		// `minOf(..., 1.0)` because an unarmed margin is +∞; it is a distance the train closes
+		// continuously, so it is root-found like the speed. The three converted guards use
+		// tolerance 0.0: the root finder then returns a point on the satisfied side, so a stand
+		// ends at the clamped `v == 0.0` the dwell and reversal checks require, never at a creep
+		// of up to the default 1e-9 m/s.
 		//
-		// The remaining arms keep `waitUntil`: their primary exits are velocity targets, where
-		// one step of lateness is immaterial, and converting them would move the shunting-loop
-		// baselines. The else-arm's second exit, [brakingRoomGone] (Issue #1057), is a distance
-		// threshold, but a plain wait wakes at most one accepted step (kDisco `dtMax` = 1 ms)
-		// late: a residual of well under 1 m/s at the worst line speed, inside the best-effort
-		// clearance doctrine and far below the line-speed snap this fixes.
+		// No re-check follows any of these waits. The code after them reads only `terminate`,
+		// `accelerate` and discrete aspect state, and [watchForLateRestrictiveAspect]'s own
+		// re-test of [brakingRoomGone] re-parks on its crossing wait if a floating-point edge
+		// left the margin a hair above zero.
 		//
-		// Cancellation composes the same way it does for `waitUntil`. [cancelAccelerating]
-		// clears `accelerate` and activates; kDisco checks level crossings straight after that
-		// event, so [approachMargin] is already -1.0 and the wait ends at the same instant.
-		// One of the two turns returns from the wait; a re-command's iteration then starts
-		// from [commandPending] in [actions], and the other turn only passivates again.
+		// Cancellation composes as it did for `waitUntil`. [cancelAccelerating] clears
+		// `accelerate` and activates; kDisco checks level crossings straight after that event, so
+		// the guard is already -1.0 and the wait ends at the same instant. One of the two turns
+		// returns from the wait; a re-command's iteration then starts from [commandPending] in
+		// [actions], and the other turn only passivates again. [terminate] now really ends a
+		// crossing wait: it reactivates, which drops the notice, where a plain `waitUntil`
+		// re-tested its condition and parked again.
 		val isHalfSpeedLeg = cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED
 		if (isHalfSpeedLeg) {
 			// The second term ends phase 1 the instant the signal this phase started short of
@@ -213,7 +234,16 @@ internal class Engine(
 		} else {
 			// Also ends when a restrictive aspect has left no braking room (Issue #1057): the leg
 			// was commanded while the signal allowed, so nothing else would ever brake it.
-			waitUntil(Condition { cond.test() || brakingRoomGone() })
+			waitUntilCrossing(tolerance = 0.0) {
+				if (!accelerate) {
+					-1.0
+				} else {
+					minOf(
+						speedMargin(cond.getStopTest()),
+						if (targetSpeed > 0.0) minOf(brakingRoomMargin(), 1.0) else 1.0
+					)
+				}
+			}
 		}
 
 		// `!terminate` because [terminate] now really does end the wait above (it reactivates
@@ -393,8 +423,8 @@ internal class Engine(
 	 *   and `s = 0` in the same step: `(T² − v²) / (2s)` degenerates to `0 / 0` there, and a
 	 *   step that reaches `s ≤ 0` first takes [derivatives]' leg-ending branch, clearing
 	 *   `accelerate` — the watch would then never arm, the very hole it closes. A rate fixed at
-	 *   the resume instant has no singular point, and the leg ends on its plain
-	 *   [AccelerationStopTest.ACCELERATION_ENDED] test, at most one 1 ms step late.
+	 *   the resume instant has no singular point, and the leg ends where the velocity crosses
+	 *   the cap, root-found on [AccelerationStopTest.ACCELERATION_ENDED]'s margin (Issue #760).
 	 * - *What stays.* A **decelerating** resume (the cap below the current speed) keeps the
 	 *   law aimed at the signal: the aspect's permitted speed applies at the signal, and
 	 *   slowing over the whole distance left reaches it with no coasting state for a watch to
@@ -422,7 +452,13 @@ internal class Engine(
 				AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
 			}
 		currentCondition = resuming
-		waitUntil(Condition { resuming.test() || host.semaphoreToStopShortOf() != null })
+		waitUntilCrossing(tolerance = 0.0) {
+			if (!accelerate) {
+				-1.0
+			} else {
+				minOf(speedMargin(resuming.getStopTest()), if (host.semaphoreToStopShortOf() != null) -1.0 else 1.0)
+			}
+		}
 		return !terminate && accelerate && host.semaphoreToStopShortOf() != null
 	}
 
@@ -465,7 +501,14 @@ internal class Engine(
 		logger.trace { "Train ${host.trainNumber} engine: deceleration phase to stand, target $targetSpeed" }
 		val braking = AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
 		currentCondition = braking
-		waitUntil(Condition { braking.test() || host.semaphoreToStopShortOf() == null })
+		// `targetSpeed` is 0.0, so the speed term is the velocity itself.
+		waitUntilCrossing(tolerance = 0.0) {
+			if (!accelerate) {
+				-1.0
+			} else {
+				minOf(speedMargin(braking.getStopTest()), if (host.semaphoreToStopShortOf() == null) -1.0 else 1.0)
+			}
+		}
 		return !terminate && accelerate && host.semaphoreToStopShortOf() == null
 	}
 
