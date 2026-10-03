@@ -954,25 +954,7 @@ open class DefaultSimulationContext(
 				// Create Dynamic wrapper based on cell type
 				when (cell) {
 					is InOut -> {
-						// Create and map InOut dynamic wrapper
-						val dynamic = createDynamic(cell)
-						staticToDynamicMap[cell] = dynamic
-						// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
-						// These semaphores might be used in paths before they're encountered as separate cells
-						// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
-						if (!staticToDynamicMap.containsKey(cell.inSemaphore)) {
-							staticToDynamicMap[cell.inSemaphore] = dynamic.inSemaphore
-						}
-						if (!staticToDynamicMap.containsKey(cell.outSemaphore)) {
-							staticToDynamicMap[cell.outSemaphore] = dynamic.outSemaphore
-						}
-						// Also add to dynamicInOuts list if it doesn't exist yet
-						if (dynamicInOuts == null) {
-							dynamicInOuts = mutableListOf()
-						}
-						if (dynamic !in dynamicInOuts!!) {
-							dynamicInOuts!!.add(dynamic)
-						}
+						mapInOutCell(cell)
 						mappedCount++
 						logger.trace { "Mapped InOut at ($x,$y) to dynamic wrapper (with semaphores)" }
 					}
@@ -993,6 +975,42 @@ open class DefaultSimulationContext(
 		}
 		logger.debug { "Initialized $mappedCount dynamic wrappers (total in map: ${staticToDynamicMap.size})" }
 
+		mapGraphTrackBlocks()
+	}
+
+	/**
+	 * Grid-pass helper of [initializeDynamicMapping]: map a static [InOut] found in the grid,
+	 * then its two embedded semaphores (each only if not mapped yet), then add its wrapper to
+	 * [dynamicInOuts].
+	 */
+	private fun mapInOutCell(cell: InOut) {
+		// Create and map InOut dynamic wrapper
+		val dynamic = createDynamic(cell)
+		staticToDynamicMap[cell] = dynamic
+		// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
+		// These semaphores might be used in paths before they're encountered as separate cells
+		// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
+		if (!staticToDynamicMap.containsKey(cell.inSemaphore)) {
+			staticToDynamicMap[cell.inSemaphore] = dynamic.inSemaphore
+		}
+		if (!staticToDynamicMap.containsKey(cell.outSemaphore)) {
+			staticToDynamicMap[cell.outSemaphore] = dynamic.outSemaphore
+		}
+		// Also add to dynamicInOuts list if it doesn't exist yet
+		if (dynamicInOuts == null) {
+			dynamicInOuts = mutableListOf()
+		}
+		if (dynamic !in dynamicInOuts!!) {
+			dynamicInOuts!!.add(dynamic)
+		}
+	}
+
+	/**
+	 * Track-pass helper of [initializeDynamicMapping]: create a DynamicTrack wrapper for every
+	 * TrackBlock in the graph, alias the graph's DynamicTrackBlock to the same wrapper, and map
+	 * any internal sections. Runs after the grid pass.
+	 */
+	private fun mapGraphTrackBlocks() {
 		// Now iterate through all edges (TrackBlocks) in the graph and create DynamicTrack wrappers
 		var trackMappedCount = 0
 		val graph = getGraph()
@@ -1099,13 +1117,7 @@ open class DefaultSimulationContext(
 				when {
 					cell !is PathSeparator -> continue
 					cell is DynamicPathSeparator -> {
-						val staticRef =
-							when (cell) {
-								is DynamicInOut -> cell.staticRef
-								is DynamicRailSemaphore -> cell.staticRef
-								is DynamicRailSwitch -> cell.staticRef
-								else -> error("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
-							}
+						val staticRef = staticRefOf(cell)
 						if (staticRef !in staticToDynamicMap) {
 							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y) - staticRef not mapped")
 						}
@@ -1119,6 +1131,18 @@ open class DefaultSimulationContext(
 			}
 		}
 	}
+
+	/**
+	 * The static reference of a [DynamicPathSeparator] found in the grid, for
+	 * [collectUnmappedSeparators]. An implementor this method does not know is an error.
+	 */
+	private fun staticRefOf(cell: DynamicPathSeparator): PathSeparator =
+		when (cell) {
+			is DynamicInOut -> cell.staticRef
+			is DynamicRailSemaphore -> cell.staticRef
+			is DynamicRailSwitch -> cell.staticRef
+			else -> error("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
+		}
 
 	private fun collectUnmappedTracks(unmappedTracks: MutableList<String>) {
 		val graph = getGraph()
