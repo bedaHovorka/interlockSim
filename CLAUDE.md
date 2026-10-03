@@ -120,6 +120,13 @@ docker compose up app                       # Editor GUI
 docker compose up text                      # Thesis PDF
 ```
 
+AI dispatcher example (Goal 10, needs Ollama; Compose "Stage B", #924):
+
+```bash
+docker compose --profile ollama up -d ollama    # first start pulls qwen2.5:7b-instruct (~4.7 GB)
+docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
+```
+
 Key facts (full detail: [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under
 "Build & Development Environment"):
 
@@ -134,6 +141,17 @@ Key facts (full detail: [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)
   the container can read the host's 0600 X11 cookie. Set
   `export RUNTIME_UID=$(id -u) RUNTIME_GID=$(id -g)` (or put them in `.env`) before
   building; details in the comments in `docker-compose.yml` and `Dockerfile`.
+- `app` stays on `network_mode: host` (the X11 setup depends on it) and reads `OLLAMA_BASE_URL`
+  (default `http://localhost:11434`); it depends optionally on the `ollama` service, which
+  has a healthcheck that stays false until the model is pulled. On Docker Desktop
+  (Windows/macOS) set `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
+- The image's default `CMD` includes `-ea`; an explicit `java -jar …` override drops
+  assertions, so write `java -ea -jar …` as above unless dropping them is intended.
+- With a **native** Ollama already listening on 11434, `docker compose --profile ollama up`
+  makes `ollama-port-check` exit 1 on purpose (it prevents shadowing the native server) and
+  the compose `ollama` service is skipped. That is not a broken compose file: skip the
+  profile and run the `docker compose run app …` line; the default URL reaches the native
+  Ollama.
 - The fast-sim runtime image must stay glibc-based — see
   [fast-sim/CLAUDE.md](fast-sim/CLAUDE.md).
 - Offline builds: publish kDisco to `mavenLocal()` first — see the style guide's

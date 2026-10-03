@@ -27,6 +27,11 @@
 #        # Run simulation with example:
 #        docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 #
+#        # Run the AI dispatcher example (needs Ollama; -ea keeps assertions on, as in
+#        # the image's default CMD -- an explicit `java -jar` override drops it otherwise):
+#        docker compose --profile ollama up -d ollama
+#        docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
+#
 #        # Run simulation with custom XML:
 #        docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
 #
@@ -71,6 +76,20 @@ services:
       - DISPLAY=${DISPLAY:-host.docker.internal:0}
       # Pass X11 authentication
       - XAUTHORITY=/tmp/.docker.xauth
+      # Ollama endpoint for the LLM dispatcher (OllamaExecutorConfig.default() reads this
+      # environment variable only, never a -D property). `app` runs with network_mode: host,
+      # so on Linux `localhost:11434` reaches both the compose `ollama` service (published on
+      # 11434) and a native `ollama serve`. On Windows/macOS Docker Desktop set
+      # OLLAMA_BASE_URL=http://host.docker.internal:11434 (in .env or the shell) instead.
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+    # Optional dependency (Compose 2.20+): with `--profile ollama` the app waits until the
+    # `ollama` service is healthy (model pulled, API answering); without the profile the
+    # service is not part of the project and `app` starts as before (e.g. against a native
+    # Ollama, or without AI at all).
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false
     volumes:
       # Mount X11 socket for GUI display
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -161,9 +180,14 @@ services:
   # nc -zv localhost 11434` against a running native `ollama serve` -- connection failed).
   # `host.docker.internal:11434` IS reachable from a `network_mode: host` container on the
   # same setup, which is why dispatcher-agent's OLLAMA_BASE_URL (see OllamaExecutorConfig
-  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) should be set to
-  # `http://host.docker.internal:11434` once Stage B wires it into the `app` service below --
-  # `app` already runs with `network_mode: host` and that works without changing it.
+  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) is set to `http://host.docker.internal:11434`
+  # on Docker Desktop.
+  #
+  # STAGE B (Issue #924) is done: the `app` service reads OLLAMA_BASE_URL (default
+  # `http://localhost:11434`, see its `environment:` block), keeps `network_mode: host`
+  # (moving it onto interlocksim-network would break the X11 setup in
+  # docs/FEDORA_DOCKER_X11_SETUP.md) and depends optionally on the `ollama` service below,
+  # which has a healthcheck that is false until the model is pulled and the API answers.
   #
   # GPU support: Ollama auto-detects the GPU at runtime -- there are NO `OLLAMA_CUDA` /
   # `OLLAMA_ROCM` environment variables (those are not real Ollama knobs). To give the
@@ -194,6 +218,9 @@ services:
   #
   #   # Then run integrationTest which auto-detects localhost:11434, no config needed
   #   ./gradlew :dispatcher-agent:integrationTest
+  #
+  #   # Or run the AI example inside the app container (reads OLLAMA_BASE_URL)
+  #   docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
   ollama-port-check:
     profiles: ["ollama"]
     image: busybox:latest
@@ -204,7 +231,8 @@ services:
       - -c
       - |
         if nc -z localhost 11434 2>/dev/null; then
-          echo "Port 11434 already in use -- assuming a local Ollama is already running. Skipping container start."
+          echo "A native Ollama already listens on port 11434; the compose ollama service is skipped on purpose (this exit 1 is not a broken compose file)."
+          echo "Use OLLAMA_BASE_URL=http://localhost:11434 with it (the default for the app service) and run the app without --profile ollama."
           exit 1
         fi
         echo "Port 11434 is free -- proceeding to start the Ollama container."
@@ -227,6 +255,14 @@ services:
       OLLAMA_MAX_VRAM: ${OLLAMA_MAX_VRAM:-0}
       # OLLAMA_NUM_PARALLEL=1     # Serialize model loading on low-VRAM systems
       # OLLAMA_LLM_LIBRARY=cuda_v11   # Force CUDA backend (NVIDIA); rocm_v6 for AMD. Optional.
+    # Healthy only once the API answers (`ollama list` needs it) AND the model is pulled;
+    # the first start downloads ~4.7GB, hence the long retry budget (120 x 15s = 30 min).
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q 'qwen2.5:7b-instruct'"]
+      interval: 15s
+      timeout: 10s
+      retries: 120
+      start_period: 60s
     # GPU support (NVIDIA): uncomment to give the container GPU access. Requires
     # nvidia-container-toolkit installed and the Docker runtime configured (see comment
     # block above). Ollama then auto-detects CUDA -- no env var needed. For AMD, switch the
