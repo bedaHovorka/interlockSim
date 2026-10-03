@@ -193,8 +193,8 @@ class AnimatedSimulationCellRenderer(
 	 * Render InOut (entry/exit point) with light gray color.
 	 *
 	 * InOut cells represent connections to the external railway network. They are
-	 * rendered in light gray to distinguish them from track blocks; while a train waits
-	 * in the entry queue ([DynamicInOut.occupied], read live) the cell is tinted in
+	 * rendered in light gray to distinguish them from track blocks; while a train is queued
+	 * at or entering through this InOut ([DynamicInOut.occupied], read live) the cell is tinted in
 	 * [AnimationColors.TRACK_OCCUPIED] first (Issue #1008).
 	 *
 	 * @param g Graphics context for rendering
@@ -249,7 +249,7 @@ class AnimatedSimulationCellRenderer(
 		// Draw only the active direction (inherits graphics context color)
 		drawSegments(g, *activeSegments.toTypedArray())
 
-		if (capturedState?.locked ?: cell.locked) drawLockMark(g, staticSwitch)
+		if (capturedState?.locked ?: cell.locked) drawLockMark(g, staticSwitch, AnimationColors.SWITCH_LOCKED)
 	}
 
 	/**

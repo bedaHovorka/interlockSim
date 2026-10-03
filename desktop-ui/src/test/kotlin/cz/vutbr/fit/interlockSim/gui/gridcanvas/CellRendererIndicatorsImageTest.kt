@@ -165,7 +165,7 @@ class CellRendererIndicatorsImageTest {
 			val onTrunk =
 				mark.filter { (x, y) -> (if (spatialType == Cell.SpatialType.HORIZONTAL) y else x) in CELL / 2 - 1..CELL / 2 }
 			assertThat(onTrunk, label).isEmpty()
-			// The padlock hides no track pixel: everything else matches the unlocked rendering.
+			// Draws nothing besides the track and the mark.
 			assertThat(nonBackgroundPixels(locked) - mark.toSet() - track, label).isEqualTo(emptySet())
 		}
 	}

@@ -26,7 +26,10 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
  * **Dynamic properties**:
  * - Signal states live in the embedded semaphores ([inSemaphore], [outSemaphore], both
  *   [DynamicRailSemaphore] wrappers).
- * - [occupied] means "at least one train waits in this InOut's entry queue"; it is set by
+ * - [occupied] is true while at least one train is queued at this entry InOut: trains still
+ *   waiting for their entry route, and the train currently entering until its tail has started
+ *   (`Train.actions` → `out()`). Exit traffic does not set it. Unlike block occupancy, a train
+ *   counted here may not yet be on the network. It is set by
  *   [cz.vutbr.fit.interlockSim.sim.InOutWorker] and announced to the listeners registered with
  *   [addPropertyChangeListener] as a `ContextChangeEvent("occupied", old, new)`.
  *
@@ -53,7 +56,10 @@ class DynamicInOut(
 	// orientation and direction() are delegated from OrientedPathSeparator
 
 	/**
-	 * Dynamic property: at least one train waits in this InOut's entry queue.
+	 * Dynamic property: true while at least one train is queued at this entry InOut: trains still
+	 * waiting for their entry route, and the train currently entering until its tail has started
+	 * (`Train.actions` → `out()`). Exit traffic does not set it. Unlike block occupancy, a train
+	 * counted here may not yet be on the network.
 	 *
 	 * Written by the simulation thread through [setOccupied]; @Volatile because the Swing EDT
 	 * reads it live while rendering.
