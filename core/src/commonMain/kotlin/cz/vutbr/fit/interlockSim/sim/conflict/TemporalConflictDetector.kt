@@ -281,12 +281,7 @@ class TemporalConflictDetector(
 		for (occA in projA) {
 			if (occA.enterOffsetSeconds > lookaheadWindowSeconds) continue
 			for (occB in projB) {
-				if (occB.enterOffsetSeconds > lookaheadWindowSeconds) continue
-				if (occA.block != occB.block) continue
-
-				// Interval-overlap test: [enterA, exitA) ∩ [enterB, exitB) ≠ ∅
-				if (occA.enterOffsetSeconds >= occB.exitOffsetSeconds) continue
-				if (occB.enterOffsetSeconds >= occA.exitOffsetSeconds) continue
+				if (!overlapsWithinWindow(occA, occB)) continue
 
 				// Predicted moment the overlap begins (= max of the two enter times)
 				val predictedConflictTime =
@@ -295,6 +290,27 @@ class TemporalConflictDetector(
 				emitIfNotDeduplicated(trainA, trainB, occA.block, predictedConflictTime, detectionTime)
 			}
 		}
+	}
+
+	/**
+	 * True when [occB] enters within the lookahead window, both occupancies are on the same
+	 * block, and their intervals overlap. The caller checks [occA]'s enter offset against the
+	 * window first, so that guard prunes the whole inner loop.
+	 *
+	 * The comparisons are kept exactly as written: [ProjectedOccupancy] does not validate its
+	 * offsets, so NaN can reach this code, and for NaN `a >= b` and `a < b` are both false.
+	 */
+	private fun overlapsWithinWindow(
+		occA: ProjectedOccupancy,
+		occB: ProjectedOccupancy
+	): Boolean {
+		if (occB.enterOffsetSeconds > lookaheadWindowSeconds) return false
+		if (occA.block != occB.block) return false
+
+		// Interval-overlap test: [enterA, exitA) ∩ [enterB, exitB) ≠ ∅
+		if (occA.enterOffsetSeconds >= occB.exitOffsetSeconds) return false
+		if (occB.enterOffsetSeconds >= occA.exitOffsetSeconds) return false
+		return true
 	}
 
 	/**
