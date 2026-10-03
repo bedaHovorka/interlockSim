@@ -90,6 +90,9 @@ services:
     # service is not part of the project, this dependency is skipped and `app` starts at
     # once (native Ollama, or no AI). So a separate `run app` does NOT wait for a pull in
     # progress: start Ollama first with `docker compose --profile ollama up -d --wait ollama`.
+    # `docker compose --profile ollama up app` works only while `ollama` is not yet running;
+    # while it runs, use `run app` without the profile (the port check would see the compose
+    # ollama on 11434 and exit 1).
     depends_on:
       ollama:
         condition: service_healthy
@@ -154,8 +157,8 @@ services:
   # companion to one -- both would bind port 11434.
   #
   # profiles: ["ollama"] keeps both this and ollama-port-check out of a bare `docker compose up`
-  # / `up --build` (same reason `test` above is profile-gated): explicitly naming the service, as
-  # in `docker compose up -d ollama` below, still starts it regardless of the active profile --
+  # / `up --build` (same reason `test` above is profile-gated): explicitly naming the service
+  # with the profile, as in `docker compose --profile ollama up -d --wait ollama` below, starts it --
   # only an unqualified `up`/`up --build` skips it. Before this was added, a plain `docker compose
   # up --build -d --remove-orphans` on a machine with a native `ollama serve` already running
   # would fail outright: ollama-port-check's intentional exit 1 (see below) made Compose report
@@ -167,9 +170,11 @@ services:
   # `nc -z` using network_mode: host (direct access to the real host's network stack on
   # Linux). If something is already listening there, it exits 1, which -- via ollama's
   # depends_on condition: service_completed_successfully below -- prevents the ollama
-  # container from starting at all. This means `docker compose up -d ollama` is safe to
-  # run unconditionally: it no-ops if a local Ollama (native or another container) is
-  # already up, and starts the container otherwise.
+  # container from starting at all. So if something already listens on 11434 (a native Ollama
+  # or the compose ollama already running) the check exits 1 on purpose, Compose reports that
+  # it did not complete successfully and does not start `ollama`. That is not a broken file:
+  # use the Ollama that is already running (OLLAMA_BASE_URL default) and run `app` without
+  # the profile.
   #
   # KNOWN LIMITATION (Windows/macOS Docker Desktop): network_mode: host runs inside the
   # Docker Desktop VM (WSL2 on Windows), not the real host OS, so it cannot see a native
@@ -184,8 +189,8 @@ services:
   # nc -zv localhost 11434` against a running native `ollama serve` -- connection failed).
   # `host.docker.internal:11434` IS reachable from a `network_mode: host` container on the
   # same setup, which is why dispatcher-agent's OLLAMA_BASE_URL (see OllamaExecutorConfig
-  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) is set to `http://host.docker.internal:11434`
-  # on Docker Desktop.
+  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) must be set by the user to
+  # `http://host.docker.internal:11434` on Docker Desktop.
   #
   # STAGE B (Issue #924) is done: the `app` service reads OLLAMA_BASE_URL (default
   # `http://localhost:11434`, see its `environment:` block), keeps `network_mode: host`
@@ -213,12 +218,12 @@ services:
   #
   # Usage:
   #   # CPU-only (default, slowest but works everywhere)
-  #   docker compose up -d --wait ollama    # --wait blocks until the healthcheck passes
+  #   docker compose --profile ollama up -d --wait ollama    # --wait blocks until the healthcheck passes
   #
   #   # GPU with CUDA (fast, requires NVIDIA GPU + nvidia-container-toolkit)
   #   #   1. Uncomment the deploy.resources.reservations.devices block below.
   #   #   2. export OLLAMA_MAX_VRAM=8589934592   # optional 8GB VRAM cap
-  #   docker compose up -d --wait ollama
+  #   docker compose --profile ollama up -d --wait ollama
   #
   #   # Then run integrationTest which auto-detects localhost:11434, no config needed
   #   ./gradlew :dispatcher-agent:integrationTest
@@ -263,6 +268,7 @@ services:
     # Healthy only once the API answers (`ollama list` needs it) AND the model is pulled;
     # the first start downloads ~4.7GB, hence the long retry budget (120 x 15s = 30 min).
     healthcheck:
+      # The model tag must stay in sync with `command:` below and OllamaExecutorConfig.DEFAULT_MODEL_NAME.
       test: ["CMD-SHELL", "ollama list | grep -q 'qwen2.5:7b-instruct'"]
       interval: 15s
       timeout: 10s

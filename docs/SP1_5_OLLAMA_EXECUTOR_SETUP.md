@@ -82,7 +82,7 @@ class doc.)
 
 **CPU-only (works everywhere, slower):**
 ```bash
-docker compose up -d ollama
+docker compose --profile ollama up -d --wait ollama
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
@@ -99,7 +99,7 @@ sudo systemctl restart docker
 export OLLAMA_MAX_VRAM=8589934592  # 8GB limit (in bytes; 8589934592 = 8 GiB)
 
 # 3. Build and start Ollama with GPU support
-docker compose up -d ollama
+docker compose --profile ollama up -d --wait ollama
 
 # 4. Verify the GPU is actually in use (Processor column should say GPU, not CPU):
 docker compose exec -T ollama ollama ps
@@ -119,7 +119,7 @@ set `OLLAMA_LLM_LIBRARY=cuda_v11` (NVIDIA) in the `ollama` service environment.
 export OLLAMA_LLM_LIBRARY=rocm_v6
 export OLLAMA_MAX_VRAM=8589934592
 
-docker compose up -d ollama
+docker compose --profile ollama up -d --wait ollama
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
@@ -275,7 +275,7 @@ Expected output: Test `local Ollama has the configured tool-capable model pulled
 
 **Fix:**
 - Native: Run `ollama serve` in a terminal
-- Docker: Run `docker compose up -d ollama && sleep 10`
+- Docker: Run `docker compose --profile ollama up -d --wait ollama` (`--wait` blocks until the healthcheck passes)
 
 ### "Model 'qwen2.5:7b-instruct' not pulled"
 
@@ -298,10 +298,9 @@ ollama pull qwen2.5:7b-instruct
 
 **Cause:** Ollama container too slow to start, or model still pulling
 
-**Fix:** Wait longer before running tests:
+**Fix:** `--wait` blocks until the model is pulled and the API answers, so no `sleep` is needed:
 ```bash
-docker compose up -d ollama
-sleep 30  # Wait for startup
+docker compose --profile ollama up -d --wait ollama
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
