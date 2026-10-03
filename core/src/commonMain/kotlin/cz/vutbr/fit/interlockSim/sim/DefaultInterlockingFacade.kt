@@ -282,9 +282,11 @@ class DefaultInterlockingFacade(
 		}
 
 		val fromEndpoint =
-			resolveEndpoint(fromEndpointName, inOutByName, semaphoreByName) ?: return unresolvedEndpointDenial(fromEndpointName)
+			resolveEndpoint(fromEndpointName, inOutByName, semaphoreByName)
+				?: return unresolvedEndpointDenial(fromEndpointName)
 		val toEndpoint =
-			resolveEndpoint(toEndpointName, inOutByName, semaphoreByName) ?: return unresolvedEndpointDenial(toEndpointName)
+			resolveEndpoint(toEndpointName, inOutByName, semaphoreByName)
+				?: return unresolvedEndpointDenial(toEndpointName)
 
 		return env
 			.getRoutingServices()
