@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
+import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -21,6 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import java.awt.BasicStroke
+import java.awt.Color
 import java.awt.Graphics2D
 import java.lang.Math.round
 import java.util.EnumMap
@@ -104,6 +106,40 @@ abstract class CellRenderer(
 		g.fillPolygon(xs, ys, 3)
 		g.drawPolygon(xs, ys, 3)
 		g.transform = transform
+	}
+
+	/**
+	 * Draws a small padlock in the bottom-right quarter of the cell to mark a locked switch
+	 * (Issue #1008): a filled body with a semicircular shackle of the same width sitting on it.
+	 * Drawn in [AnimationColors.SWITCH_LOCKED]; the caller's colour and stroke are restored.
+	 */
+	protected fun drawLockMark(g: Graphics2D) {
+		val oldColor = g.color
+		val oldStroke = g.stroke
+		val x = cellWidth * 5 / 8
+		val y = cellHeight * 5 / 8
+		val width = cellWidth / 4
+		val height = cellHeight / 4
+		g.color = AnimationColors.SWITCH_LOCKED
+		g.stroke = BasicStroke(1f)
+		g.fillRect(x, y, width, height)
+		g.drawArc(x, y - cellHeight / 8, width, height, 0, 180)
+		g.stroke = oldStroke
+		g.color = oldColor
+	}
+
+	/**
+	 * Fills the whole cell with [color] (Issue #1008: an occupied InOut). Call it before the cell's
+	 * own drawing so the track stays visible on top; the caller's colour is restored.
+	 */
+	protected fun drawOccupancyTint(
+		g: Graphics2D,
+		color: Color
+	) {
+		val oldColor = g.color
+		g.color = color
+		g.fillRect(0, 0, cellWidth, cellHeight)
+		g.color = oldColor
 	}
 
 	// Protected helper methods for common static cell rendering logic

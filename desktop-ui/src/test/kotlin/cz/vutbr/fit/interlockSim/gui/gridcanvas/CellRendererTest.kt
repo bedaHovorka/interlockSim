@@ -18,8 +18,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -284,5 +287,59 @@ class CellRendererTest {
 		// Then - verify correct polymorphic draw method was invoked
 		verify(atLeast = 1) { graphicsMock.drawLine(0, 8, 8, 8) }
 		verify(atLeast = 1) { graphicsMock.drawLine(16, 8, 8, 8) }
+	}
+
+	// ========== Issue #1008: switch-locked and InOut-occupancy indicators (16x16 cell) ==========
+
+	@Test
+	fun `SimulationCellRenderer draws a padlock on a locked DynamicRailSwitch`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		dynamicSwitch.lock()
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicSwitch)
+
+		// Body in the bottom-right quarter, shackle as the upper semicircle sitting on the body.
+		verify { graphicsMock.fillRect(10, 10, 4, 4) }
+		verify { graphicsMock.drawArc(10, 8, 4, 4, 0, 180) }
+	}
+
+	@Test
+	fun `SimulationCellRenderer draws no padlock on an unlocked DynamicRailSwitch`() {
+		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicSwitch)
+
+		verify(exactly = 0) { graphicsMock.fillRect(10, 10, 4, 4) }
+		verify(exactly = 0) { graphicsMock.drawArc(10, 8, 4, 4, 0, 180) }
+	}
+
+	@Test
+	fun `SimulationCellRenderer tints an occupied DynamicInOut before drawing it`() {
+		val dynamicInOut = spyk(createDynamicInOut(InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)))
+		every { dynamicInOut.occupied } returns true
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicInOut)
+
+		verify { graphicsMock.fillRect(0, 0, 16, 16) }
+		verify { graphicsMock.drawLine(0, 8, 8, 8) }
+		verify { graphicsMock.fillOval(4, 4, 8, 8) }
+		verifyOrder {
+			graphicsMock.fillRect(0, 0, 16, 16)
+			graphicsMock.drawLine(0, 8, 8, 8)
+		}
+	}
+
+	@Test
+	fun `SimulationCellRenderer does not tint a free DynamicInOut`() {
+		val dynamicInOut = createDynamicInOut(InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL))
+		val graphicsMock = mockk<Graphics2D>(relaxed = true)
+
+		simulationRenderer.draw(graphicsMock, dynamicInOut)
+
+		verify(exactly = 0) { graphicsMock.fillRect(any(), any(), any(), any()) }
+		verify { graphicsMock.fillOval(4, 4, 8, 8) }
 	}
 }

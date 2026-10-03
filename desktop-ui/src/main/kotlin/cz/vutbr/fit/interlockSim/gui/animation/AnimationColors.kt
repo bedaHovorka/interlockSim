@@ -66,6 +66,14 @@ object AnimationColors {
 	/** Default signal color when state is unknown - Light gray */
 	val DEFAULT_SIGNAL: Color = Color(0xC0, 0xC0, 0xC0)
 
+	// ========== Interlocking Indicator Colors ==========
+
+	/**
+	 * Padlock mark on a locked switch (Issue #1008) - Magenta, distinct from every track, signal,
+	 * train and path-preview colour.
+	 */
+	val SWITCH_LOCKED: Color = Color(0xFF, 0x00, 0xFF)
+
 	// ========== Train Colors ==========
 
 	/** Train body color for trains from InOut B - Blue */

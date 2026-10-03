@@ -394,17 +394,18 @@ object AnimationStateCapture {
 	/**
 	 * Capture state of a single railway switch.
 	 *
-	 * Extracts current configuration (MAIN/BRANCH) from dynamic wrapper.
+	 * Extracts current configuration (MAIN/BRANCH) and lock state from dynamic wrapper.
 	 *
 	 * @param dynamicSwitch Dynamic switch wrapper with current state
 	 * @return Immutable switch state snapshot
 	 */
-	private fun captureSwitchState(dynamicSwitch: DynamicRailSwitch): SwitchState {
+	internal fun captureSwitchState(dynamicSwitch: DynamicRailSwitch): SwitchState {
 		val conf = dynamicSwitch.conf
 
 		return SwitchState(
 			railSwitch = dynamicSwitch.staticRef,
-			conf = conf
+			conf = conf,
+			locked = dynamicSwitch.locked
 		)
 	}
 }

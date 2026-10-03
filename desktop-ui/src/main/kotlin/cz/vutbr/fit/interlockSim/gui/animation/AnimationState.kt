@@ -191,8 +191,11 @@ data class SignalState(
  *
  * @property railSwitch Reference to the static switch configuration
  * @property conf Current configuration from [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch]
+ * @property locked Whether the switch was locked against repositioning (Issue #1008), from
+ *   [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch.locked]
  */
 data class SwitchState(
 	val railSwitch: RailSwitch,
-	val conf: RailSwitch.Conf
+	val conf: RailSwitch.Conf,
+	val locked: Boolean
 )
