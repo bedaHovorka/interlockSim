@@ -498,4 +498,180 @@ class TemporalConflictDetectionTest : KoinComponent {
 
 		assertThat(received).isEmpty()
 	}
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// Test 11: Individual guards of checkTrainPair (issue #1005, Task 41)
+	// ──────────────────────────────────────────────────────────────────────────
+
+	/** Reserve train-A first and then train-B, so train-A is the outer (`trainA`) side of the pair. */
+	private fun reserveAThenB(
+		detector: TemporalConflictDetector,
+		block: DynamicTrackBlock,
+		timeB: Double = 2.0
+	) {
+		detector.handleBlockEvent(BlockEvent.BlockReserved(block, "train-A", time = 1.0))
+		detector.handleBlockEvent(BlockEvent.BlockReserved(block, "train-B", time = timeB))
+	}
+
+	/**
+	 * Only the outer guard on train A's enter offset suppresses this pair.
+	 *
+	 * - Train A: [35, 50) s, beyond the default 30-s window.
+	 * - Train B: [10, 40) s, inside the window, same block, overlapping with A.
+	 */
+	@Test
+	fun `train A entering beyond the window is skipped although the intervals overlap`() {
+		val (detector, received) = buildDetector()
+		val block = realBlock()
+
+		detector.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 35.0, exitOffsetSeconds = 50.0))
+				"train-B" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 10.0, exitOffsetSeconds = 40.0))
+				else -> null
+			}
+		}
+
+		reserveAThenB(detector, block)
+
+		assertThat(received).isEmpty()
+	}
+
+	/**
+	 * Mirror of the non-overlapping test: train B leaves exactly when train A enters.
+	 *
+	 * - Train A: [10, 20) s
+	 * - Train B: [0, 10) s   ← exits exactly when A enters (non-overlapping)
+	 */
+	@Test
+	fun `train B leaving exactly when train A enters does not emit event`() {
+		val (detector, received) = buildDetector()
+		val block = realBlock()
+
+		detector.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 10.0, exitOffsetSeconds = 20.0))
+				"train-B" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 0.0, exitOffsetSeconds = 10.0))
+				else -> null
+			}
+		}
+
+		reserveAThenB(detector, block)
+
+		assertThat(received).isEmpty()
+	}
+
+	/**
+	 * The window guards are strict: an enter offset equal to the window is still inside it.
+	 * Checked once with train A and once with train B on the window boundary.
+	 */
+	@Test
+	fun `enter offset equal to the window fires for train A and for train B`() {
+		val block = realBlock()
+		val window = TemporalConflictDetector.DEFAULT_LOOKAHEAD_WINDOW_SECONDS
+
+		val (detectorA, receivedA) = buildDetector()
+		detectorA.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = window, exitOffsetSeconds = 50.0))
+				"train-B" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 0.0, exitOffsetSeconds = 40.0))
+				else -> null
+			}
+		}
+		reserveAThenB(detectorA, block)
+
+		val (detectorB, receivedB) = buildDetector()
+		detectorB.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 0.0, exitOffsetSeconds = 40.0))
+				"train-B" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = window, exitOffsetSeconds = 50.0))
+				else -> null
+			}
+		}
+		reserveAThenB(detectorB, block)
+
+		assertThat(receivedA).hasSize(1)
+		assertThat(receivedA.single().predictedConflictTime).isEqualTo(2.0 + window)
+		assertThat(receivedB).hasSize(1)
+		assertThat(receivedB.single().predictedConflictTime).isEqualTo(2.0 + window)
+	}
+
+	/**
+	 * The other half of the default-window promise: enterOffset = 31 s is outside the
+	 * default 30-s window, so no event fires even though the intervals overlap.
+	 */
+	@Test
+	fun `enter offset of 31 seconds is outside the default window`() {
+		val (detector, received) = buildDetector()
+		val block = realBlock()
+
+		detector.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 0.0, exitOffsetSeconds = 60.0))
+				"train-B" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 31.0, exitOffsetSeconds = 50.0))
+				else -> null
+			}
+		}
+
+		reserveAThenB(detector, block)
+
+		assertThat(received).isEmpty()
+	}
+
+	/**
+	 * Two occupancies per train on two blocks; only one of the four pairs conflicts.
+	 *
+	 * - Train A: X [0, 10) s, Y [10, 20) s
+	 * - Train B: X [15, 25) s, Y [12, 22) s
+	 *
+	 * On X train B enters after A has left; the two mixed pairs are on different blocks;
+	 * on Y the intervals overlap from 12 s. Exactly one event for Y is expected.
+	 */
+	@Test
+	fun `only the conflicting pair of a multi occupancy projection emits`() {
+		val (detector, received) = buildDetector()
+		val blockX = realBlock()
+		val ctxY =
+			CommonTestFixtures.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				DefaultSimulationProcessFactory()
+			)
+		val blockY: DynamicTrackBlock = ctxY.getGraph().values().first()
+		ctxY.close()
+
+		detector.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" ->
+					listOf(
+						ProjectedOccupancy(blockX, enterOffsetSeconds = 0.0, exitOffsetSeconds = 10.0),
+						ProjectedOccupancy(blockY, enterOffsetSeconds = 10.0, exitOffsetSeconds = 20.0)
+					)
+				"train-B" ->
+					listOf(
+						ProjectedOccupancy(blockX, enterOffsetSeconds = 15.0, exitOffsetSeconds = 25.0),
+						ProjectedOccupancy(blockY, enterOffsetSeconds = 12.0, exitOffsetSeconds = 22.0)
+					)
+				else -> null
+			}
+		}
+
+		reserveAThenB(detector, blockX, timeB = 4.0)
+
+		assertThat(received).hasSize(1)
+		val event = received.single()
+		assertThat(event.trainId).isEqualTo("train-A")
+		assertThat(event.otherTrainId).isEqualTo("train-B")
+		assertThat(event.conflictBlock).isEqualTo(blockY)
+		assertThat(event.predictedConflictTime).isEqualTo(4.0 + 12.0)
+	}
 }

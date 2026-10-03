@@ -111,7 +111,7 @@ class ValidationDialog(
 		panel.add(Box.createVerticalStrut(10))
 
 		// Error messages in scrollable text area
-		val errorText = buildErrorMessage()
+		val errorText = buildErrorMessage(validationResult)
 		val textArea = JTextArea(errorText)
 		textArea.isEditable = false
 		textArea.lineWrap = true
@@ -134,36 +134,6 @@ class ValidationDialog(
 
 		return panel
 	}
-
-	/**
-	 * Builds the error message text from validation result.
-	 */
-	private fun buildErrorMessage(): String =
-		buildString {
-			// Format all errors
-			for ((index, error) in validationResult.errors.withIndex()) {
-				if (index > 0) {
-					append("\n\n")
-					append("─".repeat(50))
-					append("\n\n")
-				}
-				append(error.format())
-			}
-
-			// Format warnings if any
-			if (validationResult.warnings.isNotEmpty()) {
-				if (validationResult.errors.isNotEmpty()) {
-					append("\n\n")
-					append("═".repeat(50))
-					append("\n\n")
-				}
-				append("Warnings:\n\n")
-				for ((index, warning) in validationResult.warnings.withIndex()) {
-					if (index > 0) append("\n\n")
-					append(warning.format())
-				}
-			}
-		}
 
 	/**
 	 * Creates the button panel with action buttons.
@@ -229,6 +199,51 @@ class ValidationDialog(
 	}
 
 	companion object {
+		private const val ERROR_SEPARATOR_WIDTH = 50
+
+		/**
+		 * Builds the error message text from a validation result: the errors, then the warnings
+		 * section if there are any warnings.
+		 */
+		internal fun buildErrorMessage(validationResult: ValidationResult): String =
+			buildString {
+				appendErrors(validationResult.errors)
+				appendWarnings(validationResult.warnings, hasErrors = validationResult.errors.isNotEmpty())
+			}
+
+		/** Appends every error, separated from each other by a thin rule. */
+		private fun StringBuilder.appendErrors(errors: List<ValidationError>) {
+			for ((index, error) in errors.withIndex()) {
+				if (index > 0) {
+					append("\n\n")
+					append("─".repeat(ERROR_SEPARATOR_WIDTH))
+					append("\n\n")
+				}
+				append(error.format())
+			}
+		}
+
+		/**
+		 * Appends the "Warnings:" section, set off from preceding errors (when [hasErrors]) by a thick
+		 * rule. Appends nothing when [warnings] is empty.
+		 */
+		private fun StringBuilder.appendWarnings(
+			warnings: List<ValidationWarning>,
+			hasErrors: Boolean
+		) {
+			if (warnings.isEmpty()) return
+			if (hasErrors) {
+				append("\n\n")
+				append("═".repeat(ERROR_SEPARATOR_WIDTH))
+				append("\n\n")
+			}
+			append("Warnings:\n\n")
+			for ((index, warning) in warnings.withIndex()) {
+				if (index > 0) append("\n\n")
+				append(warning.format())
+			}
+		}
+
 		/**
 		 * Shows a validation dialog with the given result.
 		 *

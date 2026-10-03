@@ -216,22 +216,15 @@ abstract class AbstractPath protected constructor(
 				val nextTrack = Util.assertInstanceOf<Track>(iterator.next())
 
 				if (!separatorSetting(operationName, separator, previous, nextTrack)) {
-					if (operationName == IS_FREE_FROM) {
-						logger.info {
-							"${Process.time()} PATH_NOT_FREE: Separator $separator prevents path - config cannot be set"
-						}
-					}
+					logPathNotFree(operationName) { "Separator $separator prevents path - config cannot be set" }
 					logger.debug { "Separator setting failed for operation: $operationName" }
 					return false
 				}
 
 				// Execute the track operation via lambda (replaces reflection invoke)
 				if (!trackOperation(nextTrack, separator)) {
-					if (operationName == IS_FREE_FROM) {
-						logger.info {
-							"${Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${toTrackFacility(nextTrack).getState()}"
-						}
+					logPathNotFree(operationName) {
+						"Track $nextTrack prevents path - state=${toTrackFacility(nextTrack).getState()}"
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
 					return false
@@ -251,6 +244,21 @@ abstract class AbstractPath protected constructor(
 			throw e
 		} catch (e: Exception) {
 			throw TrackOperationException(e, this)
+		}
+	}
+
+	/**
+	 * Logs why an `isFreeFrom` iteration was cut short. Any other operation fails silently here:
+	 * only `isFreeFrom` is a query about availability, the rest report failure through their result.
+	 *
+	 * @param reason Lazily built text after the `PATH_NOT_FREE:` tag; evaluated only when the line is logged.
+	 */
+	private fun logPathNotFree(
+		operationName: String,
+		reason: () -> String
+	) {
+		if (operationName == IS_FREE_FROM) {
+			logger.info { "${Process.time()} PATH_NOT_FREE: ${reason()}" }
 		}
 	}
 
