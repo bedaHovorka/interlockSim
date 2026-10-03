@@ -120,6 +120,13 @@ docker compose up app                       # Editor GUI
 docker compose up text                      # Thesis PDF
 ```
 
+AI dispatcher example (Goal 10, needs Ollama; Compose "Stage B", #924):
+
+```bash
+docker compose --profile ollama up -d --wait ollama   # blocks until the model is pulled and the API answers (first start ~4.7 GB)
+docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
+```
+
 Key facts (full detail: [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under
 "Build & Development Environment"):
 
@@ -134,6 +141,11 @@ Key facts (full detail: [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)
   the container can read the host's 0600 X11 cookie. Set
   `export RUNTIME_UID=$(id -u) RUNTIME_GID=$(id -g)` (or put them in `.env`) before
   building; details in the comments in `docker-compose.yml` and `Dockerfile`.
+- `app` stays on host networking (the X11 setup depends on it) and reads `OLLAMA_BASE_URL`
+  (default `http://localhost:11434`; Docker Desktop: `http://host.docker.internal:11434`).
+  Keep `-ea` in an explicit `java -jar …` command — the image's default `CMD` has it.
+- If port 11434 is already in use (a native Ollama or a running compose `ollama`), skip
+  `--profile ollama` and run `app` alone. Mechanism: `docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md`.
 - The fast-sim runtime image must stay glibc-based — see
   [fast-sim/CLAUDE.md](fast-sim/CLAUDE.md).
 - Offline builds: publish kDisco to `mavenLocal()` first — see the style guide's
