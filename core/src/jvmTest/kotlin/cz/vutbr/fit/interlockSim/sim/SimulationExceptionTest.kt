@@ -16,6 +16,7 @@ import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -141,6 +142,13 @@ class SimulationExceptionTest : KoinTestBase() {
 
 			// Assert
 			assertThat(time).isNotNull()
+		}
+
+		@Test
+		fun `time is NaN when thrown outside a simulation run`() {
+			val exception = SimulationException(testMessage, null, mockTrack)
+
+			assertThat(exception.time.isNaN()).isTrue()
 		}
 
 		@Test
