@@ -101,6 +101,10 @@ class EngineStandaloneTest : KoinTestBase() {
 	 * of while its aspect does not allow, as the next semaphore, and as the aspect ahead — so a
 	 * test changes all three at once by setting the semaphore's signal.
 	 *
+	 * The distance never shrinks, so the brake-to-stop law `a = -v²/(2s)` is asymptotic here (`v`
+	 * never reaches 0): a brake-to-stop test can only leave that wait through its discrete aspect
+	 * term or through `terminate()`.
+	 *
 	 * @param distanceMeters the fixed distance to the signal the braking law aims at
 	 */
 	private class FakeEngineHost(
