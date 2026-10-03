@@ -109,22 +109,46 @@ abstract class CellRenderer(
 	}
 
 	/**
-	 * Draws a small padlock in the bottom-right quarter of the cell to mark a locked switch
-	 * (Issue #1008): a filled body with a semicircular shackle of the same width sitting on it.
-	 * Drawn in [AnimationColors.SWITCH_LOCKED]; the caller's colour and stroke are restored.
+	 * Draws a small padlock that marks a locked [railSwitch] (Issue #1008), in
+	 * [AnimationColors.SWITCH_LOCKED]; the caller's colour is restored.
+	 *
+	 * The glyph is 5/16 of the cell square (5x5 px at 16 px): a body 3/16 high across the full
+	 * glyph width, under a shackle one pixel narrower on each side (a top bar and two legs).
+	 *
+	 * It sits in the half of the cell opposite the switch's branch leg and keeps at least one pixel
+	 * clear of the trunk line:
+	 * - HORIZONTAL switch: right of centre, in the top half when the branch leaves downwards and in
+	 *   the bottom half when it leaves upwards.
+	 * - VERTICAL switch: below centre, in the left half when the branch leaves to the right and in
+	 *   the right half when it leaves to the left.
 	 */
-	protected fun drawLockMark(g: Graphics2D) {
+	protected fun drawLockMark(
+		g: Graphics2D,
+		railSwitch: RailSwitch
+	) {
+		val branch = railSwitch.getBranchSegments().first()
+		val vertical = railSwitch.getSpatialType() == Cell.SpatialType.VERTICAL
+		val nearEdgeX = cellWidth / 16
+		val nearEdgeY = cellHeight / 16
+		val farSideX = cellWidth * 5 / 8
+		val farSideY = cellHeight * 5 / 8
+		val x = if (vertical && branch.dx > 0) nearEdgeX else farSideX
+		val y = if (!vertical && branch.dy > 0) nearEdgeY else farSideY
+
+		val glyphWidth = cellWidth * 5 / 16
+		val glyphHeight = cellHeight * 5 / 16
+		val bodyHeight = cellHeight * 3 / 16
+		val unit = maxOf(1, cellWidth / 16)
+		val bodyTop = y + glyphHeight - bodyHeight
+
 		val oldColor = g.color
-		val oldStroke = g.stroke
-		val x = cellWidth * 5 / 8
-		val y = cellHeight * 5 / 8
-		val width = cellWidth / 4
-		val height = cellHeight / 4
 		g.color = AnimationColors.SWITCH_LOCKED
-		g.stroke = BasicStroke(1f)
-		g.fillRect(x, y, width, height)
-		g.drawArc(x, y - cellHeight / 8, width, height, 0, 180)
-		g.stroke = oldStroke
+		// Shackle: top bar and two legs, one unit narrower than the body on each side
+		g.fillRect(x + unit, y, glyphWidth - 2 * unit, unit)
+		g.fillRect(x + unit, y + unit, unit, bodyTop - y - unit)
+		g.fillRect(x + glyphWidth - 2 * unit, y + unit, unit, bodyTop - y - unit)
+		// Body
+		g.fillRect(x, bodyTop, glyphWidth, bodyHeight)
 		g.color = oldColor
 	}
 
