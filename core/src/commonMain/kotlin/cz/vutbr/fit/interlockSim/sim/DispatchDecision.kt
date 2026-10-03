@@ -70,9 +70,28 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * @since Issue #540 (SP0.1 — Goal 10), moved to `:core` and reworded in Issue #729
  *   (SP0.7 — Goal 10); SP1.7 tool-driven subtypes added in Issue #774;
  *   [HoldTrain] and [rationale] added in Issue #556 (SP2b.1 — Goal 10);
- *   [rationale] changed to [List] in Issue #560 (SP2b.5 — Goal 10)
+ *   [rationale] changed to [List] in Issue #560 (SP2b.5 — Goal 10);
+ *   [kind] and [trainName] added in Issue #969
  */
 sealed class DispatchDecision {
+	/**
+	 * Which subtype this decision is, as a value with its tool name and display label.
+	 * Lets consumers that only need the type name read it here instead of writing
+	 * their own `when` over the subtypes.
+	 *
+	 * @since Issue #969
+	 */
+	abstract val kind: DispatchDecisionKind
+
+	/**
+	 * The train this decision names, or `null` when it names none ([NoAction],
+	 * [SetSwitchPosition], and [SetSignalAspect] without train attribution).
+	 * For [ApproveTrain], [ReservePath] and [HoldTrain] this is their `trainId`.
+	 *
+	 * @since Issue #969
+	 */
+	abstract val trainName: String?
+
 	/**
 	 * Human-readable rationale for this decision, as an ordered list of rule-
 	 * evaluation strings produced by the dispatcher or route-scoring engine.
@@ -101,7 +120,10 @@ sealed class DispatchDecision {
 	data class ApproveTrain(
 		val trainId: String,
 		override val rationale: List<String> = emptyList()
-	) : DispatchDecision()
+	) : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.APPROVE_TRAIN
+		override val trainName: String get() = trainId
+	}
 
 	/**
 	 * The dispatcher decided to reserve a forward path of **one section** from
@@ -130,12 +152,18 @@ sealed class DispatchDecision {
 		val trainId: String,
 		val fromSemaphoreName: String,
 		val toSeparatorName: String
-	) : DispatchDecision()
+	) : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.RESERVE_PATH
+		override val trainName: String get() = trainId
+	}
 
 	/**
 	 * No dispatch action should be taken this tick.
 	 */
-	data object NoAction : DispatchDecision()
+	data object NoAction : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.NO_ACTION
+		override val trainName: String? get() = null
+	}
 
 	// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
 	//
@@ -177,6 +205,9 @@ sealed class DispatchDecision {
 		val holdDurationSeconds: Double,
 		override val rationale: List<String> = emptyList()
 	) : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.HOLD_TRAIN
+		override val trainName: String get() = trainId
+
 		init {
 			require(trainId.isNotBlank()) { "trainId must not be blank" }
 			require(holdDurationSeconds > 0.0) {
@@ -216,7 +247,10 @@ sealed class DispatchDecision {
 	 *   closing the tracking-contract hole an untracked signal write would otherwise leave (G5,
 	 *   Issue #893 task A6). Attribution-only: no production code currently constructs a
 	 *   [SetSignalAspect] decision that reaches an applier (`PathCommandTranslator.translate` has
-	 *   no production caller), so this property changes no live behavior.
+	 *   no production caller), so this property changes no live behavior. The semi-auto approval
+	 *   dialog shows this value as the "Train:" row, but `extractTrainId` (`:dispatcher-agent`)
+	 *   deliberately reports an empty identifier for this subtype, so the model is told nothing
+	 *   about it in `AppliedOutcome.DroppedInvalid`.
 	 * @property rationale Rule-evaluation strings explaining this signal command
 	 *   (empty for dispatchers that do not record rationale).
 	 *
@@ -226,9 +260,11 @@ sealed class DispatchDecision {
 	data class SetSignalAspect(
 		val semaphoreName: String,
 		val signal: Signal,
-		val trainName: String? = null,
+		override val trainName: String? = null,
 		override val rationale: List<String> = emptyList()
-	) : DispatchDecision()
+	) : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.SET_SIGNAL_ASPECT
+	}
 
 	/**
 	 * The agent decided to set a named rail switch to a specific position.
@@ -249,7 +285,10 @@ sealed class DispatchDecision {
 		val switchName: String,
 		val position: RailSwitch.Conf,
 		override val rationale: List<String> = emptyList()
-	) : DispatchDecision()
+	) : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.SET_SWITCH_POSITION
+		override val trainName: String? get() = null
+	}
 
 	/**
 	 * The agent decided to release all track blocks reserved for the named train.
@@ -265,9 +304,11 @@ sealed class DispatchDecision {
 	 * @since Issue #774 (SP1.7 — Goal 10 threading contract)
 	 */
 	data class ReleaseRoute(
-		val trainName: String,
+		override val trainName: String,
 		override val rationale: List<String> = emptyList()
-	) : DispatchDecision()
+	) : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.RELEASE_ROUTE
+	}
 
 	/**
 	 * The agent decided to atomically reserve an end-to-end path for the named train.
@@ -304,11 +345,46 @@ sealed class DispatchDecision {
 	 * @since Issue #774 (SP1.7 — Goal 10 threading contract)
 	 */
 	data class RequestRoute(
-		val trainName: String,
+		override val trainName: String,
 		val fromEndpointName: String,
 		val toEndpointName: String,
 		override val rationale: List<String> = emptyList()
-	) : DispatchDecision()
+	) : DispatchDecision() {
+		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.REQUEST_ROUTE
+	}
+}
+
+/**
+ * The subtype of a [DispatchDecision], with the two names consumers show for it.
+ *
+ * @property commandType The LLM-facing tool name, emitted verbatim to the model in
+ *   `AppliedOutcome.DroppedInvalid.commandType` (`:dispatcher-agent`). [RELEASE_ROUTE] maps to
+ *   `cancel_route` because that is the current tool name (see `CancelRouteTool`), not the
+ *   retired `release_route`.
+ * @property displayName The human-readable label shown in the semi-auto approval dialog
+ *   (`:desktop-ui`).
+ *
+ * `AuthoredAction.decisionKind` (as set by `DispatchDecisionApplier`) and
+ * `Sp2c21MetricsRecorder.normaliseDecision` (`:dispatcher-agent`) deliberately use the class
+ * simple name (e.g. `"ApproveTrain"`), not [commandType] or [displayName], and must not be
+ * switched to [DispatchDecision.kind]: the run-JSON and metrics keys would change. The
+ * validator-rejection path in `KoogAgentFactory` sets `decisionKind` to the LLM tool name
+ * instead; this PR leaves that as it is.
+ *
+ * @since Issue #969
+ */
+enum class DispatchDecisionKind(
+	val commandType: String,
+	val displayName: String
+) {
+	APPROVE_TRAIN("approve_train", "Approve Train"),
+	RESERVE_PATH("reserve_path", "Reserve Path"),
+	NO_ACTION("no_action", "No Action"),
+	HOLD_TRAIN("hold_train", "Hold Train"),
+	SET_SIGNAL_ASPECT("set_signal_aspect", "Set Signal Aspect"),
+	SET_SWITCH_POSITION("set_switch_position", "Set Switch Position"),
+	RELEASE_ROUTE("cancel_route", "Release Route"),
+	REQUEST_ROUTE("request_route", "Request Route")
 }
 
 /**

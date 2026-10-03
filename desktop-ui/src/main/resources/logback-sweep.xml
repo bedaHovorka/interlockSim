@@ -29,6 +29,8 @@
 
 	<!-- The dispatcher agent, its tools, its planner and the run recorder. -->
 	<logger name="cz.vutbr.fit.interlockSim.dispatcher" level="INFO"/>
+	<!-- The dispatcher's route requests and releases are logged by this shared core helper (Issue #960). -->
+	<logger name="cz.vutbr.fit.interlockSim.sim.ToolDrivenDecisions" level="INFO"/>
 
 	<!-- End-of-run summaries: planner totals, orphan reclamations, decision rate, run JSON path. -->
 	<logger name="cz.vutbr.fit.interlockSim.DispatcherRunSummaries" level="INFO"/>

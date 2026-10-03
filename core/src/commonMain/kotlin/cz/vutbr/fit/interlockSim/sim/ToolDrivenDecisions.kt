@@ -10,10 +10,42 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.RouteRelease
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val toolDrivenLogger = KotlinLogging.logger {}
+
+/**
+ * What the actuator answered when [applyToolDrivenToActuator] applied one of the four
+ * tool-driven [DispatchDecision] subtypes, handed to that function's `onOutcome` callback.
+ *
+ * The asynchronous applier (`:dispatcher-agent`'s `DispatchDecisionApplier`) maps it to its own
+ * observation outcome (`AppliedOutcome`), which `:core` cannot name — hence this core-level type.
+ *
+ * @since Issue #960
+ */
+sealed interface ToolDrivenOutcome {
+	/** [DispatchDecision.SetSignalAspect]: [applied] is the [NetworkActuatorPort.setSignalAspect] result. */
+	data class SignalSet(
+		val applied: Boolean
+	) : ToolDrivenOutcome
+
+	/** [DispatchDecision.SetSwitchPosition]: [applied] is the [NetworkActuatorPort.setSwitchPosition] result. */
+	data class SwitchSet(
+		val applied: Boolean
+	) : ToolDrivenOutcome
+
+	/** [DispatchDecision.ReleaseRoute]: the [NetworkActuatorPort.releaseRouteDetailed] result. */
+	data class RouteReleased(
+		val release: RouteRelease
+	) : ToolDrivenOutcome
+
+	/** [DispatchDecision.RequestRoute]: the [NetworkActuatorPort.requestRoute] result. */
+	data class RouteRequested(
+		val result: RouteRequestResult
+	) : ToolDrivenOutcome
+}
 
 /**
  * Applies one of the four SP1.7 tool-driven [DispatchDecision] subtypes
@@ -51,12 +83,17 @@ private val toolDrivenLogger = KotlinLogging.logger {}
  * @param logPrefix Short prefix identifying the call site, included in every log line
  *   so the two consumers are distinguishable in logs (e.g. `"wireSynchronousDispatcher"`,
  *   `"DispatchDecisionApplier"`).
+ * @param onOutcome Receives what the actuator answered, exactly once per applied decision and
+ *   after the decision's log lines; never called for the non-tool subtypes, which throw. The
+ *   synchronous wiring keeps the no-op default; the asynchronous applier builds its
+ *   observation outcome from it (Issue #960).
  * @since Issue #774 (SP1.7 — Goal 10 threading contract); helper extracted to remove
  *   the cross-path duplication surfaced by the SP1.7 code review.
  */
 fun DispatchDecision.applyToolDrivenToActuator(
 	actuator: NetworkActuatorPort,
-	logPrefix: String
+	logPrefix: String,
+	onOutcome: (ToolDrivenOutcome) -> Unit = {}
 ) {
 	// Exhaustive `when` *expression* over the sealed DispatchDecision — the compiler
 	// enforces coverage, so adding a future subtype fails to compile here until it
@@ -75,6 +112,7 @@ fun DispatchDecision.applyToolDrivenToActuator(
 						"signal $signal not applied"
 				}
 			}
+			onOutcome(ToolDrivenOutcome.SignalSet(success))
 		}
 		is DispatchDecision.SetSwitchPosition -> {
 			toolDrivenLogger.debug {
@@ -88,6 +126,7 @@ fun DispatchDecision.applyToolDrivenToActuator(
 						"position $position not applied"
 				}
 			}
+			onOutcome(ToolDrivenOutcome.SwitchSet(success))
 		}
 		is DispatchDecision.ReleaseRoute -> {
 			toolDrivenLogger.debug {
@@ -107,13 +146,14 @@ fun DispatchDecision.applyToolDrivenToActuator(
 					"$logPrefix: ReleaseRoute train '$trainName' held no reservation (no-op)"
 				}
 			}
+			onOutcome(ToolDrivenOutcome.RouteReleased(release))
 		}
 		is DispatchDecision.RequestRoute -> {
 			toolDrivenLogger.debug {
 				"$logPrefix: applying RequestRoute trainName=$trainName, from=$fromEndpointName, to=$toEndpointName" +
 					rationale.toRationaleLogSuffix()
 			}
-			return requestRouteAndLog(actuator, logPrefix)
+			onOutcome(ToolDrivenOutcome.RouteRequested(requestRouteAndLog(actuator, logPrefix)))
 		}
 		DispatchDecision.NoAction,
 		is DispatchDecision.ApproveTrain,
@@ -127,25 +167,24 @@ fun DispatchDecision.applyToolDrivenToActuator(
 }
 
 /**
- * Sends this RequestRoute through [actuator] and logs the result. Named for the side effect
- * (review thread on PR #1082): the old name `nothing` read like a no-op, but this helper does
- * perform the route request.
+ * Sends this RequestRoute through [actuator], logs the result and returns it. Named for the side
+ * effect (review thread on PR #1082): the old name `nothing` read like a no-op, but this helper
+ * does perform the route request.
  */
 private fun DispatchDecision.RequestRoute.requestRouteAndLog(
 	actuator: NetworkActuatorPort,
 	logPrefix: String
-) {
-	// Exhaustive `when` over the sealed RouteRequestResult — returning it forces the
-	// compiler to enforce coverage (matches the pattern in DefaultNetworkActuatorPort).
+): RouteRequestResult {
+	val result = actuator.requestRoute(trainName, fromEndpointName, toEndpointName)
+	// Exhaustive `when` over the sealed RouteRequestResult — the compiler enforces coverage,
+	// so a future subtype fails to compile here until it is handled.
 	//
 	// Design note: a successful RequestRoute does NOT bump the block-transition counter
 	// (unlike ReservePath, whose `Reserved` branch calls incrementBlockTransition /
 	// onBlockTransition at the call site). The counter is test-observability only (#365);
 	// trains navigate the reserved route via PathReservationRegistry, not the counter.
 	// See DispatchDecision.RequestRoute KDoc for the full rationale.
-	when (
-		val result = actuator.requestRoute(trainName, fromEndpointName, toEndpointName)
-	) {
+	when (result) {
 		is RouteRequestResult.Reserved ->
 			toolDrivenLogger.debug {
 				"$logPrefix: RequestRoute reserved ${result.blocksCount} block(s) for $trainName"
@@ -182,7 +221,8 @@ private fun DispatchDecision.RequestRoute.requestRouteAndLog(
 		is RouteRequestResult.ConditionFailed ->
 			toolDrivenLogger.warn {
 				"$logPrefix: RequestRoute four-condition refusal for $trainName " +
-					"(${if (result.retryable) "transient" else "permanent"}): ${result.reason}"
+					"($fromEndpointName → $toEndpointName${if (result.retryable) ", transient" else ", permanent"}): " +
+					result.reason
 			}
 
 		is RouteRequestResult.GeometricallyImpossible ->
@@ -192,7 +232,9 @@ private fun DispatchDecision.RequestRoute.requestRouteAndLog(
 
 		is RouteRequestResult.DivergesFromHeldRoute ->
 			toolDrivenLogger.warn {
-				"$logPrefix: RequestRoute diverges from the held route for $trainName — ${result.reason}"
+				"$logPrefix: RequestRoute diverges from the held route for $trainName " +
+					"(held target ${result.heldTarget}) — ${result.reason}"
 			}
 	}
+	return result
 }

@@ -16,14 +16,17 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeSink
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase
 import cz.vutbr.fit.interlockSim.dispatcher.planner.AuthoredAction
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.RouteRelease
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatchDecisionKind
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListener
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.sim.ToolDrivenOutcome
 import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
 import cz.vutbr.fit.interlockSim.sim.toRationaleLogSuffix
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -224,6 +227,9 @@ class DispatchDecisionApplier(
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/** Log prefix this applier passes to the shared [applyToolDrivenToActuator] helper. */
+		private const val TOOL_DRIVEN_LOG_PREFIX = "DispatchDecisionApplier"
 	}
 
 	/**
@@ -515,13 +521,13 @@ class DispatchDecisionApplier(
 				ApplyResult(true)
 			}
 			// ── Tool-driven actuator subtypes ─────────────────────────────────────
-			// SetSignalAspect and SetSwitchPosition still delegate to the shared helper in :core
-			// (no outcome type defined for them). ReleaseRoute and RequestRoute are handled
-			// directly here so the outcome can be captured and published without touching
-			// :core's applyToolDrivenToActuator (zero :core changes).
+			// All four go through the shared helper in :core. SetSignalAspect and SetSwitchPosition
+			// publish no outcome (no AppliedOutcome is defined for them); ReleaseRoute and
+			// RequestRoute map the helper's reported ToolDrivenOutcome to an AppliedOutcome
+			// (Issue #960).
 			is DispatchDecision.SetSignalAspect,
 			is DispatchDecision.SetSwitchPosition -> {
-				decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
+				decision.applyToolDrivenToActuator(networkActuator, TOOL_DRIVEN_LOG_PREFIX)
 				ApplyResult(true)
 			}
 			is DispatchDecision.ReleaseRoute -> {
@@ -740,37 +746,20 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * Applies [decision] via [NetworkActuatorPort.releaseRoute] and publishes
-	 * an [AppliedOutcome.Released] when a [correlation] is available.
-	 *
-	 * Inlined from [cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator] so the outcome can
-	 * be captured without modifying `:core`. Logging is identical to the shared helper.
+	 * Applies [decision] through the shared [applyToolDrivenToActuator] helper (which calls
+	 * [NetworkActuatorPort.releaseRouteDetailed] and logs) and publishes an
+	 * [AppliedOutcome.Released] built from the reported [RouteRelease] when a [correlation] is
+	 * available.
 	 */
 	private fun applyReleaseRoute(
 		decision: DispatchDecision.ReleaseRoute,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
-		logger.debug {
-			"DispatchDecisionApplier: applying ReleaseRoute trainName=${decision.trainName}" +
-				decision.rationale.toRationaleLogSuffix()
-		}
-		val release = networkActuator.releaseRouteDetailed(decision.trainName)
-		val released = release.anyReleased
-		if (release.deferred) {
-			logger.info {
-				"DispatchDecisionApplier: ReleaseRoute train '${decision.trainName}' only partly released -- " +
-					"approach locking kept ${release.deferredBlockIds.joinToString(", ")} reserved (Issue #1050)"
-			}
-		}
-		if (!released) {
-			logger.debug {
-				"DispatchDecisionApplier: ReleaseRoute train '${decision.trainName}' held no reservation (no-op)"
-			}
-		}
+		val release = applyThroughSharedHelper<ToolDrivenOutcome.RouteReleased>(decision).release
 		publishOutcome(correlation) {
 			AppliedOutcome.Released(
 				trainId = decision.trainName,
-				anyReleased = released,
+				anyReleased = release.anyReleased,
 				deferredBlockIds = release.deferredBlockIds,
 				id = it.id,
 				tickIndex = it.tickIndex
@@ -779,12 +768,25 @@ class DispatchDecisionApplier(
 	}
 
 	/**
-	 * Applies [decision] via [NetworkActuatorPort.requestRoute] and publishes
-	 * an [AppliedOutcome] subtype matching the [RouteRequestResult] when a [correlation] is
-	 * available.
+	 * Applies the tool-driven [decision] through [applyToolDrivenToActuator] — the single
+	 * source of its actuator call and logging — and returns the [ToolDrivenOutcome] the helper
+	 * reported, which must be a [T] for this decision subtype.
 	 *
-	 * Inlined from [cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator] so the outcome can
-	 * be captured without modifying `:core`. Logging is identical to the shared helper.
+	 * @since Issue #960
+	 */
+	private inline fun <reified T : ToolDrivenOutcome> applyThroughSharedHelper(decision: DispatchDecision): T {
+		var reported: ToolDrivenOutcome? = null
+		decision.applyToolDrivenToActuator(networkActuator, TOOL_DRIVEN_LOG_PREFIX) { reported = it }
+		val outcome = reported
+		check(outcome is T) { "applyToolDrivenToActuator reported $outcome for $decision" }
+		return outcome
+	}
+
+	/**
+	 * Applies [decision] through the shared [applyToolDrivenToActuator] helper (which calls
+	 * [NetworkActuatorPort.requestRoute] once and logs the result) and publishes an
+	 * [AppliedOutcome] subtype matching the reported [RouteRequestResult] when a [correlation] is
+	 * available.
 	 *
 	 * ## Duplicate-suppression guard
 	 *
@@ -811,27 +813,12 @@ class DispatchDecisionApplier(
 			}
 			return null
 		}
-		logger.debug {
-			"DispatchDecisionApplier: applying RequestRoute trainName=${decision.trainName}, " +
-				"from=${decision.fromEndpointName}, to=${decision.toEndpointName}${decision.rationale.toRationaleLogSuffix()}"
-		}
-		return when (
-			val result =
-				networkActuator.requestRoute(
-					decision.trainName,
-					decision.fromEndpointName,
-					decision.toEndpointName
-				)
-		) {
+		return when (val result = applyThroughSharedHelper<ToolDrivenOutcome.RouteRequested>(decision).result) {
 			is RouteRequestResult.Reserved -> {
 				handleRequestRouteReserved(decision, result, reservationKey, correlation)
 				null
 			}
 			is RouteRequestResult.AllPathsBlocked -> {
-				logger.warn {
-					"DispatchDecisionApplier: RequestRoute all paths blocked for ${decision.trainName} " +
-						"(${decision.fromEndpointName} → ${decision.toEndpointName}); attempted: ${result.attemptedPaths}"
-				}
 				publishOutcome(correlation) {
 					AppliedOutcome.Blocked(
 						trainId = decision.trainName,
@@ -845,10 +832,6 @@ class DispatchDecisionApplier(
 				ApplyFailureCode.ALL_PATHS_BLOCKED
 			}
 			is RouteRequestResult.Conflict -> {
-				logger.warn {
-					"DispatchDecisionApplier: RequestRoute conflict for ${decision.trainName} — " +
-						"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
-				}
 				publishOutcome(correlation) {
 					AppliedOutcome.Conflicted(
 						trainId = decision.trainName,
@@ -863,10 +846,6 @@ class DispatchDecisionApplier(
 				ApplyFailureCode.CONFLICT
 			}
 			is RouteRequestResult.NoRouteExists -> {
-				logger.warn {
-					"DispatchDecisionApplier: RequestRoute no route exists " +
-						"${decision.fromEndpointName} → ${decision.toEndpointName} for ${decision.trainName}"
-				}
 				publishOutcome(correlation) {
 					AppliedOutcome.NoRoute(
 						trainId = decision.trainName,
@@ -916,10 +895,6 @@ class DispatchDecisionApplier(
 		result: RouteRequestResult.UnresolvedEndpoint,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
-		logger.warn {
-			"DispatchDecisionApplier: RequestRoute unresolved endpoint '${result.endpointName}' for " +
-				"${decision.trainName} (${decision.fromEndpointName} → ${decision.toEndpointName})"
-		}
 		publishOutcome(correlation) {
 			AppliedOutcome.UnresolvedEndpoint(
 				trainId = decision.trainName,
@@ -946,10 +921,6 @@ class DispatchDecisionApplier(
 		result: RouteRequestResult.OriginNotContiguous,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
-		logger.warn {
-			"DispatchDecisionApplier: RequestRoute origin not contiguous for " +
-				"${decision.trainName}: ${result.reason}"
-		}
 		publishOutcome(correlation) {
 			AppliedOutcome.OriginNotContiguous(
 				trainId = decision.trainName,
@@ -977,12 +948,6 @@ class DispatchDecisionApplier(
 		result: RouteRequestResult.ConditionFailed,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
-		logger.warn {
-			"DispatchDecisionApplier: RequestRoute four-condition refusal for " +
-				"${decision.trainName} (${decision.fromEndpointName} → " +
-				"${decision.toEndpointName}${if (result.retryable) ", transient" else ", permanent"}): " +
-				result.reason
-		}
 		publishOutcome(correlation) {
 			AppliedOutcome.ConditionFailed(
 				trainId = decision.trainName,
@@ -1011,10 +976,6 @@ class DispatchDecisionApplier(
 		result: RouteRequestResult.GeometricallyImpossible,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
-		logger.warn {
-			"DispatchDecisionApplier: RequestRoute geometrically impossible for " +
-				"${decision.trainName}: ${result.reason}"
-		}
 		publishOutcome(correlation) {
 			AppliedOutcome.GeometricallyImpossible(
 				trainId = decision.trainName,
@@ -1042,10 +1003,6 @@ class DispatchDecisionApplier(
 		result: RouteRequestResult.DivergesFromHeldRoute,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
-		logger.warn {
-			"DispatchDecisionApplier: RequestRoute diverges from the held route for " +
-				"${decision.trainName} (held target ${result.heldTarget}): ${result.reason}"
-		}
 		publishOutcome(correlation) {
 			AppliedOutcome.DivergesFromHeldRoute(
 				trainId = decision.trainName,
@@ -1071,9 +1028,6 @@ class DispatchDecisionApplier(
 		reservationKey: ReservationKey,
 		correlation: CommandCorrelationMap.CommandAndTick?
 	) {
-		logger.debug {
-			"DispatchDecisionApplier: RequestRoute reserved ${result.blocksCount} block(s) for ${decision.trainName}"
-		}
 		appliedRequestRoutes.add(reservationKey)
 		onBlockTransition(decision.trainName)
 		publishOutcome(correlation) {
@@ -1125,41 +1079,22 @@ class DispatchDecisionApplier(
  * Returns the tool name for this decision type, used in
  * [AppliedOutcome.DroppedInvalid.commandType] to identify which tool was attempted.
  *
- * Top-level `internal` so exhaustive-branch coverage can be asserted directly by tests
- * without constructing a [DispatchDecisionApplier] — the function is a pure projection of
- * the sealed [DispatchDecision] type and references no applier state.
+ * Top-level `internal` so the mapping can be asserted directly by tests without constructing
+ * a [DispatchDecisionApplier]. Reads [DispatchDecisionKind.commandType] since Issue #969.
  */
-internal fun DispatchDecision.commandTypeName(): String =
-	when (this) {
-		is DispatchDecision.RequestRoute -> "request_route"
-		// The LLM-facing tool name is `cancel_route` (see CancelRouteTool). This projection
-		// feeds AppliedOutcome.DroppedInvalid.commandType, which both renderers emit
-		// verbatim to the model, so it must speak the current tool name — not the retired
-		// `release_route`.
-		is DispatchDecision.ReleaseRoute -> "cancel_route"
-		is DispatchDecision.ApproveTrain -> "approve_train"
-		is DispatchDecision.ReservePath -> "reserve_path"
-		is DispatchDecision.HoldTrain -> "hold_train"
-		is DispatchDecision.SetSignalAspect -> "set_signal_aspect"
-		is DispatchDecision.SetSwitchPosition -> "set_switch_position"
-		DispatchDecision.NoAction -> "no_action"
-	}
+internal fun DispatchDecision.commandTypeName(): String = kind.commandType
 
 /**
  * Returns the train identifier carried by this decision, or an empty string when no train
- * identifier is applicable (e.g. [DispatchDecision.NoAction]).
+ * identifier is applicable (e.g. [DispatchDecision.NoAction]). Reads
+ * [DispatchDecision.trainName] since Issue #969, except for [DispatchDecision.SetSignalAspect].
  *
  * Top-level `internal` for the same reason as [commandTypeName] — pure projection, no
  * applier state, exhaustively testable.
  */
 internal fun DispatchDecision.extractTrainId(): String =
-	when (this) {
-		is DispatchDecision.RequestRoute -> trainName
-		is DispatchDecision.ReleaseRoute -> trainName
-		is DispatchDecision.ApproveTrain -> trainId
-		is DispatchDecision.ReservePath -> trainId
-		is DispatchDecision.HoldTrain -> trainId
-		is DispatchDecision.SetSignalAspect -> ""
-		is DispatchDecision.SetSwitchPosition -> ""
-		DispatchDecision.NoAction -> ""
-	}
+	// SetSignalAspect keeps the empty identifier it had before #969 even when it carries a
+	// trainName: the value reaches the model through AppliedOutcome.DroppedInvalid, and the
+	// trainName on SetSignalAspect is attribution for the reservation tracker, not the
+	// command's subject. Changing it would change what the agent is told.
+	if (kind == DispatchDecisionKind.SET_SIGNAL_ASPECT) "" else trainName ?: ""

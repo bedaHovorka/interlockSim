@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -103,5 +104,22 @@ class ToolDrivenDecisionsReleaseRouteTest {
 			messages.none { "only partly released" in it },
 			"an empty deferral must not be logged as partial"
 		).isTrue()
+	}
+
+	@Test
+	fun `the RouteRelease is reported through onOutcome exactly once, deferred or not (Issue 960)`() {
+		listOf(
+			RouteRelease(anyReleased = true, deferredBlockIds = listOf("k1")),
+			RouteRelease(anyReleased = true, deferredBlockIds = emptyList()),
+			RouteRelease(anyReleased = false, deferredBlockIds = emptyList())
+		).forEach { release ->
+			val outcomes = mutableListOf<ToolDrivenOutcome>()
+
+			DispatchDecision.ReleaseRoute("T-087").applyToolDrivenToActuator(actuatorReturning(release), "unit-test") {
+				outcomes += it
+			}
+
+			assertThat(outcomes).isEqualTo(listOf<ToolDrivenOutcome>(ToolDrivenOutcome.RouteReleased(release)))
+		}
 	}
 }
