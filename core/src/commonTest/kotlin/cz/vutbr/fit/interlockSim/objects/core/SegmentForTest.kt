@@ -62,6 +62,14 @@ class SegmentForTest {
 		}
 	}
 
+	@Test
+	fun `segmentFor maps extreme magnitudes by sign`() {
+		assertThat(segmentFor(Int.MAX_VALUE, Int.MIN_VALUE)).isEqualTo(Segment.E)
+		assertThat(segmentFor(Int.MIN_VALUE, 0)).isEqualTo(Segment.A)
+		assertThat(segmentFor(0, Int.MAX_VALUE)).isEqualTo(Segment.H)
+		assertThat(segmentFor(Int.MIN_VALUE, Int.MIN_VALUE)).isEqualTo(Segment.B)
+	}
+
 	// Deliberately kept alongside the jvmTest round-trip in CellTest: this commonTest
 	// copy also exercises the mapping on linuxX64, where jvmTest never runs.
 	@Test

@@ -145,6 +145,22 @@ fun d2r(d: Int): Float = (d + 1) * 0.5f
 fun r2d(r: Float): Int = (2 * r - 1).toInt()
 
 /**
+ * Segment for each (sign of dx, sign of dy) pair. The centre pair `0 to 0` has no segment and is
+ * deliberately absent, so a lookup yields `null` for it.
+ */
+private val SEGMENT_BY_SIGNS: Map<Pair<Int, Int>, Cell.Segment> =
+	mapOf(
+		(-1 to -1) to Cell.Segment.B,
+		(-1 to 0) to Cell.Segment.A,
+		(-1 to 1) to Cell.Segment.D,
+		(0 to -1) to Cell.Segment.C,
+		(0 to 1) to Cell.Segment.H,
+		(1 to -1) to Cell.Segment.E,
+		(1 to 0) to Cell.Segment.F,
+		(1 to 1) to Cell.Segment.G
+	)
+
+/**
  * This is from d-coordinates conversion
  * @param dx
  * @param dy
@@ -153,19 +169,7 @@ fun r2d(r: Float): Int = (2 * r - 1).toInt()
 fun segmentFor(
 	dx: Int,
 	dy: Int
-): Cell.Segment? =
-	when (dx.sign to dy.sign) {
-		-1 to -1 -> Cell.Segment.B
-		-1 to 0 -> Cell.Segment.A
-		-1 to 1 -> Cell.Segment.D
-		0 to -1 -> Cell.Segment.C
-		0 to 0 -> null
-		0 to 1 -> Cell.Segment.H
-		1 to -1 -> Cell.Segment.E
-		1 to 0 -> Cell.Segment.F
-		1 to 1 -> Cell.Segment.G
-		else -> null // unreachable: Int.sign is -1, 0, or 1
-	}
+): Cell.Segment? = SEGMENT_BY_SIGNS[dx.sign to dy.sign]
 
 /**
  * if segments can consist in regular cell
