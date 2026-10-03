@@ -321,8 +321,8 @@ class TrainBehaviorTest : KoinTestBase() {
 			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
-			// Engine.AccelerationStopCondition checks:
-			// stopTest.condition(targetSpeed, velocity)
+			// Engine's leg waits end on AccelerationStopTest.margin(targetSpeed, velocity) <= 0,
+			// the margin form of stopTest.condition(targetSpeed, velocity)
 			// For deceleration: targetSpeed ≥ velocity
 			// When velocity reaches targetSpeed, engine stops
 

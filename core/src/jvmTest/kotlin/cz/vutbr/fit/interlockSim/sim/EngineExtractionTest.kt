@@ -65,6 +65,27 @@ class EngineExtractionTest : KoinTestBase() {
 	}
 
 	/**
+	 * Issue #760: the crossing waits end on [AccelerationStopTest.margin] `<= 0`, so it must agree
+	 * with [AccelerationStopTest.condition] everywhere — including at equality, where both
+	 * inclusive comparisons hold and the margin is exactly zero.
+	 */
+	@Test
+	@DisplayName("AccelerationStopTest.margin is non-positive exactly when condition holds")
+	fun marginMirrorsCondition() {
+		val speeds = listOf(0.0, 1e-9, 5.0, 9.999999, 10.0, 10.000001, 20.0, 40.0)
+		for (test in AccelerationStopTest.entries) {
+			for (target in speeds) {
+				for (velocity in speeds) {
+					assertThat(
+						test.margin(target, velocity) <= 0.0,
+						name = "$test margin <= 0 for target $target, velocity $velocity"
+					).isEqualTo(test.condition(target, velocity))
+				}
+			}
+		}
+	}
+
+	/**
 	 * Locks the adapter design commit `5b6985b7` chose: [Train] does not implement [Engine.Host]
 	 * directly. [Engine.Host] is `internal`, so a public [Train] implementing it would have to
 	 * publish the kinematic [cz.ksimulantenbande.kdisco.Variable]s on its public API — see the

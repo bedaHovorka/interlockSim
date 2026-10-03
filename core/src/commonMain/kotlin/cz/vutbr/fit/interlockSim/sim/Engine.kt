@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.ksimulantenbande.kdisco.Condition
 import cz.ksimulantenbande.kdisco.Continuous
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Variable
@@ -105,12 +104,10 @@ internal class Engine(
 	 * @property runUpRate a constant acceleration for the leg in place of the braking law;
 	 *   `null` — every leg but an accelerating [resumeAtAspectCap] — keeps the law
 	 */
-	private inner class AccelerationStopCondition(
+	private class AccelerationStopCondition(
 		private val stopTest: AccelerationStopTest,
 		val runUpRate: Double? = null
-	) : Condition {
-		override fun test(): Boolean = !accelerate || stopTest.condition(targetSpeed, host.getVelocity())
-
+	) {
 		fun getStopTest(): AccelerationStopTest = stopTest
 	}
 
@@ -155,19 +152,12 @@ internal class Engine(
 	}
 
 	/**
-	 * The margin form of [test]'s own speed condition for the current leg: non-positive exactly
-	 * when [AccelerationStopTest.condition] holds for [targetSpeed] and the host's velocity
-	 * (Issue #760). `x - y <= 0` holds exactly when `x <= y`, and halving is exact, so the
-	 * crossing waits that use it end on the same predicate the old step polls tested.
+	 * [test]'s [AccelerationStopTest.margin] for the current leg's [targetSpeed] and the host's
+	 * velocity (Issue #760). It mirrors [AccelerationStopTest.condition]: the margin is
+	 * non-positive exactly when `condition()` is true, so the crossing waits that use it end on
+	 * the same predicate the old step polls tested.
 	 */
-	private fun speedMargin(test: AccelerationStopTest): Double {
-		val v = host.getVelocity()
-		return when (test) {
-			AccelerationStopTest.ACCELERATION_ENDED -> targetSpeed - v
-			AccelerationStopTest.DECELERATION_ENDED -> v - targetSpeed
-			AccelerationStopTest.TO_HALF_SPEED -> targetSpeed / 2.0 - v
-		}
-	}
+	private fun speedMargin(test: AccelerationStopTest): Double = test.margin(targetSpeed, host.getVelocity())
 
 	override suspend fun actions() {
 		while (true) {
@@ -706,4 +696,22 @@ internal enum class AccelerationStopTest(
 		targetSpeed: Double,
 		velocity: Double
 	): Boolean = if (isDecelerate()) targetSpeed >= velocity else targetSpeed <= velocity
+
+	/**
+	 * The margin form of [condition] (Issue #760): non-positive exactly when [condition] is true
+	 * for the same arguments. `x - y <= 0` holds exactly when `x <= y`, and halving is exact, so
+	 * a crossing wait on this margin ends on the predicate [condition] tests.
+	 *
+	 * @param targetSpeed commanded target
+	 * @param velocity current train velocity
+	 */
+	fun margin(
+		targetSpeed: Double,
+		velocity: Double
+	): Double =
+		when (this) {
+			ACCELERATION_ENDED -> targetSpeed - velocity
+			DECELERATION_ENDED -> velocity - targetSpeed
+			TO_HALF_SPEED -> targetSpeed / 2.0 - velocity
+		}
 }

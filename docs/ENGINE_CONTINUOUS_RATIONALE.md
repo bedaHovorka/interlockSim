@@ -129,7 +129,8 @@ snaps at the stand grows with the step. See the comment at `dtMax` in
 
 ## Non-goals
 
-- No change to `Engine`'s runtime behavior relative to the former `Motor`.
+- No change to `Engine`'s runtime behaviour from the #1059 rename itself; the wait
+  conversions (#1014, #760) are described under [Waits](#waits-issues-1014-and-760).
 - No new formulas, no change to kinematics.
 - No reopening of the kDisco-vs-DSOL-vs-Kalasim framework decision.
 
