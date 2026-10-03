@@ -410,6 +410,8 @@ class GridTransformerTest : CommonKoinTestBase() {
 	fun createDynamic_inSemaphoreIsChangeableAndOutSemaphoreIsConstantFree() {
 		val dynamic = GridTransformer.createDynamic(InOut("A", true, Cell.SpatialType.HORIZONTAL))
 
+		assertThat(dynamic.inSemaphore.signal).isEqualTo(Signal.STOP)
+
 		dynamic.inSemaphore.signal = Signal.FREE
 		dynamic.outSemaphore.signal = Signal.STOP
 
