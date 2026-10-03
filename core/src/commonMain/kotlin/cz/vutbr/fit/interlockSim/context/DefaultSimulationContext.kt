@@ -30,8 +30,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.OrientedNodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -955,7 +953,7 @@ open class DefaultSimulationContext(
 				when (cell) {
 					is InOut -> {
 						// Create and map InOut dynamic wrapper
-						val dynamic = createDynamic(cell)
+						val dynamic = GridTransformer.createDynamic(cell)
 						staticToDynamicMap[cell] = dynamic
 						// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
 						// These semaphores might be used in paths before they're encountered as separate cells
@@ -1474,12 +1472,6 @@ open class DefaultSimulationContext(
 			controller.pollStepTime()?.let { dt -> stepTimeTarget = t + dt }
 		}
 		return StepControlState(prevTime = t, stepTimeTarget = stepTimeTarget)
-	}
-
-	private fun createDynamic(i: InOut): DynamicInOut {
-		val inSemaphore = createDynamicInstance(i.inSemaphore)
-		val outSemaphore = createConstantInstance(i.outSemaphore, Signal.FREE)
-		return DynamicInOut(i, inSemaphore, outSemaphore)
 	}
 
 	/**
