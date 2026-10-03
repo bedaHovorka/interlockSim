@@ -296,7 +296,7 @@ class TrainFrontBoundaryStateTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("arrival at the destination InOut does not swap the entry end in place")
 	fun `published front state stays coherent after arrival`() {
 		// 4-block linear topology: A -> Sem1 -> Sem2 -> Sem3 -> B (4 x 100 m).
@@ -331,7 +331,7 @@ class TrainFrontBoundaryStateTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 45, unit = TimeUnit.SECONDS)
 	@DisplayName("incremental route reservation never swaps the entry end in place")
 	fun `published front state stays coherent across an incremental-reservation run`() {
 		val ctx = TestFixtures.newShuntingSimulationContext(initializeDynamicMapping = true).tracked()

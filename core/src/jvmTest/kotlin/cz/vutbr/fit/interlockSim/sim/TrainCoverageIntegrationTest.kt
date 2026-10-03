@@ -89,7 +89,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		@DisplayName("ShuntingLoop endTime=200 maximizes Front branch coverage")
-		@Timeout(value = 120, unit = SECONDS)
+		@Timeout(value = 10, unit = SECONDS)
 		fun extendedSimulationMaximizesFrontCoverage() {
 			val ctx = loadVyhybnaContext()
 
@@ -120,7 +120,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		@DisplayName("ShuntingLoop endTime=60 exercises basic Front paths")
-		@Timeout(value = 60, unit = SECONDS)
+		@Timeout(value = 10, unit = SECONDS)
 		fun shortSimulationExercisesBasicFrontPaths() {
 			val ctx = loadVyhybnaContext()
 
@@ -145,7 +145,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		@DisplayName("SimpleTestProcess exercises Front InOut entry path")
-		@Timeout(value = 60, unit = SECONDS)
+		@Timeout(value = 10, unit = SECONDS)
 		fun simpleLinearTopologyExercisesInOutEntryPath() {
 			val ctx = TestTopologies.simpleLinearPathSimulation()
 			context = ctx
@@ -194,7 +194,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		@DisplayName("LengthChecker.report() produces diagnostic output via reflection")
-		@Timeout(value = 60, unit = SECONDS)
+		@Timeout(value = 10, unit = SECONDS)
 		fun lengthCheckerReportProducesDiagnosticOutput() {
 			val ctx = loadVyhybnaContext()
 			val inOuts = ctx.getInOuts().toList()
@@ -227,7 +227,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		@DisplayName("LengthChecker.report() formats distances from active simulation")
-		@Timeout(value = 60, unit = SECONDS)
+		@Timeout(value = 10, unit = SECONDS)
 		fun lengthCheckerReportAfterSimulationRun() {
 			val ctx = TestTopologies.simpleLinearPathSimulation()
 			context = ctx
@@ -262,7 +262,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		@DisplayName("LengthChecker.check() exercised through simulation")
-		@Timeout(value = 60, unit = SECONDS)
+		@Timeout(value = 10, unit = SECONDS)
 		fun lengthCheckerCheckExercisedThroughSimulation() {
 			val ctx = loadVyhybnaContext()
 
@@ -277,7 +277,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		 */
 		@Test
 		@DisplayName("LengthChecker.report() returns same StringBuilder reference")
-		@Timeout(value = 30, unit = SECONDS)
+		@Timeout(value = 10, unit = SECONDS)
 		fun lengthCheckerReportReturnsSameReference() {
 			val ctx = loadVyhybnaContext()
 			val inOuts = ctx.getInOuts().toList()

@@ -113,7 +113,7 @@ class TrainFrontIdentityTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("identity matches the live getters through an arrival run")
 	fun `identity matches the live getters through an arrival run`() {
 		// 4-block linear topology: A -> Sem1 -> Sem2 -> Sem3 -> B (4 x 100 m).
@@ -132,7 +132,7 @@ class TrainFrontIdentityTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 45, unit = TimeUnit.SECONDS)
 	@DisplayName("identity matches the live getters through an incremental-reservation run")
 	fun `identity matches the live getters through an incremental-reservation run`() {
 		val ctx = TestFixtures.newShuntingSimulationContext(initializeDynamicMapping = true).tracked()

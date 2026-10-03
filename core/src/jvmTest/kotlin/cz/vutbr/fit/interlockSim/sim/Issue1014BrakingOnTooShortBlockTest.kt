@@ -181,7 +181,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	// ── Rung 1 ────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a block too short to brake from half speed is still braked within the bound")
 	fun shortBlockIsBrakedWithinTheDecelerationBound() {
 		val profile = runApproach("R1", SHORT_APPROACH, SHORT_TRAIN_LENGTH, SAMPLE_PERIOD)
@@ -191,7 +191,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	// ── Rung 2 ────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the shortest legal block is braked within the bound, not snapped to zero")
 	fun shortestLegalBlockIsBrakedWithinTheDecelerationBound() {
 		val profile = runApproach("R2", MIN_TRACK_LENGTH, SHORT_TRAIN_LENGTH, FINE_SAMPLE_PERIOD)
@@ -208,7 +208,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * that is already showing proceed.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an aspect clearing during the approach is run through, not braked up to")
 	fun aspectClearingDuringTheApproachIsRunThroughNotBrakedTo() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
@@ -264,7 +264,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * running through it.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an aspect clearing after the braking-room crossing is still run through")
 	fun aspectClearingAfterTheBrakingRoomCrossingIsStillRunThrough() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
@@ -317,7 +317,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * speed it actually permits.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an aspect clearing to a restrictive-but-allowing aspect resumes at its speed cap")
 	fun aspectClearingToARestrictiveButAllowingAspectRespectsItsSpeedCap() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
@@ -370,7 +370,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * 27.78 m/s (13.89 m/s), well above S30's 8.33 m/s permitted speed.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an aspect clearing to a restrictive-but-allowing aspect during phase 1 respects its speed cap")
 	fun aspectClearingToARestrictiveButAllowingAspectDuringPhaseOneRespectsItsSpeedCap() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)
@@ -428,7 +428,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * speed it has, and that is not what this rung is about.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an aspect turning restrictive again after a clear is braked to the stop line, not snapped")
 	fun aspectTurningRestrictiveAgainAfterAClearIsBrakedNotSnapped() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = RE_RESTRICTION_APPROACH)
@@ -507,7 +507,7 @@ class Issue1014BrakingOnTooShortBlockTest : KoinTestBase() {
 	 * which both versions have.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("terminating the engine mid-approach leaves no process parked in the wait")
 	fun terminatingTheEngineMidApproachLeavesNoProcessParkedInTheWait() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = SHORT_APPROACH)

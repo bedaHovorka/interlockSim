@@ -76,7 +76,7 @@ class MultiTrainLoopTest : KoinTestBase() {
 
 	/** Scenario 1: three trains injected sequentially all complete their journey. */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `three trains on linear track all enter and exit`() {
 		val ctx = loadLinearContext()
 		val process =
@@ -108,7 +108,7 @@ class MultiTrainLoopTest : KoinTestBase() {
 
 	/** Scenario 2: trains with fully overlapping paths queue safely and complete. */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `conflicting paths queue without collision`() {
 		val ctx = loadLinearContext()
 		val process =
@@ -141,7 +141,7 @@ class MultiTrainLoopTest : KoinTestBase() {
 
 	/** Scenario 3: Y-junction with two trains heading to different exits. */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	fun `two trains on Y junction reach different exits`() {
 		val ctx = loadYJunctionContext()
 
@@ -186,7 +186,7 @@ class MultiTrainLoopTest : KoinTestBase() {
 	 * external/manual wiring.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("MultiTrainLoop auto-registers a halt callback for each dynamically generated train")
 	fun `dynamically generated train has its halt callback auto-registered`() {
 		val ctx = loadLinearContext()

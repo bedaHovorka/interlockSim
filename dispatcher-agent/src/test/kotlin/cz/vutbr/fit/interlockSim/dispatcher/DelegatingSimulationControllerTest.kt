@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * @since Issue #564 (SP4.2 — Goal 10 close the loop)
  */
 @DisplayName("DelegatingSimulationController — late-bound agent-loop pacing")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class DelegatingSimulationControllerTest {
 	/** Recording [SimulationController] fake; configurable pause state and throttle behaviour. */
 	private class RecordingDelegate : SimulationController {

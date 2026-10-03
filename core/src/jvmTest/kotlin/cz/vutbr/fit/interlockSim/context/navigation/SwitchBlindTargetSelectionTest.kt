@@ -113,7 +113,7 @@ class SwitchBlindTargetSelectionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("occupied k1 does not steer the target to the free k2 — doB1 is falsely 'available'")
 	fun occupiedK1IsFalselyAvailableSoFreeK2IsNeverSelected() {
 		// Occupy ONLY the k1 block (doA1 → doB1, the single 100-unit track) directly at the

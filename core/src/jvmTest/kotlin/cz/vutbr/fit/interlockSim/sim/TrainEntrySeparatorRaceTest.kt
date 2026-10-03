@@ -77,7 +77,7 @@ class TrainEntrySeparatorRaceTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("trainEntrySeparator is always an end of frontSection while the train is running")
 	fun `trainEntrySeparator always matches an end of the front section`() {
 		val violations = mutableListOf<String>()

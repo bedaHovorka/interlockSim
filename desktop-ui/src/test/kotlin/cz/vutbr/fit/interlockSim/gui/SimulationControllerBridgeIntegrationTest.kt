@@ -58,7 +58,7 @@ class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("controller.setSpeed propagates to live ShuntingLoop while simulation runs")
 	fun controllerSetSpeedPropagatesToLiveShuntingLoop() {
 		val factory = get<SimulationContextFactory>()
@@ -99,7 +99,7 @@ class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed before start applies on start() to the real ShuntingLoop")
 	fun preStartSpeedAppliedToRealShuntingLoopOnStart() {
 		val factory = get<SimulationContextFactory>()

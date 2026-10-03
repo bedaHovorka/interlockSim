@@ -117,7 +117,7 @@ class EntryRouteLossAccountingTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 	@DisplayName("route hidden forever at the entry InOut: zero movement, zero exits, no termination")
 	fun trainThatNeverEnteredIsNeverCountedAsExited() {
 		val context = fixture.loadShuntingLoopContext().tracked()

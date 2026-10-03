@@ -82,7 +82,7 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("blocks already held from the same start survive a registry conflict on the extension")
 	fun alreadyHeldBlocksSurviveRegistryConflict() {
 		val train = "Train #1025"
@@ -164,7 +164,7 @@ class ReservePathConflictRollbackScopeTest : KoinTestBase() {
 	 * the registry still attributes it to the train: the WARN branch, and the divergence it names.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a conflict rollback that cancels a block still registered to the train names that divergence")
 	fun conflictRollbackNamesBlockStillRegisteredToTheCancellingTrain() {
 		val train = "Train #1025"

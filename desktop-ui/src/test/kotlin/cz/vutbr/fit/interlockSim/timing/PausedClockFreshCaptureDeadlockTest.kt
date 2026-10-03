@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicReference
  * @since Issue #849 (SP2c.26 — Goal 10 F1 paused-clock spike)
  */
 @DisplayName("F1 paused-clock spike — pause → emit → resume through DispatchTickLoop (#849)")
-@Timeout(60, unit = TimeUnit.SECONDS)
+@Timeout(30, unit = TimeUnit.SECONDS)
 class PausedClockFreshCaptureDeadlockTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC1: a paused emit window can never obtain a fresh sim-thread capture")

@@ -131,7 +131,7 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an accelerating resume reaches its cap half-way to the signal and coasts at it")
 	fun acceleratingResumeReachesItsCapHalfWayAndCoasts() {
 		val cap = Signal.S40.allowedSpeed()
@@ -175,7 +175,7 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a decelerating resume keeps the old law and reaches its cap at the signal")
 	fun deceleratingResumeReachesItsCapAtTheSignal() {
 		val cap = Signal.S30.allowedSpeed()

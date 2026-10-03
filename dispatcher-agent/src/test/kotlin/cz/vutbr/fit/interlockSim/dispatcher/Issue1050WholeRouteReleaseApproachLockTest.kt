@@ -75,7 +75,7 @@ class Issue1050WholeRouteReleaseApproachLockTest : DispatcherKoinTestBase() {
 	)
 
 	@Test
-	@Timeout(value = 3, unit = TimeUnit.MINUTES)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `releaseRoute at a proceed aspect defers the committed block and the train books it`() {
 		val context = TestFixtures.newShuntingSimulationContext().tracked()
 		val loop = prepareShuntingLoop(context, SIM_END_TIME)

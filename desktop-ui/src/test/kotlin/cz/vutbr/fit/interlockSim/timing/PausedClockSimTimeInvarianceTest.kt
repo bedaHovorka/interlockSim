@@ -57,7 +57,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #849 (SP2c.26 — Goal 10 F1 paused-clock spike)
  */
 @DisplayName("F1 paused-clock spike — simulation-clock freeze and pause latency (#849)")
-@Timeout(120, unit = TimeUnit.SECONDS)
+@Timeout(30, unit = TimeUnit.SECONDS)
 class PausedClockSimTimeInvarianceTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC2: the simulation clock is frozen while paused, and demonstrably advances when not")

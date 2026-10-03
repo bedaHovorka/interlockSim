@@ -96,7 +96,7 @@ class Issue1065RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a merge-abort candidate needing the OTHER position of a live switch is refused, not stolen")
 	fun mergeAbortCandidateDoesNotStealASwitchFromTheSurvivingRoute() {
 		val trainId = "train_1065_locked_switch"
@@ -131,7 +131,7 @@ class Issue1065RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a switch a train has PASSED (but not yet fully completed its journey) is reclaimed")
 	fun staleSwitchLockIsReclaimedOnceTheOwnerHasPassedItWithoutCompletingTheJourney() {
 		val trainId1 = "train_1065_passer"
@@ -181,7 +181,7 @@ class Issue1065RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a refused candidate's rollback does not unlock a switch owned by ANOTHER train")
 	fun refusedCandidateDoesNotUnlockAnotherTrainsSwitch() {
 		val trainId1 = "train_1065_foreign_owner"

@@ -40,7 +40,7 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("a run that reaches its end time reports COMPLETED")
 	fun completedRunReportsCompleted() {
 		val outcome = get<Main>().runExample(arrayOf("example", "shuntingLoop", "30"))
@@ -49,7 +49,7 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an unknown example name reports NOT_STARTED, which is not a deadlock")
 	fun unknownExampleReportsNotStarted() {
 		// Nothing ran, so this must not be reported as success — but it must not be reported as a
@@ -61,7 +61,7 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a missing end-time argument reports NOT_STARTED")
 	fun missingEndTimeReportsNotStarted() {
 		val outcome = get<Main>().runExample(arrayOf("example", "shuntingLoop"))

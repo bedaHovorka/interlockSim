@@ -87,7 +87,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	 * a real simulation run (i.e. the `beforeEvent` hook fires for every event).
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("throttle is called at least once per simulation run")
 	fun throttleCalledOncePerEvent() {
 		val controller = FakeSimulationController()
@@ -107,7 +107,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	 * previous event, so negative deltas must never appear.
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("all throttle deltas are non-negative")
 	fun throttleDeltaIsNonNegative() {
 		val controller = FakeSimulationController()
@@ -130,7 +130,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	 * `awaitCalls` must equal `throttleCalls`.
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("awaitIfPaused is called once per event (== throttleCalls when no step-time window)")
 	fun awaitIfPausedCalledOncePerEvent() {
 		val controller = FakeSimulationController()
@@ -157,7 +157,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	 * Expected: exactly 2 throttle calls and 2 awaitIfPaused calls.
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("one queued step-event allows exactly one extra event while paused")
 	fun stepEventAdvancesExactlyOneMoreEvent() {
 		// pauseAfterThrottleCalls=1: paused after the 1st throttle call

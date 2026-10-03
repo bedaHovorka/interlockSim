@@ -48,7 +48,7 @@ class BoundaryCrossingNavigationQueryTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `each crossing of a mid-leg switch queries navigation once`() {
 		val run = runBToA { null }
 
@@ -68,7 +68,7 @@ class BoundaryCrossingNavigationQueryTest : KoinTestBase() {
 	 * turns that busy loop into a failure instead of a hang.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 	fun `a carried ownership conflict is used once and the retry asks navigation fresh`() {
 		val baseline = runBToA { null }.queriesBySeparator.getValue(MID_LEG_SIGNAL)
 		val injected = AtomicInteger()

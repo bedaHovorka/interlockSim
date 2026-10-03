@@ -134,21 +134,21 @@ class SimulationSpeedIntegrationTest {
 	// ── 2. Pause/resume at different speeds ───────────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("pause and resume at 0.1x speed do not deadlock")
 	fun pauseResumeAt01xSpeed() {
 		verifyPauseResumeAtSpeed(0.1)
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("pause and resume at 1x speed do not deadlock")
 	fun pauseResumeAt1xSpeed() {
 		verifyPauseResumeAtSpeed(1.0)
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("pause and resume at 10x speed do not deadlock")
 	fun pauseResumeAt10xSpeed() {
 		verifyPauseResumeAtSpeed(10.0)
@@ -157,7 +157,7 @@ class SimulationSpeedIntegrationTest {
 	// ── 3. Multiple pause/resume cycles ──────────────────────────────────────
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("10 pause/resume cycles complete without deadlock")
 	fun multiplePauseResumeCycles() {
 		val simRunning = CountDownLatch(1)
@@ -260,7 +260,7 @@ class SimulationSpeedIntegrationTest {
 	// ── 6. Concurrent speed changes ───────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("concurrent speed changes from 4 threads cause no data races")
 	fun concurrentSpeedChangesFromMultipleThreads() {
 		val simRunning = CountDownLatch(1)
@@ -324,21 +324,21 @@ class SimulationSpeedIntegrationTest {
 	// ── 7. Stop at various progress points ───────────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stop at simulated 25% completion terminates cleanly")
 	fun stopAt25PercentProgress() {
 		verifyStopAfterIterations(25)
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stop at simulated 50% completion terminates cleanly")
 	fun stopAt50PercentProgress() {
 		verifyStopAfterIterations(50)
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stop at simulated 75% completion terminates cleanly")
 	fun stopAt75PercentProgress() {
 		verifyStopAfterIterations(75)
@@ -347,7 +347,7 @@ class SimulationSpeedIntegrationTest {
 	// ── 8. Speed changes from EDT ─────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("speed changes posted from EDT do not race with simulation thread")
 	fun speedChangesFromEdtNoRaceConditions() {
 		val simRunning = CountDownLatch(1)

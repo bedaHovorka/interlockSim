@@ -68,7 +68,7 @@ import java.util.concurrent.TimeUnit.SECONDS
  */
 @DisplayName("AbstractPath.setUpSemaphores Coverage (Issue #357)")
 @Tag("integration-test")
-@Timeout(30, unit = SECONDS)
+@Timeout(10, unit = SECONDS)
 class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()

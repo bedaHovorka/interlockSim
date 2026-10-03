@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit
  *   (SP0.7 — Goal 10)
  */
 @DisplayName("RuleBasedDispatcher — branch-level unit coverage")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class RuleBasedDispatcherTest {
 	// ── Test data builders ──────────────────────────────────────────────────
 

@@ -76,7 +76,7 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("PathCommandTranslator — SP2b.3 switch + signal command generation")
 @Tag("integration-test")
-@Timeout(60, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class PathCommandTranslatorTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val processFactory: SimulationProcessFactory by inject()

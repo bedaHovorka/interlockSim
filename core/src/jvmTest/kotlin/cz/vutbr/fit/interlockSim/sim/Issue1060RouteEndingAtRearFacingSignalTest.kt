@@ -58,7 +58,7 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the rule dispatcher extends the route from zB and the train leaves")
 	fun ruleDispatcherExtendsTheRouteAndTheTrainLeaves() {
 		val context = loadVyhybnaContext().tracked()

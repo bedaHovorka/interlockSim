@@ -78,7 +78,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the supervised driver loop is declared in the context scope")
 	fun driverLoopIsReachableFromTheScope() {
 		val context = createShuntingLoopAIContext()
@@ -87,7 +87,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the snapshot signal is declared in scope so coalesced ticks can be reported")
 	fun snapshotSignalIsReachableFromTheScope() {
 		val context = createShuntingLoopAIContext()
@@ -96,7 +96,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the per-tick control step signals the driver, and the signal counts the tick")
 	fun controlStepSignalsTheDriver() {
 		val context = createShuntingLoopAIContext()
@@ -110,7 +110,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	@DisplayName("a freshly built example has run no cycles and recorded no failures")
 	fun freshLoopHasCleanCounters() {
 		val context = createShuntingLoopAIContext()
@@ -132,7 +132,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	 * in `ExampleRegistry` reverts to that default and flips this test red.
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the driver's post-plan liveness probe is the loop's own flag (#1032)")
 	fun driverLivenessProbeIsWiredToTheLoop() {
 		val context = createShuntingLoopAIContext().tracked()

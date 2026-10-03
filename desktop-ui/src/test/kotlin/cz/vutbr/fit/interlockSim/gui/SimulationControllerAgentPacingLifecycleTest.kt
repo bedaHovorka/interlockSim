@@ -38,7 +38,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationC
 
 @Tag("integration-test")
 @DisplayName("SimulationController — agent-pacing delegate lifecycle (SP4.2, #564)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 	/**
 	 * Builds a real [DefaultSimulationContext] with a long-running [ShuntingLoop] main process,

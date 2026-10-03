@@ -69,7 +69,7 @@ class CollisionWarningSubscriptionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Listener registered before run() receives a manually emitted warning")
 	fun listenerBeforeRunReceivesManuallyEmittedWarning() {
 		val ctx = singleTrainContext()
@@ -94,7 +94,7 @@ class CollisionWarningSubscriptionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Listener registered after run() is silently ignored")
 	fun listenerAfterRunIsIgnored() {
 		val ctx = singleTrainContext()

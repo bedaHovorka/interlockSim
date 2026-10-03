@@ -76,7 +76,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a snapshot store is resolvable, so a finished run has somewhere to be written")
 	fun snapshotStoreIsBound() {
 		val context = createExample("createShuntingLoopAIExample", "shuntingLoopAI")
@@ -85,12 +85,12 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the AI example records under the LLM arm, not the hard-coded rule-based default")
 	fun aiExampleRecordsUnderTheLlmArm() = assertRecordsUnderLlmArm("createShuntingLoopAIExample")
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the GUI AI example records under the LLM arm, not the hard-coded rule-based default")
 	fun guiAiExampleRecordsUnderTheLlmArm() {
 		// Issue #928: createShuntingLoopAIGuiExample never declared the LLM_TOOL_CALLING recorder
@@ -101,7 +101,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	@DisplayName("the rule-based example still records under the rule-based arm")
 	fun ruleBasedExampleRecordsUnderTheRuleBasedArm() {
 		val context = createExample("createShuntingLoopExample", "shuntingLoop")
@@ -115,7 +115,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	 * (SP2c.22), and a shared instance would merge two runs' counters into one JSON.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("each context gets its own recorder with its own run id")
 	fun recordersAreIndependentPerContext() {
 		val first =

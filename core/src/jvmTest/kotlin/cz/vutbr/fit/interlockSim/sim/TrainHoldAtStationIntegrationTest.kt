@@ -127,7 +127,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("stationary train — dwell runs for the requested duration and clears the flag")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun dwellRunsForRequestedDurationAndClearsFlag() {
 		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()
@@ -174,7 +174,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("moving train — holdAtStation is rejected (it is a dwell timer, not a brake)")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun movingTrainIsRejected() {
 		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()
@@ -219,7 +219,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("second holdAtStation while already dwelling is rejected")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun doubleDwellIsRejected() {
 		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()
@@ -254,7 +254,7 @@ class TrainHoldAtStationIntegrationTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("non-positive dwell duration is rejected before any dwell is scheduled")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun nonPositiveDurationIsRejected() {
 		TestTopologies.simpleLinearPathSimulation().use { ctx ->
 			val events = ctx.collectTrainEvents()

@@ -57,7 +57,7 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("SP1.7 threading contract: actuator tools marshal via the SinkHolder queue off-thread")
 @Tag("integration-test")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(15, unit = TimeUnit.SECONDS)
 class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
 	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext().tracked()
 

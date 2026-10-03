@@ -60,7 +60,7 @@ class TrainKinematicSamplerContractTest : KoinTestBase() {
 		}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("cadence: one sample per period, from activation until the end time")
 	fun samplesArriveOnTheRequestedCadenceUntilTheEndTime() {
 		val (ctx, semaphore) = loadSemaphoreFixture()
@@ -96,7 +96,7 @@ class TrainKinematicSamplerContractTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("flip: the aspect is applied once on the first matching sample and never again")
 	fun aspectFlipOnceAppliesTheAspectExactlyOnce() {
 		val (ctx, semaphore) = loadSemaphoreFixture()

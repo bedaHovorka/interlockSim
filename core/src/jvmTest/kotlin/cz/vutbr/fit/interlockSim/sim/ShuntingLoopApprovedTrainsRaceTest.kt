@@ -71,7 +71,7 @@ class ShuntingLoopApprovedTrainsRaceTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.MINUTES)
+	@Timeout(value = 2, unit = TimeUnit.MINUTES)
 	@DisplayName("getApprovedTrains never tears while the simulation mutates the approved set")
 	fun `approved train reads are safe off the simulation thread`() {
 		val ctx: DefaultSimulationContext =

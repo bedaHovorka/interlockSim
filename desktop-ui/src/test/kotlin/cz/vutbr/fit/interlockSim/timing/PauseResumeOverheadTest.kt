@@ -24,7 +24,7 @@ import kotlin.math.roundToInt
 
 @Tag("integration-test")
 @DisplayName("F1 paused-clock spike — pause/resume overhead per tick (#849)")
-@Timeout(120, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class PauseResumeOverheadTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC3: the pause/resume control-primitive round trip costs under 1 ms at p99")

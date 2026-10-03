@@ -47,7 +47,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #806 (SP2b.6 follow-up — Goal 10)
  */
 @DisplayName("DispatchDecisionApplier + SemiAutoApprovalGateway wiring (Issue #806)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class DispatchDecisionApplierSemiAutoGatewayTest {
 	private lateinit var networkActuator: NetworkActuatorPort
 	private lateinit var trainLifecyclePort: TrainLifecyclePort

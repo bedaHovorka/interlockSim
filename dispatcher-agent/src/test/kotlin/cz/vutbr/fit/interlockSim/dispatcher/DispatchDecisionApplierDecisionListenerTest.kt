@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicReference
  * @since Issue #561 (SP2b.6 — Goal 10)
  */
 @DisplayName("DispatchDecisionApplier — onDecisionApplied observer hook (SP2b.6)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class DispatchDecisionApplierDecisionListenerTest {
 	private lateinit var networkActuator: NetworkActuatorPort
 	private val approvedTrains = mutableListOf<String>()

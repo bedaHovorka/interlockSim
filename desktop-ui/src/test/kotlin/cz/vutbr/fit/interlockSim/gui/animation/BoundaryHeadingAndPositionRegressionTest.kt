@@ -131,7 +131,7 @@ class BoundaryHeadingAndPositionRegressionTest : HeadingSamplerTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 45, unit = TimeUnit.SECONDS)
 	@DisplayName("the raw heading never reverses and the drawn position never jumps back")
 	fun `raw heading and drawn position stay coherent at every boundary`() {
 		val context = startSamplerContext()

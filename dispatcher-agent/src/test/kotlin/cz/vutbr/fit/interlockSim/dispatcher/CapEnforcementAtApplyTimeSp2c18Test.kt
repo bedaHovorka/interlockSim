@@ -58,7 +58,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * @since Issue #841 (SP2c.18 — Goal 10)
  */
 @DisplayName("SP2c.18 — apply-time cap enforcement for approve_train (#841)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class CapEnforcementAtApplyTimeSp2c18Test {
 	private lateinit var networkActuator: NetworkActuatorPort
 	private lateinit var correlationMap: CommandCorrelationMap

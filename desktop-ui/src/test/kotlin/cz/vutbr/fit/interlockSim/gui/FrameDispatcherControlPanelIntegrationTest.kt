@@ -114,7 +114,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	// ── Tests ─────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setContext(SimulationContext) shows the DispatcherControlPanel")
 	fun setContextShowsDispatcherControlPanel() {
 		val context = buildContext()
@@ -127,7 +127,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("startSimulation wires modeState + hub and enables the panel controls")
 	fun startSimulationWiresPanel() {
 		val context = buildContext()
@@ -148,7 +148,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("selecting MANUAL in the combo propagates to DispatcherModeState.setOverride (Critical 2)")
 	fun comboSelectionPropagatesToModeState() {
 		val context = buildContext()
@@ -172,7 +172,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("decision hub feeds an applied decision's rationale to the panel (Critical 1)")
 	fun decisionHubFeedsRationaleToPanel() {
 		val context = buildContext()
@@ -204,7 +204,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stopSimulation clears the panel mode state and disables the controls")
 	fun stopSimulationClearsPanel() {
 		val context = buildContext()
@@ -231,7 +231,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setContext(EditingContext) hides the panel and clears mode state")
 	fun setContextEditingHidesPanelAndClearsModeState() {
 		val context = buildContext()
@@ -252,7 +252,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("startSimulation installs an approver on SemiAutoApprovalGateway (Issue #806, SP2b.6 follow-up)")
 	fun startSimulationInstallsSemiAutoApprover() {
 		val context = buildContext()
@@ -280,7 +280,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stopSimulation detaches the SemiAutoApprovalGateway approver (Issue #806, SP2b.6 follow-up)")
 	fun stopSimulationDetachesSemiAutoApprover() {
 		val context = buildContext()

@@ -110,7 +110,7 @@ class Issue1066RegressionTest : KoinTestBase() {
 			?: throw IllegalStateException("No track section between $from and $to")
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("zA -> doB1 while the stored path ends at doB2: refused with DivergesFromHeldRoute, nothing mutated")
 	fun divergentCandidateIsRefusedWithoutMutation() {
 		// Given: the train stands at zA holding zA -> doB2 (stored PathInfo target = doB2).
@@ -153,7 +153,7 @@ class Issue1066RegressionTest : KoinTestBase() {
 	 * `doB1 -> B` is the real production shape — a train held at doB1 extending to the exit.
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(15, unit = TimeUnit.SECONDS)
 	@DisplayName("doB1 -> B while holding zA -> doB1: legitimate extension, reserved and merged")
 	fun legitimateExtensionFromHeldTargetIsNotRefused() {
 		// Given: the train holds the real main-leg route zA -> doB1 (old.target = doB1).
@@ -185,7 +185,7 @@ class Issue1066RegressionTest : KoinTestBase() {
 	 * verdict, not a retryable "all paths blocked".
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("reservePathToAnyNextSemaphore with every target divergent reports DivergesFromHeldRoute")
 	fun outerScanReportsDivergentWhenEveryTargetDiverges() {
 		// Given: the train stands at zA holding zA -> doB2 (branch), so old.target = doB2.

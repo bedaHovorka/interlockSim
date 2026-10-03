@@ -62,7 +62,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the sweeper is declared in the context scope so the run can report its counters")
 	fun sweeperIsReachableFromTheScope() {
 		val context = createShuntingLoopAIContext()
@@ -71,7 +71,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	@DisplayName("the per-tick control step drives a sweep")
 	fun controlStepDrivesASweep() {
 		val context = createShuntingLoopAIContext()
@@ -87,7 +87,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a freshly built network has nothing to reclaim")
 	fun freshNetworkReleasesNothing() {
 		val context = createShuntingLoopAIContext()
@@ -112,7 +112,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	 * decision) and `RegistryPartialRouteReleaserTest` (the interlocking safety).
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("the sweeper is built with a partial releaser so un-travelled tails can be reclaimed")
 	fun sweeperHasAPartialReleaser() {
 		val context = createShuntingLoopAIContext()

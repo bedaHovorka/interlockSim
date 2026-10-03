@@ -73,7 +73,7 @@ class StandingAtSeparatorPerceptionTest : KoinTestBase() {
 	)
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Perception reports zero metres to zB while the train stands at zB")
 	fun standingTrainReportsZeroDistanceToTheSeparator() {
 		val outcome = runScenario()
@@ -84,7 +84,7 @@ class StandingAtSeparatorPerceptionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("A train still running between separators keeps its positive distanceToSemaphore")
 	fun runningTrainKeepsItsPositiveDistanceToTheSemaphore() {
 		val outcome = runScenario()

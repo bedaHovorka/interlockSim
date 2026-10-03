@@ -262,7 +262,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 */
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("all speed multipliers produce identical simulation semantics (free-run)")
 	fun `all speed multipliers produce identical simulation semantics`() {
 		val baseline = runAtSpeed(speedMultiplier = 1.0)
@@ -301,7 +301,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 */
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("event sequences (timestamps + types) identical across all speed multipliers")
 	fun `event sequences identical across all speed multipliers`() {
 		val baseline = runAtSpeed(speedMultiplier = 1.0)
@@ -334,7 +334,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 */
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("RealTimeSynch at ${REALTIME_TEST_SPEED}x does not alter simulation semantics")
 	fun `RealTimeSynch at high speed does not alter simulation semantics`() {
 		val baseline = runAtSpeed(speedMultiplier = 1.0, enableRealTimeSync = false)
@@ -378,7 +378,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 */
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("physics invariants: v≥0 and a∈[MINIMAL_DECELERATION, MAXIMAL_ACCELERATION]")
 	fun `physics invariants hold across full simulation run`() {
 		val snapshot = runAtSpeed(speedMultiplier = 1.0)
@@ -425,7 +425,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 */
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("train front-positions within 1e-6 m tolerance across all speed multipliers")
 	fun `train final positions within tolerance across all speed multipliers`() {
 		val baseline = runAtSpeed(speedMultiplier = 1.0)
@@ -457,7 +457,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 */
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stochastic train generation (exp(43), seed=0) is reproducible across runs")
 	fun `stochastic train generation is reproducible`() {
 		val run1 = runAtSpeed(speedMultiplier = 1.0)
@@ -491,7 +491,7 @@ class SimulationSpeedGoldenTest : IntegrationKoinTestBase() {
 	 */
 	@Test
 	@Tag("integration-test")
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("SimulationRunner speed multiplier does not alter simulation output")
 	fun `SimulationRunner speed multiplier does not alter simulation output`() {
 		val baseline = runAtSpeed(speedMultiplier = 1.0)

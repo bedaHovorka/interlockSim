@@ -118,7 +118,7 @@ class EngineStandaloneTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("velocity integrates toward the commanded target without a Train")
 	fun velocityIntegratesTowardTargetWithoutTrain() {
 		val host = FakeEngineHost()
@@ -135,7 +135,7 @@ class EngineStandaloneTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("acceleration respects MAXIMAL_TRAIN_ACCELERATION without a Train")
 	fun accelerationRespectsBoundWithoutTrain() {
 		val host = FakeEngineHost()

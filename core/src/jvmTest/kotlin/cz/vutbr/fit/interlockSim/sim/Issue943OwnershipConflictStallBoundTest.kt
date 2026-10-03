@@ -117,7 +117,7 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 	 *    origin bound ("No topological path from origin InOut").
 	 */
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `never-extended route fires errorStop after the wait horizon`() {
 		val context = loadVyhybnaContext()
 		assertThat(context.getInOuts()).isNotEmpty()
@@ -188,7 +188,7 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 	 *    from the mid-journey `"no route extension"` wording the test above asserts.
 	 */
 	@Test
-	@Timeout(value = 180, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `never-admitted origin route fires errorStop after the wait horizon`() {
 		val context = loadVyhybnaContext()
 		assertThat(context.getInOuts()).isNotEmpty()

@@ -105,7 +105,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	// ── startSimulation ───────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("startSimulation starts the simulation runner")
 	fun startSimulationStartsRunner() {
 		val runStarted = CountDownLatch(1)
@@ -131,7 +131,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	// ── Goal 9 SC3 + SC4: operator-Apply wiring ─────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("startSimulation wires onResolutionApplied to record operator choices in the scoped preference stores")
 	fun startSimulationWiresOnResolutionAppliedToScopedStores() {
 		val context = createMockShuntingContext()
@@ -181,7 +181,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	// ── stopSimulation ────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("stopSimulation stops a running simulation and marks as not running")
 	fun stopSimulationStopsRunner() {
 		val started = CountDownLatch(1)
@@ -209,7 +209,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	// ── setContext while running ──────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setContext while simulation is running stops the previous simulation")
 	fun setContextWhileRunningStopsPreviousSimulation() {
 		val context1 = createMockShuntingContext()

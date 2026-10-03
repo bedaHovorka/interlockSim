@@ -83,7 +83,7 @@ import java.util.concurrent.TimeUnit
  */
 @Tag("integration-test")
 @DisplayName("F1 paused-clock spike — headless pacing feasibility, risk R8 (#849)")
-@Timeout(180, unit = TimeUnit.SECONDS)
+@Timeout(60, unit = TimeUnit.SECONDS)
 class HeadlessPacingFeasibilityTest : IntegrationKoinTestBase() {
 	/** Minimal async planner: only [PlannerCapabilities.isAsynchronous] matters to the guard. */
 	private class AsyncProbePlanner : DispatcherPlanner {

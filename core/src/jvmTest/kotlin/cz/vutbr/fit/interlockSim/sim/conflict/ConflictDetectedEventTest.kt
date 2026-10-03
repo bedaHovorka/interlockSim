@@ -71,7 +71,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	 *   reservation is accepted — trainB's attempt is rejected with [AllPathsBlocked]).
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Two trains competing for the same path emit ConflictDetectedEvent mid-run")
 	fun twoTrainsCompetingForSamePathEmitConflictDetectedEvent() {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
@@ -139,7 +139,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	 *   no [ConflictDetectedEvent] is emitted.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Non-conflicting reservations on different paths do not emit ConflictDetectedEvent")
 	fun nonConflictingReservationsDoNotEmitConflictDetectedEvent() {
 		// Use a linear path with a semaphore that allows passage; each train will
@@ -197,7 +197,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	 * - The simulation time is recorded at detection time (non-negative).
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("ConflictDetectedEvent payload contains both train IDs and contested block")
 	fun conflictDetectedEventPayloadIsComplete() {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
@@ -255,7 +255,7 @@ class ConflictDetectedEventTest : KoinTestBase() {
 	 * given (trainId, block) contention, not a per-tick heartbeat.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Repeated AllPathsBlocked retries on the same contention emit only one ConflictDetectedEvent")
 	fun repeatedRetriesOnSameContentionEmitOnlyOneConflictDetectedEvent() {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)

@@ -99,7 +99,7 @@ class SimulationControllerSpeedPropagationTest {
 		}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed propagates to a SpeedControllable main process while running")
 	fun setSpeedReachesSpeedControllable() {
 		val process = FakeSpeedyMainProcess()
@@ -119,7 +119,7 @@ class SimulationControllerSpeedPropagationTest {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed before start applies on next start (desiredSpeed propagation)")
 	fun preStartSpeedAppliedOnStart() {
 		val process = FakeSpeedyMainProcess()
@@ -138,7 +138,7 @@ class SimulationControllerSpeedPropagationTest {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed is a safe no-op when main process is not SpeedControllable")
 	fun nonControllableMainProcessNoOp() {
 		val ctx = mockContext(PlainMainProcess())

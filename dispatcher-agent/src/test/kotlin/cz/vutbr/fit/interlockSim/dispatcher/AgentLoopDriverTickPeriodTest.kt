@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #847 (SP2c.24 — parameter grid)
  */
 @DisplayName("SP2c.24 — AgentLoopDriver minimum cycle period (#847)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class AgentLoopDriverTickPeriodTest {
 	/**
 	 * Simulated time must advance between cycles, or the driver's polling-mode stale-tick guard

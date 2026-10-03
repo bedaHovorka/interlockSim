@@ -66,7 +66,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #732 (SP0.10 — Goal 10)
  */
 @DisplayName("AgentLoopDriver — paced sense-decide-act cycle")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class AgentLoopDriverTest {
 	private lateinit var perceptionPort: NetworkPerceptionPort
 	private lateinit var planner: DispatcherPlanner
