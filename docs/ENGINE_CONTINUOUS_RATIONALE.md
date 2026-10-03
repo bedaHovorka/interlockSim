@@ -49,8 +49,9 @@ Concretely, `Engine`:
 
 - overrides `derivatives()` — only `Continuous` invokes this hook;
 - calls `start()` when an acceleration phase begins, and `stop()` when it ends;
-- uses `waitUntil(condition)` on the discrete side of the same object to
-  interleave the integrator's activity with event-driven control flow.
+- uses `waitUntilCrossing(guard)` on the discrete side of the same object to
+  interleave the integrator's activity with event-driven control flow (see
+  [Waits](#waits-issues-1014-and-760) below).
 
 `LoopProcess` (or plain `Process`) cannot host any of this.
 
@@ -101,6 +102,31 @@ adapter, not `Train` itself, is the `Host`. This keeps `Variable` fields off
 the public Train API while allowing the propulsion process to live in its own
 file.
 
+## Waits (Issues #1014 and #760)
+
+Every wait inside an engine leg is a kDisco `waitUntilCrossing`, not a
+`waitUntil` poll: the approach phase since #1014, and the `accelerateTo`
+arm, the resume at the aspect's cap and the brake to the stop line since
+#760. Each guard is non-positive exactly when the old poll's predicate held
+(`-1.0` while the leg is cancelled, the leg's speed margin, and either the
+braking-room margin or a discrete aspect term), so kDisco root-finds the
+exit inside the integration step instead of noticing it at the step's end.
+The three #760 guards use tolerance `0.0`, so a stand still ends at exactly
+`v == 0.0`. `terminate()` reactivates the engine, which ends a crossing wait
+outright; a `waitUntil` re-parked there.
+
+The `Continuous` constraints above are unchanged: `derivatives()` still owns
+the kinematics, and `start()`/`stop()` still gate the integrator per phase.
+
+The generator's `dtMax` stays at 1 ms. #760 tried 1e-2, 1e-1 and 1.0 and kept
+1e-3, because a switch of the engine's law reaches the velocity integration
+one accepted step late (the `acceleration` variable is reset to its
+step-start value in every RK stage, and the velocity integration reads it
+before `Engine.derivatives()` rewrites it). At a braking onset that step
+overruns the braking point, and the residual speed the front's clearance gate
+snaps at the stand grows with the step. See the comment at `dtMax` in
+`Generator.kt`.
+
 ## Non-goals
 
 - No change to `Engine`'s runtime behavior relative to the former `Motor`.
@@ -117,4 +143,5 @@ file.
 - kDisco: <https://github.com/bedaHovorka/kdisco/>
 - Issue: [#373](https://github.com/bedaHovorka/interlockSim/issues/373)
 - Issue: [#1059](https://github.com/bedaHovorka/interlockSim/issues/1059)
+- Issue: [#760](https://github.com/bedaHovorka/interlockSim/issues/760)
 - PR: [#372](https://github.com/bedaHovorka/interlockSim/pull/372)

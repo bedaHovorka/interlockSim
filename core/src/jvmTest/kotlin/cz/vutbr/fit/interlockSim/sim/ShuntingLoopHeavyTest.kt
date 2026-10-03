@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit
  * **Expected outcome (verified by manual run):** with the fixed-seed train
  * generator (`Generator.random = Random(0L)`) and this branch's `kdisco 0.6.1-SNAPSHOT`
  * `waitCrossing`-based block-boundary detection, a 1024s run against vyhybna.xml
- * always produces exactly 28 trains entered and 14 fully exited.
+ * always produces exactly 28 trains entered and 27 fully exited.
  *
  * **These counts are cross-platform identical** and must match the native
  * [cz.vutbr.fit.interlockSim.fastsim.ShuntingLoopDeterminismTest] (same seed, same
@@ -75,7 +75,7 @@ class ShuntingLoopHeavyTest : KoinTestBase() {
 	 *
 	 * Acceptance criteria per run:
 	 * - Exactly 28 trains entered (generated into the queue).
-	 * - Exactly 14 trains fully exited the system.
+	 * - Exactly 27 trains fully exited the system.
 	 * - Run completes within the per-run timeout → no deadlock.
 	 */
 	@RepeatedTest(1000)
