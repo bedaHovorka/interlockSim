@@ -69,8 +69,12 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 
 		/**
 		 * Largest speed change the stand may end with when the braking room ran out during the
-		 * acceleration phase: the plain wait wakes at most one 1 ms accepted step late, which
-		 * leaves under 0.7 m/s at the worst line speed.
+		 * acceleration phase. The onset wait is root-found (Issue #760), but the velocity
+		 * integration sees the engine's switch to braking one accepted step late, so the train
+		 * overruns the braking point a little and the clearance gate ends the stand from a
+		 * residual speed: 0.46 m/s measured at the generator's 1 ms `dtMax` (0.65 m/s before
+		 * Issue #760, when the onset wait itself was a whole-step poll). The residual grows with
+		 * the step — 0.92 m/s at 10 ms — which is why `dtMax` stays at 1 ms.
 		 */
 		const val MAX_RESIDUAL_STEP_MPS = 1.0
 
@@ -173,9 +177,9 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 			.isLessThanOrEqualTo(ONSET_MARGIN_TOLERANCE_METERS)
 
 		// Every step of the stand is either braking at the bound or the final residual the front's
-		// clearance gate ends. The residual is the accepted one-step-late wake of the plain wait
-		// behind the OR-arm (kDisco `dtMax` = 1 ms; about 0.65 m/s measured at a 21 m/s onset), not
-		// the line-speed snap this issue fixes.
+		// clearance gate ends. The residual comes from the velocity integration taking up the
+		// braking one accepted step after the root-found onset (kDisco `dtMax` = 1 ms; about
+		// 0.46 m/s measured at a 21.6 m/s onset), not the line-speed snap this issue fixes.
 		val worstStep =
 			afterFlip
 				.zipWithNext()
