@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -109,8 +108,8 @@ abstract class CellRenderer(
 	}
 
 	/**
-	 * Draws a small padlock that marks a locked [railSwitch] (Issue #1008), in
-	 * [AnimationColors.SWITCH_LOCKED]; the caller's colour is restored.
+	 * Draws a small padlock in [color] that marks a locked [railSwitch] (Issue #1008); the simulation
+	 * renderers pass `AnimationColors.SWITCH_LOCKED`. The caller's colour is restored.
 	 *
 	 * The glyph is 5/16 of the cell square (5x5 px at 16 px): a body 3/16 high across the full
 	 * glyph width, under a shackle one pixel narrower on each side (a top bar and two legs).
@@ -124,7 +123,8 @@ abstract class CellRenderer(
 	 */
 	protected fun drawLockMark(
 		g: Graphics2D,
-		railSwitch: RailSwitch
+		railSwitch: RailSwitch,
+		color: Color
 	) {
 		val branch = railSwitch.getBranchSegments().first()
 		val vertical = railSwitch.getSpatialType() == Cell.SpatialType.VERTICAL
@@ -142,7 +142,7 @@ abstract class CellRenderer(
 		val bodyTop = y + glyphHeight - bodyHeight
 
 		val oldColor = g.color
-		g.color = AnimationColors.SWITCH_LOCKED
+		g.color = color
 		// Shackle: top bar and two legs, one unit narrower than the body on each side
 		g.fillRect(x + unit, y, glyphWidth - 2 * unit, unit)
 		g.fillRect(x + unit, y + unit, unit, bodyTop - y - unit)

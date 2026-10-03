@@ -25,7 +25,7 @@ import java.awt.Graphics2D
 /**
  * Cell renderer for simulation mode - renders railway elements with dynamic state
  *
- * This class is the static-state renderer: it draws each cell's current configuration with basic
+ * This class is the non-animated renderer: it draws each cell's current configuration with basic
  * dynamic state indicators. [AnimatedSimulationCellRenderer] adds the animated layer on top of it.
  */
 open class SimulationCellRenderer(
@@ -72,7 +72,7 @@ open class SimulationCellRenderer(
 		// Draw only the active direction to indicate switch position
 		drawSegments(g, *activeSegments.toTypedArray())
 
-		if (cell.locked) drawLockMark(g, cell.staticRef)
+		if (cell.locked) drawLockMark(g, cell.staticRef, AnimationColors.SWITCH_LOCKED)
 	}
 
 	override fun draw(
@@ -107,7 +107,7 @@ open class SimulationCellRenderer(
 		g: Graphics2D,
 		cell: DynamicInOut
 	) {
-		// A train waiting in the entry queue tints the cell; the connector is drawn on top
+		// A train queued at or entering through this InOut tints the cell; the connector is drawn on top
 		if (cell.occupied) drawOccupancyTint(g, AnimationColors.TRACK_OCCUPIED)
 
 		// Render base configuration from static reference

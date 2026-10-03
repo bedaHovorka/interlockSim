@@ -44,7 +44,7 @@ object AnimationColors {
 	/** Track block is reserved (path set up, waiting for train) - Standard yellow */
 	val TRACK_RESERVED: Color = Color(0xFF, 0xFF, 0x00)
 
-	/** Track block is occupied (train present) - Standard red */
+	/** Track block is occupied (train present) - Standard red; also the occupied-InOut cell tint (#1008) */
 	val TRACK_OCCUPIED: Color = Color(0xFF, 0x00, 0x00)
 
 	// ========== Semaphore Signal Colors ==========

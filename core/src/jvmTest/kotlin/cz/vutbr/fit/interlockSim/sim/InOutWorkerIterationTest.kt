@@ -14,6 +14,7 @@ import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
@@ -71,6 +72,10 @@ class InOutWorkerIterationTest : KoinTestBase() {
 	fun `iteration processes two sequential trains both completing successfully`() {
 		val ctx = loadLinearContext()
 		val entry = ctx.getInOuts().first { it.name == "A" }
+		// The renderer reads `occupied` from the grid cell, so the InOut listened on here must be that
+		// very object, not an equal wrapper (equals compares the wrapped static InOut).
+		val gridCell = ctx.getRailWayNetGrid().single { entry == it.value }.value
+		assertThat(gridCell).isSameInstanceAs(entry)
 		val trains = mutableListOf<Train>()
 		// Each occupied event paired with how many trains have already left the entry queue
 		// (a train leaves the queue only after its front has moved, so totalDistance > 0).
