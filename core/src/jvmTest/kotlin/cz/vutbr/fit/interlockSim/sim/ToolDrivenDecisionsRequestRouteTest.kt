@@ -112,6 +112,10 @@ class ToolDrivenDecisionsRequestRouteTest {
 				),
 				Arguments.of(RouteRequestResult.NoRouteExists("zA", "doB1"), "no route exists zA → doB1 for T-1082"),
 				Arguments.of(
+					RouteRequestResult.UnresolvedEndpoint("zA"),
+					"unresolved endpoint 'zA' for T-1082 (zA → doB1)"
+				),
+				Arguments.of(
 					RouteRequestResult.OriginNotContiguous("zA", "zA bounds no block the train holds"),
 					"origin not contiguous for T-1082 — zA bounds no block the train holds"
 				),

@@ -15,6 +15,7 @@ import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
@@ -127,6 +128,40 @@ class KoogDispatchAgentImplPromptTest {
 
 		assertThat(prompts).hasSize(1)
 		assertThat(prompts[0]).contains(reason)
+	}
+
+	/** Publishes [outcome], runs one decision and returns the single prompt the agent built. */
+	private fun promptFor(outcome: AppliedOutcome): String {
+		val channel = AppliedOutcomeChannel()
+		channel.publish(outcome)
+		val (agent, prompts) = agentCapturingPrompts(channel)
+		runBlocking { agent.decideAsync(emptyObservation()) }
+		assertThat(prompts).hasSize(1)
+		return prompts[0]
+	}
+
+	// ── #1007 (D9): GeometricallyImpossible is a permanent refusal, distinct from OriginNotContiguous ──
+
+	@Test
+	@DisplayName("GeometricallyImpossible renders as a permanent refusal, distinct from OriginNotContiguous")
+	fun geometricallyImpossibleRenderedApartFromOriginNotContiguous() {
+		val reason = "START signal zA faces away from InOut-B"
+
+		val impossible =
+			promptFor(AppliedOutcome.GeometricallyImpossible("T-1", "zA", "InOut-B", reason, CommandId(1L), 1L))
+		val notContiguous =
+			promptFor(AppliedOutcome.OriginNotContiguous("T-1", "zA", "InOut-B", reason, CommandId(1L), 1L))
+
+		assertThat(impossible).contains(
+			"- request_route for \"T-1\" (zA -> InOut-B): REFUSED — geometrically impossible, " +
+				"this origin can never reach that target: $reason"
+		)
+		assertThat(notContiguous).contains("(zA -> InOut-B): REFUSED — $reason")
+		assertThat(impossible).isNotEqualTo(notContiguous)
+		// Only the outcome line is checked, so unrelated prompt text mentioning "retry" cannot break this.
+		val impossibleLine = impossible.lines().single { it.contains("geometrically impossible") }
+		assertThat(impossibleLine.lowercase()).doesNotContain("retry")
+		assertThat(notContiguous.lowercase()).doesNotContain("retry")
 	}
 
 	// ── AC3: Conflicted omits the raw block id ─────────────────────────────────
@@ -343,5 +378,32 @@ class KoogDispatchAgentImplPromptTest {
 		assertThat(prompts).hasSize(1)
 		assertThat(prompts[0]).contains("REFUSED — the train's route already continues toward doB2")
 		assertThat(prompts[0]).contains("extend from doB2 or cancel the route first")
+	}
+
+	// ── Issue #973: UnresolvedEndpoint names the endpoint that does not exist ─────────────────
+
+	/**
+	 * A refusal that never reached pathfinding must name the endpoint the model has to correct,
+	 * not claim "no route exists between these endpoints" (which now means only that the topology
+	 * was searched and holds no path).
+	 */
+	@Test
+	@DisplayName("UnresolvedEndpoint names the endpoint that does not exist on this network")
+	fun unresolvedEndpointNamesTheMissingEndpoint() {
+		val prompt =
+			promptFor(
+				AppliedOutcome.UnresolvedEndpoint(
+					trainId = "T-1",
+					fromEndpointName = "Nope",
+					toEndpointName = "InOut-B",
+					endpointName = "Nope",
+					id = CommandId(1L),
+					tickIndex = 1L
+				)
+			)
+
+		assertThat(prompt).contains(
+			"request_route for \"T-1\" (Nope -> InOut-B): REFUSED — endpoint 'Nope' does not exist on this network."
+		)
 	}
 }

@@ -241,6 +241,17 @@ class DispatchDecisionApplierTest {
 		}
 
 		@Test
+		@DisplayName("UnresolvedEndpoint result does not throw")
+		fun unresolvedEndpoint_doesNotThrow() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.UnresolvedEndpoint(endpointName = "zA")
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
 		@DisplayName("GeometricallyImpossible result does not throw")
 		fun geometricallyImpossible_doesNotThrow() {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
@@ -259,9 +270,9 @@ class DispatchDecisionApplierTest {
 	/**
 	 * Regression coverage for a live-run incident (SP2b.9, Goal 10): an LLM-hallucinated
 	 * `request_route` endpoint name (`"kA"`/`"kB"` instead of the real `"A"`/`"B"`) made
-	 * [NetworkActuatorPort.requestRoute] throw [IllegalArgumentException] (its `requireEndpoint`
-	 * contract, correct for trusted internal callers but a routine external-input error for the
-	 * LLM tool path), and that exception propagated out of [DispatchDecisionApplier.onControlStep]
+	 * [NetworkActuatorPort.requestRoute] throw [IllegalArgumentException] (a routine
+	 * external-input error for the LLM tool path; since Issue #973 an unknown endpoint returns
+	 * `UnresolvedEndpoint` instead, and other argument checks still throw), and that exception propagated out of [DispatchDecisionApplier.onControlStep]
 	 * uncaught — killing the entire kDisco simulation thread. [onControlStep] must isolate each
 	 * decision's application so one bad LLM argument only drops that single decision.
 	 */
@@ -272,7 +283,7 @@ class DispatchDecisionApplierTest {
 		@DisplayName("RequestRoute with an unknown endpoint does not throw out of onControlStep")
 		fun requestRoute_unknownEndpoint_doesNotThrow() {
 			every { networkActuator.requestRoute(any(), any(), any()) } throws
-				IllegalArgumentException("Unknown endpoint 'kA' in network (known InOuts: [A, B])")
+				IllegalArgumentException("bad request argument 'kA'")
 			val (queue, applier) = makeApplier()
 			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "kA", "kB")))
 
@@ -294,7 +305,7 @@ class DispatchDecisionApplierTest {
 		@DisplayName("A decision after a failing one in the same batch is still applied")
 		fun subsequentDecisionInSameBatch_stillApplied() {
 			every { networkActuator.requestRoute(any(), any(), any()) } throws
-				IllegalArgumentException("Unknown endpoint 'kA' in network (known InOuts: [A, B])")
+				IllegalArgumentException("bad request argument 'kA'")
 			val (queue, applier) = makeApplier()
 			queue.postAll(
 				listOf(

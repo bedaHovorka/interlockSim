@@ -328,6 +328,9 @@ class KoogDispatchAgentImpl(
 	 *   [AppliedOutcome.OriginNotContiguous.reason] is carried through **verbatim** — it already
 	 *   names the offending origin and the legal alternatives, and paraphrasing it would drop
 	 *   exactly the information this block exists to surface.
+	 * - [AppliedOutcome.GeometricallyImpossible] is rendered apart from
+	 *   [AppliedOutcome.OriginNotContiguous] (a permanent refusal, #1007) with its reason verbatim,
+	 *   and neither rendering carries a retry hint (D9).
 	 * - [AppliedOutcome.Conflicted.blockName] is deliberately **not** rendered — no block id
 	 *   belongs next to train-facing context; only the conflicting train ([AppliedOutcome.Conflicted.existingOwner])
 	 *   is named.
@@ -372,6 +375,12 @@ class KoogDispatchAgentImpl(
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — no route exists between these endpoints."
 
+			// Issue #973: refused before pathfinding -- the topology was never searched, so name the
+			// endpoint the model has to correct instead of claiming no route exists.
+			is AppliedOutcome.UnresolvedEndpoint ->
+				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
+					"REFUSED — endpoint '${outcome.endpointName}' does not exist on this network."
+
 			// The kernel's reason already names the offending origin and every legal alternative
 			// for this train, so it is carried through verbatim rather than paraphrased.
 			is AppliedOutcome.OriginNotContiguous ->
@@ -379,11 +388,10 @@ class KoogDispatchAgentImpl(
 					"REFUSED — ${outcome.reason}"
 
 			// Issue #903: a permanent impossibility (rear-facing START or unconfigurable switch),
-			// not ordinary contention -- the model must not retry the identical request. The
-			// kernel's reason is carried through verbatim, same reasoning as OriginNotContiguous.
+			// not ordinary contention. The kernel's reason is carried through verbatim.
 			is AppliedOutcome.GeometricallyImpossible ->
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
-					"REFUSED — ${outcome.reason}"
+					"REFUSED — geometrically impossible, this origin can never reach that target: ${outcome.reason}"
 
 			// Issue #1066: no block was busy -- the model must not retry the identical request. Tell
 			// it what to do instead of "all paths blocked".

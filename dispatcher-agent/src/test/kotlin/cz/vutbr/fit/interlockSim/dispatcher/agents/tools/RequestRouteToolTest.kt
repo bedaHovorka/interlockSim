@@ -196,4 +196,50 @@ class RequestRouteToolTest {
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)
 	}
+
+	/**
+	 * The queued-origin guard disables itself without InOut names (D8): every origin would
+	 * otherwise look like a Signal, so the same `doB1` origin that is refused above passes.
+	 */
+	@Test
+	@DisplayName("the queued-origin guard is disabled when the tool has no InOut names")
+	fun queuedOriginGuardDisabledWithoutInOutNames() {
+		val tool =
+			RequestRouteTool(
+				SinkHolder(),
+				endpoints,
+				perceptionPort(),
+				sensorPort(listOf("Train #1"), "A"),
+				inOutNames = emptySet()
+			)
+		val result =
+			runBlocking {
+				tool.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	/**
+	 * The second self-disable case from the D8 table: without a `DispatchLoopSensorPort` the tool
+	 * cannot tell who is queued, so the guard falls through and the `doB1` origin passes.
+	 */
+	@Test
+	@DisplayName("the queued-origin guard is disabled when the tool has no sensor port")
+	fun queuedOriginGuardDisabledWithoutSensorPort() {
+		val tool =
+			RequestRouteTool(
+				SinkHolder(),
+				endpoints,
+				perceptionPort(),
+				sensorPort = null,
+				inOutNames = inOuts
+			)
+		val result =
+			runBlocking {
+				tool.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
 }

@@ -57,6 +57,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  *             is RouteRequestResult.AllPathsBlocked -> logger.warn { "$trainId: all paths blocked" }
  *             is RouteRequestResult.Conflict   -> logger.warn { "$trainId: blocked by ${result.existingOwner} at ${result.blockName}" }
  *             is RouteRequestResult.NoRouteExists   -> logger.error { "$trainId: no topology route" }
+ *             else -> logger.error { "$trainId: refused: $result" } // remaining subtypes
  *         }
  *     }
  * }
@@ -84,16 +85,16 @@ interface NetworkActuatorPort {
 	 *
 	 * ## Invalid input
 	 *
-	 * Invalid input is a programmer/agent error and throws rather than being surfaced as a
-	 * [RouteRequestResult]:
-	 * - A blank [trainName] throws [IllegalArgumentException].
-	 * - A [fromEndpointName] or [toEndpointName] that does not match any InOut or Semaphore in
-	 *   the network throws [IllegalArgumentException] (unknown names must fail fast — they are
-	 *   not "no route").
+	 * A blank [trainName] is a programmer error and throws [IllegalArgumentException].
 	 *
-	 * [RouteRequestResult.NoRouteExists] is returned when no topological path connects the
-	 * requested endpoints, and also for a residual kernel refusal that never reached
-	 * pathfinding — see that type's own KDoc.  [RouteRequestResult.Conflict] is returned when a
+	 * A [fromEndpointName] or [toEndpointName] that does not match any InOut or Semaphore in the
+	 * network does **not** throw: it returns [RouteRequestResult.UnresolvedEndpoint] naming the
+	 * endpoint (Issue #973). It is not "no route", because no topology search ran.
+	 *
+	 * [RouteRequestResult.NoRouteExists] is returned when the topology was searched and no path
+	 * connects the requested endpoints.  [RouteRequestResult.UnresolvedEndpoint] is returned when
+	 * the kernel refused before pathfinding because it could not resolve an endpoint name — see
+	 * that type's own KDoc.  [RouteRequestResult.Conflict] is returned when a
 	 * path exists but a block along it is already owned by another train — it carries the
 	 * conflicting block name and the owning train name so a dispatcher can wait for that
 	 * specific train rather than retrying blindly.
@@ -103,8 +104,7 @@ interface NetworkActuatorPort {
 	 * @param fromEndpointName Name of the entry InOut or Semaphore (must exist in the network).
 	 * @param toEndpointName   Name of the exit InOut or Semaphore (must exist in the network).
 	 * @return [RouteRequestResult] indicating outcome; never `null`.
-	 * @throws IllegalArgumentException if [trainName] is blank, or if [fromEndpointName] or
-	 *   [toEndpointName] does not name an InOut or Semaphore in the network.
+	 * @throws IllegalArgumentException if [trainName] is blank.
 	 */
 	fun requestRoute(
 		trainName: String,
@@ -289,21 +289,12 @@ sealed class RouteRequestResult {
 	 * No route was established between the requested endpoints, and retrying the identical
 	 * request will always yield the same result.  The dispatcher should log this as an error.
 	 *
-	 * Two kernel outcomes produce it:
-	 *
-	 * - **No topological path** — the endpoints are as requested, but the topology graph connects
-	 *   no path between them (e.g. disconnected sub-networks).  Maps from
-	 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NoPathExists].
-	 * - **A residual interlocking refusal that never reached pathfinding** — the kernel denied
-	 *   before attempting a reservation, so no candidate-path count and no owning train exist to
-	 *   report.  Maps from
-	 *   [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]
-	 *   (Issue #834): it is reported here rather than as [AllPathsBlocked] because there is no
-	 *   count to report and the refusal is not contention.
-	 *
-	 * Note: an unknown (non-existent) endpoint name is **not** this result — it throws
-	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute], which validates endpoint
-	 * names before consulting the kernel.
+	 * Means only one thing: **the topology was searched and holds no path** — the endpoints are
+	 * as requested, but the topology graph connects no path between them (e.g. disconnected
+	 * sub-networks).  Maps from
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NoPathExists].
+	 * A refusal that never reached pathfinding because an endpoint name did not resolve is
+	 * [UnresolvedEndpoint], not this result (Issue #973).
 	 *
 	 * @property fromEndpointName The requested entry point name.
 	 * @property toEndpointName   The requested exit point name.
@@ -311,6 +302,26 @@ sealed class RouteRequestResult {
 	data class NoRouteExists(
 		val fromEndpointName: String,
 		val toEndpointName: String
+	) : RouteRequestResult()
+
+	/**
+	 * The kernel refused before pathfinding because it could not resolve [endpointName] to an
+	 * InOut or Semaphore of this network: no topology search ran, so no candidate-path count and
+	 * no owning train exist to report.  Maps from
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint].
+	 *
+	 * Permanent, like [NoRouteExists]: retrying the identical request always fails until the
+	 * caller names an endpoint that exists.  Unlike [NoRouteExists], it names the endpoint to
+	 * correct rather than claiming the topology holds no path.
+	 *
+	 * Produced by [DefaultNetworkActuatorPort.requestRoute] on both the facade and the
+	 * legacy/no-facade path.
+	 *
+	 * @property endpointName The requested endpoint name that did not resolve, verbatim.
+	 * @since Issue #973
+	 */
+	data class UnresolvedEndpoint(
+		val endpointName: String
 	) : RouteRequestResult()
 
 	/**
@@ -362,15 +373,10 @@ sealed class RouteRequestResult {
 	 *
 	 * ## Produced on both the facade and the legacy/no-facade path (task A-R1b)
 	 *
-	 * [DefaultNetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]
-	 * constructs this on the legacy/no-facade path directly from
-	 * `ReservationResult.NonContiguousStart`, and on the facade path (production dispatcher-agent
-	 * runs) from
-	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart]
-	 * -- the discriminant [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through
-	 * from the same kernel result. Since Issue #834 (task alpha-7a) the facade path classifies
-	 * **every** denial on that exhaustive `DenialCause`, so both paths yield the same
-	 * [RouteRequestResult] for the same kernel outcome (invariant I4).
+	 * Both paths of [DefaultNetworkActuatorPort] map the kernel's `NonContiguousStart` through the
+	 * same `toRouteResponse` → `classifyDenial` chain (Issue #968), from
+	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.NonContiguousStart],
+	 * so both yield the same [RouteRequestResult] for the same kernel outcome (invariant I4).
 	 *
 	 * @property fromEndpointName The rejected origin name, as requested.
 	 * @property reason English explanation naming the origin and the legal origins for this
@@ -387,8 +393,8 @@ sealed class RouteRequestResult {
 	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.requestRoute] path). Maps from
 	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.ConditionFailed].
 	 *
-	 * Distinct from [NoRouteExists] (which carries the endpoint-resolution residual
-	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.Other]) and
+	 * Distinct from [NoRouteExists] (the topology was searched and holds no path), from
+	 * [UnresolvedEndpoint] (an endpoint name did not resolve) and
 	 * from [AllPathsBlocked]/[Conflict] (which carry a candidate-path count / a blocking owner
 	 * from the reservation service): a four-condition refusal does not go through pathfinding, so
 	 * neither a count nor an owner exists to report. The [retryable] flag is the only
@@ -427,12 +433,10 @@ sealed class RouteRequestResult {
 	 *
 	 * ## Produced on both the facade and the legacy/no-facade path
 	 *
-	 * [DefaultNetworkActuatorPort] constructs this on the legacy/no-facade path directly from
-	 * `ReservationResult.GeometricallyImpossible`, and on the facade path (production
-	 * dispatcher-agent runs) from `DenialCause.GeometricallyImpossible` — the discriminant
-	 * [cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade] threads through from the same
-	 * kernel result, so both branches yield the same [RouteRequestResult] for the same kernel
-	 * outcome (invariant I4, same as [OriginNotContiguous]).
+	 * Both paths of [DefaultNetworkActuatorPort] map the kernel's `GeometricallyImpossible` through
+	 * the same `toRouteResponse` → `classifyDenial` chain (Issue #968), so both branches yield the
+	 * same [RouteRequestResult] for the same kernel outcome (invariant I4, same as
+	 * [OriginNotContiguous]).
 	 *
 	 * @property reason English explanation of which permanent-impossibility class fired.
 	 * @since Issue #903

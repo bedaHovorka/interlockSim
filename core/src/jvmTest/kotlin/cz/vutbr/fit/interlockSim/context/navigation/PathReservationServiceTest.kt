@@ -58,6 +58,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -3397,6 +3398,9 @@ class PathReservationServiceTest : KoinTestBase() {
 		 * Pins ruling P4(ii): a train with no footprint anywhere passes vacuously, whatever
 		 * its start. Tightening this arm would break every train-entry caller.
 		 *
+		 * Also the regression pin for ruling D8 (#972): the kernel cannot see a queued train, so a
+		 * mid-station origin for one is not refused here; `RequestRouteTool.queuedOriginError` owns that half.
+		 *
 		 * Uses doA1 -> A rather than doA1 -> doB1: doA1 faces B->A (see
 		 * [SignalReleaseTests] / [StartDirectionTests]), so a doA1 -> doB1 request is rejected
 		 * by the unrelated G4 rear-facing-START guard (Issue #893 task A1) regardless of
@@ -3405,6 +3409,10 @@ class PathReservationServiceTest : KoinTestBase() {
 		 * (Issue #1064).
 		 */
 		@Test
+		@DisplayName(
+			"queued train with empty footprint passes the kernel contiguity check vacuously " +
+				"(guarded by RequestRouteTool.queuedOriginError, D8)"
+		)
 		fun `a train with no footprint at all passes vacuously`() {
 			val inOutA = simulationContext.getInOuts().single { it.name == "A" }
 			val result = service.reservePath("phantom-train", findSemaphoreByName("doA1"), inOutA)

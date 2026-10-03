@@ -503,7 +503,7 @@ class Sp2c20ActionAttributionTest {
 				}
 			val networkActuator = mockk<NetworkActuatorPort>(relaxed = true)
 			every { networkActuator.requestRoute(any(), any(), any()) } throws
-				IllegalArgumentException("Unknown endpoint")
+				IllegalArgumentException("bad request argument")
 			val queue = ActuatorCommandQueue()
 			val applier =
 				DispatchDecisionApplier(
@@ -623,7 +623,10 @@ class Sp2c20ActionAttributionTest {
 					"GEOMETRICALLY_IMPOSSIBLE",
 					// Issue #1066: candidate does not continue the route the train already holds;
 					// not contention, so excluded from ALL_PATHS_BLOCKED.
-					"DIVERGES_FROM_HELD_ROUTE"
+					"DIVERGES_FROM_HELD_ROUTE",
+					// Issue #973: a refusal that never reached pathfinding (unknown endpoint), split
+					// out of NO_ROUTE_EXISTS so that code means only "no topological path".
+					"UNRESOLVED_ENDPOINT"
 				)
 			)
 		}

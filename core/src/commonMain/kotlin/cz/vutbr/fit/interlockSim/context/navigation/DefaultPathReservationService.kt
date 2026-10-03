@@ -441,10 +441,9 @@ class DefaultPathReservationService(
 	 * ## Rules
 	 *
 	 * - **Empty footprint passes vacuously.** A train that holds and occupies nothing is still
-	 *   outside the network; every production caller in that state supplies an entry InOut
-	 *   ([cz.vutbr.fit.interlockSim.sim.MultiTrainLoop], [cz.vutbr.fit.interlockSim.sim.InOutWorker],
-	 *   and the interlocking facade, whose endpoints the request tool pre-validates). Rejecting
-	 *   here would break train entry and buy no safety.
+	 *   outside the network and starts at an entry InOut by design. Which layer guards that
+	 *   queued-train case, and why it is not this one, is the table at
+	 *   [PathReservationService.ReservationResult.NonContiguousStart] (ruling D8).
 	 * - **Otherwise [start] must bound one of the footprint blocks.** Membership of
 	 *   `block.ends()`, nothing more.
 	 *
@@ -454,24 +453,6 @@ class DefaultPathReservationService(
 	 * ambiguous and any attempt to pick one would reject legitimate look-ahead extensions.
 	 * Direction is a separate concern, already covered by the backwards-route guards on the
 	 * request path.
-	 *
-	 * ## ⚠ What this does NOT cover: the queued-train half
-	 *
-	 * The vacuous arm is exactly why this kernel check closes only **half** of the Issue #893
-	 * malformation. It stops a route wrongly placed relative to a train that is *on* the network.
-	 * It cannot stop `reservePath("T", doB1, "A")` for a train still queued for admission —
-	 * that train's footprint is empty, so the request passes vacuously even though a queued train
-	 * can only ever start at its entry InOut.
-	 *
-	 * That half is guarded **only at the tool layer**, by
-	 * `RequestRouteTool.queuedOriginError`, which self-disables when the tool is built with no
-	 * InOut-name set or with no `DispatchLoopSensorPort`. Any future caller reaching this service
-	 * outside that tool therefore has no protection against the queued-train form.
-	 *
-	 * This split is the binding traffic-simulation-expert ruling, not an oversight: tightening the
-	 * vacuous arm would reject every legitimate train-entry reservation
-	 * ([cz.vutbr.fit.interlockSim.sim.MultiTrainLoop], [cz.vutbr.fit.interlockSim.sim.InOutWorker]),
-	 * which use an entry InOut with an empty footprint by design.
 	 */
 	private fun rejectNonContiguousStart(
 		trainId: String,

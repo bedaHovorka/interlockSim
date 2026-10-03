@@ -147,7 +147,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 		response as InterlockingFacade.RouteResponse.Denied
 		assertThat(response.reason).isNotEmpty()
 		// Review finding #2 (Issue #834): an empty route is a permanent dispatcher output defect,
-		// so its cause is ConditionFailed(retryable = false), not the residual Other.
+		// so its cause is ConditionFailed(retryable = false), not a contention cause.
 		assertThat(response.cause)
 			.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
 		assertThat((response.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isFalse()
@@ -392,7 +392,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 			assertThat(reason).isNotEmpty()
 			assertThat(registry.getOwner(u1)).isNull()
 			// Review finding #2 (Issue #834): a block occupied by another train is transient
-			// contention, so its cause is ConditionFailed(retryable = true), never the residual Other.
+			// contention, so its cause is ConditionFailed(retryable = true), never a permanent cause.
 			assertThat(denied.cause)
 				.isInstanceOf(InterlockingFacade.RouteResponse.DenialCause.ConditionFailed::class)
 			assertThat((denied.cause as InterlockingFacade.RouteResponse.DenialCause.ConditionFailed).retryable).isTrue()
@@ -812,15 +812,20 @@ class InterlockingFacadeTest : KoinTestBase() {
 		}
 
 		@Test
-		@DisplayName("SP3.5: requestRouteByEndpoints denies an unknown fromEndpointName")
+		@DisplayName("SP3.5: requestRouteByEndpoints denies an unknown fromEndpointName as UnresolvedEndpoint")
 		fun requestRouteByEndpointsDeniesUnknownFromEndpoint() {
-			val (e, registry) = env(semaphores = listOf(semaphore("S2")))
+			val (e, registry) = env(semaphores = listOf(semaphore("InOut-B")))
 			val facade = DefaultInterlockingFacade(e, registry)
 
-			val response = facade.requestRouteByEndpoints("T1", "NOPE", "S2")
+			val response = facade.requestRouteByEndpoints("T", "Nope", "InOut-B")
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
-			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("NOPE")
+			response as InterlockingFacade.RouteResponse.Denied
+			assertThat(response.reason).isEqualTo("Unknown route endpoint: Nope")
+			// Issue #973: the refusal never reached pathfinding, so it names the endpoint instead
+			// of reporting a "no topological path" outcome.
+			assertThat(response.cause)
+				.isEqualTo(InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint("Nope"))
 		}
 
 		@Test
@@ -841,7 +846,7 @@ class InterlockingFacadeTest : KoinTestBase() {
 		}
 
 		@Test
-		@DisplayName("SP3.5: requestRouteByEndpoints denies an unknown toEndpointName")
+		@DisplayName("SP3.5: requestRouteByEndpoints denies an unknown toEndpointName as UnresolvedEndpoint")
 		fun requestRouteByEndpointsDeniesUnknownToEndpoint() {
 			val (e, registry) = env(semaphores = listOf(semaphore("S1")))
 			val facade = DefaultInterlockingFacade(e, registry)
@@ -849,7 +854,10 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val response = facade.requestRouteByEndpoints("T1", "S1", "NOPE")
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
-			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("NOPE")
+			response as InterlockingFacade.RouteResponse.Denied
+			assertThat(response.reason).isEqualTo("Unknown route endpoint: NOPE")
+			assertThat(response.cause)
+				.isEqualTo(InterlockingFacade.RouteResponse.DenialCause.UnresolvedEndpoint("NOPE"))
 		}
 
 		@Test

@@ -59,6 +59,13 @@
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService" level="DEBUG"/>
 
+	<!--
+		ReservationResultMapping.kt logs one INFO "Route GRANTED/DENIED" line per kernel outcome.
+		Same rationale as above: with the root at WARN those lambda bodies never evaluate, so a
+		broken interpolation would hide. The appenders filter at WARN, so nothing extra prints.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.sim.ReservationResultMappingKt" level="INFO"/>
+
 	<!-- kDisco statistics suppressed during tests -->
 	<logger name="kDisco.statistics" level="ERROR"/>
 

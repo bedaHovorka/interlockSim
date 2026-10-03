@@ -353,11 +353,11 @@ class DispatchDecisionApplier(
 	 * ## Per-decision exception isolation
 	 *
 	 * Tool-driven decisions ([DispatchDecision.RequestRoute] etc.) can carry
-	 * LLM-hallucinated string arguments (an endpoint name that doesn't exist in this
-	 * network). [NetworkActuatorPort.requestRoute]'s `requireEndpoint` check throws
-	 * [IllegalArgumentException] for that case — correct for its other, trusted callers
-	 * (an unknown endpoint there really is a caller bug), but for the LLM tool path it is
-	 * a routine, expected external-input error, not a bug. Without the guard below, that
+	 * LLM-hallucinated string arguments (for example a blank train name). An unknown endpoint
+	 * name no longer throws: [NetworkActuatorPort.requestRoute] returns
+	 * `RouteRequestResult.UnresolvedEndpoint` for it (Issue #973). Other argument checks still
+	 * throw [IllegalArgumentException], which for the LLM tool path is a routine, expected
+	 * external-input error, not a bug. Without the guard below, such an
 	 * exception propagated out of this method and killed the entire kDisco simulation
 	 * thread (confirmed via a live local-model run), after which the simulation stopped
 	 * dispatching anything at all. Each decision is applied in its own try/catch so one
@@ -699,6 +699,13 @@ class DispatchDecisionApplier(
 				}
 				onFailedReservation()
 			}
+			is RouteRequestResult.UnresolvedEndpoint -> {
+				logger.warn {
+					"ReservePath: unresolved endpoint '${result.endpointName}' for ${decision.trainId} " +
+						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName})"
+				}
+				onFailedReservation()
+			}
 			is RouteRequestResult.OriginNotContiguous -> {
 				logger.warn {
 					"ReservePath: origin '${decision.fromSemaphoreName}' is not contiguous " +
@@ -871,6 +878,10 @@ class DispatchDecisionApplier(
 				}
 				ApplyFailureCode.NO_ROUTE_EXISTS
 			}
+			is RouteRequestResult.UnresolvedEndpoint -> {
+				handleRequestRouteUnresolvedEndpoint(decision, result, correlation)
+				ApplyFailureCode.UNRESOLVED_ENDPOINT
+			}
 			is RouteRequestResult.OriginNotContiguous -> {
 				handleRequestRouteOriginNotContiguous(decision, result, correlation)
 				ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS
@@ -887,6 +898,37 @@ class DispatchDecisionApplier(
 				handleRequestRouteDivergesFromHeldRoute(decision, result, correlation)
 				ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE
 			}
+		}
+	}
+
+	/**
+	 * Handles the [RouteRequestResult.UnresolvedEndpoint] branch of [applyRequestRoute] —
+	 * extracted for the same reason as [handleRequestRouteOriginNotContiguous] (detekt LongMethod
+	 * budget).
+	 *
+	 * Publishes [AppliedOutcome.UnresolvedEndpoint] so the agent learns which endpoint name it has
+	 * to correct, instead of being told that no route exists between the endpoints.
+	 *
+	 * @since Issue #973
+	 */
+	private fun handleRequestRouteUnresolvedEndpoint(
+		decision: DispatchDecision.RequestRoute,
+		result: RouteRequestResult.UnresolvedEndpoint,
+		correlation: CommandCorrelationMap.CommandAndTick?
+	) {
+		logger.warn {
+			"DispatchDecisionApplier: RequestRoute unresolved endpoint '${result.endpointName}' for " +
+				"${decision.trainName} (${decision.fromEndpointName} → ${decision.toEndpointName})"
+		}
+		publishOutcome(correlation) {
+			AppliedOutcome.UnresolvedEndpoint(
+				trainId = decision.trainName,
+				fromEndpointName = decision.fromEndpointName,
+				toEndpointName = decision.toEndpointName,
+				endpointName = result.endpointName,
+				id = it.id,
+				tickIndex = it.tickIndex
+			)
 		}
 	}
 

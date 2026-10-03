@@ -102,9 +102,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * correctly *directed* route in the wrong *place* — an origin the train could not reach. For a
  * train that has not been admitted yet the answer is unambiguous: it stands at its entry InOut and
  * nowhere else, so a Signal origin is always wrong. See [queuedOriginError], including why the rule
- * is "an InOut" rather than "the entry InOut". The authoritative, footprint-aware check lives in
- * `DefaultPathReservationService.reservePath`; its rejection returns through the apply-failure
- * channel rather than in-turn.
+ * is "an InOut" rather than "the entry InOut". The kernel's footprint-aware check covers only
+ * trains already on the network; the layer split is the table at
+ * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
+ * (ruling D8).
  *
  */
 class RequestRouteTool(
@@ -372,10 +373,11 @@ class RequestRouteTool(
 	 * may be added for it. The enforceable rule is therefore
 	 * the weaker "a queued train's origin must be an InOut, not a Signal". Combined with the
 	 * existing "cannot depart FROM the destination" rule this pins the origin exactly on a
-	 * two-InOut network such as `vyhybna.xml`, and is a strict improvement on larger ones. The
-	 * authoritative check is `DefaultPathReservationService.reservePath`'s contiguity invariant,
-	 * which sees the live footprint; this one exists to give the model in-turn feedback rather
-	 * than a silently-dropped decision one tick later.
+	 * two-InOut network such as `vyhybna.xml`, and is a strict improvement on larger ones. This is
+	 * the only guard for a queued train (its footprint is empty, so the kernel's contiguity check
+	 * passes vacuously); see the table at
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
+	 * (ruling D8).
 	 *
 	 * Disabled (returns `null`) when [inOutNames] is empty — without it every origin would look
 	 * like a Signal — or when the train is also active, in which case the live perception is the

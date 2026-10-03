@@ -866,4 +866,30 @@ class ObservationRendererTest {
 			assertThat(output).contains("DIVERGES_FROM_HELD_ROUTE (held target doB2)")
 		}
 	}
+
+	// ── Issue #973: the compact history line for an unresolved endpoint ──
+
+	@Nested
+	@DisplayName("Issue #973 — UnresolvedEndpoint in RECENT TICKS")
+	inner class UnresolvedEndpointHistory {
+		@Test
+		@DisplayName("the history line names the unresolved endpoint")
+		fun historyLineNamesUnresolvedEndpoint() {
+			val outcome =
+				AppliedOutcome.UnresolvedEndpoint(
+					trainId = "T-1",
+					fromEndpointName = "Nope",
+					toEndpointName = "InOut-B",
+					endpointName = "Nope",
+					id = CommandId(41L),
+					tickIndex = 41L
+				)
+			val record = RendererFixtures.history.last().copy(outcomes = listOf(outcome))
+			val unresolvedCtx = ctx.copy(history = listOf(record))
+
+			val output = CompactTextRenderer().render(unresolvedCtx)
+
+			assertThat(output).contains("request_route T-1 -> InOut-B : UNRESOLVED_ENDPOINT (Nope)")
+		}
+	}
 }
