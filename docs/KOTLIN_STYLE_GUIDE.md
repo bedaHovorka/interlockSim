@@ -1626,26 +1626,29 @@ Need test network?
 **Status:** Re-baselined October 2026 from measured runtimes (Issue #753). A `@Timeout` is a hang
 detector, not a performance budget: it should fire soon after a test stops making progress. The rule
 is `new = min(current, round_up(max(3 × p95, 10 s)))`, rounded up to the grid 10, 15, 20, 30, 45,
-60, 90, 120, 180, 300 s; an existing value is never raised by a re-baseline. p95 comes from the
-JUnit XML `<testcase time>` of at least 4 complete gate runs (`build detekt ktlintCheck test
+60, 90, 120, 180, 300, 600, 900, 1200 s; an existing value is never raised by a re-baseline. p95 comes
+from the JUnit XML `<testcase time>` of at least 4 complete gate runs (`build detekt ktlintCheck test
 integrationTest`). A method-level `@Timeout` uses its per-invocation times (each repetition or
 parameter set counts); a class-level `@Timeout` takes the highest per-method p95 among the methods it
-governs (a method's samples are its slowest invocation per run), including the suite's
-`@BeforeAll`/`@AfterAll` overhead. Two groups are excluded and keep their values: the
+governs (a method's samples are its slowest invocation per run). Per the JUnit 5 javadoc, a
+class-level `@Timeout` applies to every testable method (`@Test`, `@TestFactory`, `@TestTemplate`)
+but not to lifecycle methods (`@BeforeEach`, `@AfterEach`, `@BeforeAll`, `@AfterAll`). The
+testcase time still includes the `@BeforeEach`/`@AfterEach` time, and the class-level samples also
+include the suite's `@BeforeAll`/`@AfterAll` overhead; that is deliberate extra margin, not
+something the timeout covers. Two groups are excluded and keep their values: the
 `@Tag("heavy-test")` tests (they never run in the gate, so there is nothing to measure) and
 `ShuntingLoopRegressionTest`, whose 120 s timeout is the regression assertion itself. The October
 2026 pass also left alone the classes whose methods are tagged `ollama-test` (their runtime is the
 live Ollama server, not the test) and the two `SimulationSpeedPerformanceTest` methods whose own
 KDoc or body names the `@Timeout` as their budget. A test that hands an in-body join to a
 termination-asserting helper (`MultiTrainLoopSnapshotRaceTest` and `ShuntingLoopApprovedTrainsRaceTest`
-pass `JOIN_TIMEOUT_MILLIS` to `ConcurrentReadProbe`) keeps its `@Timeout` at the next grid step above
-that join, so the helper's diagnostic fires first. To re-run it: collect the JUnit XML of four or more
-gate runs (copy `*/build/test-results/{jvmTest,test,integrationTest}/` after each run), map each
-`classname`/`name` to its `@Timeout` line (JUnit reports the display name, so `@DisplayName`,
-backticked names and `[n] …`/`repetition n of m` invocation names must be mapped back to the method;
-leave an annotation unchanged when that mapping is ambiguous or has fewer than 4 samples), apply the
-rule, and rewrite only the number (and `unit`, when a `MINUTES` value stops being a whole number of
-minutes). New tests should follow the same rule: start at 10 s unless a measured run needs more.
+pass `JOIN_TIMEOUT_MILLIS` of 4 and 8 min to `ConcurrentReadProbe`) keeps its `@Timeout` at the next
+grid step above that join (300 s and 600 s), so the helper's diagnostic fires first. To re-run it,
+copy `*/build/test-results/{jvmTest,test,integrationTest}/` after each of four or more gate runs into
+`<timings>/<run-name>/` and run
+`python3 scripts/rebaseline_timeouts.py --repo . --timings <timings> --baseline-set <run-name> --out build/timeout-rebaseline`
+(a dry run that writes `rebaseline.csv`; add `--apply` to rewrite the lowered values). New tests
+should follow the same rule: start at 10 s unless a measured run needs more.
 
 ## Parameterized Tests (JUnit 5)
 
