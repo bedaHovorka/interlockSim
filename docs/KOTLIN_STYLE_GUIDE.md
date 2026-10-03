@@ -1866,8 +1866,13 @@ To bump a dependency, change its version and regenerate the file with one comman
 the diff together with the version change:
 ```bash
 mkdir -p /tmp/empty-m2
+set -a; source .env; set +a
 ./gradlew -Dmaven.repo.local=/tmp/empty-m2 --write-verification-metadata sha256 --refresh-dependencies build detekt ktlintCheck integrationTest :core:linuxX64Test :desktop-ui:jmhJar
 ```
+`set -a; source .env; set +a` exports the GitHub Packages credentials into the environment —
+the build reads `GITHUB_ACTOR`/`GITHUB_TOKEN` (or the `gpr.user`/`gpr.key` Gradle properties),
+not `.env` itself (`settings.gradle.kts`). Do it once per shell; the other
+`--write-verification-metadata` commands in this section need it too.
 `-Dmaven.repo.local` must point at an empty directory, because `mavenLocal()` comes first in
 `settings.gradle.kts` and `~/.m2` may hold artifacts with only a `.jar` and `.pom` and no Gradle
 Module Metadata. A regeneration that reads them from `~/.m2` never records the `.module` files
@@ -1898,10 +1903,13 @@ development, and a republish changes the checksum even on GitHub Packages, so th
 necessary. The trade-off: a compromised kDisco artifact would not be detected by checksum
 verification (acceptable for our own engine; kDisco's transitive dependencies are still verified).
 
-A second group, `com.gradle`, is trusted for the same kind of reason: the Develocity and Common Custom User Data
-plugins are injected in CI only, by `gradle/actions/setup-gradle` (`build-scan-publish: true`), and their version is
-owned by the SHA-pinned action, not by this build, so a pinned checksum would break on every action bump. The
-trade-off is the same as for kDisco: those artifacts are not checksum-verified.
+Two CI-only plugins, `com.gradle:develocity-gradle-plugin` and
+`com.gradle:common-custom-user-data-gradle-plugin`, are trusted by exact module name (not the
+whole `com.gradle` group) for the same kind of reason: they are injected in CI only, by
+`gradle/actions/setup-gradle` (`build-scan-publish: true`), and their version is owned by the
+SHA-pinned action, not by this build, so a pinned checksum would break on every action bump.
+The trade-off is the same as for kDisco: those two modules are not checksum-verified, but any
+other current or future artifact under `com.gradle` still is.
 
 Kotlin/Native limit: verification covers only what Gradle resolves as a dependency (for example
 `kotlin-native-prebuilt`). Anything the Kotlin/Native toolchain downloads into `~/.konan` on its own
