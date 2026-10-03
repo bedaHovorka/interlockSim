@@ -132,10 +132,12 @@ object GridTransformer {
 	/**
 	 * Create DynamicInOut wrapper with properly initialized semaphores.
 	 *
+	 * Shared with [DefaultSimulationContext] (issue #701).
+	 *
 	 * @param inOut The static InOut to wrap
 	 * @return DynamicInOut with initialized in/out semaphores
 	 */
-	private fun createDynamic(inOut: InOut): DynamicInOut {
+	internal fun createDynamic(inOut: InOut): DynamicInOut {
 		val inSemaphore = createDynamicInstance(inOut.inSemaphore)
 		val outSemaphore = createConstantInstance(inOut.outSemaphore, Signal.FREE)
 		return DynamicInOut(inOut, inSemaphore, outSemaphore)

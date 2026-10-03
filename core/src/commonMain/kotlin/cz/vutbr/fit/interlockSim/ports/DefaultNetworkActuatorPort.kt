@@ -16,8 +16,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
+import cz.vutbr.fit.interlockSim.sim.resolveEndpoint
 import cz.vutbr.fit.interlockSim.sim.toRouteResponse
 import cz.vutbr.fit.interlockSim.sim.unresolvedEndpointDenial
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
@@ -128,8 +128,12 @@ class DefaultNetworkActuatorPort(
 		fromEndpointName: String,
 		toEndpointName: String
 	): InterlockingFacade.RouteResponse {
-		val from = resolveEndpoint(fromEndpointName) ?: return unresolvedEndpointDenial(fromEndpointName)
-		val to = resolveEndpoint(toEndpointName) ?: return unresolvedEndpointDenial(toEndpointName)
+		val from =
+			resolveEndpoint(fromEndpointName, inOutByName, semaphoreByName)
+				?: return unresolvedEndpointDenial(fromEndpointName)
+		val to =
+			resolveEndpoint(toEndpointName, inOutByName, semaphoreByName)
+				?: return unresolvedEndpointDenial(toEndpointName)
 		return pathReservationService
 			.reservePath(trainName, from, to)
 			.toRouteResponse(trainName, fromEndpointName, toEndpointName)
@@ -325,15 +329,6 @@ class DefaultNetworkActuatorPort(
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────
-
-	/**
-	 * Returns the [DynamicPathSeparator] for [name], searching both [inOutByName] and
-	 * [semaphoreByName], or `null` if the name is neither an InOut nor a Semaphore of this network.
-	 *
-	 * Partial paths (InOut → Semaphore or Semaphore → InOut) are valid in addition to the
-	 * full end-to-end (InOut → InOut) form, so both element types are accepted here.
-	 */
-	private fun resolveEndpoint(name: String): DynamicPathSeparator? = inOutByName[name] ?: semaphoreByName[name]
 
 	/**
 	 * Scans the grid once to build a name→semaphore index.  Mirrors the strategy in
