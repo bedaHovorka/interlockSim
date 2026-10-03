@@ -18,6 +18,12 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
+import cz.ksimulantenbande.kdisco.Process
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -36,11 +42,15 @@ import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import io.mockk.every
+import io.mockk.mockkObject
 import io.mockk.spyk
+import io.mockk.unmockkObject
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 
 /**
  * Comprehensive unit tests for AbstractPath class.
@@ -721,6 +731,117 @@ class AbstractPathTest : KoinTestBase() {
 	}
 
 	/**
+	 * Nested test group: failure logging of `pathIterating` (Issue #1005).
+	 *
+	 * `pathIterating` logs an INFO `PATH_NOT_FREE` line when an `isFreeFrom` iteration is cut short,
+	 * plus a DEBUG line naming the operation for every failed iteration. These tests pin which failures
+	 * log what, which operations never log `PATH_NOT_FREE`, and the exact message text. The `objects`
+	 * logger is pinned to WARN in logback-test.xml, so the paths logger is raised to DEBUG for the
+	 * duration of each test.
+	 */
+	@Nested
+	@DisplayName("pathIterating failure logging")
+	inner class PathIteratingFailureLoggingTests {
+		private val simTime = 12.5
+
+		private val pathsLogger = LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.objects.paths") as Logger
+		private val appender = ListAppender<ILoggingEvent>()
+		private var previousLevel: Level? = null
+
+		@BeforeEach
+		fun attachAppender() {
+			previousLevel = pathsLogger.level
+			pathsLogger.level = Level.DEBUG
+			appender.start()
+			pathsLogger.addAppender(appender)
+			// Process.time() throws outside a running simulation, which would swallow the message text.
+			mockkObject(Process.Companion)
+			every { Process.time() } returns simTime
+		}
+
+		@AfterEach
+		fun detachAppender() {
+			pathsLogger.detachAppender(appender)
+			appender.stop()
+			pathsLogger.level = previousLevel
+			unmockkObject(Process.Companion)
+		}
+
+		/** `to` is the segment the path iteration expects the separator to lead to; `null` makes isSetUpPath agree. */
+		private fun pathOver(
+			block: DynamicTrackBlock,
+			to: Cell.Segment?
+		): ArrayPath {
+			val context: SimulationContext = spyk(createMockSimulationContext())
+			every {
+				context.getSegment(any<DynamicPathSeparator>(), any(), any())
+			} answers {
+				val segment: Cell.Segment? = if (secondArg<Track?>() == null) Cell.Segment.B else to
+				segment
+			}
+			val path = ArrayPath(context)
+			path.addFirst(end1)
+			path.addLast(block)
+			path.addLast(createDynamicInstance(RailSemaphore(false, Cell.SpatialType.HORIZONTAL)))
+			return path
+		}
+
+		private fun newBlock() = DynamicTrackBlock(SimpleTrackBlock(end1, end2, 100.0, 80.0), end1, end2)
+
+		private fun messages() = appender.list.map { it.formattedMessage }
+
+		private fun pathNotFreeMessages() = messages().filter { "PATH_NOT_FREE" in it }
+
+		@Test
+		fun `isFreeFrom with a reserved track returns false and logs the track and its state`() {
+			val block = newBlock()
+			block.setUpPath(end1, "test-train")
+			val path = pathOver(block, Cell.Segment.A)
+
+			assertThat(path.isFreeFrom(end1)).isFalse()
+
+			val notFree = pathNotFreeMessages()
+			assertThat(notFree.size).isEqualTo(1)
+			assertThat(notFree.single()).isEqualTo("$simTime PATH_NOT_FREE: Track $block prevents path - state=RESERVED")
+			assertThat(messages().contains("Track operation returned false for operation: isFreeFrom")).isTrue()
+		}
+
+		@Test
+		fun `isFreeFrom over a free track returns true and logs no failure`() {
+			val path = pathOver(newBlock(), Cell.Segment.A)
+
+			assertThat(path.isFreeFrom(end1)).isTrue()
+
+			assertThat(pathNotFreeMessages().size).isEqualTo(0)
+			assertThat(messages().none { "failed" in it || "returned false" in it }).isTrue()
+		}
+
+		@Test
+		fun `isSetUpPath with a failing track returns false without a PATH_NOT_FREE line`() {
+			// to == null agrees with MockNodeCell.getFollowingSegment, so the separator passes and the free block fails.
+			val path = pathOver(newBlock(), null)
+
+			assertThat(path.isSetUpPath(end1)).isFalse()
+
+			assertThat(pathNotFreeMessages().size).isEqualTo(0)
+			assertThat(messages().contains("Track operation returned false for operation: isSetUpPath")).isTrue()
+			assertThat(messages().none { "Separator setting failed" in it }).isTrue()
+		}
+
+		@Test
+		fun `isSetUpPath with a failing separator returns false before the track operation runs`() {
+			// MockNodeCell.getFollowingSegment answers null but the iteration expects A: separatorSetting fails first.
+			val path = pathOver(newBlock(), Cell.Segment.A)
+
+			assertThat(path.isSetUpPath(end1)).isFalse()
+
+			assertThat(pathNotFreeMessages().size).isEqualTo(0)
+			assertThat(messages().contains("Separator setting failed for operation: isSetUpPath")).isTrue()
+			assertThat(messages().none { "Track operation returned false" in it }).isTrue()
+		}
+	}
+
+	/**
 	 * Nested test group: Edge Cases and Error Conditions
 	 * Tests boundary conditions and invalid inputs
 	 */
@@ -973,3 +1094,5 @@ class AbstractPathTest : KoinTestBase() {
 		}
 	}
 }
+
+/** A [Track] that is also a [TrackFacility], as every track in a real path is. */
