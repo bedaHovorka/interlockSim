@@ -175,12 +175,22 @@ export OLLAMA_BASE_URL=http://my-ollama:11434
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
-**Windows/macOS Docker Desktop note (Issue #770):** once dispatcher-agent is wired into the `app`
-container (Stage B), `localhost` inside the container won't reach a native Ollama install or the
-`ollama` Compose service — not even under `app`'s `network_mode: host`. Verified 2026-07-19 on
-Windows 11 + Docker Desktop 29.5.3 (WSL2 backend): `host.docker.internal` *is* reachable from a
-`network_mode: host` container, so set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in that
-scenario. No change to `app`'s network mode is needed.
+**Compose wiring (Stage B, Issue #924, done):** `docker-compose.yml` passes `OLLAMA_BASE_URL`
+(default `http://localhost:11434`) to the `app` service, which keeps `network_mode: host`, and
+`app` depends optionally on the `ollama` service (profile `ollama`), whose healthcheck is false
+until the model is pulled. Sequence:
+
+```bash
+docker compose --profile ollama up -d ollama
+docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
+```
+
+**Windows/macOS Docker Desktop note (Issue #770):** `localhost` inside the container won't reach a
+native Ollama install or the `ollama` Compose service — not even under `app`'s
+`network_mode: host`. Verified 2026-07-19 on Windows 11 + Docker Desktop 29.5.3 (WSL2 backend):
+`host.docker.internal` *is* reachable from a `network_mode: host` container, so set
+`OLLAMA_BASE_URL=http://host.docker.internal:11434` (in `.env` or the shell) in that scenario.
+No change to `app`'s network mode is needed.
 
 ## Model Selection
 
