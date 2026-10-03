@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -390,5 +391,31 @@ class GridTransformerTest : CommonKoinTestBase() {
 		assertThat(result.dynamicGrid.getCellAt(0, 0)).isNotNull()
 		assertThat(result.dynamicGrid.getCellAt(9, 9)).isNotNull()
 		assertThat(result.staticToDynamicMap).hasSize(2)
+	}
+
+	// --- createDynamic (shared with DefaultSimulationContext, issue #701) ---
+
+	@Test
+	fun createDynamic_wrapsInOutAndKeepsIdentity() {
+		val inOut = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+
+		val dynamic = GridTransformer.createDynamic(inOut)
+
+		assertThat(dynamic.staticRef).isSameInstanceAs(inOut)
+		assertThat(dynamic.inSemaphore.staticRef).isSameInstanceAs(inOut.inSemaphore)
+		assertThat(dynamic.outSemaphore.staticRef).isSameInstanceAs(inOut.outSemaphore)
+	}
+
+	@Test
+	fun createDynamic_inSemaphoreIsChangeableAndOutSemaphoreIsConstantFree() {
+		val dynamic = GridTransformer.createDynamic(InOut("A", true, Cell.SpatialType.HORIZONTAL))
+
+		assertThat(dynamic.inSemaphore.signal).isEqualTo(Signal.STOP)
+
+		dynamic.inSemaphore.signal = Signal.FREE
+		dynamic.outSemaphore.signal = Signal.STOP
+
+		assertThat(dynamic.inSemaphore.signal).isEqualTo(Signal.FREE)
+		assertThat(dynamic.outSemaphore.signal).isEqualTo(Signal.FREE)
 	}
 }
