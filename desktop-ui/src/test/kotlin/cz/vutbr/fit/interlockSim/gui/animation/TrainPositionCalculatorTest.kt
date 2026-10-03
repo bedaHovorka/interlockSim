@@ -518,7 +518,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	private fun calculatorWithEmptyCache() = TrainPositionCalculator(context, emptyMap())
 
 	@Test
-	fun testGetGridPosition_cacheMissFindsStaticSeparatorByScan() {
+	fun testGetGridPosition_cacheMissFindsCachedSeparatorByScan() {
 		val (separator, position) = separatorCache().entries.first()
 
 		assertThat(calculatorWithEmptyCache().getGridPosition(separator)).isEqualTo(position)

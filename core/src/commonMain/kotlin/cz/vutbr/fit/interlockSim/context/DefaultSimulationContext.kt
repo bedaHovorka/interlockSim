@@ -987,7 +987,7 @@ open class DefaultSimulationContext(
 		staticToDynamicMap[cell] = dynamic
 		// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
 		// These semaphores might be used in paths before they're encountered as separate cells
-		// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
+		// Guarded writes: never overwrite a semaphore that was mapped earlier as its own grid cell
 		if (!staticToDynamicMap.containsKey(cell.inSemaphore)) {
 			staticToDynamicMap[cell.inSemaphore] = dynamic.inSemaphore
 		}

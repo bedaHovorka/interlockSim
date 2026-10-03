@@ -1094,5 +1094,3 @@ class AbstractPathTest : KoinTestBase() {
 		}
 	}
 }
-
-/** A [Track] that is also a [TrackFacility], as every track in a real path is. */
