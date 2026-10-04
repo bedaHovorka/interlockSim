@@ -153,11 +153,30 @@ internal class Engine(
 
 	/**
 	 * [test]'s [AccelerationStopTest.margin] for the current leg's [targetSpeed] and the host's
-	 * velocity (Issue #760). It mirrors [AccelerationStopTest.condition]: the margin is
-	 * non-positive exactly when `condition()` is true, so the crossing waits that use it end on
-	 * the same predicate the old step polls tested.
+	 * velocity (Issue #760): non-positive exactly when the leg's speed target is met, the same
+	 * predicate the old step polls tested.
 	 */
 	private fun speedMargin(test: AccelerationStopTest): Double = test.margin(targetSpeed, host.getVelocity())
+
+	/**
+	 * The guard of one velocity-target crossing wait (Issue #760): `-1.0` while the leg is
+	 * cancelled (`accelerate` false), else the smaller of [test]'s [speedMargin] and [exitTerm],
+	 * the wait's one other exit. The wait's lambda calls it again on every evaluation.
+	 */
+	private fun legMargin(
+		test: AccelerationStopTest,
+		exitTerm: Double
+	): Double = if (!accelerate) -1.0 else minOf(speedMargin(test), exitTerm)
+
+	/** A discrete exit as a guard term: `-1.0` once [exit] holds, `1.0` before. */
+	private fun exitWhen(exit: Boolean): Double = if (exit) -1.0 else 1.0
+
+	/**
+	 * The cruise arm's second exit: [brakingRoomMargin] (Issue #1057), bounded by `1.0` because an
+	 * unarmed margin is +∞. A leg aimed at a stand (`targetSpeed == 0.0`) has no such exit, the
+	 * same gate [brakingRoomGone] applies.
+	 */
+	private fun cruiseExitTerm(): Double = if (targetSpeed > 0.0) minOf(brakingRoomMargin(), 1.0) else 1.0
 
 	override suspend fun actions() {
 		while (true) {
@@ -182,14 +201,13 @@ internal class Engine(
 
 		// Every wait of a leg is located by root-finding (Issue #1014 for the approach; Issue #760
 		// for the `accelerateTo` arm below, [resumeAtAspectCap] and [brakeToStopLine]), so no exit
-		// is a whole step late. Each guard is non-positive exactly when the predicate a step poll used to test
-		// holds: -1.0 while `accelerate` is false, the leg's [speedMargin], and a discrete term
-		// at -1.0 or 1.0. Here that term is [brakingRoomMargin] (Issue #1057) instead, bounded by
-		// `minOf(..., 1.0)` because an unarmed margin is +∞; it is a distance the train closes
-		// continuously, so it is root-found like the speed. The three converted guards use
-		// tolerance 0.0: the root finder then returns a point on the satisfied side, so a stand
-		// ends at the clamped `v == 0.0` the dwell and reversal checks require, never at a creep
-		// of up to the default 1e-9 m/s.
+		// is a whole step late. Each guard is non-positive exactly when the predicate a step poll
+		// used to test holds ([legMargin]): -1.0 while `accelerate` is false, the leg's
+		// [speedMargin], and a discrete term at -1.0 or 1.0 ([exitWhen]). Here that term is
+		// [cruiseExitTerm] instead, a distance the train closes continuously, so it is root-found
+		// like the speed. The three converted guards use tolerance 0.0: the root finder then
+		// returns a point on the satisfied side, so a stand ends at the clamped `v == 0.0` the
+		// dwell and reversal checks require, never at a creep of up to the default 1e-9 m/s.
 		//
 		// No re-check follows any of these waits. The code after them reads only `terminate`,
 		// `accelerate` and discrete aspect state, and [watchForLateRestrictiveAspect]'s own
@@ -220,20 +238,11 @@ internal class Engine(
 			// too raced that path and broke the Issue #989 clearance-stop and mid-journey
 			// no-path tests. Reading the captured semaphore's own aspect sidesteps the waiver
 			// entirely: it is unaffected by the waived flag.
-			waitUntilCrossing { minOf(approachMargin(), if (restrictiveSignalCleared()) -1.0 else 1.0) }
+			waitUntilCrossing { minOf(approachMargin(), exitWhen(restrictiveSignalCleared())) }
 		} else {
 			// Also ends when a restrictive aspect has left no braking room (Issue #1057): the leg
 			// was commanded while the signal allowed, so nothing else would ever brake it.
-			waitUntilCrossing(tolerance = 0.0) {
-				if (!accelerate) {
-					-1.0
-				} else {
-					minOf(
-						speedMargin(cond.getStopTest()),
-						if (targetSpeed > 0.0) minOf(brakingRoomMargin(), 1.0) else 1.0
-					)
-				}
-			}
+			waitUntilCrossing(tolerance = 0.0) { legMargin(cond.getStopTest(), cruiseExitTerm()) }
 		}
 
 		// `!terminate` because [terminate] now really does end the wait above (it reactivates
@@ -443,11 +452,7 @@ internal class Engine(
 			}
 		currentCondition = resuming
 		waitUntilCrossing(tolerance = 0.0) {
-			if (!accelerate) {
-				-1.0
-			} else {
-				minOf(speedMargin(resuming.getStopTest()), if (host.semaphoreToStopShortOf() != null) -1.0 else 1.0)
-			}
+			legMargin(resuming.getStopTest(), exitWhen(host.semaphoreToStopShortOf() != null))
 		}
 		return !terminate && accelerate && host.semaphoreToStopShortOf() != null
 	}
@@ -493,11 +498,7 @@ internal class Engine(
 		currentCondition = braking
 		// `targetSpeed` is 0.0, so the speed term is the velocity itself.
 		waitUntilCrossing(tolerance = 0.0) {
-			if (!accelerate) {
-				-1.0
-			} else {
-				minOf(speedMargin(braking.getStopTest()), if (host.semaphoreToStopShortOf() == null) -1.0 else 1.0)
-			}
+			legMargin(braking.getStopTest(), exitWhen(host.semaphoreToStopShortOf() == null))
 		}
 		return !terminate && accelerate && host.semaphoreToStopShortOf() == null
 	}
@@ -673,12 +674,7 @@ internal enum class AccelerationStopTest(
 	 * Phase-1 of the restrictive approach: ends when velocity reaches half the target, or earlier
 	 * via the engine's approach-margin wait.
 	 */
-	TO_HALF_SPEED(false) {
-		override fun condition(
-			targetSpeed: Double,
-			velocity: Double
-		): Boolean = targetSpeed <= 2 * velocity
-	},
+	TO_HALF_SPEED(false),
 
 	/** Phase ends when velocity has fallen to the (lower) target speed. */
 	DECELERATION_ENDED(true);
@@ -687,20 +683,12 @@ internal enum class AccelerationStopTest(
 	fun isDecelerate(): Boolean = decelerate
 
 	/**
-	 * Default velocity-based completion test for the phase.
-	 *
-	 * @param targetSpeed commanded target
-	 * @param velocity current train velocity
-	 */
-	open fun condition(
-		targetSpeed: Double,
-		velocity: Double
-	): Boolean = if (isDecelerate()) targetSpeed >= velocity else targetSpeed <= velocity
-
-	/**
-	 * The margin form of [condition] (Issue #760): non-positive exactly when [condition] is true
-	 * for the same arguments. `x - y <= 0` holds exactly when `x <= y`, and halving is exact, so
-	 * a crossing wait on this margin ends on the predicate [condition] tests.
+	 * The phase's velocity-based completion test as a signed margin (Issue #760): non-positive
+	 * exactly when the phase is complete — velocity at or above the target, at or below it for a
+	 * decelerating phase, at or above half of it for [TO_HALF_SPEED]. The crossing waits end on
+	 * it. It replaced the Boolean `condition()` the step polls tested: `x - y <= 0` holds exactly
+	 * when `x <= y`, and halving is exact for normal doubles, so the margin ends on the same
+	 * predicate (`EngineExtractionTest.marginMirrorsCondition` keeps the old one as a reference).
 	 *
 	 * @param targetSpeed commanded target
 	 * @param velocity current train velocity
