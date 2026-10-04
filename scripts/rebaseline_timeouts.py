@@ -3,9 +3,10 @@
 
 Purpose
     A @Timeout is a hang detector: it should fire soon after a test stops making progress. This
-    script reads the JUnit XML of several complete gate runs, maps every <testcase> back to the
-    @Timeout annotation that governs it, and proposes (or applies) a tighter value. It was written
-    for Issue #753; docs/KOTLIN_STYLE_GUIDE.md ("Test Timeouts") states the rule for humans.
+    script reads the JUnit XML of at least MIN_RUN_SETS complete gate runs, maps every <testcase>
+    back to the @Timeout annotation that governs it, and proposes (or applies) a tighter value. It
+    was written for Issue #753; docs/KOTLIN_STYLE_GUIDE.md ("Test Timeouts") states the rule for
+    humans.
 
 Inputs
     --repo     the checkout whose @Timeout lines are read and, with --apply, rewritten. Kotlin test
@@ -14,6 +15,10 @@ Inputs
     --timings  a folder of run sets, one sub-folder per complete gate run, each holding the copied
                JUnit XML: <timings>/<run>/<module>/build/test-results/<task>/TEST-*.xml for the tasks
                in MODULES (copy */build/test-results/{jvmTest,test,integrationTest}/ after each run).
+               At least MIN_RUN_SETS sub-folders are needed and the baseline set counts; each folder
+               is trusted as one complete run. The minimum bounds the runs behind a p95, not the
+               coverage per annotation: a class-level @Timeout pools the methods it governs, so it
+               can pass MIN_SAMPLES from fewer runs.
     --baseline-set  the run (sub-folder name) taken on the branch being re-baselined. A testcase
                that is absent from it and matches no method of this branch belongs to another
                branch and is ignored.
@@ -102,6 +107,7 @@ GRID = [10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600, 900, 1200, 1800, 3600]  
 FLOOR_S = 10  # lowest proposal
 FACTOR = 3  # proposal = FACTOR x p95
 MIN_SAMPLES = 4  # fewer samples: no-data, value unchanged
+MIN_RUN_SETS = 4  # fewer complete run sets: refuse to run (the baseline set counts)
 
 TIMEOUT_RE = re.compile(
     r"@Timeout\(\s*(?:value\s*=\s*)?(?P<num>\d+)\s*,\s*unit\s*=\s*(?P<unit>(?:TimeUnit\.)?(?:SECONDS|MINUTES))"
@@ -673,6 +679,11 @@ def collect(index: Index, timings: Path, baseline_set: str) -> tuple[list[Path],
         raise SystemExit(
             f"baseline set '{baseline_set}' is not one of the run sets in {timings}: "
             + (", ".join(s.name for s in sets) or "none found")
+        )
+    if len(sets) < MIN_RUN_SETS:
+        raise SystemExit(
+            f"need at least {MIN_RUN_SETS} run sets in {timings} (the baseline set counts), "
+            f"found {len(sets)}: " + (", ".join(s.name for s in sets) or "none found")
         )
     data = Samples()
     # testcase names that exist on the branch being re-baselined (the baseline run set)
