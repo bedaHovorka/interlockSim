@@ -168,6 +168,16 @@ internal class Engine(
 		exitTerm: Double
 	): Double = if (!accelerate) -1.0 else minOf(speedMargin(test), exitTerm)
 
+	/**
+	 * Sets a velocity at or below zero to exactly `0.0` after a crossing wait that can end on a
+	 * stand (Issue #760). Tolerance `0.0` only promises the satisfied side, `v <= 0`, and the
+	 * root finder's last probe can leave `v` a hair below zero; [stop] follows, so no
+	 * [derivatives] call clamps it again. The dwell and reversal checks need exactly `0.0`.
+	 */
+	private fun clampStand() {
+		if (host.velocityVariable.state <= 0.0) host.velocityVariable.state = 0.0
+	}
+
 	/** A discrete exit as a guard term: `-1.0` once [exit] holds, `1.0` before. */
 	private fun exitWhen(exit: Boolean): Double = if (exit) -1.0 else 1.0
 
@@ -206,8 +216,11 @@ internal class Engine(
 		// [speedMargin], and a discrete term at -1.0 or 1.0 ([exitWhen]). Here that term is
 		// [cruiseExitTerm] instead, a distance the train closes continuously, so it is root-found
 		// like the speed. The three converted guards use tolerance 0.0: the root finder then
-		// returns a point on the satisfied side, so a stand ends at the clamped `v == 0.0` the
-		// dwell and reversal checks require, never at a creep of up to the default 1e-9 m/s.
+		// returns a point on the satisfied side, `v <= 0` at a stand, and [clampStand] makes that
+		// the exact `v == 0.0` the dwell and reversal checks require, never a creep of up to the
+		// default 1e-9 m/s. At a stand the exit can be up to half a step late: [derivatives] holds
+		// `v` at 0 past the stand, so the guard is flat zero there and the first bisection probe
+		// past it ends the wait. The state there equals the state at the stand.
 		//
 		// No re-check follows any of these waits. The code after them reads only `terminate`,
 		// `accelerate` and discrete aspect state, and [watchForLateRestrictiveAspect]'s own
@@ -243,6 +256,7 @@ internal class Engine(
 			// Also ends when a restrictive aspect has left no braking room (Issue #1057): the leg
 			// was commanded while the signal allowed, so nothing else would ever brake it.
 			waitUntilCrossing(tolerance = 0.0) { legMargin(cond.getStopTest(), cruiseExitTerm()) }
+			clampStand()
 		}
 
 		// `!terminate` because [terminate] now really does end the wait above (it reactivates
@@ -500,6 +514,7 @@ internal class Engine(
 		waitUntilCrossing(tolerance = 0.0) {
 			legMargin(braking.getStopTest(), exitWhen(host.semaphoreToStopShortOf() == null))
 		}
+		clampStand()
 		return !terminate && accelerate && host.semaphoreToStopShortOf() == null
 	}
 

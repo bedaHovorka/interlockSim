@@ -10,17 +10,20 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isBetween
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isTrue
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.ksimulantenbande.kdisco.Variable
 import cz.ksimulantenbande.kdisco.dtMax
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.domain.MAXIMAL_TRAIN_ACCELERATION
+import cz.vutbr.fit.interlockSim.domain.MINIMAL_TRAIN_DECELERATION
 import cz.vutbr.fit.interlockSim.domain.brakingDistanceFrom
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -91,6 +94,15 @@ class EngineStandaloneTest : KoinTestBase() {
 
 		/** How far a root-found crossing may land from the exact threshold (m/s or m). */
 		const val CROSSING_TOLERANCE = 1e-6
+
+		/**
+		 * The stand test's stop-line distance per (m/s)² of speed: `0.1` makes the law ask for
+		 * 5 m/s², past the 3 m/s² bound at every speed (s²/m).
+		 */
+		const val STAND_DISTANCE_GAIN = 0.1
+
+		/** Delay from the stand test's law switch to its sample: several 0.1 s steps (s). */
+		const val STAND_SAMPLE_DELAY = 0.3
 	}
 
 	/**
@@ -101,9 +113,10 @@ class EngineStandaloneTest : KoinTestBase() {
 	 * of while its aspect does not allow, as the next semaphore, and as the aspect ahead — so a
 	 * test changes all three at once by setting the semaphore's signal.
 	 *
-	 * The distance never shrinks, so the brake-to-stop law `a = -v²/(2s)` is asymptotic here (`v`
-	 * never reaches 0): a brake-to-stop test can only leave that wait through its discrete aspect
-	 * term or through `terminate()`.
+	 * The distance never shrinks by default, so the brake-to-stop law `a = -v²/(2s)` is asymptotic
+	 * here (`v` never reaches 0) and a brake-to-stop test leaves that wait through its discrete
+	 * aspect term or through `terminate()`. [distanceAtSpeed] replaces the fixed distance with one
+	 * that depends on the speed, which lets a test drive `v` to 0 in finite time.
 	 *
 	 * @param distanceMeters the fixed distance to the signal the braking law aims at
 	 */
@@ -117,6 +130,9 @@ class EngineStandaloneTest : KoinTestBase() {
 		/** The signal ahead; `null` is open line. */
 		var semaphore: DynamicRailSemaphore? = null
 
+		/** When set, the distance to the signal as a function of the current velocity. */
+		var distanceAtSpeed: ((Double) -> Double)? = null
+
 		/**
 		 * `false` hides [semaphore] from [nextSemaphore] only. A leg that ends on its own then goes
 		 * idle instead of arming the late-aspect watch, so the velocity stays at the value the
@@ -129,7 +145,7 @@ class EngineStandaloneTest : KoinTestBase() {
 
 		override fun getVelocity(): Double = velocity.state
 
-		override fun distanceToSemaphore(): Double = distanceMeters
+		override fun distanceToSemaphore(): Double = distanceAtSpeed?.invoke(velocity.state) ?: distanceMeters
 
 		override fun semaphoreToStopShortOf(): DynamicRailSemaphore? = semaphore?.takeUnless { it.signal.isAllowing() }
 
@@ -177,6 +193,12 @@ class EngineStandaloneTest : KoinTestBase() {
 		/** Velocity at each of [actions] that ran, in time order. */
 		val velocitiesAtActions: MutableList<Double> = mutableListOf()
 
+		/** Simulated time at which each of [actions] ran, in time order. */
+		val timesAtActions: MutableList<Double> = mutableListOf()
+
+		/** Every simulated time at which the engine went idle (passivated), in time order. */
+		val engineIdleTimes: MutableList<Double> = mutableListOf()
+
 		/** Acceleration at the end of the run. */
 		var finalAcceleration: Double = Double.NaN
 			private set
@@ -201,6 +223,7 @@ class EngineStandaloneTest : KoinTestBase() {
 			peakAcceleration = maxOf(peakAcceleration, host.acceleration.state)
 			while (pending.isNotEmpty() && time() >= pending.first().time) {
 				velocitiesAtActions += host.velocity.state
+				timesAtActions += time()
 				pending.removeAt(0).run(engine)
 			}
 			if (time() >= runSeconds) {
@@ -245,6 +268,11 @@ class EngineStandaloneTest : KoinTestBase() {
 				command = command,
 				actions = actions(semaphore)
 			)
+		ctx.onSimulationEvent { event ->
+			if (event is SimulationEvent.ProcessPassivated && event.process === engine) {
+				driver.engineIdleTimes += event.time
+			}
+		}
 		ctx.setMainProcess(driver)
 		ctx.run()
 		return driver
@@ -354,6 +382,46 @@ class EngineStandaloneTest : KoinTestBase() {
 		val velocityAtClear = driver.velocitiesAtActions.single()
 		assertThat(velocityAtClear, name = "velocity when the aspect cleared").isGreaterThan(0.0)
 		assertThat(host.velocity.state, name = "velocity at the end").isGreaterThan(velocityAtClear)
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("brake-to-stop arm ends at the stand's velocity crossing, not one step late (Issue #760)")
+	fun brakeToStopArmEndsAtTheStandCrossing() {
+		val host = FakeEngineHost(distanceMeters = BRAKING_DISTANCE_M)
+
+		// From the first action on, the stop line is `STAND_DISTANCE_GAIN × v²` away, so the law
+		// asks for -5 m/s² at every speed: the bound clamps it to a constant
+		// MINIMAL_TRAIN_DECELERATION, and `v` reaches 0 in finite time. The aspect stays STOP, so
+		// the speed term is the only exit left. The second action only samples: the velocity
+		// integration still runs one step on the old law after a switch (#1126), so the stand time
+		// is exact in closed form only from a sample taken after that step.
+		val driver =
+			runWaitSite(host, command = { it.onWarning(TARGET_SPEED_MPS) }, facing = Signal.STOP) {
+				listOf(
+					TimedAction(LATE_ACTION_TIME) {
+						host.distanceAtSpeed = { v -> Train.SEMAPHORE_STOP_CLEARANCE_METERS + STAND_DISTANCE_GAIN * v * v }
+					},
+					TimedAction(LATE_ACTION_TIME + STAND_SAMPLE_DELAY) {}
+				)
+			}
+
+		val sampleTime = driver.timesAtActions.last()
+		val speedAtSample = driver.velocitiesAtActions.last()
+		assertThat(speedAtSample, name = "velocity at the sample, still braking").isGreaterThan(0.0)
+		val standTime = sampleTime + speedAtSample / -MINIMAL_TRAIN_DECELERATION.toDouble()
+
+		// A whole-step poll ends at the end of the step that crosses the stand: 0.059 s late here.
+		// The crossing wait bisects that step, but [Engine.derivatives] holds `v` at exactly 0 past
+		// the stand, so the guard is flat zero there and the first probe that lands past the stand
+		// ends the wait: at most half a step late, never at the step's end. The state is the same
+		// as at the stand itself (`v` and the law's acceleration are both 0).
+		val idleAfterSample = driver.engineIdleTimes.first { it > sampleTime }
+		assertThat(idleAfterSample - standTime, name = "engine idle time minus stand time (s)")
+			.isBetween(-CROSSING_TOLERANCE, PINNED_DT_MAX / 2)
+		assertThat(host.velocity.state, name = "velocity at the stand").isEqualTo(0.0)
+		assertThat(driver.finalAcceleration, name = "acceleration at the stand").isEqualTo(0.0)
+		assertThat(driver.engineTerminatedAtEnd, name = "engine terminated").isEqualTo(false)
 	}
 
 	@Test
