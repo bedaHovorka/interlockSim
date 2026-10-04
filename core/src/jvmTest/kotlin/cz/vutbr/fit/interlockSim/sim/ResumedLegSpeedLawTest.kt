@@ -69,8 +69,9 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 		const val CAP_POINT_TOLERANCE_METERS = 1.0
 
 		/**
-		 * Slack on a speed read off the constant-rate ramp or the coast. The ramp's wait wakes at
-		 * most one 1 ms step late, well under a millimetre per second at these rates.
+		 * Slack on a speed read off the constant-rate ramp or the coast. The ramp's wait is
+		 * root-found at the cap (Issue #760); the slack covers the sampler and the one step the
+		 * velocity integration runs on the old acceleration after a law switch (#1126).
 		 */
 		const val SPEED_TOLERANCE_MPS = 0.01
 

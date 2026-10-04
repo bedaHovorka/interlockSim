@@ -34,7 +34,8 @@ open class Generator(
 		// Block-boundary and tail-entry events (Train.kt) and every Engine wait (Issue #1014 for
 		// the approach, Issue #760 for the rest) are located by kDisco root-finding
 		// (`Process.waitCrossing` / `waitUntilCrossing`), so no Engine wait resolves to a whole step.
-		// `dtMax` still stays at 1 ms (Issue #760 measured 1e-3, 1e-2, 1e-1 and 1.0). When Engine
+		// `dtMax` still stays at 1 ms (the Issue #760 ladder tried 1e-3, 1e-2, 1e-1 and 1.0; its
+		// table is in PR #1133). When Engine
 		// switches its law at an event, the first accepted step after it still integrates the
 		// velocity with the old acceleration: the `acceleration` Variable is reset to its
 		// step-start value in every RK stage, and the velocity integration reads it before Engine

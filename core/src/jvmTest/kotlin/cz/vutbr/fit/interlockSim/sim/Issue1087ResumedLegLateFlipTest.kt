@@ -110,8 +110,8 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		/**
 		 * Slack around the resumed cap at the flip-back, proving the cap really was reached —
 		 * that is, `resumeAtAspectCap`'s wait had ended and pre-fix the engine was idle. The
-		 * resumed leg runs up at a constant rate and its wait wakes at most one 1 ms step late,
-		 * so it overshoots the cap by well under a millimetre per second.
+		 * resumed leg runs up at a constant rate and its wait is root-found at the cap (Issue
+		 * #760), so the slack only covers the 5 ms sampler, not a late wake-up.
 		 */
 		const val CAP_TOLERANCE_MPS = 0.01
 
@@ -135,10 +135,11 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		const val FREE_END_TIME = 120L
 
 		/**
-		 * Largest speed change the FREE rung's stand may end with: the crossing wait wakes at
-		 * most one accepted step late, so the braking starts a hair past the room and the front's
-		 * clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s line-speed cap,
-		 * the same residual `Issue1057LateFlipBrakingTest` bounds at 1.0.
+		 * Largest speed change the FREE rung's stand may end with: the crossing wait is
+		 * root-found, but the velocity integration still runs the first step after the braking
+		 * onset on the old acceleration (#1126), so the braking starts a hair past the room and
+		 * the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s
+		 * line-speed cap, the same residual `Issue1057LateFlipBrakingTest` bounds at 1.0.
 		 */
 		const val MAX_RESIDUAL_STEP_MPS = 1.0
 	}
@@ -293,9 +294,9 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 			name = "braking distance needed at the flip-back"
 		).isLessThan(stopLine - atFlipBack.totalDistance)
 
-		// Every step of the stand is braking at the bound except the last: the crossing wait
-		// wakes at most one accepted step late, the braking starts that hair past the room, and
-		// the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s cap,
+		// Every step of the stand is braking at the bound except the last: the velocity
+		// integration runs one step after the onset on the old acceleration (#1126), the braking
+		// starts that hair past the room, and the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s cap,
 		// the same residual `Issue1057LateFlipBrakingTest` bounds at its `MAX_RESIDUAL_STEP_MPS`.
 		// A pre-fix snap from the cap fails the residual bound below, not this tight one.
 		val worstBrakingStep =

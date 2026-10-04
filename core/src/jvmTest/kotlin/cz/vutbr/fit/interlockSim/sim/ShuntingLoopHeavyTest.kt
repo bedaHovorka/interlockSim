@@ -40,8 +40,8 @@ import java.util.concurrent.TimeUnit
  * non-determinism that may appear only under many repeated runs.
  *
  * **Expected outcome (verified by manual run):** with the fixed-seed train
- * generator (`Generator.random = Random(0L)`) and this branch's `kdisco 0.6.1-SNAPSHOT`
- * `waitCrossing`-based block-boundary detection, a 1024s run against vyhybna.xml
+ * generator (`Generator.random = Random(0L)`) and kDisco's (`kdiscoVersion` in
+ * gradle.properties) `waitCrossing`-based block-boundary detection, a 1024s run against vyhybna.xml
  * always produces exactly 28 trains entered and 27 fully exited.
  *
  * **These counts are cross-platform identical** and must match the native
