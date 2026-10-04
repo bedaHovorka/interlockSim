@@ -162,9 +162,9 @@ services:
   # only an unqualified `up`/`up --build` skips it. Before this was added, a plain `docker compose
   # up --build -d --remove-orphans` on a machine with a native `ollama serve` already running
   # would fail outright: ollama-port-check's intentional exit 1 (see below) made Compose report
-  # `service "ollama-port-check" didn't complete successfully` and abort the whole `up`, rather
-  # than the silent no-op the paragraph below promises. Gating it behind a profile means the
-  # bare/default command never reaches that dependency check at all.
+  # `service "ollama-port-check" didn't complete successfully` and abort the whole `up`.
+  # Gating it behind a profile means the bare/default command never reaches that dependency
+  # check at all.
   #
   # ollama-port-check is a one-shot container that probes localhost:11434 via
   # `nc -z` using network_mode: host (direct access to the real host's network stack on
@@ -242,7 +242,7 @@ services:
       - |
         if nc -z localhost 11434 2>/dev/null; then
           echo "Port 11434 is already in use (a native Ollama, or the compose ollama service already running); not starting another one on purpose (this exit 1 is not a broken compose file)."
-          echo "Whichever it is, point the app at it with OLLAMA_BASE_URL=http://localhost:11434 (the default for the app service) and run the app without --profile ollama."
+          echo "Whichever it is, point the app at it with OLLAMA_BASE_URL=http://localhost:11434 (the default for the app service; Docker Desktop: http://host.docker.internal:11434) and run the app without --profile ollama."
           exit 1
         fi
         echo "Port 11434 is free -- proceeding to start the Ollama container."

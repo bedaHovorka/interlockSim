@@ -124,6 +124,7 @@ AI dispatcher example (Goal 10, needs Ollama; Compose "Stage B", #924):
 
 ```bash
 docker compose --profile ollama up -d --wait ollama   # blocks until the model is pulled and the API answers (first start ~4.7 GB)
+#   (run it only while nothing listens on 11434: if Ollama already runs, it exits 1 by design)
 docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
 ```
 

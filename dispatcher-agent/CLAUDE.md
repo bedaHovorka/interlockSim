@@ -29,7 +29,7 @@ deliberately live in `:core` to avoid a dependency cycle. Which
 - **`integrationTest` probes `localhost:11434` before it runs.** If Ollama is
   reachable, `ollama-test`-tagged tests are included. If not reachable **locally**,
   the task fails with instructions (`ollama serve` or
-  `docker compose up -d ollama`). If not reachable **in CI**, it warns and skips
+  `docker compose --profile ollama up -d --wait ollama`). If not reachable **in CI**, it warns and skips
   the `ollama-test` tag.
 - **`ollama-test` tag:** tests that need a live Ollama with `qwen2.5:7b-instruct`.
   This is the only module using that tag.
@@ -142,7 +142,7 @@ next open step).
 ## Ollama Setup
 
 - Default endpoint `http://localhost:11434`; model `qwen2.5:7b-instruct`.
-- Start natively (`ollama serve`) or with `docker compose up -d ollama`
+- Start natively (`ollama serve`) or with `docker compose --profile ollama up -d --wait ollama`
   (the compose file defines an `ollama` profile).
 - Executor setup and troubleshooting:
   [../docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md](../docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md).

@@ -298,7 +298,9 @@ ollama pull qwen2.5:7b-instruct
 
 **Cause:** Ollama container too slow to start, or model still pulling
 
-**Fix:** `--wait` blocks until the model is pulled and the API answers, so no `sleep` is needed:
+**Fix:** `--wait` blocks until the model is pulled and the API answers, so no `sleep` is needed.
+Run it only while Ollama is not already running. If the compose `ollama` is already up, the port
+check exits 1 by design: check it with `docker compose ps ollama` instead.
 ```bash
 docker compose --profile ollama up -d --wait ollama
 ./gradlew :dispatcher-agent:integrationTest
