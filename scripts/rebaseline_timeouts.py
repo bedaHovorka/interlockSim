@@ -116,6 +116,11 @@ DECL_FUN_RE = re.compile(
     r"fun\s+(?:<[^>]*>\s*)?(?P<name>`[^`]+`|\w+)\s*\("
 )
 
+# Kotlin string templates: "$name" or "${name}" (a "$" before a digit is not a template).
+TEMPLATE_RE = re.compile(r"\$(?:\{[^}]*\}|[A-Za-z_]\w*)")
+# The same grammar applied to re.escape()d text ("\$", "\{", ...).
+TEMPLATE_ESCAPED_RE = re.compile(r"\\\$(?:\\\{[^}]*\\\}|[A-Za-z_]\w*)")
+
 
 # --------------------------------------------------------------------------- Kotlin source model
 
@@ -124,26 +129,26 @@ DECL_FUN_RE = re.compile(
 class Annotation:
     file: Path
     line_no: int  # 1-based
-    text: str
     seconds: int
-    unit: str
-    scope: str  # "class" | "method"
+    unit: str  # "SECONDS" | "MINUTES" (the TimeUnit. prefix is stripped once, at parse time)
     module: str
     owner: str  # JVM class name
     method: str | None = None
+
+    @property
+    def scope(self) -> str:
+        return "method" if self.method is not None else "class"
 
 
 @dataclass
 class Method:
     name: str
-    owner: "KClass"
     annotations: list[str]
     timeout: Annotation | None = None
     kind: str = "plain"  # test | param | repeated | factory | template | lifecycle | plain
     display: str | None = None  # literal display name, or regex when templated
     display_is_regex: bool = False
     name_pattern: str | None = None  # regex for invocation names of param/repeated tests
-    heavy: bool = False
 
 
 @dataclass
@@ -152,13 +157,11 @@ class KClass:
     file: Path
     package: str
     chain: list[str]  # simple names, outermost first
-    modifiers: str
     supertypes: list[str]
     annotations: list[str]
     parent: "KClass | None"
     methods: dict[str, Method] = field(default_factory=dict)
     timeout: Annotation | None = None
-    heavy: bool = False
     nested: bool = False
 
     @property
@@ -196,7 +199,7 @@ def kotlin_string_concat(text: str) -> tuple[str, bool]:
                 out.append({"n": "\n", "t": "\t", "r": "\r", "b": "\b"}.get(n, n))
                 i += 2
                 continue
-            if c == "$" and i + 1 < len(raw) and (raw[i + 1] == "{" or raw[i + 1].isalpha() or raw[i + 1] == "_"):
+            if c == "$" and TEMPLATE_RE.match(raw, i):
                 templated = True
             out.append(c)
             i += 1
@@ -227,6 +230,63 @@ def leading_tabs(line: str) -> int:
 
 def ann_named(anns: list[str], name: str) -> list[str]:
     return [a for a in anns if re.match(rf"@{name}\b", a)]
+
+
+def collect_annotation(lines: list[str], i: int, ln: int, stripped: str, pending: list[tuple[int, str]]) -> int:
+    """Consume an annotation (joined with its continuation lines); returns the advanced line index."""
+    text = stripped
+    depth = paren_delta(text)
+    while depth > 0 and i < len(lines):
+        nxt = lines[i].strip()
+        i += 1
+        text += " " + nxt
+        depth += paren_delta(nxt)
+    # several annotations on one line: split at top-level '@'
+    for part in split_annotations(text):
+        pending.append((ln, part))
+    return i
+
+
+def build_class(module, path, package, parent, stripped, i, pending, lines) -> KClass:
+    """Parse one class declaration (its header may continue over following lines) with its pending annotations."""
+    cm = DECL_CLASS_RE.match(stripped)
+    header = stripped
+    j = i
+    while "{" not in header and j < len(lines) and j < i + 15:
+        nxt = lines[j].strip()
+        if DECL_CLASS_RE.match(nxt) or DECL_FUN_RE.match(nxt) or nxt.startswith("@"):
+            break
+        header += " " + nxt
+        j += 1
+    name = strip_ticks(cm.group("name"))
+    anns = [a for _, a in pending]
+    sup = []
+    hm = re.search(r"\)\s*:\s*([^{]*)|^[^(]*?:\s*([^{]*)", header[header.find(name) + len(name) :])
+    if hm:
+        st = (hm.group(1) or hm.group(2) or "").strip()
+        sup = [re.split(r"[(<\s]", s.strip())[0] for s in st.split(",") if s.strip()]
+    kc = KClass(
+        module=module,
+        file=path,
+        package=package,
+        chain=(parent.chain if parent else []) + [name],
+        supertypes=sup,
+        annotations=anns,
+        parent=parent,
+        nested=bool(ann_named(anns, "Nested")),
+    )
+    kc.timeout = pending_timeout(pending, path, module, kc.jvm_name, None)
+    return kc
+
+
+def build_method(module, path, owner: KClass, fm, pending) -> Method:
+    """Parse one method declaration with its pending annotations."""
+    name = strip_ticks(fm.group("name"))
+    anns = [a for _, a in pending]
+    m = Method(name=name, annotations=anns)
+    classify_method(m)
+    m.timeout = pending_timeout(pending, path, module, owner.jvm_name, name)
+    return m
 
 
 def parse_file(module: str, path: Path) -> list[KClass]:
@@ -267,65 +327,20 @@ def parse_file(module: str, path: Path) -> list[KClass]:
         ):
             stack.pop()
         if stripped.startswith("@"):
-            text = stripped
-            depth = paren_delta(text)
-            while depth > 0 and i < len(lines):
-                nxt = lines[i].strip()
-                i += 1
-                text += " " + nxt
-                depth += paren_delta(nxt)
-            # several annotations on one line: split at top-level '@'
-            for part in split_annotations(text):
-                pending.append((ln, part))
+            i = collect_annotation(lines, i, ln, stripped, pending)
             continue
         cm = DECL_CLASS_RE.match(stripped)
         fm = DECL_FUN_RE.match(stripped)
         if cm:
-            header = stripped
-            j = i
-            while "{" not in header and j < len(lines) and j < i + 15:
-                nxt = lines[j].strip()
-                if DECL_CLASS_RE.match(nxt) or DECL_FUN_RE.match(nxt) or nxt.startswith("@"):
-                    break
-                header += " " + nxt
-                j += 1
-            parent = stack[-1][1] if stack else None
-            name = strip_ticks(cm.group("name"))
-            anns = [a for _, a in pending]
-            sup = []
-            hm = re.search(r"\)\s*:\s*([^{]*)|^[^(]*?:\s*([^{]*)", header[header.find(name) + len(name) :])
-            if hm:
-                st = (hm.group(1) or hm.group(2) or "").strip()
-                sup = [re.split(r"[(<\s]", s.strip())[0] for s in st.split(",") if s.strip()]
-            kc = KClass(
-                module=module,
-                file=path,
-                package=package,
-                chain=(parent.chain if parent else []) + [name],
-                modifiers=cm.group("mods") + cm.group("kind"),
-                supertypes=sup,
-                annotations=anns,
-                parent=parent,
-                nested=bool(ann_named(anns, "Nested")),
-            )
-            kc.heavy = any('"heavy-test"' in a for a in ann_named(anns, "Tag"))
-            for pln, a in pending:
-                if a.startswith("@Timeout("):
-                    kc.timeout = make_annotation(path, pln, a, "class", module, kc.jvm_name, None)
+            kc = build_class(module, path, package, stack[-1][1] if stack else None, stripped, i, pending, lines)
             classes.append(kc)
             stack.append((indent, kc))
             pending = []
             continue
         if fm and stack and indent == stack[-1][0] + 1:
             owner = stack[-1][1]
-            name = strip_ticks(fm.group("name"))
-            anns = [a for _, a in pending]
-            m = Method(name=name, owner=owner, annotations=anns)
-            classify_method(m)
-            for pln, a in pending:
-                if a.startswith("@Timeout("):
-                    m.timeout = make_annotation(path, pln, a, "method", module, owner.jvm_name, name)
-            owner.methods.setdefault(name, m)
+            m = build_method(module, path, owner, fm, pending)
+            owner.methods.setdefault(m.name, m)
             pending = []
             if line.count('"""') % 2 == 1:
                 in_raw = True
@@ -342,66 +357,69 @@ def paren_delta(text: str) -> int:
 
 
 def split_annotations(text: str) -> list[str]:
-    parts, depth, cur, in_str = [], 0, "", False
-    k = 0
-    while k < len(text):
-        c = text[k]
-        if c == '"' and (k == 0 or text[k - 1] != "\\"):
-            in_str = not in_str
-        if not in_str:
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-            elif c == "@" and depth == 0 and cur.strip():
-                parts.append(cur.strip())
-                cur = ""
-        cur += c
-        k += 1
-    if cur.strip():
-        parts.append(cur.strip())
-    return parts
+    # mask string literals so a quote or paren inside one cannot flip the scan state
+    mask = STRING_LIT_RE.sub('""', text)
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for k, c in enumerate(mask):
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        elif c == "@" and depth == 0 and k > start:
+            parts.append(text[start:k].strip())
+            start = k
+    parts.append(text[start:].strip())
+    return [p for p in parts if p]
 
 
-def make_annotation(path, ln, text, scope, module, owner, method) -> Annotation | None:
+def make_annotation(path, ln, text, module, owner, method) -> Annotation:
     m = TIMEOUT_RE.search(text)
     if not m:
         raise SystemExit(f"Unparsed @Timeout form at {path}:{ln}: {text}")
     num = int(m.group("num"))
-    unit = m.group("unit")
-    seconds = num * 60 if unit.endswith("MINUTES") else num
-    return Annotation(path, ln, text, seconds, unit, scope, module, owner, method)
+    unit = m.group("unit").removeprefix("TimeUnit.")
+    seconds = num * 60 if unit == "MINUTES" else num
+    return Annotation(file=path, line_no=ln, seconds=seconds, unit=unit, module=module, owner=owner, method=method)
+
+
+def pending_timeout(pending, path, module, owner_jvm, method) -> Annotation | None:
+    """The @Timeout of a pending annotation block, or None; fail-loud on duplicates and unparsed forms."""
+    hits = [(ln, a) for ln, a in pending if ann_named([a], "Timeout")]
+    if len(hits) > 1:
+        raise SystemExit(f"Duplicate @Timeout at {path}: lines {hits[0][0]} and {hits[1][0]}")
+    if not hits:
+        return None
+    return make_annotation(path, hits[0][0], hits[0][1], module, owner_jvm, method)
+
+
+def pattern_arg(ann: str, default: str) -> str:
+    """The name = argument of a @ParameterizedTest/@RepeatedTest annotation (default when absent or empty)."""
+    pm = re.search(r"name\s*=", ann)
+    if not pm:
+        return default
+    raw, _ = kotlin_string_concat(ann[pm.end() :])
+    return raw or default
 
 
 def classify_method(m: Method) -> None:
     anns = m.annotations
-    if ann_named(anns, "Tag") and any('"heavy-test"' in a for a in ann_named(anns, "Tag")):
-        m.heavy = True
     dn = ann_named(anns, "DisplayName")
     if dn:
         m.display, templ = kotlin_string_concat(dn[0])
         m.display_is_regex = templ
     display = m.display if m.display is not None else f"{m.name}()"
-    if ann_named(anns, "ParameterizedTest"):
+    pt = ann_named(anns, "ParameterizedTest")
+    rt = ann_named(anns, "RepeatedTest")
+    if pt:
         m.kind = "param"
-        pm = re.search(r"name\s*=", ann_named(anns, "ParameterizedTest")[0])
-        pattern = "[{index}] {argumentsWithNames}"
-        if pm:
-            pattern, _ = kotlin_string_concat(ann_named(anns, "ParameterizedTest")[0][pm.end() :])
-        m.name_pattern = pattern_to_regex(pattern, display)
-    elif ann_named(anns, "RepeatedTest"):
+        m.name_pattern = pattern_to_regex(pattern_arg(pt[0], "[{index}] {argumentsWithNames}"), display)
+    elif rt:
         m.kind = "repeated"
-        ra = ann_named(anns, "RepeatedTest")[0]
-        pattern = "repetition {currentRepetition} of {totalRepetitions}"
-        pm = re.search(r"name\s*=", ra)
-        if pm:
-            pattern, _ = kotlin_string_concat(ra[pm.end() :])
-            pattern = {
-                "SHORT_DISPLAY_NAME": "repetition {currentRepetition} of {totalRepetitions}",
-                "LONG_DISPLAY_NAME": "{displayName} :: repetition {currentRepetition} of {totalRepetitions}",
-            }.get(pattern, pattern) if pattern else "repetition {currentRepetition} of {totalRepetitions}"
-            if "RepeatedTest.LONG_DISPLAY_NAME" in ra:
-                pattern = "{displayName} :: repetition {currentRepetition} of {totalRepetitions}"
+        pattern = pattern_arg(rt[0], "repetition {currentRepetition} of {totalRepetitions}")
+        if "RepeatedTest.LONG_DISPLAY_NAME" in rt[0]:
+            pattern = "{displayName} :: repetition {currentRepetition} of {totalRepetitions}"
         m.name_pattern = pattern_to_regex(pattern, display)
     elif ann_named(anns, "TestFactory"):
         m.kind = "factory"
@@ -433,13 +451,20 @@ class Index:
                 for m in kc.methods.values():
                     if m.timeout:
                         self.annotations.append(m.timeout)
-        self.annotations.sort(key=lambda a: (str(a.file), a.line_no))
+        self.annotations.sort(key=lambda a: (a.file, a.line_no))
         self.by_simple: dict[str, dict[str, list[KClass]]] = {}
         for module, cmap in self.classes.items():
             d = defaultdict(list)
             for kc in cmap.values():
                 d[kc.simple].append(kc)
             self.by_simple[module] = d
+        self.file_classes: dict[Path, list[KClass]] = defaultdict(list)
+        for cmap in self.classes.values():
+            for kc in cmap.values():
+                self.file_classes[kc.file].append(kc)
+        # per-row all_methods()/class_level_governor() calls are >99% repeats: memoize both
+        self._methods_cache: dict[tuple[str, str], dict[str, Method]] = {}
+        self._governor_cache: dict[tuple[str, str], Annotation | None] = {}
 
     def superclass(self, kc: KClass) -> KClass | None:
         for st in kc.supertypes:
@@ -449,6 +474,15 @@ class Index:
             if len(pick) == 1:
                 return pick[0]
         return None
+
+    def superclass_chain(self, kc: KClass):
+        """kc and every superclass of it, outermost first (cycle-safe)."""
+        cur: KClass | None = kc
+        seen: set[tuple[str, str]] = set()
+        while cur is not None and (cur.module, cur.jvm_name) not in seen:
+            seen.add((cur.module, cur.jvm_name))
+            yield cur
+            cur = self.superclass(cur)
 
     def resolve_classname(self, module: str, classname: str) -> KClass | None:
         cmap = self.classes[module]
@@ -463,29 +497,29 @@ class Index:
 
     def all_methods(self, kc: KClass) -> dict[str, Method]:
         """Methods of a class including inherited ones (own definitions win)."""
-        out: dict[str, Method] = {}
-        cur: KClass | None = kc
-        seen = set()
-        while cur is not None and cur.jvm_name not in seen:
-            seen.add(cur.jvm_name)
-            for n, m in cur.methods.items():
-                out.setdefault(n, m)
-            cur = self.superclass(cur)
-        return out
+        key = (kc.module, kc.jvm_name)
+        if key not in self._methods_cache:
+            out: dict[str, Method] = {}
+            for c in self.superclass_chain(kc):
+                for n, m in c.methods.items():
+                    out.setdefault(n, m)
+            self._methods_cache[key] = out
+        return self._methods_cache[key]
 
     def class_level_governor(self, kc: KClass) -> Annotation | None:
         """Class-level @Timeout that JUnit applies to a test running in kc (@Inherited + enclosing @Nested)."""
-        cur: KClass | None = kc
-        while cur is not None:
-            c2: KClass | None = cur
-            seen = set()
-            while c2 is not None and c2.jvm_name not in seen:
-                seen.add(c2.jvm_name)
-                if c2.timeout:
-                    return c2.timeout
-                c2 = self.superclass(c2)
-            cur = cur.parent if cur.nested else None
-        return None
+        key = (kc.module, kc.jvm_name)
+        if key not in self._governor_cache:
+            gov: Annotation | None = None
+            cur: KClass | None = kc
+            while cur is not None and gov is None:
+                for c in self.superclass_chain(cur):
+                    if c.timeout:
+                        gov = c.timeout
+                        break
+                cur = cur.parent if cur.nested else None
+            self._governor_cache[key] = gov
+        return self._governor_cache[key]
 
     def is_heavy(self, kc: KClass, m: Method | None) -> bool:
         return self.has_tag(kc, m, "heavy-test")
@@ -493,8 +527,8 @@ class Index:
     def governs_tag(self, kc: KClass, tag: str) -> bool:
         """True if a method of kc or of a class nested in it carries the tag."""
         needle = f'"{tag}"'
-        for c in self.classes[kc.module].values():
-            if c.file == kc.file and c.chain[: len(kc.chain)] == kc.chain:
+        for c in self.file_classes.get(kc.file, []):
+            if c.chain[: len(kc.chain)] == kc.chain:
                 for mm in c.methods.values():
                     if any(needle in x for x in ann_named(mm.annotations, "Tag")):
                         return True
@@ -517,7 +551,7 @@ def ann_key(a: Annotation) -> str:
 
 
 def match_candidates(methods: dict[str, Method], name: str) -> list[Method]:
-    mm = re.match(r"^(.*)\(([^()]*)\)$", name)
+    mm = re.match(r"^(.*)\([^()]*\)$", name)
     if mm and mm.group(1) in methods and methods[mm.group(1)].display is None:
         return [methods[mm.group(1)]]
     out = []
@@ -534,7 +568,7 @@ def match_candidates(methods: dict[str, Method], name: str) -> list[Method]:
             continue
         if m.display is not None:
             if m.display_is_regex:
-                rx = "^" + re.sub(r"\\\$(?:\\\{[^}]*\\\}|\w+)", ".*", re.escape(m.display)) + "$"
+                rx = "^" + TEMPLATE_ESCAPED_RE.sub(".*", re.escape(m.display)) + "$"
                 if re.match(rx, name, re.S):
                     out.append(m)
             elif m.display == name:
@@ -643,20 +677,105 @@ def collect(index: Index, timings: Path, baseline_set: str):
 def rewrite(text: str, new_seconds: int, unit: str) -> str:
     m = TIMEOUT_RE.search(text)
     assert m
-    if unit.endswith("MINUTES"):
+    if unit == "MINUTES":
         if new_seconds % 60 == 0:
-            return text[: m.start("num")] + str(new_seconds // 60) + text[m.end("num") :]
-        return (
-            text[: m.start("num")] + str(new_seconds) + text[m.end("num") : m.start("unit")]
-            + "TimeUnit.SECONDS" + text[m.end("unit") :]
-        )
+            new_seconds //= 60
+        else:
+            # the number sits left of the unit span, so replace the unit first and keep the number span valid
+            text = text[: m.start("unit")] + "TimeUnit.SECONDS" + text[m.end("unit") :]
     return text[: m.start("num")] + str(new_seconds) + text[m.end("num") :]
 
 
 def fmt_unit(seconds: int, unit: str) -> str:
-    if unit.endswith("MINUTES") and seconds % 60 == 0:
+    if unit == "MINUTES" and seconds % 60 == 0:
         return f"{seconds // 60} min"
     return f"{seconds} s"
+
+
+# --------------------------------------------------------------------------- row decision
+
+
+def exclusion_reason(index, a, kc, m, include_coupled, include_ollama) -> str | None:
+    """Why the annotation is out of re-baselining scope, or None when the tables keep it."""
+    if a.file.name in EXCLUDED_FILES:
+        return "excluded file: " + EXCLUDED_FILES[a.file.name]
+    if index.is_heavy(kc, m):
+        return "heavy-test tag"
+    if not include_coupled and (a.file.name, a.method) in BUDGET_COUPLED:
+        return "budget-coupled: " + BUDGET_COUPLED[(a.file.name, a.method)]
+    if not include_ollama and (
+        index.has_tag(kc, m, OLLAMA_TAG)
+        or (a.scope == "class" and index.governs_tag(kc, OLLAMA_TAG))
+    ):
+        return "ollama-test tag: runtime is a live external service, not the test"
+    return None
+
+
+def decide_row(a, index, cls, inv, tainted, repo, include_coupled, include_ollama) -> dict:
+    """The CSV row for one annotation: the action decided from the samples that map to it."""
+    kc = index.classes[a.module][a.owner]
+    m = kc.methods.get(a.method) if a.method else None
+    key = ann_key(a)
+    samples: list[float] = []
+    reason = exclusion_reason(index, a, kc, m, include_coupled, include_ollama)
+    action = "excluded" if reason is not None else None
+    if action is None:
+        samples = list(cls.get(key, {}).values()) if a.scope == "class" else inv.get(key, [])
+        if a.scope == "method" and m is not None and m.kind not in ("test", "param", "repeated"):
+            action, reason = "no-data", f"method kind {m.kind}"
+        elif key in tainted:
+            action, reason = "no-data", "ambiguous mapping: " + tainted[key]
+        elif len(samples) < MIN_SAMPLES:
+            action, reason = "no-data", f"{len(samples)} samples"
+    row = {
+        "module": a.module,
+        "file": str(a.file.relative_to(repo)),
+        "line": a.line_no,
+        "scope": a.scope,
+        "target": a.owner.split(".")[-1] + (f"#{a.method}" if a.method else ""),
+        "kind": (m.kind if m else "class"),
+        "current_s": a.seconds,
+        "unit": a.unit,
+        "samples": len(samples),
+        "max_s": f"{max(samples):.3f}" if samples else "",
+        "p95_s": "",
+        "x3_p95_s": "",
+        "proposal_s": "",
+        "pooled_p95_s": "",
+        "slowest": "",
+        "new_s": a.seconds,
+        "action": action,
+        "reason": reason or "",
+    }
+    if action is None:
+        if a.scope == "class":
+            per_method: dict[tuple, list[float]] = defaultdict(list)
+            for (_set, jvm, meth), t in cls[key].items():
+                per_method[(jvm, meth)].append(t)
+            worst = max(per_method.items(), key=lambda kv: p95(kv[1]))
+            row["slowest"] = f"{worst[0][0].split('.')[-1]}#{worst[0][1]}"
+            row["pooled_p95_s"] = f"{p95(samples):.3f}"
+            p = p95(worst[1])
+        else:
+            p = p95(samples)
+        proposal = round_up_grid(max(FACTOR * p, FLOOR_S))
+        row["p95_s"] = f"{p:.3f}"
+        row["x3_p95_s"] = f"{FACTOR * p:.3f}"
+        guard = JOIN_GUARD.get((a.file.name, a.method))
+        if guard is not None:
+            floor = next(g for g in GRID if g > guard)
+            if floor > proposal:
+                proposal = floor
+                row["reason"] = f"join guard: in-body wait {guard} s needs a timeout above it"
+        row["proposal_s"] = proposal
+        if proposal < a.seconds:
+            row["action"], row["new_s"] = "lower", proposal
+        elif FACTOR * p > a.seconds:
+            row["action"], row["reason"] = "would-raise", "3 x p95 exceeds the current value; left unchanged"
+        else:
+            row["action"] = "keep"
+    row["_ann"] = a
+    return row
 
 
 def main() -> int:
@@ -690,85 +809,10 @@ def main() -> int:
     for (mod, cn), n in sorted(unresolved.items()):
         print(f"  unresolved {mod} {cn} x{n}")
 
-    rows = []
-    for a in index.annotations:
-        kc = index.classes[a.module][a.owner]
-        m = kc.methods.get(a.method) if a.method else None
-        key = ann_key(a)
-        reason = ""
-        samples: list[float] = []
-        if a.file.name in EXCLUDED_FILES:
-            action, reason = "excluded", "excluded file: " + EXCLUDED_FILES[a.file.name]
-        elif index.is_heavy(kc, m):
-            action, reason = "excluded", "heavy-test tag"
-        elif not args.include_coupled and (a.file.name, a.method) in BUDGET_COUPLED:
-            action, reason = "excluded", "budget-coupled: " + BUDGET_COUPLED[(a.file.name, a.method)]
-        elif not args.include_ollama and (
-            index.has_tag(kc, m, OLLAMA_TAG)
-            or (a.scope == "class" and index.governs_tag(kc, OLLAMA_TAG))
-        ):
-            action, reason = "excluded", "ollama-test tag: runtime is a live external service, not the test"
-        else:
-            samples = list(cls.get(key, {}).values()) if a.scope == "class" else inv.get(key, [])
-            if a.scope == "method" and m is not None and m.kind not in ("test", "param", "repeated"):
-                action, reason = "no-data", f"method kind {m.kind}"
-            elif key in tainted:
-                action, reason = "no-data", "ambiguous mapping: " + tainted[key]
-            elif len(samples) < MIN_SAMPLES:
-                action, reason = "no-data", f"{len(samples)} samples"
-            else:
-                action = None
-        row = {
-            "module": a.module,
-            "file": str(a.file.relative_to(args.repo)),
-            "line": a.line_no,
-            "scope": a.scope,
-            "target": a.owner.split(".")[-1] + (f"#{a.method}" if a.method else ""),
-            "kind": (m.kind if m else "class"),
-            "current_s": a.seconds,
-            "unit": a.unit.replace("TimeUnit.", ""),
-            "samples": len(samples),
-            "max_s": f"{max(samples):.3f}" if samples else "",
-            "p95_s": "",
-            "x3_p95_s": "",
-            "proposal_s": "",
-            "pooled_p95_s": "",
-            "slowest": "",
-            "new_s": a.seconds,
-            "action": action,
-            "reason": reason,
-        }
-        slowest = ""
-        pooled = None
-        if action is None and a.scope == "class":
-            per_method: dict[tuple, list[float]] = defaultdict(list)
-            for (_set, jvm, meth), t in cls[key].items():
-                per_method[(jvm, meth)].append(t)
-            worst = max(per_method.items(), key=lambda kv: p95(kv[1]))
-            slowest = f"{worst[0][0].split('.')[-1]}#{worst[0][1]}"
-            pooled = p95(samples)
-        if action is None:
-            p = p95(worst[1]) if a.scope == "class" else p95(samples)
-            proposal = round_up_grid(max(FACTOR * p, FLOOR_S))
-            row["p95_s"] = f"{p:.3f}"
-            row["x3_p95_s"] = f"{FACTOR * p:.3f}"
-            row["pooled_p95_s"] = f"{pooled:.3f}" if pooled is not None else ""
-            row["slowest"] = slowest
-            guard = JOIN_GUARD.get((a.file.name, a.method))
-            if guard is not None:
-                floor = next(g for g in GRID if g > guard)
-                if floor > proposal:
-                    proposal = floor
-                    row["reason"] = f"join guard: in-body wait {guard} s needs a timeout above it"
-            row["proposal_s"] = proposal
-            if proposal < a.seconds:
-                row["action"], row["new_s"] = "lower", proposal
-            elif FACTOR * p > a.seconds:
-                row["action"], row["reason"] = "would-raise", "3 x p95 exceeds the current value; left unchanged"
-            else:
-                row["action"] = "keep"
-        row["_ann"] = a
-        rows.append(row)
+    rows = [
+        decide_row(a, index, cls, inv, tainted, args.repo, args.include_coupled, args.include_ollama)
+        for a in index.annotations
+    ]
 
     args.out.mkdir(parents=True, exist_ok=True)
     fields = [k for k in rows[0] if not k.startswith("_")]
@@ -787,10 +831,7 @@ def main() -> int:
         mr = [r for r in rows if r["module"] == mod]
         print(f"\n{mod}: {len(mr)} annotations; actions {dict(Counter(r['action'] for r in mr))}")
         before = Counter(fmt_unit(r["current_s"], r["unit"]) for r in mr)
-        after = Counter(
-            fmt_unit(r["new_s"], r["unit"] if (r["unit"] == "SECONDS" or r["new_s"] % 60 == 0) else "SECONDS")
-            for r in mr
-        )
+        after = Counter(fmt_unit(r["new_s"], r["unit"]) for r in mr)
         key = lambda s: int(s.split()[0]) * (60 if s.endswith("min") else 1)
         print("  before:", ", ".join(f"{k} x{v}" for k, v in sorted(before.items(), key=lambda kv: key(kv[0]))))
         print("  after: ", ", ".join(f"{k} x{v}" for k, v in sorted(after.items(), key=lambda kv: key(kv[0]))))
