@@ -282,9 +282,11 @@ class DefaultInterlockingFacade(
 		}
 
 		val fromEndpoint =
-			resolveEndpoint(fromEndpointName) ?: return unresolvedEndpointDenial(fromEndpointName)
+			resolveEndpoint(fromEndpointName, inOutByName, semaphoreByName)
+				?: return unresolvedEndpointDenial(fromEndpointName)
 		val toEndpoint =
-			resolveEndpoint(toEndpointName) ?: return unresolvedEndpointDenial(toEndpointName)
+			resolveEndpoint(toEndpointName, inOutByName, semaphoreByName)
+				?: return unresolvedEndpointDenial(toEndpointName)
 
 		return env
 			.getRoutingServices()
@@ -292,12 +294,6 @@ class DefaultInterlockingFacade(
 			.reservePath(trainId, fromEndpoint, toEndpoint)
 			.toRouteResponse(trainId, fromEndpointName, toEndpointName)
 	}
-
-	/**
-	 * Resolves a named endpoint to its [DynamicPathSeparator], checking [inOutByName]
-	 * first then [semaphoreByName].  Returns `null` if no element matches the name.
-	 */
-	private fun resolveEndpoint(name: String): DynamicPathSeparator? = inOutByName[name] ?: semaphoreByName[name]
 
 	/**
 	 * Condition 1: Check that all blocks in the route are FREE — neither physically occupied

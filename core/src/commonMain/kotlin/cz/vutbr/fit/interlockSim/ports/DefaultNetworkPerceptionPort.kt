@@ -9,8 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
-import cz.ksimulantenbande.kdisco.DiscoException
-import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -20,6 +18,7 @@ import cz.vutbr.fit.interlockSim.sim.separatorAspect
 import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import cz.vutbr.fit.interlockSim.util.indexByNonBlankName
 
 /**
@@ -331,19 +330,13 @@ class DefaultNetworkPerceptionPort(
 	 * interleave between them during a normal tick. The result is published via
 	 * [latestCaptured] so off-thread [snapshot] callers see a consistent picture.
 	 *
-	 * [SimulationSnapshot.simTime] is set from [Process.time]; if called outside an
-	 * active kDisco simulation (e.g. in unit tests), the resulting [DiscoException]
-	 * is caught and `simTime` falls back to `0.0`. Any other exception propagates.
+	 * [SimulationSnapshot.simTime] is set from [currentSimulationTime]; if called outside an
+	 * active kDisco simulation (e.g. in unit tests), `simTime` falls back to `0.0`.
 	 */
 	override fun captureSnapshot(): SimulationSnapshot {
 		val captured =
 			SimulationSnapshot(
-				simTime =
-					try {
-						Process.time()
-					} catch (_: DiscoException) {
-						0.0
-					},
+				simTime = currentSimulationTime(),
 				semaphores = allSignalAspects(),
 				blocks = allBlockOccupancies(),
 				trainPositions = allTrainPositions(),

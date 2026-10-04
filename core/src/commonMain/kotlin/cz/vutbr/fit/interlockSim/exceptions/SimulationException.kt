@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
-import cz.ksimulantenbande.kdisco.Process
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 
 /**
  * Exception thrown during simulation - at start, between start and end of simulation.
@@ -25,7 +25,7 @@ open class SimulationException(
 	/**
 	 * Model time of exception.
 	 */
-	val time: Double = runCatching { Process.time() }.getOrDefault(Double.NaN)
+	val time: Double = currentSimulationTime(Double.NaN)
 
 	/**
 	 * Create SimulationException with default FATAL severity
