@@ -278,6 +278,19 @@ class EngineStandaloneTest : KoinTestBase() {
 		return driver
 	}
 
+	/**
+	 * The engine ended at the terminate action, the last of [driver]'s actions: terminated, no
+	 * acceleration left, and the velocity frozen at its value when terminate ran.
+	 */
+	private fun assertFrozenByTerminate(
+		driver: EngineDriverProcess,
+		host: FakeEngineHost
+	) {
+		assertThat(driver.engineTerminatedAtEnd, name = "engine terminated").isTrue()
+		assertThat(driver.finalAcceleration, name = "acceleration after terminate").isEqualTo(0.0)
+		assertThat(host.velocity.state, name = "velocity after terminate").isEqualTo(driver.velocitiesAtActions.last())
+	}
+
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("velocity integrates toward the commanded target without a Train")
@@ -412,10 +425,8 @@ class EngineStandaloneTest : KoinTestBase() {
 		val standTime = sampleTime + speedAtSample / -MINIMAL_TRAIN_DECELERATION.toDouble()
 
 		// A whole-step poll ends at the end of the step that crosses the stand: 0.059 s late here.
-		// The crossing wait bisects that step, but [Engine.derivatives] holds `v` at exactly 0 past
-		// the stand, so the guard is flat zero there and the first probe that lands past the stand
-		// ends the wait: at most half a step late, never at the step's end. The state is the same
-		// as at the stand itself (`v` and the law's acceleration are both 0).
+		// The crossing wait ends at most half a step late, never at the step's end (see
+		// `Engine.awaitLeg` for why).
 		val idleAfterSample = driver.engineIdleTimes.first { it > sampleTime }
 		assertThat(idleAfterSample - standTime, name = "engine idle time minus stand time (s)")
 			.isBetween(-CROSSING_TOLERANCE, PINNED_DT_MAX / 2)
@@ -455,9 +466,7 @@ class EngineStandaloneTest : KoinTestBase() {
 		// A plain `waitUntil` re-parked here: reactivate re-tests its condition, which a running
 		// leg does not meet, so the engine kept integrating until the leg ended on its own. The
 		// velocity frozen at the terminate instant is what tells the two apart.
-		assertThat(driver.engineTerminatedAtEnd, name = "engine terminated").isTrue()
-		assertThat(driver.finalAcceleration, name = "acceleration after terminate").isEqualTo(0.0)
-		assertThat(host.velocity.state, name = "velocity after terminate").isEqualTo(driver.velocitiesAtActions.last())
+		assertFrozenByTerminate(driver, host)
 	}
 
 	@Test
@@ -475,9 +484,7 @@ class EngineStandaloneTest : KoinTestBase() {
 			}
 
 		assertThat(driver.velocitiesAtActions.last(), name = "velocity when terminated").isLessThan(TARGET_SPEED_MPS)
-		assertThat(driver.engineTerminatedAtEnd, name = "engine terminated").isTrue()
-		assertThat(driver.finalAcceleration, name = "acceleration after terminate").isEqualTo(0.0)
-		assertThat(host.velocity.state, name = "velocity after terminate").isEqualTo(driver.velocitiesAtActions.last())
+		assertFrozenByTerminate(driver, host)
 	}
 
 	@Test
@@ -492,8 +499,6 @@ class EngineStandaloneTest : KoinTestBase() {
 			}
 
 		assertThat(driver.velocitiesAtActions.single(), name = "velocity when terminated").isGreaterThan(0.0)
-		assertThat(driver.engineTerminatedAtEnd, name = "engine terminated").isTrue()
-		assertThat(driver.finalAcceleration, name = "acceleration after terminate").isEqualTo(0.0)
-		assertThat(host.velocity.state, name = "velocity after terminate").isEqualTo(driver.velocitiesAtActions.last())
+		assertFrozenByTerminate(driver, host)
 	}
 }

@@ -99,17 +99,16 @@ internal class Engine(
 	private var commandPending = false
 
 	/**
-	 * The stop test of one engine leg, and how [derivatives] drives that leg.
+	 * The stop test of one engine leg, and how [derivatives] drives that leg. The name predates
+	 * Issue #760, when this was the `Condition` a step poll tested.
 	 *
 	 * @property runUpRate a constant acceleration for the leg in place of the braking law;
 	 *   `null` — every leg but an accelerating [resumeAtAspectCap] — keeps the law
 	 */
 	private class AccelerationStopCondition(
-		private val stopTest: AccelerationStopTest,
+		val stopTest: AccelerationStopTest,
 		val runUpRate: Double? = null
-	) {
-		fun getStopTest(): AccelerationStopTest = stopTest
-	}
+	)
 
 	/**
 	 * How much room phase 1 of [onWarning] still has, as a single margin that goes
@@ -146,33 +145,41 @@ internal class Engine(
 	 * A non-positive remaining distance or velocity leaves the braking-room term out: those
 	 * corners belong to the existing exits ([derivatives]' `s <= 0` branch).
 	 */
-	private fun approachMargin(): Double {
-		if (!accelerate) return -1.0
-		return minOf(speedMargin(AccelerationStopTest.TO_HALF_SPEED), brakingRoomMargin())
-	}
+	private fun approachMargin(): Double = legMargin(AccelerationStopTest.TO_HALF_SPEED, brakingRoomMargin())
 
 	/**
-	 * [test]'s [AccelerationStopTest.margin] for the current leg's [targetSpeed] and the host's
-	 * velocity (Issue #760): non-positive exactly when the leg's speed target is met, the same
-	 * predicate the old step polls tested.
-	 */
-	private fun speedMargin(test: AccelerationStopTest): Double = test.margin(targetSpeed, host.getVelocity())
-
-	/**
-	 * The guard of one velocity-target crossing wait (Issue #760): `-1.0` while the leg is
-	 * cancelled (`accelerate` false), else the smaller of [test]'s [speedMargin] and [exitTerm],
-	 * the wait's one other exit. The wait's lambda calls it again on every evaluation.
+	 * The guard of one engine-leg crossing wait (Issues #1014 and #760): `-1.0` while the leg is
+	 * cancelled (`accelerate` false), else the smaller of [test]'s [AccelerationStopTest.margin]
+	 * for the leg's [targetSpeed] and the host's velocity — non-positive exactly when the leg's
+	 * speed target is met, the predicate the old step polls tested — and [exitTerm], the wait's
+	 * one other exit. The wait's lambda calls it again on every evaluation.
 	 */
 	private fun legMargin(
 		test: AccelerationStopTest,
 		exitTerm: Double
-	): Double = if (!accelerate) -1.0 else minOf(speedMargin(test), exitTerm)
+	): Double = if (!accelerate) -1.0 else minOf(test.margin(targetSpeed, host.getVelocity()), exitTerm)
 
 	/**
-	 * Sets a velocity at or below zero to exactly `0.0` after a crossing wait that can end on a
-	 * stand (Issue #760). Tolerance `0.0` only promises the satisfied side, `v <= 0`, and the
-	 * root finder's last probe can leave `v` a hair below zero; [stop] follows, so no
-	 * [derivatives] call clamps it again. The dwell and reversal checks need exactly `0.0`.
+	 * Waits until the leg's [legMargin] for [test] and [exitTerm] crosses zero (Issue #760), then
+	 * [clampStand]s. Tolerance `0.0`: the root finder returns a point on the satisfied side, so a
+	 * leg that ends on a stand ends at `v <= 0`, never at a creep of up to the default 1e-9 m/s.
+	 * At a stand the exit can be up to half a step late: [derivatives] holds `v` at 0 past the
+	 * stand, so the guard is flat zero there and the first bisection probe past it ends the wait.
+	 * The state there equals the state at the stand.
+	 */
+	private suspend fun awaitLeg(
+		test: AccelerationStopTest,
+		exitTerm: () -> Double
+	) {
+		waitUntilCrossing(tolerance = 0.0) { legMargin(test, exitTerm()) }
+		clampStand()
+	}
+
+	/**
+	 * Sets a velocity at or below zero to exactly `0.0`, the value the dwell and reversal checks
+	 * need. [derivatives] applies it on every evaluation; [awaitLeg] applies it once more after a
+	 * crossing wait, whose last root-finder probe can leave `v` a hair below zero with [stop]
+	 * about to follow, so no [derivatives] call would clamp it again.
 	 */
 	private fun clampStand() {
 		if (host.velocityVariable.state <= 0.0) host.velocityVariable.state = 0.0
@@ -182,11 +189,16 @@ internal class Engine(
 	private fun exitWhen(exit: Boolean): Double = if (exit) -1.0 else 1.0
 
 	/**
-	 * The cruise arm's second exit: [brakingRoomMargin] (Issue #1057), bounded by `1.0` because an
-	 * unarmed margin is +∞. A leg aimed at a stand (`targetSpeed == 0.0`) has no such exit, the
-	 * same gate [brakingRoomGone] applies.
+	 * The cruise arm's second exit: [boundedBrakingRoomMargin] (Issue #1057). A leg aimed at a
+	 * stand (`targetSpeed == 0.0`) has no such exit, the same gate [brakingRoomGone] applies.
 	 */
-	private fun cruiseExitTerm(): Double = if (targetSpeed > 0.0) minOf(brakingRoomMargin(), 1.0) else 1.0
+	private fun cruiseExitTerm(): Double = if (targetSpeed > 0.0) boundedBrakingRoomMargin() else 1.0
+
+	/**
+	 * [brakingRoomMargin] bounded by `1.0` for a crossing guard: an unarmed margin is +∞, and +∞
+	 * must never reach the root finder as a crossing value.
+	 */
+	private fun boundedBrakingRoomMargin(): Double = minOf(brakingRoomMargin(), 1.0)
 
 	override suspend fun actions() {
 		while (true) {
@@ -211,16 +223,11 @@ internal class Engine(
 
 		// Every wait of a leg is located by root-finding (Issue #1014 for the approach; Issue #760
 		// for the `accelerateTo` arm below, [resumeAtAspectCap] and [brakeToStopLine]), so no exit
-		// is a whole step late. Each guard is non-positive exactly when the predicate a step poll
-		// used to test holds ([legMargin]): -1.0 while `accelerate` is false, the leg's
-		// [speedMargin], and a discrete term at -1.0 or 1.0 ([exitWhen]). Here that term is
-		// [cruiseExitTerm] instead, a distance the train closes continuously, so it is root-found
-		// like the speed. The three converted guards use tolerance 0.0: the root finder then
-		// returns a point on the satisfied side, `v <= 0` at a stand, and [clampStand] makes that
-		// the exact `v == 0.0` the dwell and reversal checks require, never a creep of up to the
-		// default 1e-9 m/s. At a stand the exit can be up to half a step late: [derivatives] holds
-		// `v` at 0 past the stand, so the guard is flat zero there and the first bisection probe
-		// past it ends the wait. The state there equals the state at the stand.
+		// is a whole step late. Each guard is a [legMargin], non-positive exactly when the
+		// predicate a step poll used to test holds: the leg's speed margin and one more exit, a
+		// discrete term at -1.0 or 1.0 ([exitWhen]). Here that term is [cruiseExitTerm] instead,
+		// a distance the train closes continuously, so it is root-found like the speed. The three
+		// #760 waits go through [awaitLeg], which also says how a stand ends.
 		//
 		// No re-check follows any of these waits. The code after them reads only `terminate`,
 		// `accelerate` and discrete aspect state, and [watchForLateRestrictiveAspect]'s own
@@ -234,7 +241,7 @@ internal class Engine(
 		// [actions], and the other turn only passivates again. [terminate] now really ends a
 		// crossing wait: it reactivates, which drops the notice, where a plain `waitUntil`
 		// re-tested its condition and parked again.
-		val isHalfSpeedLeg = cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED
+		val isHalfSpeedLeg = cond.stopTest == AccelerationStopTest.TO_HALF_SPEED
 		if (isHalfSpeedLeg) {
 			// The second term ends phase 1 the instant the signal this phase started short of
 			// itself turns allowing, rather than only letting a clear relax the braking-room
@@ -255,8 +262,7 @@ internal class Engine(
 		} else {
 			// Also ends when a restrictive aspect has left no braking room (Issue #1057): the leg
 			// was commanded while the signal allowed, so nothing else would ever brake it.
-			waitUntilCrossing(tolerance = 0.0) { legMargin(cond.getStopTest(), cruiseExitTerm()) }
-			clampStand()
+			awaitLeg(cond.stopTest) { cruiseExitTerm() }
 		}
 
 		// `!terminate` because [terminate] now really does end the wait above (it reactivates
@@ -351,9 +357,7 @@ internal class Engine(
 		if (!brakingRoomGone()) {
 			stop()
 			host.accelerationVariable.state = 0.0
-			// `minOf(..., 1.0)` bounds the guard: an unarmed [brakingRoomMargin] is +∞, and
-			// +∞ must never reach the root finder as a crossing value.
-			waitUntilCrossing { if (accelerate) minOf(brakingRoomMargin(), 1.0) else -1.0 }
+			waitUntilCrossing { if (accelerate) boundedBrakingRoomMargin() else -1.0 }
 			if (terminate || !accelerate) return false
 			start()
 		}
@@ -465,9 +469,7 @@ internal class Engine(
 				AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
 			}
 		currentCondition = resuming
-		waitUntilCrossing(tolerance = 0.0) {
-			legMargin(resuming.getStopTest(), exitWhen(host.semaphoreToStopShortOf() != null))
-		}
+		awaitLeg(resuming.stopTest) { exitWhen(host.semaphoreToStopShortOf() != null) }
 		return !terminate && accelerate && host.semaphoreToStopShortOf() != null
 	}
 
@@ -511,10 +513,7 @@ internal class Engine(
 		val braking = AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED)
 		currentCondition = braking
 		// `targetSpeed` is 0.0, so the speed term is the velocity itself.
-		waitUntilCrossing(tolerance = 0.0) {
-			legMargin(braking.getStopTest(), exitWhen(host.semaphoreToStopShortOf() == null))
-		}
-		clampStand()
+		awaitLeg(braking.stopTest) { exitWhen(host.semaphoreToStopShortOf() == null) }
 		return !terminate && accelerate && host.semaphoreToStopShortOf() == null
 	}
 
@@ -656,7 +655,7 @@ internal class Engine(
 			accelerate = false
 			return
 		}
-		if (host.velocityVariable.state <= 0) host.velocityVariable.state = 0.0
+		clampStand()
 
 		val runUpRate = currentCondition?.runUpRate
 		if (runUpRate != null) {
@@ -666,7 +665,7 @@ internal class Engine(
 		val a: Double =
 			((targetSpeed - host.velocityVariable.state) * (targetSpeed + host.velocityVariable.state)) / (2 * s)
 		host.accelerationVariable.state =
-			if (requireNotNull(currentCondition) { "currentCondition must be set" }.getStopTest().isDecelerate()) {
+			if (requireNotNull(currentCondition) { "currentCondition must be set" }.stopTest.isDecelerate()) {
 				maxOf(a, MINIMAL_TRAIN_DECELERATION.toDouble())
 			} else {
 				minOf(a, MAXIMAL_TRAIN_ACCELERATION.toDouble())

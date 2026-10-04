@@ -33,16 +33,16 @@ open class Generator(
 		dtMin = 1e-6
 		// Block-boundary and tail-entry events (Train.kt) and every Engine wait (Issue #1014 for
 		// the approach, Issue #760 for the rest) are located by kDisco root-finding
-		// (`Process.waitCrossing` / `waitUntilCrossing`), so no Engine wait resolves to a whole step.
-		// `dtMax` still stays at 1 ms (the Issue #760 ladder tried 1e-3, 1e-2, 1e-1 and 1.0; its
-		// table is in PR #1133). When Engine
-		// switches its law at an event, the first accepted step after it still integrates the
-		// velocity with the old acceleration: the `acceleration` Variable is reset to its
-		// step-start value in every RK stage, and the velocity integration reads it before Engine
-		// rewrites it. At a braking onset that step overruns the braking point, and the clearance
-		// gate then ends the stand from a residual speed that grows with the step: 0.46 m/s at
-		// 1 ms, 0.92 m/s at 10 ms (`Issue1057LateFlipBrakingTest`), against the 0.1 m/s a raise
-		// must keep. Raising `dtMax` needs that lag removed first (#1126).
+		// (`Process.waitCrossing` / `waitUntilCrossing`), so no Engine wait resolves to a whole
+		// step. `dtMax` still stays at 1 ms (the Issue #760 ladder tried 1e-3, 1e-2, 1e-1 and 1.0;
+		// its table is in PR #1133). When Engine switches its law at an event, the first accepted
+		// step after it still integrates the velocity with the old acceleration: the
+		// `acceleration` Variable is reset to its step-start value in every RK stage, and the
+		// velocity integration reads it before Engine rewrites it. At a braking onset that step
+		// overruns the braking point, and the clearance gate then ends the stand from a residual
+		// speed that grows with the step: 0.46 m/s at 1 ms, 0.92 m/s at 10 ms
+		// (`Issue1057LateFlipBrakingTest`), against the 0.1 m/s a raise must keep. Raising `dtMax`
+		// needs that lag removed first (#1126).
 		dtMax = 1e-3
 		maxRelError = 1e-2
 		maxAbsError = 1e-2
