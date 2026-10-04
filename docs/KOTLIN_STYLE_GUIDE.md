@@ -2095,7 +2095,7 @@ manual flag needed, just have Ollama reachable before invoking Gradle:
 
 - **Native install** (if you already have Ollama, e.g. `ollama serve` running as a background
   service): nothing to configure — the probe finds it on the default port.
-- **No native install:** `docker compose up -d ollama` brings up an Ollama server on the same
+- **No native install:** `docker compose --profile ollama up -d --wait ollama` brings up an Ollama server on the same
   port (11434) as an alternative — don't run both at once, they'd conflict on the port.
 
 Either way, pull the model once:
@@ -2106,7 +2106,7 @@ docker compose exec ollama ollama pull qwen2.5:7b-instruct   # containerized
 
 **Behavior asymmetry (intentional, Issue #548):**
 - **Locally**, `integrationTest` **fails the build outright** if Ollama isn't reachable — no
-  silent skip. You must have it running (native or `docker compose up -d ollama`) before the
+  silent skip. You must have it running (native or `docker compose --profile ollama up -d --wait ollama`) before the
   `ollama-test`-tagged test can pass.
 - **In CI** (`CI`/`GITHUB_ACTIONS` env var set), an unreachable Ollama instead logs a `WARN`
   and excludes `ollama-test` for that run. GitHub Actions is intentionally kept Ollama-free —

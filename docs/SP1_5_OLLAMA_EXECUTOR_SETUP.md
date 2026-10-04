@@ -82,7 +82,7 @@ class doc.)
 
 **CPU-only (works everywhere, slower):**
 ```bash
-docker compose up -d ollama
+docker compose --profile ollama up -d --wait ollama
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
@@ -99,7 +99,7 @@ sudo systemctl restart docker
 export OLLAMA_MAX_VRAM=8589934592  # 8GB limit (in bytes; 8589934592 = 8 GiB)
 
 # 3. Build and start Ollama with GPU support
-docker compose up -d ollama
+docker compose --profile ollama up -d --wait ollama
 
 # 4. Verify the GPU is actually in use (Processor column should say GPU, not CPU):
 docker compose exec -T ollama ollama ps
@@ -119,7 +119,7 @@ set `OLLAMA_LLM_LIBRARY=cuda_v11` (NVIDIA) in the `ollama` service environment.
 export OLLAMA_LLM_LIBRARY=rocm_v6
 export OLLAMA_MAX_VRAM=8589934592
 
-docker compose up -d ollama
+docker compose --profile ollama up -d --wait ollama
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
@@ -175,12 +175,24 @@ export OLLAMA_BASE_URL=http://my-ollama:11434
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
-**Windows/macOS Docker Desktop note (Issue #770):** once dispatcher-agent is wired into the `app`
-container (Stage B), `localhost` inside the container won't reach a native Ollama install or the
-`ollama` Compose service — not even under `app`'s `network_mode: host`. Verified 2026-07-19 on
-Windows 11 + Docker Desktop 29.5.3 (WSL2 backend): `host.docker.internal` *is* reachable from a
-`network_mode: host` container, so set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in that
-scenario. No change to `app`'s network mode is needed.
+**Compose wiring (Stage B, Issue #924, done):** `docker-compose.yml` passes `OLLAMA_BASE_URL`
+(default `http://localhost:11434`) to the `app` service, which keeps `network_mode: host`, and
+`app` depends optionally on the `ollama` service (profile `ollama`), whose healthcheck is false
+until the model is pulled. The dependency only takes effect when `--profile ollama` is on the same
+command as `app`; a separate `docker compose run app …` does not wait, so start Ollama with
+`up -d --wait` (blocks on the healthcheck) first. Sequence:
+
+```bash
+docker compose --profile ollama up -d --wait ollama
+docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
+```
+
+**Windows/macOS Docker Desktop note (Issue #770):** `localhost` inside the container won't reach a
+native Ollama install or the `ollama` Compose service — not even under `app`'s
+`network_mode: host`. Verified 2026-07-19 on Windows 11 + Docker Desktop 29.5.3 (WSL2 backend):
+`host.docker.internal` *is* reachable from a `network_mode: host` container, so set
+`OLLAMA_BASE_URL=http://host.docker.internal:11434` (in `.env` or the shell) in that scenario.
+No change to `app`'s network mode is needed.
 
 ## Model Selection
 
@@ -263,7 +275,7 @@ Expected output: Test `local Ollama has the configured tool-capable model pulled
 
 **Fix:**
 - Native: Run `ollama serve` in a terminal
-- Docker: Run `docker compose up -d ollama && sleep 10`
+- Docker: Run `docker compose --profile ollama up -d --wait ollama` (`--wait` blocks until the healthcheck passes)
 
 ### "Model 'qwen2.5:7b-instruct' not pulled"
 
@@ -286,10 +298,11 @@ ollama pull qwen2.5:7b-instruct
 
 **Cause:** Ollama container too slow to start, or model still pulling
 
-**Fix:** Wait longer before running tests:
+**Fix:** `--wait` blocks until the model is pulled and the API answers, so no `sleep` is needed.
+Run it only while Ollama is not already running. If the compose `ollama` is already up, the port
+check exits 1 by design: check it with `docker compose ps ollama` instead.
 ```bash
-docker compose up -d ollama
-sleep 30  # Wait for startup
+docker compose --profile ollama up -d --wait ollama
 ./gradlew :dispatcher-agent:integrationTest
 ```
 

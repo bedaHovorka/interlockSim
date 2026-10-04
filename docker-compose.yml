@@ -25,10 +25,17 @@
 #        docker compose up app
 #
 #        # Run simulation with example:
-#        docker compose run app java -jar interlockSim.jar example shuntingLoop 60
+#        docker compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+#
+#        # Run the AI dispatcher example (needs Ollama; -ea keeps assertions on, as in
+#        # the image's default CMD -- an explicit `java -jar` override drops it otherwise).
+#        # --wait blocks until the ollama healthcheck passes (model pulled); a plain
+#        # `up -d` returns at once and `run app` does not wait for the pull:
+#        docker compose --profile ollama up -d --wait ollama
+#        docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
 #
 #        # Run simulation with custom XML:
-#        docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
+#        docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
 #
 #      GitHub Packages authentication:
 #        Set GITHUB_ACTOR and GITHUB_TOKEN and EXPORT them before building. The
@@ -71,6 +78,25 @@ services:
       - DISPLAY=${DISPLAY:-host.docker.internal:0}
       # Pass X11 authentication
       - XAUTHORITY=/tmp/.docker.xauth
+      # Ollama endpoint for the LLM dispatcher (OllamaExecutorConfig.default() reads this
+      # environment variable only, never a -D property). `app` runs with network_mode: host,
+      # so on Linux `localhost:11434` reaches both the compose `ollama` service (published on
+      # 11434) and a native `ollama serve`. On Windows/macOS Docker Desktop set
+      # OLLAMA_BASE_URL=http://host.docker.internal:11434 (in .env or the shell) instead.
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+    # Optional dependency (Compose 2.20+). It only takes effect when `--profile ollama` is on
+    # the SAME command as `app` (e.g. `docker compose --profile ollama up app`): then `app`
+    # waits until `ollama` is healthy (model pulled, API answering). Without the profile the
+    # service is not part of the project, this dependency is skipped and `app` starts at
+    # once (native Ollama, or no AI). So a separate `run app` does NOT wait for a pull in
+    # progress: start Ollama first with `docker compose --profile ollama up -d --wait ollama`.
+    # `docker compose --profile ollama up app` works only while `ollama` is not yet running;
+    # while it runs, use `run app` without the profile (the port check would see the compose
+    # ollama on 11434 and exit 1).
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false
     volumes:
       # Mount X11 socket for GUI display
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -131,22 +157,24 @@ services:
   # companion to one -- both would bind port 11434.
   #
   # profiles: ["ollama"] keeps both this and ollama-port-check out of a bare `docker compose up`
-  # / `up --build` (same reason `test` above is profile-gated): explicitly naming the service, as
-  # in `docker compose up -d ollama` below, still starts it regardless of the active profile --
+  # / `up --build` (same reason `test` above is profile-gated): explicitly naming the service
+  # with the profile, as in `docker compose --profile ollama up -d --wait ollama` below, starts it --
   # only an unqualified `up`/`up --build` skips it. Before this was added, a plain `docker compose
   # up --build -d --remove-orphans` on a machine with a native `ollama serve` already running
   # would fail outright: ollama-port-check's intentional exit 1 (see below) made Compose report
-  # `service "ollama-port-check" didn't complete successfully` and abort the whole `up`, rather
-  # than the silent no-op the paragraph below promises. Gating it behind a profile means the
-  # bare/default command never reaches that dependency check at all.
+  # `service "ollama-port-check" didn't complete successfully` and abort the whole `up`.
+  # Gating it behind a profile means the bare/default command never reaches that dependency
+  # check at all.
   #
   # ollama-port-check is a one-shot container that probes localhost:11434 via
   # `nc -z` using network_mode: host (direct access to the real host's network stack on
   # Linux). If something is already listening there, it exits 1, which -- via ollama's
   # depends_on condition: service_completed_successfully below -- prevents the ollama
-  # container from starting at all. This means `docker compose up -d ollama` is safe to
-  # run unconditionally: it no-ops if a local Ollama (native or another container) is
-  # already up, and starts the container otherwise.
+  # container from starting at all. So if something already listens on 11434 (a native Ollama
+  # or the compose ollama already running) the check exits 1 on purpose, Compose reports that
+  # it did not complete successfully and does not start `ollama`. That is not a broken file:
+  # use the Ollama that is already running (OLLAMA_BASE_URL default) and run `app` without
+  # the profile.
   #
   # KNOWN LIMITATION (Windows/macOS Docker Desktop): network_mode: host runs inside the
   # Docker Desktop VM (WSL2 on Windows), not the real host OS, so it cannot see a native
@@ -161,9 +189,14 @@ services:
   # nc -zv localhost 11434` against a running native `ollama serve` -- connection failed).
   # `host.docker.internal:11434` IS reachable from a `network_mode: host` container on the
   # same setup, which is why dispatcher-agent's OLLAMA_BASE_URL (see OllamaExecutorConfig
-  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) should be set to
-  # `http://host.docker.internal:11434` once Stage B wires it into the `app` service below --
-  # `app` already runs with `network_mode: host` and that works without changing it.
+  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) must be set by the user to
+  # `http://host.docker.internal:11434` on Docker Desktop.
+  #
+  # STAGE B (Issue #924) is done: the `app` service reads OLLAMA_BASE_URL (default
+  # `http://localhost:11434`, see its `environment:` block), keeps `network_mode: host`
+  # (moving it onto interlocksim-network would break the X11 setup in
+  # docs/FEDORA_DOCKER_X11_SETUP.md) and depends optionally on the `ollama` service below,
+  # which has a healthcheck that is false until the model is pulled and the API answers.
   #
   # GPU support: Ollama auto-detects the GPU at runtime -- there are NO `OLLAMA_CUDA` /
   # `OLLAMA_ROCM` environment variables (those are not real Ollama knobs). To give the
@@ -185,15 +218,19 @@ services:
   #
   # Usage:
   #   # CPU-only (default, slowest but works everywhere)
-  #   docker compose up -d ollama
+  #   docker compose --profile ollama up -d --wait ollama    # --wait blocks until the healthcheck passes
   #
   #   # GPU with CUDA (fast, requires NVIDIA GPU + nvidia-container-toolkit)
   #   #   1. Uncomment the deploy.resources.reservations.devices block below.
   #   #   2. export OLLAMA_MAX_VRAM=8589934592   # optional 8GB VRAM cap
-  #   docker compose up -d ollama
+  #   docker compose --profile ollama up -d --wait ollama
   #
   #   # Then run integrationTest which auto-detects localhost:11434, no config needed
   #   ./gradlew :dispatcher-agent:integrationTest
+  #
+  #   # Or run the AI example inside the app container (reads OLLAMA_BASE_URL); run it only
+  #   # after the `up -d --wait` above has returned -- `run app` itself does not wait
+  #   docker compose run app java -ea -jar interlockSim.jar example shuntingLoopAI 333
   ollama-port-check:
     profiles: ["ollama"]
     image: busybox:latest
@@ -204,7 +241,8 @@ services:
       - -c
       - |
         if nc -z localhost 11434 2>/dev/null; then
-          echo "Port 11434 already in use -- assuming a local Ollama is already running. Skipping container start."
+          echo "Port 11434 is already in use (a native Ollama, or the compose ollama service already running); not starting another one on purpose (this exit 1 is not a broken compose file)."
+          echo "Whichever it is, point the app at it with OLLAMA_BASE_URL=http://localhost:11434 (the default for the app service; Docker Desktop: http://host.docker.internal:11434) and run the app without --profile ollama."
           exit 1
         fi
         echo "Port 11434 is free -- proceeding to start the Ollama container."
@@ -227,6 +265,15 @@ services:
       OLLAMA_MAX_VRAM: ${OLLAMA_MAX_VRAM:-0}
       # OLLAMA_NUM_PARALLEL=1     # Serialize model loading on low-VRAM systems
       # OLLAMA_LLM_LIBRARY=cuda_v11   # Force CUDA backend (NVIDIA); rocm_v6 for AMD. Optional.
+    # Healthy only once the API answers (`ollama list` needs it) AND the model is pulled;
+    # the first start downloads ~4.7GB, hence the long retry budget (120 x 15s = 30 min).
+    healthcheck:
+      # The model tag must stay in sync with `command:` below and OllamaExecutorConfig.DEFAULT_MODEL_NAME.
+      test: ["CMD-SHELL", "ollama list | grep -q 'qwen2.5:7b-instruct'"]
+      interval: 15s
+      timeout: 10s
+      retries: 120
+      start_period: 60s
     # GPU support (NVIDIA): uncomment to give the container GPU access. Requires
     # nvidia-container-toolkit installed and the Docker runtime configured (see comment
     # block above). Ollama then auto-detects CUDA -- no env var needed. For AMD, switch the
