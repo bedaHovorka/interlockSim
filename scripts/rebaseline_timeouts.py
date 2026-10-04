@@ -595,21 +595,98 @@ def round_up_grid(seconds: float) -> int:
     return int(math.ceil(seconds / 600.0) * 600)
 
 
-def collect(index: Index, timings: Path, baseline_set: str):
+def canonical_name(name: str) -> str:
+    """Testcase name without the '[jvm]' target label KMP glues on when a class runs on several
+    targets (the linuxX64Test XML situation of the gradle#33990 workaround, core/CLAUDE.md)."""
+    return name[: -len("[jvm]")] if name.endswith("[jvm]") else name
+
+
+@dataclass
+class Samples:
+    """Everything collect() gathers from the run sets, keyed by annotation (ann_key)."""
+
+    inv_samples: dict[str, list[float]] = field(default_factory=lambda: defaultdict(list))
+    cls_samples: dict[str, dict[tuple, float]] = field(default_factory=lambda: defaultdict(dict))
+    tainted: dict[str, str] = field(default_factory=dict)
+    unresolved: Counter = field(default_factory=Counter)
+    stats: Counter = field(default_factory=Counter)
+
+    def add_class_sample(self, ann: Annotation, mkey: tuple, t: float) -> None:
+        """Record one sample under a class-level annotation: per run and method, the slowest."""
+        d = self.cls_samples[ann_key(ann)]
+        d[mkey] = max(d.get(mkey, 0.0), t)
+
+    def add_testcase(
+        self, index: Index, module: str, set_name: str, tc: ET.Element, t: float, baseline: set
+    ) -> KClass | None:
+        """Record one testcase under every annotation of this branch that governs it.
+
+        Returns the class the testcase ran in, or None when its classname resolves to no class
+        of the checkout. A class-level sample lands on the class annotation only when that value
+        really governs the testcase: a method with its own @Timeout runs under that value, and a
+        testcase that exists only on another branch runs under no annotation of this branch, so
+        neither may tighten the class value.
+        """
+        name = canonical_name(tc.get("name"))
+        cn = tc.get("classname")
+        self.stats["cases"] += 1
+        kc = index.resolve_classname(module, cn)
+        if kc is None:
+            self.unresolved[(module, cn)] += 1
+            return None
+        methods = index.all_methods(kc)
+        cands = match_candidates(methods, name)
+        cg = index.class_level_governor(kc)
+        if len(cands) == 1:
+            m = cands[0]
+            self.stats["matched"] += 1
+            if m.timeout is not None:
+                self.inv_samples[ann_key(m.timeout)].append(t)
+            elif cg is not None:
+                # no method value: the class annotation governs this testcase
+                self.add_class_sample(cg, (set_name, kc.jvm_name, m.name), t)
+        elif not cands and (module, cn, name) not in baseline:
+            # a test that exists only on another branch: no annotation of this branch governs it
+            self.stats["unmatched-branch-only"] += 1
+        elif not cands:
+            self.stats["unmatched"] += 1
+            if cg is not None:
+                # the '?' prefix marks a sample whose method identity the testcase name cannot resolve
+                self.add_class_sample(cg, (set_name, kc.jvm_name, f"?{name}"), t)
+            # it could belong to any non-trivially named method of the class: taint those
+            for m in methods.values():
+                if m.timeout is not None and (m.display is not None or m.kind != "test"):
+                    self.tainted.setdefault(ann_key(m.timeout), f"unmatched testcase '{name}' in {cn}")
+        else:
+            self.stats["ambiguous"] += 1
+            if cg is not None:
+                self.add_class_sample(cg, (set_name, kc.jvm_name, f"?{name}"), t)
+            for m in cands:
+                if m.timeout is not None:
+                    self.tainted.setdefault(ann_key(m.timeout), f"testcase '{name}' matches {len(cands)} methods in {cn}")
+        return kc
+
+
+def collect(index: Index, timings: Path, baseline_set: str) -> tuple[list[Path], Samples]:
     sets = sorted(p for p in timings.iterdir() if p.is_dir())
-    # per annotation: method-level -> list of per-invocation times; class-level -> {(set, methodkey): max}
-    inv_samples: dict[str, list[float]] = defaultdict(list)
-    cls_samples: dict[str, dict[tuple, float]] = defaultdict(dict)
-    tainted: dict[str, str] = {}
-    unresolved_classes = Counter()
-    stats = Counter()
+    if baseline_set not in {s.name for s in sets}:
+        raise SystemExit(
+            f"baseline set '{baseline_set}' is not one of the run sets in {timings}: "
+            + (", ".join(s.name for s in sets) or "none found")
+        )
+    data = Samples()
     # testcase names that exist on the branch being re-baselined (the baseline run set)
     baseline: set[tuple[str, str, str]] = set()
     for module, cfg in MODULES.items():
         for task in cfg["tasks"]:
             for xf in (timings / baseline_set / module / "build" / "test-results" / task).glob("TEST-*.xml"):
                 for tc in ET.parse(xf).getroot().iter("testcase"):
-                    baseline.add((module, tc.get("classname"), tc.get("name")))
+                    baseline.add((module, tc.get("classname"), canonical_name(tc.get("name"))))
+    if not baseline:
+        raise SystemExit(
+            f"no <testcase> found in the baseline set '{baseline_set}': expected "
+            f"{timings / baseline_set}/<module>/build/test-results/<task>/TEST-*.xml"
+        )
     for s in sets:
         for module, cfg in MODULES.items():
             for task in cfg["tasks"]:
@@ -623,52 +700,19 @@ def collect(index: Index, timings: Path, baseline_set: str):
                         t = float(tc.get("time") or 0)
                         case_sum += t
                         if tc.find("skipped") is not None:
-                            stats["skipped"] += 1
+                            data.stats["skipped"] += 1
                             continue
-                        stats["cases"] += 1
-                        cn = tc.get("classname")
-                        name = tc.get("name")
-                        in_baseline = (module, cn, name) in baseline
-                        if name.endswith("[jvm]"):
-                            name = name[: -len("[jvm]")]
-                        kc = index.resolve_classname(module, cn)
-                        if kc is None:
-                            unresolved_classes[(module, cn)] += 1
-                            continue
-                        suite_cls = kc
-                        methods = index.all_methods(kc)
-                        cands = match_candidates(methods, name)
-                        cg = index.class_level_governor(kc)
-                        if cg is not None:
-                            mkey = (s.name, kc.jvm_name, cands[0].name if len(cands) == 1 else f"?{name}")
-                            prev = cls_samples[ann_key(cg)].get(mkey, 0.0)
-                            cls_samples[ann_key(cg)][mkey] = max(prev, t)
-                        method_anns = {ann_key(m.timeout) for m in cands if m.timeout is not None}
-                        if len(cands) == 1:
-                            stats["matched"] += 1
-                            if cands[0].timeout is not None:
-                                inv_samples[ann_key(cands[0].timeout)].append(t)
-                        elif not cands and not in_baseline:
-                            # a test that exists only on another branch: no annotation of this branch governs it
-                            stats["unmatched-branch-only"] += 1
-                        elif not cands:
-                            stats["unmatched"] += 1
-                            # could belong to any non-trivially named method of the class: taint those
-                            for m in methods.values():
-                                if m.timeout is not None and (m.display is not None or m.kind != "test"):
-                                    tainted.setdefault(ann_key(m.timeout), f"unmatched testcase '{name}' in {cn}")
-                        else:
-                            stats["ambiguous"] += 1
-                            for k in method_anns:
-                                tainted.setdefault(k, f"testcase '{name}' matches {len(cands)} methods in {cn}")
+                        kc = data.add_testcase(index, module, s.name, tc, t, baseline)
+                        if kc is not None:
+                            suite_cls = kc
                     # @BeforeAll/@AfterAll overhead: JUnit does not apply the class-level @Timeout to lifecycle
                     # methods; the overhead is counted as one more sample on purpose, as extra margin.
                     if suite_cls is not None:
                         cg = index.class_level_governor(suite_cls)
                         overhead = suite_time - case_sum
                         if cg is not None and overhead > 0:
-                            cls_samples[ann_key(cg)][(s.name, suite_cls.jvm_name, "<suite-overhead>")] = overhead
-    return sets, inv_samples, cls_samples, tainted, unresolved_classes, stats
+                            data.add_class_sample(cg, (s.name, suite_cls.jvm_name, "<suite-overhead>"), overhead)
+    return sets, data
 
 
 # --------------------------------------------------------------------------- rewrite
@@ -711,7 +755,7 @@ def exclusion_reason(index, a, kc, m, include_coupled, include_ollama) -> str | 
     return None
 
 
-def decide_row(a, index, cls, inv, tainted, repo, include_coupled, include_ollama) -> dict:
+def decide_row(a, index: Index, data: Samples, repo: Path, include_coupled: bool, include_ollama: bool) -> dict:
     """The CSV row for one annotation: the action decided from the samples that map to it."""
     kc = index.classes[a.module][a.owner]
     m = kc.methods.get(a.method) if a.method else None
@@ -720,11 +764,11 @@ def decide_row(a, index, cls, inv, tainted, repo, include_coupled, include_ollam
     reason = exclusion_reason(index, a, kc, m, include_coupled, include_ollama)
     action = "excluded" if reason is not None else None
     if action is None:
-        samples = list(cls.get(key, {}).values()) if a.scope == "class" else inv.get(key, [])
+        samples = list(data.cls_samples.get(key, {}).values()) if a.scope == "class" else data.inv_samples.get(key, [])
         if a.scope == "method" and m is not None and m.kind not in ("test", "param", "repeated"):
             action, reason = "no-data", f"method kind {m.kind}"
-        elif key in tainted:
-            action, reason = "no-data", "ambiguous mapping: " + tainted[key]
+        elif key in data.tainted:
+            action, reason = "no-data", "ambiguous mapping: " + data.tainted[key]
         elif len(samples) < MIN_SAMPLES:
             action, reason = "no-data", f"{len(samples)} samples"
     row = {
@@ -750,7 +794,7 @@ def decide_row(a, index, cls, inv, tainted, repo, include_coupled, include_ollam
     if action is None:
         if a.scope == "class":
             per_method: dict[tuple, list[float]] = defaultdict(list)
-            for (_set, jvm, meth), t in cls[key].items():
+            for (_set, jvm, meth), t in data.cls_samples[key].items():
                 per_method[(jvm, meth)].append(t)
             worst = max(per_method.items(), key=lambda kv: p95(kv[1]))
             row["slowest"] = f"{worst[0][0].split('.')[-1]}#{worst[0][1]}"
@@ -802,15 +846,15 @@ def main() -> int:
     args = ap.parse_args()
 
     index = Index(args.repo)
-    sets, inv, cls, tainted, unresolved, stats = collect(index, args.timings, args.baseline_set)
+    sets, data = collect(index, args.timings, args.baseline_set)
     print(f"run sets: {', '.join(s.name for s in sets)}")
     print(f"annotations parsed: {len(index.annotations)}")
-    print(f"testcases: {dict(stats)}; unresolved classnames: {len(unresolved)}")
-    for (mod, cn), n in sorted(unresolved.items()):
+    print(f"testcases: {dict(data.stats)}; unresolved classnames: {len(data.unresolved)}")
+    for (mod, cn), n in sorted(data.unresolved.items()):
         print(f"  unresolved {mod} {cn} x{n}")
 
     rows = [
-        decide_row(a, index, cls, inv, tainted, args.repo, args.include_coupled, args.include_ollama)
+        decide_row(a, index, data, args.repo, args.include_coupled, args.include_ollama)
         for a in index.annotations
     ]
 
