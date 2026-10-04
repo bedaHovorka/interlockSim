@@ -877,10 +877,19 @@ def main() -> int:
         for r in rows:
             w.writerow({k: r[k] for k in fields})
 
+    # every exclusion-table entry must bind to a parsed annotation, or a rename has silently
+    # orphaned it (the JOIN_GUARD convention)
     used = {(r["_ann"].file.name, r["_ann"].method) for r in rows}
+    files = {r["_ann"].file.name for r in rows}
     for k in JOIN_GUARD:
         if k not in used:
             raise SystemExit(f"JOIN_GUARD entry matches no annotation: {k}")
+    for k in BUDGET_COUPLED:
+        if k not in used:
+            raise SystemExit(f"BUDGET_COUPLED entry matches no annotation: {k}")
+    for f in EXCLUDED_FILES:
+        if f not in files:
+            raise SystemExit(f"EXCLUDED_FILES entry matches no annotation: {f}")
     print("\naction counts:", dict(Counter(r["action"] for r in rows)))
     for mod in MODULES:
         mr = [r for r in rows if r["module"] == mod]
