@@ -77,7 +77,7 @@ class StandingAtMidLegSwitchSpeedLimitTest : KoinTestBase() {
 	)
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Perception excludes the section behind the front while standing at sw1")
 	fun standingTrainAtMidLegSwitchReportsAheadSpeedLimit() {
 		val outcome = runScenario()

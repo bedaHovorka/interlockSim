@@ -75,7 +75,7 @@ class EngineBareCancelTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a halt followed by a station dwell leaves the engine passivated with zero acceleration")
 	fun haltThenDwellLeavesTheEngineIdle() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH)
@@ -116,7 +116,7 @@ class EngineBareCancelTest : KoinTestBase() {
 	 * Issue #1059: the propulsion process under test is the top-level [Engine], not an inner Motor.
 	 */
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("motorOf returns the top-level Engine process (Issue #1059)")
 	fun motorOfReturnsTopLevelEngine() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork(approachLength = APPROACH)

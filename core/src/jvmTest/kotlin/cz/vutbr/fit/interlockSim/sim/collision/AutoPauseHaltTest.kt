@@ -203,7 +203,7 @@ class AutoPauseHaltTest : KoinTestBase() {
 	 * the halt callback through the full service machinery.
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Train.requestHalt() wired as halt callback zeroes velocity after BlockEntryViolation")
 	fun trainVelocityZeroAfterHaltCallbackFiresMidEnter() {
 		val ctx = newContext()
@@ -267,7 +267,7 @@ class AutoPauseHaltTest : KoinTestBase() {
 	 * [Train.requestHalt]'s thread-safety contract.
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Train.requestHalt() is idempotent: calling twice does not throw and velocity stays 0.0")
 	fun requestHaltIsIdempotent() {
 		val ctx = newContext()
@@ -316,7 +316,7 @@ class AutoPauseHaltTest : KoinTestBase() {
 	 * the `autoHaltTrainOnViolation` guard cannot be accidentally bypassed.
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("autoHaltTrainOnViolation=false does not invoke Train.requestHalt() halt callback")
 	fun autoHaltDisabled_doesNotInvokeRequestHalt() {
 		val ctx = newContext()

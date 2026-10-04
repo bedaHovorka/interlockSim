@@ -108,7 +108,7 @@ class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
 	 *    bound's "No topological path from origin InOut" message.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `mid-journey NoTopologicalPath fires errorStop after the bounded retries`() {
 		val context = loadVyhybnaContext()
 		assertThat(context.getInOuts()).isNotEmpty()

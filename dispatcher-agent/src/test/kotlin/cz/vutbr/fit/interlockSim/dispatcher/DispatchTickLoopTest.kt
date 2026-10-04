@@ -82,7 +82,7 @@ import ch.qos.logback.classic.Logger as LogbackLogger
  * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 @DisplayName("SP2c.5 — DispatchTickLoop unconditional fixed-tick control loop (#828)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class DispatchTickLoopTest {
 	// ── Test topology ─────────────────────────────────────────────────────────────────────
 

@@ -44,7 +44,7 @@ private const val CONSUMER_POLL_INTERVAL_MS: Long = 1
  * @since Issue #730 (SP0.8 — Goal 10)
  */
 @DisplayName("ActuatorCommandQueue — thread-safe driver-to-sim command handoff")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class ActuatorCommandQueueTest {
 	@Test
 	@DisplayName("drain returns decisions in FIFO order")

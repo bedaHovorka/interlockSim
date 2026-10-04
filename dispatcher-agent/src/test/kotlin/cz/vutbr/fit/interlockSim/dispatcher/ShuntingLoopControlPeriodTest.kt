@@ -58,7 +58,7 @@ class ShuntingLoopControlPeriodTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("control steps fire at t = 0, 2, 4, … — one every 2.0 simulated seconds")
 	fun controlStepPeriodIsTwoSimulatedSeconds() {
 		val context = fixture.loadShuntingLoopContext().tracked()

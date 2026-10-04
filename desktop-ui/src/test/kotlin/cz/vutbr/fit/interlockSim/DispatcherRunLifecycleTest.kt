@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicReference
 @DisplayName("DispatcherRunLifecycle (Issue #1072)")
 class DispatcherRunLifecycleTest : KoinTestBase() {
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("releaseKoogAgent calls MeasuringPlanAdapter.releaseAgent when present")
 	fun releaseKoogAgentCallsMeasuringAdapter() {
 		val context = createMockShuntingContext()
@@ -53,7 +53,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("releaseKoogAgent falls back to bare KoogAgentPlanAdapter when MeasuringPlanAdapter is absent")
 	fun releaseKoogAgentFallsBackToBareAdapter() {
 		val context = createMockShuntingContext()
@@ -67,7 +67,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("releaseKoogAgent is a no-op for null scope and for scopes without a planner")
 	fun releaseKoogAgentNoOpWhenAbsent() {
 		DispatcherRunLifecycle.releaseKoogAgent(null)
@@ -78,7 +78,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("closeSharedOllamaExecutor closes the bound singleton and is safe to repeat")
 	fun closeSharedOllamaExecutorClosesBoundSingleton() {
 		// A mock rather than a real executor: the real close() contract (terminal, idempotent) is
@@ -102,7 +102,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("closeSharedOllamaExecutor is safe when no OllamaSimpleExecutor is bound")
 	fun closeSharedOllamaExecutorSafeWhenUnbound() {
 		DispatcherRunLifecycle.closeSharedOllamaExecutor()
@@ -124,7 +124,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("closeSharedOllamaExecutor swallows a close failure instead of throwing (#1096 review)")
 	fun closeSharedOllamaExecutorSwallowsCloseFailure() {
 		val executor = mockk<OllamaSimpleExecutor>()
@@ -144,7 +144,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("releaseKoogAgentInBackground releases the scoped adapter on a background thread (#1096 review)")
 	fun releaseKoogAgentInBackgroundReleasesOffCallingThread() {
 		val context = createMockShuntingContext()

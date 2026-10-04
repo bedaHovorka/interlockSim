@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * @since Issue #746 (SP0.11c — Goal 10)
  */
 @DisplayName("SnapshotSignal — sim-to-driver pacing signal")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class SnapshotSignalTest {
 	companion object {
 		/** Short timeout so timeout-path tests stay fast without flaking on CI load. */

@@ -50,7 +50,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #828 (SP2c.5 — Goal 10 DispatchTickLoop)
  */
 @DisplayName("SP2c.5 — RuleBasedEmissionStrategy (#828)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class RuleBasedEmissionStrategyTest {
 	/** Returns a fixed decision list and captures the observation it was handed. */
 	private class ScriptedDispatcher(

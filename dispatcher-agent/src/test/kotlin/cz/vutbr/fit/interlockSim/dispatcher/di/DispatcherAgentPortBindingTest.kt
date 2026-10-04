@@ -116,7 +116,7 @@ class DispatcherAgentPortBindingTest : DispatcherKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName(
 		"scoped NetworkPerceptionPort resolved via Koin reports approved trains during a real " +
 			"ShuntingLoop run (#769 review finding 1)"
@@ -202,7 +202,7 @@ class DispatcherAgentPortBindingTest : DispatcherKoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName(
 		"scoped DispatchLoopSensorPort resolved via Koin reports live block-input data during a " +
 			"real ShuntingLoop run (Goal 10 dispatcher-cannot-approve-trains fix)"

@@ -169,7 +169,7 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 		 * tried was enumerated a second time inside reservePath; now each pair is enumerated once.
 		 */
 		@Test
-		@Timeout(60, unit = TimeUnit.SECONDS)
+		@Timeout(10, unit = TimeUnit.SECONDS)
 		fun `reservePathToAny enumerates every sorted InOut target exactly once`() {
 			val rudyUjezd =
 				TestFixtures

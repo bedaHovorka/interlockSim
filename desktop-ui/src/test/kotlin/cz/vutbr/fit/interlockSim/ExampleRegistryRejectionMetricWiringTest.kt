@@ -70,7 +70,7 @@ class ExampleRegistryRejectionMetricWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("a rejected request_route lands in the persisted recorder's rejectionsByCode")
 	fun rejectionReachesThePersistedRecorder() {
 		val context = createAiContext()
@@ -99,7 +99,7 @@ class ExampleRegistryRejectionMetricWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an accepted call adds no rejection")
 	fun acceptedCallAddsNoRejection() {
 		val context = createAiContext()

@@ -76,7 +76,7 @@ import java.util.concurrent.TimeUnit
  *
  * GitHub Issue: #56 (fixed)
  */
-@Timeout(value = 25, unit = TimeUnit.SECONDS)
+@Timeout(value = 10, unit = TimeUnit.SECONDS)
 class MainArgumentParsingTest {
 	private lateinit var systemErr: PrintStream
 	private lateinit var capturedErr: ByteArrayOutputStream

@@ -105,7 +105,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a same-position candidate over a STALE foreign switch succeeds by reclamation, never by stealing")
 	fun staleForeignOwnershipIsReclaimedInsteadOfStolen() {
 		// Given: vA is registered to a train that holds NO block bounded by it -- the stale window
@@ -134,7 +134,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a same-position candidate over a LIVE foreign switch is refused as transient contention")
 	fun liveForeignOwnershipRefusesTheSamePositionCandidate() {
 		// Given: vA is registered to a train that still holds a block bounded by vA on the OTHER
@@ -152,7 +152,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a flank-protected foreign switch is never reclaimed, even with no adjacent block")
 	fun flankProtectedForeignSwitchIsNeverReclaimed() {
 		// Given: vA is a FLANK grant (a facade `route.flank` lock, Issue #1076 review). The flank
@@ -167,7 +167,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a foreign owner on a switch with NO valid configuration keeps the candidate GeometricallyImpossible")
 	fun foreignOwnerDoesNotMaskAGeometricImpossibility() {
 		// Given: vA is a flank grant of another train -- the only foreign ownership Step 2e.5
@@ -192,7 +192,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a block release next to a flank-protected switch does not reclaim it (Issue #1065 path)")
 	fun blockReleaseDoesNotReclaimAFlankProtectedSwitch() {
 		registry.registerFlankSwitches(OTHER_OWNER, listOf(switchVA))
@@ -206,7 +206,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("control: the same block release DOES reclaim a plain (non-flank) ownership")
 	fun blockReleaseReclaimsAPlainStaleOwnership() {
 		// The same arrangement with a plain registration proves the release really reaches the
@@ -221,7 +221,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("the owner's own partial release next to its flank switch keeps the flank claim (Issue #1103)")
 	fun ownersPartialReleaseKeepsTheFlankClaim() {
 		// Given: OTHER_OWNER holds two blocks -- one bounded by vA, one elsewhere on the zA -> doB1
@@ -253,7 +253,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	 * reaches the caller.
 	 */
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a throwing release listener does not skip the reclaim")
 	fun aThrowingReleaseListenerDoesNotSkipTheReclaim() {
 		// Given: OTHER_OWNER reserves zA -> doB1 over vA, and a listener throws on every release event.

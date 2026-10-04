@@ -50,7 +50,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #849 (SP2c.26 — Goal 10 F1 paused-clock spike)
  */
 @DisplayName("F1 paused-clock spike — snapshot-capture hook under pause (#849)")
-@Timeout(60, unit = TimeUnit.SECONDS)
+@Timeout(20, unit = TimeUnit.SECONDS)
 class PausedClockCaptureHookTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("AC1: the capture hook is starved while the simulation is paused")

@@ -52,7 +52,7 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 class Issue1025DeferredTailReleaseTest : DispatcherKoinTestBase() {
 	@Test
-	@Timeout(value = 5, unit = TimeUnit.MINUTES)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `a deferred tail release is followed by a later reclaim and the run stays healthy`() {
 		val context = TestFixtures.newShuntingSimulationContext().tracked()
 		val registry = context.scope.get<PathReservationRegistry>()

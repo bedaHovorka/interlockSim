@@ -54,7 +54,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @Tag("integration-test")
 @DisplayName("Invalid Network Configuration Tests")
-@Timeout(value = 15, unit = TimeUnit.SECONDS)
+@Timeout(value = 10, unit = TimeUnit.SECONDS)
 class InvalidNetworkTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 

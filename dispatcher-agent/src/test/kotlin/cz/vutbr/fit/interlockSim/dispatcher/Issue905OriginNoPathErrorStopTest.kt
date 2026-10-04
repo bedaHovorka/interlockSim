@@ -65,7 +65,7 @@ class Issue905OriginNoPathErrorStopTest : DispatcherKoinTestBase() {
 	private val fixture = LiftedStackFixture()
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 	@DisplayName("origin NoTopologicalPath fires env.errorStop after bounded retries, naming the InOut")
 	fun originNoTopologicalPathFiresErrorStopAfterRetries() {
 		val context = fixture.loadShuntingLoopContext().tracked()

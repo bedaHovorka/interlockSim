@@ -51,7 +51,7 @@ class InOutWorkerIterationTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Single train: iteration() reserves path and clears queue (Success path)")
 	fun `iteration reserves path and clears queue on success`() {
 		val ctx = loadLinearContext()
@@ -64,7 +64,7 @@ class InOutWorkerIterationTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("Two trains: second train waits while first occupies path, then both complete")
 	fun `iteration processes two sequential trains both completing successfully`() {
 		val ctx = loadLinearContext()

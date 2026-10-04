@@ -61,7 +61,7 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 class Issue1025StaleTailReleaseTest : DispatcherKoinTestBase() {
 	@Test
-	@Timeout(value = 5, unit = TimeUnit.MINUTES)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `a reclaimed stale tail leaves the simulation thread alive`() {
 		// A FATAL inside a train process does not propagate out of run(): the process dies and the
 		// run goes on. The harness records such exceptions; assertHealthyReclaim's first assertion

@@ -210,7 +210,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	// ── T1 ────────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T1: a train held by a restrictive aspect stands a clearance short of it")
 	fun trainStandsShortOfARestrictiveSignal() {
 		val run = runScenario(TestTopologies.linearPathWithSemaphoreNetwork(), HELD_END_TIME)
@@ -228,7 +228,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	// ── T2 ────────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T2: the train brakes to that stand instead of being snapped to zero on it")
 	fun trainBrakesToTheStandInsteadOfSnappingToZero() {
 		val run = runScenario(TestTopologies.linearPathWithSemaphoreNetwork(), HELD_END_TIME)
@@ -256,7 +256,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	// ── T3 ────────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T3: once the aspect clears, the train covers the clearance and passes the signal")
 	fun trainCoversTheClearanceAndPassesTheSignalOnceItClears() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork()
@@ -287,7 +287,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	// ── T4 ────────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T4: an aspect clearing mid-approach leaves no train parked at the clearance line")
 	fun aspectClearingDuringTheApproachLeavesNoTrainParked() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork()
@@ -314,7 +314,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	// ── T5 ────────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T5: an aspect turning restrictive outside the clearance still stops the train short")
 	fun aspectTurningRestrictiveOnApproachStillStopsTheTrainShort() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork()
@@ -345,7 +345,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	// ── T6 ────────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T6: an aspect turning restrictive inside the clearance stops without overrun or reversal")
 	fun aspectTurningRestrictiveInsideTheClearanceStopsWithoutOverrunOrReversal() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork()
@@ -392,7 +392,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	// ── T7 ────────────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T7: the clearance holds on the shortest legal block")
 	fun clearanceHoldsOnTheShortestLegalBlock() {
 		val run =
@@ -428,7 +428,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	 * risks introducing.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T8: a train with no reserved route past the signal reaches the separator, not the stop line")
 	fun trainWithoutAnOnwardRouteIsNotHeldShortOfTheSignal() {
 		val run =
@@ -470,7 +470,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	 * into the now-unreserved tail — with no exit until a dispatcher serves it again.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("T9: a route released while held waives the stop and hands the train to the separator")
 	fun routeReleasedWhileHeldReachesTheSeparatorNotTheStopLine() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork()
@@ -563,7 +563,7 @@ class Issue989StopShortOfRestrictiveSignalTest : KoinTestBase() {
 	 * residue: no stand, and full speed after the clear.
 	 */
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("T10: an aspect flicker back to allowing leaves no stand and no lost speed")
 	fun aspectFlickerBackToAllowingLeavesNoStandAndFullRecovery() {
 		val network = TestTopologies.linearPathWithSemaphoreNetwork()

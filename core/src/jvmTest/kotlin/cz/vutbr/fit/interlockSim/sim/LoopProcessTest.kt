@@ -131,7 +131,7 @@ class LoopProcessTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("Iteration count matches simulated time at ~1 Hz (hold(1.0))")
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessIterationCountMatchesSimTime() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->
@@ -147,7 +147,7 @@ class LoopProcessTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("Loop process terminates cleanly and iteration count > 0")
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessTerminatesCleanly() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->
@@ -160,7 +160,7 @@ class LoopProcessTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("Calling terminate() multiple times is idempotent — no exception, simulation completes")
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessTerminateIdempotent() {
 		val lp = CountingLoopProcess()
 		// terminateExtra = 2 → driver calls terminate() 3 times total (2 extra + 1 real)
@@ -176,7 +176,7 @@ class LoopProcessTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("startAction() is called exactly once per process lifetime")
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessStartActionCalledOnce() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->
@@ -190,7 +190,7 @@ class LoopProcessTest : KoinTestBase() {
 
 	@Test
 	@DisplayName("byTerminateAction() is called exactly once after termination")
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessByTerminateActionCalledOnce() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->

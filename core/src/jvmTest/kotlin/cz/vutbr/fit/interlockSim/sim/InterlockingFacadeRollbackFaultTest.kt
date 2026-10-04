@@ -173,7 +173,7 @@ class InterlockingFacadeRollbackFaultTest {
 	}
 
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a setUpPath failure keeps the train's unrelated held route and PathInfo")
 	fun setUpPathFailureKeepsUnrelatedHeldRoute() {
 		val u0 = block("U0")
@@ -211,7 +211,7 @@ class InterlockingFacadeRollbackFaultTest {
 	 * rather than drop it while the block is still physically reserved.
 	 */
 	@Test
-	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a block whose cancel fails stays registered to the train; the other blocks are rolled back")
 	fun cancelFailureKeepsTheStillReservedBlockRegistered() {
 		val u1 = block("U1")

@@ -115,7 +115,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("impossible diversion doB1→doB2 is rejected without leaking blocks, locks or PathInfo")
 	fun impossibleDiversionIsRejectedCleanly() {
 		val trainId = "train_742"
@@ -154,7 +154,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("train waits at doB1 and extends to B at a future simulation time (partial path)")
 	fun trainWaitsAndExtendsWhenThroughRouteFrees() {
 		val trainId = "train_742_waiter"
@@ -191,7 +191,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("legitimate parallel-branch alternate zB→doA2 still succeeds when k1 is taken")
 	fun legitimateParallelAlternateStillSucceeds() {
 		val opposingId = "train_742_opposing"
@@ -219,7 +219,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("unconfigurable switch rejection causes no orphaned locks (rollback coverage)")
 	fun unconfigurableSwitchRollbackCleansUpLocks() {
 		val trainId = "train_742_rollback_test"
@@ -254,7 +254,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("null-segment lenient-skip preserves switch unlocked and blocks free (Issue #300)")
 	fun nullSegmentLenientSkipDoesNotCorruptState() {
 		val trainId = "train_742_null_segment"
@@ -290,7 +290,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("partial-lock rollback filters out pre-existing switches (train path extension)")
 	fun partialLockRollbackDoesNotUnlockPriorSwitches() {
 		val trainId = "train_742_prior_switches"
@@ -333,7 +333,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("block-unregister rollback cancels and unregisters all forwardBlocks")
 	fun blockUnregisterRollbackCancelsAllForwardBlocks() {
 		val trainId = "train_742_block_unregister"
@@ -368,7 +368,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(30, unit = TimeUnit.SECONDS)
+	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("unregisterSwitch releases one switch and keeps the train's other switches (scoped rollback primitive)")
 	fun unregisterSwitchReleasesOneSwitchAndKeepsTheRest() {
 		// Direct unit test for the per-switch registry primitive added for the #742 SP0.11

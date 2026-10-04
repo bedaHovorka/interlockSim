@@ -49,7 +49,7 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `toSeparatorName is null for every input that cannot take a forward reservation`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -101,7 +101,7 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `a FREE block input never carries a forward-reservation target`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()

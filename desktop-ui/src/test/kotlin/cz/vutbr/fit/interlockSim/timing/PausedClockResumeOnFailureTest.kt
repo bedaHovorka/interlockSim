@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #849 (SP2c.26 — Goal 10 F1 paused-clock spike)
  */
 @DisplayName("F1 paused-clock spike — resume must survive emission failure (#849)")
-@Timeout(60, unit = TimeUnit.SECONDS)
+@Timeout(15, unit = TimeUnit.SECONDS)
 class PausedClockResumeOnFailureTest : IntegrationKoinTestBase() {
 	@Test
 	@DisplayName("a throwing emission that resumes in finally leaves the simulation running")

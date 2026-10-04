@@ -77,7 +77,7 @@ class InOutWorkerDivergesFromHeldRouteTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a queued train holding a stored route stops the run with the worker's APPROVAL_ERROR")
 	fun queuedTrainWithStoredRouteStopsTheRun() {
 		val registry = context.scope.get<PathReservationRegistry>()

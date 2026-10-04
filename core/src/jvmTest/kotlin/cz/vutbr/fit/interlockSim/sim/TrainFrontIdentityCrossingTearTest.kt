@@ -108,7 +108,7 @@ class TrainFrontIdentityCrossingTearTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("mid-crossing the live pair is torn but the identity is the pre-crossing state")
 	fun `identity is the pre-crossing state while the crossing block runs`() {
 		val ctx = straightLine()

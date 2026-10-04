@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #560 (SP2b.5 — Goal 10)
  */
 @DisplayName("DispatchDecision — SP2b.5 rationale as List<String> (Issue #560)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class DispatchDecisionSp2b5Test {
 	// ── Helpers ──────────────────────────────────────────────────────────────
 

@@ -79,7 +79,7 @@ class ForkedJvmSweepProcessRunnerTest {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a child that overruns its budget is killed and reported as timedOut with no exit code")
 	fun killsChildThatExceedsItsTimeout(
 		@TempDir tempDir: Path

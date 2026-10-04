@@ -81,7 +81,7 @@ class SingleReactiveTrainEndToEndTest : KoinTestBase() {
 	// ── Tests ────────────────────────────────────────────────────────────────
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `reactive train policy is applied and drives a train to completion`() {
 		val context = loadVyhybnaContext()
 		val loop = ShuntingLoop(context, endTime = 120L)
@@ -108,7 +108,7 @@ class SingleReactiveTrainEndToEndTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `custom policy replaces algorithmic policy and is called for each approved train`() {
 		val context = loadVyhybnaContext()
 		val loop = ShuntingLoop(context, endTime = 120L)

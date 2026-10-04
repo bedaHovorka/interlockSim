@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #559 (SP2b.4 — Goal 10)
  */
 @DisplayName("DispatchDecisionApplier — SP2b.4 DispatcherMode gating (Issue #559)")
-@Timeout(30, unit = TimeUnit.SECONDS)
+@Timeout(10, unit = TimeUnit.SECONDS)
 class DispatchDecisionApplierModeGatingTest {
 	private lateinit var networkActuator: NetworkActuatorPort
 	private lateinit var trainLifecyclePort: TrainLifecyclePort

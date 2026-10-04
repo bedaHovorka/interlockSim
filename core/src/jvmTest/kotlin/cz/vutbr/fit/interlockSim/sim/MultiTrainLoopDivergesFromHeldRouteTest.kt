@@ -64,7 +64,7 @@ class MultiTrainLoopDivergesFromHeldRouteTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a DivergesFromHeldRoute entry reservation is logged as WARN and the train never exits")
 	fun divergentEntryReservationIsLoggedAndSkipped() {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true)

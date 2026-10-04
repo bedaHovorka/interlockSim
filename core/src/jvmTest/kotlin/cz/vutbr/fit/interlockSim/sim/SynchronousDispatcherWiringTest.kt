@@ -56,7 +56,7 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 			.conf
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `SetSignalAspect applies the requested aspect to a real semaphore`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -75,7 +75,7 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `SetSignalAspect on an unknown semaphore does not throw`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -91,7 +91,7 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `SetSwitchPosition applies the requested position to a real switch`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -111,7 +111,7 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `SetSwitchPosition on an unknown switch does not throw`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -131,7 +131,7 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `ReleaseRoute for a train holding no reservation is a no-op`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -147,7 +147,7 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `RequestRoute reserves a path, and a competing request logs a conflict without throwing`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -172,7 +172,7 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `HoldTrain is a no-op in the synchronous path and does not throw`() {
 		// HoldTrain is not supported in the synchronous wiring (TrainLifecyclePort is not
 		// available here); it should log a warning and drop the decision without throwing.

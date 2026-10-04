@@ -51,7 +51,7 @@ import java.util.concurrent.TimeUnit
  */
 @Tag("integration-test")
 @DisplayName("ConflictListenerWiring: late registration after run() is silently dropped (#827)")
-@Timeout(value = 60, unit = TimeUnit.SECONDS)
+@Timeout(value = 10, unit = TimeUnit.SECONDS)
 class ConflictListenerWiringTest : DispatcherKoinTestBase() {
 	@Test
 	@DisplayName("Listener registered after run() is not added to pendingConflictEventListeners")
