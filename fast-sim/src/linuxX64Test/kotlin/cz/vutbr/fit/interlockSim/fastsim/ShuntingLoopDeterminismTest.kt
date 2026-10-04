@@ -35,7 +35,7 @@ import kotlin.time.TimeSource
  * 1000-repetition heavy test like [cz.vutbr.fit.interlockSim.sim.ShuntingLoopHeavyTest]
  * (JVM-only, `:core:heavyTest`, manual-run).
  *
- * **Expected counts (28 entered / 14 exited) are cross-platform identical** and must
+ * **Expected counts (28 entered / 27 exited) are cross-platform identical** and must
  * match [cz.vutbr.fit.interlockSim.sim.ShuntingLoopHeavyTest] on the JVM as well as the
  * *release* `fast-sim.kexe` binary (`linkReleaseExecutableLinuxX64`, what
  * `docker compose run fast-sim` / the CLI actually runs). kDisco's

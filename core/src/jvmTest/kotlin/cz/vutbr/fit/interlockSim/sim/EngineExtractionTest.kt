@@ -61,8 +61,42 @@ class EngineExtractionTest : KoinTestBase() {
 	fun accelerationStopTestKeepsHistoricalEngineBehavior() {
 		assertThat(AccelerationStopTest.ACCELERATION_ENDED.isDecelerate()).isEqualTo(false)
 		assertThat(AccelerationStopTest.DECELERATION_ENDED.isDecelerate()).isEqualTo(true)
-		assertThat(AccelerationStopTest.TO_HALF_SPEED.condition(20.0, 10.0)).isTrue()
+		assertThat(AccelerationStopTest.TO_HALF_SPEED.margin(20.0, 10.0) <= 0.0).isTrue()
 	}
+
+	/**
+	 * Issue #760: the crossing waits end on [AccelerationStopTest.margin] `<= 0`, so it must agree
+	 * with the predicate each stop test's step poll tested before the conversion ([pollPredicate])
+	 * everywhere — including at equality, where the inclusive comparison holds and the margin is
+	 * exactly zero.
+	 */
+	@Test
+	@DisplayName("AccelerationStopTest.margin is non-positive exactly when the old poll predicate holds")
+	fun marginMirrorsCondition() {
+		val speeds = listOf(0.0, 1e-9, 5.0, 9.999999, 10.0, 10.000001, 20.0, 40.0)
+		for (test in AccelerationStopTest.entries) {
+			for (target in speeds) {
+				for (velocity in speeds) {
+					assertThat(
+						test.margin(target, velocity) <= 0.0,
+						name = "$test margin <= 0 for target $target, velocity $velocity"
+					).isEqualTo(pollPredicate(test, target, velocity))
+				}
+			}
+		}
+	}
+
+	/** The pre-#760 `AccelerationStopTest.condition`, kept here as the reference the margin mirrors. */
+	private fun pollPredicate(
+		test: AccelerationStopTest,
+		targetSpeed: Double,
+		velocity: Double
+	): Boolean =
+		when (test) {
+			AccelerationStopTest.ACCELERATION_ENDED -> targetSpeed <= velocity
+			AccelerationStopTest.DECELERATION_ENDED -> targetSpeed >= velocity
+			AccelerationStopTest.TO_HALF_SPEED -> targetSpeed <= 2 * velocity
+		}
 
 	/**
 	 * Locks the adapter design commit `5b6985b7` chose: [Train] does not implement [Engine.Host]

@@ -307,8 +307,9 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Scenario: Train should come to complete stop (velocity = 0) at
 		 * the target position without overshoot or undershoot.
 		 *
-		 * Physics: Engine uses waitUntil condition to detect when target reached:
-		 * - DECELERATION_ENDED: targetSpeed ≥ velocity (for braking)
+		 * Physics: Engine ends the leg on a crossing wait over AccelerationStopTest.margin
+		 * (Issue #760), root-found inside the integration step:
+		 * - DECELERATION_ENDED: margin `velocity - targetSpeed` reaches 0 (for braking)
 		 * - Position tracking via Site ensures precise location
 		 *
 		 * Railway Context: Precise stops required for platform alignment
@@ -321,8 +322,7 @@ class TrainBehaviorTest : KoinTestBase() {
 			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
-			// Engine.AccelerationStopCondition checks:
-			// stopTest.condition(targetSpeed, velocity)
+			// Engine's leg waits end on AccelerationStopTest.margin(targetSpeed, velocity) <= 0
 			// For deceleration: targetSpeed ≥ velocity
 			// When velocity reaches targetSpeed, engine stops
 
