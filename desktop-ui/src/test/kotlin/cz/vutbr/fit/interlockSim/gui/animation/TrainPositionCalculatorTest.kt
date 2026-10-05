@@ -13,8 +13,12 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -22,6 +26,7 @@ import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.TrainFrontIdentity
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.util.Point
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -502,6 +507,104 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 			diff -= 2 * kotlin.math.PI
 		}
 		assertThat(kotlin.math.abs(kotlin.math.abs(diff) - kotlin.math.PI) < 1e-6).isEqualTo(true)
+	}
+
+	// ========== getGridPosition: cache miss falls back to a grid scan (Issue #1005) ==========
+
+	private fun separatorCache(): Map<PathSeparator, Point> =
+		(context as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext).separatorPositionCache
+
+	/** A calculator whose pre-built cache is empty, so every lookup takes the fallback scan. */
+	private fun calculatorWithEmptyCache() = TrainPositionCalculator(context, emptyMap())
+
+	/** A dynamic wrapper mock whose staticRef is [target]. */
+	private fun wrapperOf(target: InOut): DynamicInOut {
+		val wrapper = mockk<DynamicInOut>(relaxed = true)
+		every { wrapper.staticRef } returns target
+		return wrapper
+	}
+
+	/** A strict scan context whose [cols] x [rows] grid is null everywhere except [cells] at their points. */
+	private fun scanContextWithCells(
+		cols: Int,
+		rows: Int,
+		vararg cells: Pair<Point, Cell>
+	): SimulationContext {
+		val grid = mockk<RailwayNetGrid<Cell>>()
+		every { grid.cols } returns cols
+		every { grid.rows } returns rows
+		every { grid.getCellAt(any(), any()) } returns null
+		for ((point, cell) in cells) {
+			every { grid.getCellAt(point.x, point.y) } returns cell
+		}
+		val scanContext = mockk<SimulationContext>()
+		every { scanContext.getRailWayNetGrid() } returns grid
+		return scanContext
+	}
+
+	@Test
+	fun testGetGridPosition_cacheMissFindsCachedSeparatorByScan() {
+		val (separator, position) = separatorCache().entries.first()
+
+		assertThat(calculatorWithEmptyCache().getGridPosition(separator)).isEqualTo(position)
+	}
+
+	@Test
+	fun testGetGridPosition_cacheMissFindsEverySeparatorByScan() {
+		val scanning = calculatorWithEmptyCache()
+
+		for ((separator, position) in separatorCache()) {
+			assertThat(scanning.getGridPosition(separator)).isEqualTo(position)
+		}
+	}
+
+	@Test
+	fun testGetGridPosition_cacheMissUnwrapsDynamicWrapperBeforeScan() {
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+		val dynamicEnd = trackSection!!.ends()[0]
+		assertThat(dynamicEnd is DynamicPathSeparator).isEqualTo(true)
+
+		assertThat(calculatorWithEmptyCache().getGridPosition(dynamicEnd)).isEqualTo(calculator.getGridPosition(dynamicEnd))
+		assertThat(calculatorWithEmptyCache().getGridPosition(dynamicEnd)).isNotNull()
+	}
+
+	@Test
+	fun testGetGridPosition_cacheHitDoesNotScanTheGrid() {
+		val separator = mockk<PathSeparator>(relaxed = true)
+		val position = Point(4, 5)
+		val strictContext = mockk<SimulationContext>()
+		val cached = TrainPositionCalculator(strictContext, mapOf(separator to position))
+
+		// A scan would call strictContext.getRailWayNetGrid(), which the strict mock rejects.
+		assertThat(cached.getGridPosition(separator)).isEqualTo(position)
+	}
+
+	@Test
+	fun testGetGridPosition_cacheMissWithNoMatchingCellReturnsNull() {
+		val stranger = mockk<PathSeparator>(relaxed = true)
+
+		assertThat(calculatorWithEmptyCache().getGridPosition(stranger)).isNull()
+		assertThat(calculator.getGridPosition(stranger)).isNull()
+	}
+
+	@Test
+	fun testGetGridPosition_cacheMissFindsGridCellThatIsAWrapperOfTheSeparator() {
+		// The second scan branch: the grid cell is not the separator itself, but a dynamic wrapper of it.
+		val target = mockk<InOut>(relaxed = true)
+		val bystander = mockk<PathSeparator>(relaxed = true)
+		val scanContext = scanContextWithCells(3, 2, Point(0, 1) to bystander, Point(2, 0) to wrapperOf(target))
+
+		assertThat(TrainPositionCalculator(scanContext, emptyMap()).getGridPosition(target)).isEqualTo(Point(2, 0))
+	}
+
+	@Test
+	fun testGetGridPosition_cacheMissPrefersTheFirstMatchInColumnMajorOrder() {
+		// Identity match at (1, 1) comes after the wrapper match at (0, 1): the scan runs x outer, y inner.
+		val target = mockk<InOut>(relaxed = true)
+		val scanContext = scanContextWithCells(2, 2, Point(0, 1) to wrapperOf(target), Point(1, 1) to target)
+
+		assertThat(TrainPositionCalculator(scanContext, emptyMap()).getGridPosition(target)).isEqualTo(Point(0, 1))
 	}
 
 	// ========== Deprecated Train-Overload Delegation (Issues #1030, #1028) ==========

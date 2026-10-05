@@ -326,31 +326,38 @@ class TrainPositionCalculator(
 	internal fun getGridPosition(separator: PathSeparator): Point? {
 		// Unwrap dynamic wrapper to static reference for cache lookup
 		val staticSeparator = DynamicWrapperUtils.unwrapToStatic(separator)
-		val result = separatorPositionCache[staticSeparator]
 
 		// Fallback: If not in cache, scan grid (should not happen after optimization)
-		if (result == null) {
-			val grid = context.getRailWayNetGrid()
-			for (x in 0 until grid.cols) {
-				for (y in 0 until grid.rows) {
-					val cell = grid.getCellAt(x, y)
+		return separatorPositionCache[staticSeparator] ?: scanGridFor(staticSeparator)
+	}
 
-					// Direct identity match
-					if (cell === staticSeparator) {
+	/**
+	 * Slow path of [getGridPosition]: scans the whole grid column by column for [staticSeparator].
+	 *
+	 * A cell matches when it is the separator itself or a dynamic wrapper that unwraps to it.
+	 *
+	 * @return Grid coordinates of the first match, or null if no cell matches
+	 */
+	private fun scanGridFor(staticSeparator: PathSeparator?): Point? {
+		val grid = context.getRailWayNetGrid()
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val cell = grid.getCellAt(x, y)
+
+				// Direct identity match
+				if (cell === staticSeparator) {
+					return Point(x, y)
+				}
+
+				// Also check if this is a PathSeparator that equals the target
+				if (cell is PathSeparator && staticSeparator is PathSeparator) {
+					val unwrappedCell = DynamicWrapperUtils.unwrapToStatic(cell)
+					if (unwrappedCell === staticSeparator) {
 						return Point(x, y)
-					}
-
-					// Also check if this is a PathSeparator that equals the target
-					if (cell is PathSeparator && staticSeparator is PathSeparator) {
-						val unwrappedCell = DynamicWrapperUtils.unwrapToStatic(cell)
-						if (unwrappedCell === staticSeparator) {
-							return Point(x, y)
-						}
 					}
 				}
 			}
 		}
-
-		return result
+		return null
 	}
 }
