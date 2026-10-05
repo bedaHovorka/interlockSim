@@ -517,6 +517,31 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	/** A calculator whose pre-built cache is empty, so every lookup takes the fallback scan. */
 	private fun calculatorWithEmptyCache() = TrainPositionCalculator(context, emptyMap())
 
+	/** A dynamic wrapper mock whose staticRef is [target]. */
+	private fun wrapperOf(target: InOut): DynamicInOut {
+		val wrapper = mockk<DynamicInOut>(relaxed = true)
+		every { wrapper.staticRef } returns target
+		return wrapper
+	}
+
+	/** A strict scan context whose [cols] x [rows] grid is null everywhere except [cells] at their points. */
+	private fun scanContextWithCells(
+		cols: Int,
+		rows: Int,
+		vararg cells: Pair<Point, Cell>
+	): SimulationContext {
+		val grid = mockk<RailwayNetGrid<Cell>>()
+		every { grid.cols } returns cols
+		every { grid.rows } returns rows
+		every { grid.getCellAt(any(), any()) } returns null
+		for ((point, cell) in cells) {
+			every { grid.getCellAt(point.x, point.y) } returns cell
+		}
+		val scanContext = mockk<SimulationContext>()
+		every { scanContext.getRailWayNetGrid() } returns grid
+		return scanContext
+	}
+
 	@Test
 	fun testGetGridPosition_cacheMissFindsCachedSeparatorByScan() {
 		val (separator, position) = separatorCache().entries.first()
@@ -567,17 +592,8 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	fun testGetGridPosition_cacheMissFindsGridCellThatIsAWrapperOfTheSeparator() {
 		// The second scan branch: the grid cell is not the separator itself, but a dynamic wrapper of it.
 		val target = mockk<InOut>(relaxed = true)
-		val wrapperCell = mockk<DynamicInOut>(relaxed = true)
-		every { wrapperCell.staticRef } returns target
 		val bystander = mockk<PathSeparator>(relaxed = true)
-		val grid = mockk<RailwayNetGrid<Cell>>()
-		every { grid.cols } returns 3
-		every { grid.rows } returns 2
-		every { grid.getCellAt(any(), any()) } returns null
-		every { grid.getCellAt(0, 1) } returns bystander
-		every { grid.getCellAt(2, 0) } returns wrapperCell
-		val scanContext = mockk<SimulationContext>()
-		every { scanContext.getRailWayNetGrid() } returns grid
+		val scanContext = scanContextWithCells(3, 2, Point(0, 1) to bystander, Point(2, 0) to wrapperOf(target))
 
 		assertThat(TrainPositionCalculator(scanContext, emptyMap()).getGridPosition(target)).isEqualTo(Point(2, 0))
 	}
@@ -586,16 +602,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	fun testGetGridPosition_cacheMissPrefersTheFirstMatchInColumnMajorOrder() {
 		// Identity match at (1, 1) comes after the wrapper match at (0, 1): the scan runs x outer, y inner.
 		val target = mockk<InOut>(relaxed = true)
-		val wrapperCell = mockk<DynamicInOut>(relaxed = true)
-		every { wrapperCell.staticRef } returns target
-		val grid = mockk<RailwayNetGrid<Cell>>()
-		every { grid.cols } returns 2
-		every { grid.rows } returns 2
-		every { grid.getCellAt(any(), any()) } returns null
-		every { grid.getCellAt(0, 1) } returns wrapperCell
-		every { grid.getCellAt(1, 1) } returns target
-		val scanContext = mockk<SimulationContext>()
-		every { scanContext.getRailWayNetGrid() } returns grid
+		val scanContext = scanContextWithCells(2, 2, Point(0, 1) to wrapperOf(target), Point(1, 1) to target)
 
 		assertThat(TrainPositionCalculator(scanContext, emptyMap()).getGridPosition(target)).isEqualTo(Point(0, 1))
 	}

@@ -199,7 +199,7 @@ class ValidationDialog(
 	}
 
 	companion object {
-		private const val ERROR_SEPARATOR_WIDTH = 50
+		private const val SEPARATOR_WIDTH = 50
 
 		/**
 		 * Builds the error message text from a validation result: the errors, then the warnings
@@ -216,7 +216,7 @@ class ValidationDialog(
 			for ((index, error) in errors.withIndex()) {
 				if (index > 0) {
 					append("\n\n")
-					append("─".repeat(ERROR_SEPARATOR_WIDTH))
+					append("─".repeat(SEPARATOR_WIDTH))
 					append("\n\n")
 				}
 				append(error.format())
@@ -234,7 +234,7 @@ class ValidationDialog(
 			if (warnings.isEmpty()) return
 			if (hasErrors) {
 				append("\n\n")
-				append("═".repeat(ERROR_SEPARATOR_WIDTH))
+				append("═".repeat(SEPARATOR_WIDTH))
 				append("\n\n")
 			}
 			append("Warnings:\n\n")
