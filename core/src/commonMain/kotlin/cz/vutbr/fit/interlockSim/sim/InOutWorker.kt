@@ -26,7 +26,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Behaviour of InOut process
  *
  * Keeps [DynamicInOut.occupied] equal to "the entry queue is non-empty" (issue #1008): set when a
- * train enters, re-checked whenever the worker observes the queue.
+ * train enters, only after that train is in the queue, and re-checked whenever the worker observes
+ * the queue.
  */
 class InOutWorker(
 	private val env: SimulationEnvironment,
@@ -217,11 +218,14 @@ class InOutWorker(
 	 */
 	suspend fun enterTrain(train: Train) {
 		logger.debug { "InOutWorker ${inOut.name} entering train $train, queue empty: ${queqe.empty()}" }
-		// First, because Process.wait below passivates the calling train process.
-		inOut.setOccupied(true)
 		if (queqe.empty()) {
+			// Insert first: listeners run synchronously and must already see the train in the queue.
 			train.into(queqe)
+			inOut.setOccupied(true)
 		} else {
+			// Already true (the queue is non-empty). Kept above Process.wait, which inserts the train
+			// and passivates it until the train ahead leaves and reactivates it.
+			inOut.setOccupied(true)
 			Process.wait(queqe)
 		}
 

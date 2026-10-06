@@ -46,6 +46,16 @@ class InOutWorkerIterationTest : KoinTestBase() {
 		context = null
 	}
 
+	/**
+	 * One `occupied` event with the entry queue state at the moment it fired. A train leaves the queue
+	 * only after its front has moved, so [trainsLeft] counts trains with `totalDistance > 0`.
+	 */
+	private data class OccupiedEvent(
+		val occupied: Boolean,
+		val queueNonEmpty: Boolean,
+		val trainsLeft: Int
+	)
+
 	private fun loadLinearContext(): DefaultSimulationContext {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true)
 		ctx.getInOuts()
@@ -77,11 +87,15 @@ class InOutWorkerIterationTest : KoinTestBase() {
 		val gridCell = ctx.getRailWayNetGrid().single { entry == it.value }.value
 		assertThat(gridCell).isSameInstanceAs(entry)
 		val trains = mutableListOf<Train>()
-		// Each occupied event paired with how many trains have already left the entry queue
-		// (a train leaves the queue only after its front has moved, so totalDistance > 0).
-		val occupiedEvents = mutableListOf<Pair<Boolean, Int>>()
+		// The entry queue is read while the event fires (listeners run synchronously).
+		val occupiedEvents = mutableListOf<OccupiedEvent>()
 		entry.addPropertyChangeListener { event ->
-			occupiedEvents += (event.newValue as Boolean) to trains.count { it.totalDistance > 0.0 }
+			occupiedEvents +=
+				OccupiedEvent(
+					occupied = event.newValue as Boolean,
+					queueNonEmpty = !ctx.getWorkerFor(entry).getQueqe().empty(),
+					trainsLeft = trains.count { it.totalDistance > 0.0 }
+				)
 		}
 		val process =
 			runSimpleLinearTrackScenario(
@@ -101,8 +115,12 @@ class InOutWorkerIterationTest : KoinTestBase() {
 		assertThat(process.getAllBlockTransitions().values.sum()).isGreaterThan(0)
 		// Issue #1008: the entry InOut turns occupied once, when the first train arrives, stays
 		// occupied when the first train leaves (the second one still waits in the queue), and
-		// turns free only when the last train has left.
-		assertThat(occupiedEvents).containsExactly(true to 0, false to 2)
+		// turns free only when the last train has left. Every event matches the queue at the moment
+		// it fires: listeners never see `occupied == true` with an empty queue.
+		assertThat(occupiedEvents).containsExactly(
+			OccupiedEvent(occupied = true, queueNonEmpty = true, trainsLeft = 0),
+			OccupiedEvent(occupied = false, queueNonEmpty = false, trainsLeft = 2)
+		)
 		assertThat(entry.occupied).isFalse()
 	}
 }
