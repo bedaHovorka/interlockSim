@@ -115,6 +115,8 @@ The AnimatedSim architecture provides real-time visual simulation of railway ope
 - **Thread:** Swing EDT (enforced via `require()`)
 - **Key Responsibilities:**
   - Receive PropertyChangeEvents from simulation thread
+  - Receive `locked`/`conf` events from the cached `DynamicRailSwitch` cells (registered in
+    `start()`, removed in `stop()`)
   - Marshal state capture to EDT via `SwingUtilities.invokeLater`
   - Drive 30 FPS repaint loop via Swing Timer
   - Manage resource cleanup (timers, listeners, caches)
@@ -138,7 +140,9 @@ The AnimatedSim architecture provides real-time visual simulation of railway ope
 - **Switch state:** `SwitchState` carries `conf` (MAIN/BRANCH) and `locked` (Issue #1008), both
   captured from `DynamicRailSwitch`. The renderer draws a padlock on a switch whose captured
   `locked` is true; when no state was captured yet it falls back to the live `DynamicRailSwitch`
-  (configuration and lock state alike).
+  (configuration and lock state alike). The captured lock state does not go stale between reports:
+  `AnimationController` subscribes to the `locked`/`conf` events of every cached switch and
+  refreshes the snapshot when they fire (some unlock paths fire no context or block event).
 - **Exception to the snapshot rule:** `DynamicInOut.occupied` (Issue #1008) is not captured. The
   renderer reads it live from the cell; it is a `@Volatile` field written by the simulation thread.
 

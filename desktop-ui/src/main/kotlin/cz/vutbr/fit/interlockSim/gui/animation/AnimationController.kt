@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.Component
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 
@@ -163,6 +164,31 @@ class AnimationController(
 	 */
 	private var switchCache: List<DynamicRailSwitch>? = null
 
+	/** `true` while a capture queued by [switchStateListener] has not run yet. */
+	private val switchCapturePending = AtomicBoolean(false)
+
+	/**
+	 * Refreshes the snapshot on every `locked`/`conf` change of a cached switch (Issue #1008).
+	 *
+	 * Some unlock paths fire no context or block event, so without it a captured `locked = true`
+	 * could stay on a free switch. Registered on [switchCache] in [start], removed in [stop].
+	 * Only marshals to the EDT: it runs inside `DynamicRailSwitch.lock()`/`unlock()`, which do not
+	 * guard their listeners, so it must never throw. Setting up a route fires `conf` and `locked` for
+	 * every switch on it at one instant, so the events share one pending capture
+	 * ([switchCapturePending]) instead of queueing one full capture each.
+	 */
+	private val switchStateListener =
+		ContextPropertyChangeListener {
+			logger.trace { "Switch state change received: ${it.propertyName}" }
+			if (switchCapturePending.compareAndSet(false, true)) {
+				SwingUtilities.invokeLater {
+					// Cleared before the capture, so a change during it queues a fresh one.
+					switchCapturePending.set(false)
+					captureAndUpdateState()
+				}
+			}
+		}
+
 	/**
 	 * Circuit breaker for state capture failures.
 	 * Tracks consecutive failures to detect persistent vs transient issues.
@@ -187,6 +213,7 @@ class AnimationController(
 	 * Start animation controller.
 	 *
 	 * - Registers PropertyChangeListener with simulation context
+	 * - Registers the switch state listener with every cached switch
 	 * - Starts Swing Timer for 30 FPS rendering
 	 * - Captures initial simulation state
 	 *
@@ -214,6 +241,7 @@ class AnimationController(
 		semaphoreCache = buildSemaphoreCache()
 		switchCache = buildSwitchCache()
 		logger.debug { "Initialized caches: ${semaphoreCache?.size} semaphores, ${switchCache?.size} switches" }
+		switchCache?.forEach { it.addPropertyChangeListener(switchStateListener) }
 
 		// Capture initial state
 		captureAndUpdateState()
@@ -228,7 +256,7 @@ class AnimationController(
 	/**
 	 * Stop animation controller.
 	 *
-	 * - Unregisters PropertyChangeListener
+	 * - Unregisters listeners (context and cached switches)
 	 * - Stops Swing Timer
 	 * - Clears caches for GC
 	 *
@@ -251,9 +279,10 @@ class AnimationController(
 		// Stop repaint timer
 		repaintTimer.stop()
 
-		// Unregister listener
+		// Unregister listeners
 		context.removePropertyChangeListener(this)
 		context.removeBlockEventListener(this)
+		switchCache?.forEach { it.removePropertyChangeListener(switchStateListener) }
 
 		// Clear caches to allow GC
 		semaphoreCache = null
