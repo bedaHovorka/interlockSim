@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
+import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -24,8 +25,8 @@ import java.awt.Graphics2D
 /**
  * Cell renderer for simulation mode - renders railway elements with dynamic state
  *
- * NOTE (Issue #153): Future enhancement will add animation support for simulation context.
- * Current implementation renders static configuration with basic dynamic state indicators.
+ * This class is the non-animated renderer: it draws each cell's current configuration with basic
+ * dynamic state indicators. [AnimatedSimulationCellRenderer] adds the animated layer on top of it.
  */
 open class SimulationCellRenderer(
 	cellWidth: Int,
@@ -71,8 +72,7 @@ open class SimulationCellRenderer(
 		// Draw only the active direction to indicate switch position
 		drawSegments(g, *activeSegments.toTypedArray())
 
-		// The locked state (cell.locked) is not shown. Tracked in issue #1008.
-		// Switch transitions are not animated.
+		if (cell.locked) drawLockMark(g, cell.staticRef, AnimationColors.SWITCH_LOCKED)
 	}
 
 	override fun draw(
@@ -107,11 +107,11 @@ open class SimulationCellRenderer(
 		g: Graphics2D,
 		cell: DynamicInOut
 	) {
+		// A train queued at or entering through this InOut tints the cell; the connector is drawn on top
+		if (cell.occupied) drawOccupancyTint(g, AnimationColors.TRACK_OCCUPIED)
+
 		// Render base configuration from static reference
 		drawStaticInOut(g, cell.staticRef)
-
-		// The occupancy state is not shown. Tracked in issue #1008.
-		// Train entry/exit is not animated.
 	}
 
 	// EXTENSION - additional railway element renderers can be added here

@@ -10,12 +10,15 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import org.junit.jupiter.api.AfterEach
@@ -200,6 +203,54 @@ class AnimationControllerResourceCleanupTest : KoinTestBase() {
 
 			assertThat(isRunning(controller)).isFalse()
 		}
+	}
+
+	/**
+	 * Verify a switch lock change refreshes the captured state (Issue #1008, PR #1129 review).
+	 *
+	 * Some unlock paths (rollback, orphan-lock release) fire no context or block event, so without
+	 * a switch subscription the snapshot kept `locked = true` on a free switch.
+	 */
+	@Test
+	fun switchLockChangeRefreshesCapturedState() {
+		lateinit var controller: AnimationController
+		runOnEDT {
+			controller = createController().first
+			controller.start()
+		}
+		val switch = getSwitchCache(controller)!!.first() as DynamicRailSwitch
+
+		// lock()/unlock() run on the simulation thread in production; here on the test thread
+		switch.lock()
+		runOnEDT { } // drain the capture queued by the listener
+		assertThat(controller.currentState.switchStates[switch.staticRef]?.locked).isEqualTo(true)
+
+		switch.unlock()
+		runOnEDT { }
+		assertThat(controller.currentState.switchStates[switch.staticRef]?.locked).isEqualTo(false)
+
+		runOnEDT { controller.stop() }
+	}
+
+	/**
+	 * Verify stop() unsubscribes from the cached switches: a later lock change captures nothing.
+	 */
+	@Test
+	fun stopUnsubscribesFromSwitches() {
+		lateinit var controller: AnimationController
+		lateinit var switch: DynamicRailSwitch
+		runOnEDT {
+			controller = createController().first
+			controller.start()
+			switch = getSwitchCache(controller)!!.first() as DynamicRailSwitch
+			controller.stop()
+		}
+		val stateAfterStop = controller.currentState
+
+		switch.lock()
+		runOnEDT { }
+
+		assertThat(controller.currentState).isSameInstanceAs(stateAfterStop)
 	}
 
 	// Reflection-based accessors for private fields

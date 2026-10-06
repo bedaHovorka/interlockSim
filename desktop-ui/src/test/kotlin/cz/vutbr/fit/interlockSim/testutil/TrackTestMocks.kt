@@ -29,6 +29,10 @@
  * - createMockInOut() - Entry/exit point
  * - createMockSwitch() - Rail switch junction
  *
+ * ### Real Dynamic Cells (2 factories)
+ * - createDynamicInOut() - Real DynamicInOut, optionally occupied (spy)
+ * - createDynamicSwitch() - Real DynamicRailSwitch
+ *
  * ### Occupants & Nodes (2 factories)
  * - createMockNodeCell() - Track endpoint
  * - createMockTrackOccupant() - Train/occupant
@@ -62,6 +66,8 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -81,6 +87,7 @@ import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.spyk
 
 /**
  * Creates a mock NodeCell for testing track operations.
@@ -426,6 +433,35 @@ fun createMockSwitch(name: String): RailSwitch {
 	every { mock.toString() } returns "Switch:$name"
 	return mock
 }
+
+/**
+ * Creates a real DynamicInOut around [staticInOut], with its two dynamic semaphores.
+ *
+ * `setOccupied` is internal to :core (InOutWorker owns it), so for [occupied] = true this returns
+ * a spy whose `occupied` getter returns true (Issue #1008 renderer tests).
+ */
+fun createDynamicInOut(
+	staticInOut: InOut = InOut("Entry", true, SpatialType.HORIZONTAL),
+	occupied: Boolean = false
+): DynamicInOut {
+	val inOut =
+		DynamicInOut(
+			staticInOut,
+			createDynamicInstance(staticInOut.inSemaphore),
+			createDynamicInstance(staticInOut.outSemaphore)
+		)
+	if (!occupied) return inOut
+	return spyk(inOut).also { every { it.occupied } returns true }
+}
+
+/**
+ * Creates a real, unlocked DynamicRailSwitch in its initial configuration. The default type is the
+ * one the Issue #1008 padlock coordinate tests pin.
+ */
+fun createDynamicSwitch(
+	spatialType: SpatialType = SpatialType.HORIZONTAL,
+	type: RailSwitch.Type = RailSwitch.Type.SIMPLE_RIGHT_FALSE
+): DynamicRailSwitch = DynamicRailSwitch(RailSwitch(spatialType, type))
 // ==================== Mock Implementations ====================
 
 /**

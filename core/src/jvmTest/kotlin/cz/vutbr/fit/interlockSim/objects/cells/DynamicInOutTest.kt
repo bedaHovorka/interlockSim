@@ -15,12 +15,16 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.testutil.coreTestModule
 import org.junit.jupiter.api.AfterEach
@@ -34,7 +38,8 @@ import org.koin.core.context.stopKoin
  *
  * **Static/Dynamic Separation Pattern:**
  * - InOut (static) - Immutable configuration: name, position, entry/exit flag
- * - DynamicInOut (dynamic) - Mutable state: semaphore signals (via embedded semaphores)
+ * - DynamicInOut (dynamic) - Mutable state: semaphore signals (via embedded semaphores) and the
+ *   `occupied` flag (at least one train waits in the entry queue; set by InOutWorker)
  *
  * **Identity Contract:**
  * - equals() based on wrapped static InOut object (reference equality)
@@ -254,5 +259,83 @@ class DynamicInOutTest {
 
 		// Format: "Dynamic[name]"
 		assertThat(debugString).isEqualTo("Dynamic[${staticInOut.getName()}]")
+	}
+
+	private fun firstDynamicInOut(): DynamicInOut = context.toDynamic(context.getInOutsList()[0]) as DynamicInOut
+
+	private fun recordOccupiedEvents(
+		inOut: DynamicInOut,
+		events: MutableList<ContextChangeEvent>
+	): ContextPropertyChangeListener {
+		val listener = ContextPropertyChangeListener { events += it }
+		inOut.addPropertyChangeListener(listener)
+		return listener
+	}
+
+	@Test
+	fun `occupied is false by default`() {
+		assertThat(firstDynamicInOut().occupied).isFalse()
+	}
+
+	@Test
+	fun `setOccupied true fires one occupied event`() {
+		val inOut = firstDynamicInOut()
+		val events = mutableListOf<ContextChangeEvent>()
+		recordOccupiedEvents(inOut, events)
+
+		inOut.setOccupied(true)
+
+		assertThat(inOut.occupied).isTrue()
+		assertThat(events).containsExactly(ContextChangeEvent("occupied", false, true))
+	}
+
+	@Test
+	fun `a second setOccupied true fires no event`() {
+		val inOut = firstDynamicInOut()
+		inOut.setOccupied(true)
+		val events = mutableListOf<ContextChangeEvent>()
+		recordOccupiedEvents(inOut, events)
+
+		inOut.setOccupied(true)
+
+		assertThat(inOut.occupied).isTrue()
+		assertThat(events).isEmpty()
+	}
+
+	@Test
+	fun `setOccupied false after true fires one occupied event`() {
+		val inOut = firstDynamicInOut()
+		inOut.setOccupied(true)
+		val events = mutableListOf<ContextChangeEvent>()
+		recordOccupiedEvents(inOut, events)
+
+		inOut.setOccupied(false)
+
+		assertThat(inOut.occupied).isFalse()
+		assertThat(events).containsExactly(ContextChangeEvent("occupied", true, false))
+	}
+
+	@Test
+	fun `setOccupied false on a free InOut fires no event`() {
+		val inOut = firstDynamicInOut()
+		val events = mutableListOf<ContextChangeEvent>()
+		recordOccupiedEvents(inOut, events)
+
+		inOut.setOccupied(false)
+
+		assertThat(events).isEmpty()
+	}
+
+	@Test
+	fun `a removed listener receives no occupied event`() {
+		val inOut = firstDynamicInOut()
+		val events = mutableListOf<ContextChangeEvent>()
+		val listener = recordOccupiedEvents(inOut, events)
+		inOut.removePropertyChangeListener(listener)
+
+		inOut.setOccupied(true)
+
+		assertThat(inOut.occupied).isTrue()
+		assertThat(events).isEmpty()
 	}
 }

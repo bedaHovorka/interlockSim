@@ -25,6 +25,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 /**
  * Behaviour of InOut process
  *
+ * Keeps [DynamicInOut.occupied] equal to "the entry queue is non-empty" (issue #1008): set when a
+ * train enters, only after that train is in the queue, and re-checked whenever the worker observes
+ * the queue.
  */
 class InOutWorker(
 	private val env: SimulationEnvironment,
@@ -65,6 +68,7 @@ class InOutWorker(
 	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for kDisco event-driven logic
 	override suspend fun iteration() {
 		while (!queqe.empty()) {
+			inOut.setOccupied(!queqe.empty())
 			myIdle = false
 			logger.debug { "InOutWorker ${inOut.name} queue non-empty, processing train" }
 			env.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS)
@@ -75,6 +79,7 @@ class InOutWorker(
 					"InOutWorker ${inOut.name} queue became empty while waiting for a free path; " +
 						"resuming loop to re-check queue state"
 				}
+				inOut.setOccupied(!queqe.empty())
 				continue
 			}
 			val firstLink = first
@@ -187,6 +192,7 @@ class InOutWorker(
 				}
 				logger.error(e) { "InOutWorker ${inOut.name} path setup failed with exception" }
 				env.errorStop(e)
+				inOut.setOccupied(!queqe.empty())
 				return
 			}
 			env.report("Path reserved for $firstLink", inOut, ReportType.NODE_EVENTS)
@@ -194,8 +200,10 @@ class InOutWorker(
 			// wait for the train to leave the queue
 			logger.debug { "InOutWorker ${inOut.name} waiting for train $firstLink to leave queue" }
 			waitUntil(Condition { firstLink != queqe.first() })
+			inOut.setOccupied(!queqe.empty())
 			logger.debug { "InOutWorker ${inOut.name} train left queue" }
 		}
+		inOut.setOccupied(!queqe.empty())
 		myIdle = true
 	}
 
@@ -211,8 +219,13 @@ class InOutWorker(
 	suspend fun enterTrain(train: Train) {
 		logger.debug { "InOutWorker ${inOut.name} entering train $train, queue empty: ${queqe.empty()}" }
 		if (queqe.empty()) {
+			// Insert first: listeners run synchronously and must already see the train in the queue.
 			train.into(queqe)
+			inOut.setOccupied(true)
 		} else {
+			// Already true (the queue is non-empty). Kept above Process.wait, which inserts the train
+			// and passivates it until the train ahead leaves and reactivates it.
+			inOut.setOccupied(true)
 			Process.wait(queqe)
 		}
 
