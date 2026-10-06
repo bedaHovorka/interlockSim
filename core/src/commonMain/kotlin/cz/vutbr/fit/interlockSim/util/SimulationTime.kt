@@ -26,5 +26,4 @@ import cz.ksimulantenbande.kdisco.Process
  *   folded in the NaN and try/catch variants; issue #1123 made it public so `:desktop-ui`'s
  *   `AnimationStateCapture` shares it instead of keeping its own try/catch copy.
  */
-fun currentSimulationTime(fallback: Double = 0.0): Double =
-	runCatching { Process.time() }.getOrDefault(fallback)
+fun currentSimulationTime(fallback: Double = 0.0): Double = runCatching { Process.time() }.getOrDefault(fallback)
