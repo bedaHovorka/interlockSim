@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -61,15 +62,6 @@ class CompositeTickListenerTest {
 			unapprovedTrains = emptyList(),
 			innerBlockInputs = emptyList(),
 			outerBlockInputs = emptyList()
-		)
-
-	private fun emptySnapshot(simTime: Double): SimulationSnapshot =
-		SimulationSnapshot(
-			simTime = simTime,
-			semaphores = emptyList(),
-			blocks = emptyList(),
-			trainPositions = emptyList(),
-			timetables = emptyList()
 		)
 
 	private fun koogAdapter(

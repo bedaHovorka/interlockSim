@@ -18,6 +18,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -37,15 +38,6 @@ import kotlin.test.assertFailsWith
  */
 class SnapshotProjectionNetworkPerceptionPortTest {
 	// ── Test helpers ──────────────────────────────────────────────────────────
-
-	private fun emptySnapshot(simTime: Double = 0.0) =
-		SimulationSnapshot(
-			simTime = simTime,
-			semaphores = emptyList(),
-			blocks = emptyList(),
-			trainPositions = emptyList(),
-			timetables = emptyList()
-		)
 
 	private fun makePort(snapshot: SimulationSnapshot): SnapshotProjectionNetworkPerceptionPort =
 		SnapshotProjectionNetworkPerceptionPort { snapshot }

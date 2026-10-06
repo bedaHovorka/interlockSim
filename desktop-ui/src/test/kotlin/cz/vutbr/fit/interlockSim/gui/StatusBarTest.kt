@@ -19,6 +19,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import io.mockk.mockk
 import io.mockk.verify
@@ -209,18 +210,6 @@ class StatusBarTest : KoinTestBase() {
 
 		// Must use '.' decimal separator regardless of JVM default locale
 		assertThat(statusBar.speedIndicatorText()).isEqualTo("Speed: 0.5x")
-	}
-
-	/**
-	 * Flushes the EDT queue by calling [SwingUtilities.invokeAndWait] twice.
-	 *
-	 * Two flushes are needed when code under test uses [SwingUtilities.invokeLater]:
-	 * the first flush lets the invokeLater task land on EDT, and the second flush
-	 * runs it.
-	 */
-	private fun flushEDT() {
-		SwingUtilities.invokeAndWait { /* flush 1 */ }
-		SwingUtilities.invokeAndWait { /* flush 2 */ }
 	}
 
 	/**

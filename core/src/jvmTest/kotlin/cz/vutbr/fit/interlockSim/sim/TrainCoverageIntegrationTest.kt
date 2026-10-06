@@ -17,10 +17,8 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -30,7 +28,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit.SECONDS
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -56,18 +53,11 @@ private val logger = KotlinLogging.logger {}
  */
 @DisplayName("Train Front & LengthChecker Coverage Tests (#394)")
 class TrainCoverageIntegrationTest : KoinTestBase() {
-	private val simulationContextFactory: SimulationContextFactory by inject()
 	private var context: DefaultSimulationContext? = null
 
 	@AfterEach
 	fun tearDown() {
 		context?.close()
-	}
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val ctx = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
-		context = ctx
-		return ctx
 	}
 
 	/**
@@ -91,7 +81,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		@DisplayName("ShuntingLoop endTime=200 maximizes Front branch coverage")
 		@Timeout(value = 10, unit = SECONDS)
 		fun extendedSimulationMaximizesFrontCoverage() {
-			val ctx = loadVyhybnaContext()
+			val ctx = loadVyhybnaContext(warmUpDynamicWrappers = true).tracked()
 
 			val endEvents = AtomicInteger(0)
 			val continuousEvents = AtomicInteger(0)
@@ -122,7 +112,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		@DisplayName("ShuntingLoop endTime=60 exercises basic Front paths")
 		@Timeout(value = 10, unit = SECONDS)
 		fun shortSimulationExercisesBasicFrontPaths() {
-			val ctx = loadVyhybnaContext()
+			val ctx = loadVyhybnaContext(warmUpDynamicWrappers = true).tracked()
 
 			val trainApproved = AtomicInteger(0)
 			ctx.addPropertyChangeListener(
@@ -196,7 +186,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		@DisplayName("LengthChecker.report() produces diagnostic output via reflection")
 		@Timeout(value = 10, unit = SECONDS)
 		fun lengthCheckerReportProducesDiagnosticOutput() {
-			val ctx = loadVyhybnaContext()
+			val ctx = loadVyhybnaContext(warmUpDynamicWrappers = true).tracked()
 			val inOuts = ctx.getInOuts().toList()
 			require(inOuts.size >= 2)
 
@@ -264,7 +254,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		@DisplayName("LengthChecker.check() exercised through simulation")
 		@Timeout(value = 10, unit = SECONDS)
 		fun lengthCheckerCheckExercisedThroughSimulation() {
-			val ctx = loadVyhybnaContext()
+			val ctx = loadVyhybnaContext(warmUpDynamicWrappers = true).tracked()
 
 			val loop = runShuntingLoop(ctx, 30L)
 
@@ -279,7 +269,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		@DisplayName("LengthChecker.report() returns same StringBuilder reference")
 		@Timeout(value = 10, unit = SECONDS)
 		fun lengthCheckerReportReturnsSameReference() {
-			val ctx = loadVyhybnaContext()
+			val ctx = loadVyhybnaContext(warmUpDynamicWrappers = true).tracked()
 			val inOuts = ctx.getInOuts().toList()
 			require(inOuts.size >= 2)
 

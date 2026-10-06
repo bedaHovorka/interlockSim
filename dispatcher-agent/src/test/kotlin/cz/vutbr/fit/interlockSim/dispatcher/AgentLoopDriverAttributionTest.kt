@@ -20,8 +20,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TimeoutNoOpCause
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -42,15 +42,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("AgentLoopDriver — per-cycle attribution (SP2c.20 follow-up)")
 class AgentLoopDriverAttributionTest {
-	private fun emptySnapshot(simTime: Double): SimulationSnapshot =
-		SimulationSnapshot(
-			simTime = simTime,
-			semaphores = emptyList(),
-			blocks = emptyList(),
-			trainPositions = emptyList(),
-			timetables = emptyList()
-		)
-
 	private fun authorFor(
 		correlationMap: CommandCorrelationMap,
 		decision: DispatchDecision

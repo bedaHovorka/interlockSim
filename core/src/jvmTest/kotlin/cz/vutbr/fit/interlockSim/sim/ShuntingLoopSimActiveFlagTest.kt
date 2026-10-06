@@ -3,16 +3,11 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -37,16 +32,10 @@ import java.util.concurrent.TimeUnit
 @DisplayName("ShuntingLoop simActive liveness flag (#1032)")
 @Tag("integration-test")
 class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `signalStopped clears the flag mid-run from another thread and the run still finishes`() {
-		val context = loadVyhybnaContext()
+		val context = loadVyhybnaContext().tracked()
 		// Initialize dynamic wrapper map before creating ShuntingLoop.
 		context.getInOuts()
 
@@ -92,7 +81,7 @@ class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `natural completion clears the flag without any signalStopped call`() {
-		val context = loadVyhybnaContext()
+		val context = loadVyhybnaContext().tracked()
 		context.getInOuts()
 
 		val shuntingLoop = ShuntingLoop(context, endTime = 0L)
@@ -109,7 +98,7 @@ class ShuntingLoopSimActiveFlagTest : KoinTestBase() {
 		// during simulation calls env.errorStop(e), which never reached ShuntingLoop.signalStopped
 		// before this fix — leaving the flag stuck true forever after any core-level fatal error,
 		// not only after a GUI manual stop (#1032 review follow-up, PR #1071).
-		val context = loadVyhybnaContext()
+		val context = loadVyhybnaContext().tracked()
 		context.getInOuts()
 
 		val shuntingLoop = ShuntingLoop(context, endTime = 1_000_000L)

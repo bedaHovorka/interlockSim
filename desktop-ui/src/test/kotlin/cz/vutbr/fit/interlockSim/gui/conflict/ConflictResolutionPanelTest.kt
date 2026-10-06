@@ -16,6 +16,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolution
+import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -301,10 +302,5 @@ class ConflictResolutionPanelTest {
 		val applyField = ConflictResolutionPanel::class.java.getDeclaredField("applyButton")
 		applyField.isAccessible = true
 		(applyField.get(panel) as javax.swing.JButton).doClick()
-	}
-
-	private fun flushEDT() {
-		SwingUtilities.invokeAndWait { /* flush 1 */ }
-		SwingUtilities.invokeAndWait { /* flush 2 */ }
 	}
 }

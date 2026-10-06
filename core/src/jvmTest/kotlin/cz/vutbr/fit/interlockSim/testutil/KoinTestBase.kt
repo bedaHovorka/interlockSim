@@ -11,6 +11,9 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.koin.core.context.startKoin
@@ -44,6 +47,24 @@ abstract class KoinTestBase : KoinTest {
 	 * Call once per context; a context closed by hand earlier is simply closed again.
 	 */
 	protected fun <T : Context<*, *>> T.tracked(): T = tracker.track(this)
+
+	/**
+	 * Loads `vyhybna.xml` into a fresh [DefaultSimulationContext] through the Koin-injected
+	 * [SimulationContextFactory] and [JvmEditingContextFactory] (see
+	 * [TestFixtures.loadShuntingSimulationContext]). Replaces the private copies that 16 `sim/`
+	 * test classes used to carry (Issue #1124).
+	 *
+	 * The caller owns the returned context: close it directly, via `use { … }`, or register it
+	 * with [tracked].
+	 *
+	 * @param warmUpDynamicWrappers when `true`, initialises the dynamic wrapper map before returning
+	 */
+	protected fun loadVyhybnaContext(warmUpDynamicWrappers: Boolean = false): DefaultSimulationContext =
+		TestFixtures.loadShuntingSimulationContext(
+			getKoin().get<SimulationContextFactory>(),
+			getKoin().get<JvmEditingContextFactory>(),
+			warmUpDynamicWrappers
+		)
 
 	/**
 	 * Override this method to use a different test module.

@@ -16,12 +16,11 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchId
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -35,8 +34,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("StationTopologySerializer — static topology into LLM context (SP2b.8, #695)")
 class StationTopologySerializerTest : DispatcherKoinTestBase() {
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
-
 	@Test
 	@DisplayName("describe() extracts vyhybna InOuts, signals and switches with SP3.2 IDs")
 	fun describeExtractsStaticElements() {

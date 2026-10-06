@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -112,10 +113,5 @@ class StatusBarPausedIndicatorTest {
 
 		assertThat(statusBar.isPausedIndicatorVisible()).isTrue()
 		assertThat(statusBar.pausedIndicatorText()).isEqualTo("[PAUSED]")
-	}
-
-	private fun flushEDT() {
-		SwingUtilities.invokeAndWait { /* flush 1 */ }
-		SwingUtilities.invokeAndWait { /* flush 2 */ }
 	}
 }

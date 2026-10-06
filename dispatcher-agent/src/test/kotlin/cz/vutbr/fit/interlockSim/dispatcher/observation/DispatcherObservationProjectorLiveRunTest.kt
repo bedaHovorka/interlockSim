@@ -17,20 +17,19 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -64,8 +63,6 @@ import java.util.concurrent.atomic.AtomicReference
 @DisplayName("DispatcherObservationProjector — live vyhybna.xml run (#824)")
 @Tag("integration-test")
 class DispatcherObservationProjectorLiveRunTest : DispatcherKoinTestBase() {
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
-
 	@Test
 	@DisplayName("scope resolves DispatcherObservationProjector and DispatcherObservationSource")
 	fun scopeResolvesObservationBindings() {

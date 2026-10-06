@@ -13,15 +13,14 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.agents.EmittedActionSink
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -59,12 +58,10 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @Timeout(15, unit = TimeUnit.SECONDS)
 class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext().tracked()
-
 	@Test
 	@DisplayName("actuator tool execute() off-thread queues a decision; onControlStep() applies it on the sim thread")
 	fun actuatorToolMarshalsThroughQueueAndAppliesOnControlStep() {
-		val context = loadShuntingLoopContext()
+		val context = loadShuntingLoopContext().tracked()
 		context.getInOuts() // initialize dynamic wrapper map
 
 		val perceptionPort =
