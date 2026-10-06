@@ -44,7 +44,7 @@ Add these badges to your PR description or documentation to show build status:
 
 **Artifacts:**
 - `interlockSim-jar-{sha}` - Uber JAR (90-day retention)
-- `test-results-{sha}` - JUnit XML reports (30-day retention)
+- `test-results-{sha}` - JUnit XML for core, core-test, dispatcher-agent and desktop-ui, module prefix preserved (30-day retention)
 - `sonar-inputs-{sha}` - Compiled classes, test results, JaCoCo XML for SonarQube Analysis (7-day retention)
 
 **Triggers:** Push to any branch

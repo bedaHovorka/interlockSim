@@ -15,6 +15,8 @@ Inputs
     --timings  a folder of run sets, one sub-folder per complete gate run, each holding the copied
                JUnit XML: <timings>/<run>/<module>/build/test-results/<task>/TEST-*.xml for the tasks
                in MODULES (copy */build/test-results/{jvmTest,test,integrationTest}/ after each run).
+               A downloaded CI test-results-<sha> artifact is already in that layout (the upload
+               keeps the module prefix) and can be placed directly as one run sub-folder.
                At least MIN_RUN_SETS sub-folders are needed and the baseline set counts; each folder
                is trusted as one complete run. The minimum bounds the runs behind a p95, not the
                coverage per annotation: a class-level @Timeout pools the methods it governs, so it
