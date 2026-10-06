@@ -178,13 +178,31 @@ jobs:
         if-no-files-found: error
         compression-level: 9
 
+    # 30-day JUnit XML for every JVM module the gate runs, not only desktop-ui (#1134).
+    # scripts/rebaseline_timeouts.py reads
+    # <run>/<module>/build/test-results/<task>/TEST-*.xml, so these paths must share the
+    # repository root as their least common ancestor: upload-artifact@v4 uses that ancestor
+    # as the artifact root and otherwise strips the module prefix. A single directory upload
+    # (the old desktop-ui path) or a glob whose first wildcard is below the module name
+    # would make a downloaded artifact unusable as one --timings run set. if: always()
+    # keeps the XML of a timed-out run, which is the case a timeout review needs.
+    # core-test has no @Timeout; its jvmTest XML is included so the artifact still holds
+    # every JVM module the gate runs. if-no-files-found stays warn so a run that produced
+    # no XML (compile failed before any test) does not fail this step on top of that.
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results-${{ github.sha }}
-        path: desktop-ui/build/test-results/
+        path: |
+          core/build/test-results/jvmTest/
+          core/build/test-results/integrationTest/
+          dispatcher-agent/build/test-results/test/
+          dispatcher-agent/build/test-results/integrationTest/
+          desktop-ui/build/test-results/
+          core-test/build/test-results/jvmTest/
         retention-days: 30
+        if-no-files-found: warn
 
     - name: Generate test report summary
       if: always()

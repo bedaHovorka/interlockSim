@@ -1647,8 +1647,13 @@ grid step above that join (300 s and 600 s), so the helper's diagnostic fires fi
 copy `*/build/test-results/{jvmTest,test,integrationTest}/` after each of four or more gate runs into
 `<timings>/<run-name>/` and run
 `python3 scripts/rebaseline_timeouts.py --repo . --timings <timings> --baseline-set <run-name> --out build/timeout-rebaseline`
-(a dry run that writes `rebaseline.csv`; add `--apply` to rewrite the lowered values). New tests
-should follow the same rule: start at 10 s unless a measured run needs more.
+(a dry run that writes `rebaseline.csv`; add `--apply` to rewrite the lowered values). A downloaded
+CI `test-results-<sha>` artifact (30-day retention) is already one such run set: it keeps
+`<module>/build/test-results/<task>/TEST-*.xml` for core (`jvmTest`, `integrationTest`),
+dispatcher-agent and desktop-ui, so drop the unzipped artifact in as `<timings>/<sha>/`. Runner
+times run higher than a development machine, so a re-baseline that only uses local gate runs
+underestimates CI. New tests should follow the same rule: start at 10 s unless a measured run
+needs more.
 
 ## Parameterized Tests (JUnit 5)
 
