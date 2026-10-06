@@ -16,10 +16,10 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+import cz.vutbr.fit.interlockSim.context.navigation.extractUniqueBlocks
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.collision.TrainSnapshot
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
@@ -409,14 +409,6 @@ open class MultiTrainLoop(
 	private fun releaseIfOccupied(resource: Resource) {
 		if (resource.occupied > 0) {
 			resource.release(1)
-		}
-	}
-
-	private fun extractUniqueBlocks(path: List<TrackSection>): List<DynamicTrackBlock> {
-		val seen = mutableSetOf<DynamicTrackBlock>()
-		return path.mapNotNull { section ->
-			val block = section.getTrackBlock()
-			if (block is DynamicTrackBlock && seen.add(block)) block else null
 		}
 	}
 

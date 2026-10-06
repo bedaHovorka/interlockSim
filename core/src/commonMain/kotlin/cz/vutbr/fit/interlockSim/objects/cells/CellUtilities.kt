@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
 /**
  * Domain-specific utility functions for working with Cell objects.
@@ -43,4 +44,20 @@ object CellUtilities {
 			}
 		}
 	}
+
+	/**
+	 * Checks whether two separators refer to the same network element.
+	 *
+	 * Both are normalised with [assertNodeCell] (a Dynamic* wrapper becomes its static [NodeCell])
+	 * and compared by identity, so static/static, dynamic/dynamic and mixed pairs all agree.
+	 *
+	 * @throws IllegalStateException if either separator is neither a NodeCell nor a Dynamic* wrapper
+	 * @since Issue #1123 — replaces the identical private copies in
+	 *   [cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator] and
+	 *   [cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService]
+	 */
+	fun isSameSeparator(
+		a: PathSeparator,
+		b: PathSeparator
+	): Boolean = assertNodeCell(a) === assertNodeCell(b)
 }

@@ -243,6 +243,17 @@ class DynamicTrackBlockTest {
 		}
 
 		@Test
+		@DisplayName("failed guarded transition reports current and expected state, state unchanged")
+		fun failedTransitionMessage() {
+			// Issue #1123: the message now comes from the shared TrackStateHolder
+			assertFailure { dynamicBlock1.enter(train) }
+				.message()
+				.isNotNull()
+				.contains("Wrong state: FREE , expected : RESERVED")
+			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.FREE)
+		}
+
+		@Test
 		@DisplayName("double reservation from same separator is idempotent")
 		fun cannotDoubleReserve() {
 			// Reserve once

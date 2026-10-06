@@ -127,9 +127,9 @@ class DynamicTrackBlock(
 	 * - RESERVED -> OCCUPIED (when train enters)
 	 * - OCCUPIED -> FREE (when train leaves)
 	 */
-	private var _state: TrackFacility.State = TrackFacility.State.FREE
+	private val stateHolder = TrackStateHolder()
 
-	override fun getState(): TrackFacility.State = _state
+	override fun getState(): TrackFacility.State = stateHolder.current
 
 	/**
 	 * Dynamic property: Current occupant (train)
@@ -401,21 +401,12 @@ class DynamicTrackBlock(
 
 	// ========== Private helper methods for state transitions ==========
 
-	private fun stateChange(
-		from: TrackFacility.State,
-		to: TrackFacility.State
-	): Boolean {
-		val ok = _state == from
-		if (ok) _state = to
-		return ok
-	}
-
 	private fun exceptionStateChange(
 		from: TrackFacility.State,
 		to: TrackFacility.State,
 		operation: String
 	) {
-		if (!stateChange(from, to)) {
+		if (!stateHolder.transition(from, to)) {
 			logger.error {
 				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} state violation - " +
 					"expected=$from, actual=${getState()}, attempted=$to"
@@ -423,8 +414,6 @@ class DynamicTrackBlock(
 			throw TrackReservationException.InvalidStateTransition(this, getState(), operation)
 		}
 	}
-
-	private fun errorStateMessage(from: TrackFacility.State): String = "Wrong state: $_state , expected : $from"
 
 	private fun emitBlockOccupancyEvent(
 		type: BlockOccupancyEventType,
@@ -449,8 +438,8 @@ class DynamicTrackBlock(
 		from: TrackFacility.State,
 		to: TrackFacility.State
 	) {
-		val stateChange = stateChange(from, to)
-		requireSimulation(stateChange) { errorStateMessage(from) }
+		val stateChange = stateHolder.transition(from, to)
+		requireSimulation(stateChange) { stateHolder.wrongStateMessage(from) }
 	}
 
 	// ========== Identity and string representation ==========

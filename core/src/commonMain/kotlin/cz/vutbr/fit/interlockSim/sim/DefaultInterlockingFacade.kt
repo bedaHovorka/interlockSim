@@ -26,7 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.util.cellsOfType
+import cz.vutbr.fit.interlockSim.util.cellsByName
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -86,21 +86,13 @@ class DefaultInterlockingFacade(
 			.filter { !it.name.isNullOrBlank() }
 			.associateBy { it.name!! }
 
-	/** All rail-switch cells indexed by name for O(1) lookup. */
+	/** All rail-switch cells indexed by name for O(1) lookup (unnamed switches are excluded). */
 	private val switchByName: Map<String, DynamicRailSwitch> =
-		env
-			.getRailWayNetGrid()
-			.cellsOfType<DynamicRailSwitch>()
-			.filter { it.name.isNotBlank() }
-			.associateBy { it.name }
+		env.getRailWayNetGrid().cellsByName<DynamicRailSwitch> { it.name }
 
-	/** All semaphore cells indexed by name for O(1) lookup. */
+	/** All semaphore cells indexed by name for O(1) lookup (unnamed semaphores are excluded). */
 	private val semaphoreByName: Map<String, DynamicRailSemaphore> =
-		env
-			.getRailWayNetGrid()
-			.cellsOfType<DynamicRailSemaphore>()
-			.filter { it.name.isNotBlank() }
-			.associateBy { it.name }
+		env.getRailWayNetGrid().cellsByName<DynamicRailSemaphore> { it.name }
 
 	/** All InOut endpoint cells indexed by name for O(1) lookup (SP3.5). */
 	private val inOutByName: Map<String, DynamicInOut> =

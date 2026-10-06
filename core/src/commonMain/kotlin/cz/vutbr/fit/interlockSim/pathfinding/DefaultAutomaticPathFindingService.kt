@@ -56,7 +56,7 @@ class DefaultAutomaticPathFindingService(
 		target: PathSeparator,
 		costFunction: PathCostFunction
 	): PathFindingResult? {
-		if (isSameSeparator(start, target)) {
+		if (CellUtilities.isSameSeparator(start, target)) {
 			return PathFindingResult(start, target, emptyList(), 0.0)
 		}
 
@@ -77,7 +77,7 @@ class DefaultAutomaticPathFindingService(
 			// Skip stale entries left over from cost updates.
 			if (distances[current] != currentCost) continue
 
-			if (isSameSeparator(current.separator, target)) {
+			if (CellUtilities.isSameSeparator(current.separator, target)) {
 				return buildResult(start, target, current, predecessors, currentCost)
 			}
 
@@ -184,12 +184,4 @@ class DefaultAutomaticPathFindingService(
 	 */
 	private fun normalizeSection(section: TrackSection?): TrackSection? =
 		section?.let { (it as? DynamicTrackBlock)?.staticRef as? TrackSection ?: it }
-
-	/**
-	 * Compare two separators by their normalized static identity.
-	 */
-	private fun isSameSeparator(
-		a: PathSeparator,
-		b: PathSeparator
-	): Boolean = normalize(a) === normalize(b)
 }

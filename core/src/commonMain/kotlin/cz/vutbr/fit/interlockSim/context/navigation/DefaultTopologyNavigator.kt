@@ -340,7 +340,7 @@ class DefaultTopologyNavigator(
 
 			// Check if we reached the target
 			// Note: PathSeparator.equals() handles comparison between static and dynamic instances
-			if (isSameSeparator(separator, target)) {
+			if (CellUtilities.isSameSeparator(separator, target)) {
 				val path = buildPath(node)
 				paths.add(path)
 				continue
@@ -504,7 +504,7 @@ class DefaultTopologyNavigator(
 				continue
 			}
 
-			if (isSameSeparator(separator, target)) {
+			if (CellUtilities.isSameSeparator(separator, target)) {
 				paths.add(buildPath(node))
 				continue
 			}
@@ -639,40 +639,6 @@ class DefaultTopologyNavigator(
 	}
 
 	/**
-	 * Check if two PathSeparators refer to the same network element.
-	 *
-	 * This method handles both static PathSeparators and Dynamic wrappers correctly.
-	 * Since static objects don't know about Dynamic wrappers, we normalize both
-	 * separators to their static references before comparison using identity (===).
-	 *
-	 * ## Why Identity Comparison?
-	 *
-	 * Dynamic wrappers use identity comparison (===) of static references in their equals()
-	 * implementation. To ensure consistent behavior regardless of comparison order:
-	 * - Extract static reference from both separators
-	 * - Compare using identity (===) like Dynamic wrappers do
-	 *
-	 * This works for all combinations:
-	 * - static === static (direct identity)
-	 * - dynamic === dynamic (compares static references)
-	 * - static === dynamic (compares static references)
-	 * - dynamic === static (compares static references)
-	 *
-	 * @param sep1 First separator (may be static or dynamic)
-	 * @param sep2 Second separator (may be static or dynamic)
-	 * @return true if they represent the same network element
-	 */
-	private fun isSameSeparator(
-		sep1: PathSeparator,
-		sep2: PathSeparator
-	): Boolean {
-		// Extract static references for identity comparison
-		val static1 = CellUtilities.assertNodeCell(sep1)
-		val static2 = CellUtilities.assertNodeCell(sep2)
-		return static1 === static2
-	}
-
-	/**
 	 * Check if a separator appears in the ancestor chain of a node (cycle detection).
 	 *
 	 * This method traverses the parent chain to detect if we're revisiting a separator
@@ -693,7 +659,7 @@ class DefaultTopologyNavigator(
 	): Boolean {
 		var current = parentNode
 		while (current != null) {
-			if (isSameSeparator(separator, current.separator)) {
+			if (CellUtilities.isSameSeparator(separator, current.separator)) {
 				return true
 			}
 			current = current.parent

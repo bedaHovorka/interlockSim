@@ -114,6 +114,19 @@ class DynamicTrackTest {
 	}
 
 	@Test
+	fun `failed transition reports the current and the expected state`() {
+		dynamicTrack1.setUpPath(separator1)
+
+		// Issue #1123: the message now comes from the shared TrackStateHolder
+		assertFailure { dynamicTrack1.setUpPath(separator1) }
+			.isInstanceOf(TrackOperationException::class)
+			.message()
+			.isNotNull()
+			.contains("Wrong state: RESERVED , expected : FREE")
+		assertThat(dynamicTrack1.state).isEqualTo(TrackFacility.State.RESERVED)
+	}
+
+	@Test
 	fun `can enter track from RESERVED state`() {
 		// Reserve first
 		dynamicTrack1.setUpPath(separator1)

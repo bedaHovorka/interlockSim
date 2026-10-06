@@ -301,12 +301,5 @@ class SemiAutoApprovalDialog(
 					"${decision.fromEndpointName} → ${decision.toEndpointName}"
 				else -> null
 			}
-
-		private fun formatRationale(rationale: List<String>): String =
-			if (rationale.isEmpty()) {
-				"(no rationale recorded)"
-			} else {
-				rationale.joinToString("\n") { "• $it" }
-			}
 	}
 }

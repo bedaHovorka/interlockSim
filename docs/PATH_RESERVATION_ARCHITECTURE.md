@@ -205,7 +205,8 @@ fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): R
 
 #### Step 2a: Block Extraction
 
-**Method:** `extractUniqueBlocks(path: List<TrackSection>)`
+**Method:** `extractUniqueBlocks(path: List<TrackSection>)` — internal top-level helper in
+`context/navigation/UniqueBlocks.kt`, shared with `MultiTrainLoop` (Issue #1123)
 
 **Purpose:** Convert TrackSections to unique DynamicTrackBlocks
 
@@ -217,10 +218,9 @@ fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): R
 ```kotlin
 val seen = mutableSetOf<DynamicTrackBlock>()
 return path.mapNotNull { section ->
-    val block = section.getTrackBlock()
-    when {
-        block is DynamicTrackBlock && seen.add(block) -> block
-        else -> null  // Duplicate or wrong type
+    when (val block = section.getTrackBlock()) {
+        is DynamicTrackBlock -> if (seen.add(block)) block else null  // Duplicate dropped silently
+        else -> { logger.warn { "... context type mismatch." }; null }  // Wrong type: dropped, logged
     }
 }
 ```

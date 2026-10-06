@@ -62,8 +62,10 @@ class DynamicTrack(
 	 * - RESERVED -> OCCUPIED (when train enters)
 	 * - OCCUPIED -> FREE (when train leaves)
 	 */
-	var state: TrackFacility.State = TrackFacility.State.FREE
-		private set
+	val state: TrackFacility.State
+		get() = stateHolder.current
+
+	private val stateHolder = TrackStateHolder()
 
 	/**
 	 * Dynamic property: Current occupant (train)
@@ -266,29 +268,18 @@ class DynamicTrack(
 
 	// Private helper methods for state transitions
 
-	private fun stateChange(
-		from: TrackFacility.State,
-		to: TrackFacility.State
-	): Boolean {
-		val ok = state == from
-		if (ok) state = to
-		return ok
-	}
-
 	private fun exceptionStateChange(
 		from: TrackFacility.State,
 		to: TrackFacility.State
 	) {
-		if (!stateChange(from, to)) {
+		if (!stateHolder.transition(from, to)) {
 			logger.error {
 				"${Process.time()} CONFLICT: Block ${staticRef.hashCode()} state violation - " +
 					"expected=$from, actual=$state, attempted=$to"
 			}
-			throw TrackOperationException(errorStateMessage(from), staticRef)
+			throw TrackOperationException(stateHolder.wrongStateMessage(from), staticRef)
 		}
 	}
-
-	private fun errorStateMessage(from: TrackFacility.State): String = "Wrong state: $state , expected : $from"
 
 	/**
 	 * Equality based on the static object (stable identity).

@@ -23,7 +23,8 @@ import cz.ksimulantenbande.kdisco.Process
  *
  * @since PR #1115 review -- replaces the identical private copies in `DefaultPathReservationService`,
  *   `PathReservationRegistry` and `DynamicTrackBlock`; issue #701 added the [fallback] parameter and
- *   folded in the NaN and try/catch variants.
+ *   folded in the NaN and try/catch variants; issue #1123 made it public so `:desktop-ui`'s
+ *   `AnimationStateCapture` shares it instead of keeping its own try/catch copy.
  */
-internal fun currentSimulationTime(fallback: Double = 0.0): Double =
+fun currentSimulationTime(fallback: Double = 0.0): Double =
 	runCatching { Process.time() }.getOrDefault(fallback)
