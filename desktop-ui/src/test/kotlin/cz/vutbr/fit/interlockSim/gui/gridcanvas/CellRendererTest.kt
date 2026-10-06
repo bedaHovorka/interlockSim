@@ -11,16 +11,15 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import assertk.assertThat
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import io.mockk.every
+import cz.vutbr.fit.interlockSim.testutil.createDynamicInOut
+import cz.vutbr.fit.interlockSim.testutil.createDynamicSwitch
 import io.mockk.mockk
-import io.mockk.spyk
 import io.mockk.verify
 import io.mockk.verifyOrder
 import org.junit.jupiter.api.BeforeEach
@@ -46,13 +45,6 @@ class CellRendererTest {
 		val cellHeight = 16
 		editorRenderer = EditorCellRenderer(cellWidth, cellHeight)
 		simulationRenderer = SimulationCellRenderer(cellWidth, cellHeight)
-	}
-
-// Helper method to create DynamicInOut with required semaphores
-	private fun createDynamicInOut(staticInOut: InOut): DynamicInOut {
-		val inSemaphore = createDynamicInstance(staticInOut.inSemaphore)
-		val outSemaphore = createDynamicInstance(staticInOut.outSemaphore)
-		return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
 	}
 
 	@Test
@@ -295,7 +287,7 @@ class CellRendererTest {
 
 	@Test
 	fun `SimulationCellRenderer draws a padlock on a locked DynamicRailSwitch`() {
-		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		val dynamicSwitch = createDynamicSwitch()
 		dynamicSwitch.lock()
 		val graphicsMock = mockk<Graphics2D>(relaxed = true)
 
@@ -330,7 +322,7 @@ class CellRendererTest {
 		bodyX: Int,
 		bodyY: Int
 	) {
-		val dynamicSwitch = DynamicRailSwitch(RailSwitch(spatialType, type))
+		val dynamicSwitch = createDynamicSwitch(spatialType, type)
 		dynamicSwitch.lock()
 		val graphicsMock = mockk<Graphics2D>(relaxed = true)
 
@@ -342,7 +334,7 @@ class CellRendererTest {
 
 	@Test
 	fun `SimulationCellRenderer draws no padlock on an unlocked DynamicRailSwitch`() {
-		val dynamicSwitch = DynamicRailSwitch(RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE))
+		val dynamicSwitch = createDynamicSwitch()
 		val graphicsMock = mockk<Graphics2D>(relaxed = true)
 
 		simulationRenderer.draw(graphicsMock, dynamicSwitch)
@@ -352,14 +344,11 @@ class CellRendererTest {
 
 	@Test
 	fun `SimulationCellRenderer tints an occupied DynamicInOut before drawing it`() {
-		val dynamicInOut = spyk(createDynamicInOut(InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)))
-		every { dynamicInOut.occupied } returns true
+		val dynamicInOut = createDynamicInOut(InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL), occupied = true)
 		val graphicsMock = mockk<Graphics2D>(relaxed = true)
 
 		simulationRenderer.draw(graphicsMock, dynamicInOut)
 
-		verify { graphicsMock.fillRect(0, 0, 16, 16) }
-		verify { graphicsMock.drawLine(0, 8, 8, 8) }
 		verify { graphicsMock.fillOval(4, 4, 8, 8) }
 		verifyOrder {
 			graphicsMock.fillRect(0, 0, 16, 16)

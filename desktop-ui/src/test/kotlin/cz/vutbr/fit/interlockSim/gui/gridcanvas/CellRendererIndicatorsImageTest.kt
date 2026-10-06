@@ -11,20 +11,19 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
-import assertk.assertions.isEqualTo
-import assertk.assertions.isGreaterThan
+import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.testutil.allPixels
+import cz.vutbr.fit.interlockSim.testutil.createDynamicInOut
+import cz.vutbr.fit.interlockSim.testutil.createDynamicSwitch
+import cz.vutbr.fit.interlockSim.testutil.exactColorPixels
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.spyk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.awt.Color
@@ -77,23 +76,10 @@ class CellRendererIndicatorsImageTest {
 		conf: RailSwitch.Conf,
 		locked: Boolean
 	): DynamicRailSwitch =
-		DynamicRailSwitch(RailSwitch(spatialType, type)).apply {
+		createDynamicSwitch(spatialType, type).apply {
 			if (conf != this.conf) changeConf()
 			if (locked) lock()
 		}
-
-	private fun newInOut(occupied: Boolean): DynamicInOut {
-		val staticInOut = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
-		val inOut =
-			DynamicInOut(
-				staticInOut,
-				createDynamicInstance(staticInOut.inSemaphore),
-				createDynamicInstance(staticInOut.outSemaphore)
-			)
-		if (!occupied) return inOut
-		// setOccupied is internal to :core (InOutWorker owns it), so the GUI test stubs the getter.
-		return spyk(inOut).also { every { it.occupied } returns true }
-	}
 
 	/** Renders [cell] alone into a fresh black cell image and copies it onto the sheet at ([column], [row]). */
 	private fun render(
@@ -131,10 +117,10 @@ class CellRendererIndicatorsImageTest {
 				}
 			}
 			val inOutRow = firstRow + ORIENTATIONS.size * 2
-			val occupied = render(renderer, newInOut(true), 0, inOutRow)
-			val free = render(renderer, newInOut(false), 1, inOutRow)
-			assertThat(pixels(occupied, AnimationColors.TRACK_OCCUPIED).size).isGreaterThan(0)
-			assertThat(pixels(free, AnimationColors.TRACK_OCCUPIED)).isEmpty()
+			val occupied = render(renderer, createDynamicInOut(occupied = true), 0, inOutRow)
+			val free = render(renderer, createDynamicInOut(), 1, inOutRow)
+			assertThat(exactColorPixels(occupied, AnimationColors.TRACK_OCCUPIED)).isNotEmpty()
+			assertThat(exactColorPixels(free, AnimationColors.TRACK_OCCUPIED)).isEmpty()
 		}
 
 		System.getProperty(PNG_PATH_PROPERTY)?.let { writeScaled(File(it)) }
@@ -150,14 +136,14 @@ class CellRendererIndicatorsImageTest {
 		val track = mutableSetOf<Pair<Int, Int>>()
 		CONFS.forEachIndexed { c, conf ->
 			val unlocked = render(renderer, newSwitch(spatialType, type, conf, locked = false), firstColumn + c, unlockedRow)
-			assertThat(pixels(unlocked, AnimationColors.SWITCH_LOCKED)).isEmpty()
+			assertThat(exactColorPixels(unlocked, AnimationColors.SWITCH_LOCKED)).isEmpty()
 			track += nonBackgroundPixels(unlocked)
 		}
 		CONFS.forEachIndexed { c, conf ->
 			val locked = render(renderer, newSwitch(spatialType, type, conf, locked = true), firstColumn + c, unlockedRow + 1)
-			val mark = pixels(locked, AnimationColors.SWITCH_LOCKED)
+			val mark = exactColorPixels(locked, AnimationColors.SWITCH_LOCKED)
 			val label = "${renderer::class.simpleName} $spatialType $type $conf"
-			assertThat(mark.size, label).isGreaterThan(0)
+			assertThat(mark, label).isNotEmpty()
 			// No padlock pixel on, or 8-adjacent to, a pixel either configuration draws as track.
 			val touching = mark.filter { (x, y) -> (-1..1).any { dx -> (-1..1).any { dy -> (x + dx to y + dy) in track } } }
 			assertThat(touching, label).isEmpty()
@@ -166,17 +152,9 @@ class CellRendererIndicatorsImageTest {
 				mark.filter { (x, y) -> (if (spatialType == Cell.SpatialType.HORIZONTAL) y else x) in CELL / 2 - 1..CELL / 2 }
 			assertThat(onTrunk, label).isEmpty()
 			// Draws nothing besides the track and the mark.
-			assertThat(nonBackgroundPixels(locked) - mark.toSet() - track, label).isEqualTo(emptySet())
+			assertThat(nonBackgroundPixels(locked) - mark.toSet() - track, label).isEmpty()
 		}
 	}
-
-	private fun allPixels(image: BufferedImage): List<Pair<Int, Int>> =
-		(0 until image.height).flatMap { y -> (0 until image.width).map { x -> x to y } }
-
-	private fun pixels(
-		image: BufferedImage,
-		color: Color
-	): List<Pair<Int, Int>> = allPixels(image).filter { (x, y) -> image.getRGB(x, y) == color.rgb }
 
 	private fun nonBackgroundPixels(image: BufferedImage): Set<Pair<Int, Int>> =
 		allPixels(image).filter { (x, y) -> image.getRGB(x, y) != Color.BLACK.rgb }.toSet()

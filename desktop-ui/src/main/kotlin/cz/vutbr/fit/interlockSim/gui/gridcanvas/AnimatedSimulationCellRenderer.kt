@@ -208,11 +208,10 @@ class AnimatedSimulationCellRenderer(
 	}
 
 	/**
-	 * Render railway switch showing the historically active direction from captured state.
+	 * Render railway switch showing the active direction from the latest captured snapshot.
 	 *
-	 * Uses the switch configuration from the current animation state snapshot rather than
-	 * the live cell state. This ensures that during playback, switches display their
-	 * historical positions (MAIN or BRANCH) as they were during the recorded simulation.
+	 * Uses the switch configuration from the latest animation state snapshot rather than
+	 * the live cell state, so a frame shows one consistent capture of the network.
 	 *
 	 * Only the active path (based on captured conf) is drawn. Inactive directions
 	 * are not rendered, providing a clear indication of which route was set through

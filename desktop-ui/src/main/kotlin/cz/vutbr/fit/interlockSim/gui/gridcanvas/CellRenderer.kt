@@ -111,6 +111,9 @@ abstract class CellRenderer(
 	 * Draws a small padlock in [color] that marks a locked [railSwitch] (Issue #1008); the simulation
 	 * renderers pass `AnimationColors.SWITCH_LOCKED`. The caller's colour is restored.
 	 *
+	 * Assumes a square cell (`cellWidth == cellHeight`, true for the fixed cell constants): the
+	 * stroke `unit` derives from the width while the heights derive from the height.
+	 *
 	 * The glyph is 5/16 of the cell square (5x5 px at 16 px): a body 3/16 high across the full
 	 * glyph width, under a shackle one pixel narrower on each side (a top bar and two legs).
 	 *

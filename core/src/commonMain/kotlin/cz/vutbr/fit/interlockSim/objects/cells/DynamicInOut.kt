@@ -26,10 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
  * **Dynamic properties**:
  * - Signal states live in the embedded semaphores ([inSemaphore], [outSemaphore], both
  *   [DynamicRailSemaphore] wrappers).
- * - [occupied] is true while at least one train is queued at this entry InOut: trains still
- *   waiting for their entry route, and the train currently entering until its tail has started
- *   (`Train.actions` → `out()`). Exit traffic does not set it. Unlike block occupancy, a train
- *   counted here may not yet be on the network. It is set by
+ * - [occupied]: the entry-queue indicator (see its KDoc). It is set by
  *   [cz.vutbr.fit.interlockSim.sim.InOutWorker] and announced to the listeners registered with
  *   [addPropertyChangeListener] as a `ContextChangeEvent("occupied", old, new)`.
  *

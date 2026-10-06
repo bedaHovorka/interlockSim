@@ -399,13 +399,10 @@ object AnimationStateCapture {
 	 * @param dynamicSwitch Dynamic switch wrapper with current state
 	 * @return Immutable switch state snapshot
 	 */
-	internal fun captureSwitchState(dynamicSwitch: DynamicRailSwitch): SwitchState {
-		val conf = dynamicSwitch.conf
-
-		return SwitchState(
+	internal fun captureSwitchState(dynamicSwitch: DynamicRailSwitch): SwitchState =
+		SwitchState(
 			railSwitch = dynamicSwitch.staticRef,
-			conf = conf,
+			conf = dynamicSwitch.conf,
 			locked = dynamicSwitch.locked
 		)
-	}
 }
