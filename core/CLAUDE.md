@@ -42,7 +42,8 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
   the result index. A per-module `TestLoggingSingleStreamTest` tripwire fails if a
   stderr appender reappears. Gate evidence is still taken from a complete re-run's
   XML, never from a failed attempt.
-- **`clean` is ordered before every other task** by the root build script (#1011).
+- **`clean` is ordered before other build tasks** by the root build script (#1011);
+  the aggregate `cleanAllTests` task is excluded to avoid a task-graph cycle.
   With `org.gradle.parallel=true`, Gradle gives no ordering between one project's
   `clean` and another project's work, so a `clean build …` gate could compile
   `:core-test`/`:dispatcher-agent` against `:core` jvm classes a `clean` was
