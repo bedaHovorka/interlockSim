@@ -316,48 +316,10 @@ class DefaultTopologyNavigator(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int
-	): List<List<TrackSection>> {
-		val paths = mutableListOf<List<TrackSection>>()
-		val queue = ArrayDeque<PathNode>()
-
-		// Initialize BFS with start separator
-		queue.add(PathNode(start, null, null))
-
-		while (queue.isNotEmpty()) {
-			val node = queue.removeFirst()
-			val separator = node.separator
-
-			// Check depth limit
-			if (node.depth >= maxDepth) {
-				continue
-			}
-
-			// Cycle detection: Check if separator appears in this path's ancestor chain
-			// This allows reaching the same separator via different paths (needed for finding ALL paths)
-			if (isInAncestorChain(separator, node.parent)) {
-				continue
-			}
-
-			// Check if we reached the target
-			// Note: PathSeparator.equals() handles comparison between static and dynamic instances
-			if (isSameSeparator(separator, target)) {
-				val path = buildPath(node)
-				paths.add(path)
-				continue
-			}
-
-			// Explore all possible next sections from this separator
-			// For switches, this may return multiple branches
-			val nextSections = getAllNextTrackSections(separator, node.section)
-			for (nextSection in nextSections) {
-				// Get the separator at the end of this section
-				val nextSeparator = nextSection.getSecondEnd(separator)
-				queue.add(PathNode(nextSeparator, nextSection, node))
-			}
+	): List<List<TrackSection>> =
+		searchPaths(start, target, maxDepth) { separator, section ->
+			getAllNextTrackSections(separator, section)
 		}
-
-		return paths
-	}
 
 	/**
 	 * Find all topologically possible paths with pre-computed cost breakdown.
@@ -487,30 +449,69 @@ class DefaultTopologyNavigator(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int
+	): List<List<TrackSection>> =
+		searchPaths(start, target, maxDepth) { separator, section ->
+			getSwitchConstrainedNextTrackSections(separator, section)
+		}
+
+	/**
+	 * Shared BFS engine behind [findAllTopologicalPaths] and [findAllSwitchConstrainedPaths];
+	 * the two methods differ only in the [nextSectionsOf] expansion (plain graph walk versus
+	 * switch-rule filtering).
+	 *
+	 * Enumerates every route from [start] to [target], up to [maxDepth]. Cycle detection is
+	 * per-path (ancestor chain) instead of a global visited set. This allows the same separator
+	 * to be visited via different paths (needed for enumerating ALL paths), while preventing
+	 * infinite loops within a single path.
+	 *
+	 * @param start The starting path separator
+	 * @param target The target path separator to reach
+	 * @param maxDepth Maximum search depth to prevent runaway exploration
+	 * @param nextSectionsOf Supplies the next track sections from a separator, respecting the
+	 *   caller's transition rules
+	 * @return List of paths (each path is a list of track sections)
+	 * @since issue #1123 review round -- the two near-identical BFS bodies were the Sonar
+	 *   new-code duplication flagged on PR #1138
+	 */
+	private fun searchPaths(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int,
+		nextSectionsOf: (separator: PathSeparator, current: TrackSection?) -> List<TrackSection>
 	): List<List<TrackSection>> {
 		val paths = mutableListOf<List<TrackSection>>()
 		val queue = ArrayDeque<PathNode>()
+
+		// Initialize BFS with start separator
 		queue.add(PathNode(start, null, null))
 
 		while (queue.isNotEmpty()) {
 			val node = queue.removeFirst()
 			val separator = node.separator
 
+			// Check depth limit
 			if (node.depth >= maxDepth) {
 				continue
 			}
 
+			// Cycle detection: Check if separator appears in this path's ancestor chain
+			// This allows reaching the same separator via different paths (needed for finding ALL paths)
 			if (isInAncestorChain(separator, node.parent)) {
 				continue
 			}
 
-			if (isSameSeparator(separator, target)) {
+			// Check if we reached the target
+			// Note: CellUtilities.isSameSeparator handles static separators and dynamic wrappers in any combination
+			if (CellUtilities.isSameSeparator(separator, target)) {
 				paths.add(buildPath(node))
 				continue
 			}
 
-			val nextSections = getSwitchConstrainedNextTrackSections(separator, node.section)
+			// Explore all possible next sections from this separator
+			// For switches, this may return multiple branches
+			val nextSections = nextSectionsOf(separator, node.section)
 			for (nextSection in nextSections) {
+				// Get the separator at the end of this section
 				val nextSeparator = nextSection.getSecondEnd(separator)
 				queue.add(PathNode(nextSeparator, nextSection, node))
 			}
@@ -639,40 +640,6 @@ class DefaultTopologyNavigator(
 	}
 
 	/**
-	 * Check if two PathSeparators refer to the same network element.
-	 *
-	 * This method handles both static PathSeparators and Dynamic wrappers correctly.
-	 * Since static objects don't know about Dynamic wrappers, we normalize both
-	 * separators to their static references before comparison using identity (===).
-	 *
-	 * ## Why Identity Comparison?
-	 *
-	 * Dynamic wrappers use identity comparison (===) of static references in their equals()
-	 * implementation. To ensure consistent behavior regardless of comparison order:
-	 * - Extract static reference from both separators
-	 * - Compare using identity (===) like Dynamic wrappers do
-	 *
-	 * This works for all combinations:
-	 * - static === static (direct identity)
-	 * - dynamic === dynamic (compares static references)
-	 * - static === dynamic (compares static references)
-	 * - dynamic === static (compares static references)
-	 *
-	 * @param sep1 First separator (may be static or dynamic)
-	 * @param sep2 Second separator (may be static or dynamic)
-	 * @return true if they represent the same network element
-	 */
-	private fun isSameSeparator(
-		sep1: PathSeparator,
-		sep2: PathSeparator
-	): Boolean {
-		// Extract static references for identity comparison
-		val static1 = CellUtilities.assertNodeCell(sep1)
-		val static2 = CellUtilities.assertNodeCell(sep2)
-		return static1 === static2
-	}
-
-	/**
 	 * Check if a separator appears in the ancestor chain of a node (cycle detection).
 	 *
 	 * This method traverses the parent chain to detect if we're revisiting a separator
@@ -693,7 +660,7 @@ class DefaultTopologyNavigator(
 	): Boolean {
 		var current = parentNode
 		while (current != null) {
-			if (isSameSeparator(separator, current.separator)) {
+			if (CellUtilities.isSameSeparator(separator, current.separator)) {
 				return true
 			}
 			current = current.parent

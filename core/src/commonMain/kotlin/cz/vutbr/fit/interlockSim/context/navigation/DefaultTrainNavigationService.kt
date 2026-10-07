@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.paths.TransitionAwarePath
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -159,8 +158,8 @@ class DefaultTrainNavigationService(
 				candidatePath
 			}
 
-		// Step 4: Extract all track blocks from the path
-		val blocks = extractDynamicTrackBlocks(finalPath)
+		// Step 4: Extract all track blocks from the path (mixed-element Path pre-filtered to sections)
+		val blocks = extractUniqueBlocks(finalPath.filterIsInstance<TrackSection>())
 		logger.trace {
 			"findReservedPathForTrain: candidate path has ${blocks.size} blocks: ${blocks.map { it.toString() }}"
 		}
@@ -503,49 +502,6 @@ class DefaultTrainNavigationService(
 
 		logger.debug { "buildPathWithDirection: no path found (no oriented semaphore reached)" }
 		return null
-	}
-
-	/**
-	 * Extract all DynamicTrackBlock instances from a path.
-	 *
-	 * ## Implementation
-	 *
-	 * Paths contain PathElements which can be:
-	 * - PathSeparator (semaphores, switches, InOuts)
-	 * - TrackSection (track segments)
-	 *
-	 * We need to extract TrackSection instances that are also DynamicTrackBlocks,
-	 * filtering out TrackBlockParts (which are not reservable).
-	 *
-	 * ## Deduplication
-	 *
-	 * Paths may contain the same block multiple times (e.g., switch "around" blocks).
-	 * We use a LinkedHashSet to preserve order while eliminating duplicates.
-	 *
-	 * @param path Path to extract blocks from
-	 * @return List of unique DynamicTrackBlocks in path order
-	 */
-	private fun extractDynamicTrackBlocks(path: Path): List<DynamicTrackBlock> {
-		val seen = LinkedHashSet<DynamicTrackBlock>()
-
-		for (element in path) {
-			// Only process TrackSection instances
-			if (element !is TrackSection) continue
-
-			// Extract the track block from the section
-			// TrackSection.getTrackBlock() returns the underlying TrackBlock
-			val block = element.getTrackBlock()
-
-			// Only include DynamicTrackBlock instances (not TrackBlockPart)
-			if (block is DynamicTrackBlock) {
-				seen.add(block) // LinkedHashSet ensures uniqueness
-			}
-		}
-
-		logger.trace {
-			"extractDynamicTrackBlocks: extracted ${seen.size} unique blocks from path with ${path.size} elements"
-		}
-		return seen.toList()
 	}
 
 	/**

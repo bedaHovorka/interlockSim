@@ -753,7 +753,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `extractDynamicTrackBlocks filters PathSeparator elements`() {
+		fun `block extraction filters PathSeparator elements`() {
 			// Arrange
 			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
@@ -770,7 +770,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `extractDynamicTrackBlocks extracts only DynamicTrackBlock instances`() {
+		fun `block extraction yields only DynamicTrackBlock instances`() {
 			// Arrange
 			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
@@ -790,7 +790,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `extractDynamicTrackBlocks preserves block order`() {
+		fun `block extraction preserves block order`() {
 			// Arrange
 			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
@@ -807,7 +807,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `extractDynamicTrackBlocks handles mixed element types`() {
+		fun `block extraction handles mixed element types`() {
 			// Arrange: vyhybna.xml has mixed separators and blocks
 			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()

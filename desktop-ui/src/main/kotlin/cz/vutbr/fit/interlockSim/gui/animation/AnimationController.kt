@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.sim.SimulationEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.Component
 import java.util.concurrent.atomic.AtomicBoolean
@@ -468,50 +469,22 @@ class AnimationController(
 	/**
 	 * Build cache of all semaphores in grid.
 	 *
-	 * Performs single O(n²) grid scan to find all DynamicRailSemaphore cells.
+	 * Performs single O(n²) grid scan ([cellsOfType]) to find all DynamicRailSemaphore cells.
 	 * Called once during start() to avoid repeated scans on every PropertyChangeEvent.
 	 *
-	 * @return Immutable list of all semaphores in grid
+	 * @return Read-only list of all semaphores in grid
 	 */
-	private fun buildSemaphoreCache(): List<DynamicRailSemaphore> {
-		val grid = context.getRailWayNetGrid()
-		val cache = mutableListOf<DynamicRailSemaphore>()
-
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid.getCellAt(x, y)
-				if (cell is DynamicRailSemaphore) {
-					cache.add(cell)
-				}
-			}
-		}
-
-		return cache.toList() // Immutable
-	}
+	private fun buildSemaphoreCache(): List<DynamicRailSemaphore> = context.getRailWayNetGrid().cellsOfType()
 
 	/**
 	 * Build cache of all switches in grid.
 	 *
-	 * Performs single O(n²) grid scan to find all DynamicRailSwitch cells.
+	 * Performs single O(n²) grid scan ([cellsOfType]) to find all DynamicRailSwitch cells.
 	 * Called once during start() to avoid repeated scans on every PropertyChangeEvent.
 	 *
-	 * @return Immutable list of all switches in grid
+	 * @return Read-only list of all switches in grid
 	 */
-	private fun buildSwitchCache(): List<DynamicRailSwitch> {
-		val grid = context.getRailWayNetGrid()
-		val cache = mutableListOf<DynamicRailSwitch>()
-
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid.getCellAt(x, y)
-				if (cell is DynamicRailSwitch) {
-					cache.add(cell)
-				}
-			}
-		}
-
-		return cache.toList() // Immutable
-	}
+	private fun buildSwitchCache(): List<DynamicRailSwitch> = context.getRailWayNetGrid().cellsOfType()
 
 	companion object {
 		/**

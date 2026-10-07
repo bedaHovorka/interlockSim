@@ -9,8 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.gui.animation
 
-import cz.ksimulantenbande.kdisco.DiscoException
-import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -20,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -85,7 +84,7 @@ object AnimationStateCapture {
 	): AnimationState =
 		try {
 			AnimationState(
-				simulationTime = captureSimulationTime(),
+				simulationTime = currentSimulationTime(),
 				trainStates = captureTrainStates(context),
 				trackStates = captureTrackStates(context),
 				signalStates = captureSignalStates(semaphoreCache),
@@ -94,24 +93,6 @@ object AnimationStateCapture {
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to capture animation state from simulation context" }
 			throw e
-		}
-
-	/**
-	 * Capture current simulation time.
-	 *
-	 * Uses kdisco-engine Process.time() to get current simulation time in seconds.
-	 * Returns 0.0 if called outside a simulation coroutine context (e.g. from GUI thread
-	 * before simulation starts), since Process.time() requires an active simulation.
-	 *
-	 * @return Current simulation time in seconds, or 0.0 if not inside a simulation
-	 */
-	private fun captureSimulationTime(): Double =
-		try {
-			Process.time()
-		} catch (_: DiscoException) {
-			0.0
-		} catch (_: IllegalStateException) {
-			0.0
 		}
 
 	/**

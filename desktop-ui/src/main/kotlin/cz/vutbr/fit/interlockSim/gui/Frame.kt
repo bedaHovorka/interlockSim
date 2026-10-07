@@ -635,19 +635,6 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	/**
-	 * Format the decision rationale list for the "Why this route?" dialog (Issue #561, SP2b.6).
-	 *
-	 * An empty list (no rationale recorded) yields a single explanatory line; a non-empty
-	 * list is rendered as one bullet line per entry.
-	 */
-	private fun formatRationale(rationale: List<String>): String =
-		if (rationale.isEmpty()) {
-			"No rationale recorded for the last decision."
-		} else {
-			rationale.joinToString("\n") { "• $it" }
-		}
-
-	/**
 	 * Set the railway network context and switch UI mode accordingly.
 	 *
 	 * - [EditingContext]: Switches to editing mode with StatusBar

@@ -2510,54 +2510,6 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * Extract unique DynamicTrackBlocks from a path of TrackSections.
-	 *
-	 * ## Algorithm
-	 *
-	 * 1. Map each TrackSection to its containing TrackBlock
-	 * 2. Cast to DynamicTrackBlock (guaranteed in SimulationContext)
-	 * 3. Remove duplicates (preserving order)
-	 *
-	 * ## Why Deduplication?
-	 *
-	 * A path may contain the same block multiple times:
-	 * - Switch "around" blocks appear twice in path definition
-	 * - We only want to reserve each physical block once
-	 *
-	 * ## Note on Type Safety
-	 *
-	 * In SimulationContext, all TrackBlocks are DynamicTrackBlock instances.
-	 * The cast is safe because:
-	 * - Navigator uses SimulationContext graph
-	 * - SimulationContext extends Context<Cell, DynamicTrackBlock>
-	 * - All blocks in the graph are DynamicTrackBlock
-	 *
-	 * @param path List of TrackSections in path order
-	 * @return List of unique DynamicTrackBlocks in path order
-	 */
-	private fun extractUniqueBlocks(
-		path: List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>
-	): List<DynamicTrackBlock> {
-		val seen = mutableSetOf<DynamicTrackBlock>()
-		return path.mapNotNull { section ->
-			val block = section.getTrackBlock()
-			when {
-				block is DynamicTrackBlock && seen.add(block) -> block
-				block is DynamicTrackBlock && !seen.add(block) -> null // Duplicate, expected
-				else -> {
-					// Should never happen in SimulationContext, but log for debugging
-					logger.warn {
-						"extractUniqueBlocks: Unexpected non-DynamicTrackBlock encountered: " +
-							"${block::class.simpleName} from section $section. " +
-							"This indicates a context type mismatch."
-					}
-					null
-				}
-			}
-		}
-	}
-
-	/**
 	 * Extract unique railway switches from a reserved path (Tier 2).
 	 *
 	 * Iterates through all PathElements in the path and collects DynamicRailSwitch instances.

@@ -56,11 +56,11 @@ class DefaultAutomaticPathFindingService(
 		target: PathSeparator,
 		costFunction: PathCostFunction
 	): PathFindingResult? {
-		if (isSameSeparator(start, target)) {
+		if (CellUtilities.isSameSeparator(start, target)) {
 			return PathFindingResult(start, target, emptyList(), 0.0)
 		}
 
-		val startState = SearchState(normalize(start), null)
+		val startState = SearchState(CellUtilities.assertNodeCell(start), null)
 		val distances = mutableMapOf<SearchState, Double>()
 		distances[startState] = 0.0
 
@@ -77,7 +77,7 @@ class DefaultAutomaticPathFindingService(
 			// Skip stale entries left over from cost updates.
 			if (distances[current] != currentCost) continue
 
-			if (isSameSeparator(current.separator, target)) {
+			if (CellUtilities.isSameSeparator(current.separator, target)) {
 				return buildResult(start, target, current, predecessors, currentCost)
 			}
 
@@ -91,7 +91,7 @@ class DefaultAutomaticPathFindingService(
 				val nextSeparator = section.getSecondEnd(current.separator)
 				val nextState =
 					SearchState(
-						normalize(nextSeparator),
+						CellUtilities.assertNodeCell(nextSeparator),
 						normalizeSection(section)
 					)
 				val edgeCost = costFunction.cost(section, current.separator)
@@ -170,26 +170,9 @@ class DefaultAutomaticPathFindingService(
 	}
 
 	/**
-	 * Normalize a separator to its static [cz.vutbr.fit.interlockSim.objects.cells.NodeCell] reference.
-	 *
-	 * This makes map lookups consistent whether the service is used with an
-	 * [cz.vutbr.fit.interlockSim.context.EditingContext] (static objects) or a
-	 * [cz.vutbr.fit.interlockSim.context.SimulationContext] (dynamic wrappers).
-	 */
-	private fun normalize(separator: PathSeparator): PathSeparator = CellUtilities.assertNodeCell(separator)
-
-	/**
 	 * Normalize a track section to its static reference so that [SearchState] map
 	 * lookups are consistent across static and dynamic section instances.
 	 */
 	private fun normalizeSection(section: TrackSection?): TrackSection? =
 		section?.let { (it as? DynamicTrackBlock)?.staticRef as? TrackSection ?: it }
-
-	/**
-	 * Compare two separators by their normalized static identity.
-	 */
-	private fun isSameSeparator(
-		a: PathSeparator,
-		b: PathSeparator
-	): Boolean = normalize(a) === normalize(b)
 }
