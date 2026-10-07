@@ -15,8 +15,8 @@ import assertk.assertions.isLessThan
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -48,13 +48,7 @@ class AgentLoopDriverTickPeriodTest {
 		mockk(relaxed = true) {
 			every { snapshot() } answers {
 				simTime += 1.0
-				SimulationSnapshot(
-					simTime = simTime,
-					semaphores = emptyList(),
-					blocks = emptyList(),
-					trainPositions = emptyList(),
-					timetables = emptyList()
-				)
+				emptySnapshot(simTime)
 			}
 		}
 	private val planner: DispatcherPlanner =

@@ -15,7 +15,7 @@ import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
@@ -38,15 +38,6 @@ import java.util.concurrent.TimeUnit
 class RuleBasedDispatcherTest {
 	// ── Test data builders ──────────────────────────────────────────────────
 
-	private val emptySnapshot =
-		SimulationSnapshot(
-			simTime = 0.0,
-			semaphores = emptyList(),
-			blocks = emptyList(),
-			trainPositions = emptyList(),
-			timetables = emptyList()
-		)
-
 	private fun observation(
 		approvedTrainCount: Int = 0,
 		unapprovedTrains: List<QueuedTrainObservation> = emptyList(),
@@ -54,7 +45,7 @@ class RuleBasedDispatcherTest {
 		outerBlockInputs: List<BlockInputObservation> = emptyList()
 	): DispatchObservation =
 		DispatchObservation(
-			snapshot = emptySnapshot.copy(trainPositions = List(approvedTrainCount) { fakeTrainPosition() }),
+			snapshot = emptySnapshot().copy(trainPositions = List(approvedTrainCount) { fakeTrainPosition() }),
 			unapprovedTrains = unapprovedTrains,
 			innerBlockInputs = innerBlockInputs,
 			outerBlockInputs = outerBlockInputs
