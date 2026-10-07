@@ -10,16 +10,15 @@
 		</filter>
 	</appender>
 
-	<!-- Console appender for stderr (ERROR levels) -->
-	<appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
-		<target>System.err</target>
-		<encoder>
-			<pattern>%msg%n</pattern>
-		</encoder>
-		<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-			<level>ERROR</level>
-		</filter>
-	</appender>
+	<!--
+		There is deliberately no second console appender on System.err (Issue #1011).
+		A single ERROR event used to be written to stdout AND stderr, and Gradle drains a test
+		JVM's two streams with two separate forwarding threads. Concurrent forwarding is what
+		corrupts Gradle's binary test-result index (gradle/gradle#33990), which surfaces as
+		"Could not write XML test results for ... to file ..." on a run where zero tests failed.
+		The CONSOLE appender above already prints ERROR (its threshold is WARN), so the stderr
+		copy only duplicated output. Keep test logging on one stream.
+	-->
 
 	<!-- Suppress verbose navigation logging during tests -->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation" level="WARN"/>
@@ -52,6 +51,5 @@
 	<!-- Root logger - WARN level for tests -->
 	<root level="WARN">
 		<appender-ref ref="CONSOLE"/>
-		<appender-ref ref="STDERR"/>
 	</root>
 </configuration>
