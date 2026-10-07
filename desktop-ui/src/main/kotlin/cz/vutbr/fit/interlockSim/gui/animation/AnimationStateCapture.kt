@@ -130,7 +130,8 @@ object AnimationStateCapture {
 		logger.trace { "Capturing state for ${trains.size} active trains" }
 
 		// Create position calculator for grid location interpolation
-		// Pass separator position cache for O(1) lookups (2,500× faster than grid scan)
+		// Pass separator position cache (keyed by static separators) for O(1) lookups
+		// instead of an O(cols × rows) grid scan per endpoint
 		val positionCalculator =
 			TrainPositionCalculator(
 				context,

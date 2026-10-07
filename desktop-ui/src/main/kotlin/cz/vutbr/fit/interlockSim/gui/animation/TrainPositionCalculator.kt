@@ -42,6 +42,10 @@ import kotlin.math.atan2
  * Uses pre-built cache from DefaultSimulationContext for O(1) PathSeparator position lookups,
  * avoiding O(n²) grid scans at 30 FPS rendering rate (2,500× faster for 50×50 grid).
  *
+ * The cache is keyed by **static** separators, so every lookup unwraps dynamic wrappers
+ * first (Issue #1130); the grid scan remains only as a fallback for separators the grid
+ * does not hold at all.
+ *
  * ## Grid Coordinate System
  *
  * - **Origin:** Top-left corner (0, 0)
@@ -71,7 +75,7 @@ import kotlin.math.atan2
  * (typically after marshaling to EDT via SwingUtilities.invokeLater).
  *
  * @property context Simulation context for accessing grid and network data
- * @property separatorPositionCache Cache mapping PathSeparators to grid Points for O(1) lookups
+ * @property separatorPositionCache Cache mapping **static** PathSeparators to grid Points for O(1) lookups
  *
  * @see TrainState
  * @see AnimationStateCapture
@@ -315,8 +319,9 @@ class TrainPositionCalculator(
 	 * at 30 FPS, so performance is critical (2,500× faster for 50×50 grid).
 	 *
 	 * **Dynamic Wrapper Handling:** The separator parameter may be a dynamic wrapper
-	 * (DynamicRailSemaphore, DynamicInOut). This method unwraps to static reference
-	 * before cache lookup.
+	 * (DynamicRailSemaphore, DynamicInOut). The cache is keyed by static references, so
+	 * this method unwraps to the static reference before the cache lookup — both forms
+	 * therefore hit the cache (Issue #1130).
 	 *
 	 * **Visibility:** Internal to allow AnimationStateCapture to calculate train direction.
 	 *
@@ -327,7 +332,7 @@ class TrainPositionCalculator(
 		// Unwrap dynamic wrapper to static reference for cache lookup
 		val staticSeparator = DynamicWrapperUtils.unwrapToStatic(separator)
 
-		// Fallback: If not in cache, scan grid (should not happen after optimization)
+		// Fallback: separators the grid cache does not hold (e.g. not part of this grid)
 		return separatorPositionCache[staticSeparator] ?: scanGridFor(staticSeparator)
 	}
 

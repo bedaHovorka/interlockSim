@@ -55,6 +55,7 @@ import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
@@ -190,7 +191,9 @@ open class DefaultSimulationContext(
 	 *
 	 * Used by TrainPositionCalculator to avoid O(n²) grid scans at 30 FPS.
 	 *
-	 * Maps each PathSeparator to its grid Point for O(1) position lookups.
+	 * Maps each **static** PathSeparator to its grid Point for O(1) position lookups.
+	 * Grid cells that are dynamic wrappers are keyed by their static reference, so a
+	 * lookup must unwrap first (see TrainPositionCalculator.getGridPosition).
 	 */
 	lateinit var separatorPositionCache: Map<PathSeparator, Point>
 		private set
@@ -596,8 +599,10 @@ open class DefaultSimulationContext(
 		 * repeated grid scans at 30 FPS rendering rate.
 		 *
 		 * After grid transformation, the grid contains Dynamic wrappers (DynamicInOut,
-		 * DynamicRailSemaphore, DynamicRailSwitch). We map their static references to
-		 * grid positions for consistent lookup by TrainPositionCalculator.
+		 * DynamicRailSemaphore, DynamicRailSwitch). Every cell is keyed by its **static**
+		 * reference ([DynamicWrapperUtils.unwrapToStatic]), because static cells compare by
+		 * identity: a wrapper key would never match the unwrapped separator that
+		 * TrainPositionCalculator looks up, and every lookup would miss (Issue #1130).
 		 *
 		 * Called once during fromEditingContext() after grid transformation.
 		 *
@@ -611,20 +616,9 @@ open class DefaultSimulationContext(
 				for (y in 0 until grid.rows) {
 					val cell = grid.getCellAt(x, y)
 					if (cell is PathSeparator) {
-						// Cell is PathSeparator - add directly
-						cache[cell] = Point(x, y)
-					} else if (cell is DynamicPathSeparator) {
-						// Cell is DynamicPathSeparator - add static reference
-						val staticRef =
-							when (cell) {
-								is DynamicInOut -> cell.staticRef
-								is DynamicRailSemaphore -> cell.staticRef
-								is DynamicRailSwitch -> cell.staticRef
-								else -> null
-							}
-						if (staticRef != null) {
-							cache[staticRef] = Point(x, y)
-						}
+						// Key by the static reference; a static cell is its own static reference.
+						val staticRef = DynamicWrapperUtils.unwrapToStatic(cell) ?: cell
+						cache[staticRef] = Point(x, y)
 					}
 				}
 			}

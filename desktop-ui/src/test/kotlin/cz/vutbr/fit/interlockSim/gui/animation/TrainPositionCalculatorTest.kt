@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.TrainFrontIdentity
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import io.mockk.every
 import io.mockk.mockk
@@ -605,6 +606,56 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val scanContext = scanContextWithCells(2, 2, Point(0, 1) to wrapperOf(target), Point(1, 1) to target)
 
 		assertThat(TrainPositionCalculator(scanContext, emptyMap()).getGridPosition(target)).isEqualTo(Point(0, 1))
+	}
+
+	// ========== getGridPosition: the real context cache hits for every separator (Issue #1130) ==========
+
+	@Test
+	fun testSeparatorCacheOfRealContextIsKeyedByStaticSeparators() {
+		// The cache built by DefaultSimulationContext must hold static references, not the
+		// dynamic wrappers the grid stores: static cells compare by identity, so a wrapper
+		// key could never match the unwrapped separator that getGridPosition looks up.
+		val cache = separatorCache()
+		assertThat(cache.isEmpty()).isEqualTo(false)
+		assertThat(cache.keys.any { it is DynamicPathSeparator }).isEqualTo(false)
+		assertThat(cache.keys).isEqualTo(staticSeparatorsOfGrid())
+	}
+
+	@Test
+	fun testGetGridPosition_realContextCacheAnswersEverySeparatorWithoutScanning() {
+		// Strict context mock: any fallback scan calls getRailWayNetGrid() and fails the test.
+		val noScanContext = mockk<SimulationContext>()
+		val cached = TrainPositionCalculator(noScanContext, separatorCache())
+
+		val grid = context.getRailWayNetGrid()
+		var separators = 0
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val cell = grid.getCellAt(x, y) as? PathSeparator ?: continue
+				separators++
+				val expected = Point(x, y)
+				// Wrapper form, as held by the grid and by navigation paths
+				assertThat(cached.getGridPosition(cell)).isEqualTo(expected)
+				// Static form, as held by callers that unwrapped beforehand
+				val staticSeparator = DynamicWrapperUtils.unwrapToStatic(cell)
+				assertThat(staticSeparator).isNotNull()
+				assertThat(cached.getGridPosition(staticSeparator!!)).isEqualTo(expected)
+			}
+		}
+		assertThat(separators > 0).isEqualTo(true)
+	}
+
+	/** Every grid cell that is a separator, unwrapped to its static reference. */
+	private fun staticSeparatorsOfGrid(): Set<PathSeparator> {
+		val grid = context.getRailWayNetGrid()
+		val statics = mutableSetOf<PathSeparator>()
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val cell = grid.getCellAt(x, y) as? PathSeparator ?: continue
+				statics.add(DynamicWrapperUtils.unwrapToStatic(cell) ?: cell)
+			}
+		}
+		return statics
 	}
 
 	// ========== Deprecated Train-Overload Delegation (Issues #1030, #1028) ==========
