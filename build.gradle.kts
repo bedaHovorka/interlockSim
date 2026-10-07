@@ -94,9 +94,9 @@ subprojects {
 // project's work. In the `clean build …` gate that means `:core-test:clean` or
 // `:desktop-ui:clean` may still be deleting while `:core:jvmJar` has already produced its
 // output — or `:core:clean` may run after it, wiping the classes the other modules compile
-// against. The observed symptom was `:core-test:compileKotlinJvm` / `:dispatcher-agent:
-// compileKotlin` failing with "Unresolved reference: SimulationContext" on a commit that
-// compiles cleanly, while the same gate with `--max-workers=1` was green.
+// against. The observed symptom was `:core-test:compileKotlinJvm` and
+// `:dispatcher-agent:compileKotlin` failing with "Unresolved reference: SimulationContext" on
+// a commit that compiles cleanly, while the same gate with `--max-workers=1` was green.
 //
 // The project dependencies are declared correctly; what is missing is ordering against the
 // `clean` tasks, which no dependency edge can express. `mustRunAfter` adds exactly that, and
