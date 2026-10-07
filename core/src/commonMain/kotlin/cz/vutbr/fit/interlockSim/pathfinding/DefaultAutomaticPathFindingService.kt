@@ -60,7 +60,7 @@ class DefaultAutomaticPathFindingService(
 			return PathFindingResult(start, target, emptyList(), 0.0)
 		}
 
-		val startState = SearchState(normalize(start), null)
+		val startState = SearchState(CellUtilities.assertNodeCell(start), null)
 		val distances = mutableMapOf<SearchState, Double>()
 		distances[startState] = 0.0
 
@@ -91,7 +91,7 @@ class DefaultAutomaticPathFindingService(
 				val nextSeparator = section.getSecondEnd(current.separator)
 				val nextState =
 					SearchState(
-						normalize(nextSeparator),
+						CellUtilities.assertNodeCell(nextSeparator),
 						normalizeSection(section)
 					)
 				val edgeCost = costFunction.cost(section, current.separator)
@@ -168,15 +168,6 @@ class DefaultAutomaticPathFindingService(
 		sections.reverse()
 		return PathFindingResult(start, target, sections, totalCost)
 	}
-
-	/**
-	 * Normalize a separator to its static [cz.vutbr.fit.interlockSim.objects.cells.NodeCell] reference.
-	 *
-	 * This makes map lookups consistent whether the service is used with an
-	 * [cz.vutbr.fit.interlockSim.context.EditingContext] (static objects) or a
-	 * [cz.vutbr.fit.interlockSim.context.SimulationContext] (dynamic wrappers).
-	 */
-	private fun normalize(separator: PathSeparator): PathSeparator = CellUtilities.assertNodeCell(separator)
 
 	/**
 	 * Normalize a track section to its static reference so that [SearchState] map

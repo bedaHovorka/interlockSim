@@ -25,7 +25,9 @@ private val logger = KotlinLogging.logger {}
  * not one indicates a context type mismatch: it is dropped and logged at WARN.
  *
  * @since Issue #1123 — replaces the near-identical private copies in [DefaultPathReservationService]
- *   (which logged the mismatch) and `MultiTrainLoop` (which dropped it silently); the WARN is kept
+ *   (which logged the mismatch), `MultiTrainLoop` and `DefaultTrainNavigationService` (which dropped
+ *   it silently); the WARN is kept, and the train service pre-filters its mixed-element `Path` to
+ *   sections (`filterIsInstance<TrackSection>()`) at its call site
  */
 internal fun extractUniqueBlocks(path: List<TrackSection>): List<DynamicTrackBlock> {
 	val seen = mutableSetOf<DynamicTrackBlock>()

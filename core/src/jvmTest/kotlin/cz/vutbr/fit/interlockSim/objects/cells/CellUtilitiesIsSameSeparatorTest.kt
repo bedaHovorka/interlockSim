@@ -45,7 +45,8 @@ class CellUtilitiesIsSameSeparatorTest : KoinTestBase() {
 			context.getInOuts().map { it to it.staticRef } +
 				grid.cellsOfType<DynamicRailSemaphore>().map { it to it.staticRef } +
 				grid.cellsOfType<DynamicRailSwitch>().map { it to it.staticRef }
-		assertThat(pairs.size).isGreaterThan(0)
+		// More than one pair, so the distinctness double loop below stays meaningful.
+		assertThat(pairs.size).isGreaterThan(1)
 		return pairs
 	}
 
