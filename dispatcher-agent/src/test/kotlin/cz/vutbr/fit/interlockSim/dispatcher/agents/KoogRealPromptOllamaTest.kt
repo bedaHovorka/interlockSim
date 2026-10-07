@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
@@ -21,6 +20,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaPrewarmExtension
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -29,7 +29,6 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -272,8 +271,6 @@ class KoogRealPromptOllamaTest : DispatcherKoinTestBase() {
 				outcomeFeed = outcomeFeed
 			)
 	}
-
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	/**
 	 * One cycle's worth of live state: what the ports report and what the observation carries.

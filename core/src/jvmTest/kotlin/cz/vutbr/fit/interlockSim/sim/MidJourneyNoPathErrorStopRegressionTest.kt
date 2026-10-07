@@ -13,14 +13,10 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
@@ -29,7 +25,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
@@ -81,12 +76,6 @@ private val logger = KotlinLogging.logger {}
 @DisplayName("PR #940: mid-journey NoTopologicalPath → bounded retries → env.errorStop (core coverage anchor)")
 @Tag("integration-test")
 class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
 	/**
 	 * Verifies that [Train.MAX_MID_JOURNEY_NO_PATH_RETRIES] is defined and positive — the
 	 * bounded-retry policy for mid-journey `NoTopologicalPath`, the counterpart of

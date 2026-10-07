@@ -19,6 +19,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
+import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -737,17 +738,6 @@ class SimulationControllerTest {
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
-
-	/**
-	 * Flushes the EDT queue by calling [SwingUtilities.invokeAndWait] the given number of times.
-	 *
-	 * Two flushes are typically needed when a background thread fires an event handled by
-	 * [SwingUtilities.invokeLater]: the first flush dispatches the invokeLater task, and the
-	 * second flush ensures any nested EDT work queued by the task is also completed.
-	 */
-	private fun flushEDT(times: Int = 2) {
-		repeat(times) { SwingUtilities.invokeAndWait { /* flush */ } }
-	}
 
 	private fun createController(
 		toolBar: ToolBar? = null,

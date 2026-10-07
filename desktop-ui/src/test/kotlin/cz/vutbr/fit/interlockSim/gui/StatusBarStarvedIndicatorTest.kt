@@ -14,6 +14,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -102,10 +103,5 @@ class StatusBarStarvedIndicatorTest {
 
 		assertThat(statusBar.isStarvedIndicatorVisible()).isTrue()
 		assertThat(statusBar.starvedIndicatorText()).isEqualTo(StatusBar.STARVED_BADGE_TEXT)
-	}
-
-	private fun flushEDT() {
-		SwingUtilities.invokeAndWait { /* flush 1 */ }
-		SwingUtilities.invokeAndWait { /* flush 2 */ }
 	}
 }

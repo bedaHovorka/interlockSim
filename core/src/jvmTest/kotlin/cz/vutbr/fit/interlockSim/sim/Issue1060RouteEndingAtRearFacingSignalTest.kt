@@ -13,8 +13,6 @@ import assertk.assertThat
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -22,12 +20,10 @@ import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -46,9 +42,6 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("A route ending at a rear-facing signal is extended for the train standing before it (#1060)")
 class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
 	private companion object {
 		const val END_TIME = 300L
 		const val REAR_FACING_END = "doB1"
@@ -159,7 +152,4 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 			is DynamicRailSemaphore -> element.name
 			else -> null
 		}
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 }

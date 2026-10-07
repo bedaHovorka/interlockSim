@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -40,7 +41,6 @@ import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
@@ -60,8 +60,6 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @DisplayName("DispatcherObservationProjector — sim-thread capture, sorting, determinism (#824)")
 class DispatcherObservationProjectorTest : DispatcherKoinTestBase() {
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
-
 	private fun newProjector(
 		context: DefaultSimulationContext,
 		perceptionPort: NetworkPerceptionPort,

@@ -3,11 +3,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -15,7 +11,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
@@ -42,12 +37,6 @@ private val logger = KotlinLogging.logger {}
 @DisplayName("ShuntingLoop Regression Tests (PR #95)")
 @Tag("integration-test")
 class ShuntingLoopRegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
 	/**
 	 * Test that trains complete full circuits and exit successfully.
 	 *

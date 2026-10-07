@@ -25,12 +25,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -86,18 +86,6 @@ class AgentLoopDriverTest {
 	}
 
 	private fun makeDriver(): AgentLoopDriver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller)
-
-	// ── Helpers ────────────────────────────────────────────────────────────────
-
-	/** Creates a [SimulationSnapshot] with the given simTime and empty lists. */
-	private fun emptySnapshot(simTime: Double): SimulationSnapshot =
-		SimulationSnapshot(
-			simTime = simTime,
-			semaphores = emptyList(),
-			blocks = emptyList(),
-			trainPositions = emptyList(),
-			timetables = emptyList()
-		)
 
 	// ── Cycle order ─────────────────────────────────────────────────────────
 

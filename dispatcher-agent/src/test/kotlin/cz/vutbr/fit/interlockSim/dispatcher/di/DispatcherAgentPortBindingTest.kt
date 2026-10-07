@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
@@ -36,7 +37,6 @@ import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -77,8 +77,6 @@ import java.util.concurrent.atomic.AtomicReference
 @DisplayName("SP1.4 port bindings resolve from a DefaultSimulationContext Koin scope (#549)")
 class DispatcherAgentPortBindingTest : DispatcherKoinTestBase() {
 	override fun getTestModules(): List<Module> = listOf(dispatcherAgentModule, commonCoreTestModule)
-
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
 
 	@Test
 	@DisplayName("scope resolves DefaultNetworkPerceptionPort, DefaultNetworkActuatorPort and KoogAgentFactory")

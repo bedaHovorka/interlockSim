@@ -13,7 +13,6 @@ import ai.koog.agents.core.agent.AIAgent
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.doesNotContain
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandId
@@ -23,6 +22,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -32,7 +32,6 @@ import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -81,8 +80,6 @@ import org.junit.jupiter.params.provider.EnumSource
  */
 @DisplayName("Live prompt surfaces contain no menu artifacts (Issue #893, phase beta, task B3)")
 class LivePromptNoMenuTest : DispatcherKoinTestBase() {
-	private fun loadShuntingLoopContext(): DefaultSimulationContext = TestFixtures.newShuntingSimulationContext()
-
 	/** Mirrors [KoogAgentFactoryTest.fakePerceptionPort]: reports [activeTrainIds] as active. */
 	private fun fakePerceptionPort(activeTrainIds: List<String> = listOf("T1")): NetworkPerceptionPort =
 		mockk<NetworkPerceptionPort> {

@@ -13,13 +13,10 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.AspectFlipOnce
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertStoodAtClearanceStopLine
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.runClearanceStopScenario
@@ -27,7 +24,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -58,9 +54,6 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("Issue #989 — the clearance stop on vyhybna's multi-section approach")
 class Issue989VyhybnaMultiSectionStopTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
 	private companion object {
 		/** Distance from A to `doB1` along the reserved route: 100 m + 5 m + 5 m + 100 m. */
 		const val DISTANCE_TO_DOB1 = 210.0
@@ -77,9 +70,6 @@ class Issue989VyhybnaMultiSectionStopTest : KoinTestBase() {
 		/** Proceed aspect `doB1` is cleared to at its stand. */
 		val PROCEED_ASPECT = Signal.S30
 	}
-
-	private fun loadVyhybnaContext() =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)

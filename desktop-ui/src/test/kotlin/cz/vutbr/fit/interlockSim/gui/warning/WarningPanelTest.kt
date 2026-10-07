@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
+import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -169,10 +170,5 @@ class WarningPanelTest {
 		SwingUtilities.invokeAndWait { panel.clearWarnings() }
 
 		assertThat(panel.listModel.isEmpty).isTrue()
-	}
-
-	private fun flushEDT() {
-		SwingUtilities.invokeAndWait { /* flush 1 */ }
-		SwingUtilities.invokeAndWait { /* flush 2 */ }
 	}
 }

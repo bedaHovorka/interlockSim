@@ -46,6 +46,10 @@ The `testutil` package provides:
 - **RudyUjezdStructure** - `assertRudyUjezdStationInOuts`: asserts the four station
   InOuts of the `rudyUjezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
   the parse test and the stream round trip of the XML factory tests
+- **EdtFlush** - `flushEDT(times = 2)`: drains the Swing event queue with
+  `invokeAndWait` flushes; the default two cover a pending `invokeLater` task and the
+  nested EDT work it queues. Must not be called on the EDT itself. One shared copy
+  replacing the seven private helpers of the GUI tests (Issue #1124)
 
 Shared fixture-library helpers from `:core-test` (same package, KMP `commonMain`) are also
 visible here: `ContextTracker` (the registry behind `tracked()`), `runSampled` (listener-wiring

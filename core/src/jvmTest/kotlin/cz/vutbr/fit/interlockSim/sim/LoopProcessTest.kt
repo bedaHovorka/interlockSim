@@ -12,16 +12,12 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import cz.ksimulantenbande.kdisco.Process
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -43,11 +39,6 @@ import java.util.concurrent.atomic.AtomicInteger
 @DisplayName("LoopProcess Lifecycle Integration Tests")
 @Tag("integration-test")
 class LoopProcessTest : KoinTestBase() {
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingSimulationContext(simulationContextFactory, warmUpDynamicWrappers = true)
-
 	// ---------------------------------------------------------------------------
 	// Helpers – concrete LoopProcess subclasses used only inside this test file
 	// ---------------------------------------------------------------------------
@@ -134,7 +125,7 @@ class LoopProcessTest : KoinTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessIterationCountMatchesSimTime() {
 		val lp = CountingLoopProcess()
-		loadVyhybnaContext().use { ctx ->
+		loadVyhybnaContext(warmUpDynamicWrappers = true).use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 10.0))
 			ctx.run()
 		}
@@ -150,7 +141,7 @@ class LoopProcessTest : KoinTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessTerminatesCleanly() {
 		val lp = CountingLoopProcess()
-		loadVyhybnaContext().use { ctx ->
+		loadVyhybnaContext(warmUpDynamicWrappers = true).use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 			ctx.run() // must not hang
 		}
@@ -164,7 +155,7 @@ class LoopProcessTest : KoinTestBase() {
 	fun loopProcessTerminateIdempotent() {
 		val lp = CountingLoopProcess()
 		// terminateExtra = 2 → driver calls terminate() 3 times total (2 extra + 1 real)
-		loadVyhybnaContext().use { ctx ->
+		loadVyhybnaContext(warmUpDynamicWrappers = true).use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0, terminateExtra = 2))
 			ctx.run() // must complete without exception or hang
 		}
@@ -179,7 +170,7 @@ class LoopProcessTest : KoinTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessStartActionCalledOnce() {
 		val lp = CountingLoopProcess()
-		loadVyhybnaContext().use { ctx ->
+		loadVyhybnaContext(warmUpDynamicWrappers = true).use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 			ctx.run()
 		}
@@ -193,7 +184,7 @@ class LoopProcessTest : KoinTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun loopProcessByTerminateActionCalledOnce() {
 		val lp = CountingLoopProcess()
-		loadVyhybnaContext().use { ctx ->
+		loadVyhybnaContext(warmUpDynamicWrappers = true).use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 			ctx.run()
 		}
