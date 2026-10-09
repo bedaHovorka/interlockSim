@@ -76,7 +76,7 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 		 * Issue #760, when the onset wait itself was a whole-step poll). The residual grows with
 		 * the step — 0.92 m/s at 10 ms — which is why `dtMax` stays at 1 ms.
 		 */
-		const val MAX_RESIDUAL_STEP_MPS = 1.0
+		const val MAX_RESIDUAL_STEP_MPS = 0.1
 
 		/**
 		 * Tolerance for the braking-onset margin (the room left minus the textbook braking

@@ -141,7 +141,7 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		 * the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s
 		 * line-speed cap, the same residual `Issue1057LateFlipBrakingTest` bounds at 1.0.
 		 */
-		const val MAX_RESIDUAL_STEP_MPS = 1.0
+		const val MAX_RESIDUAL_STEP_MPS = 0.1
 	}
 
 	/** One flip-back rung's outcome: the flip's own sample, the stand's samples, and the clear's state. */
