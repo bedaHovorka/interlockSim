@@ -36,20 +36,26 @@ object DynamicWrapperUtils {
 	 * **Use case:** Identity-based comparison and caching where we need to compare the
 	 * underlying static configuration objects, not the runtime wrapper instances.
 	 *
-	 * **Example usage:**
-	 * ```kotlin
-	 * val staticSep = unwrapToStatic(dynamicSeparator)
-	 * if (staticSep1 === staticSep2) {
-	 *     // Same underlying configuration
-	 * }
-	 * ```
+	 * For known-non-null input prefer [staticRefOf], which cannot return null.
 	 *
 	 * @param separator The separator to unwrap (can be dynamic wrapper, static object, or null)
 	 * @return The static PathSeparator reference (unwrapped if input was dynamic, unchanged otherwise, null if input was null)
 	 */
-	fun unwrapToStatic(separator: PathSeparator?): PathSeparator? =
+	fun unwrapToStatic(separator: PathSeparator?): PathSeparator? = separator?.let { staticRefOf(it) }
+
+	/**
+	 * Unwrap a non-null PathSeparator to its static reference (see [unwrapToStatic]).
+	 *
+	 * This is the non-null-input variant of [unwrapToStatic]: a static separator is
+	 * returned unchanged, so the result is never null and call sites over non-null input
+	 * need no null handling (no `?: x` fallback — that branch would be unreachable dead
+	 * code).
+	 *
+	 * @param separator The separator to unwrap (dynamic wrapper or static object)
+	 * @return The static PathSeparator reference (unwrapped if input was dynamic, unchanged otherwise)
+	 */
+	fun staticRefOf(separator: PathSeparator): PathSeparator =
 		when (separator) {
-			null -> null
 			is DynamicInOut -> separator.staticRef
 			is DynamicRailSemaphore -> separator.staticRef
 			is DynamicRailSwitch -> separator.staticRef
