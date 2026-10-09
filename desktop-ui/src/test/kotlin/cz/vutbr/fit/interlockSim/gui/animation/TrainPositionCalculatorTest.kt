@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -628,35 +629,24 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val cached = TrainPositionCalculator(noScanContext, separatorCache())
 
 		val grid = context.getRailWayNetGrid()
-		var separators = 0
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid.getCellAt(x, y) as? PathSeparator ?: continue
-				separators++
-				val expected = Point(x, y)
-				// Wrapper form, as held by the grid and by navigation paths
-				assertThat(cached.getGridPosition(cell)).isEqualTo(expected)
-				// Static form, as held by callers that unwrapped beforehand
-				val staticSeparator = DynamicWrapperUtils.unwrapToStatic(cell)
-				assertThat(staticSeparator).isNotNull()
-				assertThat(cached.getGridPosition(staticSeparator!!)).isEqualTo(expected)
-			}
+		val separators = grid.cellsOfType<PathSeparator>()
+		assertThat(separators.isNotEmpty()).isEqualTo(true)
+		for (cell in separators) {
+			val expected = checkNotNull(grid.getLocation(cell))
+			// Wrapper form, as held by the grid and by navigation paths
+			assertThat(cached.getGridPosition(cell)).isEqualTo(expected)
+			// Static form, as held by callers that unwrapped beforehand
+			assertThat(cached.getGridPosition(DynamicWrapperUtils.staticRefOf(cell))).isEqualTo(expected)
 		}
-		assertThat(separators > 0).isEqualTo(true)
 	}
 
 	/** Every grid cell that is a separator, unwrapped to its static reference. */
-	private fun staticSeparatorsOfGrid(): Set<PathSeparator> {
-		val grid = context.getRailWayNetGrid()
-		val statics = mutableSetOf<PathSeparator>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid.getCellAt(x, y) as? PathSeparator ?: continue
-				statics.add(DynamicWrapperUtils.unwrapToStatic(cell) ?: cell)
-			}
-		}
-		return statics
-	}
+	private fun staticSeparatorsOfGrid(): Set<PathSeparator> =
+		context
+			.getRailWayNetGrid()
+			.cellsOfType<PathSeparator>()
+			.map { DynamicWrapperUtils.staticRefOf(it) }
+			.toSet()
 
 	// ========== Deprecated Train-Overload Delegation (Issues #1030, #1028) ==========
 

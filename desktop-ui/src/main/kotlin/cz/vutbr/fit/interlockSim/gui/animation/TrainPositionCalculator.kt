@@ -297,8 +297,8 @@ class TrainPositionCalculator(
 		// Use identity-based comparison (===) to determine interpolation direction.
 		// Unwrap dynamic wrappers to static refs, then compare with === to find which
 		// end the train entered from — that end becomes the start of interpolation.
-		val entryStatic = DynamicWrapperUtils.unwrapToStatic(entrySeparator)
-		val end1Static = DynamicWrapperUtils.unwrapToStatic(ends[1])
+		val entryStatic = DynamicWrapperUtils.staticRefOf(entrySeparator)
+		val end1Static = DynamicWrapperUtils.staticRefOf(ends[1])
 		val end0GridPos = getGridPosition(ends[0])
 		val end1GridPos = getGridPosition(ends[1])
 
@@ -330,7 +330,7 @@ class TrainPositionCalculator(
 	 */
 	internal fun getGridPosition(separator: PathSeparator): Point? {
 		// Unwrap dynamic wrapper to static reference for cache lookup
-		val staticSeparator = DynamicWrapperUtils.unwrapToStatic(separator)
+		val staticSeparator = DynamicWrapperUtils.staticRefOf(separator)
 
 		// Fallback: separators the grid cache does not hold (e.g. not part of this grid)
 		return separatorPositionCache[staticSeparator] ?: scanGridFor(staticSeparator)
@@ -343,7 +343,7 @@ class TrainPositionCalculator(
 	 *
 	 * @return Grid coordinates of the first match, or null if no cell matches
 	 */
-	private fun scanGridFor(staticSeparator: PathSeparator?): Point? {
+	private fun scanGridFor(staticSeparator: PathSeparator): Point? {
 		val grid = context.getRailWayNetGrid()
 		for (x in 0 until grid.cols) {
 			for (y in 0 until grid.rows) {
@@ -355,8 +355,8 @@ class TrainPositionCalculator(
 				}
 
 				// Also check if this is a PathSeparator that equals the target
-				if (cell is PathSeparator && staticSeparator is PathSeparator) {
-					val unwrappedCell = DynamicWrapperUtils.unwrapToStatic(cell)
+				if (cell is PathSeparator) {
+					val unwrappedCell = DynamicWrapperUtils.staticRefOf(cell)
 					if (unwrappedCell === staticSeparator) {
 						return Point(x, y)
 					}

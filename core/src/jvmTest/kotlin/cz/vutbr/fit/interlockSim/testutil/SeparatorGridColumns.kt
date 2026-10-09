@@ -29,7 +29,7 @@ fun separatorGridColumns(context: SimulationContext): Map<PathSeparator, Int> {
 }
 
 /** The static separator a [PathSeparator] (dynamic wrapper or static) is keyed by. */
-private fun keyOf(separator: PathSeparator): PathSeparator = DynamicWrapperUtils.unwrapToStatic(separator) ?: separator
+private fun keyOf(separator: PathSeparator): PathSeparator = DynamicWrapperUtils.staticRefOf(separator)
 
 /**
  * Whether [entry] is the end a train running west to east (towards growing grid columns) enters

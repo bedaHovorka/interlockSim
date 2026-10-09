@@ -600,7 +600,7 @@ open class DefaultSimulationContext(
 		 *
 		 * After grid transformation, the grid contains Dynamic wrappers (DynamicInOut,
 		 * DynamicRailSemaphore, DynamicRailSwitch). Every cell is keyed by its **static**
-		 * reference ([DynamicWrapperUtils.unwrapToStatic]), because static cells compare by
+		 * reference ([DynamicWrapperUtils.staticRefOf]), because static cells compare by
 		 * identity: a wrapper key would never match the unwrapped separator that
 		 * TrainPositionCalculator looks up, and every lookup would miss (Issue #1130).
 		 *
@@ -617,7 +617,7 @@ open class DefaultSimulationContext(
 					val cell = grid.getCellAt(x, y)
 					if (cell is PathSeparator) {
 						// Key by the static reference; a static cell is its own static reference.
-						val staticRef = DynamicWrapperUtils.unwrapToStatic(cell) ?: cell
+						val staticRef = DynamicWrapperUtils.staticRefOf(cell)
 						cache[staticRef] = Point(x, y)
 					}
 				}
@@ -1127,6 +1127,10 @@ open class DefaultSimulationContext(
 	/**
 	 * The static reference of a [DynamicPathSeparator] found in the grid, for
 	 * [collectUnmappedSeparators]. An implementor this method does not know is an error.
+	 *
+	 * Unlike [DynamicWrapperUtils.staticRefOf], the pass-through of unknown [PathSeparator]
+	 * types is not correct here: anything claiming to be a [DynamicPathSeparator] must map
+	 * to a known static reference, so an unknown implementor fails loudly instead.
 	 */
 	private fun staticRefOf(cell: DynamicPathSeparator): PathSeparator =
 		when (cell) {
