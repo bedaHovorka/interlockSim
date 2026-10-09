@@ -37,8 +37,9 @@ import org.koin.test.inject
 
 /**
  * Covers every branch of `DefaultPathReservationService.resolveForwardSection` (Issue #957)
- * through both of its callers: the oriented [PathReservationService.reservePathToAnyNextSemaphore]
- * overload and [PathReservationService.findNextReservationTarget].
+ * through its callers: the oriented [PathReservationService.reservePathToAnyNextSemaphore]
+ * overload, [PathReservationService.findNextReservationTarget], and
+ * [ReservationTargetQuery.findReservationTargetCandidates] (Issue #970, which the former now wraps).
  *
  * The two failure branches (separator without a grid location, separator without a forward
  * track section) are reached by wrapping the real `vyhybna.xml` context in a delegating
@@ -107,6 +108,8 @@ class ForwardSectionResolutionTest : KoinTestBase() {
 			assertThat(service.reservePathToAnyNextSemaphore("train1", start), name = "reserve from $start")
 				.isEqualTo(PathReservationService.ReservationResult.NoPathExists)
 			assertThat(service.findNextReservationTarget(start), name = "target from $start").isNull()
+			assertThat(service.findReservationTargetCandidates(start, null), name = "candidates from $start")
+				.isEqualTo(emptyList())
 		}
 		assertThat(registry.getBlocks("train1")).isEqualTo(emptyList())
 	}
@@ -119,6 +122,8 @@ class ForwardSectionResolutionTest : KoinTestBase() {
 			assertThat(service.reservePathToAnyNextSemaphore("train1", start), name = "reserve from $start")
 				.isEqualTo(PathReservationService.ReservationResult.NoPathExists)
 			assertThat(service.findNextReservationTarget(start), name = "target from $start").isNull()
+			assertThat(service.findReservationTargetCandidates(start, null), name = "candidates from $start")
+				.isEqualTo(emptyList())
 		}
 		assertThat(registry.getBlocks("train1")).isEqualTo(emptyList())
 	}

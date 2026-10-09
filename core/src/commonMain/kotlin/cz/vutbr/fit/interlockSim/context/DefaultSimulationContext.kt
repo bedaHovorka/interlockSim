@@ -16,6 +16,7 @@ import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -371,6 +372,10 @@ open class DefaultSimulationContext(
 				topologyNavigatorInstance
 
 			override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
+
+			// The scoped service implements both interfaces; same instance, read-only capability (Issue #970).
+			override fun getReservationTargetQuery(): ReservationTargetQuery =
+				pathReservationServiceInstance as ReservationTargetQuery
 
 			override fun getTrainNavigationService(): TrainNavigationService = trainNavigationServiceInstance
 		}
