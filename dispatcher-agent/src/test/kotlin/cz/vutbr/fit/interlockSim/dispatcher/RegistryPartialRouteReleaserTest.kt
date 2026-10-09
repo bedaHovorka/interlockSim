@@ -591,6 +591,38 @@ class RegistryPartialRouteReleaserTest : DispatcherKoinTestBase() {
 		assertThat(registry().getPathInfo(trainId)!!.target, "PathInfo target").isEqualTo(zA)
 	}
 
+	/**
+	 * Issue #1103 item 1: the last-resort fallback drops a FREE block with `registry.unregisterBlock`
+	 * directly, bypassing the service. That must not leave the train owning a switch no held block
+	 * protects any more -- the registry reclaims the claim with the block. The failing block is the
+	 * last switch-bounded block of the tail, so its switch's other route neighbour was already
+	 * released and only this fallback release can free the switch.
+	 */
+	@Test
+	@DisplayName("the fallback's direct registry release leaves no stale switch ownership")
+	fun fallbackRegistryReleaseLeavesNoStaleSwitchOwnership() {
+		val (head, tail) = reserveAndOccupyLongRoute()
+		val failing = tail.last { block -> block.ends().any { it is DynamicRailSwitch && it !in head.ends() } }
+		val freedSwitches = failing.ends().filterIsInstance<DynamicRailSwitch>().filter { it !in head.ends() }
+		assertThat(freedSwitches.map { registry().getSwitchOwner(it) }.distinct(), "owner before").isEqualTo(listOf(trainId))
+		val flaky = releaserWithFailingFallbackFor(failing, DropFailure.THROWS)
+		val tailIds = tail.map { BlockIdentity.stableBlockId(it) }
+		assertThat(flaky.releaseUntravelledTail(trainId, tailIds).deferred, "first call deferred").isTrue()
+
+		val second = flaky.releaseUntravelledTail(trainId, tailIds)
+
+		assertThat(second.released, "released ids").isEqualTo(tailIds)
+		assertThat(registry().getOwner(failing), "owner of the fallback-released block").isEqualTo(null)
+		freedSwitches.forEach { switch ->
+			assertThat(registry().getSwitchOwner(switch), "owner of ${switch.name}").isEqualTo(null)
+			assertThat(switch.locked, "lock of ${switch.name}").isFalse()
+		}
+		assertThat(
+			registry().getSwitches(trainId).filter { registry().isStaleSwitchOwnership(it) },
+			"stale claims left"
+		).isEmpty()
+	}
+
 	enum class DropFailure {
 		/** Throws before unregistering: the releaser must drop the block from the registry itself. */
 		THROWS,

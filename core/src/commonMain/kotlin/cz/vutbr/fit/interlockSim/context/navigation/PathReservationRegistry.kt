@@ -437,6 +437,11 @@ class PathReservationRegistry(
 	 * - Removes block from trainToBlocks[trainId]
 	 * - Removes blockToTrain[block] and the block's registration timestamp
 	 * - If this was the last block, removes trainToBlocks[trainId] (but keeps trainToPathInfo[trainId])
+	 * - Releases every switch claim at the block's [DynamicTrackBlock.ends] that is stale afterwards
+	 *   ([isStaleSwitchOwnership]: a plain claim whose owner holds no block bounded by the switch any
+	 *   more) through [unregisterSwitch], so no release path can leave switch ownership stale
+	 *   (Issue #1065, #1103). A flank claim, and a claim whose owner still holds the block on the
+	 *   other side of the switch, stay.
 	 *
 	 * ## PathInfo Lifecycle (Issue #301 Fix)
 	 *
@@ -509,7 +514,38 @@ class PathReservationRegistry(
 			}
 		}
 
+		// Issue #1103: the block is gone, so a plain claim at its ends that no held block protects
+		// any more is stale now; release it here, where EVERY block release passes, rather than in
+		// each caller.
+		block.ends().filterIsInstance<DynamicRailSwitch>().forEach { reclaimStaleSwitchOwnership(it) }
+
 		return true
+	}
+
+	/**
+	 * Release [switch]'s ownership if [isStaleSwitchOwnership] says it protects no live route, through
+	 * [unregisterSwitch], which keeps both ownership maps consistent and unlocks the switch.
+	 *
+	 * This is the mechanism that makes the SI-5 guard in `DynamicRailSwitch.setUpPath` livable
+	 * (Issue #1065): without it, a train that has passed a switch keeps it locked until its FULL
+	 * journey completes ([unregister]'s unconditional unlock), and the next train needing the other
+	 * position would be refused forever instead of merely waiting -- confirmed on EVERY repetition of
+	 * the vyhybna shunting loop. [unregisterBlock] runs it for the freed block's ends;
+	 * `DefaultPathReservationService` runs it for a candidate's switches before taking them
+	 * (reservePath Step 2e.5, Issue #1076).
+	 *
+	 * @return the owner whose stale claim was released, or `null` when nothing was released
+	 * @since Issue #1065 (moved here from the service, Issue #1103)
+	 */
+	fun reclaimStaleSwitchOwnership(switch: DynamicRailSwitch): String? {
+		val owner = getSwitchOwner(switch) ?: return null
+		if (!isStaleSwitchOwnership(switch)) return null
+		unregisterSwitch(owner, switch)
+		logger.info {
+			"reclaimStaleSwitchOwnership: Released stale ownership of switch ${switch.staticRef.getName()} " +
+				"held by '$owner' -- the owner holds no block bounded by it"
+		}
+		return owner
 	}
 
 	/**

@@ -109,8 +109,9 @@ class Issue1076RegressionTest : KoinTestBase() {
 	@DisplayName("a same-position candidate over a STALE foreign switch succeeds by reclamation, never by stealing")
 	fun staleForeignOwnershipIsReclaimedInsteadOfStolen() {
 		// Given: vA is registered to a train that holds NO block bounded by it -- the stale window
-		// from the issue. A rollback (Issue #961) and a throwing release listener (Issue #1103) no
-		// longer leave it; a direct registry caller still can, and only Step 2e.5 heals that.
+		// from the issue. No block release leaves it any more (the registry reclaims on every
+		// unregisterBlock, Issue #1103); a claim made through the public registerSwitches with no
+		// block held still can, and only Step 2e.5 heals that.
 		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
 		assertThat(switchVA.locked).isTrue()
 
@@ -121,13 +122,50 @@ class Issue1076RegressionTest : KoinTestBase() {
 
 		// Then: the reservation succeeds by LEGITIMATE reclamation (Step 2e.5), so both maps
 		// agree: the candidate owns vA and the stale owner's switch list is empty.
+		assertCandidateOwnsVAAndOtherOwnerCannotUnlockIt(result)
+	}
+
+	/**
+	 * Issue #1103 item 1: the production shape of the stale window. The other owner held a block
+	 * bounded by vA and freed it through `registry.unregisterBlock` directly -- the one production
+	 * caller that bypasses the service (the dispatcher's last-resort fallback) -- so no service-side
+	 * reclaim ran. The registry itself now reclaims the claim with the block, so the candidate finds
+	 * vA free rather than relying on Step 2e.5.
+	 */
+	@Test
+	@Timeout(10, unit = TimeUnit.SECONDS)
+	@DisplayName("a block freed through the registry directly leaves no stale switch for the candidate to reclaim")
+	fun directRegistryReleaseLeavesNoStaleOwnershipForTheCandidate() {
+		// Given: OTHER_OWNER holds the k2-side block bounded by vA and claims vA for it.
+		val nextToVA = blockNearVAOffCandidatePath()
+		assertThat(registry.registerAtomic(OTHER_OWNER, listOf(nextToVA)))
+			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
+
+		// When: the block leaves the registry directly, with no service in between.
+		assertThat(registry.unregisterBlock(OTHER_OWNER, nextToVA)).isTrue()
+
+		// Then: the claim went with the block -- nothing is left for Step 2e.5 to reclaim...
+		assertThat(registry.getSwitchOwner(switchVA), "owner after the direct release").isNull()
+		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
+		assertThat(switchVA.locked, "lock after the direct release").isFalse()
+
+		// ...and the candidate's same-position route takes vA with both maps in agreement.
+		val result = service.reservePath(CANDIDATE, semaphoreZA, semaphoreDoB1)
+		assertCandidateOwnsVAAndOtherOwnerCannotUnlockIt(result)
+	}
+
+	/**
+	 * [result] succeeded, the candidate owns vA in BOTH maps, the other owner's switch list is empty,
+	 * and the other owner's release path cannot unlock the candidate's live switch -- the corruption
+	 * consequence Issue #1076 describes.
+	 */
+	private fun assertCandidateOwnsVAAndOtherOwnerCannotUnlockIt(result: PathReservationService.ReservationResult) {
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(CANDIDATE)
 		assertThat(registry.getSwitches(CANDIDATE)).contains(switchVA)
 		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
 
-		// And: the stale owner's release path can no longer unlock the candidate's live switch
-		// -- the corruption consequence the issue describes.
 		assertThat(registry.unregisterSwitches(OTHER_OWNER)).isEmpty()
 		assertThat(switchVA.locked).isTrue()
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(CANDIDATE)

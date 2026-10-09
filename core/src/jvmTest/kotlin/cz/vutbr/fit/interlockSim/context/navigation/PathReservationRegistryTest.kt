@@ -617,6 +617,96 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 			assertThat(registry.getSwitches("train1")).isEmpty()
 		}
+
+		/**
+		 * A switch on the reserved path together with the two held blocks it joins, in path order:
+		 * a train straddling the switch holds both, a train that has passed it holds only the second.
+		 */
+		private fun straddledSwitch(): Triple<DynamicTrackBlock, DynamicRailSwitch, DynamicTrackBlock> {
+			val (before, after) =
+				blocks.zipWithNext().first { (before, after) ->
+					before.ends().any { it is DynamicRailSwitch && it in after.ends() }
+				}
+			val switch = before.ends().filterIsInstance<DynamicRailSwitch>().first { it in after.ends() }
+			return Triple(before, switch, after)
+		}
+
+		@ParameterizedTest(name = "flank = {0}")
+		@ValueSource(booleans = [false, true])
+		fun `unregisterBlock reclaims a stale plain claim at the freed block's ends and keeps a flank claim`(
+			flank: Boolean
+		) {
+			// Arrange - Issue #1103: train1 holds ONE block bounded by the switch and claims the switch.
+			val (_, switch, block) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(block)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			if (flank) {
+				registry.registerFlankSwitches("train1", listOf(switch))
+			} else {
+				registry.registerSwitches("train1", listOf(switch))
+			}
+
+			// Act - the block leaves the registry; train1 now holds no block bounded by the switch.
+			assertThat(registry.unregisterBlock("train1", block)).isTrue()
+
+			// Assert - a plain claim is stale and goes with the block; a flank claim protects a route the
+			// switch is not adjacent to and survives (Issue #1076 review).
+			if (flank) {
+				assertThat(registry.getSwitchOwner(switch), "flank owner").isEqualTo("train1")
+				assertThat(registry.isFlankProtected(switch)).isTrue()
+				assertThat(switch.locked, "flank lock").isTrue()
+			} else {
+				assertThat(registry.getSwitchOwner(switch), "plain owner").isNull()
+				assertThat(registry.getSwitches("train1")).isEmpty()
+				assertThat(switch.locked, "plain lock").isFalse()
+			}
+		}
+
+		@Test
+		fun `unregisterBlock keeps a plain claim whose owner still holds the other block at the switch`() {
+			// Arrange - train1 straddles the switch: it holds the block before and the block after it.
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act - the block behind the train is freed; the one in front is still held.
+			assertThat(registry.unregisterBlock("train1", before)).isTrue()
+
+			// Assert - the switch still protects a live route and must not move under the train.
+			assertThat(switch.locked, "lock").isTrue()
+			assertThat(registry.getSwitchOwner(switch), "owner").isEqualTo("train1")
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
+			assertThat(registry.isStaleSwitchOwnership(switch)).isFalse()
+		}
+
+		@Test
+		fun `sectional release frees the switch only with the last held block bounded by it`() {
+			// Arrange - train1 holds before | switch | after and claims the switch.
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+			val positionHeld = switch.conf
+
+			// Act 1 - the first block is freed: the claim stays, and a second train is still refused.
+			assertThat(registry.unregisterBlock("train1", before)).isTrue()
+			assertThat(registry.getSwitchOwner(switch), "owner after the first release").isEqualTo("train1")
+			assertFailure { registry.registerSwitches("train2", listOf(switch)) }
+				.isInstanceOf(IllegalStateException::class)
+
+			// Act 2 - the last held block bounded by the switch is freed: the claim is released with it.
+			assertThat(registry.unregisterBlock("train1", after)).isTrue()
+
+			// Assert - the switch is free for the second train's route in the OPPOSITE position.
+			assertThat(registry.getSwitchOwner(switch), "owner after the second release").isNull()
+			assertThat(switch.locked, "lock after the second release").isFalse()
+			switch.changeConf()
+			assertThat(switch.conf).isNotEqualTo(positionHeld)
+			registry.registerSwitches("train2", listOf(switch))
+			assertThat(registry.getSwitchOwner(switch), "second train's claim").isEqualTo("train2")
+			assertThat(switch.locked, "second train's lock").isTrue()
+		}
 	}
 
 	@Nested
