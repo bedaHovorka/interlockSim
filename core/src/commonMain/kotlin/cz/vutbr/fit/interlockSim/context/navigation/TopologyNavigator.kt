@@ -194,8 +194,9 @@ interface TopologyNavigator {
 	 * Length of the shortest route from [start] to [target] over the same switch-blind moves as
 	 * [findAllTopologicalPaths], or `null` when no route exists.
 	 *
-	 * The result equals `findAllTopologicalPaths(start, target, maxDepth).minOf { it.sumOf(length) }`,
-	 * but an implementation can compute it without listing every path. Listing them grows
+	 * The default body returns `findAllTopologicalPaths(start, target, maxDepth).minOf { it.sumOf(length) }`.
+	 * An implementation can compute the same value without listing every path; see
+	 * [DefaultTopologyNavigator.findShortestTopologicalDistance] for where its search may differ. Listing them grows
 	 * exponentially with the number of switches: on the Praha fixture (50 switches) one pair has
 	 * 912 paths and takes seconds on the JVM and about a minute on linuxX64 (Issue #1148).
 	 *

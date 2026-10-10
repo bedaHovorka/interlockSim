@@ -330,52 +330,31 @@ class DefaultTopologyNavigator(
 	 * and dynamic contexts give the same result. A state is expanded, or accepted as the target,
 	 * only while its depth is below [maxDepth], checked in the same order as the path listing.
 	 *
-	 * The search can differ from the listing in two rare cases. It does not forbid a route from
-	 * passing one separator twice. And it keeps only the cheapest arrival at a state, so near
-	 * [maxDepth] a cheaper but deeper arrival can hide a shallower one: the depth bound is
-	 * approximate. On all 174 InOut pairs of the test fixtures and `vyhybna.xml` both give the
-	 * same value at the default depth (Issue #1148).
+	 * The search itself is [boundedShortestDistance]: its depth bound is exact. The one difference from the
+	 * listing is that the search does not forbid a route from passing one separator twice. On all
+	 * 174 InOut pairs of the test fixtures and `vyhybna.xml` both give the same value at the
+	 * default depth (Issue #1148).
 	 */
 	override fun findShortestTopologicalDistance(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int
-	): Double? {
-		val startState = DistanceState(start, null, 0)
-		val bestCost = mutableMapOf(startState.key() to 0.0)
-		val queue = mutableListOf(startState to 0.0)
-
-		while (queue.isNotEmpty()) {
-			val cheapest = queue.minBy { it.second }
-			queue.remove(cheapest)
-			val (state, cost) = cheapest
-			if (cost > (bestCost[state.key()] ?: Double.MAX_VALUE)) {
-				continue
-			}
-			// Same order as searchPaths: the depth bound is checked before the target.
-			if (state.depth >= maxDepth) {
-				continue
-			}
-			if (CellUtilities.isSameSeparator(state.separator, target)) {
-				return cost
-			}
-			for (section in getAllNextTrackSections(state.separator, state.section)) {
-				val next = DistanceState(section.getSecondEnd(state.separator), section, state.depth + 1)
-				val nextCost = cost + section.length()
-				if (nextCost < (bestCost[next.key()] ?: Double.MAX_VALUE)) {
-					bestCost[next.key()] = nextCost
-					queue.add(next to nextCost)
-				}
+	): Double? =
+		boundedShortestDistance(
+			start = DistanceState(start, null),
+			isTarget = { CellUtilities.isSameSeparator(it.separator, target) },
+			maxDepth = maxDepth,
+			key = DistanceState::key
+		) { state ->
+			getAllNextTrackSections(state.separator, state.section).map { section ->
+				DistanceState(section.getSecondEnd(state.separator), section) to section.length()
 			}
 		}
-		return null
-	}
 
 	/** Search state of [findShortestTopologicalDistance]: a separator and the section that led into it. */
-	private inner class DistanceState(
+	private class DistanceState(
 		val separator: PathSeparator,
-		val section: TrackSection?,
-		val depth: Int
+		val section: TrackSection?
 	) {
 		/** Identity of the state, normalized to the static cell and the static block. */
 		fun key(): Pair<NodeCell, Any?> =

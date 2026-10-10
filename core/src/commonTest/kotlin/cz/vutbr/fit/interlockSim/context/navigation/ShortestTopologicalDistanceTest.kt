@@ -29,6 +29,11 @@ import kotlin.test.Test
  * pair; the same equality was checked on all its 110 pairs when the search was added.
  */
 class ShortestTopologicalDistanceTest : CommonKoinTestBase() {
+	private companion object {
+		/** Largest depth bound of the sweep; beyond it every fixture route fits. */
+		const val DEPTH_SWEEP_MAX: Int = 12
+	}
+
 	private fun assertSameAsPathListing(
 		xml: String,
 		maxDepth: Int = 100
@@ -65,9 +70,12 @@ class ShortestTopologicalDistanceTest : CommonKoinTestBase() {
 	fun matchesPathListingOnTwoParallelTracks() = assertSameAsPathListing(NetworkResources.TWO_TRACKS_PARALLEL_XML)
 
 	@Test
-	fun respectsASmallDepthBoundLikePathListing() {
-		for (maxDepth in 0..3) {
+	fun respectsEveryDepthBoundLikePathListing() {
+		// Small bounds cut routes off part-way; a search that kept only the shortest arrival per
+		// state would lose a shallower, longer arrival that still has depth left (PR #1175 review).
+		for (maxDepth in 0..DEPTH_SWEEP_MAX) {
 			assertSameAsPathListing(NetworkResources.VYHYBNA_XML, maxDepth)
+			assertSameAsPathListing(NetworkResources.CERVENY_UJEZD_XML, maxDepth)
 			assertSameAsPathListing(NetworkResources.SWITCH_BASIC_XML, maxDepth)
 		}
 	}
