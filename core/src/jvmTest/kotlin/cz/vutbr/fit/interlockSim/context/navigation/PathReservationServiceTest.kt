@@ -47,6 +47,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.assertReservedBlocks
@@ -2999,7 +3000,7 @@ class PathReservationServiceTest : KoinTestBase() {
 	inner class ExternalObserverApi {
 		@Test
 		fun `environment addBlockOccupancyListener receives reserve and release events`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			val result = service.reservePath("train1", inOut1, inOut2)
@@ -3029,7 +3030,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `legacy listener receives BLOCK_RELEASED on unregister path`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			val result = service.reservePath("train1", inOut1, inOut2)
@@ -3053,7 +3054,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `legacy listener receives BLOCK_RELEASED on unregisterBlock path`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			val result = service.reservePath("train1", inOut1, inOut2)
@@ -3085,7 +3086,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		 */
 		@Test
 		fun `dropFreedBlock unregisters a freed block and publishes one BLOCK_RELEASED`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
 			val firstBlock = success.reservedBlocks.first()
@@ -3146,7 +3147,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `dropFreedBlock refuses a block the train does not own and publishes nothing`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
 			val firstBlock = success.reservedBlocks.first()
@@ -3546,7 +3547,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val doA1 = findSemaphoreByName("doA1")
 			val doB1 = findSemaphoreByName("doB1")
 			occupy(blockBetween("vA", "doA1"), "rearTrain")
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			val result = service.reservePath("rearTrain", doA1, doB1, maxDepth = 3)
@@ -3953,7 +3954,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		private fun rollbackStep(): DefaultPathReservationService = service as DefaultPathReservationService
 
 		private fun releasedEventsFor(
-			listener: RecordingListener,
+			listener: RecordingBlockOccupancyListener,
 			block: DynamicTrackBlock
 		): List<BlockOccupancyEvent> =
 			listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED && it.block == block }
@@ -3963,7 +3964,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
 			val firstBlock = success.reservedBlocks.first()
 			assertThat(firstBlock.getState()).isEqualTo(TrackFacility.State.RESERVED)
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			assertThat(service.releaseBlock("train1", firstBlock)).isTrue()
@@ -3996,7 +3997,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		fun `releaseBlock refuses a block the train does not own and changes nothing`() {
 			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
 			val firstBlock = success.reservedBlocks.first()
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			assertThat(service.releaseBlock("otherTrain", firstBlock)).isFalse()
@@ -4011,7 +4012,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		fun `rollbackBlock frees and unregisters a reserved block without a release event`() {
 			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
 			val firstBlock = success.reservedBlocks.first()
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			assertThat(rollbackStep().rollbackBlock("train1", firstBlock)).isTrue()
@@ -4047,33 +4048,32 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 
 		/**
-		 * PR #1115 review: when a release listener throws and the stale-switch reclaim then throws too, the
-		 * listener's exception is the one that propagates, with the reclaim's attached as suppressed. The
-		 * reclaim is made to throw through a mocked block whose only end is a locked switch that fails.
+		 * PR #1115 review, settled by Issue #1103: the stale-switch reclaim runs inside
+		 * [PathReservationRegistry.unregisterBlock], BEFORE the release event, so a throwing release
+		 * listener propagates its failure from every release but can no longer skip the reclaim.
 		 */
 		@Test
-		fun `a failing reclaim after a throwing release listener keeps the listener's exception`() {
-			val failingSwitch = mockk<DynamicRailSwitch>(relaxed = true)
-			every { failingSwitch.locked } throws IllegalStateException("reclaim failure")
-			val block = mockk<DynamicTrackBlock>(relaxed = true)
-			every { block.getState() } returns TrackFacility.State.FREE
-			every { block.occupant } returns null
-			every { block.trainName } returns null
-			every { block.ends() } returns arrayOf(failingSwitch)
-			assertThat(registry.registerAtomic("t1", listOf(block)))
-				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+		fun `a throwing release listener cannot skip the stale switch reclaim`() {
+			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
+			val switches = registry.getSwitches("train1")
+			assertThat(switches, "switches of the reserved route").isNotEmpty()
 			val throwing =
 				BlockOccupancyListener { event ->
 					if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) error("listener failure")
 				}
 			registry.addBlockOccupancyListener(throwing)
 
-			val thrown = runCatching { service.dropFreedBlock("t1", block) }.exceptionOrNull()
+			val failures =
+				success.reservedBlocks.map { block -> runCatching { service.releaseBlock("train1", block) }.exceptionOrNull() }
 			registry.removeBlockOccupancyListener(throwing)
 
-			assertThat(thrown?.message).isEqualTo("listener failure")
-			assertThat(thrown?.suppressed?.map { it.message }).isEqualTo(listOf("reclaim failure"))
-			assertThat(registry.getOwner(block), "the block left the registry before the event").isNull()
+			assertThat(failures.map { it?.message }, "every release reported the listener")
+				.isEqualTo(success.reservedBlocks.map { "listener failure" })
+			assertThat(registry.getBlocks("train1"), "blocks still owned").isEmpty()
+			assertThat(registry.getSwitches("train1"), "switches still owned").isEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked, "lock of ${switch.name}").isFalse()
+			}
 		}
 
 		/**
@@ -4085,7 +4085,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		fun `rollbackBlock refuses a block the train does not own and changes nothing`() {
 			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
 			val firstBlock = success.reservedBlocks.first()
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			assertThat(rollbackStep().rollbackBlock("otherTrain", firstBlock)).isFalse()
@@ -4107,7 +4107,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
 			val switches = registry.getSwitches("train1")
 			assertThat(switches, "switches of the reserved route").isNotEmpty()
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			environment.addBlockOccupancyListener(listener)
 
 			(service as DefaultPathReservationService).rollbackUnconfigurableCandidate(
@@ -4145,14 +4145,6 @@ class PathReservationServiceTest : KoinTestBase() {
 			success.reservedBlocks.forEach { block ->
 				assertThat(registry.getRegisteredAtSimTime(block), "timestamp of $block after rollback").isNull()
 			}
-		}
-	}
-
-	private class RecordingListener : BlockOccupancyListener {
-		val events = mutableListOf<BlockOccupancyEvent>()
-
-		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
-			events.add(event)
 		}
 	}
 }

@@ -3897,23 +3897,11 @@ class DefaultPathReservationService(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			approachLockDeferredUntil.remove(block)
-			// Issue #1103: a throwing release listener must not skip the reclaim below; its exception
-			// still propagates afterwards, with a reclaim failure attached as suppressed (PR #1115 review).
-			val listenerFailure =
-				runCatching { emitBlockReleased(block, trainId, currentSimulationTime()) }.exceptionOrNull()
-			try {
-				// Issue #1065: every committed per-block release passes through here -- Train.Tail's
-				// per-block clearance (via unregisterBlock above) and RegistryPartialRouteReleaser's
-				// tail release (via releaseBlock) -- so reclaiming a now-stale switch lock here keeps the
-				// invariant continuously true on those paths, rather than discovering it lazily the next
-				// time a train asks for the switch. The rollback paths get the same reclaim from
-				// rollbackBlock (Issue #961).
-				reclaimStaleSwitchLocks(block)
-			} catch (e: Exception) {
-				if (listenerFailure == null) throw e
-				listenerFailure.addSuppressed(e)
-			}
-			listenerFailure?.let { throw it }
+			// Issue #1065, #1103: the registry reclaimed every now-stale switch claim at the block's
+			// ends inside unregisterBlock, BEFORE this event, so a throwing release listener cannot
+			// skip it (PR #1115 review) and no release path -- this funnel, rollbackBlock, or a direct
+			// registry call -- is left out.
+			emitBlockReleased(block, trainId, currentSimulationTime())
 		}
 		return released
 	}
@@ -3961,10 +3949,10 @@ class DefaultPathReservationService(
 			// stays registered, because the registry only drops a FREE block.
 			logger.warn(e) { "rollbackBlock: failed to cancel the path setup of $block for '$trainId'" }
 		}
+		// The registry reclaims any now-stale switch claim at the block's ends itself (Issue #1103).
 		val unregistered = registry.unregisterBlock(trainId, block)
 		if (unregistered) {
 			approachLockDeferredUntil.remove(block)
-			reclaimStaleSwitchLocks(block)
 		}
 		return unregistered
 	}
@@ -3997,19 +3985,14 @@ class DefaultPathReservationService(
 	/**
 	 * Issue #1076: reclaim STALE foreign ownership among [switches] before a candidate for
 	 * [trainId] touches them, so the candidate never has to overwrite it (see
-	 * [PathReservationRegistry.registerSwitches]). Such ownership used to survive mainly because a
-	 * scoped rollback path released the owner's adjacent blocks via
-	 * [PathReservationRegistry.unregisterBlock] directly, bypassing [dropFreedBlock]'s
-	 * reclamation; since Issue #961 those paths reclaim through [rollbackBlock]. This step stays
-	 * (Issue #1103 item 1) because two paths can still leave ownership stale. (A throwing
-	 * release-event listener no longer can: [dropFreedBlock] reclaims in a `finally`.)
-	 * - The dispatcher's partial-route releaser has a last-resort fallback that drops a FREE block
-	 *   with [PathReservationRegistry.unregisterBlock] directly, with no reclaim. It fires only when
-	 *   the service failed BEFORE unregistering the block; a throw during the release event leaves
-	 *   the block already unregistered, so the fallback short-circuits.
-	 * - The registry is public: [PathReservationRegistry.registerSwitches] accepts a switch the
-	 *   train holds no adjacent block for, and a direct [PathReservationRegistry.unregisterBlock]
-	 *   reclaims nothing.
+	 * [PathReservationRegistry.registerSwitches]). No per-block release leaves ownership stale any
+	 * more: [PathReservationRegistry.unregisterBlock] reclaims at the freed block's ends, including
+	 * a direct registry call (Issue #1103 item 1); whole-route cleanup (`registry.unregister` +
+	 * `unregisterSwitches`) unlocks wholesale instead. This step stays for the
+	 * one remaining path: the registry is public, and [PathReservationRegistry.registerSwitches]
+	 * accepts a switch the train holds no adjacent block for -- a claim born stale, which no block
+	 * release ever visits. Without this step the G10 pre-check would refuse a same-position
+	 * candidate for such a switch forever (the Issue #1065 trap).
 	 *
 	 * A foreign owner that survives this step is live and refuses the candidate in
 	 * [configureSwitchesInPath] instead.
@@ -4022,50 +4005,7 @@ class DefaultPathReservationService(
 	) {
 		switches
 			.filter { registry.isOwnedByOtherTrain(it, trainId) }
-			.forEach { reclaimIfStale(it) { "before a candidate for '$trainId' takes it, Issue #1076" } }
-	}
-
-	/**
-	 * Issue #1065: once [block] leaves the registry, release any switch lock at its ends that no
-	 * longer protects a live route ([PathReservationRegistry.isStaleSwitchOwnership]).
-	 *
-	 * This is the mechanism that makes the SI-5 guard in [DynamicRailSwitch.setUpPath] livable:
-	 * without it, a train that has passed a switch keeps it locked until its FULL journey
-	 * completes ([unregister]'s unconditional unlock), and the next train needing the other
-	 * position would be refused forever instead of merely waiting -- confirmed to happen on
-	 * EVERY repetition of the vyhybna shunting loop (a train exits, the next one needs the
-	 * opposite position for the same switch), so this is load-bearing, not defensive polish.
-	 *
-	 * @since Issue #1065
-	 */
-	private fun reclaimStaleSwitchLocks(block: DynamicTrackBlock) {
-		block
-			.ends()
-			.filterIsInstance<DynamicRailSwitch>()
-			.filter { it.locked }
-			.forEach { reclaimIfStale(it) { "after $block was freed, Issue #1065" } }
-	}
-
-	/**
-	 * Release [switch]'s ownership if [PathReservationRegistry.isStaleSwitchOwnership] says it
-	 * protects no live route. Goes through [PathReservationRegistry.unregisterSwitch], which
-	 * keeps both ownership maps consistent. Shared by [reclaimStaleSwitchLocks] and
-	 * [reclaimStaleForeignSwitchOwnership].
-	 *
-	 * @param trigger why the check runs now -- for the log line only
-	 * @since Issue #1076
-	 */
-	private fun reclaimIfStale(
-		switch: DynamicRailSwitch,
-		trigger: () -> String
-	) {
-		val owner = registry.getSwitchOwner(switch) ?: return
-		if (!registry.isStaleSwitchOwnership(switch)) return
-		registry.unregisterSwitch(owner, switch)
-		logger.info {
-			"Released stale ownership of switch ${switch.staticRef.getName()} held by '$owner' -- " +
-				"the owner holds no block bounded by it (${trigger()})"
-		}
+			.forEach { registry.reclaimStaleSwitchOwnership(it) }
 	}
 
 	/**

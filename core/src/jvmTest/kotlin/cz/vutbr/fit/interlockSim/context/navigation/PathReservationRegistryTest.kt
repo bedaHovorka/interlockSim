@@ -30,14 +30,15 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
-import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
+import cz.vutbr.fit.interlockSim.testutil.throwingSwitchUnlockListener
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -479,6 +480,43 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(switch.locked).isTrue()
 		}
 
+		@Test
+		fun `unregister releases a held switch claim even when the train holds no block`() {
+			// Arrange - Issue #1103 review round: bulk release must clear switch claims too, and the
+			// claim-with-no-held-block shape is exactly the stale one this PR attacks.
+			val switch = switches().first()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act - the train holds no blocks at all.
+			assertThat(registry.unregister("train1")).isEmpty()
+
+			// Assert
+			assertThat(registry.getSwitchOwner(switch), "claim without a block").isNull()
+			assertThat(registry.getSwitches("train1"), "train's switch list").isEmpty()
+			assertThat(switch.locked, "lock").isFalse()
+		}
+
+		@Test
+		fun `unregister releases held switch claims together with the blocks`() {
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act - the whole-route teardown.
+			val released = registry.unregister("train1")
+
+			// Assert - the blocks come back, and the switch is unlocked and reusable in the
+			// OPPOSITE position by another train.
+			assertThat(released).containsExactly(before, after)
+			assertThat(registry.getSwitchOwner(switch), "claim after unregister").isNull()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			assertThat(switch.locked, "lock after unregister").isFalse()
+			switch.changeConf()
+			registry.registerSwitches("train2", listOf(switch))
+			assertThat(registry.getSwitchOwner(switch), "second train's claim").isEqualTo("train2")
+		}
+
 		@ParameterizedTest(name = "flank = {0}")
 		@ValueSource(booleans = [false, true])
 		fun `a mixed list is rejected atomically without partial registration`(flank: Boolean) {
@@ -617,6 +655,127 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 			assertThat(registry.getSwitches("train1")).isEmpty()
 		}
+
+		/**
+		 * A switch on the reserved path together with the two held blocks it joins, in path order:
+		 * a train straddling the switch holds both, a train that has passed it holds only the second.
+		 */
+		private fun straddledSwitch(): Triple<DynamicTrackBlock, DynamicRailSwitch, DynamicTrackBlock> {
+			val (before, after) =
+				blocks.zipWithNext().first { (before, after) ->
+					before.ends().any { it is DynamicRailSwitch && it in after.ends() }
+				}
+			val switch = before.ends().filterIsInstance<DynamicRailSwitch>().first { it in after.ends() }
+			return Triple(before, switch, after)
+		}
+
+		@ParameterizedTest(name = "release-time reclaim, flank = {0}")
+		@ValueSource(booleans = [false, true])
+		fun `unregisterBlock reclaims a stale plain claim at the freed block's ends and keeps a flank claim`(flank: Boolean) {
+			// Arrange - Issue #1103: train1 holds ONE block bounded by the switch and claims the switch.
+			val (_, switch, block) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(block)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			if (flank) {
+				registry.registerFlankSwitches("train1", listOf(switch))
+			} else {
+				registry.registerSwitches("train1", listOf(switch))
+			}
+
+			// Act - the block leaves the registry; train1 now holds no block bounded by the switch.
+			assertThat(registry.unregisterBlock("train1", block)).isTrue()
+
+			// Assert - a plain claim is stale and goes with the block; a flank claim protects a route the
+			// switch is not adjacent to and survives (Issue #1076 review).
+			if (flank) {
+				assertThat(registry.getSwitchOwner(switch), "flank owner").isEqualTo("train1")
+				assertThat(registry.isFlankProtected(switch)).isTrue()
+				assertThat(switch.locked, "flank lock").isTrue()
+			} else {
+				assertThat(registry.getSwitchOwner(switch), "plain owner").isNull()
+				assertThat(registry.getSwitches("train1")).isEmpty()
+				assertThat(switch.locked, "plain lock").isFalse()
+			}
+		}
+
+		@Test
+		fun `unregisterBlock keeps a plain claim whose owner still holds the other block at the switch`() {
+			// Arrange - train1 straddles the switch: it holds the block before and the block after it.
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act - the block behind the train is freed; the one in front is still held.
+			assertThat(registry.unregisterBlock("train1", before)).isTrue()
+
+			// Assert - the switch still protects a live route and must not move under the train.
+			assertThat(switch.locked, "lock").isTrue()
+			assertThat(registry.getSwitchOwner(switch), "owner").isEqualTo("train1")
+			assertThat(registry.getSwitches("train1")).containsExactly(switch)
+			assertThat(registry.isStaleSwitchOwnership(switch)).isFalse()
+		}
+
+		@Test
+		fun `sectional release frees the switch only with the last held block bounded by it`() {
+			// Arrange - train1 holds before | switch | after and claims the switch.
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+			val positionHeld = switch.conf
+
+			// Act 1 - the first block is freed: the claim stays, and a second train is still refused.
+			assertThat(registry.unregisterBlock("train1", before)).isTrue()
+			assertThat(registry.getSwitchOwner(switch), "owner after the first release").isEqualTo("train1")
+			assertFailure { registry.registerSwitches("train2", listOf(switch)) }
+				.isInstanceOf(IllegalStateException::class)
+
+			// Act 2 - the last held block bounded by the switch is freed: the claim is released with it.
+			assertThat(registry.unregisterBlock("train1", after)).isTrue()
+
+			// Assert - the switch is free for the second train's route in the OPPOSITE position.
+			assertThat(registry.getSwitchOwner(switch), "owner after the second release").isNull()
+			assertThat(switch.locked, "lock after the second release").isFalse()
+			switch.changeConf()
+			assertThat(switch.conf).isNotEqualTo(positionHeld)
+			registry.registerSwitches("train2", listOf(switch))
+			assertThat(registry.getSwitchOwner(switch), "second train's claim").isEqualTo("train2")
+			assertThat(switch.locked, "second train's lock").isTrue()
+		}
+
+		@Test
+		fun `a throwing switch listener does not abort the release nor the reclaim`() {
+			// Arrange - Issue #1103 review: DynamicRailSwitch fires property listeners synchronously
+			// from inside the reclaim's unregisterSwitch. The release funnel must survive that
+			// throw, and the switch's per-listener containment (the review's ruling C) must leave
+			// the reclaim able to clean the claim in the same call.
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+			val throwing = throwingSwitchUnlockListener()
+			switch.addPropertyChangeListener(throwing)
+
+			// Act 1 - free the block BEFORE the switch: the claim is not stale yet (the train still
+			// holds the block after the switch), so the reclaim keeps it.
+			assertThat(registry.unregisterBlock("train1", before)).isTrue()
+			assertThat(registry.getSwitchOwner(switch), "owner after act 1").isEqualTo("train1")
+
+			// Act 2 - the LAST block bounded by the switch is freed, so the reclaim runs
+			// unregisterSwitch -> unlock() -> the throwing listener throws into the notify loop.
+			assertThat(registry.unregisterBlock("train1", after)).isTrue()
+
+			// Assert - the release completed and the reclaim fully cleaned the claim: the cell-level
+			// containment logged the failure and ran on, so the map cleanup after unlock() also ran.
+			// The block mappings are gone, the switch is unlocked and immediately claimable again.
+			assertThat(registry.getBlocks("train1")).isEmpty()
+			assertThat(registry.getSwitchOwner(switch), "owner after the reclaim").isNull()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			assertThat(switch.locked, "lock after the reclaim").isFalse()
+			registry.registerSwitches("train2", listOf(switch))
+			assertThat(registry.getSwitchOwner(switch), "second train's claim").isEqualTo("train2")
+		}
 	}
 
 	@Nested
@@ -734,7 +893,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 		@Test
 		fun `addBlockOccupancyListener delivers events to subscriber`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			val block = blocks.first()
 			val event = fakeEvent(block)
 
@@ -746,7 +905,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 		@Test
 		fun `removeBlockOccupancyListener stops event delivery`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			val block = blocks.first()
 			val event = fakeEvent(block)
 
@@ -759,8 +918,8 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 		@Test
 		fun `multiple listeners receive the same event in registration order`() {
-			val first = RecordingListener()
-			val second = RecordingListener()
+			val first = RecordingBlockOccupancyListener()
+			val second = RecordingBlockOccupancyListener()
 			val block = blocks.first()
 			val event = fakeEvent(block)
 
@@ -1089,14 +1248,6 @@ class PathReservationRegistryTest : KoinTestBase() {
 		held.filter { it !in kept }.forEach { block ->
 			block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
 			assertThat(registry.unregisterBlock(trainId, block)).isTrue()
-		}
-	}
-
-	private class RecordingListener : BlockOccupancyListener {
-		val events = mutableListOf<BlockOccupancyEvent>()
-
-		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
-			events.add(event)
 		}
 	}
 }

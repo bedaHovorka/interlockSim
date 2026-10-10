@@ -13,6 +13,7 @@ import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsAtLeast
+import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -459,6 +460,83 @@ class DynamicRailSwitchTest {
 			// Listener was removed; further fires must not call it again
 			dynamicSwitch1.changeConf()
 			assertThat(callCount).isEqualTo(countAfterFirstFire)
+		}
+	}
+
+	@Nested
+	@DisplayName("Listener failure containment (Issue #1103)")
+	inner class ListenerFailureContainment {
+		// The notification order is insertion order: the throwing listener is always added
+		// BEFORE the recorder, so "recorder still notified" proves the loop did not stop.
+
+		/** Records the locked flag as a listener sees it, then throws. */
+		private fun throwingLockedObserver(
+			target: DynamicRailSwitch,
+			observed: MutableList<Boolean>
+		): ContextPropertyChangeListener =
+			ContextPropertyChangeListener {
+				observed.add(target.locked)
+				error("switch listener failure")
+			}
+
+		private fun throwing(): ContextPropertyChangeListener =
+			ContextPropertyChangeListener { error("switch listener failure") }
+
+		@Test
+		fun `a throwing listener does not starve later listeners on unlock`() {
+			// Given: a throwing listener plus a recorder behind it
+			val observed = mutableListOf<Boolean>()
+			dynamicSwitch1.addPropertyChangeListener(throwingLockedObserver(dynamicSwitch1, observed))
+			val recorded = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { recorded.add(it) }
+
+			// lock() already contained the throwing listener; the observer saw locked=true
+			dynamicSwitch1.lock()
+
+			// When: unlock notifies both listeners
+			dynamicSwitch1.unlock()
+
+			// Then: the state write is committed before ANY listener runs (the throwing listener
+			// observed the new locked value of each transition), the recorder behind it still got
+			// both events, and no exception escaped the notify loop.
+			assertThat(observed).containsExactly(true, false)
+			assertThat(recorded).hasSize(2)
+			assertThat(recorded[0].propertyName).isEqualTo("locked")
+			assertThat(recorded[0].newValue).isEqualTo(true)
+			assertThat(recorded[1].propertyName).isEqualTo("locked")
+			assertThat(recorded[1].newValue).isEqualTo(false)
+			assertThat(dynamicSwitch1.locked).isFalse()
+		}
+
+		@Test
+		fun `a throwing listener does not starve later listeners on lock`() {
+			val observed = mutableListOf<Boolean>()
+			dynamicSwitch1.addPropertyChangeListener(throwingLockedObserver(dynamicSwitch1, observed))
+			val recorded = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { recorded.add(it) }
+
+			dynamicSwitch1.lock()
+
+			assertThat(observed).containsExactly(true)
+			assertThat(recorded).hasSize(1)
+			assertThat(recorded[0].propertyName).isEqualTo("locked")
+			assertThat(recorded[0].newValue).isEqualTo(true)
+			assertThat(dynamicSwitch1.locked).isTrue()
+		}
+
+		@Test
+		fun `a throwing listener does not starve later listeners on conf change`() {
+			dynamicSwitch1.addPropertyChangeListener(throwing())
+			val recorded = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { recorded.add(it) }
+
+			dynamicSwitch1.changeConf()
+
+			assertThat(recorded).hasSize(1)
+			assertThat(recorded[0].propertyName).isEqualTo("conf")
+			assertThat(recorded[0].oldValue).isEqualTo(Conf.MAIN)
+			assertThat(recorded[0].newValue).isEqualTo(Conf.BRANCH)
+			assertThat(dynamicSwitch1.conf).isEqualTo(Conf.BRANCH)
 		}
 	}
 
