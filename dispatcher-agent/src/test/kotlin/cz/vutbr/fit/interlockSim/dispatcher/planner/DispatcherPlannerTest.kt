@@ -18,10 +18,10 @@ import assertk.assertions.isTrue
 import assertk.fail
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationController
-import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -135,14 +135,7 @@ class DispatcherPlannerTest {
 
 		private fun emptyObservation(): DispatchObservation =
 			DispatchObservation(
-				snapshot =
-					SimulationSnapshot(
-						simTime = 0.0,
-						semaphores = emptyList(),
-						blocks = emptyList(),
-						trainPositions = emptyList(),
-						timetables = emptyList()
-					),
+				snapshot = emptySnapshot(),
 				unapprovedTrains = emptyList(),
 				innerBlockInputs = emptyList(),
 				outerBlockInputs = emptyList()
