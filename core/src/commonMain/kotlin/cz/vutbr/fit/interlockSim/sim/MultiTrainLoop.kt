@@ -583,7 +583,7 @@ open class MultiTrainLoop(
 			is PathReservationService.ReservationResult.GeometricallyImpossible -> {
 				// Issue #903: a permanent impossibility (rear-facing START or
 				// unconfigurable switch), not ordinary contention. Logged at WARN; the
-				// attempt counts toward maxEntryAttempts.
+				// entry fails at once with GEOMETRICALLY_IMPOSSIBLE and is not retried.
 				logger.warn {
 					"MultiTrainLoop: geometrically impossible route for ${train.name}: ${result.reason}"
 				}
