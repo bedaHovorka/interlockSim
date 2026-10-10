@@ -165,8 +165,7 @@ object NextHopResolver {
 	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.reserveOrDefer] reads, so the two arms
 	 * cannot disagree about which separator a given input leads to.
 	 */
-	private fun BlockInputObservation.chosenTargetName(): String? =
-		ReservationTargetPolicy.pick(candidateTargets)?.name
+	private fun BlockInputObservation.chosenTargetName(): String? = ReservationTargetPolicy.pick(candidateTargets)?.name
 
 	/** `true` when [input] qualifies as a forward-reservation candidate for its owner. */
 	private fun isEligible(input: BlockInputObservation): Boolean =
