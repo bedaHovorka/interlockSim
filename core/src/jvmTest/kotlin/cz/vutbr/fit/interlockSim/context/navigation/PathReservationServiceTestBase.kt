@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
 import org.koin.test.inject
 
@@ -50,8 +49,8 @@ import org.koin.test.inject
  * @since Issue #1165 (extracted from PathReservationServiceTest)
  */
 abstract class PathReservationServiceTestBase : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
+	protected val editingContextFactory: JvmEditingContextFactory by inject()
+	protected val simulationContextFactory: SimulationContextFactory by inject()
 
 	protected lateinit var simulationContext: DefaultSimulationContext
 	protected lateinit var environment: SimulationEnvironment
@@ -64,7 +63,7 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml from resources
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
+		simulationContext = loadVyhybnaContext().tracked()
 
 		environment = simulationContext
 

@@ -53,20 +53,6 @@ class PathReservationToAnyTest : PathReservationServiceTestBase() {
 	}
 
 	/**
-	 * Find InOut by name.
-	 */
-	private fun findInOutByName(name: String): DynamicInOut {
-		val inOuts = simulationContext.getInOuts()
-		for (inOut in inOuts) {
-			val dynamic = simulationContext.toDynamic(inOut) as DynamicInOut
-			if (dynamic.name == name) {
-				return dynamic
-			}
-		}
-		throw IllegalStateException("InOut $name not found")
-	}
-
-	/**
 	 * Assert that reserved blocks form a path through specified separators in order.
 	 */
 	private fun assertPathContainsSeparators(
