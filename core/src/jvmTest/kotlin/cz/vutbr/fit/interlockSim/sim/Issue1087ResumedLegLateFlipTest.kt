@@ -136,10 +136,12 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 
 		/**
 		 * Largest speed change the FREE rung's stand may end with: the crossing wait is
-		 * root-found, but the velocity integration still runs the first step after the braking
-		 * onset on the old acceleration (#1126), so the braking starts a hair past the room and
-		 * the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s
-		 * line-speed cap, the same residual `Issue1057LateFlipBrakingTest` bounds at 1.0.
+		 * root-found and the engine runs ahead of the velocity integration (#1126), so the
+		 * braking starts at the onset and the stand ends with no snap — 0.015 m/s measured at
+		 * the 80 m/s line-speed cap, one 5 ms sample at the 3 m/s² bound, the same residual
+		 * `Issue1057LateFlipBrakingTest` bounds. Before #1126 the velocity integration ran the
+		 * first step after the onset on the old acceleration and the front's clearance gate
+		 * ended the arrival crawl from about 0.7 m/s.
 		 */
 		const val MAX_RESIDUAL_STEP_MPS = 0.1
 	}
@@ -294,11 +296,12 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 			name = "braking distance needed at the flip-back"
 		).isLessThan(stopLine - atFlipBack.totalDistance)
 
-		// Every step of the stand is braking at the bound except the last: the velocity
-		// integration runs one step after the onset on the old acceleration (#1126), the braking
-		// starts that hair past the room, and the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s cap,
-		// the same residual `Issue1057LateFlipBrakingTest` bounds at its `MAX_RESIDUAL_STEP_MPS`.
-		// A pre-fix snap from the cap fails the residual bound below, not this tight one.
+		// Every step of the stand is braking at the bound: the engine writes each stage's
+		// acceleration before the velocity integration reads it (#1126), so the braking starts
+		// at the root-found onset and the front's clearance gate has no crawl left to end
+		// (0.015 m/s at the 80 m/s cap, the same residual `Issue1057LateFlipBrakingTest` bounds
+		// at its `MAX_RESIDUAL_STEP_MPS`). A pre-fix snap from the cap fails the residual bound
+		// below, not this tight one.
 		val worstBrakingStep =
 			run.samples
 				.filter { it.time >= atFlipBack.time }
