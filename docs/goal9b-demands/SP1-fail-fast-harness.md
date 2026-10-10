@@ -26,7 +26,9 @@
    `TopologyNavigator.findShortestTopologicalDistance`, a Dijkstra search over the same switch-blind
    moves. On all 174 ordered InOut pairs of the test fixtures (Praha included) it gives the same value
    as the listing. The cheap Praha pairs (28 ordered pairs of at most 100 topological paths each) keep
-   that equality pinned by `ShortestTopologicalDistanceTest.matchesPathListingOnTheCheapPrahaPairs`.
+   that equality pinned by `ShortestTopologicalDistanceTest.matchesPinnedListingDistancesOnPraha`. It
+   checks the search against listing values measured once, because listing even these pairs at test
+   time took 39 s on the JVM and 776 s on linuxX64 debug (past the 5 min CI limit).
 
 ## Cost of listing every path
 
