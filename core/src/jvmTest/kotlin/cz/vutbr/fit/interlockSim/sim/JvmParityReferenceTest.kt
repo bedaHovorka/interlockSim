@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
@@ -18,6 +19,11 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.REFERENCE_TRAJECTORY_TOLERANCE
+import cz.vutbr.fit.interlockSim.testutil.SHUNTING_LOOP_REFERENCE_TIMES
+import cz.vutbr.fit.interlockSim.testutil.SHUNTING_LOOP_REFERENCE_TRAJECTORY
+import cz.vutbr.fit.interlockSim.testutil.ShuntingLoopTrajectorySampler
+import cz.vutbr.fit.interlockSim.testutil.TrajectorySample
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
@@ -40,11 +46,14 @@ import java.util.concurrent.TimeUnit
  * 5. Events are in chronological order (timestamps non-decreasing)
  * 6. Summary statistics are present and reasonable
  * 7. Exact entered/exited train counts (cross-platform determinism)
+ * 8. The first train's velocity and position at fixed simulation times match the shared
+ *    reference trajectory (Issue #1126) — two platforms cannot diverge behind equal counts
  *
  * Invariant 7 asserts **exact** counts, which must equal the native test's constants:
  * kDisco's `Random.exp()`/`.normal()` are bit-identical across JVM and native since
  * bedaHovorka/kdisco#69 was fixed (pure-Kotlin fdlibm `PortableMath` replacing
- * platform-delegating `kotlin.math.ln`/`exp`).
+ * platform-delegating `kotlin.math.ln`/`exp`). Invariant 8 reads its reference from
+ * `:core-test` (`SHUNTING_LOOP_REFERENCE_TRAJECTORY`), the one table both tests share.
  *
  * @since Issue #417 (native vs JVM semantic parity)
  * @see TextReporter
@@ -66,18 +75,20 @@ class JvmParityReferenceTest : KoinTestBase() {
 		private const val EXPECTED_TRAINS_EXITED = 1
 	}
 
-	/** Collected output plus final train counters of one simulation run. */
+	/** Collected output, final train counters and the sampled trajectory of one simulation run. */
 	private data class SimRun(
 		val events: List<String>,
 		val summary: String,
 		val trainsEntered: Int,
-		val trainsExited: Int
+		val trainsExited: Int,
+		val trajectory: List<TrajectorySample>
 	)
 
 	/**
 	 * Creates a ShuntingLoop simulation context from vyhybna.xml, attaches a
-	 * [TextReporter] with an output collector, runs the simulation, and returns
-	 * the collected event lines, summary line, and final train counters.
+	 * [TextReporter] with an output collector and a [ShuntingLoopTrajectorySampler], runs the
+	 * simulation, and returns the collected event lines, summary line, final train counters and
+	 * the sampled trajectory.
 	 */
 	private fun runSimulation(): SimRun {
 		val factory = getKoin().get<SimulationContextFactory>()
@@ -85,21 +96,25 @@ class JvmParityReferenceTest : KoinTestBase() {
 		val output = mutableListOf<String>()
 		var trainsEntered = -1
 		var trainsExited = -1
+		var trajectory = emptyList<TrajectorySample>()
 		Util
 			.assertInstanceOf<DefaultSimulationContext>(
 				stream.use { factory.createContext(it) }
 			).use { context ->
 				val loop = prepareShuntingLoop(context, END_TIME)
 				val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
+				val sampler = ShuntingLoopTrajectorySampler(loop, SHUNTING_LOOP_REFERENCE_TIMES)
 				context.addPropertyChangeListener(reporter)
+				context.addPropertyChangeListener(sampler)
 				context.run()
 				reporter.printSummary()
 				trainsEntered = loop.getTrainsEntered()
 				trainsExited = loop.getTrainsExited()
+				trajectory = sampler.samples
 			}
 		val eventLines = output.filter { !it.startsWith("---") }
 		val summary = output.last { it.startsWith("---") }
-		return SimRun(eventLines, summary, trainsEntered, trainsExited)
+		return SimRun(eventLines, summary, trainsEntered, trainsExited, trajectory)
 	}
 
 	private fun runSimulationAndCollect(): Pair<List<String>, String> {
@@ -170,6 +185,21 @@ class JvmParityReferenceTest : KoinTestBase() {
 		val run = runSimulation()
 		assertThat(run.trainsEntered, name = "trains entered").isEqualTo(EXPECTED_TRAINS_ENTERED)
 		assertThat(run.trainsExited, name = "trains exited").isEqualTo(EXPECTED_TRAINS_EXITED)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `invariant 8 - sampled velocity and position match the reference trajectory`() {
+		val run = runSimulation()
+		assertThat(run.trajectory.map { it.time }, name = "sample times").isEqualTo(SHUNTING_LOOP_REFERENCE_TIMES)
+		run.trajectory.zip(SHUNTING_LOOP_REFERENCE_TRAJECTORY).forEach { (sample, reference) ->
+			assertThat(sample.velocity, name = "velocity at t=${reference.time}")
+				.isNotNull()
+				.isCloseTo(reference.velocity, REFERENCE_TRAJECTORY_TOLERANCE)
+			assertThat(sample.totalDistance, name = "distance at t=${reference.time}")
+				.isNotNull()
+				.isCloseTo(reference.totalDistance, REFERENCE_TRAJECTORY_TOLERANCE)
+		}
 	}
 
 	@Test

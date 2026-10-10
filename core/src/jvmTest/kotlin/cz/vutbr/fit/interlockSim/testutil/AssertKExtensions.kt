@@ -17,6 +17,7 @@ import assertk.Assert
 import assertk.assertThat
 import assertk.assertions.isBetween
 import assertk.assertions.isEqualTo
+import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.support.expected
 import assertk.assertions.support.show
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
@@ -328,3 +329,37 @@ fun assertStoodAtClearanceStopLine(
  * flip rungs' braking-room premises and [assertStoodAtClearanceStopLine] cannot drift apart.
  */
 fun clearanceStopLine(signalDistance: Double): Double = signalDistance - Train.SEMAPHORE_STOP_CLEARANCE_METERS
+
+/**
+ * Asserts that the front never passed the clearance stop line that ends [signalDistance] at any
+ * of [samples] — not only at the last one — within the generator's `maxAbsError`. The stand
+ * itself is [assertStoodAtClearanceStopLine]'s business; this pins that no sample on the way
+ * there overshot the line and came back (Issue #1126 domain pin).
+ */
+fun assertNeverPastClearanceStopLine(
+	samples: List<TrainKinematicSample>,
+	signalDistance: Double
+) {
+	val limit = clearanceStopLine(signalDistance) + CLEARANCE_STOP_POSITION_TOLERANCE
+	samples.forEach { sample ->
+		assertThat(sample.totalDistance, name = "distance travelled, never past the stop line, at $sample")
+			.isLessThanOrEqualTo(limit)
+	}
+}
+
+/**
+ * Asserts that the velocity never rises between consecutive [samples] taken at or after
+ * [fromTime]: once a braking leg has started, the train only slows down or stands
+ * (Issue #1126 domain pin).
+ */
+fun assertVelocityNonIncreasingFrom(
+	samples: List<TrainKinematicSample>,
+	fromTime: Double
+) {
+	samples
+		.filter { it.time >= fromTime }
+		.zipWithNext()
+		.forEach { (a, b) ->
+			assertThat(b.velocity, name = "velocity after braking onset, $a -> $b").isLessThanOrEqualTo(a.velocity)
+		}
+}

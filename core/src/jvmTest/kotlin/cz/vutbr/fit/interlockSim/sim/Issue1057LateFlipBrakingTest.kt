@@ -19,7 +19,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.AspectFlipOnce
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.assertNeverPastClearanceStopLine
 import cz.vutbr.fit.interlockSim.testutil.assertStoodAtClearanceStopLine
+import cz.vutbr.fit.interlockSim.testutil.assertVelocityNonIncreasingFrom
 import cz.vutbr.fit.interlockSim.testutil.runClearanceStopScenario
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -176,6 +178,11 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 				brakingDistanceFrom(onset.velocity)
 		assertThat(abs(roomAtOnset), name = "braking-room margin at braking onset")
 			.isLessThanOrEqualTo(ONSET_MARGIN_TOLERANCE_METERS)
+
+		// From the onset on the train only slows down, and its front never passes the clearance
+		// stop line on the way to the stand — at any sample, not only the last (Issue #1126).
+		assertVelocityNonIncreasingFrom(afterFlip, onset.time)
+		assertNeverPastClearanceStopLine(run.samples, APPROACH_BLOCK_LENGTH)
 
 		// Every step of the stand is braking at the bound: the engine writes each stage's
 		// acceleration before the velocity integration reads it (#1126), so the root-found onset
