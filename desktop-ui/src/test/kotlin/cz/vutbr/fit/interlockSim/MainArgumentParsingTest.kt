@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit
  * This test class validates:
  * - CLI mode selection (sim, edit, example, invalid)
  * - Argument validation and presence checking
- * - Error message output to System.err
+ * - Error message output validated once across the console streams (Issue #1011)
  * - Edge cases (empty args, extra args, spaces in paths)
  * - Frame initialization for GUI mode
  *
@@ -56,7 +56,7 @@ import java.util.concurrent.TimeUnit
  * - Main is a singleton with private constructor
  * - CLI mode routing via main(args) static method
  * - Frame initialization is GUI-specific (mocked to avoid X11 dependencies)
- * - System.err output captured for validation
+ * - Both console streams (System.out, System.err) captured for validation (Issue #1011)
  *
  * Coverage:
  * - Main.isArgs() method (private, tested via public main())
@@ -115,9 +115,17 @@ class MainArgumentParsingTest {
 		}
 	}
 
+	/**
+	 * Everything Main reported to the user: its direct System.err writes plus its logger output.
+	 * The test logback config's root logger and CONSOLE threshold are both WARN, so the config
+	 * sends WARN and ERROR (those are the levels Main's logger emits) to System.out only
+	 * (Issue #1011), and the usage text and other `logger.error` messages land in the captured
+	 * stdout. DEBUG and INFO are suppressed by the level itself, not by the stream split.
+	 */
 	private fun getCapturedError(): String {
 		System.err.flush()
-		return capturedErr.toString()
+		System.out.flush()
+		return capturedErr.toString() + capturedOut.toString()
 	}
 
 	private fun getCapturedOutput(): String {
@@ -535,7 +543,7 @@ class MainArgumentParsingTest {
 	@DisplayName("System Integration")
 	inner class SystemIntegrationTests {
 		@Test
-		fun `System_err is used for messages not stdout`() {
+		fun `usage message is reported once on a single stream`() {
 			// Arrange
 			val args = arrayOf("unknown")
 
@@ -543,9 +551,12 @@ class MainArgumentParsingTest {
 			main(args)
 
 			// Assert
-			// All messages should be on System.err (not System.out)
-			val errOutput = capturedErr.toString()
-			assertThat(errOutput).contains("usage:")
+			// Issue #1011: test logging uses one console stream, so the usage text must not be
+			// duplicated onto System.err (logback-test.xml shadows the production logback.xml
+			// that is also on this classpath, via :core's resources).
+			val output = getCapturedError()
+			assertThat(Regex("usage:").findAll(output).count()).isEqualTo(1)
+			assertThat(capturedErr.toString()).doesNotContain("usage:")
 		}
 
 		@Test

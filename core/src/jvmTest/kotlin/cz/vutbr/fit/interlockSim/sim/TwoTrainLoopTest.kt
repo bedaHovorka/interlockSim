@@ -193,7 +193,10 @@ class TwoTrainLoopTest : KoinTestBase() {
 			assertThat(result.transitions.isNotEmpty(), name = "run $index has transitions")
 				.isTrue()
 
-			System.err.println(
+			// Issue #1011: test console output stays on stdout only — Gradle drains the two
+			// streams with two forwarding threads, so stderr traffic re-opens the two-stream
+			// pattern the single-stream fix removes.
+			System.out.println(
 				"Run $index transitions=${result.transitions.size}, " +
 					"entered=${result.trainsEntered}, exited=${result.trainsExited}, " +
 					"sample=${result.transitions.take(5)}"

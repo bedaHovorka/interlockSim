@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.dispatcher.testutil
+package cz.vutbr.fit.interlockSim.testutil
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
@@ -21,16 +21,15 @@ import org.slf4j.LoggerFactory
  * The single-stream policy is a precaution, not a confirmed fix — see below.
  *
  * Gradle drains a test JVM's stdout and stderr with two separate forwarding threads, and
- * concurrent forwarding is the suspect mechanism behind these JVM XML failures
- * ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990)). That upstream
- * issue proves the mechanism for Kotlin test tasks only; its maintainer says regular JVM
- * `Test` output should already be serialized, and the upstream race is unfixed — so for
- * JVM `Test` tasks the two-stream pattern stays a probable cause, not a proven one. Either
- * way the symptom is "Could not write XML test results for ... to file ..." on a run where
- * zero tests failed, and the JUnit XML is the artifact the gate's pass/fail tally is read
- * from. Keeping console output on one stream removes the trigger this project can remove.
- * A console appender on `System.err` re-introduces the two-stream pattern, so this test
- * fails if one reappears in `logback-test.xml`.
+ * concurrent forwarding is the suspect mechanism behind the JVM XML failures
+ * ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990)); the single-stream
+ * policy applies the same way this module's jvmTest now logs through logback (a provider plus
+ * a single-stream `logback-test.xml`) instead of falling back to SLF4J's no-provider case,
+ * whose banner also writes to stderr. Either way the guarded symptom is "Could not write XML
+ * test results for ... to file ..." on a run where zero tests failed, and the JUnit XML is
+ * the artifact the gate's pass/fail tally is read from. A console appender on `System.err`
+ * re-introduces the two-stream pattern, so this test fails if one reappears in
+ * `logback-test.xml`.
  */
 class TestLoggingSingleStreamTest {
 	@Test

@@ -100,13 +100,14 @@ subprojects {
 //
 // The project dependencies are declared correctly; what is missing is ordering against the
 // `clean` tasks, which no dependency edge can express. `mustRunAfter` adds exactly that, and
-// only for tasks already in the graph — a build without `clean` is unaffected. The aggregate
-// `cleanAllTests` task is also excluded: ordering it after `clean` can form a task-graph cycle.
+// only for tasks already in the graph — a build without `clean` is unaffected. Every `clean*`
+// task is excluded: `clean` depends on the Kotlin `cleanAllTests` aggregate, which depends on the
+// `clean<Task>` rule tasks, so ordering any of them after `clean` forms a task-graph cycle.
 val cleanTaskPaths = subprojects.map { "${it.path}:clean" }
 
 subprojects {
     tasks.configureEach {
-        if (name != "clean" && name != "cleanAllTests") {
+        if (!name.startsWith("clean")) {
             mustRunAfter(cleanTaskPaths)
         }
     }

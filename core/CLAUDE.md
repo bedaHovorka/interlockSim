@@ -36,11 +36,15 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
   `:core:integrationTest` and `:desktop-ui:test` (that `:desktop-ui:test` run also
   had one real, load-induced timeout failure).
   **Test logging therefore stays on one console stream** (#1011): every
-  `logback-test.xml` has a single `ConsoleAppender` on stdout — the former
+  `logback-test.xml` sends its console output to stdout only — the former
   `System.err` twin wrote each ERROR event twice, and Gradle drains a test JVM's
-  two streams with two forwarding threads, which is the concurrency that corrupts
-  the result index. A per-module `TestLoggingSingleStreamTest` tripwire fails if a
-  stderr appender reappears. Gate evidence is still taken from a complete re-run's
+  two streams with two forwarding threads. That concurrency is the suspect
+  mechanism behind the JVM XML failures — upstream only proves it for Kotlin test
+  tasks, so for JVM `Test` tasks it is a probable cause and the single-stream
+  policy is a precaution, not a confirmed fix. A per-module
+  `TestLoggingSingleStreamTest` tripwire fails if a stderr appender reappears
+  (desktop-ui's stdout `SPIKE_MEASUREMENTS` appender for the SP2c.26 F1 spike
+  tests is unaffected). Gate evidence is still taken from a complete re-run's
   XML, never from a failed attempt.
 - **`clean` is ordered before other build tasks** by the root build script (#1011);
   the aggregate `cleanAllTests` task is excluded to avoid a task-graph cycle.

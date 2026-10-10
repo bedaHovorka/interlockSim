@@ -118,8 +118,9 @@ abstract class AbstractFrameTestBase : KoinTestBase() {
 					}
 				}
 			} catch (e: Exception) {
-				// Log but don't fail test cleanup
-				System.err.println("Warning: Failed to dispose Frame: ${e.message}")
+				// Log but don't fail test cleanup; stdout only (Issue #1011 — single console
+				// stream, same rule the test logback configs enforce)
+				System.out.println("Warning: Failed to dispose Frame: ${e.message}")
 			}
 		}
 		frames.clear()

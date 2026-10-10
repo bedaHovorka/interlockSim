@@ -11,13 +11,16 @@
 	</appender>
 
 	<!--
-		There is deliberately no second console appender on System.err (Issue #1011).
+		There is deliberately no console appender on System.err (Issue #1011).
 		A single ERROR event used to be written to stdout AND stderr, and Gradle drains a test
-		JVM's two streams with two separate forwarding threads. Concurrent forwarding is what
-		corrupts Gradle's binary test-result index (gradle/gradle#33990), which surfaces as
-		"Could not write XML test results for ... to file ..." on a run where zero tests failed.
-		The CONSOLE appender above already prints ERROR (its threshold is WARN), so the stderr
-		copy only duplicated output. Keep test logging on one stream.
+		JVM's two streams with two separate forwarding threads. Concurrent forwarding is the
+		suspect mechanism behind the JVM XML failures ("Could not write XML test results for
+		... to file ..." with zero failed tests) — but only a probable cause here: upstream
+		(gradle/gradle#33990) proves it for Kotlin test tasks, whose maintainer says regular
+		JVM Test output should already be serialized, and the upstream race is unfixed. The
+		single-stream setup is therefore a precaution: it removes the trigger this project
+		can remove. The CONSOLE appender above already prints ERROR (its threshold is WARN),
+		so the stderr copy only duplicated output. Keep console test output on stdout only.
 	-->
 
 	<!-- File appender for test runs (optional, can be disabled) -->

@@ -17,15 +17,20 @@ import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 
 /**
- * Tripwire (Issue #1011): test logging of this module must stay on a single console stream.
+ * Tripwire (Issue #1011): console test logging of this module must stay on stdout only.
+ * The single-stream policy is a precaution, not a confirmed fix — see below.
  *
  * Gradle drains a test JVM's stdout and stderr with two separate forwarding threads, and
- * concurrent forwarding corrupts its binary test-result index
- * ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990)). That surfaces as
- * "Could not write XML test results for ... to file ..." on a run where zero tests failed —
- * and the JUnit XML is the artifact the gate's pass/fail tally is read from. A console
- * appender on `System.err` re-introduces the two-stream pattern, so this test fails if one
- * reappears in `logback-test.xml`.
+ * concurrent forwarding is the suspect mechanism behind these JVM XML failures
+ * ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990)). That upstream
+ * issue proves the mechanism for Kotlin test tasks only; its maintainer says regular JVM
+ * `Test` output should already be serialized, and the upstream race is unfixed — so for
+ * JVM `Test` tasks the two-stream pattern stays a probable cause, not a proven one. Either
+ * way the symptom is "Could not write XML test results for ... to file ..." on a run where
+ * zero tests failed, and the JUnit XML is the artifact the gate's pass/fail tally is read
+ * from. Keeping console output on one stream removes the trigger this project can remove.
+ * A console appender on `System.err` re-introduces the two-stream pattern, so this test
+ * fails if one reappears in `logback-test.xml`.
  */
 class TestLoggingSingleStreamTest {
 	@Test
