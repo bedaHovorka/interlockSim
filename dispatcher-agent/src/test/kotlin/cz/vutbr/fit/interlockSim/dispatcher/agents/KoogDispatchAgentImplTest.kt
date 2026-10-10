@@ -22,9 +22,11 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -125,7 +127,7 @@ class KoogDispatchAgentImplTest {
 
 	private fun blockInput(
 		towardSemaphoreName: String,
-		toSeparatorName: String?,
+		targetName: String?,
 		ownerTrainId: String?,
 		isApproachingThisInput: Boolean = false,
 		pathSetUpTowardThisInput: Boolean = false,
@@ -135,7 +137,8 @@ class KoogDispatchAgentImplTest {
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
-			toSeparatorName = toSeparatorName,
+			candidateTargets =
+				listOfNotNull(targetName?.let { CandidateTarget(it, SeparatorKind.SEMAPHORE, available = true) }),
 			state = TrackFacility.State.OCCUPIED,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
@@ -156,7 +159,7 @@ class KoogDispatchAgentImplTest {
 					listOf(
 						blockInput(
 							towardSemaphoreName = "doB1",
-							toSeparatorName = "doB2",
+							targetName = "doB2",
 							ownerTrainId = "Train #1",
 							isApproachingThisInput = true
 						)
@@ -183,7 +186,7 @@ class KoogDispatchAgentImplTest {
 					listOf(
 						blockInput(
 							towardSemaphoreName = "doB1",
-							toSeparatorName = null,
+							targetName = null,
 							ownerTrainId = "Train #1",
 							isApproachingThisInput = true
 						)
@@ -217,7 +220,7 @@ class KoogDispatchAgentImplTest {
 					listOf(
 						blockInput(
 							towardSemaphoreName = "doB1",
-							toSeparatorName = "doB2",
+							targetName = "doB2",
 							ownerTrainId = "Train #1",
 							isApproachingThisInput = true,
 							pathAlreadyExtendedBeyond = true
@@ -280,7 +283,7 @@ class KoogDispatchAgentImplTest {
 					listOf(
 						blockInput(
 							towardSemaphoreName = "doB1",
-							toSeparatorName = "doB2",
+							targetName = "doB2",
 							ownerTrainId = "Train #1",
 							isApproachingThisInput = true,
 							blockId = "SECRET_BLOCK_ID"
@@ -310,7 +313,7 @@ class KoogDispatchAgentImplTest {
 					listOf(
 						blockInput(
 							towardSemaphoreName = "doB1",
-							toSeparatorName = "doB2",
+							targetName = "doB2",
 							ownerTrainId = "Train #1",
 							isApproachingThisInput = true
 						)
@@ -336,7 +339,7 @@ class KoogDispatchAgentImplTest {
 	/**
 	 * Builds an observation with two active trains, both owning an
 	 * [BlockInputObservation.isApproachingThisInput] input targeting the same
-	 * [toSeparatorName][BlockInputObservation.toSeparatorName] -- the scenario
+	 * [candidateTargets][BlockInputObservation.candidateTargets] target -- the scenario
 	 * [NextHopResolver.resolveAll] must dedup so the two arms cannot disagree about who gets
 	 * the section (mirrors [RuleBasedDispatcher.checkAllInputs]'s `claimedSeparators`).
 	 */
@@ -367,13 +370,13 @@ class KoogDispatchAgentImplTest {
 				listOf(
 					blockInput(
 						towardSemaphoreName = "doB1",
-						toSeparatorName = "sharedSep",
+						targetName = "sharedSep",
 						ownerTrainId = "Train #1",
 						isApproachingThisInput = true
 					),
 					blockInput(
 						towardSemaphoreName = "doC1",
-						toSeparatorName = "sharedSep",
+						targetName = "sharedSep",
 						ownerTrainId = "Train #2",
 						isApproachingThisInput = true
 					)

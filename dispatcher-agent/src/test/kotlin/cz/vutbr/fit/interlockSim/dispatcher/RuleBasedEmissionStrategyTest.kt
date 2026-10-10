@@ -25,9 +25,11 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -93,7 +95,7 @@ class RuleBasedEmissionStrategyTest {
 	) = BlockInputObservation(
 		blockId = blockId,
 		towardSemaphoreName = toward,
-		toSeparatorName = "B",
+		candidateTargets = listOf(CandidateTarget("B", SeparatorKind.SEMAPHORE, available = true)),
 		state = TrackFacility.State.FREE,
 		ownerTrainId = null,
 		isApproachingThisInput = false,
@@ -130,14 +132,14 @@ class RuleBasedEmissionStrategyTest {
 		}
 
 		/**
-		 * The rule-based dispatcher speaks `ReservePath(fromSemaphoreName, toSeparatorName)`; the
+		 * The rule-based dispatcher speaks `ReservePath(fromSemaphoreName, toTargetName)`; the
 		 * agent vocabulary speaks `RequestRoute(fromEndpointName, toEndpointName)`. Would fail if
 		 * the two endpoint fields were swapped in `toAttributedAction`.
 		 */
 		@Test
 		@DisplayName("ReservePath maps to RequestRoute with from/to in the right order")
 		fun reservePathMapsToRequestRoute() {
-			val decision = DispatchDecision.ReservePath("T-2", fromSemaphoreName = "doA1", toSeparatorName = "B")
+			val decision = DispatchDecision.ReservePath("T-2", fromSemaphoreName = "doA1", toTargetName = "B")
 			val strategy = RuleBasedEmissionStrategy(ScriptedDispatcher(listOf(decision)))
 
 			val emitted = runBlocking { strategy.emit("", observation) }

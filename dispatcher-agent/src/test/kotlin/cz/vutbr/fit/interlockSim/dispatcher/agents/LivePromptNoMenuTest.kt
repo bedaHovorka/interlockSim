@@ -30,8 +30,10 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -164,13 +166,16 @@ class LivePromptNoMenuTest : DispatcherKoinTestBase() {
 	inner class CycleMessageSurface {
 		private fun blockInput(
 			towardSemaphoreName: String,
-			toSeparatorName: String?,
+			targetName: String?,
 			ownerTrainId: String?
 		): BlockInputObservation =
 			BlockInputObservation(
 				blockId = "blk",
 				towardSemaphoreName = towardSemaphoreName,
-				toSeparatorName = toSeparatorName,
+				candidateTargets =
+					listOfNotNull(
+						targetName?.let { CandidateTarget(it, SeparatorKind.SEMAPHORE, available = true) }
+					),
 				state = TrackFacility.State.OCCUPIED,
 				ownerTrainId = ownerTrainId,
 				isApproachingThisInput = true,
@@ -245,7 +250,7 @@ class LivePromptNoMenuTest : DispatcherKoinTestBase() {
 						),
 					unapprovedTrains = listOf(QueuedTrainObservation(trainId = "Train #3", destinationInOutName = "B")),
 					innerBlockInputs =
-						listOf(blockInput(towardSemaphoreName = "doB1", toSeparatorName = "doB2", ownerTrainId = "Train #1")),
+						listOf(blockInput(towardSemaphoreName = "doB1", targetName = "doB2", ownerTrainId = "Train #1")),
 					outerBlockInputs = emptyList()
 				)
 
@@ -273,7 +278,7 @@ class LivePromptNoMenuTest : DispatcherKoinTestBase() {
 
 		/**
 		 * Two active trains whose owned inputs both resolve to the same
-		 * [BlockInputObservation.toSeparatorName] -- the scenario
+		 * [BlockInputObservation.candidateTargets] target -- the scenario
 		 * [cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopResolver.resolveAll] dedups. Checked
 		 * against the same no-menu surface as [capturedRepresentativePrompt] plus the additional
 		 * constraint that the loser's line must not misstate the railway as occupied/blocked.
@@ -312,8 +317,8 @@ class LivePromptNoMenuTest : DispatcherKoinTestBase() {
 					unapprovedTrains = emptyList(),
 					innerBlockInputs =
 						listOf(
-							blockInput(towardSemaphoreName = "doB1", toSeparatorName = "sharedSep", ownerTrainId = "Train #1"),
-							blockInput(towardSemaphoreName = "doC1", toSeparatorName = "sharedSep", ownerTrainId = "Train #2")
+							blockInput(towardSemaphoreName = "doB1", targetName = "sharedSep", ownerTrainId = "Train #1"),
+							blockInput(towardSemaphoreName = "doC1", targetName = "sharedSep", ownerTrainId = "Train #2")
 						),
 					outerBlockInputs = emptyList()
 				)
