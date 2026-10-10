@@ -60,7 +60,7 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 
 ## Goal 9B demand list
 
-- [GOAL_9B_DEMANDS_SP1_FAIL_FAST_HARNESS.md](GOAL_9B_DEMANDS_SP1_FAIL_FAST_HARNESS.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
+- [goal9b-demands/SP1-fail-fast-harness.md](goal9b-demands/SP1-fail-fast-harness.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
 
 ## History
 
