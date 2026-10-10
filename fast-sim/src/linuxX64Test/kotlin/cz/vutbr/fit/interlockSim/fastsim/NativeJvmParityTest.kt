@@ -13,12 +13,19 @@ import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
+import cz.vutbr.fit.interlockSim.testutil.REFERENCE_TRAJECTORY_TOLERANCE
+import cz.vutbr.fit.interlockSim.testutil.SHUNTING_LOOP_REFERENCE_TIMES
+import cz.vutbr.fit.interlockSim.testutil.SHUNTING_LOOP_REFERENCE_TRAJECTORY
+import cz.vutbr.fit.interlockSim.testutil.ShuntingLoopTrajectorySampler
+import cz.vutbr.fit.interlockSim.testutil.TrajectorySample
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.math.abs
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -38,11 +45,14 @@ import kotlin.test.assertTrue
  * 5. Events are in chronological order (timestamps non-decreasing)
  * 6. Summary statistics are present and reasonable
  * 7. Exact entered/exited train counts (cross-platform determinism)
+ * 8. The first train's velocity and position at fixed simulation times match the shared
+ *    reference trajectory (Issue #1126) — two platforms cannot diverge behind equal counts
  *
  * Invariant 7 asserts **exact** counts, which must equal the JVM test's constants:
  * kDisco's `Random.exp()`/`.normal()` are bit-identical across JVM and native since
  * bedaHovorka/kdisco#69 was fixed (pure-Kotlin fdlibm `PortableMath` replacing
- * platform-delegating `kotlin.math.ln`/`exp`).
+ * platform-delegating `kotlin.math.ln`/`exp`). Invariant 8 reads its reference from
+ * `:core-test` (`SHUNTING_LOOP_REFERENCE_TRAJECTORY`), the one table both tests share.
  *
  * @since Issue #417 (native vs JVM semantic parity)
  * @see TextReporter
@@ -72,34 +82,39 @@ class NativeJvmParityTest {
 		stopKoin()
 	}
 
-	/** Collected output plus final train counters of one simulation run. */
+	/** Collected output, final train counters and the sampled trajectory of one simulation run. */
 	private data class SimRun(
 		val events: List<String>,
 		val summary: String,
 		val trainsEntered: Int,
-		val trainsExited: Int
+		val trainsExited: Int,
+		val trajectory: List<TrajectorySample>
 	)
 
 	/**
 	 * Runs the shuntingLoop simulation and collects output lines via [TextReporter]
-	 * plus the final train counters.
+	 * plus the final train counters and the trajectory a [ShuntingLoopTrajectorySampler] took.
 	 */
 	private fun runSimulation(): SimRun {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 		var trainsEntered = -1
 		var trainsExited = -1
+		var trajectory = emptyList<TrajectorySample>()
 		NativeExampleRegistry.create("shuntingLoop", END_TIME, NativeContextFactory()).use { ctx ->
+			val loop = ctx.mainProcess as ShuntingLoop
+			val sampler = ShuntingLoopTrajectorySampler(loop, SHUNTING_LOOP_REFERENCE_TIMES)
 			ctx.addPropertyChangeListener(reporter)
+			ctx.addPropertyChangeListener(sampler)
 			ctx.run()
 			reporter.printSummary()
-			val loop = ctx.mainProcess as ShuntingLoop
 			trainsEntered = loop.getTrainsEntered()
 			trainsExited = loop.getTrainsExited()
+			trajectory = sampler.samples
 		}
 		val eventLines = output.filter { !it.startsWith("---") }
 		val summary = output.last { it.startsWith("---") }
-		return SimRun(eventLines, summary, trainsEntered, trainsExited)
+		return SimRun(eventLines, summary, trainsEntered, trainsExited, trajectory)
 	}
 
 	private fun runSimulationAndCollect(): Pair<List<String>, String> {
@@ -112,6 +127,24 @@ class NativeJvmParityTest {
 		val run = runSimulation()
 		assertEquals(EXPECTED_TRAINS_ENTERED, run.trainsEntered, "trains entered")
 		assertEquals(EXPECTED_TRAINS_EXITED, run.trainsExited, "trains exited")
+	}
+
+	@Test
+	fun `invariant 8 - sampled velocity and position match the reference trajectory`() {
+		val run = runSimulation()
+		assertEquals(SHUNTING_LOOP_REFERENCE_TIMES, run.trajectory.map { it.time }, "sample times")
+		run.trajectory.zip(SHUNTING_LOOP_REFERENCE_TRAJECTORY).forEach { (sample, reference) ->
+			val velocity = assertNotNull(sample.velocity, "velocity at t=${reference.time}")
+			val distance = assertNotNull(sample.totalDistance, "distance at t=${reference.time}")
+			assertTrue(
+				abs(velocity - reference.velocity) <= REFERENCE_TRAJECTORY_TOLERANCE,
+				"velocity at t=${reference.time}: expected ${reference.velocity}, got $velocity"
+			)
+			assertTrue(
+				abs(distance - reference.totalDistance) <= REFERENCE_TRAJECTORY_TOLERANCE,
+				"distance at t=${reference.time}: expected ${reference.totalDistance}, got $distance"
+			)
+		}
 	}
 
 	@Test

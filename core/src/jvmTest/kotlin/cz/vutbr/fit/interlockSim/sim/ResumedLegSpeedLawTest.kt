@@ -70,8 +70,8 @@ class ResumedLegSpeedLawTest : KoinTestBase() {
 
 		/**
 		 * Slack on a speed read off the constant-rate ramp or the coast. The ramp's wait is
-		 * root-found at the cap (Issue #760); the slack covers the sampler and the one step the
-		 * velocity integration runs on the old acceleration after a law switch (#1126).
+		 * root-found at the cap (Issue #760) and the engine runs ahead of the velocity
+		 * integration (#1126); the slack covers the sampler and the root finder's tolerance.
 		 */
 		const val SPEED_TOLERANCE_MPS = 0.01
 

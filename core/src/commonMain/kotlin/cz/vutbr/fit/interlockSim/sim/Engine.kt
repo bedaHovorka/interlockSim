@@ -45,6 +45,15 @@ internal class Engine(
 ) : Continuous() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/**
+		 * kDisco priority of the engine as a [Continuous]: strictly above the train's
+		 * `SimpleIntegration`s (which keep the default `0.0`), so that [derivatives] writes each
+		 * RK stage's acceleration before the velocity integration reads it (Issue #1126). Equal
+		 * priorities run in activation order, and the train starts its integrations before the
+		 * engine, which put the engine last. No other `Continuous` sets a priority.
+		 */
+		private const val CONTINUOUS_PRIORITY = 1.0
 	}
 
 	/**
@@ -589,7 +598,25 @@ internal class Engine(
 		if (!terminated()) Process.reactivate(this)
 	}
 
-	override fun start(): Continuous = if (accelerate) super.start() else this
+	/**
+	 * Starts the engine's continuous part at [CONTINUOUS_PRIORITY]. The guard is re-evaluated on
+	 * every start; outside the first leg it normally already holds, and the priority field then
+	 * survives every later [stop]/[start] pair, so each re-insertion lands ahead of the velocity
+	 * integration. kDisco's `setPriority` needs an active discrete context, which [start] always
+	 * has in production (it is reached only from the engine's own `actions()` turn), and the
+	 * engine is out of the active list at that moment (every leg ends with [stop]), so the call
+	 * only records the priority.
+	 *
+	 * Deviation from the base contract: `Continuous.start()` no-ops when no discrete context is
+	 * active, but [setPriority] throws in that situation. An engine started from outside a
+	 * simulation turn therefore throws instead of no-op-ing — that misuse path is a defect, and
+	 * failing loudly there is intended.
+	 */
+	override fun start(): Continuous {
+		if (!accelerate) return this
+		if (getPriority() != CONTINUOUS_PRIORITY) setPriority(CONTINUOUS_PRIORITY)
+		return super.start()
+	}
 
 	/**
 	 * Distance the braking law `a = (target² − v²) / (2s)` is aimed at.

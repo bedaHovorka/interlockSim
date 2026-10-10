@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.engineOf
 import cz.vutbr.fit.interlockSim.testutil.motorOf
+import cz.vutbr.fit.interlockSim.testutil.velocityIntegrationOf
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
@@ -144,6 +145,21 @@ class EngineExtractionTest : KoinTestBase() {
 		val train = Train(createMockSimulationContext(), createTimetable())
 
 		assertThat(engineOf(train)).isSameInstanceAs(engineOf(train))
+	}
+
+	/**
+	 * Issue #1126 gives the engine kDisco priority 1.0 so its derivatives run ahead of the
+	 * velocity integration; the invariant "no other `Continuous` sets a priority" needs the train
+	 * side pinned too — its velocity integration must keep the default priority 0. A priority of
+	 * 1.0 or more here would silently undo the ordering fix.
+	 */
+	@Test
+	@DisplayName("Train's velocity integration keeps kDisco priority 0 (Issue #1126)")
+	fun velocityIntegrationKeepsDefaultPriority() {
+		val train = Train(createMockSimulationContext(), createTimetable())
+
+		assertThat(velocityIntegrationOf(train).getPriority(), name = "velocity integration priority")
+			.isEqualTo(0.0)
 	}
 
 	private fun createTimetable(): Timetable {

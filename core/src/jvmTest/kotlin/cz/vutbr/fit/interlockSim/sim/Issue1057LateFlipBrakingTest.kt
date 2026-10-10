@@ -19,7 +19,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.AspectFlipOnce
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.assertNeverPastClearanceStopLine
 import cz.vutbr.fit.interlockSim.testutil.assertStoodAtClearanceStopLine
+import cz.vutbr.fit.interlockSim.testutil.assertVelocityNonIncreasingFrom
 import cz.vutbr.fit.interlockSim.testutil.runClearanceStopScenario
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -69,14 +71,15 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 
 		/**
 		 * Largest speed change the stand may end with when the braking room ran out during the
-		 * acceleration phase. The onset wait is root-found (Issue #760), but the velocity
-		 * integration sees the engine's switch to braking one accepted step late, so the train
-		 * overruns the braking point a little and the clearance gate ends the stand from a
-		 * residual speed: 0.46 m/s measured at the generator's 1 ms `dtMax` (0.65 m/s before
-		 * Issue #760, when the onset wait itself was a whole-step poll). The residual grows with
-		 * the step — 0.92 m/s at 10 ms — which is why `dtMax` stays at 1 ms.
+		 * acceleration phase. The onset wait is root-found (Issue #760) and the engine runs
+		 * ahead of the velocity integration (Issue #1126), so the braking starts at the onset
+		 * and the stand ends with no snap: 0.015 m/s measured at the generator's 1 ms `dtMax`,
+		 * which is one 5 ms sample of braking at the 3 m/s² bound. Before #1126 the velocity
+		 * integration ran every step on the step-start acceleration, the train overran the
+		 * braking point and the clearance gate ended the stand from 0.46 m/s at 1 ms (0.65 m/s
+		 * before #760, 0.92 m/s at 10 ms), which is why this bound was 1.0 then.
 		 */
-		const val MAX_RESIDUAL_STEP_MPS = 1.0
+		const val MAX_RESIDUAL_STEP_MPS = 0.1
 
 		/**
 		 * Tolerance for the braking-onset margin (the room left minus the textbook braking
@@ -176,10 +179,15 @@ class Issue1057LateFlipBrakingTest : KoinTestBase() {
 		assertThat(abs(roomAtOnset), name = "braking-room margin at braking onset")
 			.isLessThanOrEqualTo(ONSET_MARGIN_TOLERANCE_METERS)
 
-		// Every step of the stand is either braking at the bound or the final residual the front's
-		// clearance gate ends. The residual comes from the velocity integration taking up the
-		// braking one accepted step after the root-found onset (kDisco `dtMax` = 1 ms; about
-		// 0.46 m/s measured at a 21.6 m/s onset), not the line-speed snap this issue fixes.
+		// From the onset on the train only slows down, and its front never passes the clearance
+		// stop line on the way to the stand — at any sample, not only the last (Issue #1126).
+		assertVelocityNonIncreasingFrom(afterFlip, onset.time)
+		assertNeverPastClearanceStopLine(run.samples, APPROACH_BLOCK_LENGTH)
+
+		// Every step of the stand is braking at the bound: the engine writes each stage's
+		// acceleration before the velocity integration reads it (#1126), so the root-found onset
+		// is where the braking starts and the front's clearance gate has no residual to snap
+		// (0.015 m/s measured at a 21.6 m/s onset, kDisco `dtMax` = 1 ms).
 		val worstStep =
 			afterFlip
 				.zipWithNext()

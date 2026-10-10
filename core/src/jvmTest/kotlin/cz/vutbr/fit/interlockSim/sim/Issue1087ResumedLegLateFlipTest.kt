@@ -17,6 +17,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isTrue
+import assertk.fail
 import cz.vutbr.fit.interlockSim.domain.SERVICE_BRAKING_DECELERATION_MPS2
 import cz.vutbr.fit.interlockSim.domain.brakingDistanceFrom
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -24,7 +25,9 @@ import cz.vutbr.fit.interlockSim.testutil.AspectFlipOnce
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.testutil.TrainKinematicSample
+import cz.vutbr.fit.interlockSim.testutil.assertNeverPastClearanceStopLine
 import cz.vutbr.fit.interlockSim.testutil.assertStoodAtClearanceStopLine
+import cz.vutbr.fit.interlockSim.testutil.assertVelocityNonIncreasingFrom
 import cz.vutbr.fit.interlockSim.testutil.clearanceStopLine
 import cz.vutbr.fit.interlockSim.testutil.runClearanceStopScenario
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -136,12 +139,21 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 
 		/**
 		 * Largest speed change the FREE rung's stand may end with: the crossing wait is
-		 * root-found, but the velocity integration still runs the first step after the braking
-		 * onset on the old acceleration (#1126), so the braking starts a hair past the room and
-		 * the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s
-		 * line-speed cap, the same residual `Issue1057LateFlipBrakingTest` bounds at 1.0.
+		 * root-found and the engine runs ahead of the velocity integration (#1126), so the
+		 * braking starts at the onset and the stand ends with no snap — 0.015 m/s measured at
+		 * the 80 m/s line-speed cap, one 5 ms sample at the 3 m/s² bound, the same residual
+		 * `Issue1057LateFlipBrakingTest` bounds. Before #1126 the velocity integration ran the
+		 * first step after the onset on the old acceleration and the front's clearance gate
+		 * ended the arrival crawl from about 0.7 m/s.
 		 */
-		const val MAX_RESIDUAL_STEP_MPS = 1.0
+		const val MAX_RESIDUAL_STEP_MPS = 0.1
+
+		/**
+		 * Tolerance for the FREE rung's braking-onset margin (the room left minus the textbook
+		 * braking distance): one 5 ms sample at the 80 m/s cap is 0.4 m of slack, plus the
+		 * generator's position error.
+		 */
+		const val ONSET_MARGIN_TOLERANCE_METERS = 0.5
 	}
 
 	/** One flip-back rung's outcome: the flip's own sample, the stand's samples, and the clear's state. */
@@ -294,11 +306,29 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 			name = "braking distance needed at the flip-back"
 		).isLessThan(stopLine - atFlipBack.totalDistance)
 
-		// Every step of the stand is braking at the bound except the last: the velocity
-		// integration runs one step after the onset on the old acceleration (#1126), the braking
-		// starts that hair past the room, and the front's clearance gate ends the arrival crawl — about 0.7 m/s at the 80 m/s cap,
-		// the same residual `Issue1057LateFlipBrakingTest` bounds at its `MAX_RESIDUAL_STEP_MPS`.
-		// A pre-fix snap from the cap fails the residual bound below, not this tight one.
+		// Braking starts only when the room left to the clearance stop line no longer exceeds
+		// the textbook braking distance at the bound; from there the train only slows down, and
+		// its front never passes the line at any sample (Issue #1126 domain pins).
+		val afterFlipBack = run.samples.filter { it.time >= atFlipBack.time }
+		val onset =
+			afterFlipBack
+				.zipWithNext()
+				.firstOrNull { (a, b) -> b.velocity < a.velocity }
+				?.first
+				?: fail("no velocity drop in any pair of samples after the flip-back: $afterFlipBack")
+		val roomAtOnset =
+			onset.distanceToSemaphore - Train.SEMAPHORE_STOP_CLEARANCE_METERS - brakingDistanceFrom(onset.velocity)
+		assertThat(abs(roomAtOnset), name = "braking-room margin at braking onset")
+			.isLessThanOrEqualTo(ONSET_MARGIN_TOLERANCE_METERS)
+		assertVelocityNonIncreasingFrom(afterFlipBack, onset.time)
+		assertNeverPastClearanceStopLine(run.samples, FREE_APPROACH_BLOCK_LENGTH)
+
+		// Every step of the stand is braking at the bound: the engine writes each stage's
+		// acceleration before the velocity integration reads it (#1126), so the braking starts
+		// at the root-found onset and the front's clearance gate has no crawl left to end
+		// (0.015 m/s at the 80 m/s cap, the same residual `Issue1057LateFlipBrakingTest` bounds
+		// at its `MAX_RESIDUAL_STEP_MPS`). A pre-fix snap from the cap fails the residual bound
+		// below, not this tight one.
 		val worstBrakingStep =
 			run.samples
 				.filter { it.time >= atFlipBack.time }

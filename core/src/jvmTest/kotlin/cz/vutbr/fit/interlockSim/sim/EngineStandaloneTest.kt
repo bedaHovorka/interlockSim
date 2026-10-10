@@ -15,7 +15,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
+import cz.ksimulantenbande.kdisco.Continuous
 import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.ksimulantenbande.kdisco.Variable
 import cz.ksimulantenbande.kdisco.dtMax
@@ -103,6 +105,23 @@ class EngineStandaloneTest : KoinTestBase() {
 
 		/** Delay from the stand test's law switch to its sample: several 0.1 s steps (s). */
 		const val STAND_SAMPLE_DELAY = 0.3
+
+		/** Priority of the witness that runs after every priority-0 [Continuous] (Issue #1126). */
+		const val TRAILING_WITNESS_PRIORITY = -1.0
+	}
+
+	/**
+	 * A [Continuous] that only records what [FakeEngineHost.acceleration] holds each time kDisco
+	 * calls its [derivatives] — one entry per RK stage of every step (Issue #1126).
+	 */
+	private class AccelerationWitness(
+		private val host: FakeEngineHost
+	) : Continuous() {
+		val seen: MutableList<Double> = mutableListOf()
+
+		override fun derivatives() {
+			seen += host.acceleration.state
+		}
 	}
 
 	/**
@@ -172,7 +191,8 @@ class EngineStandaloneTest : KoinTestBase() {
 	 *
 	 * The wait-site tests (Issue #760) also pin `dtMax` to [pinnedDtMax] and run each of [actions]
 	 * once, at its time; the state read at those moments and at the end of the run is kept for the
-	 * assertions.
+	 * assertions. [afterVelocityIntegrationStarted] runs once the velocity integration is in the
+	 * active-continuous list and before the command, so a test can start witnesses around it.
 	 */
 	private class EngineDriverProcess(
 		env: SimulationEnvironment,
@@ -181,9 +201,13 @@ class EngineStandaloneTest : KoinTestBase() {
 		private val runSeconds: Double = RUN_SECONDS,
 		private val pinnedDtMax: Double? = null,
 		private val command: (Engine) -> Unit = { it.accelerateTo(TARGET_SPEED_MPS) },
-		private val actions: List<TimedAction> = emptyList()
+		private val actions: List<TimedAction> = emptyList(),
+		private val afterVelocityIntegrationStarted: () -> Unit = {}
 	) : Interlocking(env) {
 		private val velocityIntegration = SimpleIntegration(host.velocity, host.acceleration)
+
+		/** kDisco priority of the velocity integration: the default, as in [Train]. */
+		val velocityIntegrationPriority: Double get() = velocityIntegration.getPriority()
 		private val pending = actions.sortedBy { it.time }.toMutableList()
 
 		/** Highest acceleration [host] reported, sampled once per [iteration]. */
@@ -216,6 +240,7 @@ class EngineStandaloneTest : KoinTestBase() {
 			host.acceleration.start()
 			host.velocity.start()
 			velocityIntegration.start()
+			afterVelocityIntegrationStarted()
 			command(engine)
 		}
 
@@ -325,6 +350,41 @@ class EngineStandaloneTest : KoinTestBase() {
 		assertThat(driver.peakAcceleration, name = "peak acceleration")
 			.isLessThanOrEqualTo(MAXIMAL_TRAIN_ACCELERATION.toDouble())
 	}
+	// --- Issue #1126: the engine's derivatives run before the velocity integration ---------------
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("engine derivatives run before the velocity integration in every stage (Issue #1126)")
+	fun engineDerivativesRunBeforeTheVelocityIntegrationInEveryStage() {
+		val host = FakeEngineHost()
+		val engine = Engine(host)
+		// `held` sits right behind the velocity integration at the same priority, so it reads
+		// the acceleration exactly when the integration does. `trailing` runs after every
+		// priority-0 continuous, including the engine, so it reads the acceleration the engine
+		// computed for the current stage. The two agree in every stage only when the engine's
+		// derivatives ran before the velocity integration's.
+		val held = AccelerationWitness(host)
+		val trailing = AccelerationWitness(host)
+		val driver =
+			loadContext().use { ctx ->
+				EngineDriverProcess(ctx, host, engine, pinnedDtMax = PINNED_DT_MAX) {
+					held.start()
+					trailing.setPriority(TRAILING_WITNESS_PRIORITY).start()
+				}.also {
+					ctx.setMainProcess(it)
+					ctx.run()
+				}
+			}
+
+		assertThat(host.velocity.state, name = "velocity after the run").isGreaterThan(0.0)
+		// The braking law `(T² − v²) / (2s)` changes with `v`, so a stage whose velocity
+		// integration still saw the step-start acceleration shows up as a mismatch here.
+		assertThat(trailing.seen, name = "stage accelerations read after the engine").isNotEmpty()
+		assertThat(held.seen, name = "accelerations the velocity integration read").isEqualTo(trailing.seen)
+		assertThat(engine.getPriority(), name = "engine priority")
+			.isGreaterThan(driver.velocityIntegrationPriority)
+	}
+
 	// --- Issue #760: the three velocity-target waits end on root-found crossings -------------
 
 	@Test
@@ -406,9 +466,9 @@ class EngineStandaloneTest : KoinTestBase() {
 		// From the first action on, the stop line is `STAND_DISTANCE_GAIN × v²` away, so the law
 		// asks for -5 m/s² at every speed: the bound clamps it to a constant
 		// MINIMAL_TRAIN_DECELERATION, and `v` reaches 0 in finite time. The aspect stays STOP, so
-		// the speed term is the only exit left. The second action only samples: the velocity
-		// integration still runs one step on the old law after a switch (#1126), so the stand time
-		// is exact in closed form only from a sample taken after that step.
+		// the speed term is the only exit left. The second action only samples a point on that
+		// constant-deceleration ramp, from which the stand time is exact in closed form (the engine
+		// runs ahead of the velocity integration since #1126, so the ramp starts at the switch).
 		val driver =
 			runWaitSite(host, command = { it.onWarning(TARGET_SPEED_MPS) }, facing = Signal.STOP) {
 				listOf(
