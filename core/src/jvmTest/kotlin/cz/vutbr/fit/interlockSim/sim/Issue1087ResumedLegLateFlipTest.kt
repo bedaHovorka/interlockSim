@@ -17,6 +17,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isTrue
+import assertk.fail
 import cz.vutbr.fit.interlockSim.domain.SERVICE_BRAKING_DECELERATION_MPS2
 import cz.vutbr.fit.interlockSim.domain.brakingDistanceFrom
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -309,7 +310,12 @@ class Issue1087ResumedLegLateFlipTest : KoinTestBase() {
 		// the textbook braking distance at the bound; from there the train only slows down, and
 		// its front never passes the line at any sample (Issue #1126 domain pins).
 		val afterFlipBack = run.samples.filter { it.time >= atFlipBack.time }
-		val onset = afterFlipBack.zipWithNext().first { (a, b) -> b.velocity < a.velocity }.first
+		val onset =
+			afterFlipBack
+				.zipWithNext()
+				.firstOrNull { (a, b) -> b.velocity < a.velocity }
+				?.first
+				?: fail("no velocity drop in any pair of samples after the flip-back: $afterFlipBack")
 		val roomAtOnset =
 			onset.distanceToSemaphore - Train.SEMAPHORE_STOP_CLEARANCE_METERS - brakingDistanceFrom(onset.velocity)
 		assertThat(abs(roomAtOnset), name = "braking-room margin at braking onset")

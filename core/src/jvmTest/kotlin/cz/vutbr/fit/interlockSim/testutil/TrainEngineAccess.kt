@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.sim.Engine
+import cz.vutbr.fit.interlockSim.sim.SimpleIntegration
 import cz.vutbr.fit.interlockSim.sim.Train
 
 /**
@@ -37,3 +38,17 @@ internal fun engineOf(train: Train): Engine {
  * that only need process lifecycle checks.
  */
 fun motorOf(train: Train): Process = engineOf(train)
+
+/**
+ * The train's velocity integration (`Train.va`, `velocity ← acceleration`), reached by reflection.
+ *
+ * The field is private with no accessor, for the same observability reason as [engineOf]. The
+ * Issue #1126 ordering fix gives the engine priority 1.0 above it and pins the invariant "no
+ * other `Continuous` sets a priority"; a tripwire test reads this integration's priority to
+ * check the train side of that invariant.
+ */
+internal fun velocityIntegrationOf(train: Train): SimpleIntegration {
+	val field = Train::class.java.getDeclaredField("va")
+	field.isAccessible = true
+	return field.get(train) as SimpleIntegration
+}

@@ -66,7 +66,9 @@ class ShuntingLoopTrajectorySampler(
 				if (wait > 0.0) hold(wait)
 				val approved = loop.getApprovedTrains()
 				val train = followed ?: approved.firstOrNull()?.also { followed = it }
-				val present = train?.takeIf { it in approved }
+				// Identity check on purpose (`===`): the KDoc promises to follow the train by
+				// object identity, and `in` would go through `equals` instead.
+				val present = train?.takeIf { candidate -> approved.any { candidate === it } }
 				collected += TrajectorySample(time(), train?.name, present?.getVelocity(), present?.totalDistance)
 			}
 		}

@@ -146,6 +146,13 @@ formula change. With it, each RK stage integrates the velocity with that
 stage's acceleration, and the stand residual at 1 ms is one 5 ms sample at
 the braking bound (0.015 m/s).
 
+One second-order consequence of the reorder: `clampStand()` writes
+`velocityVariable.state` mid-derivative while the engine brings a train to a
+stand, and that write now lands before the position integrations read the
+stage velocity, where they previously read the unclamped stage value. The
+goldens were unaffected at 1 ms, but this write is why a future
+trajectory-change at a stand need not come from a formula change.
+
 The generator's `dtMax` stays at 1 ms. The #760 ladder (1e-2, 1e-1, 1.0;
 table in the PR #1133 description) was walked before #1126 and a raise is a
 separate decision. See the comment at `dtMax` in `Generator.kt`.
