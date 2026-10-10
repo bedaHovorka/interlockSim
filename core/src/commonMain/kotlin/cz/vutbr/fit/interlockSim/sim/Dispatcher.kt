@@ -12,10 +12,12 @@ package cz.vutbr.fit.interlockSim.sim
 /**
  * Control seam between the kDisco simulation kernel and dispatch policy.
  *
- * A [Dispatcher] encapsulates **what to do** (train admission and forward-path
- * reservation policy) independently of **how the simulation steps** (kDisco
- * process scheduling and `hold()`/`passivate()` mechanics), as a pure decision
- * function: given an observed snapshot, return the list of decisions to apply.
+ * A [Dispatcher] encapsulates **what to do** (train admission, and forward-path
+ * reservation policy including the **choice of the reservation target** among the
+ * candidates the shell reports — [BlockInputObservation.candidateTargets], Issue #970)
+ * independently of **how the simulation steps** (kDisco process scheduling and
+ * `hold()`/`passivate()` mechanics), as a pure decision function: given an observed
+ * snapshot, return the list of decisions to apply.
  *
  * [decide] must not mutate simulation state or retain [observed] beyond the call.
  * All effects are expressed as the returned [DispatchDecision]s; the caller

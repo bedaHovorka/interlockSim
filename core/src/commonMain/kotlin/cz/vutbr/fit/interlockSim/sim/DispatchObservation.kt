@@ -106,8 +106,9 @@ data class QueuedTrainObservation(
 
 /**
  * Everything a dispatch policy needs to decide whether to extend a reservation
- * toward [towardSemaphoreName], pre-computed by the shell from live block/registry
- * state before [Dispatcher.decide] is called.
+ * toward [towardSemaphoreName], and to which target ([candidateTargets]) — facts
+ * computed by the shell from live block/registry state before [Dispatcher.decide] is
+ * called; the choice among them is the dispatcher's (Issue #970).
  *
  * [SimulationSnapshot]'s [cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading]
  * only carries `blockId`/`state`/`trainId` — it has no notion of *which input* a
