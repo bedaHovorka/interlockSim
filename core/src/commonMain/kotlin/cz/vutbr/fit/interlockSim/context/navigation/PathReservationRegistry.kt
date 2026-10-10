@@ -385,7 +385,7 @@ class PathReservationRegistry(
 		}
 
 	/**
-	 * Unregister all blocks reserved by a train.
+	 * Unregister all blocks reserved by a train (whole-route teardown).
 	 *
 	 * Removes all bidirectional mappings for the given train, regardless of block state.
 	 * This is used for simulation cleanup, test scenarios, and forced release.
@@ -395,11 +395,23 @@ class PathReservationRegistry(
 	 * - Removes trainToBlocks[trainId]
 	 * - Removes blockToTrain[block] and the block's registration timestamp for all blocks owned by this train
 	 * - Removes trainToPathInfo[trainId] (Issue #295/#296)
+	 * - Releases the train's held switch claims too ([unregisterSwitches]): a whole-route teardown
+	 *   unlocks every held switch unconditionally, so the bulk API cannot leave a stale claim behind
+	 *   any more than the per-block funnel can (Issue #1103 review). Already-blockless trains release
+	 *   their claims too -- a switch claim without a held block is exactly the stale shape. Callers
+	 *   that also call [unregisterSwitches] themselves get an idempotent no-op.
 	 *
 	 * @param trainId The train identifier
 	 * @return List of blocks that were released (empty if train had no reservations)
 	 */
 	fun unregister(trainId: String): List<DynamicTrackBlock> {
+		if (trainToBlocks[trainId] == null) {
+			// No blocks to release, but a switch claim can exist without one -- exactly the stale
+			// shape -- so the wholesale switch release still runs.
+			unregisterSwitches(trainId)
+			return emptyList()
+		}
+
 		val blocks: List<DynamicTrackBlock> = trainToBlocks[trainId] ?: return emptyList()
 
 		// Remove all blocks from mappings (regardless of state)
@@ -411,6 +423,10 @@ class PathReservationRegistry(
 		// Remove train entry and PathInfo
 		trainToBlocks.remove(trainId)
 		trainToPathInfo.remove(trainId)
+
+		// Issue #1103 review: whole-route teardown releases the switch claims too, so no train
+		// leaves this method with stale ownership anywhere in the registry.
+		unregisterSwitches(trainId)
 
 		logger.debug {
 			"unregister: Released ${blocks.size} blocks for '$trainId'"
@@ -440,8 +456,8 @@ class PathReservationRegistry(
 	 * - Releases every switch claim at the block's [DynamicTrackBlock.ends] that is stale afterwards
 	 *   ([isStaleSwitchOwnership]: a plain claim whose owner holds no block bounded by the switch any
 	 *   more) through [unregisterSwitch]. This makes [unregisterBlock] the funnel for per-block
-	 *   releases (whole-route cleanup goes through [unregister] + [unregisterSwitches] and unlocks
-	 *   wholesale instead); a reclaim failure is contained in [reclaimStaleSwitchOwnership] and the
+	 *   releases (whole-route teardown goes through [unregister], which releases the claims
+	 *   wholesale itself); a reclaim failure is contained in [reclaimStaleSwitchOwnership] and the
 	 *   claim stays healable there (Issue #1065, #1103). A flank claim, and a claim whose owner still
 	 *   holds the block on the other side of the switch, stay.
 	 *

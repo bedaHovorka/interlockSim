@@ -480,6 +480,43 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(switch.locked).isTrue()
 		}
 
+		@Test
+		fun `unregister releases a held switch claim even when the train holds no block`() {
+			// Arrange - Issue #1103 review round: bulk release must clear switch claims too, and the
+			// claim-with-no-held-block shape is exactly the stale one this PR attacks.
+			val switch = switches().first()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act - the train holds no blocks at all.
+			assertThat(registry.unregister("train1")).isEmpty()
+
+			// Assert
+			assertThat(registry.getSwitchOwner(switch), "claim without a block").isNull()
+			assertThat(registry.getSwitches("train1"), "train's switch list").isEmpty()
+			assertThat(switch.locked, "lock").isFalse()
+		}
+
+		@Test
+		fun `unregister releases held switch claims together with the blocks`() {
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+
+			// Act - the whole-route teardown.
+			val released = registry.unregister("train1")
+
+			// Assert - the blocks come back, and the switch is unlocked and reusable in the
+			// OPPOSITE position by another train.
+			assertThat(released).containsExactly(before, after)
+			assertThat(registry.getSwitchOwner(switch), "claim after unregister").isNull()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			assertThat(switch.locked, "lock after unregister").isFalse()
+			switch.changeConf()
+			registry.registerSwitches("train2", listOf(switch))
+			assertThat(registry.getSwitchOwner(switch), "second train's claim").isEqualTo("train2")
+		}
+
 		@ParameterizedTest(name = "flank = {0}")
 		@ValueSource(booleans = [false, true])
 		fun `a mixed list is rejected atomically without partial registration`(flank: Boolean) {
