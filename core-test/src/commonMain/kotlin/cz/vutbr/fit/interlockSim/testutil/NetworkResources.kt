@@ -54,6 +54,6 @@ object NetworkResources {
 	/** Station-scale Praha hlavní nádraží network (117 blocks, 50 switches, 11 InOuts). */
 	val PRAHA_HLAVNI_NADRAZI_XML: String by lazy { fixture("praha-hlavni-nadrazi.xml") }
 
-	/** Rudý Újezd station network. */
-	val RUDY_UJEZD_XML: String by lazy { fixture("rudyUjezd.xml") }
+	/** Červený Újezd station network. */
+	val CERVENY_UJEZD_XML: String by lazy { fixture("cerveny_ujezd.xml") }
 }

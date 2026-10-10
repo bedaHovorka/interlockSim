@@ -85,47 +85,49 @@ class MultiTrainScaleStressTest : KoinTestBase() {
 	@DisplayName("twentyTrainStress: 20 trains enter and exit Praha at real-time ratio >= 1, 10 runs")
 	fun twentyTrainStress() {
 		val ratios = mutableListOf<Double>()
-		repeat(STRESS_RUNS) { runIndex ->
-			val ctx =
-				CommonTestFixtures
-					.parseSimulationContext(
-						NetworkResources.PRAHA_HLAVNI_NADRAZI_XML,
-						getKoin().get<SimulationProcessFactory>()
-					).tracked()
-			ctx.getInOuts() // initialize dynamic wrappers
-			val loop =
-				MultiTrainLoop(
-					ctx,
-					endTime = TWENTY_TRAIN_END_TIME,
-					trainSpecs = twentyTrainSpecs(),
-					maxConcurrentTrains = MAX_CONCURRENT_TRAINS,
-					maxEntryAttempts = MAX_ENTRY_ATTEMPTS
-				)
-			ctx.setMainProcess(loop)
-
-			val startMs = System.currentTimeMillis()
-			ctx.run()
-			val wallSeconds = (System.currentTimeMillis() - startMs) / 1000.0
-			val realTimeRatio = TWENTY_TRAIN_END_TIME / wallSeconds
-			ratios.add(realTimeRatio)
-
-			logger.info {
-				"20-train Praha stress run ${runIndex + 1}/$STRESS_RUNS: " +
-					"entered=${loop.getTrainsEntered()}, exited=${loop.getTrainsExited()}, " +
-					"maxConcurrent=${loop.getMaxConcurrentTrains()}, occupied=${loop.getOccupiedResourceCount()}, " +
-					"entryFailures=${loop.getEntryFailures().size}, wall=${wallSeconds}s, ratio=$realTimeRatio"
-			}
-			assertThat(loop.getEntryFailures(), name = "entry failures").isEmpty()
-			assertThat(loop.getTrainsEntered(), name = "trains entered").isEqualTo(TRAINS)
-			assertThat(loop.getTrainsExited(), name = "trains exited").isEqualTo(TRAINS)
-			assertThat(loop.getOccupiedResourceCount(), name = "occupied resources").isZero()
-			assertThat(realTimeRatio, name = "real-time ratio").isGreaterThanOrEqualTo(MIN_REAL_TIME_RATIO)
-			ctx.close()
-		}
+		repeat(STRESS_RUNS) { runIndex -> ratios.add(runStressRun(runIndex)) }
 
 		logger.info {
 			"20-train Praha stress aggregate: runs=$STRESS_RUNS, minRatio=${ratios.minOrNull()}, " +
 				"meanRatio=${ratios.average()}, maxRatio=${ratios.maxOrNull()}"
 		}
+	}
+
+	private fun runStressRun(runIndex: Int): Double {
+		val ctx =
+			CommonTestFixtures
+				.parseSimulationContext(
+					NetworkResources.PRAHA_HLAVNI_NADRAZI_XML,
+					getKoin().get<SimulationProcessFactory>()
+				).tracked()
+		ctx.getInOuts() // initialize dynamic wrappers
+		val loop =
+			MultiTrainLoop(
+				ctx,
+				endTime = TWENTY_TRAIN_END_TIME,
+				trainSpecs = twentyTrainSpecs(),
+				maxConcurrentTrains = MAX_CONCURRENT_TRAINS,
+				maxEntryAttempts = MAX_ENTRY_ATTEMPTS
+			)
+		ctx.setMainProcess(loop)
+
+		val startMs = System.currentTimeMillis()
+		ctx.run()
+		val wallSeconds = (System.currentTimeMillis() - startMs) / 1000.0
+		val realTimeRatio = TWENTY_TRAIN_END_TIME / wallSeconds
+
+		logger.info {
+			"20-train Praha stress run ${runIndex + 1}/$STRESS_RUNS: " +
+				"entered=${loop.getTrainsEntered()}, exited=${loop.getTrainsExited()}, " +
+				"maxConcurrent=${loop.getMaxConcurrentTrains()}, occupied=${loop.getOccupiedResourceCount()}, " +
+				"entryFailures=${loop.getEntryFailures().size}, wall=${wallSeconds}s, ratio=$realTimeRatio"
+		}
+		assertThat(loop.getEntryFailures(), name = "entry failures").isEmpty()
+		assertThat(loop.getTrainsEntered(), name = "trains entered").isEqualTo(TRAINS)
+		assertThat(loop.getTrainsExited(), name = "trains exited").isEqualTo(TRAINS)
+		assertThat(loop.getOccupiedResourceCount(), name = "occupied resources").isZero()
+		assertThat(realTimeRatio, name = "real-time ratio").isGreaterThanOrEqualTo(MIN_REAL_TIME_RATIO)
+		ctx.close()
+		return realTimeRatio
 	}
 }
