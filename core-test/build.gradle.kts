@@ -17,6 +17,7 @@ plugins {
 
 // Load versions from root gradle.properties
 val assertkVersion: String by project
+val logbackVersion: String by project
 val koinVersion: String by project
 val kotlinVersion: String by project
 val kdiscoVersion: String by project
@@ -94,6 +95,12 @@ kotlin {
 				// Issue #1110: RepeatedTestCapExtensionTest runs its fixtures through EngineTestKit.
 				// junit-jupiter-api comes from jvmMain; only the testkit/launcher bits are extra.
 				implementation("org.junit.platform:junit-platform-testkit:$junitPlatformVersion")
+				// Issue #1011: this module ships no logging engine, and its only runtime classpath
+				// config is :core's production logback.xml (picked up from the :core jvm jar).
+				// Without a provider, SLF4J prints its no-provider banner to stderr at first use
+				// and NOP-logs; with logback-classic plus the single-stream logback-test.xml below,
+				// console test output stays on stdout like in every other JVM module.
+				implementation("ch.qos.logback:logback-classic:$logbackVersion")
 				runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
 				runtimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 			}

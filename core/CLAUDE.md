@@ -34,9 +34,25 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
   failures ([#1011](https://github.com/bedaHovorka/interlockSim/issues/1011)), and
   on 2026-10-01 under heavy machine load (load average ~90) on
   `:core:integrationTest` and `:desktop-ui:test` (that `:desktop-ui:test` run also
-  had one real, load-induced timeout failure). The cause is not confirmed — no
-  `--stacktrace` was captured. Gate evidence is therefore taken from a complete
-  re-run's XML, never from the failed attempt.
+  had one real, load-induced timeout failure).
+  **Test logging therefore stays on one console stream** (#1011): every
+  `logback-test.xml` sends its console output to stdout only — the former
+  `System.err` twin wrote each ERROR event twice, and Gradle drains a test JVM's
+  two streams with two forwarding threads. That concurrency is the suspect
+  mechanism behind the JVM XML failures — upstream only proves it for Kotlin test
+  tasks, so for JVM `Test` tasks it is a probable cause and the single-stream
+  policy is a precaution, not a confirmed fix. A per-module
+  `TestLoggingSingleStreamTest` tripwire fails if a stderr appender reappears
+  (desktop-ui's stdout `SPIKE_MEASUREMENTS` appender for the SP2c.26 F1 spike
+  tests is unaffected). Gate evidence is still taken from a complete re-run's
+  XML, never from a failed attempt.
+- **`clean` is ordered before other build tasks** by the root build script (#1011);
+  the aggregate `cleanAllTests` task is excluded to avoid a task-graph cycle.
+  With `org.gradle.parallel=true`, Gradle gives no ordering between one project's
+  `clean` and another project's work, so a `clean build …` gate could compile
+  `:core-test`/`:dispatcher-agent` against `:core` jvm classes a `clean` was
+  deleting (`Unresolved reference: SimulationContext`). The `mustRunAfter` block in
+  the root `build.gradle.kts` supplies the ordering no dependency edge can express.
 - **`generateNativeResourceRoot`** generates `NATIVE_RESOURCE_ROOTS` with
   **absolute** paths to the resource directories of `:core` and `:core-test`.
   A relocated native binary fails at its first `Resources.read()` — a known
