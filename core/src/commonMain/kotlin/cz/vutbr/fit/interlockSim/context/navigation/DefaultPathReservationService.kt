@@ -3985,9 +3985,10 @@ class DefaultPathReservationService(
 	/**
 	 * Issue #1076: reclaim STALE foreign ownership among [switches] before a candidate for
 	 * [trainId] touches them, so the candidate never has to overwrite it (see
-	 * [PathReservationRegistry.registerSwitches]). No block release leaves ownership stale any
-	 * more: [PathReservationRegistry.unregisterBlock] reclaims at the freed block's ends on every
-	 * release path, including a direct registry call (Issue #1103 item 1). This step stays for the
+	 * [PathReservationRegistry.registerSwitches]). No per-block release leaves ownership stale any
+	 * more: [PathReservationRegistry.unregisterBlock] reclaims at the freed block's ends, including
+	 * a direct registry call (Issue #1103 item 1); whole-route cleanup (`registry.unregister` +
+	 * `unregisterSwitches`) unlocks wholesale instead. This step stays for the
 	 * one remaining path: the registry is public, and [PathReservationRegistry.registerSwitches]
 	 * accepts a switch the train holds no adjacent block for -- a claim born stale, which no block
 	 * release ever visits. Without this step the G10 pre-check would refuse a same-position

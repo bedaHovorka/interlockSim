@@ -55,12 +55,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   movement; an under-locked one is a safety failure. This is the conservative half of the
  *   railway-domain question round 3 raised.
  *   **Superseded by Issue #1065:** the ruling this KDoc asked for has a mechanism, not a policy
- *   change here. `PathReservationRegistry.unregisterBlock` -- which every released block passes
+ *   change here. `PathReservationRegistry.unregisterBlock` -- which every per-block release passes
  *   through, including this class's `releaseBlock` and its last-resort direct fallback (Issue
  *   #1103) -- reclaims a switch's claim once its owner holds no block adjacent to it, regardless
  *   of which release path freed that block. So a switch left locked here by this class IS
- *   reclaimed, just not by this class: by the next block release (from here or anywhere else)
- *   that leaves it with no adjacent block. This class's own conservatism above is unchanged and
+ *   reclaimed by the release itself, inside `unregisterBlock`, which frees the adjacent block.
+ *   This class's own conservatism above is unchanged and
  *   still correct; it no longer needs to be, because it is no longer the last word on the
  *   switch's fate.
  * - **Per-block failure is contained.** A block that throws is logged and skipped; the rest of the

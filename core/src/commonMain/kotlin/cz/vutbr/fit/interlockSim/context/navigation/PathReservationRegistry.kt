@@ -439,9 +439,11 @@ class PathReservationRegistry(
 	 * - If this was the last block, removes trainToBlocks[trainId] (but keeps trainToPathInfo[trainId])
 	 * - Releases every switch claim at the block's [DynamicTrackBlock.ends] that is stale afterwards
 	 *   ([isStaleSwitchOwnership]: a plain claim whose owner holds no block bounded by the switch any
-	 *   more) through [unregisterSwitch], so no release path can leave switch ownership stale
-	 *   (Issue #1065, #1103). A flank claim, and a claim whose owner still holds the block on the
-	 *   other side of the switch, stay.
+	 *   more) through [unregisterSwitch]. This makes [unregisterBlock] the funnel for per-block
+	 *   releases (whole-route cleanup goes through [unregister] + [unregisterSwitches] and unlocks
+	 *   wholesale instead); a reclaim failure is contained in [reclaimStaleSwitchOwnership] and the
+	 *   claim stays healable there (Issue #1065, #1103). A flank claim, and a claim whose owner still
+	 *   holds the block on the other side of the switch, stay.
 	 *
 	 * ## PathInfo Lifecycle (Issue #301 Fix)
 	 *
@@ -515,9 +517,13 @@ class PathReservationRegistry(
 		}
 
 		// Issue #1103: the block is gone, so a plain claim at its ends that no held block protects
-		// any more is stale now; release it here, where EVERY block release passes, rather than in
-		// each caller.
-		block.ends().filterIsInstance<DynamicRailSwitch>().forEach { reclaimStaleSwitchOwnership(it) }
+		// any more is stale now; release it here, where every per-block release passes, rather than
+		// in each caller.
+		block
+			.ends()
+			.filterIsInstance<DynamicRailSwitch>()
+			.filter { it.locked }
+			.forEach { reclaimStaleSwitchOwnership(it) }
 
 		return true
 	}
@@ -528,22 +534,41 @@ class PathReservationRegistry(
 	 *
 	 * This is the mechanism that makes the SI-5 guard in `DynamicRailSwitch.setUpPath` livable
 	 * (Issue #1065): without it, a train that has passed a switch keeps it locked until its FULL
-	 * journey completes ([unregister]'s unconditional unlock), and the next train needing the other
-	 * position would be refused forever instead of merely waiting -- confirmed on EVERY repetition of
-	 * the vyhybna shunting loop. [unregisterBlock] runs it for the freed block's ends;
-	 * `DefaultPathReservationService` runs it for a candidate's switches before taking them
-	 * (reservePath Step 2e.5, Issue #1076).
+	 * journey completes (the whole-route `unregister` + `unregisterSwitches` pair's unconditional
+	 * unlock), and the next train needing the other position would be refused forever instead of
+	 * merely waiting -- confirmed on EVERY repetition of the vyhybna shunting loop.
+	 * [unregisterBlock] runs it for the freed block's ends; `DefaultPathReservationService` runs it
+	 * for a candidate's switches before taking them (reservePath Step 2e.5, Issue #1076).
 	 *
-	 * @return the owner whose stale claim was released, or `null` when nothing was released
+	 * Listener containment: `unregisterSwitch` -> `DynamicRailSwitch.unlock()` invokes property
+	 * listeners synchronously. A throwing listener is contained by the cell itself
+	 * (`DynamicRailSwitch.notifyListeners`: logged, the remaining listeners and the lock state
+	 * change still complete); the try/catch here is defense-in-depth, so the caller's own work
+	 * (block release, event emission, reservePath) also survives a throw. Both ownership maps stay
+	 * consistent -- [unregisterSwitch] removes the map entries only after `unlock()`.
+	 *
+	 * @return the owner whose stale claim was released, or `null` when nothing was released or the
+	 *   release failed and was contained
 	 * @since Issue #1065 (moved here from the service, Issue #1103)
 	 */
 	fun reclaimStaleSwitchOwnership(switch: DynamicRailSwitch): String? {
-		val owner = getSwitchOwner(switch) ?: return null
-		if (!isStaleSwitchOwnership(switch)) return null
-		unregisterSwitch(owner, switch)
+		val switchName = switch.staticRef.getName()
+		val claim = getSwitchClaim(switch)
+		if (claim == null || !isStaleSwitchOwnership(switch)) return null
+		val owner = claim.trainId
+		try {
+			unregisterSwitch(owner, switch)
+		} catch (e: Exception) {
+			logger.warn(e) {
+				"reclaimStaleSwitchOwnership: Failed to release stale ownership of switch $switchName " +
+					"held by '$owner' -- the claim stays in the ownership maps and the switch stays " +
+					"unlocked; a later reclaim cleans it"
+			}
+			return null
+		}
 		logger.info {
-			"reclaimStaleSwitchOwnership: Released stale ownership of switch ${switch.staticRef.getName()} " +
-				"held by '$owner' -- the owner holds no block bounded by it"
+			"reclaimStaleSwitchOwnership: Released stale ownership of switch $switchName held by " +
+				"'$owner' -- the owner holds no block bounded by it"
 		}
 		return owner
 	}

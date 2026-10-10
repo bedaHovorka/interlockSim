@@ -30,14 +30,15 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
-import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
+import cz.vutbr.fit.interlockSim.testutil.throwingSwitchUnlockListener
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -631,7 +632,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 			return Triple(before, switch, after)
 		}
 
-		@ParameterizedTest(name = "flank = {0}")
+		@ParameterizedTest(name = "release-time reclaim, flank = {0}")
 		@ValueSource(booleans = [false, true])
 		fun `unregisterBlock reclaims a stale plain claim at the freed block's ends and keeps a flank claim`(flank: Boolean) {
 			// Arrange - Issue #1103: train1 holds ONE block bounded by the switch and claims the switch.
@@ -704,6 +705,39 @@ class PathReservationRegistryTest : KoinTestBase() {
 			registry.registerSwitches("train2", listOf(switch))
 			assertThat(registry.getSwitchOwner(switch), "second train's claim").isEqualTo("train2")
 			assertThat(switch.locked, "second train's lock").isTrue()
+		}
+
+		@Test
+		fun `a throwing switch listener does not abort the release nor the reclaim`() {
+			// Arrange - Issue #1103 review: DynamicRailSwitch fires property listeners synchronously
+			// from inside the reclaim's unregisterSwitch. The release funnel must survive that
+			// throw, and the switch's per-listener containment (the review's ruling C) must leave
+			// the reclaim able to clean the claim in the same call.
+			val (before, switch, after) = straddledSwitch()
+			assertThat(registry.registerAtomic("train1", listOf(before, after)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			registry.registerSwitches("train1", listOf(switch))
+			val throwing = throwingSwitchUnlockListener()
+			switch.addPropertyChangeListener(throwing)
+
+			// Act 1 - free the block BEFORE the switch: the claim is not stale yet (the train still
+			// holds the block after the switch), so the reclaim keeps it.
+			assertThat(registry.unregisterBlock("train1", before)).isTrue()
+			assertThat(registry.getSwitchOwner(switch), "owner after act 1").isEqualTo("train1")
+
+			// Act 2 - the LAST block bounded by the switch is freed, so the reclaim runs
+			// unregisterSwitch -> unlock() -> the throwing listener throws into the notify loop.
+			assertThat(registry.unregisterBlock("train1", after)).isTrue()
+
+			// Assert - the release completed and the reclaim fully cleaned the claim: the cell-level
+			// containment logged the failure and ran on, so the map cleanup after unlock() also ran.
+			// The block mappings are gone, the switch is unlocked and immediately claimable again.
+			assertThat(registry.getBlocks("train1")).isEmpty()
+			assertThat(registry.getSwitchOwner(switch), "owner after the reclaim").isNull()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			assertThat(switch.locked, "lock after the reclaim").isFalse()
+			registry.registerSwitches("train2", listOf(switch))
+			assertThat(registry.getSwitchOwner(switch), "second train's claim").isEqualTo("train2")
 		}
 	}
 
@@ -822,7 +856,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 		@Test
 		fun `addBlockOccupancyListener delivers events to subscriber`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			val block = blocks.first()
 			val event = fakeEvent(block)
 
@@ -834,7 +868,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 		@Test
 		fun `removeBlockOccupancyListener stops event delivery`() {
-			val listener = RecordingListener()
+			val listener = RecordingBlockOccupancyListener()
 			val block = blocks.first()
 			val event = fakeEvent(block)
 
@@ -847,8 +881,8 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 		@Test
 		fun `multiple listeners receive the same event in registration order`() {
-			val first = RecordingListener()
-			val second = RecordingListener()
+			val first = RecordingBlockOccupancyListener()
+			val second = RecordingBlockOccupancyListener()
 			val block = blocks.first()
 			val event = fakeEvent(block)
 
@@ -1177,14 +1211,6 @@ class PathReservationRegistryTest : KoinTestBase() {
 		held.filter { it !in kept }.forEach { block ->
 			block.cancelPathSetup(requireNotNull(block.reservedFrom) { "a reserved block has a reservedFrom" })
 			assertThat(registry.unregisterBlock(trainId, block)).isTrue()
-		}
-	}
-
-	private class RecordingListener : BlockOccupancyListener {
-		val events = mutableListOf<BlockOccupancyEvent>()
-
-		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
-			events.add(event)
 		}
 	}
 }

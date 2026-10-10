@@ -47,6 +47,10 @@ private val logger = KotlinLogging.logger {}
  * - "locked" property: Fired when lock state changes
  *   - `lock()`/`unlock()`: Fire event only if state actually changes
  *
+ * Listener containment (Issue #1103): the state write is committed before listeners run, and
+ * each listener call is contained (exception logged, the rest notified), so a faulty listener
+ * cannot abort a lock transaction or suppress the listeners after it.
+ *
  * @property static The static switch object with immutable editing-time properties
  */
 class DynamicRailSwitch(
@@ -85,6 +89,31 @@ class DynamicRailSwitch(
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**
+	 * Notifies every listener of one property change, one listener at a time (Issue #1103).
+	 *
+	 * A listener is a passenger of this switch, not the driver: the state change is already
+	 * committed above, so a throwing listener must not leak out of here, abort a lock
+	 * transaction mid-way, or starve the listeners after it. Its failure is logged; the loop
+	 * continues. The interlocking state itself cannot be corrupted by a listener.
+	 */
+	private fun notifyListeners(
+		propertyName: String,
+		oldValue: Any?,
+		newValue: Any?
+	) {
+		listeners.forEach { listener ->
+			try {
+				listener.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue))
+			} catch (e: Exception) {
+				logger.warn(e) {
+					"Switch ${staticRef.getName()}: listener failed on $propertyName change " +
+						"($oldValue -> $newValue); continuing with the remaining listeners"
+				}
+			}
+		}
+	}
+
+	/**
 	 * Changes the switch configuration to the opposite position.
 	 *
 	 * @throws IllegalStateException if switch is locked (safety property SI-5)
@@ -99,7 +128,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
-		listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
+		notifyListeners("conf", oldConf, conf)
 	}
 
 	override fun cancelPathSetup(
@@ -153,7 +182,7 @@ class DynamicRailSwitch(
 		}
 		conf = newConf
 		if (oldConf != newConf) {
-			listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
+			notifyListeners("conf", oldConf, newConf)
 		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
@@ -215,7 +244,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		notifyListeners("locked", oldLocked, locked)
 	}
 
 	/**
@@ -232,7 +261,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		notifyListeners("locked", oldLocked, locked)
 	}
 
 	/**

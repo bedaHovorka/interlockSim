@@ -32,6 +32,7 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.passAndRelease
 import cz.vutbr.fit.interlockSim.testutil.routeBlocksOf
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
+import cz.vutbr.fit.interlockSim.testutil.throwingSwitchUnlockListener
 import cz.vutbr.fit.interlockSim.testutil.topologicalPathBlocks
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -137,10 +138,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	@DisplayName("a block freed through the registry directly leaves no stale switch for the candidate to reclaim")
 	fun directRegistryReleaseLeavesNoStaleOwnershipForTheCandidate() {
 		// Given: OTHER_OWNER holds the k2-side block bounded by vA and claims vA for it.
-		val nextToVA = blockNearVAOffCandidatePath()
-		assertThat(registry.registerAtomic(OTHER_OWNER, listOf(nextToVA)))
-			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
-		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
+		val nextToVA = givenOtherOwnerClaimsVA()
 
 		// When: the block leaves the registry directly, with no service in between.
 		assertThat(registry.unregisterBlock(OTHER_OWNER, nextToVA)).isTrue()
@@ -171,6 +169,19 @@ class Issue1076RegressionTest : KoinTestBase() {
 		assertThat(registry.getSwitchOwner(switchVA)).isEqualTo(CANDIDATE)
 	}
 
+	/**
+	 * The stale-window seed: [OTHER_OWNER] reserves the k2-side block bounded by vA
+	 * ([blockNearVAOffCandidatePath]) and claims vA for it. Returns the block so a test can free it
+	 * through its chosen release path.
+	 */
+	private fun givenOtherOwnerClaimsVA(): DynamicTrackBlock {
+		val nextToVA = blockNearVAOffCandidatePath()
+		assertThat(registry.registerAtomic(OTHER_OWNER, listOf(nextToVA)))
+			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
+		return nextToVA
+	}
+
 	@Test
 	@Timeout(10, unit = TimeUnit.SECONDS)
 	@DisplayName("a same-position candidate over a LIVE foreign switch is refused as transient contention")
@@ -181,9 +192,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 		// this arrangement is deliberately not physically consistent, because no consistent live
 		// same-position owner exists without a block conflict that would refuse the candidate
 		// first. It isolates the ownership guard -- do not "fix" it into a consistent route.
-		assertThat(registry.registerAtomic(OTHER_OWNER, listOf(blockNearVAOffCandidatePath())))
-			.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
-		registry.registerSwitches(OTHER_OWNER, listOf(switchVA))
+		givenOtherOwnerClaimsVA()
 
 		// When / Then: before the fix this traversed vA and stole the ownership entry.
 		assertCandidateRefusedAndOwnerIntact()
@@ -285,10 +294,11 @@ class Issue1076RegressionTest : KoinTestBase() {
 	}
 
 	/**
-	 * Issue #1103: a block release drops the block from the registry, publishes the release event,
-	 * then reclaims the stale switch locks. The reclaim runs in a `finally`, so a release-event
-	 * listener that throws can no longer leave the released train owning vA; its exception still
-	 * reaches the caller.
+	 * Issue #1103: a block release drops the block from the registry and reclaims the stale switch
+	 * locks INSIDE `registry.unregisterBlock` -- before the service publishes the release event. A
+	 * reclaim failure is contained (logged, `null` returned), so it can no longer skip the reclaim
+	 * or abort the funnel; a release-EVENT listener that throws still propagates its exception to
+	 * the caller.
 	 */
 	@Test
 	@Timeout(10, unit = TimeUnit.SECONDS)
@@ -316,6 +326,48 @@ class Issue1076RegressionTest : KoinTestBase() {
 		assertThat(registry.getSwitches(OTHER_OWNER)).isEmpty()
 		assertThat(registry.getSwitchOwner(switchVA)).isNull()
 		assertThat(switchVA.locked).isFalse()
+	}
+
+	/**
+	 * Issue #1103 review: a SWITCH property listener throws while the reclaim's `unregisterSwitch` ->
+	 * `DynamicRailSwitch.unlock()` notifies it -- inside `unregisterBlock`, BEFORE the service
+	 * publishes the release event. Without the containment in `reclaimStaleSwitchOwnership` the
+	 * exception would escape the release funnel and the freed block would never be announced
+	 * (the phantom reservation). A throwing BLOCK-EVENT listener is a different seam, covered by
+	 * [aThrowingReleaseListenerDoesNotSkipTheReclaim].
+	 */
+	@Test
+	@Timeout(10, unit = TimeUnit.SECONDS)
+	@DisplayName("a throwing switch listener does not suppress the release event nor the recovery")
+	fun aThrowingSwitchListenerDoesNotSuppressTheReleaseEventNorTheRecovery() {
+		// Given: OTHER_OWNER holds the k2-side block bounded by vA and claims vA for it, through the
+		// direct-registry production shape (the dispatcher's last-resort fallback). A switch property
+		// listener throws on every unlock notification; released blocks are recorded separately.
+		val nextToVA = givenOtherOwnerClaimsVA()
+		val throwingSwitchListener = throwingSwitchUnlockListener()
+		switchVA.addPropertyChangeListener(throwingSwitchListener)
+		val released = mutableListOf<DynamicTrackBlock>()
+		registry.addBlockOccupancyListener { event ->
+			if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) released.add(event.block)
+		}
+
+		// When: the block leaves the registry through the release funnel.
+		assertThat(service.dropFreedBlock(OTHER_OWNER, nextToVA)).isTrue()
+
+		// Then: the funnel stayed alive and the release event FIRED for the freed block, and the
+		// reclaim completed despite the throw -- the switch's per-listener containment (review
+		// ruling C) logged the failure and ran on. The switch-level containment detail is
+		// covered in DynamicRailSwitchTest and the registry-map detail in
+		// PathReservationRegistryTest; here we hold only what the funnel guarantees.
+		assertThat(released).containsExactly(nextToVA)
+		assertThat(registry.getBlocks(OTHER_OWNER)).isEmpty()
+		assertThat(registry.getSwitchOwner(switchVA), "claim after the reclaim").isNull()
+
+		// And: recovery is listener-proof. vA is already free (the reclaim released the claim),
+		// so the candidate's same-position route succeeds directly and ends with vA safely
+		// under the candidate.
+		val result = service.reservePath(CANDIDATE, semaphoreZA, semaphoreDoB1)
+		assertCandidateOwnsVAAndOtherOwnerCannotUnlockIt(result)
 	}
 
 	/**

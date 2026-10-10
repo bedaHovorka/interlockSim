@@ -200,7 +200,11 @@ class DynamicTrackBlock(
 	 */
 	override fun getTrackOccupant(): TrackOccupant? = occupant
 
-	override fun ends(): Array<PathSeparator> = arrayOf(end1, end2)
+	// Cached once: ends() is read on every registry staleness scan and block-release reclaim
+	// (Issue #1144 review), so a fresh array per call is wasted work. Never mutate the array.
+	private val endsCache: Array<PathSeparator> = arrayOf(end1, end2)
+
+	override fun ends(): Array<PathSeparator> = endsCache
 
 	override fun getNextTrackSection(
 		separator: PathSeparator,
