@@ -179,7 +179,7 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 					if (!canReserveForward(input)) continue
 					val start = semaphores.first { it.name == input.towardSemaphoreName } as OrientedPathSeparator
 					val owner = if (input.awaitingRouteExtension) input.ownerTrainId else null
-					val expected = query.findReservationTargetCandidates(start, owner).map { it.toCandidateTarget() }
+					val expected = query.findReservationTargetCandidates(start, owner).map { it.expectedCandidateTarget() }
 					listsCompared++
 					if (input.candidateTargets != expected) {
 						violations += "${input.blockId}->${input.towardSemaphoreName}: ${input.candidateTargets} != $expected"
@@ -200,8 +200,12 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
 			(input.isApproachingThisInput || input.pathSetUpTowardThisInput)
 
-	/** The expected observation fact for a query result: the kind follows the separator's class. */
-	private fun ReservationTargetCandidate.toCandidateTarget(): CandidateTarget =
+	/**
+	 * The expected observation fact for a query result, computed independently of
+	 * [cz.vutbr.fit.interlockSim.sim.toCandidateTarget] so this test is a real oracle for the
+	 * production conversion rather than a restatement of it.
+	 */
+	private fun ReservationTargetCandidate.expectedCandidateTarget(): CandidateTarget =
 		when (val sep = separator) {
 			is DynamicInOut -> CandidateTarget(sep.name, SeparatorKind.IN_OUT, available)
 			is DynamicRailSemaphore -> CandidateTarget(sep.name, SeparatorKind.SEMAPHORE, available)

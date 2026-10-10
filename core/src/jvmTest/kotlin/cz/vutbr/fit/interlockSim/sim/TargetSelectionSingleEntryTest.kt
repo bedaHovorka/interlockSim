@@ -45,12 +45,19 @@ import java.util.concurrent.TimeUnit
 @DisplayName("Target selection has one entry (allow-list tripwire, Issue #1152)")
 class TargetSelectionSingleEntryTest {
 	private companion object {
-		/** Production source roots, relative to the `:core` project directory (the test working dir). */
+		/**
+		 * Production source roots. Listed relative to both plausible working directories — the
+		 * `:core` project directory (Gradle's default for its test tasks) and the repository root
+		 * — because only the existing ones are scanned.
+		 */
 		val SOURCE_ROOTS =
 			listOf(
 				"src/commonMain/kotlin",
 				"src/jvmMain/kotlin",
-				"../dispatcher-agent/src/main/kotlin"
+				"../dispatcher-agent/src/main/kotlin",
+				"core/src/commonMain/kotlin",
+				"core/src/jvmMain/kotlin",
+				"dispatcher-agent/src/main/kotlin"
 			)
 
 		/** The declaring/implementing package: it *is* the reservation API. */
