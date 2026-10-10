@@ -4047,33 +4047,32 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 
 		/**
-		 * PR #1115 review: when a release listener throws and the stale-switch reclaim then throws too, the
-		 * listener's exception is the one that propagates, with the reclaim's attached as suppressed. The
-		 * reclaim is made to throw through a mocked block whose only end is a locked switch that fails.
+		 * PR #1115 review, settled by Issue #1103: the stale-switch reclaim runs inside
+		 * [PathReservationRegistry.unregisterBlock], BEFORE the release event, so a throwing release
+		 * listener propagates its failure from every release but can no longer skip the reclaim.
 		 */
 		@Test
-		fun `a failing reclaim after a throwing release listener keeps the listener's exception`() {
-			val failingSwitch = mockk<DynamicRailSwitch>(relaxed = true)
-			every { failingSwitch.locked } throws IllegalStateException("reclaim failure")
-			val block = mockk<DynamicTrackBlock>(relaxed = true)
-			every { block.getState() } returns TrackFacility.State.FREE
-			every { block.occupant } returns null
-			every { block.trainName } returns null
-			every { block.ends() } returns arrayOf(failingSwitch)
-			assertThat(registry.registerAtomic("t1", listOf(block)))
-				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+		fun `a throwing release listener cannot skip the stale switch reclaim`() {
+			val success = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
+			val switches = registry.getSwitches("train1")
+			assertThat(switches, "switches of the reserved route").isNotEmpty()
 			val throwing =
 				BlockOccupancyListener { event ->
 					if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) error("listener failure")
 				}
 			registry.addBlockOccupancyListener(throwing)
 
-			val thrown = runCatching { service.dropFreedBlock("t1", block) }.exceptionOrNull()
+			val failures =
+				success.reservedBlocks.map { block -> runCatching { service.releaseBlock("train1", block) }.exceptionOrNull() }
 			registry.removeBlockOccupancyListener(throwing)
 
-			assertThat(thrown?.message).isEqualTo("listener failure")
-			assertThat(thrown?.suppressed?.map { it.message }).isEqualTo(listOf("reclaim failure"))
-			assertThat(registry.getOwner(block), "the block left the registry before the event").isNull()
+			assertThat(failures.map { it?.message }, "every release reported the listener")
+				.isEqualTo(success.reservedBlocks.map { "listener failure" })
+			assertThat(registry.getBlocks("train1"), "blocks still owned").isEmpty()
+			assertThat(registry.getSwitches("train1"), "switches still owned").isEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked, "lock of ${switch.name}").isFalse()
+			}
 		}
 
 		/**

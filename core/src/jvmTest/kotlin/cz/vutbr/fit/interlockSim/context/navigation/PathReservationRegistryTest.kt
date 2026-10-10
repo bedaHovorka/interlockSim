@@ -633,9 +633,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 		@ParameterizedTest(name = "flank = {0}")
 		@ValueSource(booleans = [false, true])
-		fun `unregisterBlock reclaims a stale plain claim at the freed block's ends and keeps a flank claim`(
-			flank: Boolean
-		) {
+		fun `unregisterBlock reclaims a stale plain claim at the freed block's ends and keeps a flank claim`(flank: Boolean) {
 			// Arrange - Issue #1103: train1 holds ONE block bounded by the switch and claims the switch.
 			val (_, switch, block) = straddledSwitch()
 			assertThat(registry.registerAtomic("train1", listOf(block)))
