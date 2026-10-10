@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
+import cz.vutbr.fit.interlockSim.sim.ReservationTargetPolicy
 
 /**
  * Finds the one forward route request that would help a given active train this cycle, or
@@ -90,7 +91,7 @@ object NextHopResolver {
 		if (hop != null) {
 			return NextHopOutcome.Hop(
 				fromSignalName = hop.towardSemaphoreName,
-				toSeparatorName = requireNotNull(hop.toSeparatorName)
+				toTargetName = requireNotNull(hop.chosenTargetName())
 			)
 		}
 		return fallbackOutcome(inputs, trainId)
@@ -140,10 +141,10 @@ object NextHopResolver {
 			if (ownerId in decidedTrains) continue
 			if (!isEligible(candidate)) continue
 			decidedTrains += ownerId
-			val target = requireNotNull(candidate.toSeparatorName)
+			val target = requireNotNull(candidate.chosenTargetName())
 			if (claimedSeparators.add(target)) {
 				hopByTrain[ownerId] =
-					NextHopOutcome.Hop(fromSignalName = candidate.towardSemaphoreName, toSeparatorName = target)
+					NextHopOutcome.Hop(fromSignalName = candidate.towardSemaphoreName, toTargetName = target)
 			} else {
 				claimedAwayByTrain[ownerId] = target
 			}
@@ -151,16 +152,27 @@ object NextHopResolver {
 
 		return trainIds.associateWith { trainId ->
 			hopByTrain[trainId]
-				?: claimedAwayByTrain[trainId]?.let { NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = it) }
+				?: claimedAwayByTrain[trainId]?.let { NextHopOutcome.ClaimedByAnotherTrain(toTargetName = it) }
 				?: fallbackOutcome(inputs, trainId)
 		}
 	}
+
+	/**
+	 * The target this input's reservation would be made to, or `null` when no candidate is
+	 * available — [ReservationTargetPolicy.pick] over
+	 * [BlockInputObservation.candidateTargets], the one target-selection path every dispatcher
+	 * shares (Issue #1152). Resolved here, from the same list
+	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.reserveOrDefer] reads, so the two arms
+	 * cannot disagree about which separator a given input leads to.
+	 */
+	private fun BlockInputObservation.chosenTargetName(): String? =
+		ReservationTargetPolicy.pick(candidateTargets)?.name
 
 	/** `true` when [input] qualifies as a forward-reservation candidate for its owner. */
 	private fun isEligible(input: BlockInputObservation): Boolean =
 		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
 			(input.isApproachingThisInput || input.pathSetUpTowardThisInput) &&
-			input.toSeparatorName != null
+			input.chosenTargetName() != null
 
 	/** The first (list-order) input owned by [trainId] and qualifying per [isEligible], or `null`. */
 	private fun firstEligibleInput(
@@ -199,28 +211,28 @@ object NextHopResolver {
 sealed interface NextHopOutcome {
 	/**
 	 * A qualifying forward reservation exists: request a route from [fromSignalName] to
-	 * [toSeparatorName]. Both are signal or InOut names — legal `request_route` endpoints — never
+	 * [toTargetName]. Both are signal or InOut names — legal `request_route` endpoints — never
 	 * a block id.
 	 */
 	data class Hop(
 		val fromSignalName: String,
-		val toSeparatorName: String
+		val toTargetName: String
 	) : NextHopOutcome
 
 	/** Every input this train owns already has its path extended beyond it; nothing to request. */
 	data object RouteAlreadySet : NextHopOutcome
 
 	/**
-	 * No owned input has a computed FREE next separator (or the train owns no input at all).
+	 * No owned input has an available next target (or the train owns no input at all).
 	 * This is never evidence that the track ahead is occupied or blocked — see
-	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName]'s own contract — so
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets]'s own contract — so
 	 * rendered wording for this outcome must not use either word.
 	 */
 	data object NoSectionReservable : NextHopOutcome
 
 	/**
 	 * [NextHopResolver.resolveAll]-only outcome: this train's own next-hop target,
-	 * [toSeparatorName], qualified exactly like a [Hop] would, but another active train's
+	 * [toTargetName], qualified exactly like a [Hop] would, but another active train's
 	 * eligible input claimed the same separator earlier in this same cycle's fixed evaluation
 	 * order (same-tick same-target dedup, mirroring
 	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs]'s `claimedSeparators`).
@@ -241,6 +253,6 @@ sealed interface NextHopOutcome {
 	 * numbered-list markers.
 	 */
 	data class ClaimedByAnotherTrain(
-		val toSeparatorName: String
+		val toTargetName: String
 	) : NextHopOutcome
 }

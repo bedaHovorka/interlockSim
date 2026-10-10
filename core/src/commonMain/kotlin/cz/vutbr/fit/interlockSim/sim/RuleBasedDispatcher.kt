@@ -30,7 +30,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    among the next separators one section ahead that the shell reports with their
  *    availability ([BlockInputObservation.candidateTargets]), through
  *    [ReservationTargetPolicy] (Issue #970) — destination-agnostic; see
- *    [BlockInputObservation.toSeparatorName] for the compatibility projection of that pick.
+ *    [BlockInputObservation.candidateTargets], the dispatcher's only target-selection input
+ *    (Issue #1152).
  *
  * The shell ([ShuntingLoop]) calls [decide] once per tick with a single
  * [DispatchObservation] whose fields are all populated together (SP0.11,
@@ -225,7 +226,7 @@ class RuleBasedDispatcher(
 	 * [BlockInputObservation.candidateTargets] through [ReservationTargetPolicy] (Issue #970) and
 	 * emits a [DispatchDecision.ReservePath] toward it, unless no candidate is available or the
 	 * chosen separator was already claimed by an earlier input this tick (see [checkAllInputs]).
-	 * The [BlockInputObservation.toSeparatorName] projection is never read here.
+	 * [BlockInputObservation.candidateTargets] is the only target input read here.
 	 */
 	private fun reserveOrDefer(
 		input: BlockInputObservation,

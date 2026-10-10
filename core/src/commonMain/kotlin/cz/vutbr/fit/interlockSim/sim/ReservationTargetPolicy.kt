@@ -22,9 +22,9 @@ package cz.vutbr.fit.interlockSim.sim
  * first, so on real data the pick is the first available candidate in list order — byte-identical
  * to the pre-#970 `findNextReservationTarget` result.
  *
- * A separate object rather than a [RuleBasedDispatcher] member because the shell
- * ([ShuntingLoop]) applies the same policy to fill the [BlockInputObservation.toSeparatorName]
- * compatibility projection, and the shell must not depend on a dispatcher implementation.
+ * A separate object rather than a [RuleBasedDispatcher] member because every dispatcher —
+ * including `:dispatcher-agent`'s `NextHopResolver`, which tells an LLM which hop the
+ * rule-based arm would make — must reach its target through this one policy (Issue #1152).
  *
  * @since Issue #970
  */
