@@ -25,13 +25,52 @@ import kotlin.test.Test
  *
  * The Dijkstra search must give the same value for every ordered InOut pair, including pairs
  * whose only routes reverse through a switch (switch-blind "phantom" routes) and pairs with no
- * route at all. The Praha fixture is left out here because listing its paths takes seconds per
- * pair; the same equality was checked on all its 110 pairs when the search was added.
+ * route at all. The Praha fixture is too big to list in full here (its 110 pairs take 98.7 s of
+ * JVM listing, see `docs/goal9b-demands/SP1-fail-fast-harness.md`); the full sweep equality was
+ * checked once when the search was added, and [matchesPathListingOnTheCheapPrahaPairs] keeps the
+ * 28 cheap pairs (at most 100 topological paths each, measured 2026-10-10) pinned permanently.
  */
 class ShortestTopologicalDistanceTest : CommonKoinTestBase() {
 	private companion object {
 		/** Largest depth bound of the sweep; beyond it every fixture route fits. */
 		const val DEPTH_SWEEP_MAX: Int = 12
+
+		/**
+		 * The ordered Praha pairs whose switch-blind listing enumerates at most 100 paths, measured
+		 * on 2026-10-10. Listing them is fast, so this class pins their equality to the search even
+		 * though the full Praha sweep stays out of reach for a unit test.
+		 */
+		val CHEAP_PRAHA_PAIRS =
+			listOf(
+				"N-Lib-1" to "S-Vin-1",
+				"N-Lib-1" to "S-Vin-2",
+				"N-Lib-2" to "S-Vin-1",
+				"N-Lib-2" to "S-Vin-2",
+				"N-Vys-1" to "S-Vrs-1",
+				"N-Vys-1" to "S-Vrs-2",
+				"N-Vys-1" to "S-Vrs-3",
+				"N-Vys-2" to "N-Bypass",
+				"N-Vys-2" to "S-Bypass",
+				"N-Bypass" to "N-Vys-2",
+				"N-Bypass" to "S-Bypass",
+				"S-Vin-1" to "N-Lib-1",
+				"S-Vin-1" to "N-Lib-2",
+				"S-Vin-1" to "S-Vin-2",
+				"S-Vin-2" to "N-Lib-1",
+				"S-Vin-2" to "N-Lib-2",
+				"S-Vin-2" to "S-Vin-1",
+				"S-Vrs-1" to "N-Vys-1",
+				"S-Vrs-1" to "S-Vrs-2",
+				"S-Vrs-1" to "S-Vrs-3",
+				"S-Vrs-2" to "N-Vys-1",
+				"S-Vrs-2" to "S-Vrs-1",
+				"S-Vrs-2" to "S-Vrs-3",
+				"S-Vrs-3" to "N-Vys-1",
+				"S-Vrs-3" to "S-Vrs-1",
+				"S-Vrs-3" to "S-Vrs-2",
+				"S-Bypass" to "N-Vys-2",
+				"S-Bypass" to "N-Bypass"
+			)
 	}
 
 	private fun assertSameAsPathListing(
@@ -68,6 +107,23 @@ class ShortestTopologicalDistanceTest : CommonKoinTestBase() {
 
 	@Test
 	fun matchesPathListingOnTwoParallelTracks() = assertSameAsPathListing(NetworkResources.TWO_TRACKS_PARALLEL_XML)
+
+	@Test
+	fun matchesPathListingOnTheCheapPrahaPairs() {
+		val ctx = CommonTestFixtures.parseSimulationContext(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML, get()).tracked()
+		val inOuts = ctx.getInOuts().toList().associateBy { it.name }
+		val navigator = ctx.getRoutingServices().getTopologyNavigator()
+		for ((inName, outName) in CHEAP_PRAHA_PAIRS) {
+			val start = requireNotNull(inOuts[inName]) { "Praha fixture has no InOut '$inName'" }
+			val target = requireNotNull(inOuts[outName]) { "Praha fixture has no InOut '$outName'" }
+			val paths = navigator.findAllTopologicalPaths(start, target)
+			val listed = paths.minOfOrNull { path -> path.sumOf { section -> section.length() } }
+			assertThat(
+				navigator.findShortestTopologicalDistance(start, target),
+				name = "shortest distance $inName -> $outName"
+			).isEqualTo(listed)
+		}
+	}
 
 	@Test
 	fun respectsEveryDepthBoundLikePathListing() {

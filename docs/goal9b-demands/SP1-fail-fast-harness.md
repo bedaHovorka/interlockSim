@@ -25,7 +25,8 @@
    constructor and listed every topological path to find the shortest one. It now calls
    `TopologyNavigator.findShortestTopologicalDistance`, a Dijkstra search over the same switch-blind
    moves. On all 174 ordered InOut pairs of the test fixtures (Praha included) it gives the same value
-   as the listing.
+   as the listing. The cheap Praha pairs (28 ordered pairs of at most 100 topological paths each) keep
+   that equality pinned by `ShortestTopologicalDistanceTest.matchesPathListingOnTheCheapPrahaPairs`.
 
 ## Cost of listing every path
 
@@ -76,6 +77,11 @@ switch-legal route** on the Praha fixture (for example `N-Bypass → S-Vrs-3`: 7
 legal routes; also `N-Lib-1 → S-Bypass`, `N-Vys-1 → S-Vin-1`, `N-Vys-2 → S-Vin-2`). The stress test
 therefore fails because of its train specs, not because of a livelock. Before SP1 these trains retried
 a route search that could never succeed until the cap; now each fails on its first attempt.
+
+PR #1175 review round (2026-10-10): `twentyTrainStress` asserts this measured contract now — 13
+refusals of `NO_ROUTE` on the first attempt, the other 7 trains enter and exit — so `heavyTest` is
+green and the real-time ratio machinery runs. The assertions flip back to "all 20 exit" when
+demand 3 (legal-route pairs) lands.
 
 ## #895 timing re-baseline (CI step times)
 
