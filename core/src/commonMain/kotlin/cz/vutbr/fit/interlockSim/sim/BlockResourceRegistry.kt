@@ -33,6 +33,19 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  * they are all free, then releasing right away, keeps the dispatcher non-blocking
  * and still demonstrates the kDisco [Resource] primitive.
  *
+ * ## The gate is inert today (Issue #1148)
+ *
+ * The dispatcher acquires and releases the resources inside one section that never
+ * suspends on another process, so no other attempt can observe them held:
+ * [areAllAvailable] always returns `true` when the dispatcher checks it and the gate
+ * never refuses an attempt. It adds bookkeeping cost but no protection — journey-time
+ * exclusivity is enforced solely by
+ * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService]. The gate is kept
+ * on purpose (owner ruling on Issue #1147); removing it is out of scope. Since Issue #1148
+ * the dispatcher gates, per `(entry, exit)` pair, the union of the blocks of every
+ * topological candidate (computed once, the topology is static), because
+ * `reservePath` chooses the candidate itself.
+ *
  * ## Future slices
  *
  * When path reservation becomes incremental, a per-block guard process could hold

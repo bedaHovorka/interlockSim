@@ -58,6 +58,10 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 - [GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md](GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md) - paused-clock feasibility and headless-pacing ruling (SP2c.26, #849, 2026-08).
 - [GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md](GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md) - Ollama capability audit: seed, format and tools, `num_ctx`, `maxIterations` (SP2c.27, #850).
 
+## Goal 9B demand list
+
+- [GOAL_9B_DEMANDS_SP1_FAIL_FAST_HARNESS.md](GOAL_9B_DEMANDS_SP1_FAIL_FAST_HARNESS.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
+
 ## History
 
 Dated summaries, retrospectives, decisions, and reports. Kept for context; do not treat as current.
