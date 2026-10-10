@@ -28,7 +28,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.INOUT_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SEMAPHORE_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SWITCH_KEY
-import cz.vutbr.fit.interlockSim.testutil.assertRudyUjezdStationInOuts
+import cz.vutbr.fit.interlockSim.testutil.assertCervenyUjezdStationInOuts
 import cz.vutbr.fit.interlockSim.testutil.countCellTypes
 import cz.vutbr.fit.interlockSim.testutil.existPath
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -51,7 +51,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - semaphore-basic.xml - RailSemaphore between two InOut nodes
  * - two-tracks-parallel.xml - Two parallel independent tracks
  * - empty-grid.xml - Grid with minimal elements (2 InOut nodes, no tracks)
- * - rudyUjezd.xml - Full station topology (Rudy Ujezd)
+ * - cerveny_ujezd.xml - Full station topology (Cerveny Ujezd)
  * - invalid-*.xml - Various malformed/invalid XML files
  */
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -205,17 +205,17 @@ class XMLContextFactoryParseTest : XMLContextFactoryTestBase() {
 	}
 
 	@Test
-	fun parseXML_rudyUjezd_createsValidContext() {
-		val xml = getFixtureStream("rudyUjezd.xml")
+	fun parseXML_cervenyUjezd_createsValidContext() {
+		val xml = getFixtureStream("cerveny_ujezd.xml")
 
 		(editingContextFactory.createContext(xml) as EditingContext).use { context ->
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			// Check grid size (from rudyUjezd.xml: X=100, Y=100)
+			// Check grid size (from cerveny_ujezd.xml: X=100, Y=100)
 			assertThat(grid.cols).isEqualTo(100)
 			assertThat(grid.rows).isEqualTo(100)
 			// in-outs on the first end (f1, f2) and the second end (s1, s2) of the station
-			val (f1, f2, s1, s2) = assertRudyUjezdStationInOuts(context)
+			val (f1, f2, s1, s2) = assertCervenyUjezdStationInOuts(context)
 
 			// from each end, there are switches and semaphores leading into the station area and must exist path to each InOut on the other side
 			assertThat(existPath(f1, s1, context)).isTrue()

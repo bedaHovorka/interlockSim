@@ -24,7 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.assertRudyUjezdStationInOuts
+import cz.vutbr.fit.interlockSim.testutil.assertCervenyUjezdStationInOuts
 import cz.vutbr.fit.interlockSim.testutil.saveAndReloadThroughStream
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
@@ -262,9 +262,9 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		}
 
 		@Test
-		fun saveAndLoad_rudyUjezd_preservesComplexStructure() {
+		fun saveAndLoad_cervenyUjezd_preservesComplexStructure() {
 			// Load complex fixture
-			val xml = getFixtureStream("rudyUjezd.xml")
+			val xml = getFixtureStream("cerveny_ujezd.xml")
 			editingContextFactory.createContext(xml).use { originalContext ->
 				// Save to OutputStream, load back from it, and verify
 				editingContextFactory.saveAndReloadThroughStream(originalContext) { loadedContext ->
@@ -275,7 +275,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 					assertThat(loadedEditingContext.getRailWayNetGrid().rows).isEqualTo(100)
 
 					// Verify key InOut points exist
-					assertRudyUjezdStationInOuts(loadedEditingContext)
+					assertCervenyUjezdStationInOuts(loadedEditingContext)
 				}
 			}
 		}
@@ -313,10 +313,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		}
 
 		@Test
-		fun outputStreamAndFile_rudyUjezd_produceIdenticalXML(
+		fun outputStreamAndFile_cervenyUjezd_produceIdenticalXML(
 			@TempDir tempDir: File
 		) {
-			assertFileAndStreamOutputIdentical("rudyUjezd.xml", tempDir)
+			assertFileAndStreamOutputIdentical("cerveny_ujezd.xml", tempDir)
 		}
 
 		/** Loads [fixtureName], saves to both [tempDir] and an OutputStream, and asserts the outputs are identical. */
@@ -457,8 +457,8 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 	inner class PerformanceTests {
 		@Test
 		fun saveContext_largeContext_completesInReasonableTime() {
-			// Load complex fixture (rudyUjezd is reasonably large)
-			val xml = getFixtureStream("rudyUjezd.xml")
+			// Load complex fixture (cerveny_ujezd is reasonably large)
+			val xml = getFixtureStream("cerveny_ujezd.xml")
 			editingContextFactory.createContext(xml).use { context ->
 				// Measure save time
 				val outputStream = ByteArrayOutputStream()
@@ -469,7 +469,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 				).isTrue()
 				val elapsedTime = System.nanoTime() - startTime
 
-				// Verify save completes in reasonable time (< 1 second for rudyUjezd)
+				// Verify save completes in reasonable time (< 1 second for cerveny_ujezd)
 				assertThat(elapsedTime)
 					.withMessage("Save should complete in reasonable time")
 					.isGreaterThan(0) // Sanity check: some time elapsed

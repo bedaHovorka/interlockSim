@@ -14,7 +14,7 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 
 /**
- * Structure check for the `rudyUjezd.xml` fixture, shared by the parse test in
+ * Structure check for the `cerveny_ujezd.xml` fixture, shared by the parse test in
  * `XMLContextFactoryParseTest` and the stream round trip in `XMLContextFactoryOutputStreamTest`
  * (Issue #1035 review round).
  *
@@ -26,7 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
  * - s1: `<InOut X="5" Y="31" SpatialType="HORIZONTAL" orientation="false" name="" />`
  * - s2: `<InOut X="5" Y="32" SpatialType="HORIZONTAL" orientation="false" name="" />`
  */
-fun assertRudyUjezdStationInOuts(context: Context<*, *>): List<InOut> {
+fun assertCervenyUjezdStationInOuts(context: Context<*, *>): List<InOut> {
 	val grid = context.getRailWayNetGrid()
 	val f1 = grid.getCellAt(37, 32)
 	val f2 = grid.getCellAt(37, 31)

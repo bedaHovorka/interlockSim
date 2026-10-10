@@ -164,30 +164,31 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 		}
 
 		/**
-		 * On rudyUjezd.xml the semaphore at (11,31) has two InOuts in one orientation partition, so
+		 * On cerveny_ujezd.xml the semaphore at (11,31) has two InOuts in one orientation partition, so
 		 * the sort key is evaluated for both of them. Before Issue #966 every InOut the loop then
 		 * tried was enumerated a second time inside reservePath; now each pair is enumerated once.
 		 */
 		@Test
 		@Timeout(10, unit = TimeUnit.SECONDS)
 		fun `reservePathToAny enumerates every sorted InOut target exactly once`() {
-			val rudyUjezd =
+			val cervenyUjezd =
 				TestFixtures
-					.loadRudyUjezdXml()
+					.loadCervenyUjezdXml()
 					.use { simulationContextFactory.createContext(it) }
 					.let { it as DefaultSimulationContext }
 					.tracked()
-			val counting = CountingNavigator(rudyUjezd.scope.get())
+			val counting = CountingNavigator(cervenyUjezd.scope.get())
 			val service =
 				DefaultPathReservationService(
 					counting,
-					rudyUjezd,
-					rudyUjezd.scope.get(),
-					rudyUjezd.scope.get(),
-					rudyUjezd.scope.get()
+					cervenyUjezd,
+					cervenyUjezd.scope.get(),
+					cervenyUjezd.scope.get(),
+					cervenyUjezd.scope.get()
 				)
-			val start = rudyUjezd.getRailWayNetGrid()[Point(11, 31)] as DynamicRailSemaphore
-			val inOuts = rudyUjezd.getInOuts().map { rudyUjezd.toDynamic(it) as DynamicInOut }
+
+			val start = cervenyUjezd.getRailWayNetGrid()[Point(11, 31)] as DynamicRailSemaphore
+			val inOuts = cervenyUjezd.getInOuts().map { cervenyUjezd.toDynamic(it) as DynamicInOut }
 			val oppositeSide = inOuts.filter { it.getOrientation() != start.getOrientation() }
 			assertThat(oppositeSide.size, name = "InOuts sorted together").isGreaterThan(1)
 
