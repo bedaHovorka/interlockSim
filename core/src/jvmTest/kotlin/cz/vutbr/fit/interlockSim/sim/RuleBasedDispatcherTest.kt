@@ -65,10 +65,16 @@ class RuleBasedDispatcherTest {
 		destinationInOutName: String = "outA"
 	): QueuedTrainObservation = QueuedTrainObservation(trainId, destinationInOutName)
 
+	/**
+	 * Builds an input. [candidateTargets] defaults to the one available semaphore named by
+	 * [toSeparatorName] (none when it is `null`), so the pre-#970 cases that only name a target
+	 * read unchanged; a case about the choice itself passes an explicit list.
+	 */
 	private fun input(
 		state: TrackFacility.State,
 		towardSemaphoreName: String = "sem",
 		toSeparatorName: String? = "nextSep",
+		candidateTargets: List<CandidateTarget>? = null,
 		ownerTrainId: String? = null,
 		isApproachingThisInput: Boolean = false,
 		pathSetUpTowardThisInput: Boolean = false,
@@ -80,6 +86,9 @@ class RuleBasedDispatcherTest {
 			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
 			toSeparatorName = toSeparatorName,
+			candidateTargets =
+				candidateTargets
+					?: listOfNotNull(toSeparatorName?.let { CandidateTarget(it, SeparatorKind.SEMAPHORE, available = true) }),
 			state = state,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
@@ -268,6 +277,147 @@ class RuleBasedDispatcherTest {
 		val decisions = dispatcher.decide(observed)
 
 		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
+	}
+
+	// ── Path advancement — the target choice (Issue #970) ───────────────────
+
+	private fun semaphore(
+		name: String,
+		available: Boolean
+	) = CandidateTarget(name, SeparatorKind.SEMAPHORE, available)
+
+	private fun inOut(
+		name: String,
+		available: Boolean
+	) = CandidateTarget(name, SeparatorKind.IN_OUT, available)
+
+	@Test
+	@DisplayName("the second candidate wins when the first is unavailable")
+	fun secondCandidateWinsWhenFirstUnavailable() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "zA",
+							toSeparatorName = null,
+							candidateTargets = listOf(semaphore("doB1", false), semaphore("doB2", true)),
+							ownerTrainId = "T1",
+							isApproachingThisInput = true
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "zA", "doB2"))
+	}
+
+	@Test
+	@DisplayName("all candidates unavailable: NoAction, whatever the projection says")
+	fun allCandidatesUnavailableGivesNoAction() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "zA",
+							toSeparatorName = "doB1",
+							candidateTargets = listOf(semaphore("doB1", false), semaphore("doB2", false)),
+							ownerTrainId = "T1",
+							isApproachingThisInput = true
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
+	}
+
+	@Test
+	@DisplayName("an available InOut listed second wins over an available semaphore listed first")
+	fun inOutListedSecondWins() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				innerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "doB1",
+							toSeparatorName = "zB",
+							candidateTargets = listOf(semaphore("zB", true), inOut("B", true)),
+							ownerTrainId = "T1",
+							isApproachingThisInput = true
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "doB1", "B"))
+	}
+
+	@Test
+	@DisplayName("the dispatcher chooses from the candidates and ignores a decoy toSeparatorName")
+	fun ignoresDecoyToSeparatorName() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.RESERVED,
+							towardSemaphoreName = "zA",
+							toSeparatorName = "decoy",
+							candidateTargets = listOf(semaphore("doB2", true)),
+							ownerTrainId = "T2",
+							pathSetUpTowardThisInput = true
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "zA", "doB2"))
+	}
+
+	@Test
+	@DisplayName("two inputs sharing the first available target: the second defers and does not fall through")
+	fun sharedFirstAvailableTargetSecondInputDefersWithoutFallingThrough() {
+		// Pins the byte-identical claim of Issue #970: the same-tick dedup (Issue #829) still
+		// works on the pick alone. A deferred input is re-evaluated next tick against a fresh
+		// list; it does NOT take its second candidate in the same tick.
+		val dispatcher = RuleBasedDispatcher()
+		val inputK1 =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k1",
+				towardSemaphoreName = "doB1",
+				toSeparatorName = "zB",
+				candidateTargets = listOf(semaphore("zB", true), semaphore("zB2", true)),
+				ownerTrainId = "T1",
+				isApproachingThisInput = true
+			)
+		val inputK2 =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k2",
+				towardSemaphoreName = "doB2",
+				toSeparatorName = "zB",
+				candidateTargets = listOf(semaphore("zB", true), semaphore("zB3", true)),
+				ownerTrainId = "T2",
+				isApproachingThisInput = true
+			)
+
+		val decisions = dispatcher.decide(observation(innerBlockInputs = listOf(inputK1, inputK2)))
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "doB1", "zB"))
 	}
 
 	// ── Path advancement — RESERVED branch ──────────────────────────────────
