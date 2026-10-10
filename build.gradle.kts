@@ -103,12 +103,19 @@ subprojects {
 // only for tasks already in the graph — a build without `clean` is unaffected. Every `clean*`
 // task is excluded: `clean` depends on the Kotlin `cleanAllTests` aggregate, which depends on the
 // `clean<Task>` rule tasks, so ordering any of them after `clean` forms a task-graph cycle.
-val cleanTaskPaths = subprojects.map { "${it.path}:clean" }
-
+//
+// The list is resolved late, with a Callable, and keeps only the `clean` tasks that exist. A
+// partial Docker context (the fast-sim image copies no build script for `:dispatcher-agent`)
+// leaves some included projects without a `clean` task, and a fixed path to one of them fails
+// with "Task with path ':dispatcher-agent:clean' not found".
 subprojects {
     tasks.configureEach {
         if (!name.startsWith("clean")) {
-            mustRunAfter(cleanTaskPaths)
+            mustRunAfter(
+                Callable {
+                    rootProject.subprojects.mapNotNull { it.tasks.findByName("clean") }
+                },
+            )
         }
     }
 }
