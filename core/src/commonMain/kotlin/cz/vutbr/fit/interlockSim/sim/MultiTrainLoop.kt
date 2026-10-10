@@ -11,13 +11,12 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Resource
+import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.extractUniqueBlocks
-import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.collision.TrainSnapshot
@@ -60,7 +59,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * result of that call does not depend on any dispatcher-side candidate path, because
  * `reservePath` runs its own candidate search. A train gets at most [maxEntryAttempts]
  * attempts (one per dispatcher tick); when they are used up, or when the entry is
- * statically impossible, the train is retired from the approved list and an
+ * permanently impossible (no route, a geometrically impossible route, an unknown InOut
+ * name), the train is retired from the approved list (or never created) and an
  * [EntryFailure] is recorded (see [getEntryFailures]) instead of retrying forever.
  *
  * ## Determinism
@@ -108,9 +108,6 @@ open class MultiTrainLoop(
 		 */
 		internal const val DEFAULT_MAX_ENTRY_ATTEMPTS: Int = 3600
 
-		/** Search depth for the topological candidates that feed the resource gate. */
-		private const val GATE_SEARCH_MAX_DEPTH: Int = 100
-
 		/** Report types enabled by the multi-train scenario. */
 		internal val ENABLED_REPORT_TYPES =
 			arrayOf(
@@ -140,13 +137,26 @@ open class MultiTrainLoop(
 	 * Why an entry reservation was given up (Issue #1148).
 	 */
 	enum class EntryFailureKind {
-		/** The spec names an entry or exit [DynamicInOut] that the context does not contain. */
+		/**
+		 * The spec names an entry or exit [DynamicInOut] that the context does not contain. No
+		 * [Train] is created for such a spec, so the failure has no train name and no attempts.
+		 */
 		UNKNOWN_IN_OUT,
 
-		/** No topological path connects the entry and exit, so no attempt can ever succeed. */
-		NO_TOPOLOGICAL_PATH,
+		/**
+		 * No route connects the entry and exit: the route search found none, or `reservePath`
+		 * answered [PathReservationService.ReservationResult.NoPathExists]. Permanent, so it is
+		 * not retried.
+		 */
+		NO_ROUTE,
 
-		/** Every one of the [maxEntryAttempts] attempts failed. */
+		/**
+		 * `reservePath` answered [PathReservationService.ReservationResult.GeometricallyImpossible]
+		 * (Issue #903). Permanent for the same request, so it is not retried.
+		 */
+		GEOMETRICALLY_IMPOSSIBLE,
+
+		/** Every one of the [maxEntryAttempts] attempts failed on a retryable result. */
 		ATTEMPTS_EXHAUSTED
 	}
 
@@ -156,23 +166,32 @@ open class MultiTrainLoop(
 	 * The train is retired from the approved list and never started, so it frees its
 	 * concurrency slot instead of being retried forever.
 	 *
-	 * @property trainName name of the refused train
+	 * @property trainName name of the refused train, or `null` for [EntryFailureKind.UNKNOWN_IN_OUT],
+	 *   where no train is created
 	 * @property inName name of the entry [DynamicInOut]
 	 * @property outName name of the exit [DynamicInOut]
 	 * @property kind why the entry was given up
-	 * @property attempts number of entry attempts made, the failing one included
+	 * @property attempts number of entry attempts made, the failing one included; `0` for
+	 *   [EntryFailureKind.UNKNOWN_IN_OUT]
 	 * @property lastResult result of the last [PathReservationService.reservePath] call, or
 	 *   `null` when the failing attempt made no call
 	 * @property simTime simulation time of the failing attempt
 	 */
 	data class EntryFailure(
-		val trainName: String,
+		val trainName: String?,
 		val inName: String,
 		val outName: String,
 		val kind: EntryFailureKind,
 		val attempts: Int,
 		val lastResult: PathReservationService.ReservationResult?,
 		val simTime: Double
+	)
+
+	/** A generated train's spec with its resolved entry and exit. */
+	private data class TrainEntry(
+		val spec: TrainSpec,
+		val inIo: DynamicInOut,
+		val outIo: DynamicInOut
 	)
 
 	/** Outcome of one bounded entry-reservation attempt. */
@@ -208,7 +227,6 @@ open class MultiTrainLoop(
 		}
 	}
 
-	private val topologyNavigator: TopologyNavigator = context.getRoutingServices().getTopologyNavigator()
 	private val blockResources: BlockResourceRegistry = BlockResourceRegistry(context)
 
 	private val pendingSpecs: ArrayDeque<TrainSpec> = ArrayDeque(trainSpecs.sortedBy { it.inTime })
@@ -233,7 +251,7 @@ open class MultiTrainLoop(
 	 */
 	@kotlin.concurrent.Volatile
 	private var approvedTrains: List<Train> = emptyList()
-	private val trainToSpec: MutableMap<Train, TrainSpec> = mutableMapOf()
+	private val trainEntries: MutableMap<Train, TrainEntry> = mutableMapOf()
 	private val generator: DeterministicGenerator = DeterministicGenerator(context)
 
 	/** Trains whose entry path was reserved and whose process was activated. */
@@ -293,14 +311,12 @@ open class MultiTrainLoop(
 			pendingSpecs.removeFirst()
 
 			val inOuts = env.getInOuts().toList()
-			val inIo =
-				requireSimulationNotNull(inOuts.find { it.name == spec.inName }) {
-					"No DynamicInOut named '${spec.inName}' in context"
-				}
-			val outIo =
-				requireSimulationNotNull(inOuts.find { it.name == spec.outName }) {
-					"No DynamicInOut named '${spec.outName}' in context"
-				}
+			val inIo = inOuts.find { it.name == spec.inName }
+			val outIo = inOuts.find { it.name == spec.outName }
+			if (inIo == null || outIo == null) {
+				recordUnknownInOut(spec, now)
+				return
+			}
 			val timetable =
 				Timetable(
 					inIo,
@@ -313,7 +329,7 @@ open class MultiTrainLoop(
 			// Wire the auto-halt callback so DefaultCollisionDetectionService.autoHaltTrainOnViolation
 			// can actually stop this train on a BlockEntryViolation — see Train.requestHalt() KDoc.
 			env.getCollisionServices().registerHaltCallback(train.name, train::requestHalt)
-			trainToSpec[train] = spec
+			trainEntries[train] = TrainEntry(spec, inIo, outIo)
 			logger.debug {
 				"MultiTrainLoop: generated ${train.name} (${spec.inName} -> ${spec.outName}) at t=$now"
 			}
@@ -359,7 +375,7 @@ open class MultiTrainLoop(
 		// so an off-thread reader never walks a list that is being mutated (Issue #994).
 		approvedTrains = survivors
 		terminated.forEach { train ->
-			trainToSpec.remove(train)
+			trainEntries.remove(train)
 			startedTrains.remove(train)
 			entryAttempts.remove(train)
 			trainsExitedCount++
@@ -389,8 +405,8 @@ open class MultiTrainLoop(
 			if (train in startedTrains || trainHasActivePath(train)) {
 				continue
 			}
-			val spec = trainToSpec[train] ?: continue
-			when (val outcome = reserveEntryPath(train, spec)) {
+			val entry = trainEntries[train] ?: continue
+			when (val outcome = reserveEntryPath(train, entry)) {
 				EntryAttemptOutcome.Reserved -> {
 					startedTrains.add(train)
 					logger.info { "MultiTrainLoop: starting ${train.name}" }
@@ -412,7 +428,7 @@ open class MultiTrainLoop(
 	) {
 		// Copy-on-write, as everywhere else approvedTrains is replaced (Issue #994).
 		approvedTrains = approvedTrains.filterNot { it === train }
-		trainToSpec.remove(train)
+		trainEntries.remove(train)
 		entryAttempts.remove(train)
 		entryFailures.add(failure)
 		logger.error {
@@ -435,54 +451,68 @@ open class MultiTrainLoop(
 	 * froze the simulation clock.
 	 *
 	 * Before the call the [BlockResourceRegistry] gate is consulted: the capacity-1 resource of
-	 * every block any topological candidate may use is checked non-blocking (`isAvailable`) and
-	 * acquired only when all of them can be. Resources are released immediately afterwards,
-	 * before the train starts; the journey-time exclusivity is enforced by
-	 * [PathReservationService]. The gate is inert today (see [BlockResourceRegistry]).
+	 * every block of the candidate routes is checked non-blocking (`isAvailable`) and acquired
+	 * only when all of them can be. Resources are released immediately afterwards, before the
+	 * train starts; the journey-time exclusivity is enforced by [PathReservationService]. The
+	 * gate is inert today (see [BlockResourceRegistry]).
 	 *
 	 * @return [EntryAttemptOutcome.Reserved] on success; [EntryAttemptOutcome.Retry] when this
-	 *   attempt failed and attempts remain; [EntryAttemptOutcome.Failed] when the entry is
-	 *   statically impossible or this was attempt number [maxEntryAttempts].
+	 *   attempt failed on a retryable result and attempts remain; [EntryAttemptOutcome.Failed]
+	 *   when the entry is permanently impossible or this was attempt number [maxEntryAttempts].
 	 */
 	private suspend fun reserveEntryPath(
 		train: Train,
-		spec: TrainSpec
+		entry: TrainEntry
 	): EntryAttemptOutcome {
 		val attempt = (entryAttempts[train] ?: 0) + 1
 		entryAttempts[train] = attempt
 
-		val inOuts = env.getInOuts().toList()
-		val inIo = inOuts.find { it.name == spec.inName }
-		val outIo = inOuts.find { it.name == spec.outName }
-		if (inIo == null || outIo == null) {
-			return failedEntry(train, spec, EntryFailureKind.UNKNOWN_IN_OUT, attempt, null)
-		}
-
-		val gateBlocks =
-			gateBlocksByRoute.getOrPut(spec.inName to spec.outName) {
-				topologyNavigator
-					.findAllTopologicalPaths(inIo, outIo, maxDepth = GATE_SEARCH_MAX_DEPTH)
-					.flatMap { extractUniqueBlocks(it) }
-					.distinct()
-			}
+		val gateBlocks = gateBlocksFor(entry)
 		if (gateBlocks.isEmpty()) {
-			return failedEntry(train, spec, EntryFailureKind.NO_TOPOLOGICAL_PATH, attempt, null)
+			return failedEntry(train, entry.spec, EntryFailureKind.NO_ROUTE, attempt, null)
 		}
 
-		val result = reserveThroughGate(train, gateBlocks, inIo, outIo)
-		if (result is PathReservationService.ReservationResult.Success) {
-			entryAttempts.remove(train)
-			logger.debug {
-				"MultiTrainLoop: reserved ${result.reservedBlocks.size} block(s) for ${train.name} " +
-					"on attempt $attempt"
+		val result = reserveThroughGate(train, gateBlocks, entry.inIo, entry.outIo)
+		val permanentKind =
+			when (result) {
+				is PathReservationService.ReservationResult.Success -> {
+					entryAttempts.remove(train)
+					logger.debug {
+						"MultiTrainLoop: reserved ${result.reservedBlocks.size} block(s) for ${train.name} " +
+							"on attempt $attempt"
+					}
+					return EntryAttemptOutcome.Reserved
+				}
+				is PathReservationService.ReservationResult.NoPathExists -> EntryFailureKind.NO_ROUTE
+				is PathReservationService.ReservationResult.GeometricallyImpossible ->
+					EntryFailureKind.GEOMETRICALLY_IMPOSSIBLE
+				else -> null
 			}
-			return EntryAttemptOutcome.Reserved
+		return when {
+			permanentKind != null -> failedEntry(train, entry.spec, permanentKind, attempt, result)
+			attempt >= maxEntryAttempts ->
+				failedEntry(train, entry.spec, EntryFailureKind.ATTEMPTS_EXHAUSTED, attempt, result)
+			else -> EntryAttemptOutcome.Retry
 		}
-		if (attempt >= maxEntryAttempts) {
-			return failedEntry(train, spec, EntryFailureKind.ATTEMPTS_EXHAUSTED, attempt, result)
-		}
-		return EntryAttemptOutcome.Retry
 	}
+
+	/**
+	 * The gate blocks of [entry]: every block of the candidate routes [RouteFinder] gives for
+	 * the `(entry, exit)` pair, the same candidates `reservePath` tries for an InOut-to-InOut
+	 * request. Cached per pair, because the topology is static.
+	 *
+	 * Before Issue #1148 the gate enumerated every topological path instead (up to 912 on Praha,
+	 * seconds per pair on the JVM and minutes on native); the route search answers in
+	 * milliseconds.
+	 */
+	private fun gateBlocksFor(entry: TrainEntry): List<DynamicTrackBlock> =
+		gateBlocksByRoute.getOrPut(entry.spec.inName to entry.spec.outName) {
+			env
+				.getRouteFinder()
+				.findRoutes(entry.inIo.staticRef, entry.outIo.staticRef, env)
+				.flatMap { extractUniqueBlocks(it.segments) }
+				.distinct()
+		}
 
 	/**
 	 * Acquires the gate resources for [gateBlocks], makes the single
@@ -586,6 +616,31 @@ open class MultiTrainLoop(
 				simTime = time()
 			)
 		)
+
+	/**
+	 * Records an [EntryFailureKind.UNKNOWN_IN_OUT] failure for [spec]. No [Train] is created,
+	 * so the spec takes no concurrency slot and is not counted as entered.
+	 */
+	private fun recordUnknownInOut(
+		spec: TrainSpec,
+		now: Double
+	) {
+		val failure =
+			EntryFailure(
+				trainName = null,
+				inName = spec.inName,
+				outName = spec.outName,
+				kind = EntryFailureKind.UNKNOWN_IN_OUT,
+				attempts = 0,
+				lastResult = null,
+				simTime = now
+			)
+		entryFailures.add(failure)
+		logger.error {
+			"MultiTrainLoop: no train generated for ${spec.inName} -> ${spec.outName}: " +
+				"the context has no DynamicInOut with one of these names"
+		}
+	}
 
 	private fun releaseIfOccupied(resource: Resource) {
 		if (resource.occupied > 0) {

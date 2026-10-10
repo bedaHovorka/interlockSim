@@ -43,8 +43,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService]. The gate is kept
  * on purpose (owner ruling on Issue #1147); removing it is out of scope. Since Issue #1148
  * the dispatcher gates, per `(entry, exit)` pair, the union of the blocks of every
- * topological candidate (computed once, the topology is static), because
- * `reservePath` chooses the candidate itself.
+ * candidate route from [cz.vutbr.fit.interlockSim.context.RouteFinder] (computed once, the
+ * topology is static), because `reservePath` chooses the candidate itself.
  *
  * ## Future slices
  *
