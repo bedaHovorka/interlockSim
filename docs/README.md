@@ -62,6 +62,10 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 
 - [goal9b-demands/SP1-fail-fast-harness.md](goal9b-demands/SP1-fail-fast-harness.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
 
+## Goal 1B reports (dated)
+
+- [SP9-kdisco-review.md](SP9-kdisco-review.md) - kDisco deadlock and race review, scanner survey, and the Goal 9B engine-guarantee demands (SP9, #1156, 2026-10). Belongs at `goal9b-demands/SP9-kdisco-review.md`; see the note at the top of the file.
+
 ## History
 
 Dated summaries, retrospectives, decisions, and reports. Kept for context; do not treat as current.
