@@ -510,11 +510,14 @@ interface PathReservationService :
 	 * reserving overload would reserve to (the first FREE candidate), **without
 	 * reserving anything**.
 	 *
-	 * Used by the dispatch shell ([cz.vutbr.fit.interlockSim.sim.ShuntingLoop]) to
-	 * pre-compute the `to` of an explicit from→to
-	 * [cz.vutbr.fit.interlockSim.sim.DispatchDecision.ReservePath] so the pure
-	 * [cz.vutbr.fit.interlockSim.sim.Dispatcher] can echo it and the shell can apply
-	 * it with [reservePath]. The target is a semaphore, or the destination
+	 * Since Issue #970 this is the first available element of
+	 * [ReservationTargetQuery.findReservationTargetCandidates]: the dispatch shell
+	 * ([cz.vutbr.fit.interlockSim.sim.ShuntingLoop]) publishes that candidate list and the
+	 * [cz.vutbr.fit.interlockSim.sim.Dispatcher] chooses the `to` of its from→to
+	 * [cz.vutbr.fit.interlockSim.sim.DispatchDecision.ReservePath] from it
+	 * ([cz.vutbr.fit.interlockSim.sim.ReservationTargetPolicy]); the shell then applies the
+	 * decision with [reservePath]. This single-pick form stays for callers that need only the
+	 * pick. The target is a semaphore, or the destination
 	 * [cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut] for the final section
 	 * (InOuts are always valid terminal targets — see `findNextSemaphoresVia`).
 	 *
@@ -542,6 +545,7 @@ interface PathReservationService :
 	 *   `null` if none is free.
 	 * @see reservePathToAnyNextSemaphore
 	 * @see isPathAvailable
+	 * @see ReservationTargetQuery.findReservationTargetCandidates
 	 * @since Issue #729 (SP0.7 — Goal 10)
 	 */
 	fun findNextReservationTarget(start: OrientedPathSeparator): DynamicPathSeparator? =

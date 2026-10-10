@@ -244,8 +244,9 @@ class KoogDispatchAgentImpl(
 	 *
 	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toSeparatorName] come from
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName]/
-	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName] — signal or InOut
-	 * names, both legal `request_route` endpoints — never
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName] (the latter is the
+	 * `ReservationTargetPolicy` pick over `candidateTargets`, carried by the compatibility
+	 * projection — Issue #970) — signal or InOut names, both legal `request_route` endpoints — never
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.blockId]. See this class's
 	 * [buildUserPrompt] KDoc ("Never render a name the model cannot use as an argument") for why
 	 * that distinction matters.

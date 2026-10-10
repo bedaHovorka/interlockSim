@@ -30,8 +30,11 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
  *   active network). An agent reads this list to decide which trains to admit.
  * - **Inner block inputs** — directional inputs of every inner track block (RailSemaphore–
  *   RailSemaphore bounds). Each input carries occupancy state, owner train, approach direction,
- *   and whether a forward reservation already extends beyond this input — the exact data
- *   [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] needs for forward-path decisions.
+ *   whether a forward reservation already extends beyond this input, and the evaluated
+ *   candidate targets one section ahead
+ *   ([cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets]) — the exact data
+ *   [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] needs to decide whether to reserve and
+ *   to choose the target (Issue #970).
  * - **Outer block inputs** — same data for outer (InOut–RailSemaphore) track blocks.
  *
  * ## Threading

@@ -96,6 +96,7 @@ class DefaultPathReservationService(
 	private val pathInfoBuilder: PathInfoBuilder,
 	private val routeFinder: RouteFinder
 ) : PathReservationService,
+	ReservationTargetQuery,
 	BlockRollbackStep {
 	// ── Conflict-vs-routine-contention disambiguation (Issue #612 follow-up) ──
 	//
@@ -1879,26 +1880,37 @@ class DefaultPathReservationService(
 	override fun findNextReservationTarget(
 		start: OrientedPathSeparator,
 		ownerTrainId: String?
-	): DynamicPathSeparator? {
+	): DynamicPathSeparator? = findReservationTargetCandidates(start, ownerTrainId).firstOrNull { it.available }?.separator
+
+	override fun findReservationTargetCandidates(
+		start: OrientedPathSeparator,
+		ownerTrainId: String?
+	): List<ReservationTargetCandidate> {
 		logger.debug {
-			"findNextReservationTarget: Finding next FREE target from oriented separator $start" +
+			"findReservationTargetCandidates: Listing next targets from oriented separator $start" +
 				(ownerTrainId?.let { ", blocks owned by $it count as free (Issue #1060)" } ?: "")
 		}
 
-		val (dynamicStart, next) = resolveForwardSection(start, "findNextReservationTarget") ?: return null
+		val (dynamicStart, next) =
+			resolveForwardSection(start, "findReservationTargetCandidates") ?: return emptyList()
 
 		val targets = findNextSemaphoresVia(dynamicStart, next)
 		if (targets.isEmpty()) {
-			logger.debug { "findNextReservationTarget: No separators found from $start via $next" }
-			return null
+			logger.debug { "findReservationTargetCandidates: No separators found from $start via $next" }
+			return emptyList()
 		}
-		val firstAvailable =
-			targets.firstOrNull { isPathAvailableFor(dynamicStart, it, DEFAULT_MAX_PATH_DEPTH, ownerTrainId) }
+		// Every candidate is evaluated (Issue #970 ruling: never report an unevaluated candidate
+		// as unavailable). isPathAvailableFor is read-only, so the extra evaluations past the
+		// first available target change no state and the pick stays byte-identical.
+		val candidates =
+			targets.map {
+				ReservationTargetCandidate(it, isPathAvailableFor(dynamicStart, it, DEFAULT_MAX_PATH_DEPTH, ownerTrainId))
+			}
 		logger.debug {
-			"findNextReservationTarget: ${targets.size} target(s) from $start via $next, " +
-				"first available = $firstAvailable"
+			"findReservationTargetCandidates: ${targets.size} target(s) from $start via $next, " +
+				"available = ${candidates.filter { it.available }.map { it.separator }}"
 		}
-		return firstAvailable
+		return candidates
 	}
 
 	override fun isPathToAnyNextSemaphoreAvailable(

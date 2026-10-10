@@ -4,8 +4,13 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -16,9 +21,11 @@ import java.util.concurrent.TimeUnit
  * Locks in the sensor-port contract that keeps the forward-reservation graph search
  * off the per-tick hot path.
  *
- * [ShuntingLoop.toBlockInputObservation] resolves [BlockInputObservation.toSeparatorName]
- * via [PathReservationService.findNextReservationTarget][cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.findNextReservationTarget],
- * which is a BFS plus a per-candidate topological-path enumeration. Running it for every
+ * [ShuntingLoop.toBlockInputObservation] resolves [BlockInputObservation.candidateTargets]
+ * via [ReservationTargetQuery.findReservationTargetCandidates][cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery.findReservationTargetCandidates],
+ * which is a BFS plus a per-candidate topological-path enumeration, and derives
+ * [BlockInputObservation.toSeparatorName] as [ReservationTargetPolicy.pick] over that list
+ * (Issue #970). Running the query for every
  * block input on every tick — including inputs that provably cannot take a forward
  * reservation — accounted for ~9% of `fast-sim example shuntingLoop 300` wall time.
  *
@@ -33,6 +40,11 @@ import java.util.concurrent.TimeUnit
  *
  * Reverting the gate (computing `toSeparatorName` unconditionally) makes this test fail:
  * FREE inputs with clear track ahead resolve to a non-null target.
+ *
+ * Since Issue #970 the same gate guards [BlockInputObservation.candidateTargets], the list the
+ * dispatcher chooses from; `toSeparatorName` is the policy's pick over that list. The last two
+ * tests pin that relation and the list's content against
+ * [ReservationTargetQuery.findReservationTargetCandidates][cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery.findReservationTargetCandidates].
  */
 @DisplayName("ShuntingLoop forward-reservation-target laziness contract")
 @Tag("integration-test")
@@ -117,4 +129,88 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 
 		assertThat(freeWithTarget.firstOrNull(), "FREE input with a forward-reservation target").isNull()
 	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `candidateTargets is empty for every non-eligible input and toSeparatorName is the policy's pick`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		val loop = ShuntingLoop(context, endTime = 120L)
+		wireSynchronousDispatcher(context, loop)
+		val wired = loop.controlStepListener
+
+		var inputsWithCandidates = 0
+		val violations = mutableListOf<String>()
+		loop.controlStepListener =
+			ControlStepListener {
+				for (input in loop.getInnerBlockInputs() + loop.getOuterBlockInputs()) {
+					if (input.candidateTargets.isNotEmpty()) inputsWithCandidates++
+					if (!canReserveForward(input) && input.candidateTargets.isNotEmpty()) {
+						violations += "non-eligible ${input.blockId}->${input.towardSemaphoreName} lists ${input.candidateTargets}"
+					}
+					val pick = ReservationTargetPolicy.pick(input.candidateTargets)?.name
+					if (input.toSeparatorName != pick) {
+						violations +=
+							"${input.blockId}->${input.towardSemaphoreName} projects ${input.toSeparatorName} but the pick is $pick"
+					}
+				}
+				wired?.onControlStep()
+			}
+
+		context.setMainProcess(loop)
+		context.run()
+
+		assertThat(inputsWithCandidates, "inputs carrying candidates").isGreaterThan(0)
+		assertThat(violations.size, "violations: $violations").isEqualTo(0)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `every candidate's kind matches its separator class and the list equals the interlocking's query`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+		val query = context.getRoutingServices().getReservationTargetQuery()
+		val semaphores = context.cellsOfType<DynamicRailSemaphore>()
+
+		val loop = ShuntingLoop(context, endTime = 120L)
+		wireSynchronousDispatcher(context, loop)
+		val wired = loop.controlStepListener
+
+		var listsCompared = 0
+		val violations = mutableListOf<String>()
+		loop.controlStepListener =
+			ControlStepListener {
+				for (input in loop.getInnerBlockInputs() + loop.getOuterBlockInputs()) {
+					if (!canReserveForward(input)) continue
+					val start = semaphores.first { it.name == input.towardSemaphoreName } as OrientedPathSeparator
+					val owner = if (input.awaitingRouteExtension) input.ownerTrainId else null
+					val expected = query.findReservationTargetCandidates(start, owner).map { it.toCandidateTarget() }
+					listsCompared++
+					if (input.candidateTargets != expected) {
+						violations += "${input.blockId}->${input.towardSemaphoreName}: ${input.candidateTargets} != $expected"
+					}
+				}
+				wired?.onControlStep()
+			}
+
+		context.setMainProcess(loop)
+		context.run()
+
+		assertThat(listsCompared, "eligible inputs compared").isGreaterThan(0)
+		assertThat(violations.size, "violations: $violations").isEqualTo(0)
+	}
+
+	/** The shell's gate for resolving a forward target (Issues #749 and #1060). */
+	private fun canReserveForward(input: BlockInputObservation): Boolean =
+		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
+			(input.isApproachingThisInput || input.pathSetUpTowardThisInput)
+
+	/** The expected observation fact for a query result: the kind follows the separator's class. */
+	private fun ReservationTargetCandidate.toCandidateTarget(): CandidateTarget =
+		when (val sep = separator) {
+			is DynamicInOut -> CandidateTarget(sep.name, SeparatorKind.IN_OUT, available)
+			is DynamicRailSemaphore -> CandidateTarget(sep.name, SeparatorKind.SEMAPHORE, available)
+			else -> throw IllegalStateException("Unexpected separator kind: $sep")
+		}
 }

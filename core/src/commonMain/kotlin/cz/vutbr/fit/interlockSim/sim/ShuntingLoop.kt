@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -24,7 +26,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -131,6 +132,12 @@ class ShuntingLoop(
 	// Lazy injection (SP0.11: moved from ctor param to lazy property — construction stays in scope)
 	private val pathReservationService: PathReservationService by lazy {
 		context.getRoutingServices().getPathReservationService()
+	}
+
+	// The candidates the dispatcher chooses from; the read-only capability is served by the
+	// same instance as the reserving service (Issue #970).
+	private val reservationTargetQuery: ReservationTargetQuery by lazy {
+		context.getRoutingServices().getReservationTargetQuery()
 	}
 
 	companion object {
@@ -443,10 +450,12 @@ class ShuntingLoop(
 	 * [SimulationSnapshot][cz.vutbr.fit.interlockSim.ports.SimulationSnapshot]
 	 * cannot carry (see [BlockInputObservation] KDoc).
 	 *
-	 * [toSeparatorName] is the next FREE separator one section ahead of [to]
-	 * ([PathReservationService.findNextReservationTarget]) — the read-only twin of the
-	 * pre-#729 `reservePathToAnyNextSemaphore(to)` call, so the applier's
-	 * `reservePath(train, to, target)` reproduces the prior first-FREE outcome.
+	 * [BlockInputObservation.candidateTargets] lists every next separator one section ahead of
+	 * [to] with its availability ([ReservationTargetQuery.findReservationTargetCandidates]) — the
+	 * read-only twin of the pre-#729 `reservePathToAnyNextSemaphore(to)` call; the
+	 * [Dispatcher] chooses among them (Issue #970). [BlockInputObservation.toSeparatorName] is
+	 * the compatibility projection of that choice, [ReservationTargetPolicy.pick] over the same
+	 * list, so a reader that needs only the pick gets the prior first-FREE outcome.
 	 */
 	private fun toBlockInputObservation(
 		block: DynamicTrackBlock,
@@ -470,18 +479,20 @@ class ShuntingLoop(
 			pathAlreadyExtendedBeyond &&
 				isApproachingThisInput &&
 				isStandingAwaitingExtension(requireSimulationNotNull(block.getTrackOccupant()), to)
+		val candidateTargets =
+			findForwardReservationCandidates(
+				to,
+				isApproachingThisInput,
+				pathSetUpTowardThisInput,
+				pathAlreadyExtendedBeyond,
+				awaitingRouteExtension,
+				ownerTrainId
+			)
 		return BlockInputObservation(
 			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
 			towardSemaphoreName = to.name,
-			toSeparatorName =
-				findForwardReservationTargetName(
-					to,
-					isApproachingThisInput,
-					pathSetUpTowardThisInput,
-					pathAlreadyExtendedBeyond,
-					awaitingRouteExtension,
-					ownerTrainId
-				),
+			toSeparatorName = ReservationTargetPolicy.pick(candidateTargets)?.name,
+			candidateTargets = candidateTargets,
 			state = state,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
@@ -506,17 +517,19 @@ class ShuntingLoop(
 			occupant.distanceToSignalAhead() <= STANDING_AT_SEPARATOR_TOLERANCE &&
 			trainNavigationService.findReservedPathForTrain(occupant.name, to) is PathResult.OwnershipConflict
 
-	// Only inputs that can actually yield a forward reservation need a target searched for.
-	// findNextReservationTarget is a graph walk (BFS + per-candidate path enumeration); running
-	// it for FREE and already-extended inputs cost ~9% of fast-sim wall time (#738).
-	private fun findForwardReservationTargetName(
+	// Only inputs that can actually yield a forward reservation need the candidates searched
+	// for. findReservationTargetCandidates is a graph walk (BFS + per-candidate path
+	// enumeration); running it for FREE and already-extended inputs cost ~9% of fast-sim wall
+	// time (#738). The gate is unchanged by Issue #970; only the result widened from the first
+	// available target to every evaluated candidate.
+	private fun findForwardReservationCandidates(
 		to: DynamicRailSemaphore,
 		isApproachingThisInput: Boolean,
 		pathSetUpTowardThisInput: Boolean,
 		pathAlreadyExtendedBeyond: Boolean,
 		awaitingRouteExtension: Boolean,
 		ownerTrainId: String?
-	): String? {
+	): List<CandidateTarget> {
 		val canReserveForward =
 			(!pathAlreadyExtendedBeyond || awaitingRouteExtension) &&
 				(isApproachingThisInput || pathSetUpTowardThisInput)
@@ -524,26 +537,27 @@ class ShuntingLoop(
 			// Owner-aware (own blocks count as free) only for the #1060 state: the extension
 			// of an awaiting route leads back over the train's own blocks. A not-extended
 			// input keeps the plain FREE-only search, exactly as before Issue #1060.
-			pathReservationService
-				.findNextReservationTarget(
+			reservationTargetQuery
+				.findReservationTargetCandidates(
 					to,
 					if (awaitingRouteExtension) ownerTrainId else null
-				)?.let(::nameOf)
+				).mapNotNull(::toCandidateTarget)
 		} else {
-			null
+			emptyList()
 		}
 	}
 
 	/**
-	 * Name of a [DynamicPathSeparator] returned by
-	 * [PathReservationService.findNextReservationTarget] — a [DynamicInOut] or a
-	 * [DynamicRailSemaphore] (the only separator kinds that method returns). Used to
-	 * carry the `to` target across the pure [Dispatcher] seam as a name string.
+	 * The observation fact for one [ReservationTargetCandidate]: its separator's name and
+	 * [SeparatorKind], carried across the pure [Dispatcher] seam as plain values. A
+	 * [DynamicInOut] is an [SeparatorKind.IN_OUT], a [DynamicRailSemaphore] a
+	 * [SeparatorKind.SEMAPHORE] — the only separator kinds
+	 * [ReservationTargetQuery.findReservationTargetCandidates] returns; `null` for any other.
 	 */
-	private fun nameOf(separator: DynamicPathSeparator): String? =
-		when (separator) {
-			is DynamicInOut -> separator.name
-			is DynamicRailSemaphore -> separator.name
+	private fun toCandidateTarget(candidate: ReservationTargetCandidate): CandidateTarget? =
+		when (val separator = candidate.separator) {
+			is DynamicInOut -> CandidateTarget(separator.name, SeparatorKind.IN_OUT, candidate.available)
+			is DynamicRailSemaphore -> CandidateTarget(separator.name, SeparatorKind.SEMAPHORE, candidate.available)
 			else -> null
 		}
 

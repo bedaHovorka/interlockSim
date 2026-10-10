@@ -133,9 +133,10 @@ sealed class DispatchDecision {
 	 * shell carried as [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName]);
 	 * [toSeparatorName] is the next separator one section ahead — destination-agnostic
 	 * (a semaphore, or the destination InOut for the final section; see
-	 * [BlockInputObservation.toSeparatorName] for why). The shell pre-computes `to` as
-	 * the first FREE next separator ([BlockInputObservation.toSeparatorName]) so the
-	 * applier can call
+	 * [BlockInputObservation.toSeparatorName] for why). The dispatcher chooses `to` among
+	 * the candidates the shell reports with their availability
+	 * ([BlockInputObservation.candidateTargets]) through [ReservationTargetPolicy]
+	 * (Issue #970), so the applier can call
 	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePath]
 	 * directly. `to` is never the far destination as a multi-section shortcut: one
 	 * section is reserved per decision, matching the pre-#729

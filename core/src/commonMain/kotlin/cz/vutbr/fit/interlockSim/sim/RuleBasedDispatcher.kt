@@ -26,9 +26,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * 2. **Path advancement** — for every [DispatchObservation.innerBlockInputs] and
  *    [DispatchObservation.outerBlockInputs] entry, reserves the next forward
  *    section for any approaching or reserved train. Each reservation is expressed
- *    as a from→to [DispatchDecision.ReservePath] whose `to` the shell has
- *    pre-computed as the next FREE separator one section ahead — destination-agnostic;
- *    see [BlockInputObservation.toSeparatorName].
+ *    as a from→to [DispatchDecision.ReservePath] whose `to` this dispatcher **chooses**
+ *    among the next separators one section ahead that the shell reports with their
+ *    availability ([BlockInputObservation.candidateTargets]), through
+ *    [ReservationTargetPolicy] (Issue #970) — destination-agnostic; see
+ *    [BlockInputObservation.toSeparatorName] for the compatibility projection of that pick.
  *
  * The shell ([ShuntingLoop]) calls [decide] once per tick with a single
  * [DispatchObservation] whose fields are all populated together (SP0.11,
@@ -39,8 +41,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Train admission is strictly FIFO over [DispatchObservation.unapprovedTrains].
  * Path selection is applied by the shell via
  * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePath]
- * using the `to` separator this dispatcher echoes from the observation, which
- * produces deterministic results for a fixed network topology. Given the same XML
+ * using the `to` separator this dispatcher chooses from the observation's candidate
+ * list with the deterministic [ReservationTargetPolicy], which produces deterministic
+ * results for a fixed network topology. Given the same XML
  * network and train generation sequence, this dispatcher produces identical
  * decision sequences across consecutive runs.
  *
@@ -57,8 +60,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * value* of a reservation attempt, which is unavailable before the shell applies
  * the returned [DispatchDecision]s.
  *
- * When the shell found no FREE next separator one section ahead
- * ([BlockInputObservation.toSeparatorName] == `null`), no reservation can be
+ * When no candidate one section ahead is available ([ReservationTargetPolicy.pick] over
+ * [BlockInputObservation.candidateTargets] returns `null`), no reservation can be
  * requested this tick and [DispatchDecision.NoAction] effectively results for
  * that input — the train waits and is reconsidered next tick, matching the
  * pre-#729 behaviour where `reservePathToAnyNextSemaphore` returned
@@ -72,7 +75,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * [PathCommandTranslator] (SP2b.3, Issue #558) translates the selected [PathCandidate]
  * into explicit [DispatchDecision.SetSwitchPosition] and [DispatchDecision.SetSignalAspect]
  * commands that the interlocking independently validates before the path is reserved.
- * This per-tick [decide] currently reserves a single pre-computed section per input and does
+ * This per-tick [decide] currently reserves a single section per input, chosen by the
+ * placeholder [ReservationTargetPolicy] (exit first, then first available signal), and does
  * not yet route through [CandidatePathRuleEngine]; SP2b.5 (Issue #560) shipped only the
  * rationale API ([CandidatePathRuleEngine.selectWithRationale], [DispatchDecision.rationale]).
  * Wiring the engine into multi-route selection here remains open — the SP2b.2/SP2b.3 stage is
@@ -148,8 +152,8 @@ class RuleBasedDispatcher(
 	 * ## Same-tick same-target dedup (Goal 10 Stage A3, Issue #829)
 	 *
 	 * [checkInput] resolves each input independently from one frozen [observed] snapshot, so
-	 * two different trains approaching a track merge (different blocks) can both compute the
-	 * *same* [BlockInputObservation.toSeparatorName] as their next FREE separator — neither
+	 * two different trains approaching a track merge (different blocks) can both pick the
+	 * *same* separator from their [BlockInputObservation.candidateTargets] — neither
 	 * input can see the other's not-yet-applied reservation. Emitting both
 	 * [DispatchDecision.ReservePath]s lets one land as a same-tick reservation race purely from
 	 * this evaluation order, not from any real track contention (confirmed via
@@ -159,8 +163,9 @@ class RuleBasedDispatcher(
 	 * [claimedSeparators] tracks every target already claimed earlier in this same batch; a
 	 * later input targeting an already-claimed separator is deferred (yields no decision) rather
 	 * than emitted — the deferred train is simply re-evaluated next tick, by which point the
-	 * winner's reservation has updated the topology and the shell will recompute a (likely
-	 * different) FREE separator for it.
+	 * winner's reservation has updated the topology and the shell will report a fresh candidate
+	 * list (the deferred input does **not** fall through to its next candidate in the same
+	 * tick; this keeps the pick byte-identical to the pre-#970 shell-side choice).
 	 */
 	private fun checkAllInputs(observed: DispatchObservation): List<DispatchDecision.ReservePath> {
 		val claimedSeparators = mutableSetOf<String>()
@@ -172,12 +177,12 @@ class RuleBasedDispatcher(
 	 *
 	 * @param claimedSeparators Separators already claimed by an earlier input in this same
 	 *   [checkAllInputs] batch; mutated in place when this call claims a new one.
-	 * @return A [DispatchDecision.ReservePath] when the block state warrants one, the shell
-	 *   found a FREE next separator ([BlockInputObservation.toSeparatorName] non-null), and that
-	 *   separator has not already been claimed this tick; `null` when the state requires no
-	 *   action (FREE, or occupied/reserved but not eligible toward this input, or already
-	 *   extended, or no FREE next separator one section ahead, or the target separator was
-	 *   already claimed by an earlier input this tick).
+	 * @return A [DispatchDecision.ReservePath] when the block state warrants one,
+	 *   [ReservationTargetPolicy] picks an available candidate from
+	 *   [BlockInputObservation.candidateTargets], and that separator has not already been
+	 *   claimed this tick; `null` when the state requires no action (FREE, or occupied/reserved
+	 *   but not eligible toward this input, or already extended, or no available candidate one
+	 *   section ahead, or the chosen separator was already claimed by an earlier input this tick).
 	 */
 	private fun checkInput(
 		input: BlockInputObservation,
@@ -216,15 +221,17 @@ class RuleBasedDispatcher(
 		}
 
 	/**
-	 * Shared tail of the OCCUPIED/RESERVED [checkInput] branches: emits a [DispatchDecision.ReservePath]
-	 * toward [BlockInputObservation.toSeparatorName], unless there is no FREE separator yet or it was
-	 * already claimed by an earlier input this tick (see [checkAllInputs]).
+	 * Shared tail of the OCCUPIED/RESERVED [checkInput] branches: chooses the target among
+	 * [BlockInputObservation.candidateTargets] through [ReservationTargetPolicy] (Issue #970) and
+	 * emits a [DispatchDecision.ReservePath] toward it, unless no candidate is available or the
+	 * chosen separator was already claimed by an earlier input this tick (see [checkAllInputs]).
+	 * The [BlockInputObservation.toSeparatorName] projection is never read here.
 	 */
 	private fun reserveOrDefer(
 		input: BlockInputObservation,
 		claimedSeparators: MutableSet<String>
 	): DispatchDecision.ReservePath? {
-		val target = input.toSeparatorName
+		val target = ReservationTargetPolicy.pick(input.candidateTargets)?.name
 		if (target == null) {
 			logger.debug {
 				"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +

@@ -22,6 +22,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
  *
  * - [getTopologyNavigator] - Static topology navigation (no dynamic-state dependency)
  * - [getPathReservationService] - Atomic path reservation with train ownership tracking
+ * - [getReservationTargetQuery] - Read-only next-target candidate query (reservation capability, Issue #970)
  * - [getTrainNavigationService] - Train-specific navigation over RESERVED paths only
  *
  * @see cz.vutbr.fit.interlockSim.context.SimulationEnvironment.getRoutingServices
@@ -65,6 +66,21 @@ interface RoutingServices {
 	 * @since Issue #296 (ShuntingLoop refactoring)
 	 */
 	fun getPathReservationService(): PathReservationService
+
+	/**
+	 * Get the read-only reservation-target capability for dispatcher target choice.
+	 *
+	 * [ReservationTargetQuery] is deliberately **not** a superinterface of
+	 * [PathReservationService]: adding an abstract method to it would force every
+	 * implementer to grow the candidate-query machinery, so the capability is exposed
+	 * here instead (Issue #970 review). Implementations serve both interfaces from the
+	 * same instance.
+	 *
+	 * @return ReservationTargetQuery instance for this simulation context
+	 * @see ReservationTargetQuery
+	 * @since Issue #970
+	 */
+	fun getReservationTargetQuery(): ReservationTargetQuery
 
 	/**
 	 * Get train navigation service for train-specific path following.
