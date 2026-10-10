@@ -466,9 +466,9 @@ class EngineStandaloneTest : KoinTestBase() {
 		// From the first action on, the stop line is `STAND_DISTANCE_GAIN × v²` away, so the law
 		// asks for -5 m/s² at every speed: the bound clamps it to a constant
 		// MINIMAL_TRAIN_DECELERATION, and `v` reaches 0 in finite time. The aspect stays STOP, so
-		// the speed term is the only exit left. The second action only samples: the velocity
-		// integration still runs one step on the old law after a switch (#1126), so the stand time
-		// is exact in closed form only from a sample taken after that step.
+		// the speed term is the only exit left. The second action only samples a point on that
+		// constant-deceleration ramp, from which the stand time is exact in closed form (the engine
+		// runs ahead of the velocity integration since #1126, so the ramp starts at the switch).
 		val driver =
 			runWaitSite(host, command = { it.onWarning(TARGET_SPEED_MPS) }, facing = Signal.STOP) {
 				listOf(

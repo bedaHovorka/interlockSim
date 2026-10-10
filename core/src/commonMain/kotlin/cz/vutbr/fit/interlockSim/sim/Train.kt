@@ -1537,6 +1537,7 @@ class Train :
 
 	private val acceleration: Variable = Variable(0.0)
 	private val velocity: Variable = Variable(0.0)
+	// Runs at kDisco priority 0; `engine` runs at 1.0, ahead of it (Issue #1126).
 	private val va: SimpleIntegration = SimpleIntegration(velocity, acceleration)
 	private val front: Front = Front()
 	private val tail: Tail = Tail()

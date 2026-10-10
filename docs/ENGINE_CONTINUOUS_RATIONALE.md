@@ -121,14 +121,34 @@ outright; a `waitUntil` re-parked there.
 The `Continuous` constraints above are unchanged: `derivatives()` still owns
 the kinematics, and `start()`/`stop()` still gate the integrator per phase.
 
-The generator's `dtMax` stays at 1 ms. #760 tried 1e-2, 1e-1 and 1.0 and kept
-1e-3 (the measured ladder is in the PR #1133 description; #1126 tracks the fix), because a switch of the engine's law reaches the velocity integration
-one accepted step late (the `acceleration` variable is reset to its
-step-start value in every RK stage, and the velocity integration reads it
-before `Engine.derivatives()` rewrites it). At a braking onset that step
-overruns the braking point, and the residual speed the front's clearance gate
-snaps at the stand grows with the step. See the comment at `dtMax` in
-`Generator.kt`.
+## Integration order (Issue #1126)
+
+`Engine` runs at kDisco `Continuous` priority `1.0`; the train's
+`SimpleIntegration`s keep the default `0.0`. Active continuous processes run
+in descending priority, equal priorities in activation order, and `Train`
+starts its integrations before the engine, so without the priority the
+velocity integration read `acceleration` before `Engine.derivatives()` wrote
+it. The `acceleration` variable has rate 0, and RKF45 resets every variable to
+its step-start value before each stage, so the velocity was integrated with a
+zero-order hold of the step-start acceleration on every step: exact for the
+constant-rate regimes, a first-order error for the braking law
+`(T² − v²) / (2s)`, and the whole first step after a law switch ran on the
+old law. At a braking onset that step overran the braking point, and the
+front's clearance gate ended the stand from a residual speed that grew with
+the step (0.46 m/s at 1 ms, 0.92 m/s at 10 ms in `Issue1057LateFlipBrakingTest`).
+
+`Engine.start()` assigns the priority once, on the first start, from inside
+the engine's own discrete turn (kDisco's `setPriority` needs an active
+context and no running monitor) with the engine out of the active list, so
+the call only records the field; every later `stop()`/`start()` pair
+re-inserts the engine ahead of the integrations. Evaluation order only, no
+formula change. With it, each RK stage integrates the velocity with that
+stage's acceleration, and the stand residual at 1 ms is one 5 ms sample at
+the braking bound (0.015 m/s).
+
+The generator's `dtMax` stays at 1 ms. The #760 ladder (1e-2, 1e-1, 1.0;
+table in the PR #1133 description) was walked before #1126 and a raise is a
+separate decision. See the comment at `dtMax` in `Generator.kt`.
 
 ## Non-goals
 
@@ -148,4 +168,5 @@ snaps at the stand grows with the step. See the comment at `dtMax` in
 - Issue: [#373](https://github.com/bedaHovorka/interlockSim/issues/373)
 - Issue: [#1059](https://github.com/bedaHovorka/interlockSim/issues/1059)
 - Issue: [#760](https://github.com/bedaHovorka/interlockSim/issues/760)
+- Issue: [#1126](https://github.com/bedaHovorka/interlockSim/issues/1126)
 - PR: [#372](https://github.com/bedaHovorka/interlockSim/pull/372)
