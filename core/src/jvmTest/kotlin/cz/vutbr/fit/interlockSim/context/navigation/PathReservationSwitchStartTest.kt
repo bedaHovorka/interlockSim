@@ -14,6 +14,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -61,6 +62,31 @@ class PathReservationSwitchStartTest : PathReservationServiceTestBase() {
 
 		// Act
 		val result = service.reservePath("train1", switchVA, inOut2)
+
+		// Assert
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		assertThat(service.getReservedBlocks("train1")).isEmpty()
+		assertThat(registry.getSwitches("train1")).isEmpty()
+		assertThat(registry.getPathInfo("train1")).isNull()
+	}
+
+	@Test
+	fun `reservePathToAnyNextSemaphore from a switch start is refused and reserves nothing`() {
+		// Arrange - the outer semaphore scan delegates to reservePath once per semaphore it finds,
+		// so the Step 0 guard refuses each attempt and the scan reports the permanent verdict.
+		val switchVA = switchNamed("vA")
+		val doA1 = findSemaphoreByName("doA1")
+		val next =
+			simulationContext
+				.getRoutingServices()
+				.getTopologyNavigator()
+				.findAllTopologicalPaths(switchVA, doA1)
+				.first()
+				.filterIsInstance<TrackSection>()
+				.first()
+
+		// Act
+		val result = service.reservePathToAnyNextSemaphore("train1", switchVA, next)
 
 		// Assert
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()

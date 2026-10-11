@@ -1654,8 +1654,10 @@ class DefaultPathReservationService(
 	 * carries the full rationale.
 	 *
 	 * Extracted so [reservePathToAnyNextSemaphore] stays within its method-length budget.
+	 * `internal` so tests can pin the all-divergent branch directly: since Issue #1188 no legal
+	 * (oriented, contiguous) origin on `vyhybna.xml` reaches it through the real scan.
 	 */
-	private fun classifyExhaustedSemaphores(
+	internal fun classifyExhaustedSemaphores(
 		lastResult: PathReservationService.ReservationResult?,
 		permanentAttempts: Int,
 		attemptCount: Int
@@ -1980,10 +1982,10 @@ class DefaultPathReservationService(
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
 
-		// Issue #1188: a non-oriented start (a switch) is refused once, here. Every target would
-		// otherwise repeat the identical Step 0 rejection inside reservePath, each repetition
-		// costing a full candidate-path enumeration (same reasoning as the NonContiguousStart
-		// short-circuit in STEP 4 below).
+		// Issue #1188: a non-oriented start (a switch) is refused once, here. reservePath would
+		// refuse it too, before its candidate-path enumeration, but only after STEP 1 had already
+		// discovered every target, and then once per target with the same reason and warning.
+		// Refusing up front skips the target discovery and the repeated calls.
 		rejectNonOrientedStart(trainId, start)?.let { return it }
 
 		// ========================================

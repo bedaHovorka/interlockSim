@@ -189,15 +189,19 @@ interface PathReservationService :
 		 * (`PATH_RESERVATION_ARCHITECTURE.md` §5: G4 and the contiguity precondition are "the
 		 * same malformation class -- a route the train cannot actually use").
 		 *
-		 * Set whenever **any** candidate in the attempt hits this failure mode, even if other
+		 * For the per-candidate classes (rear-facing START, unconfigurable switch) it is set
+		 * whenever **any** candidate in the attempt hits this failure mode, even if other
 		 * candidates in the same attempt were only ordinarily blocked -- first-hit-wins, mirroring
 		 * how [NonContiguousStart] already short-circuits ahead of blocked-candidate tracking
 		 * (traffic-simulation-expert ruling, Issue #903: the fact one candidate is permanently
 		 * impossible is real and permanent information regardless of what other candidates did).
+		 * A non-oriented route origin (Issue #1188) is a request-level refusal instead: it fires
+		 * before any candidate is discovered.
 		 *
-		 * @property reason English explanation of which permanent-impossibility class fired
-		 *   (rear-facing START, unconfigurable switch, or a non-oriented route origin — Issue
-		 *   #1188) and which candidate hit it.
+		 * @property reason English explanation of which permanent-impossibility class fired. For
+		 *   a rear-facing START or an unconfigurable switch it names the candidate that hit it; for
+		 *   a non-oriented route origin (Issue #1188) it names the origin, because no candidate
+		 *   exists yet.
 		 * @since Issue #903
 		 */
 		data class GeometricallyImpossible(
