@@ -87,9 +87,9 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		context = TestFixtures.newShuntingSimulationContext().tracked()
 		service = context.getRoutingServices().getPathReservationService()
 		registry = context.scope.get<PathReservationRegistry>()
-		inA = context.separatorAt(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y)
-		doB1 = context.separatorAt(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y)
-		inB = context.separatorAt(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y)
+		inA = context.separatorAt(11, 8) // vyhybna InOut A
+		doB1 = context.separatorAt(25, 8) // vyhybna signal doB1
+		inB = context.separatorAt(30, 8) // vyhybna InOut B
 	}
 
 	@Test

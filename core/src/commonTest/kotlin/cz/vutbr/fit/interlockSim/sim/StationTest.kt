@@ -26,10 +26,27 @@ import kotlin.test.Test
  * Topology derivation of [Station] (Goal 1B SP2.1, Issue #1161; SIM-004).
  *
  * The vyhybna parity tests pin the derived blocks, signals and switches against the
- * hand-written `ShuntingLoop.COORD_*` contract that the derivation replaces. The other tests
+ * hand-written ShuntingLoop coordinate constants that the derivation replaced (frozen in [Former]). The other tests
  * show that the same derivation builds a [Station] from the larger fixture networks.
  */
 class StationTest : CommonKoinTestBase() {
+	/**
+	 * The hand-written vyhybna coordinate contract of ShuntingLoop that [Station] replaced, frozen
+	 * here verbatim when the constants were deleted (Issue #1162), so the parity check stays.
+	 */
+	private object Former {
+		val IN_A = Point(11, 8)
+		val IN_B = Point(30, 8)
+		val SW_A = Point(15, 8)
+		val SW_B = Point(26, 8)
+		val SEM_ZA = Point(14, 8)
+		val SEM_DOA1 = Point(16, 8)
+		val SEM_DOA2 = Point(17, 9)
+		val SEM_DOB1 = Point(25, 8)
+		val SEM_DOB2 = Point(24, 9)
+		val SEM_ZB = Point(27, 8)
+	}
+
 	private fun load(xml: String): DefaultSimulationContext {
 		val ctx = CommonTestFixtures.parseSimulationContext(xml, get()).tracked()
 		ctx.getInOuts() // initialize dynamic wrappers
@@ -46,25 +63,25 @@ class StationTest : CommonKoinTestBase() {
 		assertThat(station.platformTracks.map { it.name }).containsExactly("k1", "k2")
 		val (k1, k2) = station.platformTracks
 		assertThat(k1.signals.map { ctx.locationOf(it) }).containsExactlyInAnyOrder(
-			Point(ShuntingLoop.COORD_SEM_DOA1_X, ShuntingLoop.COORD_SEM_DOA1_Y),
-			Point(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y)
+			Former.SEM_DOA1,
+			Former.SEM_DOB1
 		)
 		assertThat(k2.signals.map { ctx.locationOf(it) }).containsExactlyInAnyOrder(
-			Point(ShuntingLoop.COORD_SEM_DOA2_X, ShuntingLoop.COORD_SEM_DOA2_Y),
-			Point(ShuntingLoop.COORD_SEM_DOB2_X, ShuntingLoop.COORD_SEM_DOB2_Y)
+			Former.SEM_DOA2,
+			Former.SEM_DOB2
 		)
 		// The same graph edges the old coordinate lookup resolved.
 		val graph = ctx.getGraph()
 		assertThat(k1.block).isSameInstanceAs(
 			graph[
-				Point(ShuntingLoop.COORD_SEM_DOA1_X, ShuntingLoop.COORD_SEM_DOA1_Y),
-				Point(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y)
+				Former.SEM_DOA1,
+				Former.SEM_DOB1
 			]
 		)
 		assertThat(k2.block).isSameInstanceAs(
 			graph[
-				Point(ShuntingLoop.COORD_SEM_DOA2_X, ShuntingLoop.COORD_SEM_DOA2_Y),
-				Point(ShuntingLoop.COORD_SEM_DOB2_X, ShuntingLoop.COORD_SEM_DOB2_Y)
+				Former.SEM_DOA2,
+				Former.SEM_DOB2
 			]
 		)
 	}
@@ -79,28 +96,28 @@ class StationTest : CommonKoinTestBase() {
 		assertThat(station.entryExitBlocks.map { it.name }).containsExactly("kB", "kA")
 		val (kB, kA) = station.entryExitBlocks
 		assertThat(ctx.locationOf(requireNotNull(kB.inOut))).isEqualTo(
-			Point(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y)
+			Former.IN_B
 		)
 		assertThat(kB.signals.map { ctx.locationOf(it) }).containsExactly(
-			Point(ShuntingLoop.COORD_SEM_ZB_X, ShuntingLoop.COORD_SEM_ZB_Y)
+			Former.SEM_ZB
 		)
 		assertThat(ctx.locationOf(requireNotNull(kA.inOut))).isEqualTo(
-			Point(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y)
+			Former.IN_A
 		)
 		assertThat(kA.signals.map { ctx.locationOf(it) }).containsExactly(
-			Point(ShuntingLoop.COORD_SEM_ZA_X, ShuntingLoop.COORD_SEM_ZA_Y)
+			Former.SEM_ZA
 		)
 		val graph = ctx.getGraph()
 		assertThat(kA.block).isSameInstanceAs(
 			graph[
-				Point(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y),
-				Point(ShuntingLoop.COORD_SEM_ZA_X, ShuntingLoop.COORD_SEM_ZA_Y)
+				Former.IN_A,
+				Former.SEM_ZA
 			]
 		)
 		assertThat(kB.block).isSameInstanceAs(
 			graph[
-				Point(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y),
-				Point(ShuntingLoop.COORD_SEM_ZB_X, ShuntingLoop.COORD_SEM_ZB_Y)
+				Former.IN_B,
+				Former.SEM_ZB
 			]
 		)
 	}
@@ -111,8 +128,8 @@ class StationTest : CommonKoinTestBase() {
 		val station = Station.from(ctx)
 
 		assertThat(station.switches.map { ctx.locationOf(it) }).containsExactlyInAnyOrder(
-			Point(ShuntingLoop.COORD_SW_A_X, ShuntingLoop.COORD_SW_A_Y),
-			Point(ShuntingLoop.COORD_SW_B_X, ShuntingLoop.COORD_SW_B_Y)
+			Former.SW_A,
+			Former.SW_B
 		)
 	}
 

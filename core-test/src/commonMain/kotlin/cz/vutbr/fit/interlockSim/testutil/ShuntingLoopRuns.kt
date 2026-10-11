@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
@@ -34,7 +33,8 @@ import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
  * @param env the environment the loop and the dispatcher see. Defaults to [context]. Pass a
  *   `NavigationDecoratingContext` here to inject a navigation decorator while [context] still
  *   drives the run.
- * @param maxConcurrentTrains forwarded to [wireSynchronousDispatcher]
+ * @param maxConcurrentTrains scenario override of the station capacity, forwarded to [ShuntingLoop];
+ *   `null` keeps the topology value (2 on `vyhybna.xml`), which the dispatcher then inherits
  * @param beforeRun runs after the loop is wired and set as main process, but **before** `run()`.
  *   Use it for anything that must be live for the whole run — a property-change reporter, a
  *   conflict listener, a captured reference to the loop.
@@ -44,7 +44,7 @@ fun runShuntingLoop(
 	context: DefaultSimulationContext,
 	endTime: Long,
 	env: SimulationContext = context,
-	maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
+	maxConcurrentTrains: Int? = null,
 	beforeRun: (ShuntingLoop) -> Unit = {}
 ): ShuntingLoop {
 	val loop = prepareShuntingLoop(context, endTime, env, maxConcurrentTrains)
@@ -63,12 +63,12 @@ fun prepareShuntingLoop(
 	context: DefaultSimulationContext,
 	endTime: Long,
 	env: SimulationContext = context,
-	maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+	maxConcurrentTrains: Int? = null
 ): ShuntingLoop {
 	// Idempotent: initialises the dynamic wrapper map if the caller has not already done so.
 	context.getInOuts()
-	val loop = ShuntingLoop(env, endTime)
-	wireSynchronousDispatcher(env, loop, maxConcurrentTrains = maxConcurrentTrains)
+	val loop = ShuntingLoop(env, endTime, maxConcurrentTrains = maxConcurrentTrains)
+	wireSynchronousDispatcher(env, loop)
 	context.setMainProcess(loop)
 	return loop
 }
