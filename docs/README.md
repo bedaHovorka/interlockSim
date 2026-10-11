@@ -69,6 +69,7 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 - [goal9b-demands/SP12.2-release-rollback.md](goal9b-demands/SP12.2-release-rollback.md) - route release and rollback moved into `RouteReleaser`; the release seams a Goal 9B dispatcher may call and those that stay private (Goal 1B SP12.2, #1168).
 - [goal9b-demands/SP12.3-signal-configuration.md](goal9b-demands/SP12.3-signal-configuration.md) - which signal seams a Goal 9B dispatcher may call and which stay private after the signal-configuration extraction (`ClearedSignalLedger`, `RouteSignalConfigurator`), with the #895 re-baseline (Goal 1B SP12.3, #1169).
 - [goal9b-demands/SP12.4-switch-configuration.md](goal9b-demands/SP12.4-switch-configuration.md) - switch-configuration seams extracted into `SwitchConfigurator`: which a Goal 9B dispatcher may surface (the `Locked` outcome's holder and positions) and which must stay private, plus the pinned `registerSwitches` born-stale behaviour (Goal 1B SP12.4, #1170).
+- [goal9b-demands/SP12.5-target-discovery.md](goal9b-demands/SP12.5-target-discovery.md) - target discovery extracted from `DefaultPathReservationService`: which discovery seams a Goal 9B dispatcher may call and which stay private, with the #895 re-baseline (Goal 1B SP12.5, #1171).
 - [goal9b-demands/SP12.6-registry-split.md](goal9b-demands/SP12.6-registry-split.md) - `PathReservationRegistry` split into block, switch and PathInfo units; which registry seams a dispatcher may call (Goal 1B SP12.6, #1172).
 
 ## History
