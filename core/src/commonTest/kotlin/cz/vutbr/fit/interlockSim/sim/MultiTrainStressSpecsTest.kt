@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
-import assertk.assertions.isNotEmpty
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
@@ -29,15 +29,28 @@ import kotlin.test.Test
  *
  * This test runs in `commonTest` (JVM `test` and `:core:linuxX64Test`), so a spec change that
  * reintroduces an impossible pair fails in the normal gate instead of only in the manual
- * `heavyTest`. It is cheap because it asks [cz.vutbr.fit.interlockSim.context.RouteFinder] only
- * about pairs that do have a route: those searches answer in milliseconds, while a search for a
- * pair without one enumerates every switch-constrained path first.
+ * `heavyTest`. Route existence is checked with
+ * [cz.vutbr.fit.interlockSim.context.RouteFinder.isRouteAvailable], which states the intent
+ * directly instead of listing routes the guard never looks at.
+ *
+ * It is fast because the switch-constrained path enumeration of these Praha pairs is small
+ * (measured 1-22 ms per pair, see `docs/goal9b-demands/SP1-fail-fast-harness.md`), not because
+ * an existence check stops the search early: [cz.vutbr.fit.interlockSim.context.RouteFinder]
+ * walks every switch-constrained path up to its depth cap whether the pair has a route or not,
+ * and `maxRoutes` bounds only the returned list. A pair without a route answers with an empty
+ * list after the same bounded enumeration, so this guard cannot hang on an impossible pair;
+ * the gate fails cleanly instead.
  */
 class MultiTrainStressSpecsTest : CommonKoinTestBase() {
 	@Test
 	fun everyStressPairHasASwitchLegalRouteOnPraha() {
 		val specs = MultiTrainStressSpecs.twentyTrainSpecs()
 		assertThat(specs, name = "stress specs").hasSize(MultiTrainStressSpecs.TRAINS)
+		val usedPairs = specs.map { it.inName to it.outName }.distinct()
+		assertThat(
+			usedPairs,
+			name = "distinct pairs used by the stress rotation"
+		).hasSize(MultiTrainStressSpecs.LEGAL_PAIRS.size)
 
 		val ctx =
 			CommonTestFixtures
@@ -51,14 +64,15 @@ class MultiTrainStressSpecsTest : CommonKoinTestBase() {
 		).isEmpty()
 
 		val routeFinder = ctx.getRouteFinder()
-		for ((inName, outName) in specs.map { it.inName to it.outName }.distinct()) {
-			val routes =
-				routeFinder.findRoutes(
+		for ((inName, outName) in usedPairs) {
+			assertThat(
+				routeFinder.isRouteAvailable(
 					inOutsByName.getValue(inName).staticRef,
 					inOutsByName.getValue(outName).staticRef,
 					ctx
-				)
-			assertThat(routes, name = "routes $inName -> $outName").isNotEmpty()
+				),
+				name = "switch-legal route $inName -> $outName"
+			).isTrue()
 		}
 	}
 }

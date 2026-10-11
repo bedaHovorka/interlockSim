@@ -17,7 +17,7 @@ package cz.vutbr.fit.interlockSim.sim
  * ## Why the pairs are listed instead of rotated over all InOuts (Issue #1179)
  *
  * The scenario used to rotate over the product of the five north entries and the six south
- * exits (`NORTH_ENTRIES[i % 5]`, `SOUTH_EXITS[i % 6]`). 13 of the 20 pairs that produced have
+ * exits (`NORTH_ENTRIES[i % 5]`, `SOUTH_EXITS[i % 6]`). 13 of the 20 pairs produced this way have
  * topological paths on `praha-hlavni-nadrazi.xml` but **no switch-legal route**: every path
  * reverses through a switch, so `RouteFinder` — and with it
  * `PathReservationService.reservePath` — refuses them with `NO_ROUTE` on the first attempt.

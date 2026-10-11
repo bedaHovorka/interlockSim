@@ -73,7 +73,13 @@ class MultiTrainScaleStressTest : KoinTestBase() {
 		private const val MAX_ENTRY_ATTEMPTS: Int = 1800
 		private const val STRESS_RUNS: Int = 10
 		private const val MIN_REAL_TIME_RATIO: Double = 1.0
-		private const val TIMEOUT_SECONDS: Long = 1200L
+
+		/**
+		 * Hang detector for the whole [STRESS_RUNS]-run method, not a budget. Measured 2026-10-11:
+		 * four `:core:heavyTest` invocations need 20.997-23.476 s each (p95 23.476 s), so the
+		 * style-guide rule (≥ 3 × p95 = 70.4 s, rounded up to the timeout grid) gives 90 s.
+		 */
+		private const val TIMEOUT_SECONDS: Long = 90L
 	}
 
 	@Test

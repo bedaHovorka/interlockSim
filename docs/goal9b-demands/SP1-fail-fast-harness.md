@@ -83,7 +83,9 @@ a route search that could never succeed until the cap; after SP1 each failed on 
 ### Demand 3 closed (#1179, 2026-10-11)
 
 **Per-pair decision (railway-civil-engineer): the specs were wrong, the fixture is right — for all
-13 pairs.** The modelled Praha throats fan each north group into the platforms and back out to the
+13 pairs** (`N-Bypass → S-Vrs-1/S-Vrs-2/S-Vrs-3/S-Vin-2`, `N-Lib-1 → S-Bypass/S-Vrs-2/S-Vrs-3`,
+`N-Lib-2 → S-Bypass`, `N-Vys-1 → S-Vin-1/S-Vin-2/S-Bypass`, `N-Vys-2 → S-Vin-1/S-Vin-2`). The
+modelled Praha throats fan each north group into the platforms and back out to the
 matching exit group, and the bypass (Y=20) is a through line, not a platform approach. Every one of
 the 13 pairs would need a reversal through a switch, that is a shunting move; no dispatcher routes a
 through train that way. No crossover was added to `praha-hlavni-nadrazi.xml`: changing the fixture
@@ -92,15 +94,25 @@ would also move the pinned topological distances of
 
 `twentyTrainStress` now rotates over the switch-legal pairs only
 (`MultiTrainStressSpecs.LEGAL_PAIRS` in `core/src/commonTest`): the five block-disjoint pairs of
-`fiveTrainCompleteness` plus `N-Lib-2 → S-Vin-1`, `N-Vys-2 → S-Vrs-1` and `N-Lib-2 → S-Vrs-3`. All
-20 trains enter and exit and the run records no `EntryFailure`. Because a reused pair serializes its
-trains, the scenario runs on a longer simulated horizon (`endTime = 3600 s`,
-`maxEntryAttempts = 1800`, one attempt per two simulated seconds).
+`fiveTrainCompleteness` plus `N-Lib-2 → S-Vin-1`, `N-Vys-2 → S-Vrs-1` and `N-Lib-2 → S-Vrs-3`.
+Because a reused pair serializes its trains, the scenario runs on a longer simulated horizon
+(`endTime = 3600 s`, `maxEntryAttempts = 1800`, one attempt per two simulated seconds). **Measured
+2026-10-11 (local JDK 21):** four `:core:heavyTest` invocations of the 10-run method all record
+20 entered, 20 exited and no `EntryFailure`, in 20.997-23.476 s wall per invocation (p95 23.476 s).
+Criterion "no `NO_ROUTE` `EntryFailure` in a run" of #1179 is met by a measured run, not by reasoning.
+The gate's timeout re-baseline never sees this scenario (`heavy-test` never runs in the gate), so the
+manual measurement above is the timeout basis: ≥ 3 × p95 = 70.4 s, rounded up to the timeout grid,
+`@Timeout` = 90 s.
 
 The fast `MultiTrainStressSpecsTest` guard (`commonTest`, so JVM `test` and `:core:linuxX64Test`)
-asserts that every pair the scenario uses has a `RouteFinder` route on Praha, so a spec change cannot
-reintroduce an impossible pair unnoticed. It only asks about pairs that do have a route, which costs
-milliseconds; a search for a pair without one enumerates every switch-constrained path first.
+asserts that every pair the scenario uses has a `RouteFinder` route (`isRouteAvailable`) and that the
+rotation exercises all of `LEGAL_PAIRS`, so a spec change cannot reintroduce an impossible pair or
+silently narrow the load. Route existence is not cheaper to compute than a full search on this
+engine: `RouteFinder` walks every switch-constrained path up to its depth cap whether the pair has a
+route or not (`maxRoutes` bounds only the returned list). The guard is fast because the
+switch-constrained enumeration of these Praha pairs is small (~1-22 ms per pair — table above), and
+it cannot hang on an impossible pair: the same bounded enumeration answers with an empty list, and
+the gate fails cleanly.
 
 ## #895 timing re-baseline (CI step times)
 
