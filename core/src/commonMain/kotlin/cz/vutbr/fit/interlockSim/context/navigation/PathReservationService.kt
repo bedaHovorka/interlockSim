@@ -196,7 +196,8 @@ interface PathReservationService :
 		 * impossible is real and permanent information regardless of what other candidates did).
 		 *
 		 * @property reason English explanation of which permanent-impossibility class fired
-		 *   (rear-facing START or unconfigurable switch) and which candidate hit it.
+		 *   (rear-facing START, unconfigurable switch, or a non-oriented route origin — Issue
+		 *   #1188) and which candidate hit it.
 		 * @since Issue #903
 		 */
 		data class GeometricallyImpossible(
@@ -238,6 +239,13 @@ interface PathReservationService :
 
 	/**
 	 * Find and reserve a free path from start to target separator.
+	 *
+	 * ## Endpoint precondition (Issue #1188)
+	 *
+	 * [start] must be an [OrientedPathSeparator] — a semaphore or an InOut. Routes run
+	 * signal-to-signal; a switch is interior track, never an endpoint. A request that fails this
+	 * is rejected with [ReservationResult.GeometricallyImpossible] before any block, switch or
+	 * signal is touched.
 	 *
 	 * ## Contiguity precondition (Issue #893)
 	 *
@@ -649,6 +657,12 @@ interface PathReservationService :
 	 * - No type casting to SimulationContext
 	 * - Single responsibility (all target discovery in service layer)
 	 * - Automatic semaphore signal configuration
+	 *
+	 * ## Endpoint precondition (Issue #1188)
+	 *
+	 * [start] must be an [OrientedPathSeparator], exactly as for [reservePath]. A non-oriented
+	 * start (a switch) is rejected once, up front, with
+	 * [ReservationResult.GeometricallyImpossible] — no target is attempted.
 	 *
 	 * @param trainId Unique identifier for the train
 	 * @param start Starting path separator (typically a semaphore)

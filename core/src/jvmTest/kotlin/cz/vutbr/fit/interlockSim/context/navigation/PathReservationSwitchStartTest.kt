@@ -1,0 +1,87 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.context.navigation
+
+import assertk.assertThat
+import assertk.assertions.isEmpty
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
+
+/**
+ * Regression tests for Issue #1188: a reservation request whose `start` is a
+ * [DynamicRailSwitch] used to pass Step 2c/2d (blocks reserved AND registered to the train)
+ * and only then throw `SimulationException[FATAL]` ("PathSeparator must be
+ * OrientedPathSeparator") out of `configureSwitchesInPath`, past every rollback path. The
+ * blocks stayed registered to a route that was never granted, so a later request from a
+ * separator that does not bound them was refused as `NonContiguousStart`.
+ *
+ * Fix: a Step 0 guard (`DefaultPathReservationService.rejectNonOrientedStart`, mirrored at the
+ * top of [PathReservationService.reservePathToAny]) refuses a non-oriented origin with the typed
+ * [PathReservationService.ReservationResult.GeometricallyImpossible] before any block, switch
+ * or signal is touched. Routes run signal-to-signal; a switch is interior track, never an
+ * endpoint (the same invariant Issue #938 pinned for `PathInfo.start`).
+ */
+@Tag("integration-test")
+class PathReservationSwitchStartTest : PathReservationServiceTestBase() {
+	/** The switch named [name] in the loaded `vyhybna.xml` grid. */
+	private fun switchNamed(name: String): DynamicRailSwitch =
+		simulationContext.cellsOfType<DynamicRailSwitch>().firstOrNull { it.name == name }
+			?: throw IllegalStateException("Switch $name not found in grid")
+
+	@Test
+	fun `reservePathToAny from a switch start is refused and reserves nothing`() {
+		// Arrange - vA is a switch, i.e. a non-oriented separator
+		val switchVA = switchNamed("vA")
+
+		// Act - must return a typed result, never throw
+		val result = service.reservePathToAny("train1", switchVA)
+
+		// Assert - refused, and nothing was reserved, registered or configured
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		assertThat(service.getReservedBlocks("train1")).isEmpty()
+		assertThat(registry.getSwitches("train1")).isEmpty()
+		assertThat(registry.getPathInfo("train1")).isNull()
+	}
+
+	@Test
+	fun `reservePath from a switch start is refused and reserves nothing`() {
+		// Arrange
+		val switchVA = switchNamed("vA")
+
+		// Act
+		val result = service.reservePath("train1", switchVA, inOut2)
+
+		// Assert
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		assertThat(service.getReservedBlocks("train1")).isEmpty()
+		assertThat(registry.getSwitches("train1")).isEmpty()
+		assertThat(registry.getPathInfo("train1")).isNull()
+	}
+
+	@Test
+	fun `a refused switch start leaves a later request from an unrelated separator unaffected`() {
+		// Arrange - the refused request used to leak two RESERVED blocks onto train1,
+		// which made every later request from a separator that does not bound them fail
+		// as NonContiguousStart (the train's footprint was no longer empty).
+		val switchVA = switchNamed("vA")
+		assertThat(service.reservePathToAny("train1", switchVA))
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+
+		// Act - the same train now asks for an ordinary InOut-to-InOut route
+		val result = service.reservePath("train1", inOut1, inOut2)
+
+		// Assert
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+	}
+}

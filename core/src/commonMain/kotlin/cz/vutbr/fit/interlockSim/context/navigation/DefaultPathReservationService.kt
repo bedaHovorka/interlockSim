@@ -465,6 +465,46 @@ class DefaultPathReservationService(
 		return PathReservationService.ReservationResult.NonContiguousStart(startName, reason)
 	}
 
+	/**
+	 * The endpoint invariant (Issue #1188): a route runs signal-to-signal, so its origin must be
+	 * an [OrientedPathSeparator] (a semaphore or an InOut). A switch is interior track, never an
+	 * endpoint — the same rule [forwardOnlyPathInfo] enforces for a trimmed PathInfo start
+	 * (Issue #938).
+	 *
+	 * Returns `null` when [start] is oriented, or the
+	 * [PathReservationService.ReservationResult.GeometricallyImpossible] to return otherwise.
+	 *
+	 * ## Why this must be a Step 0 guard
+	 *
+	 * Without it a switch start passed Step 2c/2d (blocks reserved AND registered to the train)
+	 * and only then threw `SimulationException[FATAL]` out of
+	 * [cz.vutbr.fit.interlockSim.context.SimulationContext.getSegment] ("PathSeparator must be
+	 * OrientedPathSeparator") from inside `configureSwitchesInPath`, past every rollback path.
+	 * The blocks stayed registered to a route that was never granted — a leak that made later
+	 * requests from an unrelated separator fail as `NonContiguousStart`, because the train's
+	 * footprint was no longer empty.
+	 *
+	 * ## Why `GeometricallyImpossible` and not a new result class
+	 *
+	 * It is exactly that contract: permanent for the identical request, never retryable, and the
+	 * caller has to ask for a different origin — unlike ordinary
+	 * [PathReservationService.ReservationResult.AllPathsBlocked] contention.
+	 */
+	private fun rejectNonOrientedStart(
+		trainId: String,
+		start: DynamicPathSeparator
+	): PathReservationService.ReservationResult.GeometricallyImpossible? {
+		if (start is OrientedPathSeparator) return null
+		val startName = separatorLabel(start)
+		val reason =
+			"Route origin '$startName' is not an oriented separator (it is a " +
+				"${start::class.simpleName ?: "unknown"}): a route runs signal-to-signal, so it can only " +
+				"start at a semaphore or an InOut. Request for train '$trainId' refused before any " +
+				"block, switch or signal was touched."
+		logger.warn { "reservePath: rejected non-oriented start — $reason" }
+		return PathReservationService.ReservationResult.GeometricallyImpossible(reason)
+	}
+
 	private fun findCandidatePaths(
 		trainId: String,
 		start: DynamicPathSeparator,
@@ -498,7 +538,8 @@ class DefaultPathReservationService(
 	 * For other separator types (e.g. semaphore-to-InOut), BFS topology paths from
 	 * [TopologyNavigator] are used instead.
 	 *
-	 * 0. Reject a [start] that is not contiguous with the train's own footprint (Issue #893) —
+	 * 0. Reject a non-oriented [start] (a switch — Issue #1188, see [rejectNonOrientedStart]) and a
+	 *    [start] that is not contiguous with the train's own footprint (Issue #893) —
 	 *    see [rejectNonContiguousStart]
 	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise)
 	 * 2. For each path in priority order (cheapest cost first for InOut routes):
@@ -512,6 +553,7 @@ class DefaultPathReservationService(
 	 * ## Error Handling
 	 *
 	 * - Start not contiguous with the train's footprint → return NonContiguousStart
+	 * - Start is not an OrientedPathSeparator (a switch) → return GeometricallyImpossible
 	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
 	 * - Registry conflict → roll back only the forward blocks THIS call reserved (never the
@@ -543,6 +585,11 @@ class DefaultPathReservationService(
 		maxDepth: Int,
 		topologicalPaths: Lazy<List<List<TrackSection>>>?
 	): PathReservationService.ReservationResult {
+		// Step 0 (Issue #1188): a route runs signal-to-signal, so a non-oriented start (a switch)
+		// is refused here, before any block is reserved or registered -- see
+		// [rejectNonOrientedStart] for the leak this prevents.
+		rejectNonOrientedStart(trainId, start)?.let { return it }
+
 		// Step 0 (Issue #893, task A-R1): a route may only start where the train actually is.
 		// Checked BEFORE candidate-path discovery so it also governs the already-owned
 		// early-return branch further down, which would otherwise report Success for a route
@@ -1932,6 +1979,12 @@ class DefaultPathReservationService(
 		logger.debug {
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
+
+		// Issue #1188: a non-oriented start (a switch) is refused once, here. Every target would
+		// otherwise repeat the identical Step 0 rejection inside reservePath, each repetition
+		// costing a full candidate-path enumeration (same reasoning as the NonContiguousStart
+		// short-circuit in STEP 4 below).
+		rejectNonOrientedStart(trainId, start)?.let { return it }
 
 		// ========================================
 		// STEP 1: Target Discovery
