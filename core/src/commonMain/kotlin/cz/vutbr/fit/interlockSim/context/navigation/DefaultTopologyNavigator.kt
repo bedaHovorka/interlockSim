@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -47,8 +48,54 @@ private val logger = KotlinLogging.logger {}
  * @since Issue #293 (Phase 1 of Issue #292)
  */
 class DefaultTopologyNavigator(
-	private val context: Context<Cell, out TrackBlock>
+	private val context: Context<Cell, out TrackBlock>,
+	private val cacheRoutes: Boolean = context is SimulationContext,
+	private val routeNodeBudget: Int = ROUTE_SEARCH_NODE_BUDGET
 ) : TopologyNavigator {
+	companion object {
+		/**
+		 * Default node budget of one switch-constrained route enumeration (Issue #1151): the most
+		 * search nodes [searchSwitchConstrainedPaths] takes from its queue before it gives up with
+		 * [RouteSearch.BudgetExceeded].
+		 *
+		 * Measured basis (JVM, 2026-10-11, depth cap 100). The search expands the whole switch-legal
+		 * tree reachable from the start whatever the target, so the count depends on the start only.
+		 * - Shipped networks: the largest enumeration of any ordered InOut pair expands 236 nodes on
+		 *   `praha-hlavni-nadrazi.xml` (50 switches, about 2.5 ms), 47 on `cerveny_ujezd.xml` and 13
+		 *   on `vyhybna.xml`.
+		 * - Largest enumeration the test suite requires: the synthetic 15-stage
+		 *   `TestTopologies.branchySwitchChain` (32,768 routes) expands 229,371 nodes; the
+		 *   `DefaultAutomaticPathFindingServiceTest` performance contract needs it to complete.
+		 *
+		 * 300,000 keeps that contract with about 30 % headroom, is more than 1,000 times the Praha
+		 * maximum, and stops a 16-stage chain (458,747 nodes) or anything larger with
+		 * [RouteSearch.BudgetExceeded] after seconds of search, once per `(start, target, maxDepth)`
+		 * cache key (the expansion depends on the start only, the key also on the target), instead of
+		 * letting it grow without bound.
+		 * `RouteSearchBudgetTest.everyFixtureInOutPairCompletesWithinTheDefaultBudget` is the
+		 * tripwire that fails when a shipped fixture outgrows it.
+		 */
+		internal const val ROUTE_SEARCH_NODE_BUDGET: Int = 300_000
+	}
+
+	/**
+	 * Switch-constrained route searches of this navigator, keyed on `(start, target, maxDepth)`
+	 * (Issue #1151). Used only when [cacheRoutes] is set, that is for a simulation context, whose
+	 * topology never changes; an editing context changes its topology in place and is never cached.
+	 * The entries hold topology only: which blocks a route crosses, never whether they are free.
+	 * A plain map, confined to the simulation thread like the rest of the simulation state; the
+	 * editor (including the path preview) uses an editing context, whose navigator never caches.
+	 */
+	private val routeCache = mutableMapOf<RouteKey, RouteSearch>()
+
+	/** Switch-constrained enumerations this navigator has run, cached or not (diagnostics). */
+	internal var routeEnumerationCount: Int = 0
+		private set
+
+	/** Number of `(start, target, maxDepth)` searches held in the route cache (diagnostics). */
+	internal val routeCacheSize: Int
+		get() = routeCache.size
+
 	/**
 	 * Get the next track section following a path separator, using pure topology traversal.
 	 *
@@ -317,9 +364,9 @@ class DefaultTopologyNavigator(
 		target: PathSeparator,
 		maxDepth: Int
 	): List<List<TrackSection>> =
-		searchPaths(start, target, maxDepth) { separator, section ->
+		searchPaths(start, target, maxDepth, nodeBudget = Int.MAX_VALUE) { separator, section ->
 			getAllNextTrackSections(separator, section)
-		}
+		}.paths
 
 	/**
 	 * Dijkstra search over the moves of [getAllNextTrackSections], so the result matches the
@@ -484,15 +531,66 @@ class DefaultTopologyNavigator(
 	 * Uses the same BFS as [findAllTopologicalPaths] but expands each node with
 	 * [getSwitchConstrainedNextTrackSections] so that invalid switch transitions are
 	 * never included in the returned routes.
+	 *
+	 * Bounded and cached (Issue #1151): the enumeration stops after the navigator's node budget
+	 * ([ROUTE_SEARCH_NODE_BUDGET] by default) and then answers an empty list, as for a pair without
+	 * a route ([searchSwitchConstrainedPaths] gives the structured [RouteSearch.BudgetExceeded]).
+	 * In a simulation context every `(start, target, maxDepth)` search runs once per navigator and
+	 * later calls return the same list.
+	 *
+	 * What the empty list means to callers over budget: an InOut-to-InOut `reservePath` reports
+	 * `NoPathExists`, a permanent refusal (`InOutWorker` throws, `MultiTrainLoop` records
+	 * `NO_ROUTE`, `ReservationResultMapping` gives `DenialCause.NoPath`), while `isPathAvailable`
+	 * and `isPathToAnyNextSemaphoreAvailable` read it as "every path blocked", so a train asking
+	 * them would wait forever behind the one budget warning. No shipped network gets near the
+	 * budget (at most 236 expanded nodes against [ROUTE_SEARCH_NODE_BUDGET]).
 	 */
 	override fun findAllSwitchConstrainedPaths(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int
-	): List<List<TrackSection>> =
-		searchPaths(start, target, maxDepth) { separator, section ->
-			getSwitchConstrainedNextTrackSections(separator, section)
+	): List<List<TrackSection>> {
+		val search =
+			if (cacheRoutes) {
+				routeCache.getOrPut(RouteKey(start, target, maxDepth)) {
+					searchSwitchConstrainedPaths(start, target, maxDepth, routeNodeBudget)
+				}
+			} else {
+				searchSwitchConstrainedPaths(start, target, maxDepth, routeNodeBudget)
+			}
+		return when (search) {
+			is RouteSearch.Completed -> search.paths
+			is RouteSearch.BudgetExceeded -> emptyList()
 		}
+	}
+
+	/**
+	 * Enumerate the switch-legal routes from [start] to [target], like
+	 * [findAllSwitchConstrainedPaths], but stop after [nodeBudget] expanded search nodes and say so
+	 * with [RouteSearch.BudgetExceeded] (Issue #1151). Never cached.
+	 *
+	 * Within the budget the routes and their order are exactly those of the unbounded enumeration.
+	 */
+	internal fun searchSwitchConstrainedPaths(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int,
+		nodeBudget: Int
+	): RouteSearch {
+		routeEnumerationCount++
+		val outcome =
+			searchPaths(start, target, maxDepth, nodeBudget) { separator, section ->
+				getSwitchConstrainedNextTrackSections(separator, section)
+			}
+		if (!outcome.budgetExceeded) {
+			return RouteSearch.Completed(outcome.paths, outcome.expandedNodes)
+		}
+		logger.warn {
+			"Route search from $start to $target stopped after ${outcome.expandedNodes} expanded nodes " +
+				"(budget $nodeBudget); the pair is treated as having no route"
+		}
+		return RouteSearch.BudgetExceeded(start, target, nodeBudget, outcome.expandedNodes)
+	}
 
 	/**
 	 * Shared BFS engine behind [findAllTopologicalPaths] and [findAllSwitchConstrainedPaths];
@@ -507,9 +605,11 @@ class DefaultTopologyNavigator(
 	 * @param start The starting path separator
 	 * @param target The target path separator to reach
 	 * @param maxDepth Maximum search depth to prevent runaway exploration
+	 * @param nodeBudget Most nodes taken from the queue; the search stops with
+	 *   [PathSearchOutcome.budgetExceeded] set when more remain (Issue #1151)
 	 * @param nextSectionsOf Supplies the next track sections from a separator, respecting the
 	 *   caller's transition rules
-	 * @return List of paths (each path is a list of track sections)
+	 * @return the paths found (each path is a list of track sections) and the search size
 	 * @since issue #1123 review round -- the two near-identical BFS bodies were the Sonar
 	 *   new-code duplication flagged on PR #1138
 	 */
@@ -517,15 +617,21 @@ class DefaultTopologyNavigator(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int,
+		nodeBudget: Int,
 		nextSectionsOf: (separator: PathSeparator, current: TrackSection?) -> List<TrackSection>
-	): List<List<TrackSection>> {
+	): PathSearchOutcome {
 		val paths = mutableListOf<List<TrackSection>>()
 		val queue = ArrayDeque<PathNode>()
+		var expandedNodes = 0
 
 		// Initialize BFS with start separator
 		queue.add(PathNode(start, null, null))
 
 		while (queue.isNotEmpty()) {
+			if (expandedNodes >= nodeBudget) {
+				return PathSearchOutcome(paths, expandedNodes, budgetExceeded = true)
+			}
+			expandedNodes++
 			val node = queue.removeFirst()
 			val separator = node.separator
 
@@ -557,7 +663,33 @@ class DefaultTopologyNavigator(
 			}
 		}
 
-		return paths
+		return PathSearchOutcome(paths, expandedNodes, budgetExceeded = false)
+	}
+
+	/** Result of [searchPaths]: the paths found, the nodes expanded, and whether the budget ran out. */
+	private class PathSearchOutcome(
+		val paths: List<List<TrackSection>>,
+		val expandedNodes: Int,
+		val budgetExceeded: Boolean
+	)
+
+	/**
+	 * Key of [routeCache]. Separators are compared by identity: a dynamic wrapper equals its static
+	 * cell one way only, and the two give routes made of different section objects.
+	 */
+	private class RouteKey(
+		val start: PathSeparator,
+		val target: PathSeparator,
+		val maxDepth: Int
+	) {
+		override fun equals(other: Any?): Boolean =
+			other is RouteKey && start === other.start && target === other.target && maxDepth == other.maxDepth
+
+		override fun hashCode(): Int = (start.hashCode() * HASH_MULTIPLIER + target.hashCode()) * HASH_MULTIPLIER + maxDepth
+
+		private companion object {
+			const val HASH_MULTIPLIER: Int = 31
+		}
 	}
 
 	/**
