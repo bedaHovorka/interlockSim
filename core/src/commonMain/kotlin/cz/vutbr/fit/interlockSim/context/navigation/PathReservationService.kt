@@ -333,7 +333,7 @@ interface PathReservationService :
 	 * are IDENTICAL: a write that leaves [semaphore] at
 	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP] (or a constant semaphore's no-op
 	 * write) records nothing, and a semaphore already owned by a different train under this
-	 * service is simply reassigned to [trainId] (mirroring [PathReservationRegistry.blockToTrain]'s
+	 * service is simply reassigned to [trainId] (mirroring [PathReservationRegistry.getOwner]'s
 	 * last-writer-wins semantics elsewhere in this service).
 	 *
 	 * @param trainId The train the write was made on behalf of.

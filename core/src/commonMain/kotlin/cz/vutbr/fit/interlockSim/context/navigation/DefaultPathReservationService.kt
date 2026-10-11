@@ -930,7 +930,7 @@ class DefaultPathReservationService(
 		val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
 		val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
 		// If the registry's merge fail-safe STILL aborted
-		// (PathReservationRegistry.mergePathInfo's KDoc lists the four reasons) --
+		// (PathInfoMerger.merge's KDoc lists the four reasons) --
 		// now only the genuinely pathological ones: duplicated new-start, the
 		// direction reversal guard (Issue #944), or the cycle guard -- release
 		// exactly what THIS candidate acquired --
@@ -3150,7 +3150,7 @@ class DefaultPathReservationService(
 	 * in production) passes a `start` that no longer bounds the first forward block -- every
 	 * block adjacent to it is already owned. Building the merge candidate from that `start`
 	 * therefore makes `new.start != old.target` on every such call, not a rare shape but the
-	 * routine one, and [PathReservationRegistry.mergePathInfo]'s Step 0a fail-safe aborts every
+	 * routine one, and [PathInfoMerger.merge]'s Step 0a fail-safe aborts every
 	 * time, discarding a legitimate extension. Starting the merge candidate where the NEW blocks
 	 * actually begin makes `new.start` agree with `old.target` naturally, so the merge succeeds
 	 * and properly extends PathInfo instead of aborting -- leaving [rollbackIfMergeAborted]'s
