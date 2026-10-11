@@ -72,18 +72,47 @@ other four trains. Stack samples (`eu-stack`) showed `Train.validateTrainLength`
 | Scenario | Entry attempts per train | Outcome |
 |---|---:|---|
 | `fiveTrainCompleteness` (5 block-disjoint routes, `maxEntryAttempts = 10`) | 1 | measured: all 5 exit, no `EntryFailure`, no gate resource left held |
-| `twentyTrainStress` (20 trains, `maxEntryAttempts = 60`) | 1 for the 13 refused trains | measured: fails fast at simulated time 22 s; 13 of 20 trains get `NO_ROUTE` |
+| `twentyTrainStress` before #1179 (20 trains, `maxEntryAttempts = 60`) | 1 for the 13 refused trains | measured: fails fast at simulated time 22 s; 13 of 20 trains get `NO_ROUTE` |
 
-The 13 refused trains of `twentyTrainStress` ask for pairs that have topological paths but **no
+The 13 refused trains of `twentyTrainStress` asked for pairs that have topological paths but **no
 switch-legal route** on the Praha fixture (for example `N-Bypass → S-Vrs-3`: 760 topological paths, 0
 legal routes; also `N-Lib-1 → S-Bypass`, `N-Vys-1 → S-Vin-1`, `N-Vys-2 → S-Vin-2`). The stress test
-therefore fails because of its train specs, not because of a livelock. Before SP1 these trains retried
-a route search that could never succeed until the cap; now each fails on its first attempt.
+therefore failed because of its train specs, not because of a livelock. Before SP1 these trains retried
+a route search that could never succeed until the cap; after SP1 each failed on its first attempt.
 
-PR #1175 review round (2026-10-10): `twentyTrainStress` asserts this measured contract now — 13
-refusals of `NO_ROUTE` on the first attempt, the other 7 trains enter and exit — so `heavyTest` is
-green and the real-time ratio machinery runs. The assertions flip back to "all 20 exit" when
-demand 3 (legal-route pairs) lands.
+### Demand 3 closed (#1179, 2026-10-11)
+
+**Per-pair decision (railway-civil-engineer): the specs were wrong, the fixture is right — for all
+13 pairs** (`N-Bypass → S-Vrs-1/S-Vrs-2/S-Vrs-3/S-Vin-2`, `N-Lib-1 → S-Bypass/S-Vrs-2/S-Vrs-3`,
+`N-Lib-2 → S-Bypass`, `N-Vys-1 → S-Vin-1/S-Vin-2/S-Bypass`, `N-Vys-2 → S-Vin-1/S-Vin-2`). The
+modelled Praha throats fan each north group into the platforms and back out to the
+matching exit group, and the bypass (Y=20) is a through line, not a platform approach. Every one of
+the 13 pairs would need a reversal through a switch, that is a shunting move; no dispatcher routes a
+through train that way. No crossover was added to `praha-hlavni-nadrazi.xml`: changing the fixture
+would also move the pinned topological distances of
+`ShortestTopologicalDistanceTest.matchesPinnedListingDistancesOnPraha`.
+
+`twentyTrainStress` now rotates over the switch-legal pairs only
+(`MultiTrainStressSpecs.LEGAL_PAIRS` in `core/src/commonTest`): the five block-disjoint pairs of
+`fiveTrainCompleteness` plus `N-Lib-2 → S-Vin-1`, `N-Vys-2 → S-Vrs-1` and `N-Lib-2 → S-Vrs-3`.
+Because a reused pair serializes its trains, the scenario runs on a longer simulated horizon
+(`endTime = 3600 s`, `maxEntryAttempts = 1800`, one attempt per two simulated seconds). **Measured
+2026-10-11 (local JDK 21):** four `:core:heavyTest` invocations of the 10-run method all record
+20 entered, 20 exited and no `EntryFailure`, in 20.997-23.476 s wall per invocation (p95 23.476 s).
+Criterion "no `NO_ROUTE` `EntryFailure` in a run" of #1179 is met by a measured run, not by reasoning.
+The gate's timeout re-baseline never sees this scenario (`heavy-test` never runs in the gate), so the
+manual measurement above is the timeout basis: ≥ 3 × p95 = 70.4 s, rounded up to the timeout grid,
+`@Timeout` = 90 s.
+
+The fast `MultiTrainStressSpecsTest` guard (`commonTest`, so JVM `test` and `:core:linuxX64Test`)
+asserts that every pair the scenario uses has a `RouteFinder` route (`isRouteAvailable`) and that the
+rotation exercises all of `LEGAL_PAIRS`, so a spec change cannot reintroduce an impossible pair or
+silently narrow the load. Route existence is not cheaper to compute than a full search on this
+engine: `RouteFinder` walks every switch-constrained path up to its depth cap whether the pair has a
+route or not (`maxRoutes` bounds only the returned list). The guard is fast because the
+switch-constrained enumeration of these Praha pairs is small (~1-22 ms per pair — table above), and
+it cannot hang on an impossible pair: the same bounded enumeration answers with an empty list, and
+the gate fails cleanly.
 
 ## #895 timing re-baseline (CI step times)
 
@@ -105,8 +134,10 @@ The native step is 44 s longer than on `develop` because SP1 adds tests to `comm
    it applies its candidate cap (~2.7 s JVM on Praha, from #591).
 2. **Retry trigger.** Blocked entries are re-polled every dispatcher cycle. The already-emitted
    `ConflictDetectedEvent` (or a block-release event) should trigger the retry instead.
-3. **Route pairs must be legal.** A scale scenario must draw its `(entry, exit)` pairs from the
-   switch-legal routes of the network (`RouteFinder`), not from all InOut combinations: 13 of the 20
-   `twentyTrainStress` pairs have no legal route on Praha.
+3. **Route pairs must be legal.** ✅ **Done (#1179).** A scale scenario must draw its
+   `(entry, exit)` pairs from the switch-legal routes of the network (`RouteFinder`), not from all
+   InOut combinations: 13 of the 20 original `twentyTrainStress` pairs had no legal route on Praha.
+   `MultiTrainStressSpecs.LEGAL_PAIRS` now supplies the pairs and `MultiTrainStressSpecsTest`
+   guards them.
 4. **Structured refusal as input.** `EntryFailure` (kind, attempts, last `ReservationResult`) is the
    hand-off point for a conflict resolver: it says which train gave up, after how many attempts and why.
