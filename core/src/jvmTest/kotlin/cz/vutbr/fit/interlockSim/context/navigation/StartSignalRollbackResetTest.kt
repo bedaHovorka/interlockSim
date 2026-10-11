@@ -159,8 +159,8 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 
 		// maxDepth = 4 restricts the topological search to the single direct doA1 -> A route (doA1 -> vA ->
 		// zA -> A, three sections; not doA1 -> zA, whose end faces away from the train, Issue #1064),
-		// the same technique the MergeAbortResourceRelease sibling test (PathReservationServiceTest)
-		// and StartDirectionTests use to exclude vyhybna's longer sibling-branch alternate --
+		// the same technique the PathReservationMergeAbortResourceReleaseTest and
+		// PathReservationStartDirectionTest siblings use to exclude vyhybna's longer sibling-branch alternate --
 		// otherwise an unconfigurable switch on that alternate candidate would surface as a
 		// geometric failure and mask what THIS test actually verifies: the START-aspect rollback
 		// after this direct candidate's injected signal-config fault (ConfigFailed, not a geometric

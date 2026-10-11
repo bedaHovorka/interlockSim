@@ -160,7 +160,7 @@ interface PathReservationService :
 		 * queued-train half. A train with **no** footprint at all (neither registered nor occupied
 		 * blocks) passes the kernel check vacuously, because tightening it would reject every
 		 * legitimate train-entry reservation (an entry InOut with an empty footprint, by design).
-		 * Pinned by `PathReservationServiceTest` ("a train with no footprint at all passes
+		 * Pinned by `PathReservationContiguityTest` ("a train with no footprint at all passes
 		 * vacuously").
 		 *
 		 * @property startName Name of the offending start separator (or its `toString()` when

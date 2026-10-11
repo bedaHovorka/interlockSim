@@ -46,11 +46,11 @@ import org.koin.test.inject
  * [DefaultPathReservationService.reservePathToAnyNextSemaphore] returns the semaphores it cleared
  * to [Signal.STOP] (Issue #847, SP2c.24 code-review follow-up).
  *
- * ## Why this is a separate class from [PathReservationServiceTest]
+ * ## Why this is a separate class from [PathReservationServiceTestBase]
  *
  * The rollback needs a *reachable alternative route*: `reservePath` must succeed via a path that
  * does not contain the required `next` block. `vyhybna.xml` — which
- * [PathReservationServiceTest] is built around — never produces that shape; a sweep over every
+ * [PathReservationServiceTestBase] is built around — never produces that shape; a sweep over every
  * (start × adjacent block × blocked/free) combination in it reaches the branch zero times.
  * `parallel-routes.xml` does, because its two genuinely parallel routes between `swA` and `swB`
  * give `reservePath` somewhere else to go when the direct one is taken.
@@ -101,7 +101,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		// that SIMPLE_RIGHT_FALSE cannot make). Which failure class comes back is deliberately not
 		// pinned here — this test's concern is the bypass-rollback signal/switch cleanup below,
 		// which runs identically regardless. (It is AllPathsBlocked since Issue #937, because not
-		// every candidate is geometrically impossible; PathReservationServiceTest owns that rule.)
+		// every candidate is geometrically impossible; PathReservationOrientedSeparatorOverloadTest owns that rule.)
 		assertThat(result)
 			.withMessage("a reservation whose every candidate failed must not report success")
 			.isNotInstanceOf<PathReservationService.ReservationResult.Success>()
@@ -201,7 +201,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		// (swA must join F-to-G, a main-to-branch join SIMPLE_RIGHT_FALSE cannot make). Which
 		// failure class comes back is deliberately not pinned here — this test's concern is the
 		// switch cleanup below, which runs identically regardless. (It is AllPathsBlocked since
-		// Issue #937; PathReservationServiceTest owns that rule.)
+		// Issue #937; PathReservationOrientedSeparatorOverloadTest owns that rule.)
 		assertThat(result)
 			.withMessage("a reservation whose every candidate failed must not report success")
 			.isNotInstanceOf<PathReservationService.ReservationResult.Success>()
