@@ -15,19 +15,11 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -172,65 +164,5 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 		// Whether the (re-)clearing is internally "recorded" for later reset is not
 		// inspectable from outside DefaultPathReservationService; the signal staying at
 		// STOP is the observable proof that no re-light was attempted.
-	}
-
-	private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
-		val grid = simulationContext.getRailWayNetGrid()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid[Point(x, y)]
-				if (cell is DynamicRailSemaphore && cell.name == name) {
-					return cell
-				}
-			}
-		}
-		throw IllegalStateException("Semaphore $name not found in grid")
-	}
-
-	private fun inOutNamed(name: String): DynamicPathSeparator =
-		simulationContext
-			.getInOuts()
-			.map { simulationContext.toDynamic(it) }
-			.filterIsInstance<DynamicInOut>()
-			.single { it.name == name }
-
-	/** Name of a separator, whatever concrete dynamic cell type it is; `null` if unnamed. */
-	private fun separatorNameOf(separator: PathSeparator): String? =
-		when (separator) {
-			is DynamicRailSemaphore -> separator.name
-			is DynamicRailSwitch -> separator.name
-			is DynamicInOut -> separator.name
-			else -> null
-		}
-
-	/**
-	 * The single block whose two ends are the separators named [first] and [second].
-	 * `vyhybna.xml` blocks carry no XML name of their own, so they are addressed by
-	 * their endpoints, same identity convention as [PathReservationContiguityTest].
-	 */
-	private fun blockBetween(
-		first: String,
-		second: String
-	): DynamicTrackBlock =
-		simulationContext
-			.getGraph()
-			.values()
-			.filterIsInstance<DynamicTrackBlock>()
-			.firstOrNull { block ->
-				block.ends().mapNotNull { separatorNameOf(it) }.toSet() == setOf(first, second)
-			} ?: throw IllegalStateException("No block found between $first and $second")
-
-	/**
-	 * Put [trainId] physically on [block] without touching the registry -- the state a
-	 * train admitted before any route was granted is in.
-	 */
-	private fun occupy(
-		block: DynamicTrackBlock,
-		trainId: String
-	) {
-		block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
-		block.enter(
-			FakeTrackOccupant(trainId)
-		)
 	}
 }

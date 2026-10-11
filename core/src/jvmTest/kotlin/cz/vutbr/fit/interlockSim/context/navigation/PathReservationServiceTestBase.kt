@@ -10,14 +10,22 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.BeforeEach
 import org.koin.test.inject
 
@@ -26,18 +34,8 @@ import org.koin.test.inject
  *
  * ## Test Coverage
  *
- * The suite (one file per former `@Nested` group, Issue #1165) covers:
- *
- * - ✅ Successful reservation (all blocks FREE)
- * - ✅ Partial failure rollback (atomic guarantee)
- * - ✅ Conflict detection (block OCCUPIED)
- * - ✅ Conflict detection (block RESERVED by different train)
- * - ✅ Multiple train coordination
- * - ✅ Release path and re-reserve
- * - ✅ Idempotent operations
- * - ✅ No path exists (topology)
- * - ✅ All paths blocked
- * - ✅ Path availability check
+ * One file per former `@Nested` group (Issue #1165); each group class name and its own KDoc
+ * state what that group covers, so this base does not restate the suite's coverage.
  *
  * ## Test Data
  *
@@ -87,5 +85,88 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 
 		assertThat(inOut1).isNotNull()
 		assertThat(inOut2).isNotNull()
+	}
+
+	/**
+	 * The semaphore named [name] in the loaded grid.
+	 *
+	 * Eight of the suite's group classes carried a private copy of this grid sweep
+	 * (Issue #1183, SP6.1 follow-up).
+	 *
+	 * @throws IllegalStateException when the grid holds no semaphore of that name
+	 */
+	protected fun findSemaphoreByName(name: String): DynamicRailSemaphore =
+		simulationContext.cellsOfType<DynamicRailSemaphore>().firstOrNull { it.name == name }
+			?: throw IllegalStateException("Semaphore $name not found in grid")
+
+	/**
+	 * The dynamic InOut named [name].
+	 *
+	 * Reads the context's `getInOuts()` and maps through `toDynamic`, so the returned wrapper is
+	 * the very instance the reservation services use — the grid sweep would be equivalent here
+	 * (`toDynamic` caches one wrapper per static separator), but this is the form the suite
+	 * carried and the one that cannot depend on grid order.
+	 */
+	protected fun inOutNamed(name: String): DynamicPathSeparator =
+		simulationContext
+			.getInOuts()
+			.map { simulationContext.toDynamic(it) }
+			.filterIsInstance<DynamicInOut>()
+			.single { it.name == name }
+
+	/** Name of a separator, whatever concrete dynamic cell type it is; `null` if unnamed. */
+	protected fun separatorNameOf(separator: PathSeparator): String? =
+		when (separator) {
+			is DynamicRailSemaphore -> separator.name
+			is DynamicRailSwitch -> separator.name
+			is DynamicInOut -> separator.name
+			else -> null
+		}
+
+	/**
+	 * The single block whose two ends are the separators named [first] and [second].
+	 * `vyhybna.xml` blocks carry no XML name of their own, so they are addressed by
+	 * their endpoints (the same identity `ShuntingLoop` labels `kA`/`kB`/`k1`/`k2`).
+	 */
+	protected fun blockBetween(
+		first: String,
+		second: String
+	): DynamicTrackBlock =
+		simulationContext
+			.getGraph()
+			.values()
+			.filterIsInstance<DynamicTrackBlock>()
+			.firstOrNull { block ->
+				block.ends().mapNotNull { separatorNameOf(it) }.toSet() == setOf(first, second)
+			} ?: throw IllegalStateException("No block found between $first and $second")
+
+	/**
+	 * Put [trainId] physically on [block] without touching the registry — the state a
+	 * train admitted before any route was granted is in.
+	 */
+	protected fun occupy(
+		block: DynamicTrackBlock,
+		trainId: String
+	) {
+		block.setUpPath(block.ends().first() as DynamicPathSeparator, trainId)
+		block.enter(
+			FakeTrackOccupant(trainId)
+		)
+	}
+
+	/** Assert that the endpoints of [blocks] include every separator in [separatorNames]. */
+	protected fun assertPathContainsSeparators(
+		blocks: List<DynamicTrackBlock>,
+		vararg separatorNames: String
+	) {
+		val found =
+			blocks
+				.flatMap { block -> block.ends().mapNotNull { separatorNameOf(it) } }
+				.filter { it.isNotEmpty() }
+				.toSet()
+
+		separatorNames.forEach { expectedName ->
+			assertThat(found, name = "separators bounding the reserved blocks").contains(expectedName)
+		}
 	}
 }

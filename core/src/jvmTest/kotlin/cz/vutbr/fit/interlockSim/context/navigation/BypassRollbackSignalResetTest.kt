@@ -12,11 +12,13 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -72,14 +74,32 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
+	private lateinit var editing: EditingContext
 	private lateinit var context: DefaultSimulationContext
 	private lateinit var service: PathReservationService
 
 	@BeforeEach
 	fun setUp() {
-		val editing = editingContextFactory.createContext(TestFixtures.loadParallelRoutesXml()) as EditingContext
-		context = simulationContextFactory.createContext(editing) as DefaultSimulationContext
+		editing = editingContextFactory.createContext(TestFixtures.loadParallelRoutesXml()) as EditingContext
+		// The editing context is consumed by the transformation and closed right after it (the
+		// `TestFixtures.loadShunting*` pattern); the simulation context lives for the test and is
+		// closed by `tearDownKoin()` through `tracked()` -- Issues #1038, #1183.
+		context = editing.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }.tracked()
 		service = context.getRoutingServices().getPathReservationService()
+	}
+
+	@Test
+	@DisplayName("the fixture leaks no context: the editing context is closed, the simulation context is tracked")
+	fun setUpClosesTheEditingContextAndTracksTheSimulationContext() {
+		assertThat(editing.scope.closed)
+			.withMessage("the editing context is consumed by the transformation and must not outlive it")
+			.isTrue()
+		assertThat(context.scope.closed)
+			.withMessage("the simulation context must stay open for the test body")
+			.isFalse()
+		assertThat(trackedContextCount)
+			.withMessage("the simulation context must be registered for tearDownKoin() to close")
+			.isEqualTo(1)
 	}
 
 	@Test

@@ -17,10 +17,8 @@ import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -577,30 +575,6 @@ class PathReservationSignalReleaseTest : PathReservationServiceTestBase() {
 					"not still claim it"
 			).isFalse()
 	}
-
-	private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
-		val grid = simulationContext.getRailWayNetGrid()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell =
-					grid[
-						cz.vutbr.fit.interlockSim.util
-							.Point(x, y)
-					]
-				if (cell is DynamicRailSemaphore && cell.name == name) {
-					return cell
-				}
-			}
-		}
-		throw IllegalStateException("Semaphore $name not found in grid")
-	}
-
-	private fun inOutNamed(name: String): DynamicPathSeparator =
-		simulationContext
-			.getInOuts()
-			.map { simulationContext.toDynamic(it) }
-			.filterIsInstance<DynamicInOut>()
-			.single { it.name == name }
 
 	private fun litSemaphoreNames(success: PathReservationService.ReservationResult.Success): Set<String> =
 		semaphoresBounding(success.reservedBlocks)
