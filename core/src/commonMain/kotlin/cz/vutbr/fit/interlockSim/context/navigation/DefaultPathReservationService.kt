@@ -13,14 +13,12 @@ import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.SwitchLockedException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -102,232 +100,23 @@ class DefaultPathReservationService(
 	// for why AllPathsBlocked is routine contention and only unresolved-at-end-of-run is reported.
 	private val contention = ReservationContentionTracker(registry)
 
-	// ── Cleared-signal ownership, so a proceed aspect cannot outlive its route ──
+	// ── Cleared-signal ledger and route signal configuration (Issue #1169, SP12.3) ──
 	//
-	// reservePath() clears the START separator (configureStartSignal) and every semaphore
-	// between two consecutive reserved blocks (configureIntermediateSemaphores). Nothing used
-	// to undo that: releasePath()/unregister() cancelled blocks and unlocked switches but never
-	// touched a semaphore, so an aspect cleared for a route that was later released stayed lit
-	// for the rest of the run -- authorising an opposing train onto track the interlocking
-	// believed free. Seen live on `exampleGui shuntingLoopAI 333`: the A→B route granted at
-	// t=26.0 cleared zA/doA1/doB1, the OrphanReservationSweeper cancelled it at t=88.0, and all
-	// three still showed S80 when the run ended.
-	//
-	// Only the SUCCESS path records here. Two kinds of rollback need to reach a semaphore
-	// nonetheless:
-	// - `rollbackReservation` and the switch-config-failure call to `rollbackUnconfigurableCandidate`
-	//   (from `configureAndRegisterSwitches`) run strictly BEFORE step 2g signal configuration --
-	//   a candidate rolled back for either reason has cleared nothing and needs no reset.
-	// - The signal-config-failure call to `rollbackUnconfigurableCandidate` (step 2g's own
-	//   `!signalConfigured` branch) runs AFTER `configureStartSignal` was attempted, and a
-	//   PARTIAL aspect write is possible: the underlying config call can set the physical
-	//   aspect and still throw before `recordClearedSemaphore` runs (Issue #893, task A5).
-	//   That branch resets the before/after delta of this map via `resetSemaphoreSet` (for any
-	//   semaphore that WAS recorded) and separately drives the candidate START itself back to
-	//   STOP when it is left showing proceed with no recorded owner -- see [reservePath] step
-	//   2g and the reset helper it calls for the unrecorded case.
-	// A third case, the bypass-rollback in `reservePathToAnyNextSemaphore`, runs AFTER a fully
-	// successful `reservePath` has already configured the candidate's signals; it resets exactly
-	// the semaphores that candidate cleared (the before/after delta of this map) via
-	// `resetSemaphoreSet`, never the whole per-train set, so a pre-existing reservation's signals
-	// stay lit.
-	//
-	// Ownership is last-writer-wins -- unlike block ownership, where registerAtomic rejects a
-	// foreign reservation instead of reassigning it (the same contrast
-	// PathReservationService.recordExternalClearedSemaphore states): if a semaphore is re-cleared
-	// for another train, that train becomes its owner and the earlier train's release leaves it
-	// alone. Without this a stale release could drop a signal to STOP under a train actively
-	// running against it.
-	private val clearedSemaphores: MutableMap<String, MutableSet<DynamicRailSemaphore>> = mutableMapOf()
+	// Which semaphore is lit for which train, and every reset back to STOP, live in
+	// ClearedSignalLedger; clearing the START and intermediate semaphores of a reserved route
+	// lives in RouteSignalConfigurator, which records each aspect it clears in the ledger.
+	private val signalLedger = ClearedSignalLedger()
 
-	private val semaphoreClearedFor: MutableMap<DynamicRailSemaphore, String> = mutableMapOf()
+	private val signalConfigurator = RouteSignalConfigurator(environment, signalLedger)
 
 	// Route release and rollback, including the approach-lock deferral window (Issue #1168).
 	private val releaser =
 		RouteReleaser(
 			registry = registry,
-			resetSemaphoresForReleasedBlocks = ::resetSemaphoresForReleasedBlocks,
-			resetClearedSemaphores = ::resetClearedSemaphores,
+			resetSemaphoresForReleasedBlocks = signalLedger::resetSemaphoresForReleasedBlocks,
+			resetClearedSemaphores = signalLedger::resetClearedSemaphores,
 			clearBlockedTracking = contention::clearBlockedTracking
 		)
-
-	/**
-	 * Record that [semaphore] now shows a proceed aspect on [trainId]'s behalf, so
-	 * [resetClearedSemaphores] can return it to [Signal.STOP] when the route is released.
-	 *
-	 * A semaphore that did not actually end up allowing is not recorded: `configureSemaphoreSignal`
-	 * swallows configuration failures (logging at WARN), and a `ConstantSemaphore` (an InOut's
-	 * `outSemaphore`, predzvěst, narážník) has a no-op setter that never changes. "Is it lit as a
-	 * result of this call?" is therefore the only reliable test that something needs undoing.
-	 */
-	private fun recordClearedSemaphore(
-		trainId: String,
-		semaphore: DynamicRailSemaphore
-	) {
-		if (!semaphore.signal.isAllowing()) return
-		clearedSemaphores.getOrPut(trainId) { mutableSetOf() }.add(semaphore)
-		semaphoreClearedFor[semaphore] = trainId
-	}
-
-	/**
-	 * Return every semaphore still owned by [trainId] to [Signal.STOP] and forget them.
-	 *
-	 * [Signal.STOP] is always the fail-safe direction -- it authorises nothing -- so resetting
-	 * a semaphore the train no longer needs can only ever be over-restrictive. Semaphores since
-	 * re-cleared for another train are skipped (see [semaphoreClearedFor]).
-	 */
-	private fun resetClearedSemaphores(trainId: String) {
-		val owned: Set<DynamicRailSemaphore> = clearedSemaphores.remove(trainId) ?: return
-		owned.forEach { semaphore ->
-			if (semaphoreClearedFor[semaphore] != trainId) {
-				logger.debug {
-					"resetClearedSemaphores: ${semaphore.name} was re-cleared for " +
-						"'${semaphoreClearedFor[semaphore]}'; leaving it lit for that train"
-				}
-				return@forEach
-			}
-			semaphoreClearedFor.remove(semaphore)
-			try {
-				semaphore.signal = Signal.STOP
-			} catch (e: Exception) {
-				logger.warn(e) {
-					"resetClearedSemaphores: Failed to reset semaphore ${semaphore.name} for '$trainId'"
-				}
-			}
-		}
-		logger.debug {
-			"resetClearedSemaphores: Returned ${owned.size} semaphore(s) to STOP for '$trainId'"
-		}
-	}
-
-	/**
-	 * Return only the semaphores in [toReset] still owned by [trainId] to [Signal.STOP] and forget
-	 * them, leaving every other semaphore the train still holds cleared untouched.
-	 *
-	 * Subset analogue of [resetClearedSemaphores]. Used by the bypass-rollback in
-	 * [reservePathToAnyNextSemaphore]: that rollback runs *after* a successful [reservePath] has
-	 * already cleared the candidate's semaphores, so resetting the whole per-train set would also
-	 * drop signals the train still needs for a live reservation. The caller passes the before/after
-	 * delta of [clearedSemaphores] -- exactly what this candidate cleared -- so a pre-existing
-	 * reservation's signals are preserved.
-	 *
-	 * Same ownership semantics as [resetClearedSemaphores]: a semaphore since re-cleared for another
-	 * train is skipped (see [semaphoreClearedFor]).
-	 */
-	private fun resetSemaphoreSet(
-		trainId: String,
-		toReset: Set<DynamicRailSemaphore>
-	) {
-		if (toReset.isEmpty()) return
-		val owned = clearedSemaphores[trainId] ?: return
-		var resetCount = 0
-		toReset.forEach { semaphore ->
-			// Forget this semaphore in the CALLER's ledger entry regardless of which branch
-			// runs below -- ownership having moved on means trainId doesn't hold it any more
-			// either way, so leaving it in `owned` would strand a stale entry that keeps
-			// hasClearedSignals(trainId) reporting true forever (Issue #893 final-review F2).
-			owned.remove(semaphore)
-			if (semaphoreClearedFor[semaphore] != trainId) {
-				logger.debug {
-					"resetSemaphoreSet: ${semaphore.name} was re-cleared for " +
-						"'${semaphoreClearedFor[semaphore]}'; leaving it lit for that train"
-				}
-				return@forEach
-			}
-			semaphoreClearedFor.remove(semaphore)
-			try {
-				semaphore.signal = Signal.STOP
-				resetCount++
-			} catch (e: Exception) {
-				logger.warn(e) {
-					"resetSemaphoreSet: Failed to reset semaphore ${semaphore.name} for '$trainId'"
-				}
-			}
-		}
-		if (owned.isEmpty()) clearedSemaphores.remove(trainId)
-		logger.debug {
-			"resetSemaphoreSet: Returned $resetCount of ${toReset.size} semaphore(s) to STOP for '$trainId'"
-		}
-	}
-
-	/**
-	 * Return a candidate route's START separator to [Signal.STOP] when [configureStartSignal]
-	 * wrote a partial aspect that [recordClearedSemaphore] never got a chance to record
-	 * (Issue #893, task A5).
-	 *
-	 * `DefaultSimulationContext.configureSemaphoreSignal` can set the physical aspect and still
-	 * throw before returning -- `configureStartSignal`'s try/catch then reports failure with the
-	 * semaphore already lit, but `recordClearedSemaphore` sits AFTER that call and never runs, so
-	 * [resetSemaphoreSet]'s before/after delta is empty and cannot find it. This is the fallback
-	 * that catches exactly that unrecorded case.
-	 *
-	 * ## Why [clearedBeforeStart] is required (review fix, Issue #893 task A5)
-	 *
-	 * A route EXTENSION re-invokes [reservePath] with the train's ORIGINAL start. If that start
-	 * was already legitimately cleared and recorded for THIS SAME train by an earlier successful
-	 * call, `semaphoreClearedFor[semaphore] == trainId` already -- the plain ownership check
-	 * alone cannot distinguish "already lit for me from an earlier hop" from "just written by
-	 * THIS failed attempt". Without [clearedBeforeStart], a failed extension attempt would drive
-	 * an earlier, still-governing signal back to STOP and purge its bookkeeping, stranding the
-	 * train behind its own signal while its earlier blocks stay registered. The snapshot -- taken
-	 * before this attempt's own [configureStartSignal] call -- lets this function reset ONLY a
-	 * semaphore that is genuinely new to this attempt.
-	 *
-	 * A no-op when [start] is not a semaphore-bearing separator, when it is not showing proceed,
-	 * when it was already present in [clearedBeforeStart] (this attempt did not write it), or
-	 * when it is owned by a DIFFERENT train (same ownership semantics as
-	 * [resetClearedSemaphores]/[resetSemaphoreSet] -- never drop a signal a live reservation
-	 * still needs).
-	 *
-	 * @param trainId The train whose failed candidate is being rolled back
-	 * @param start The candidate's start separator (semaphore or InOut)
-	 * @param clearedBeforeStart Snapshot of `clearedSemaphores[trainId]` taken before this
-	 *   attempt's [configureStartSignal] call -- a semaphore already present here predates this
-	 *   attempt and must be left alone
-	 */
-	private fun resetUnrecordedStartSignal(
-		trainId: String,
-		start: DynamicPathSeparator,
-		clearedBeforeStart: Set<DynamicRailSemaphore>
-	) {
-		val semaphore =
-			when (start) {
-				is DynamicRailSemaphore -> start
-				is DynamicInOut -> start.inSemaphore
-				else -> return
-			}
-		if (!semaphore.signal.isAllowing()) return
-		if (semaphore in clearedBeforeStart) {
-			logger.debug {
-				"resetUnrecordedStartSignal: ${semaphore.name} was already cleared for '$trainId' " +
-					"before this attempt (route extension reusing its original START); leaving it lit"
-			}
-			return
-		}
-		val owner = semaphoreClearedFor[semaphore]
-		if (owner != null && owner != trainId) {
-			logger.debug {
-				"resetUnrecordedStartSignal: ${semaphore.name} is owned by '$owner', not '$trainId'; " +
-					"leaving it lit for that train"
-			}
-			return
-		}
-		try {
-			semaphore.signal = Signal.STOP
-			semaphoreClearedFor.remove(semaphore)
-			val owned = clearedSemaphores[trainId]
-			owned?.remove(semaphore)
-			if (owned != null && owned.isEmpty()) clearedSemaphores.remove(trainId)
-			logger.debug {
-				"resetUnrecordedStartSignal: Reset partially-written START semaphore " +
-					"${semaphore.name} to STOP for '$trainId'"
-			}
-		} catch (e: Exception) {
-			logger.warn(e) {
-				"resetUnrecordedStartSignal: Failed to reset semaphore ${semaphore.name} for '$trainId'"
-			}
-		}
-	}
 
 	/**
 	 * Every [DynamicTrackBlock] edge in this context's graph, read once on first use.
@@ -704,9 +493,9 @@ class DefaultPathReservationService(
 		// Issue #904: snapshot BEFORE configureAlreadyOwnedStartSignal so a merge abort
 		// below can reset exactly what THIS call cleared, not a pre-existing reservation's
 		// signal (mirrors Step 2g/2i's own clearedBeforeStart snapshots).
-		val clearedBeforeStart = snapshotClearedSemaphores(trainId)
+		val clearedBeforeStart = signalLedger.snapshotClearedSemaphores(trainId)
 		if (blocks.isNotEmpty()) {
-			configureAlreadyOwnedStartSignal(trainId, start, blocks)
+			signalConfigurator.configureAlreadyOwnedStartSignal(trainId, start, blocks)
 		}
 		// FIX (Goal 10 SP2b.9 follow-up): a redundant re-request for a route this train
 		// already holds to the same target (e.g. a stateless per-cycle LLM dispatcher
@@ -733,7 +522,7 @@ class DefaultPathReservationService(
 		// just (re-)cleared for a merge that never happened; reset it back to STOP (G1),
 		// still report Success since the train's actual block ownership is correct and
 		// unchanged (traffic-simulation-expert ruling, Issue #904).
-		resetSignalsIfMergeAborted(mergeOutcome, trainId, start, clearedBeforeStart)
+		signalLedger.resetSignalsIfMergeAborted(mergeOutcome, trainId, start, clearedBeforeStart)
 
 		// Resolved -- this train is no longer contending for any block.
 		contention.clearBlockedTracking(trainId)
@@ -835,7 +624,7 @@ class DefaultPathReservationService(
 		// candidate's Step 2g/2h/2i signal work runs, so a rollback at any of those
 		// steps (including Step 2i's merge-abort rollback, Issue #904) can reset
 		// exactly what THIS candidate cleared (Issue #893 task A5).
-		val clearedBeforeCandidate = snapshotClearedSemaphores(trainId)
+		val clearedBeforeCandidate = signalLedger.snapshotClearedSemaphores(trainId)
 		val preparation = CandidatePreparation(pathInfo, candidateSwitches, priorSwitches, clearedBeforeCandidate)
 		val switchOutcome = configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)
 		// The candidate has already been rolled back inside configureAndRegisterSwitches
@@ -856,7 +645,7 @@ class DefaultPathReservationService(
 		// A semaphore START is configured for blocks.first() (the block next to it, also on a
 		// route extension, Issue #1062); forwardBlocks (just reserved) only drive an InOut START.
 		if (forwardBlocks.isNotEmpty()) {
-			val signalResult = configureStartSignal(trainId, start, forwardBlocks, blocks.first())
+			val signalResult = signalConfigurator.configureStartSignal(trainId, start, forwardBlocks, blocks.first())
 
 			// Rollback reservation if signal configuration failed
 			// This prevents trains from waiting indefinitely at STOP signals.
@@ -909,11 +698,12 @@ class DefaultPathReservationService(
 		val failures = recordG4FailureOnce(geometricFailures, signalResult, index)
 		// Issue #893 task A5: configureStartSignal can leave a PARTIAL aspect
 		// write behind -- the underlying config call sets the physical aspect
-		// and still throws before recordClearedSemaphore runs. Reset the
-		// before/after delta of clearedSemaphores (covers anything that WAS
-		// recorded), then explicitly drive the candidate START itself back to
-		// STOP for the unrecorded case resetSemaphoreSet's delta cannot see.
-		resetCandidateSignals(trainId, start, preparation.clearedBeforeCandidate)
+		// and still throws before ClearedSignalLedger.recordClearedSemaphore runs.
+		// Reset the before/after delta of the ledger's clearedSemaphores (covers
+		// anything that WAS recorded), then explicitly drive the candidate START
+		// itself back to STOP for the unrecorded case the delta reset
+		// (ClearedSignalLedger.resetSemaphoreSet) cannot see.
+		signalLedger.resetCandidateSignals(trainId, start, preparation.clearedBeforeCandidate)
 		rollbackUnconfigurableCandidate(
 			trainId,
 			forwardBlocks,
@@ -948,8 +738,8 @@ class DefaultPathReservationService(
 		// (signal=STOP) and wait forever.
 		// forwardBlocks is passed separately so a route EXTENSION (blocks the train
 		// already owns, plus new ones) only lights boundaries that lead into a new
-		// block -- see [configureIntermediateSemaphores].
-		configureIntermediateSemaphores(trainId, blocks, forwardBlocks.toSet())
+		// block -- see [RouteSignalConfigurator.configureIntermediateSemaphores].
+		signalConfigurator.configureIntermediateSemaphores(trainId, blocks, forwardBlocks.toSet())
 
 		// Step 2i: Register PathInfo metadata (Issue #295/#296 Phase 4; moved here by
 		// Issue #742). Registration happens only after switches AND signals configured
@@ -1168,17 +958,12 @@ class DefaultPathReservationService(
 	/** See [RouteReleaser.releasePathDetailed] (Issue #1050 approach locking). */
 	override fun releasePathDetailed(trainId: String): PathRelease = releaser.releasePathDetailed(trainId)
 
-	/**
-	 * See [PathReservationService.hasClearedSignals]. `clearedSemaphores` never holds an
-	 * empty set for a key -- every removal path ([resetClearedSemaphores], [resetSemaphoreSet],
-	 * [resetUnrecordedStartSignal]) deletes the map entry once its set empties -- so a
-	 * key-presence check alone is exact.
-	 */
-	override fun hasClearedSignals(trainId: String): Boolean = clearedSemaphores.containsKey(trainId)
+	/** See [PathReservationService.hasClearedSignals]; answered by [ClearedSignalLedger.hasClearedSignals]. */
+	override fun hasClearedSignals(trainId: String): Boolean = signalLedger.hasClearedSignals(trainId)
 
 	/**
 	 * See [PathReservationService.recordExternalClearedSemaphore]. Delegates directly to the
-	 * same [recordClearedSemaphore] used internally by [reservePath], so an external caller's
+	 * same [ClearedSignalLedger.recordClearedSemaphore] used internally by [reservePath], so an external caller's
 	 * write is folded into the single ledger this service already maintains -- see the interface
 	 * KDoc for why this is the fix for Issue #893's task A6 (G6 single signal ledger).
 	 */
@@ -1186,7 +971,7 @@ class DefaultPathReservationService(
 		trainId: String,
 		semaphore: DynamicRailSemaphore
 	) {
-		recordClearedSemaphore(trainId, semaphore)
+		signalLedger.recordClearedSemaphore(trainId, semaphore)
 	}
 
 	/**
@@ -1279,7 +1064,7 @@ class DefaultPathReservationService(
 			// Capture the semaphores this train already has cleared before this attempt, so a
 			// bypass-rollback can reset only what THIS candidate cleared (the before/after delta)
 			// and not a pre-existing reservation's signals.
-			val clearedBefore = clearedSemaphores[trainId]?.toSet() ?: emptySet()
+			val clearedBefore = signalLedger.snapshotClearedSemaphores(trainId)
 			// Capture the blocks this train already owns before this attempt, for the same reason
 			// on the block side: a bypass candidate's alternative route may reuse blocks the train
 			// already holds from a live reservation, so result.reservedBlocks can overlap that
@@ -1312,8 +1097,8 @@ class DefaultPathReservationService(
 						// paths. Reset exactly the semaphores this candidate cleared (the delta),
 						// never the train's whole set, which may still hold a live reservation.
 						val clearedByThisCandidate =
-							(clearedSemaphores[trainId] ?: emptySet()) - clearedBefore
-						resetSemaphoreSet(trainId, clearedByThisCandidate)
+							signalLedger.snapshotClearedSemaphores(trainId) - clearedBefore
+						signalLedger.resetSemaphoreSet(trainId, clearedByThisCandidate)
 						// Release the wrongly reserved path — only the blocks THIS candidate newly
 						// reserved (the ownership delta vs [blocksBefore]); blocks the train already
 						// held from a live reservation must stay registered, or the rollback would
@@ -1335,7 +1120,7 @@ class DefaultPathReservationService(
 					}
 
 					// Success! Path reserved and validated to use the required 'next' block
-					configureBypassStartSignal(trainId, start, result.reservedBlocks)
+					signalConfigurator.configureBypassStartSignal(trainId, start, result.reservedBlocks)
 
 					logger.debug {
 						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore via required next block"
@@ -2594,75 +2379,6 @@ class DefaultPathReservationService(
 	) = releaser.rollbackReservation(separator, blocks)
 
 	/**
-	 * Configure (or skip) the START separator's signal for the already-owned early-return
-	 * branch of [reservePath]: every block in the requested path is already owned by [trainId],
-	 * so there is nothing to reserve, only the START signal to (re-)confirm.
-	 *
-	 * Extracted from [reservePath] so the candidate-loop body stays under the cyclomatic
-	 * complexity threshold (mirrors [configureStartSignal]'s extraction for the same reason).
-	 *
-	 * - START is a [DynamicRailSemaphore] that faces away from [blocks]' first entry (Issue
-	 *   #893 task A1, G4): SKIP -- the grant already exists and there is nothing to roll back,
-	 *   so unlike [configureStartSignal]'s rejection this only leaves the semaphore un-lit.
-	 * - START is a [DynamicRailSemaphore] facing the travel direction: configure it, idempotent.
-	 * - START is a [DynamicInOut]: configure its embedded `inSemaphore`, idempotent.
-	 * - Any other START type: nothing to configure.
-	 *
-	 * @param start The candidate's start separator (semaphore or InOut).
-	 * @param blocks The already-owned path's full block list (first one drives the signal).
-	 * @since Issue #893 task A1 (extracted alongside the G4 rear-facing-START guard)
-	 */
-	private fun configureAlreadyOwnedStartSignal(
-		trainId: String,
-		start: DynamicPathSeparator,
-		blocks: List<DynamicTrackBlock>
-	) {
-		when {
-			start is DynamicRailSemaphore && !startFacesTravelDirection(start, blocks.first()) -> {
-				logger.debug {
-					"reservePath: Left already-owned START semaphore ${start.name} at STOP for " +
-						"$trainId - the route passes it from behind"
-				}
-			}
-			start is DynamicRailSemaphore -> {
-				environment.configureSemaphoreSignal(start, blocks.first())
-				recordClearedSemaphore(trainId, start)
-			}
-			start is DynamicInOut -> {
-				val firstBlock = blocks.first()
-				val maxSpeed = firstBlock.maxSpeed(start)
-				start.inSemaphore.setUpSpeed(
-					from = start.direction(),
-					to =
-						cz.vutbr.fit.interlockSim.objects.core
-							.anti(start.direction()),
-					allowedSpeed = maxSpeed
-				)
-				recordClearedSemaphore(trainId, start.inSemaphore)
-			}
-		}
-	}
-
-	/**
-	 * Outcome of [configureStartSignal], distinguishing a permanent G4 rear-facing rejection
-	 * (Issue #903) from any other configuration failure (unsupported START type, or a genuine
-	 * exception from the underlying signal-configuration call) so the caller can classify the
-	 * candidate correctly instead of folding both into ordinary contention.
-	 *
-	 * @since Issue #903
-	 */
-	private enum class StartSignalResult {
-		/** The start signal/inSemaphore was configured (or treated as already configured). */
-		Configured,
-
-		/** G4: an adjacent semaphore START faces away from the requested direction of travel. */
-		RejectedG4,
-
-		/** Any other failure: unsupported START type, or a genuine configuration exception. */
-		ConfigFailed
-	}
-
-	/**
 	 * Permanent geometric impossibilities seen while trying a request's candidate paths.
 	 *
 	 * Two facts, deliberately kept apart (Issue #937):
@@ -2940,47 +2656,6 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * `clearedSemaphores[trainId]`, defaulting to an empty set. Extracted so every snapshot call
-	 * site in [reservePath] stays branch-free (a bare elvis `?:` at the call site would otherwise
-	 * count against that method's own cyclomatic complexity).
-	 */
-	private fun snapshotClearedSemaphores(trainId: String): Set<DynamicRailSemaphore> =
-		clearedSemaphores[trainId]?.toSet() ?: emptySet()
-
-	/**
-	 * Reset exactly the semaphores THIS candidate cleared since [clearedBeforeCandidate] (Issue
-	 * #893 task A5 / Issue #904): the before/after delta of [clearedSemaphores] (covers anything
-	 * recorded), then [start] itself for the unrecorded partial-write case
-	 * [resetSemaphoreSet]'s delta cannot see. Extracted so every rollback call site in
-	 * [reservePath] stays a single line.
-	 */
-	private fun resetCandidateSignals(
-		trainId: String,
-		start: DynamicPathSeparator,
-		clearedBeforeCandidate: Set<DynamicRailSemaphore>
-	) {
-		resetSemaphoreSet(trainId, snapshotClearedSemaphores(trainId) - clearedBeforeCandidate)
-		resetUnrecordedStartSignal(trainId, start, clearedBeforeCandidate)
-	}
-
-	/**
-	 * The already-owned early-return branch's merge-abort handling (Issue #904, traffic-simulation-expert
-	 * ruling Q2): this branch acquires no new blocks or switches, so an abort has nothing to roll
-	 * back on that side. The only discrepancy is a signal this call may have just (re-)cleared for
-	 * a merge that never happened; reset it back to STOP (G1) if the merge aborted, otherwise do
-	 * nothing. Extracted so the call site in [reservePath] stays branch-free.
-	 */
-	private fun resetSignalsIfMergeAborted(
-		mergeOutcome: PathReservationRegistry.MergeOutcome,
-		trainId: String,
-		start: DynamicPathSeparator,
-		clearedBeforeCandidate: Set<DynamicRailSemaphore>
-	) {
-		if (mergeOutcome !is PathReservationRegistry.MergeOutcome.Aborted) return
-		resetCandidateSignals(trainId, start, clearedBeforeCandidate)
-	}
-
-	/**
 	 * Step 2i's merge-abort handling (Issue #904): if [mergeOutcome] is
 	 * [PathReservationRegistry.MergeOutcome.Aborted], release exactly what THIS candidate
 	 * acquired -- blocks, switches and cleared signal -- transactionally complete, matching Step
@@ -3006,7 +2681,7 @@ class DefaultPathReservationService(
 			"reservePath: merge aborted for $trainId (${mergeOutcome.reason}) -- releasing " +
 				"this candidate's blocks, switches and signal instead of leaving an orphaned tail"
 		}
-		resetCandidateSignals(trainId, start, clearedBeforeCandidate)
+		signalLedger.resetCandidateSignals(trainId, start, clearedBeforeCandidate)
 		rollbackUnconfigurableCandidate(trainId, forwardBlocks, extractUniqueSwitches(pathInfo), priorSwitches)
 		return true
 	}
@@ -3067,171 +2742,6 @@ class DefaultPathReservationService(
 		} else {
 			current
 		}
-
-	/**
-	 * Configure the START separator's signal for a freshly reserved candidate (Step 2g).
-	 *
-	 * Extracted from [reservePath] so the candidate-loop body stays under the cyclomatic
-	 * complexity threshold. Returns [StartSignalResult.Configured] when the start
-	 * signal/inSemaphore was configured for the reserved candidate, and a specific failure
-	 * variant otherwise — in which case the caller rolls the candidate back via
-	 * [rollbackUnconfigurableCandidate] and continues to the next candidate.
-	 *
-	 * - START is a [DynamicRailSemaphore]: configure it for [startBlock], the path's first block --
-	 *   the one the semaphore actually bounds. The first *forward* block is not that block on a route
-	 *   extension (every block next to the start is already owned), and the block rejects a
-	 *   separator it does not end, which left the start at STOP (Issue #1062).
-	 * - START is a [DynamicInOut]: configure its embedded `inSemaphore` (train entering from
-	 *   the external network). `inSemaphore.direction() == anti(InOut.direction())` per
-	 *   `InOut.kt`, so `from = InOut.direction()` and `to = anti(InOut.direction())`.
-	 * - Any other START type: no signal to configure → [StartSignalResult.ConfigFailed] (rolls
-	 *   the candidate back).
-	 *
-	 * @param start The candidate's start separator (semaphore or InOut).
-	 * @param forwardBlocks The blocks just reserved for this candidate (first one drives an
-	 *   InOut START's allowed speed).
-	 * @param startBlock The first block of the whole candidate path, adjacent to [start]; drives a
-	 *   semaphore START's direction check and allowed speed.
-	 * @return [StartSignalResult.Configured] on success; a failure variant otherwise.
-	 * @since Issue #742 SP0.11 review follow-up (extracted from reservePath Step 2g); return
-	 *   type widened from `Boolean` to [StartSignalResult] by Issue #903.
-	 */
-	private fun configureStartSignal(
-		trainId: String,
-		start: DynamicPathSeparator,
-		forwardBlocks: List<DynamicTrackBlock>,
-		startBlock: DynamicTrackBlock
-	): StartSignalResult =
-		when {
-			// Case 1: START is a semaphore -> configure it (train departing from semaphore)
-			start is DynamicRailSemaphore -> {
-				// Issue #893 task A1 (G4): a START that faces away from the requested direction
-				// of travel has no proceed authority to give -- the block the train needs to
-				// enter lies behind the semaphore's facing, not ahead of it. Unlike an
-				// intermediate semaphore (configureIntermediateSemaphores, PR #892), the START
-				// is authority-defining: granting the route anyway would strand the train with
-				// no signal it is entitled to obey, a #566-class stall. Reject before
-				// configuring/recording anything, so the caller's rollback has nothing to undo.
-				if (!startFacesTravelDirection(start, startBlock)) {
-					logger.debug {
-						"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
-							"away from the requested direction of travel toward $startBlock"
-					}
-					StartSignalResult.RejectedG4
-				} else {
-					try {
-						environment.configureSemaphoreSignal(start, startBlock)
-						recordClearedSemaphore(trainId, start)
-						logger.debug {
-							"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
-						}
-						StartSignalResult.Configured
-					} catch (e: Exception) {
-						logger.warn(e) {
-							"reservePath: Semaphore signal configuration failed - rolling back reservation"
-						}
-						StartSignalResult.ConfigFailed
-					}
-				}
-			}
-			// Case 2: START is InOut -> configure inSemaphore (train entering from external network)
-			// Path is conceptually: inOut.inSemaphore → blocks → target
-			// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
-			start is DynamicInOut -> {
-				val firstBlock = forwardBlocks.first()
-				// Issue #911: mirror startFacesTravelDirection's fail-open tolerance for a
-				// route extension's non-adjacent start (Issue #893 task A1). A route extension
-				// re-invokes reservePath with the ORIGINAL start; once every block adjacent to
-				// it is already owned, forwardBlocks.first() is several hops away and is not
-				// literally an end of this InOut's track, so maxSpeed(start) throws
-				// SimulationException[FATAL] instead of returning a value. There is nothing new
-				// to configure at a boundary this InOut does not bound -- the adjacent block
-				// already carries the speed set by the original grant
-				// (PathReservationRegistry.resetUnrecordedStartSignal's KDoc documents this
-				// exact steady state) -- so treat the START as already configured rather than
-				// failing the whole candidate. A genuine configuration failure below (e.g.
-				// setUpSpeed itself throwing) still fails closed, unchanged.
-				val maxSpeed =
-					try {
-						firstBlock.maxSpeed(start)
-					} catch (e: SimulationException) {
-						logger.debug(e) {
-							"reservePath: Could not resolve maxSpeed for InOut START ${start.name} " +
-								"toward $firstBlock (likely non-adjacent, e.g. a route extension); " +
-								"treating as already configured"
-						}
-						return StartSignalResult.Configured
-					}
-				try {
-					// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
-					// For valid direction: from=anti(inSem.dir), to=inSem.dir
-					// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
-					start.inSemaphore.setUpSpeed(
-						from = start.direction(), // InOut's direction
-						to =
-							cz.vutbr.fit.interlockSim.objects.core
-								.anti(start.direction()),
-						// Anti = inSemaphore's direction
-						allowedSpeed = maxSpeed
-					)
-					recordClearedSemaphore(trainId, start.inSemaphore)
-					logger.debug {
-						"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
-					}
-					StartSignalResult.Configured
-				} catch (e: Exception) {
-					logger.warn(e) {
-						"reservePath: InOut inSemaphore configuration failed - rolling back reservation"
-					}
-					StartSignalResult.ConfigFailed
-				}
-			}
-			else -> StartSignalResult.ConfigFailed
-		}
-
-	/**
-	 * Re-configure a [DynamicRailSemaphore] START after [reservePathToAnyNextSemaphore] has
-	 * validated that the inner [reservePath] call's [reservedBlocks] actually traverse the
-	 * required `next` block.
-	 *
-	 * Extracted from [reservePathToAnyNextSemaphore] to keep that method under the
-	 * cyclomatic/length complexity thresholds (mirrors [configureStartSignal]'s own extraction
-	 * for the same reason).
-	 *
-	 * Issue #893 task A5 (documented TDD exception -- see the approved SDD plan for phase alpha
-	 * gap G3; no reachable failing test exists for this branch, since it only ever repeats a
-	 * decision the inner [reservePath] call above already made). Fixed anyway: re-lighting here
-	 * without [recordClearedSemaphore] leaves the signal outside [clearedSemaphores] /
-	 * [semaphoreClearedFor] forever, so no release path can ever find it to reset. Guarded with
-	 * [facesDirectionOfTravel] (not the tolerant [startFacesTravelDirection] --
-	 * `reservedBlocks.first()` is always the path's genuine first hop from [start], so it is
-	 * always structurally adjacent and `getSegment` cannot throw here), for symmetry with the A1
-	 * rear-facing-START rejection: re-lighting blindly would resurrect a signal
-	 * [configureStartSignal] or [configureAlreadyOwnedStartSignal] deliberately left at STOP.
-	 *
-	 * A no-op for a non-semaphore [start] (InOut semaphores are constant) or an empty
-	 * [reservedBlocks] list.
-	 */
-	private fun configureBypassStartSignal(
-		trainId: String,
-		start: DynamicPathSeparator,
-		reservedBlocks: List<DynamicTrackBlock>
-	) {
-		if (start !is DynamicRailSemaphore || reservedBlocks.isEmpty()) return
-		val firstBlock = reservedBlocks.first()
-		if (!facesDirectionOfTravel(start, firstBlock)) {
-			logger.debug {
-				"reservePathToAnyNextSemaphore: Left START semaphore ${start.name} at STOP for " +
-					"$trainId - it faces away from the requested direction of travel"
-			}
-			return
-		}
-		environment.configureSemaphoreSignal(start, firstBlock)
-		recordClearedSemaphore(trainId, start)
-		logger.debug {
-			"reservePathToAnyNextSemaphore: Configured START semaphore ${start.name} to ${start.signal}"
-		}
-	}
 
 	/**
 	 * Configure the candidate path's switches and register them on success (Issue #742).
@@ -3465,19 +2975,8 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * Reset every semaphore this service recorded as cleared for [trainId] that governs one of
-	 * [blocks]. See the interface KDoc for why candidates come from both `ends()` and
-	 * `reservedFrom` -- the two sources cover, respectively, an INTERMEDIATE boundary between two
-	 * blocks of the same reservation, and the route's START (including its InOut form), neither of
-	 * which the other source can recover on its own for a multi-block route.
-	 *
-	 * Delegates the actual reset to [resetSemaphoreSet], so ownership (last-writer-wins) is
-	 * identical to [releasePath]/[unregister]: a semaphore since re-cleared for another train is
-	 * left alone.
-	 *
-	 * See the interface KDoc for this call's proven-safe scope (suffix/rearmost releases on a
-	 * non-revisiting route) -- this method performs no route-position validation of its own, so a
-	 * caller outside that scope is responsible for the risk described there.
+	 * See [PathReservationService.resetSemaphoresForReleasedBlocks]; delegates to
+	 * [ClearedSignalLedger.resetSemaphoresForReleasedBlocks] (Issue #1169).
 	 *
 	 * @since Issue #893 (phase alpha, task A3)
 	 */
@@ -3485,23 +2984,7 @@ class DefaultPathReservationService(
 		trainId: String,
 		blocks: Collection<DynamicTrackBlock>
 	) {
-		if (blocks.isEmpty()) return
-		val candidates = mutableSetOf<DynamicRailSemaphore>()
-		blocks.forEach { block ->
-			block.ends().forEach { end ->
-				when (end) {
-					is DynamicRailSemaphore -> candidates.add(end)
-					is DynamicInOut -> candidates.add(end.inSemaphore)
-					else -> Unit
-				}
-			}
-			when (val reservedFrom = block.reservedFrom) {
-				is DynamicRailSemaphore -> candidates.add(reservedFrom)
-				is DynamicInOut -> candidates.add(reservedFrom.inSemaphore)
-				else -> Unit
-			}
-		}
-		resetSemaphoreSet(trainId, candidates)
+		signalLedger.resetSemaphoresForReleasedBlocks(trainId, blocks)
 	}
 
 	override fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
@@ -3536,168 +3019,6 @@ class DefaultPathReservationService(
 		override fun distanceToSemaphore(): Double = 0.0
 
 		override fun nextSemaphore(): OrientedPathSeparator? = null
-	}
-
-	/**
-	 * `true` when a train moving into [nextBlock] passes [semaphore] head-on (the semaphore
-	 * faces the movement), `false` when it passes it from behind.
-	 *
-	 * ## Why a rear-passed semaphore must not be cleared (the `doB` defect)
-	 *
-	 * `vyhybna.xml` is bidirectional, so a reserved route routinely runs past semaphores that
-	 * face the other way. An `A → B` route is governed by `zA` and `doB1`/`doB2` and runs past
-	 * `doA1`/`doA2` and `zB`; a `B → A` route is the mirror image. Clearing the rear-passed ones
-	 * is wrong twice over:
-	 *
-	 * - **The train never reads them.** `Train.separatorAction` only calls `semaphoreAction`
-	 *   when `isSeparatorInDirection()` holds, so a rear-passed semaphore contributes nothing
-	 *   to the movement it was cleared for.
-	 * - **It authorises the opposing movement.** A train approaching from the other side reads
-	 *   `signal.isAllowing()` directly (it is the reservation holder, so it deliberately does
-	 *   not consult [DynamicRailSemaphore.isAllowingFor]) and takes a proceed aspect meant for
-	 *   nobody. That aspect is also the one that never returns to danger, because the reset at
-	 *   the end of `semaphoreAction` sits on exactly the branch that was skipped.
-	 *
-	 * ## Relationship to Issue #566
-	 *
-	 * [DynamicRailSemaphore.checkPathSegments] deliberately accepts both segment orderings, so
-	 * a rear-side pairing is a *valid* thing to ask for; this guard decides only that the
-	 * reservation flow does not ask for it. The Issue #566 stall it was protecting against — a
-	 * granted route no train could drive — cannot come back, precisely because the train does
-	 * not wait on a semaphore it passes from behind.
-	 *
-	 * Falls back to `true` (clear it, the pre-existing behaviour) when the environment cannot
-	 * resolve segments, so an unexpected environment type degrades to the old semantics rather
-	 * than silently stranding routes at STOP.
-	 */
-	private fun facesDirectionOfTravel(
-		semaphore: DynamicRailSemaphore,
-		nextBlock: DynamicTrackBlock
-	): Boolean {
-		val context =
-			environment as? cz.vutbr.fit.interlockSim.context.SimulationContext
-				?: return true
-		return semaphoreFacesNextBlock(context, semaphore, nextBlock)
-	}
-
-	/**
-	 * [facesDirectionOfTravel], tolerant of a [nextBlock] that cannot be resolved (Issue #893
-	 * task A1, Issue #1062).
-	 *
-	 * Both START-signal call sites ([configureStartSignal] and the already-owned early-return
-	 * branch of [reservePath]) hand this the FIRST block of the whole requested path, which is the
-	 * block next to [semaphore]. That holds on a route **extension** too: the extension re-invokes
-	 * `reservePath` with the ORIGINAL start separator and every block next to it is already owned,
-	 * but the path's first block is still the one the separator bounds. So the direction check runs
-	 * on extensions and a rear-facing START is rejected there (G4), like on a fresh route. (Before
-	 * Issue #1062 the call sites passed the first *forward* block, which is not next to the start on
-	 * an extension; [DefaultSimulationContext.getSegment] threw for it and this guard fell open.)
-	 *
-	 * The `catch` stays as a fail-open safety net ("cannot resolve -> proceed, never strand the
-	 * route") for a pair that is unexpectedly not adjacent, without changing
-	 * [facesDirectionOfTravel]'s contract or its callers within [configureIntermediateSemaphores]
-	 * (which only ever pass a genuinely adjacent pair). A START that does not touch the requesting
-	 * train's footprint at all is refused earlier by the A-R1 contiguity predicate
-	 * ([rejectNonContiguousStart]).
-	 */
-	private fun startFacesTravelDirection(
-		semaphore: DynamicRailSemaphore,
-		nextBlock: DynamicTrackBlock
-	): Boolean =
-		try {
-			facesDirectionOfTravel(semaphore, nextBlock)
-		} catch (e: Exception) {
-			logger.debug(e) {
-				"reservePath: Could not resolve whether START semaphore ${semaphore.name} faces " +
-					"$nextBlock (unexpectedly not adjacent); treating as facing " +
-					"the travel direction"
-			}
-			true
-		}
-
-	/**
-	 * Configure the signal for every semaphore that lies at the junction between
-	 * two consecutive blocks in the reserved path **and faces the direction of travel**.
-	 *
-	 * When [reservePath] reserves a path spanning multiple blocks
-	 * (e.g. InOut A → semaphore → InOut B), step 2g only sets the signal for the
-	 * *start* separator.  Any intermediate semaphore keeps its default STOP signal,
-	 * causing the train to halt at that separator and never reach its destination.
-	 *
-	 * This method walks the ordered list of reserved blocks and, for each
-	 * consecutive pair, finds the common end-point separator.  If that separator is
-	 * a [DynamicRailSemaphore] it is configured to ALLOW in the direction of the
-	 * *next* block (i.e. the block the train will enter after passing the
-	 * semaphore).
-	 *
-	 * The call is idempotent — re-setting a signal that is already ALLOW is safe.
-	 * Failures are non-fatal and are logged at WARN level by
-	 * [SimulationEnvironment.configureSemaphoreSignal].
-	 *
-	 * A semaphore the route passes from behind is deliberately left at STOP — see
-	 * [facesDirectionOfTravel].
-	 *
-	 * A route **extension** (this train already owns a prefix of [blocks] from an earlier
-	 * [reservePath] call, and this call adds new blocks beyond it) must not touch a boundary
-	 * strictly between two blocks the train already owns: the train may already have passed
-	 * that semaphore and returned it to STOP itself ([cz.vutbr.fit.interlockSim.sim.Train]'s
-	 * `semaphoreAction` does exactly that on facing passage). Re-lighting it here would
-	 * resurrect a proceed aspect behind the train's head — authorising nobody, since the train
-	 * never reads a semaphore it has already passed, while an opposing movement might. Only a
-	 * boundary whose next block is still part of the *new* portion of the route is eligible for
-	 * configuration; [forwardBlocks] is exactly that new portion, as computed by [reservePath]
-	 * (blocks not already owned by [trainId]).
-	 *
-	 * @param trainId Train the aspects are cleared on behalf of, recorded so
-	 *                [resetClearedSemaphores] can return them to STOP when the route is released.
-	 * @param blocks Ordered list of [DynamicTrackBlock] objects from path start to target.
-	 *               Must be in traversal order (the order produced by
-	 *               [extractUniqueBlocks] from a BFS/DFS path).
-	 * @param forwardBlocks The subset of [blocks] not already owned by [trainId] (the newly
-	 *                      reserved portion of the route). A boundary is only configured when
-	 *                      the block it leads into is a member of this set.
-	 */
-	private fun configureIntermediateSemaphores(
-		trainId: String,
-		blocks: List<DynamicTrackBlock>,
-		forwardBlocks: Set<DynamicTrackBlock>
-	) {
-		if (blocks.size < 2) return
-		for (i in 0 until blocks.size - 1) {
-			val currentBlock = blocks[i]
-			val nextBlock = blocks[i + 1]
-			// The boundary leads into a block the train already owns -- it sits strictly
-			// between two blocks this train already holds, so it must be left exactly as it
-			// is (the train may already have passed it and returned it to STOP itself).
-			if (nextBlock !in forwardBlocks) {
-				continue
-			}
-			// Find the shared end-point between the two consecutive blocks.
-			// DynamicTrackBlock.ends() returns Array<PathSeparator> whose elements
-			// are the DynamicPathSeparator instances shared across the graph.
-			for (end in currentBlock.ends()) {
-				if (end is DynamicRailSemaphore && nextBlock.ends().contains(end)) {
-					// A semaphore facing against the direction of travel governs the OPPOSING
-					// movement, not this one. Clearing it authorises nobody useful and is
-					// actively unsafe -- see [facesDirectionOfTravel].
-					if (!facesDirectionOfTravel(end, nextBlock)) {
-						logger.debug {
-							"reservePath: Left intermediate semaphore ${end.name} at STOP for $trainId - " +
-								"the route passes it from behind (between block $i and block ${i + 1})"
-						}
-						continue
-					}
-					// `end` sits between currentBlock and nextBlock; configure it so
-					// the train can pass from currentBlock into nextBlock.
-					environment.configureSemaphoreSignal(end, nextBlock)
-					recordClearedSemaphore(trainId, end)
-					logger.debug {
-						"reservePath: Configured intermediate semaphore ${end.name} to ALLOW " +
-							"(between block $i and block ${i + 1})"
-					}
-				}
-			}
-		}
 	}
 }
 
