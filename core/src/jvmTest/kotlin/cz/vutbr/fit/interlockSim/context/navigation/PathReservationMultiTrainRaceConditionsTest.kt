@@ -18,7 +18,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
@@ -59,26 +58,6 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBase() {
-	/**
-	 * Find a semaphore by name in the grid.
-	 */
-	private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
-		val grid = simulationContext.getRailWayNetGrid()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell =
-					grid[
-						cz.vutbr.fit.interlockSim.util
-							.Point(x, y)
-					]
-				if (cell is DynamicRailSemaphore && cell.name == name) {
-					return cell
-				}
-			}
-		}
-		throw IllegalStateException("Semaphore $name not found in grid")
-	}
-
 	/**
 	 * Helper function to assert that all blocks are owned by the specified train with consistent state.
 	 *

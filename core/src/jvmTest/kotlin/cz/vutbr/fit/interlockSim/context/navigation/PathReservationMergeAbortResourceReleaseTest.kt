@@ -13,12 +13,10 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotInstanceOf
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -97,18 +95,5 @@ class PathReservationMergeAbortResourceReleaseTest : PathReservationServiceTestB
 		assertThat(registry.getPathInfo(trainId)!!.target)
 			.withMessage("a merge-abort must not touch the stored PathInfo")
 			.isEqualTo(zB)
-	}
-
-	private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
-		val grid = simulationContext.getRailWayNetGrid()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid[Point(x, y)]
-				if (cell is DynamicRailSemaphore && cell.name == name) {
-					return cell
-				}
-			}
-		}
-		throw IllegalStateException("Semaphore $name not found in grid")
 	}
 }

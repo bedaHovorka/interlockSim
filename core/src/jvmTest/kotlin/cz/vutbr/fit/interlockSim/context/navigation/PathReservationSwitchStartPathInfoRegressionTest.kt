@@ -14,12 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -40,41 +35,6 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 class PathReservationSwitchStartPathInfoRegressionTest : PathReservationServiceTestBase() {
-	private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
-		val grid = simulationContext.getRailWayNetGrid()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid[Point(x, y)]
-				if (cell is DynamicRailSemaphore && cell.name == name) return cell
-			}
-		}
-		throw IllegalStateException("Semaphore '$name' not found in grid")
-	}
-
-	/**
-	 * Block whose two endpoint separators (by name) are [first] and [second].
-	 * vyhybna.xml blocks carry no XML name of their own; they are addressed by endpoints.
-	 */
-	private fun blockBetween(
-		first: String,
-		second: String
-	): DynamicTrackBlock {
-		fun separatorName(sep: PathSeparator): String? =
-			when (sep) {
-				is DynamicRailSemaphore -> sep.name
-				is DynamicRailSwitch -> sep.name
-				is DynamicInOut -> sep.name
-				else -> null
-			}
-		return simulationContext
-			.getGraph()
-			.values()
-			.filterIsInstance<DynamicTrackBlock>()
-			.firstOrNull { block ->
-				block.ends().mapNotNull { separatorName(it) }.toSet() == setOf(first, second)
-			} ?: throw IllegalStateException("No block found between '$first' and '$second'")
-	}
-
 	/**
 	 * Issue #938: when the already-owned prefix of a forward reservation ends at a switch
 	 * (e.g. vB on the k2 siding branch) and the first new block is right after that switch,
