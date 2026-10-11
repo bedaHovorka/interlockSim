@@ -12,7 +12,9 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isSameInstanceAs
 import assertk.fail
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -21,7 +23,6 @@ import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -184,22 +185,93 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 		}
 
 		@Test
-		@DisplayName("a switch start (no orientation) sorts InOuts by path length only, then semaphores")
-		fun switchStartOrderIsPinned() {
-			for ((start, expected) in mapOf(
-				"vA" to listOf("A", "B", "zA", "doA1", "doA2", "doB2", "doB1", "zB"),
-				"vB" to listOf("B", "A", "zA", "doA1", "doA2", "doB2", "doB1", "zB")
-			)) {
+		@DisplayName("a switch start is refused by the Issue #1188 guard before any target is discovered")
+		fun switchStartIsRefusedBeforeDiscovery() {
+			// The order a switch start would get is pinned in Direct.wholeNetworkTargetsFromSwitch.
+			for (start in listOf("vA", "vB")) {
 				appender.list.clear()
-				// The reservation itself refuses a switch start (it is not an OrientedPathSeparator);
-				// only the order computed before the first attempt is pinned here. Each start gets its
-				// own train id because the refused attempt leaves blocks registered to the train
-				// (pre-existing on base, Issue #1188), which would make the next start non-contiguous.
-				runCatching { service.reservePathToAny("train-$start", separator(start)) }
-					.onSuccess { error("switch start $start unexpectedly reserved: $it") }
-					.onFailure { assertThat(it::class, name = "failure from $start").isEqualTo(SimulationException::class) }
-				assertThat(loggedTargetOrder(), name = "order from $start").containsExactly(*expected.toTypedArray())
+				val result = service.reservePathToAny("train-$start", separator(start))
+				assertThat(result, name = "result from $start")
+					.isInstanceOf(PathReservationService.ReservationResult.GeometricallyImpossible::class)
+				assertThat(
+					appender.list.any { "Target order" in it.formattedMessage },
+					name = "target order logged for $start"
+				).isFalse()
 			}
+		}
+	}
+
+	@Nested
+	@DisplayName("ReservationTargetDiscovery directly")
+	inner class Direct {
+		private lateinit var discovery: ReservationTargetDiscovery
+
+		@BeforeEach
+		fun createDiscovery() {
+			discovery = ReservationTargetDiscovery(simulationContext.scope.get(), simulationContext)
+		}
+
+		@Test
+		@DisplayName("reservePathToAnyTargets keeps the recorded order; only InOuts carry precomputed paths")
+		fun wholeNetworkTargetsFromZA() {
+			val targets = discovery.reservePathToAnyTargets(separator("zA"))
+
+			assertThat(targets.map { label(it.first) })
+				.containsExactly("B", "A", "doA1", "doA2", "doB2", "doB1", "zB")
+			assertThat(targets.filter { it.second != null }.map { label(it.first) }).containsExactly("B", "A")
+		}
+
+		@Test
+		@DisplayName("reservePathToAnyTargets from a switch sorts InOuts by distance only")
+		fun wholeNetworkTargetsFromSwitch() {
+			assertThat(discovery.reservePathToAnyTargets(separator("vB")).map { label(it.first) })
+				.containsExactly("B", "A", "zA", "doA1", "doA2", "doB2", "doB1", "zB")
+		}
+
+		@Test
+		@DisplayName("findNextSemaphoresVia from zA reaches both loop tracks' far signals, k1 first")
+		fun nextSeparatorsFromZA() {
+			val zA = separator("zA") as OrientedPathSeparator
+			val (start, next) = discovery.resolveForwardSection(zA, "test")!!
+
+			assertThat(start).isSameInstanceAs(zA)
+			assertThat(discovery.findNextSemaphoresVia(start, next).map { label(it) })
+				.containsExactly("doB1", "doB2")
+		}
+
+		@Test
+		@DisplayName("findNextSemaphoresVia puts the InOut before the opposing loop signal")
+		fun nextSeparatorsPutInOutFirst() {
+			val doB1 = separator("doB1") as OrientedPathSeparator
+			val (start, next) = discovery.resolveForwardSection(doB1, "test")!!
+
+			assertThat(discovery.findNextSemaphoresVia(start, next).map { label(it) })
+				.containsExactly("B", "doB2")
+		}
+
+		@Test
+		@DisplayName("candidate query equals the service's, separator for separator")
+		fun candidatesMatchService() {
+			for (name in listOf("zA", "doA1", "doA2", "doB2", "doB1", "zB", "A", "B")) {
+				val start = separator(name) as OrientedPathSeparator
+				assertThat(discovery.findReservationTargetCandidates(start, null), name = "from $name")
+					.isEqualTo(query.findReservationTargetCandidates(start, null))
+			}
+		}
+
+		@Test
+		@DisplayName("no forward section means nothing is available")
+		fun nullNextIsUnavailable() {
+			assertThat(discovery.isAnyNextTargetAvailable(separator("zA"), null)).isFalse()
+		}
+
+		@Test
+		@DisplayName("the semaphore list is the grid's, computed once")
+		fun semaphoresAreCachedInGridOrder() {
+			val first = discovery.allSemaphores()
+
+			assertThat(first.map { it.name }).containsExactly("zA", "doA1", "doA2", "doB2", "doB1", "zB")
+			assertThat(discovery.allSemaphores()).isSameInstanceAs(first)
 		}
 	}
 
