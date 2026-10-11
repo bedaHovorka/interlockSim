@@ -16,6 +16,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
+import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidate
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
@@ -85,9 +88,7 @@ class RuleBasedDispatcherTest {
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
-			candidateTargets =
-				candidateTargets
-					?: listOfNotNull(targetName?.let { CandidateTarget(it, SeparatorKind.SEMAPHORE, available = true) }),
+			candidateTargets = candidateTargets ?: semaphoreCandidates(targetName),
 			state = state,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
@@ -280,16 +281,6 @@ class RuleBasedDispatcherTest {
 
 	// ── Path advancement — the target choice (Issue #970) ───────────────────
 
-	private fun semaphore(
-		name: String,
-		available: Boolean
-	) = CandidateTarget(name, SeparatorKind.SEMAPHORE, available)
-
-	private fun inOut(
-		name: String,
-		available: Boolean
-	) = CandidateTarget(name, SeparatorKind.IN_OUT, available)
-
 	@Test
 	@DisplayName("the second candidate wins when the first is unavailable")
 	fun secondCandidateWinsWhenFirstUnavailable() {
@@ -301,7 +292,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "zA",
-							candidateTargets = listOf(semaphore("doB1", false), semaphore("doB2", true)),
+							candidateTargets = listOf(semaphoreCandidate("doB1", false), semaphoreCandidate("doB2", true)),
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -324,7 +315,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "zA",
-							candidateTargets = listOf(semaphore("doB1", false), semaphore("doB2", false)),
+							candidateTargets = listOf(semaphoreCandidate("doB1", false), semaphoreCandidate("doB2", false)),
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -347,7 +338,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "doB1",
-							candidateTargets = listOf(semaphore("zB", true), inOut("B", true)),
+							candidateTargets = listOf(semaphoreCandidate("zB", true), inOutCandidate("B", true)),
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -370,7 +361,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.RESERVED,
 							towardSemaphoreName = "zA",
-							candidateTargets = listOf(semaphore("doB2", true)),
+							candidateTargets = listOf(semaphoreCandidate("doB2", true)),
 							ownerTrainId = "T2",
 							pathSetUpTowardThisInput = true
 						)
@@ -394,7 +385,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k1",
 				towardSemaphoreName = "doB1",
-				candidateTargets = listOf(semaphore("zB", true), semaphore("zB2", true)),
+				candidateTargets = listOf(semaphoreCandidate("zB", true), semaphoreCandidate("zB2", true)),
 				ownerTrainId = "T1",
 				isApproachingThisInput = true
 			)
@@ -403,7 +394,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k2",
 				towardSemaphoreName = "doB2",
-				candidateTargets = listOf(semaphore("zB", true), semaphore("zB3", true)),
+				candidateTargets = listOf(semaphoreCandidate("zB", true), semaphoreCandidate("zB3", true)),
 				ownerTrainId = "T2",
 				isApproachingThisInput = true
 			)

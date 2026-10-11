@@ -13,9 +13,10 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -31,32 +32,15 @@ import kotlin.test.assertFailsWith
  */
 class CandidateTargetConversionTest {
 	/**
-	 * A separator that is neither a station exit nor a signal — a switch-shaped element, which
-	 * the interlocking must never report as a route endpoint.
+	 * A separator that is neither a station exit nor a signal. Nothing here is stubbed by hand:
+	 * the fake delegates member-for-member to a real [createDynamicInstance] product, and what
+	 * makes it unknown to the conversion's `when` arms is its own class name — it is neither a
+	 * `DynamicInOut` nor a `DynamicRailSemaphore` runtime type.
 	 */
-	private class NotAnEndpointSeparator : DynamicPathSeparator {
-		override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> = emptySet()
-
-		override fun getSpatialType(): Cell.SpatialType? = null
-
-		override fun joins(): Set<Cell.Segment> = emptySet()
-
-		override fun cancelPathSetup(
-			from: Cell.Segment?,
-			to: Cell.Segment?
-		) = Unit
-
-		override fun setUpPath(
-			from: Cell.Segment?,
-			to: Cell.Segment?,
-			allowedSpeed: Double,
-			trackOccupant: TrackOccupant
-		) = Unit
-
-		override fun allowedSpeed(): Double = 0.0
-
-		override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = null
-	}
+	private class NotAnEndpointSeparator(
+		delegate: DynamicPathSeparator =
+			createDynamicInstance(RailSemaphore("NotAnEndpointSeparator", true, Cell.SpatialType.HORIZONTAL))
+	) : DynamicPathSeparator by delegate
 
 	@Test
 	fun `an unknown separator kind fails loudly instead of being dropped`() {

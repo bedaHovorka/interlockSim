@@ -82,5 +82,35 @@ can watch) for unavailable candidates.
 
 Each demand above would change the observation vocabulary, and therefore the prompt and the
 rule-based dispatcher at the same time. SP5's contract was the opposite: identical behaviour
-(the A3 determinism check on `vyhybna.xml` is unchanged), one reader instead of two. Growing
-the vocabulary is Goal 9B's work.
+(the A3 determinism check and the #895 re-baseline below are unchanged), one reader instead of
+two. Growing the vocabulary is Goal 9B's work.
+
+## Acceptance runs (2026-10-11)
+
+The two Issue #1152 acceptance checks ran locally on the PR head 8b67c567 and on its base,
+Goal 1B tip 8f6b5e24, so "before" and "after" refer to the same checkout pair throughout.
+
+### A3 — RuleBasedDispatcher 10-run determinism on `vyhybna.xml`
+
+`RuleBasedDispatcherDeterminismTest` (`:dispatcher-agent:integrationTest`): 10/10 repetitions
+produced the identical outcome at the base revision and again at the head revision; the
+absolute gates held on every run (`trainsExited > 0`, `maxConcurrentTrains = 2`,
+`conflictEventCount <= 2`).
+
+### #895 re-baseline — rule-based control arm
+
+Manual `aiSweep` control arm (no `model` axis): grid `endTimeSeconds 600, repeat 10,
+perRunTimeoutSeconds 900, axes: example: ["shuntingLoop"]` with the remaining axes at their
+defaults (`tickPeriodMs 0`, `historyN 3`, `maxActionsPerTick 3`). The grid and the two rendered
+`report.md` files live under `build/` only, per the sweep's keep-measurements-out-of-`docs/`
+policy. Railway outcomes summed over the 10 runs:
+
+| Revision | Runs | Journeys | Entered | Exited | Max concurrent | Block transitions | Conflicts | Failed reservations |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base 8f6b5e24 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| head 8b67c567 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+
+Both sweeps: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Per run that is
+15/15/15 (journeys/entered/exited) with 30 block transitions — *not* comparable to the #895-era
+control ceiling (15/11/25 on goal-10 in August 2026); the network and its rules have moved since.
+What the acceptance criterion needs is base == head, and it holds.

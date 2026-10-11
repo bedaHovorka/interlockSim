@@ -223,16 +223,16 @@ class RuleBasedDispatcher(
 
 	/**
 	 * Shared tail of the OCCUPIED/RESERVED [checkInput] branches: chooses the target among
-	 * [BlockInputObservation.candidateTargets] through [ReservationTargetPolicy] (Issue #970) and
-	 * emits a [DispatchDecision.ReservePath] toward it, unless no candidate is available or the
-	 * chosen separator was already claimed by an earlier input this tick (see [checkAllInputs]).
+	 * [BlockInputObservation.candidateTargets] through [chosenTargetName] (Issue #970) and emits
+	 * a [DispatchDecision.ReservePath] toward it, unless no candidate is available or the chosen
+	 * separator was already claimed by an earlier input this tick (see [checkAllInputs]).
 	 * [BlockInputObservation.candidateTargets] is the only target input read here.
 	 */
 	private fun reserveOrDefer(
 		input: BlockInputObservation,
 		claimedSeparators: MutableSet<String>
 	): DispatchDecision.ReservePath? {
-		val target = ReservationTargetPolicy.pick(input.candidateTargets)?.name
+		val target = input.chosenTargetName()
 		if (target == null) {
 			logger.debug {
 				"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +

@@ -14,9 +14,8 @@ import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
-import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
-import cz.vutbr.fit.interlockSim.sim.SeparatorKind
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -62,10 +61,7 @@ class NextHopResolverTest {
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
-			candidateTargets =
-				listOfNotNull(
-					targetName?.let { CandidateTarget(it, SeparatorKind.SEMAPHORE, available = true) }
-				),
+			candidateTargets = semaphoreCandidates(targetName),
 			state = TrackFacility.State.OCCUPIED,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,

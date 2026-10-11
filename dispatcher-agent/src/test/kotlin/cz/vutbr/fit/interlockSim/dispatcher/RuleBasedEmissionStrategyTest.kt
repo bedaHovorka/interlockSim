@@ -25,11 +25,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
-import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
-import cz.vutbr.fit.interlockSim.sim.SeparatorKind
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -95,7 +94,7 @@ class RuleBasedEmissionStrategyTest {
 	) = BlockInputObservation(
 		blockId = blockId,
 		towardSemaphoreName = toward,
-		candidateTargets = listOf(CandidateTarget("B", SeparatorKind.SEMAPHORE, available = true)),
+		candidateTargets = semaphoreCandidates("B"),
 		state = TrackFacility.State.FREE,
 		ownerTrainId = null,
 		isApproachingThisInput = false,

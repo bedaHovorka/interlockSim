@@ -48,3 +48,17 @@ object ReservationTargetPolicy {
 				SeparatorKind.SEMAPHORE -> 1
 			}
 }
+
+/**
+ * The name this input's reservation would be made to, or `null` when no candidate is available —
+ * [ReservationTargetPolicy.pick] applied to [BlockInputObservation.candidateTargets], resolved
+ * from the same list [RuleBasedDispatcher.reserveOrDefer] reads, so the two arms cannot disagree
+ * about which separator a given input leads to (Issue #1152).
+ *
+ * Every dispatcher resolves its target through this seam. Selecting from the raw candidate list
+ * instead is a second opinion about which route to set, and the
+ * `TargetSelectionSingleEntryTest` allow-list rejects that spelling outright.
+ *
+ * @since Issue #1152 (SP5 — Goal 1B)
+ */
+fun BlockInputObservation.chosenTargetName(): String? = ReservationTargetPolicy.pick(candidateTargets)?.name

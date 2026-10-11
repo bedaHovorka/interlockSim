@@ -22,11 +22,10 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
-import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
-import cz.vutbr.fit.interlockSim.sim.SeparatorKind
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -137,8 +136,7 @@ class KoogDispatchAgentImplTest {
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
-			candidateTargets =
-				listOfNotNull(targetName?.let { CandidateTarget(it, SeparatorKind.SEMAPHORE, available = true) }),
+			candidateTargets = semaphoreCandidates(targetName),
 			state = TrackFacility.State.OCCUPIED,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,

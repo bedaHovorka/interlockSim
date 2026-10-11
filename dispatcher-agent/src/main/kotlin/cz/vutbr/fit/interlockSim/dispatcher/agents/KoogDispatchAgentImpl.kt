@@ -255,11 +255,10 @@ class KoogDispatchAgentImpl(
 	 *
 	 * Per [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets]'s own contract, a
 	 * candidate list with no available entry means "no forward-reservation target applies", not
-	 * "the track ahead is
-	 * occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must never claim
-	 * otherwise, and must never invite a route request the kernel has no target for. The same rule
-	 * applies to [NextHopOutcome.ClaimedByAnotherTrain]: the section is not occupied or blocked, it
-	 * is simply going to a different train this cycle.
+	 * "the track ahead is occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must
+	 * never claim otherwise, and must never invite a route request the kernel has no target for.
+	 * The same rule applies to [NextHopOutcome.ClaimedByAnotherTrain]: the section is not occupied
+	 * or blocked, it is simply going to a different train this cycle.
 	 *
 	 * ## Standing at a signal reads the same perception field the tool guard reads
 	 *

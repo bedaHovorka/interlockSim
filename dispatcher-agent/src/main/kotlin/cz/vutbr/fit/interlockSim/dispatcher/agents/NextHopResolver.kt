@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
-import cz.vutbr.fit.interlockSim.sim.ReservationTargetPolicy
+import cz.vutbr.fit.interlockSim.sim.chosenTargetName
 
 /**
  * Finds the one forward route request that would help a given active train this cycle, or
@@ -25,7 +25,8 @@ import cz.vutbr.fit.interlockSim.sim.ReservationTargetPolicy
  * refuse to even consider: the first input, in deterministic list order
  * ([DispatchObservation.innerBlockInputs] then [DispatchObservation.outerBlockInputs]), owned by
  * the train, not already extended beyond, either approached by or reserved toward that train, and
- * carrying a computed FREE next separator.
+ * having an available forward candidate — [chosenTargetName] non-null over
+ * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] (Issue #1152).
  *
  * ## Same-tick same-target dedup lives in [resolveAll], not [resolve] (Issue #834, SP2c.11, task 8)
  *
@@ -156,16 +157,6 @@ object NextHopResolver {
 				?: fallbackOutcome(inputs, trainId)
 		}
 	}
-
-	/**
-	 * The target this input's reservation would be made to, or `null` when no candidate is
-	 * available — [ReservationTargetPolicy.pick] over
-	 * [BlockInputObservation.candidateTargets], the one target-selection path every dispatcher
-	 * shares (Issue #1152). Resolved here, from the same list
-	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.reserveOrDefer] reads, so the two arms
-	 * cannot disagree about which separator a given input leads to.
-	 */
-	private fun BlockInputObservation.chosenTargetName(): String? = ReservationTargetPolicy.pick(candidateTargets)?.name
 
 	/** `true` when [input] qualifies as a forward-reservation candidate for its owner. */
 	private fun isEligible(input: BlockInputObservation): Boolean =
