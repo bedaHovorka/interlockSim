@@ -54,31 +54,50 @@ internal class BlockOwnershipTable(
 	): RegistrationResult {
 		// Phase 1: Validate no conflicts
 		for (block in blocks) {
-			val registryOwner = blockToTrain[block]
-			if (registryOwner != null && registryOwner != trainId) {
-				return RegistrationResult.Conflict(block, registryOwner, classifyConflict(block))
-			}
-
-			// Defence in depth: also check the block's own reservation state in case
-			// the registry and the dynamic block have diverged (e.g. manual cleanup).
-			val blockOwner = block.trainName
-			if (blockOwner != null && blockOwner != trainId) {
-				return RegistrationResult.Conflict(block, blockOwner, classifyConflict(block))
-			}
-
-			// Defence in depth: a block may be occupied even if the registry has no
-			// record of it. Reject the reservation to avoid entering an occupied block.
-			val occupant = block.occupant
-			if (occupant != null && occupant.name != trainId) {
-				return RegistrationResult.Conflict(
-					block,
-					occupant.name,
-					ConflictReason.OCCUPIED_BY_OTHER_TRAIN
-				)
-			}
+			findConflict(trainId, block)?.let { return it }
 		}
 
 		// Phase 2: All checks passed - register all blocks
+		claim(trainId, blocks)
+		return RegistrationResult.Success
+	}
+
+	/**
+	 * Phase 1 of [registerAtomic] for one block: the registry owner, then the block's own
+	 * `trainName`, then its physical occupant.
+	 *
+	 * @return the first conflict found, or `null` when [trainId] may take [block]
+	 */
+	private fun findConflict(
+		trainId: String,
+		block: DynamicTrackBlock
+	): RegistrationResult.Conflict? {
+		val registryOwner = blockToTrain[block]
+		if (registryOwner != null && registryOwner != trainId) {
+			return RegistrationResult.Conflict(block, registryOwner, classifyConflict(block))
+		}
+
+		// Defence in depth: also check the block's own reservation state in case
+		// the registry and the dynamic block have diverged (e.g. manual cleanup).
+		val blockOwner = block.trainName
+		if (blockOwner != null && blockOwner != trainId) {
+			return RegistrationResult.Conflict(block, blockOwner, classifyConflict(block))
+		}
+
+		// Defence in depth: a block may be occupied even if the registry has no
+		// record of it. Reject the reservation to avoid entering an occupied block.
+		val occupant = block.occupant
+		if (occupant != null && occupant.name != trainId) {
+			return RegistrationResult.Conflict(block, occupant.name, ConflictReason.OCCUPIED_BY_OTHER_TRAIN)
+		}
+		return null
+	}
+
+	/** Phase 2 of [registerAtomic]: record every block for [trainId]; callers have checked for conflicts. */
+	private fun claim(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>
+	) {
 		val blockList = trainToBlocks.getOrPut(trainId) { mutableListOf() }
 		blocks.forEach { block ->
 			if (block !in blockList) {
@@ -88,8 +107,6 @@ internal class BlockOwnershipTable(
 			// The clock is read only for a newly registered block; it does not advance within this call.
 			blockRegisteredAt.getOrPut(block) { simTimeSource() }
 		}
-
-		return RegistrationResult.Success
 	}
 
 	/**
@@ -134,6 +151,16 @@ internal class BlockOwnershipTable(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean {
+		if (!isReleasable(trainId, block)) return false
+		drop(trainId, block)
+		return true
+	}
+
+	/** The guard of [release]: [trainId] owns [block] and the block is FREE. Logs the refusal. */
+	private fun isReleasable(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
 		// Validate block is owned by this train
 		val owner = blockToTrain[block]
 		if (owner != trainId) {
@@ -151,7 +178,14 @@ internal class BlockOwnershipTable(
 			}
 			return false
 		}
+		return true
+	}
 
+	/** The mutation of [release]: remove [block] from the maps, and the train's entry with its last block. */
+	private fun drop(
+		trainId: String,
+		block: DynamicTrackBlock
+	) {
 		// Remove from mappings
 		blockToTrain.remove(block)
 		blockRegisteredAt.remove(block)
@@ -171,7 +205,6 @@ internal class BlockOwnershipTable(
 					"removed from trainToBlocks (PathInfo retained for navigation)"
 			}
 		}
-		return true
 	}
 
 	/**

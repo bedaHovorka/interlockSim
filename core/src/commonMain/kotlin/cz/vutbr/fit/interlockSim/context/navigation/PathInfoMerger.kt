@@ -255,20 +255,57 @@ internal class PathInfoMerger(
 				"with new ${new.start}->${new.target} for '$trainId'"
 		}
 
+		val preconditionReason = preconditionAbortReason(trainId, old, new)
+		if (preconditionReason != null) {
+			logger.warn {
+				"mergePathInfo: aborting $preconditionReason. Keeping existing valid PathInfo unchanged. " +
+					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+			}
+			return MergeOutcome.Aborted(old, preconditionReason)
+		}
+
+		// Steps 1-4: old path, then new path without the shared separator, cycle-checked
+		val mergedPath = ArrayPath(context)
+		val cycleAbortReason = concatenate(trainId, old, new, mergedPath)
+		if (cycleAbortReason != null) return MergeOutcome.Aborted(old, cycleAbortReason)
+
+		// Step 5: Merge entry directions (new overwrites old for conflicts)
+		val mergedDirections = old.entryDirections.toMutableMap()
+		mergedDirections.putAll(new.entryDirections)
+
+		logger.trace {
+			"mergePathInfo: merged ${old.reservedPath.size} + ${new.reservedPath.size} " +
+				"elements into ${mergedPath.size} elements " +
+				"(overlap: ${if (new.start == old.target) "yes" else "no"})"
+		}
+
+		return MergeOutcome.Merged(
+			PathInfo(
+				start = old.start, // Keep original start (where Tail might still be)
+				target = new.target,
+				reservedPath = mergedPath,
+				entryDirections = mergedDirections
+			)
+		)
+	}
+
+	/**
+	 * Steps 0a-0c of [merge]: the fail-safe checks that run before anything is concatenated.
+	 *
+	 * @return the first abort reason, or `null` when [new] may be merged onto [old]
+	 */
+	private fun preconditionAbortReason(
+		trainId: String,
+		old: PathInfo,
+		new: PathInfo
+	): String? {
 		// Step 0a (Issue #834): the new path must CONTINUE the stored one. Concatenating a path
 		// that starts somewhere else produces two adjacent separators; navigation truncates there
 		// safely, so the train never teleports, but everything past the seam becomes an orphaned
 		// RESERVED tail behind a cleared aspect the train will never reach. Abort fail-safe.
 		// Issue #904: the caller now releases exactly what it acquired for this attempt, so the
 		// tail is no longer orphaned -- it never gets a chance to persist.
-		val nonContiguousReason = nonContiguousReason(trainId, old, new)
-		if (nonContiguousReason != null) {
-			logger.warn {
-				"mergePathInfo: aborting $nonContiguousReason. Keeping existing valid PathInfo unchanged. " +
-					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-			}
-			return MergeOutcome.Aborted(old, nonContiguousReason)
-		}
+		nonContiguousReason(trainId, old, new)?.let { return it }
 
 		// Step 0b: new.start must occur exactly once in its own path (see "Preconditions" above).
 		// Until Issue #834 this threw IllegalStateException — from reservePath Step 2i, i.e. after
@@ -276,31 +313,28 @@ internal class PathInfoMerger(
 		// with nothing catching it. Abort the same fail-safe way instead; never throw from here.
 		val occurrences = new.reservedPath.count { it == new.start }
 		if (occurrences != 1) {
-			val reason =
-				"merge with duplicated new start for train $trainId — ${new.start} appears " +
-					"$occurrences times in the new path, expected exactly 1 at its beginning"
-			logger.warn {
-				"mergePathInfo: aborting $reason. Keeping existing valid PathInfo unchanged. " +
-					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-			}
-			return MergeOutcome.Aborted(old, reason)
+			return "merge with duplicated new start for train $trainId — ${new.start} appears " +
+				"$occurrences times in the new path, expected exactly 1 at its beginning"
 		}
 
 		// Step 0c: the new route must not send the train back over the section it just
 		// travelled (Issue #944). See [reversalAbortReason] for why occurrence counting alone
 		// cannot catch this.
-		val reversalReason = reversalAbortReason(trainId, old, new)
-		if (reversalReason != null) {
-			logger.warn {
-				"mergePathInfo: aborting $reversalReason. Keeping existing valid PathInfo unchanged. " +
-					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-			}
-			return MergeOutcome.Aborted(old, reversalReason)
-		}
+		return reversalAbortReason(trainId, old, new)
+	}
 
-		// Step 1: Create merged path starting from old path
-		val mergedPath = ArrayPath(context)
-
+	/**
+	 * Steps 1-4 of [merge]: append [old], then [new] without its first separator (already
+	 * `old.target`), into [mergedPath].
+	 *
+	 * @return the cycle abort reason, or `null` when every element was appended
+	 */
+	private fun concatenate(
+		trainId: String,
+		old: PathInfo,
+		new: PathInfo,
+		mergedPath: ArrayPath
+	): String? {
 		// Step 2: Add all elements from old path
 		old.reservedPath.forEach { mergedPath.add(it) }
 
@@ -318,28 +352,10 @@ internal class PathInfoMerger(
 				}
 			} else {
 				val cycleAbortReason = addElementWithCycleDetection(element, mergedPath, trainId, old, new)
-				if (cycleAbortReason != null) return MergeOutcome.Aborted(old, cycleAbortReason)
+				if (cycleAbortReason != null) return cycleAbortReason
 			}
 		}
-
-		// Step 5: Merge entry directions (new overwrites old for conflicts)
-		val mergedDirections = old.entryDirections.toMutableMap()
-		mergedDirections.putAll(new.entryDirections)
-
-		logger.trace {
-			"mergePathInfo: merged ${old.reservedPath.size} + ${new.reservedPath.size} " +
-				"elements into ${mergedPath.size} elements " +
-				"(overlap: ${if (skipFirst) "yes" else "no"})"
-		}
-
-		return MergeOutcome.Merged(
-			PathInfo(
-				start = old.start, // Keep original start (where Tail might still be)
-				target = new.target,
-				reservedPath = mergedPath,
-				entryDirections = mergedDirections
-			)
-		)
+		return null
 	}
 
 	/**
