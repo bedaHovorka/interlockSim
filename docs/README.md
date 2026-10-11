@@ -61,6 +61,7 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 ## Goal 9B demand list
 
 - [goal9b-demands/SP1-fail-fast-harness.md](goal9b-demands/SP1-fail-fast-harness.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
+- [goal9b-demands/SP2-station-abstraction.md](goal9b-demands/SP2-station-abstraction.md) - which station facts a dispatcher takes from the topology (capacity rule, platform tracks, entry/exit blocks) and which still come from per-scenario configuration (Goal 1B SP2, #1149).
 - [goal9b-demands/SP4-bounded-route-search.md](goal9b-demands/SP4-bounded-route-search.md) - route-search size and time per Praha pair, the node budget, and why incremental reservation is not needed for search cost (Goal 1B SP4, #1151).
 - [goal9b-demands/SP5-target-selection-path.md](goal9b-demands/SP5-target-selection-path.md) - what a dispatcher still cannot express through `CandidateTarget` (cost, destination, unavailability reason, horizon, time), recorded as Goal 9B demands (Goal 1B SP5, #1152).
 - [goal9b-demands/SP9-kdisco-review.md](goal9b-demands/SP9-kdisco-review.md) - kDisco deadlock and race review, scanner survey, and the Goal 9B engine-guarantee demands (Goal 1B SP9, #1156, 2026-10).
