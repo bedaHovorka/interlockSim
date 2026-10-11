@@ -61,6 +61,9 @@
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService" level="DEBUG"/>
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteReleaser" level="DEBUG"/>
+	<!-- Its signal bookkeeping and signal configuration moved out of the service (Issue #1169). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.ClearedSignalLedger" level="DEBUG"/>
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteSignalConfigurator" level="DEBUG"/>
 
 	<!--
 		ReservationResultMapping.kt logs one INFO "Route GRANTED/DENIED" line per kernel outcome.
