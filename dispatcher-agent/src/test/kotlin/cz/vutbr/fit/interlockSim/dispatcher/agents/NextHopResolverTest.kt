@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -42,9 +43,14 @@ class NextHopResolverTest {
 			outerBlockInputs = outerBlockInputs
 		)
 
+	/**
+	 * [targetName] seeds the single available candidate the resolver must pick through
+	 * [cz.vutbr.fit.interlockSim.sim.ReservationTargetPolicy] — `null` means the input reports
+	 * no reservable target at all (Issue #1152).
+	 */
 	private fun input(
 		towardSemaphoreName: String = "sem",
-		toSeparatorName: String? = "nextSep",
+		targetName: String? = "nextSep",
 		ownerTrainId: String? = "T1",
 		isApproachingThisInput: Boolean = false,
 		pathSetUpTowardThisInput: Boolean = false,
@@ -55,7 +61,7 @@ class NextHopResolverTest {
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
-			toSeparatorName = toSeparatorName,
+			candidateTargets = semaphoreCandidates(targetName),
 			state = TrackFacility.State.OCCUPIED,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
@@ -70,31 +76,31 @@ class NextHopResolverTest {
 	@DisplayName("returns Hop with the block's toward-signal and next-separator names when the input qualifies")
 	fun resolvesHopFromQualifyingInput() {
 		val qualifying =
-			input(towardSemaphoreName = "doB1", toSeparatorName = "doB2", isApproachingThisInput = true)
+			input(towardSemaphoreName = "doB1", targetName = "doB2", isApproachingThisInput = true)
 
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(qualifying)))
 
-		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toSeparatorName = "doB2"))
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toTargetName = "doB2"))
 	}
 
 	@Test
 	@DisplayName("a RESERVED input qualifies via pathSetUpTowardThisInput, not just isApproachingThisInput")
 	fun resolvesHopFromReservedPathSetUpInput() {
 		val qualifying =
-			input(towardSemaphoreName = "zA", toSeparatorName = "zB", pathSetUpTowardThisInput = true)
+			input(towardSemaphoreName = "zA", targetName = "zB", pathSetUpTowardThisInput = true)
 
 		val outcome = NextHopResolver.resolve("T1", observation(outerBlockInputs = listOf(qualifying)))
 
-		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "zA", toSeparatorName = "zB"))
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "zA", toTargetName = "zB"))
 	}
 
 	@Test
 	@DisplayName("selection precedence: an earlier qualifying innerBlockInputs entry wins over a later outer one")
 	fun innerListPrecedesOuterList() {
 		val innerHop =
-			input(towardSemaphoreName = "inner", toSeparatorName = "innerTarget", isApproachingThisInput = true)
+			input(towardSemaphoreName = "inner", targetName = "innerTarget", isApproachingThisInput = true)
 		val outerHop =
-			input(towardSemaphoreName = "outer", toSeparatorName = "outerTarget", isApproachingThisInput = true)
+			input(towardSemaphoreName = "outer", targetName = "outerTarget", isApproachingThisInput = true)
 
 		val outcome =
 			NextHopResolver.resolve(
@@ -102,20 +108,20 @@ class NextHopResolverTest {
 				observation(innerBlockInputs = listOf(innerHop), outerBlockInputs = listOf(outerHop))
 			)
 
-		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "inner", toSeparatorName = "innerTarget"))
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "inner", toTargetName = "innerTarget"))
 	}
 
 	@Test
 	@DisplayName("selection precedence: list order within innerBlockInputs is preserved")
 	fun listOrderWithinInnerIsPreserved() {
 		val first =
-			input(towardSemaphoreName = "first", toSeparatorName = "firstTarget", isApproachingThisInput = true)
+			input(towardSemaphoreName = "first", targetName = "firstTarget", isApproachingThisInput = true)
 		val second =
-			input(towardSemaphoreName = "second", toSeparatorName = "secondTarget", isApproachingThisInput = true)
+			input(towardSemaphoreName = "second", targetName = "secondTarget", isApproachingThisInput = true)
 
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(first, second)))
 
-		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "first", toSeparatorName = "firstTarget"))
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "first", toTargetName = "firstTarget"))
 	}
 
 	// ── Non-qualifying inputs ───────────────────────────────────────────────
@@ -124,7 +130,7 @@ class NextHopResolverTest {
 	@DisplayName("owner mismatch: an otherwise-qualifying input owned by a different train yields no hop")
 	fun ownerMismatchYieldsNoHop() {
 		val someoneElses =
-			input(ownerTrainId = "OTHER", isApproachingThisInput = true, toSeparatorName = "target")
+			input(ownerTrainId = "OTHER", isApproachingThisInput = true, targetName = "target")
 
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(someoneElses)))
 
@@ -139,7 +145,7 @@ class NextHopResolverTest {
 				ownerTrainId = "T1",
 				isApproachingThisInput = false,
 				pathSetUpTowardThisInput = false,
-				toSeparatorName = "target"
+				targetName = "target"
 			)
 
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(neither)))
@@ -149,10 +155,10 @@ class NextHopResolverTest {
 
 	@Test
 	@DisplayName(
-		"null toSeparatorName: an approaching input with no computed FREE target yields NoSectionReservable, not Hop"
+		"empty candidateTargets: an approaching input with no computed FREE target yields NoSectionReservable, not Hop"
 	)
 	fun nullTargetYieldsNoSectionReservable() {
-		val noTarget = input(ownerTrainId = "T1", isApproachingThisInput = true, toSeparatorName = null)
+		val noTarget = input(ownerTrainId = "T1", isApproachingThisInput = true, targetName = null)
 
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(noTarget)))
 
@@ -166,7 +172,7 @@ class NextHopResolverTest {
 			input(
 				ownerTrainId = "T1",
 				isApproachingThisInput = true,
-				toSeparatorName = "target",
+				targetName = "target",
 				pathAlreadyExtendedBeyond = true
 			)
 
@@ -183,14 +189,14 @@ class NextHopResolverTest {
 				ownerTrainId = "T1",
 				towardSemaphoreName = "zB",
 				isApproachingThisInput = true,
-				toSeparatorName = "doA1",
+				targetName = "doA1",
 				pathAlreadyExtendedBeyond = true,
 				awaitingRouteExtension = true
 			)
 
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(standing)))
 
-		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "zB", toSeparatorName = "doA1"))
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "zB", toTargetName = "doA1"))
 	}
 
 	@Test
@@ -200,7 +206,7 @@ class NextHopResolverTest {
 			input(
 				ownerTrainId = "T1",
 				isApproachingThisInput = true,
-				toSeparatorName = "doneTarget",
+				targetName = "doneTarget",
 				pathAlreadyExtendedBeyond = true,
 				blockId = "b1"
 			)
@@ -208,14 +214,14 @@ class NextHopResolverTest {
 			input(
 				ownerTrainId = "T1",
 				pathSetUpTowardThisInput = true,
-				toSeparatorName = "nextTarget",
+				targetName = "nextTarget",
 				towardSemaphoreName = "nextSem",
 				blockId = "b2"
 			)
 
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(extended, qualifying)))
 
-		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "nextSem", toSeparatorName = "nextTarget"))
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "nextSem", toTargetName = "nextTarget"))
 	}
 
 	@Test
@@ -234,7 +240,7 @@ class NextHopResolverTest {
 		val obs =
 			observation(
 				innerBlockInputs =
-					listOf(input(towardSemaphoreName = "doB1", toSeparatorName = "doB2", isApproachingThisInput = true))
+					listOf(input(towardSemaphoreName = "doB1", targetName = "doB2", isApproachingThisInput = true))
 			)
 
 		val first = NextHopResolver.resolve("T1", obs)
@@ -261,14 +267,14 @@ class NextHopResolverTest {
 			val t1Input =
 				input(
 					towardSemaphoreName = "doB1",
-					toSeparatorName = "sharedSep",
+					targetName = "sharedSep",
 					ownerTrainId = "T1",
 					isApproachingThisInput = true
 				)
 			val t2Input =
 				input(
 					towardSemaphoreName = "doC1",
-					toSeparatorName = "sharedSep",
+					targetName = "sharedSep",
 					ownerTrainId = "T2",
 					isApproachingThisInput = true
 				)
@@ -276,8 +282,8 @@ class NextHopResolverTest {
 
 			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
 
-			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toSeparatorName = "sharedSep"))
-			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = "sharedSep"))
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toTargetName = "sharedSep"))
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toTargetName = "sharedSep"))
 		}
 
 		@Test
@@ -289,14 +295,14 @@ class NextHopResolverTest {
 			val t2Input =
 				input(
 					towardSemaphoreName = "inner",
-					toSeparatorName = "sharedSep",
+					targetName = "sharedSep",
 					ownerTrainId = "T2",
 					isApproachingThisInput = true
 				)
 			val t1Input =
 				input(
 					towardSemaphoreName = "outer",
-					toSeparatorName = "sharedSep",
+					targetName = "sharedSep",
 					ownerTrainId = "T1",
 					isApproachingThisInput = true
 				)
@@ -304,8 +310,8 @@ class NextHopResolverTest {
 
 			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
 
-			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "inner", toSeparatorName = "sharedSep"))
-			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = "sharedSep"))
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "inner", toTargetName = "sharedSep"))
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toTargetName = "sharedSep"))
 		}
 
 		@Test
@@ -314,14 +320,14 @@ class NextHopResolverTest {
 			val t1Input =
 				input(
 					towardSemaphoreName = "doB1",
-					toSeparatorName = "sepA",
+					targetName = "sepA",
 					ownerTrainId = "T1",
 					isApproachingThisInput = true
 				)
 			val t2Input =
 				input(
 					towardSemaphoreName = "doC1",
-					toSeparatorName = "sepB",
+					targetName = "sepB",
 					ownerTrainId = "T2",
 					isApproachingThisInput = true
 				)
@@ -329,8 +335,8 @@ class NextHopResolverTest {
 
 			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
 
-			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toSeparatorName = "sepA"))
-			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doC1", toSeparatorName = "sepB"))
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toTargetName = "sepA"))
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doC1", toTargetName = "sepB"))
 		}
 
 		@Test
@@ -352,21 +358,21 @@ class NextHopResolverTest {
 			val t1Input =
 				input(
 					towardSemaphoreName = "doA1",
-					toSeparatorName = "sepX",
+					targetName = "sepX",
 					ownerTrainId = "T1",
 					isApproachingThisInput = true
 				)
 			val t2FirstInput =
 				input(
 					towardSemaphoreName = "doB1",
-					toSeparatorName = "sepX",
+					targetName = "sepX",
 					ownerTrainId = "T2",
 					isApproachingThisInput = true
 				)
 			val t2SecondInput =
 				input(
 					towardSemaphoreName = "doB2",
-					toSeparatorName = "sepY",
+					targetName = "sepY",
 					ownerTrainId = "T2",
 					isApproachingThisInput = true
 				)
@@ -374,25 +380,25 @@ class NextHopResolverTest {
 
 			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
 
-			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doA1", toSeparatorName = "sepX"))
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doA1", toTargetName = "sepX"))
 			// T2 is decided at its first eligible input (doB1→sepX, already claimed); it does NOT
 			// fall back to doB2→sepY — this is the point where resolveAll diverges from checkAllInputs.
-			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toSeparatorName = "sepX"))
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toTargetName = "sepX"))
 		}
 
 		@Test
 		@DisplayName("a single train is unaffected: resolveAll agrees with resolve for every existing outcome shape")
 		fun singleTrainResolveAllAgreesWithResolve() {
 			val hopInput =
-				input(towardSemaphoreName = "doB1", toSeparatorName = "doB2", isApproachingThisInput = true)
+				input(towardSemaphoreName = "doB1", targetName = "doB2", isApproachingThisInput = true)
 			val extendedInput =
 				input(
 					ownerTrainId = "T1",
 					isApproachingThisInput = true,
-					toSeparatorName = "target",
+					targetName = "target",
 					pathAlreadyExtendedBeyond = true
 				)
-			val noHopInput = input(ownerTrainId = "T1", toSeparatorName = "target")
+			val noHopInput = input(ownerTrainId = "T1", targetName = "target")
 
 			listOf(
 				observation(innerBlockInputs = listOf(hopInput)),
@@ -413,14 +419,14 @@ class NextHopResolverTest {
 			val t1Input =
 				input(
 					towardSemaphoreName = "doB1",
-					toSeparatorName = "sharedSep",
+					targetName = "sharedSep",
 					ownerTrainId = "T1",
 					isApproachingThisInput = true
 				)
 			val t2Input =
 				input(
 					towardSemaphoreName = "doC1",
-					toSeparatorName = "sharedSep",
+					targetName = "sharedSep",
 					ownerTrainId = "T2",
 					isApproachingThisInput = true
 				)

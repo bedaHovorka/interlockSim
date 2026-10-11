@@ -22,9 +22,9 @@ package cz.vutbr.fit.interlockSim.sim
  * first, so on real data the pick is the first available candidate in list order — byte-identical
  * to the pre-#970 `findNextReservationTarget` result.
  *
- * A separate object rather than a [RuleBasedDispatcher] member because the shell
- * ([ShuntingLoop]) applies the same policy to fill the [BlockInputObservation.toSeparatorName]
- * compatibility projection, and the shell must not depend on a dispatcher implementation.
+ * A separate object rather than a [RuleBasedDispatcher] member because every dispatcher —
+ * including `:dispatcher-agent`'s `NextHopResolver`, which tells an LLM which hop the
+ * rule-based arm would make — must reach its target through this one policy (Issue #1152).
  *
  * @since Issue #970
  */
@@ -48,3 +48,17 @@ object ReservationTargetPolicy {
 				SeparatorKind.SEMAPHORE -> 1
 			}
 }
+
+/**
+ * The name this input's reservation would be made to, or `null` when no candidate is available —
+ * [ReservationTargetPolicy.pick] applied to [BlockInputObservation.candidateTargets], resolved
+ * from the same list [RuleBasedDispatcher.reserveOrDefer] reads, so the two arms cannot disagree
+ * about which separator a given input leads to (Issue #1152).
+ *
+ * Every dispatcher resolves its target through this seam. Selecting from the raw candidate list
+ * instead is a second opinion about which route to set, and the
+ * `TargetSelectionSingleEntryTest` allow-list rejects that spelling outright.
+ *
+ * @since Issue #1152 (SP5 — Goal 1B)
+ */
+fun BlockInputObservation.chosenTargetName(): String? = ReservationTargetPolicy.pick(candidateTargets)?.name

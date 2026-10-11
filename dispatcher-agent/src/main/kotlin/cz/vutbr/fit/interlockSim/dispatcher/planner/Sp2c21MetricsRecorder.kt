@@ -102,7 +102,7 @@ class Sp2c21MetricsRecorder(
 			when (decision) {
 				is DispatchDecision.ApproveTrain -> "ApproveTrain|${decision.trainId}||"
 				is DispatchDecision.ReservePath ->
-					"ReservePath|${decision.trainId}|${decision.fromSemaphoreName}|${decision.toSeparatorName}"
+					"ReservePath|${decision.trainId}|${decision.fromSemaphoreName}|${decision.toTargetName}"
 				is DispatchDecision.NoAction -> "NoAction|||"
 				is DispatchDecision.HoldTrain -> "HoldTrain|${decision.trainId}||"
 				is DispatchDecision.SetSignalAspect -> "SetSignalAspect||${decision.semaphoreName}|"
