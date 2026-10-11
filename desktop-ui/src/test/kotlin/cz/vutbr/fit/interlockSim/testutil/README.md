@@ -43,8 +43,8 @@ The `testutil` package provides:
   and leaves the source to the caller, and a round trip fails at the save step when the
   source cannot be saved (Issue #1035; happy-path close and double close are pinned by
   KoinTestBaseCleanupContractTest — removed here by the Issue #1046 dedupe)
-- **RudyUjezdStructure** - `assertRudyUjezdStationInOuts`: asserts the four station
-  InOuts of the `rudyUjezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
+- **CervenyUjezdStructure** - `assertCervenyUjezdStationInOuts`: asserts the four station
+  InOuts of the `cerveny_ujezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
   the parse test and the stream round trip of the XML factory tests
 - **EdtFlush** - `flushEDT(times = 2)`: drains the Swing event queue with
   `invokeAndWait` flushes; the default two cover a pending `invokeLater` task and the
@@ -358,4 +358,4 @@ TestTopologies.linearPathWithSemaphoreSequence(
 
 ---
 
-**Last Updated**: 2026-09-11 (PR #1021 round: `:core-test` jvmMain sampling helpers `TrainKinematicSampler`/`AspectFlipOnce` listed; earlier: PR #1043 review round — shared PathExistence BFS helper, Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, cleanup contract; PR #1047 review round — cleanup contract narrowed to the non-duplicated cases)
+**Last Updated**: 2026-09-11 (PR #1021 round: `:core-test` jvmMain sampling helpers `TrainKinematicSampler`/`AspectFlipOnce` listed; earlier: PR #1043 review round — shared PathExistence BFS helper, Issue #1035 round-trip helpers, shared network builder and grid scan, cerveny_ujezd structure check, cleanup contract; PR #1047 review round — cleanup contract narrowed to the non-duplicated cases)

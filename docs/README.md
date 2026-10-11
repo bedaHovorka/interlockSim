@@ -58,6 +58,12 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 - [GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md](GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md) - paused-clock feasibility and headless-pacing ruling (SP2c.26, #849, 2026-08).
 - [GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md](GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md) - Ollama capability audit: seed, format and tools, `num_ctx`, `maxIterations` (SP2c.27, #850).
 
+## Goal 9B demand list
+
+- [goal9b-demands/SP1-fail-fast-harness.md](goal9b-demands/SP1-fail-fast-harness.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
+- [goal9b-demands/SP5-target-selection-path.md](goal9b-demands/SP5-target-selection-path.md) - what a dispatcher still cannot express through `CandidateTarget` (cost, destination, unavailability reason, horizon, time), recorded as Goal 9B demands (Goal 1B SP5, #1152).
+- [goal9b-demands/SP9-kdisco-review.md](goal9b-demands/SP9-kdisco-review.md) - kDisco deadlock and race review, scanner survey, and the Goal 9B engine-guarantee demands (Goal 1B SP9, #1156, 2026-10).
+
 ## History
 
 Dated summaries, retrospectives, decisions, and reports. Kept for context; do not treat as current.

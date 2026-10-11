@@ -53,7 +53,7 @@ object TestFixtures {
 
 	fun loadPrahaHlavniNadraziXml(): InputStream = fixture("praha-hlavni-nadrazi.xml")
 
-	fun loadRudyUjezdXml(): InputStream = fixture("rudyUjezd.xml")
+	fun loadCervenyUjezdXml(): InputStream = fixture("cerveny_ujezd.xml")
 
 	/**
 	 * Two-parallel-route network (Issue #598 Goal 2 SP6).
