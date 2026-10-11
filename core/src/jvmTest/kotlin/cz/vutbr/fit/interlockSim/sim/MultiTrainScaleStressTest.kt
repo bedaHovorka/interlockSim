@@ -11,7 +11,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
@@ -44,12 +43,16 @@ import java.util.concurrent.TimeUnit
  * instead of a hang. `SEPARATE_THREAD` makes the timeout fire even while the CPU-bound
  * simulation never checks the interrupt flag.
  *
- * **Contract today:** 13 of the 20 specs ask for pairs that
- * have topological paths but no switch-legal route on Praha, so `reservePath` refuses them with
- * `NO_ROUTE` on the first attempt; the other 7 trains enter and exit. The test asserts this
- * measured contract (measured in `docs/goal9b-demands/SP1-fail-fast-harness.md`), which keeps
- * `heavyTest` green and the real-time ratio machinery running. When Goal 1B (demand 3) makes the
- * scenario draw switch-legal pairs and pass in full, the assertions flip back to "all 20 exit".
+ * **Contract (Issue #1179, Goal 9B demand 3):** every spec asks for an `(entry, exit)` pair that
+ * has a switch-legal route on Praha ([MultiTrainStressSpecs]), so all 20 trains enter and exit and
+ * no [MultiTrainLoop.EntryFailure] is recorded. Until #1179 the scenario rotated over the product
+ * of the north entries and the south exits; 13 of those 20 pairs had no switch-legal route and
+ * were refused with `NO_ROUTE` on the first attempt, so at most 7 trains ever ran. The fast
+ * `MultiTrainStressSpecsTest` guard keeps the pairs legal without running this scenario.
+ *
+ * Reusing a legal pair serializes the trains that share it, so the scenario needs a long
+ * simulated horizon: [TWENTY_TRAIN_END_TIME] and a matching [MAX_ENTRY_ATTEMPTS] (one attempt per
+ * two simulated seconds) give every train room to obtain its entry route and complete its run.
  */
 @Tag("heavy-test")
 @DisplayName("MultiTrainLoop — 20-train Praha stress (heavy, manual only)")
@@ -57,38 +60,25 @@ class MultiTrainScaleStressTest : KoinTestBase() {
 	private companion object {
 		private val logger = KotlinLogging.logger {}
 
-		private const val TWENTY_TRAIN_END_TIME: Long = 1200L
-		private const val HEADWAY_SECONDS: Double = 5.0
-		private const val TRAIN_LENGTH: Double = 40.0
-		private const val TRAINS: Int = 20
+		private const val TWENTY_TRAIN_END_TIME: Long = 3600L
+		private const val TRAINS: Int = MultiTrainStressSpecs.TRAINS
 
-		/** Trains whose spec pairs have no switch-legal route on Praha, so they get NO_ROUTE at once. */
-		private const val REFUSED_TRAINS: Int = 13
 		private const val MAX_CONCURRENT_TRAINS: Int = 20
 
-		/** Entry attempts per train before the run records a structured failure. */
-		private const val MAX_ENTRY_ATTEMPTS: Int = 60
+		/**
+		 * Entry attempts per train before the run records a structured failure. One attempt per
+		 * two simulated seconds, so the cap covers the whole [TWENTY_TRAIN_END_TIME] horizon:
+		 * a train that waits for a route reused by an earlier train is never given up early.
+		 */
+		private const val MAX_ENTRY_ATTEMPTS: Int = 1800
 		private const val STRESS_RUNS: Int = 10
 		private const val MIN_REAL_TIME_RATIO: Double = 1.0
-		private const val TIMEOUT_SECONDS: Long = 120L
-
-		private val NORTH_ENTRIES = listOf("N-Lib-1", "N-Lib-2", "N-Vys-1", "N-Vys-2", "N-Bypass")
-		private val SOUTH_EXITS = listOf("S-Vin-1", "S-Vin-2", "S-Vrs-1", "S-Vrs-2", "S-Vrs-3", "S-Bypass")
-
-		private fun twentyTrainSpecs(): List<MultiTrainLoop.TrainSpec> =
-			List(TRAINS) { i ->
-				MultiTrainLoop.TrainSpec(
-					inName = NORTH_ENTRIES[i % NORTH_ENTRIES.size],
-					outName = SOUTH_EXITS[i % SOUTH_EXITS.size],
-					inTime = i * HEADWAY_SECONDS,
-					length = TRAIN_LENGTH
-				)
-			}
+		private const val TIMEOUT_SECONDS: Long = 1200L
 	}
 
 	@Test
 	@Timeout(value = TIMEOUT_SECONDS, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-	@DisplayName("twentyTrainStress: 13 refusals of NO_ROUTE, the other 7 trains enter and exit, 10 runs")
+	@DisplayName("twentyTrainStress: all 20 trains enter and exit, no entry failure, 10 runs")
 	fun twentyTrainStress() {
 		val ratios = mutableListOf<Double>()
 		repeat(STRESS_RUNS) { runIndex -> ratios.add(runStressRun(runIndex)) }
@@ -111,7 +101,7 @@ class MultiTrainScaleStressTest : KoinTestBase() {
 			MultiTrainLoop(
 				ctx,
 				endTime = TWENTY_TRAIN_END_TIME,
-				trainSpecs = twentyTrainSpecs(),
+				trainSpecs = MultiTrainStressSpecs.twentyTrainSpecs(),
 				maxConcurrentTrains = MAX_CONCURRENT_TRAINS,
 				maxEntryAttempts = MAX_ENTRY_ATTEMPTS
 			)
@@ -128,18 +118,9 @@ class MultiTrainScaleStressTest : KoinTestBase() {
 				"maxConcurrent=${loop.getMaxConcurrentTrains()}, occupied=${loop.getOccupiedResourceCount()}, " +
 				"entryFailures=${loop.getEntryFailures().size}, wall=${wallSeconds}s, ratio=$realTimeRatio"
 		}
-		val refusals = loop.getEntryFailures()
-		assertThat(refusals, name = "entry failures").hasSize(REFUSED_TRAINS)
-		assertThat(
-			refusals.filter { it.kind != MultiTrainLoop.EntryFailureKind.NO_ROUTE },
-			name = "refusals that are not NO_ROUTE"
-		).isEmpty()
-		assertThat(
-			refusals.filter { it.attempts != 1 },
-			name = "refusals after more than one attempt"
-		).isEmpty()
+		assertThat(loop.getEntryFailures(), name = "entry failures").isEmpty()
 		assertThat(loop.getTrainsEntered(), name = "trains entered").isEqualTo(TRAINS)
-		assertThat(loop.getTrainsExited(), name = "trains exited").isEqualTo(TRAINS - REFUSED_TRAINS)
+		assertThat(loop.getTrainsExited(), name = "trains exited").isEqualTo(TRAINS)
 		assertThat(loop.getOccupiedResourceCount(), name = "occupied resources").isZero()
 		assertThat(realTimeRatio, name = "real-time ratio").isGreaterThanOrEqualTo(MIN_REAL_TIME_RATIO)
 		ctx.close()
