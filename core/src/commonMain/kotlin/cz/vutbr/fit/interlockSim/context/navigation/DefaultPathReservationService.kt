@@ -1086,8 +1086,8 @@ class DefaultPathReservationService(
 	 * Otherwise: no [BlockEvent.ReservationConflictDetected] emission here (Goal 3) -- a
 	 * blocked-path outcome is routine "path busy, will retry" contention for the
 	 * collision-warning layer. The contention is recorded so [flushUnresolvedConflicts] can
-	 * surface it if it never resolves before the run ends (see the class-level disambiguation
-	 * comment). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted mid-run (it does not trigger an
+	 * surface it if it never resolves before the run ends (see
+	 * [ReservationContentionTracker]'s class KDoc). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted mid-run (it does not trigger an
 	 * automatic simulation pause, so it can be delivered without the false-positive-pause problem
 	 * that led to the Goal 3 restriction) -- but only the FIRST time a given (trainId, block)
 	 * contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
