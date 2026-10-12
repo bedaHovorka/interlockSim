@@ -132,10 +132,12 @@ class DefaultPathReservationService(
 	// `resetSemaphoreSet`, never the whole per-train set, so a pre-existing reservation's signals
 	// stay lit.
 	//
-	// Ownership is last-writer-wins, mirroring BlockOwnershipTable.blockToTrain: if a
-	// semaphore is re-cleared for another train, that train becomes its owner and the earlier
-	// train's release leaves it alone. Without this a stale release could drop a signal to STOP
-	// under a train actively running against it.
+	// Ownership is last-writer-wins -- unlike block ownership, where registerAtomic rejects a
+	// foreign reservation instead of reassigning it (the same contrast
+	// PathReservationService.recordExternalClearedSemaphore states): if a semaphore is re-cleared
+	// for another train, that train becomes its owner and the earlier train's release leaves it
+	// alone. Without this a stale release could drop a signal to STOP under a train actively
+	// running against it.
 	private val clearedSemaphores: MutableMap<String, MutableSet<DynamicRailSemaphore>> = mutableMapOf()
 
 	private val semaphoreClearedFor: MutableMap<DynamicRailSemaphore, String> = mutableMapOf()
