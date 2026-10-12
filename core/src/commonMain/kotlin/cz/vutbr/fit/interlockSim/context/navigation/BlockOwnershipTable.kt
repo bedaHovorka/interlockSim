@@ -207,13 +207,6 @@ internal class BlockOwnershipTable(
 		}
 	}
 
-	/**
-	 * The live list of blocks [trainId] holds, or `null` when the train has no entry. Read-only view
-	 * for [SwitchOwnershipTable]'s staleness rule, which distinguishes "no entry" from "no block
-	 * bounded by the switch" exactly as the registry did before the split.
-	 */
-	fun heldBlocksOrNull(trainId: String): List<DynamicTrackBlock>? = trainToBlocks[trainId]
-
 	/** A copy of the blocks [trainId] holds (empty if none). */
 	fun getBlocks(trainId: String): List<DynamicTrackBlock> = trainToBlocks[trainId]?.toList() ?: emptyList()
 

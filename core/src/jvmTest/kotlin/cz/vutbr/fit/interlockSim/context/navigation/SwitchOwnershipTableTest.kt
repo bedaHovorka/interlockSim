@@ -43,7 +43,7 @@ class SwitchOwnershipTableTest : KoinTestBase() {
 		fixture =
 			RegistryUnitFixture(TestFixtures.loadShuntingSimulationContext(simulationContextFactory).tracked())
 		held.clear()
-		table = SwitchOwnershipTable { trainId -> held[trainId] }
+		table = SwitchOwnershipTable { trainId -> held[trainId] ?: emptyList() }
 	}
 
 	@Test

@@ -35,12 +35,12 @@ private val logger: KLogger = registryLogger
  *
  * **NOT thread-safe**, like the registry.
  *
- * @param heldBlocks the live blocks a train holds, or `null` when it has no block entry -- the
- *   registry passes [BlockOwnershipTable.heldBlocksOrNull]. Only the staleness rule reads it.
+ * @param heldBlocks the blocks a train holds (empty when it has no block entry) -- the registry
+ *   passes [BlockOwnershipTable.getBlocks]. Only the staleness rule reads it.
  * @since Issue #1172 (the logic since Issue #291 / #1065 / #1076 / #1103)
  */
 internal class SwitchOwnershipTable(
-	private val heldBlocks: (String) -> List<DynamicTrackBlock>?
+	private val heldBlocks: (String) -> List<DynamicTrackBlock>
 ) {
 	/** Train ID -> reserved switches. */
 	private val trainToSwitches = mutableMapOf<String, MutableList<DynamicRailSwitch>>()
@@ -118,7 +118,7 @@ internal class SwitchOwnershipTable(
 	fun isStaleSwitchOwnership(switch: DynamicRailSwitch): Boolean {
 		val claim = switchToTrain[switch] ?: return false
 		if (claim.isFlank) return false
-		return heldBlocks(claim.trainId)?.none { switch in it.ends() } ?: true
+		return heldBlocks(claim.trainId).none { switch in it.ends() }
 	}
 
 	/**

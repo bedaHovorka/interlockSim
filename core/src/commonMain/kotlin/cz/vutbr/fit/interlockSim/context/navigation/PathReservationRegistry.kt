@@ -203,7 +203,7 @@ class PathReservationRegistry(
 	private val blockTable = BlockOwnershipTable(simTimeSource)
 
 	/** Switch ownership (Tier 2): Train ID <-> switches, with each claim's purpose (Issue #1103). */
-	private val switchTable = SwitchOwnershipTable(blockTable::heldBlocksOrNull)
+	private val switchTable = SwitchOwnershipTable(blockTable::getBlocks)
 
 	/** PathInfo bookkeeping: Train ID -> the route it is driving (Issue #295/#296). */
 	private val pathInfoStore = PathInfoStore(context, blockTable::getBlocks)
@@ -286,18 +286,15 @@ class PathReservationRegistry(
 	 */
 	fun unregister(trainId: String): List<DynamicTrackBlock> {
 		val blocks = blockTable.removeTrain(trainId)
-		if (blocks == null) {
-			// No blocks to release, but a switch claim can exist without one -- exactly the stale
-			// shape -- so the wholesale switch release still runs.
-			switchTable.unregisterSwitches(trainId)
-			return emptyList()
-		}
-		pathInfoStore.remove(trainId)
+		if (blocks != null) pathInfoStore.remove(trainId)
 
-		// Issue #1103 review: whole-route teardown releases the switch claims too, so no train
-		// leaves this method with stale ownership anywhere in the registry.
+		// Issue #1103 review: whole-route teardown releases the switch claims too. A switch claim
+		// can exist without a block entry -- exactly the stale shape -- so the wholesale release
+		// runs unconditionally, and no train leaves this method with stale ownership anywhere in
+		// the registry.
 		switchTable.unregisterSwitches(trainId)
 
+		if (blocks == null) return emptyList()
 		logger.debug {
 			"unregister: Released ${blocks.size} blocks for '$trainId'"
 		}

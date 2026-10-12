@@ -132,7 +132,7 @@ class DefaultPathReservationService(
 	// `resetSemaphoreSet`, never the whole per-train set, so a pre-existing reservation's signals
 	// stay lit.
 	//
-	// Ownership is last-writer-wins, mirroring PathReservationRegistry.blockToTrain: if a
+	// Ownership is last-writer-wins, mirroring BlockOwnershipTable.blockToTrain: if a
 	// semaphore is re-cleared for another train, that train becomes its owner and the earlier
 	// train's release leaves it alone. Without this a stale release could drop a signal to STOP
 	// under a train actively running against it.
@@ -679,7 +679,7 @@ class DefaultPathReservationService(
 		// re-issuing request_route for a train it already granted a route to, since it
 		// has no memory of its own prior tool calls) must be a no-op here. Re-registering
 		// an identical PathInfo would duplicate every separator in the merge
-		// (PathReservationRegistry.registerPathInfo/mergePathInfo), and a further
+		// (PathReservationRegistry.registerPathInfo / PathInfoMerger.merge), and a further
 		// redundant call can hit the registry's 3rd-occurrence cycle-abort — silently
 		// discarding the merge while this method still reports Success, an invisible
 		// PathInfo/reality divergence that can strand the train permanently once it
@@ -3596,8 +3596,8 @@ class DefaultPathReservationService(
 	 * ([rollbackUnconfigurableCandidate], the bypass rollback in [reservePathToAnyNextSemaphore]).
 	 *
 	 * [PathReservationRegistry.unregisterSwitch] unlocks + removes the switch from the registry's
-	 * switchToTrain/trainToSwitches maps when the switch is registered to this train (after
-	 * [PathReservationRegistry.registerSwitches]). When the switch was locked by `setUpPath` but NOT
+	 * switch-ownership maps ([SwitchOwnershipTable]) when the switch is registered to this train
+	 * (after [PathReservationRegistry.registerSwitches]). When the switch was locked by `setUpPath` but NOT
 	 * yet registered (switch-config-failure path, before registration), unregisterSwitch is a no-op —
 	 * so fall back to an explicit unlock to release the physical lock.
 	 *

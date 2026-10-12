@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
@@ -71,7 +72,7 @@ class BlockOwnershipTableTest : KoinTestBase() {
 			)
 		)
 		assertThat(table.getOwner(fixture.blockBtoZB)).isNull()
-		assertThat(table.heldBlocksOrNull("t2")).isNull()
+		assertThat(table.getBlocks("t2")).isEmpty()
 	}
 
 	@Test
@@ -107,7 +108,7 @@ class BlockOwnershipTableTest : KoinTestBase() {
 
 		fixture.blockZBtoVB.cancelPathSetup(fixture.zB)
 		assertThat(table.release("t1", fixture.blockZBtoVB)).isTrue()
-		assertThat(table.heldBlocksOrNull("t1"), "train entry").isNull()
+		assertThat(table.getBlocks("t1"), "train entry").isEmpty()
 		assertThat(table.isBlockAvailable(fixture.blockZBtoVB)).isTrue()
 	}
 

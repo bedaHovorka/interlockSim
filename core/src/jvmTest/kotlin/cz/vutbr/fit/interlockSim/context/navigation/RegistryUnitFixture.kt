@@ -16,7 +16,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.testutil.routeBlocksOf
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 
 /**
@@ -35,11 +35,9 @@ internal class RegistryUnitFixture(
 	val vB: DynamicRailSwitch = context.separatorAt(26, 8) as DynamicRailSwitch
 	val doB1: DynamicPathSeparator = context.separatorAt(25, 8)
 
-	private val navigator: TopologyNavigator = context.scope.get()
-
-	val blockBtoZB: DynamicTrackBlock = blockBetween(inOutB, zB)
-	val blockZBtoVB: DynamicTrackBlock = blockBetween(zB, vB)
-	val blockVBtoDoB1: DynamicTrackBlock = blockBetween(vB, doB1)
+	val blockBtoZB: DynamicTrackBlock = context.routeBlocksOf(inOutB, zB).first()
+	val blockZBtoVB: DynamicTrackBlock = context.routeBlocksOf(zB, vB).first()
+	val blockVBtoDoB1: DynamicTrackBlock = context.routeBlocksOf(vB, doB1).first()
 
 	/** The whole approach as one stored route: `B, block, zB, block, vB, block, doB1`. */
 	fun approachPathInfo(): PathInfo = pathInfo(inOutB, blockBtoZB, zB, blockZBtoVB, vB, blockVBtoDoB1, doB1)
@@ -55,16 +53,4 @@ internal class RegistryUnitFixture(
 			entryDirections = emptyMap()
 		)
 	}
-
-	private fun blockBetween(
-		from: DynamicPathSeparator,
-		to: DynamicPathSeparator
-	): DynamicTrackBlock =
-		navigator
-			.findAllTopologicalPaths(from, to)
-			.first()
-			.filterIsInstance<TrackSection>()
-			.map { it.getTrackBlock() }
-			.filterIsInstance<DynamicTrackBlock>()
-			.first()
 }
