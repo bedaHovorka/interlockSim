@@ -132,10 +132,12 @@ class DefaultPathReservationService(
 	// `resetSemaphoreSet`, never the whole per-train set, so a pre-existing reservation's signals
 	// stay lit.
 	//
-	// Ownership is last-writer-wins, mirroring PathReservationRegistry.blockToTrain: if a
-	// semaphore is re-cleared for another train, that train becomes its owner and the earlier
-	// train's release leaves it alone. Without this a stale release could drop a signal to STOP
-	// under a train actively running against it.
+	// Ownership is last-writer-wins -- unlike block ownership, where registerAtomic rejects a
+	// foreign reservation instead of reassigning it (the same contrast
+	// PathReservationService.recordExternalClearedSemaphore states): if a semaphore is re-cleared
+	// for another train, that train becomes its owner and the earlier train's release leaves it
+	// alone. Without this a stale release could drop a signal to STOP under a train actively
+	// running against it.
 	private val clearedSemaphores: MutableMap<String, MutableSet<DynamicRailSemaphore>> = mutableMapOf()
 
 	private val semaphoreClearedFor: MutableMap<DynamicRailSemaphore, String> = mutableMapOf()
@@ -679,7 +681,7 @@ class DefaultPathReservationService(
 		// re-issuing request_route for a train it already granted a route to, since it
 		// has no memory of its own prior tool calls) must be a no-op here. Re-registering
 		// an identical PathInfo would duplicate every separator in the merge
-		// (PathReservationRegistry.registerPathInfo/mergePathInfo), and a further
+		// (PathReservationRegistry.registerPathInfo / PathInfoMerger.merge), and a further
 		// redundant call can hit the registry's 3rd-occurrence cycle-abort — silently
 		// discarding the merge while this method still reports Success, an invisible
 		// PathInfo/reality divergence that can strand the train permanently once it
@@ -930,7 +932,7 @@ class DefaultPathReservationService(
 		val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
 		val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
 		// If the registry's merge fail-safe STILL aborted
-		// (PathReservationRegistry.mergePathInfo's KDoc lists the four reasons) --
+		// (PathInfoMerger.merge's KDoc lists the four reasons) --
 		// now only the genuinely pathological ones: duplicated new-start, the
 		// direction reversal guard (Issue #944), or the cycle guard -- release
 		// exactly what THIS candidate acquired --
@@ -3150,7 +3152,7 @@ class DefaultPathReservationService(
 	 * in production) passes a `start` that no longer bounds the first forward block -- every
 	 * block adjacent to it is already owned. Building the merge candidate from that `start`
 	 * therefore makes `new.start != old.target` on every such call, not a rare shape but the
-	 * routine one, and [PathReservationRegistry.mergePathInfo]'s Step 0a fail-safe aborts every
+	 * routine one, and [PathInfoMerger.merge]'s Step 0a fail-safe aborts every
 	 * time, discarding a legitimate extension. Starting the merge candidate where the NEW blocks
 	 * actually begin makes `new.start` agree with `old.target` naturally, so the merge succeeds
 	 * and properly extends PathInfo instead of aborting -- leaving [rollbackIfMergeAborted]'s
@@ -3596,8 +3598,8 @@ class DefaultPathReservationService(
 	 * ([rollbackUnconfigurableCandidate], the bypass rollback in [reservePathToAnyNextSemaphore]).
 	 *
 	 * [PathReservationRegistry.unregisterSwitch] unlocks + removes the switch from the registry's
-	 * switchToTrain/trainToSwitches maps when the switch is registered to this train (after
-	 * [PathReservationRegistry.registerSwitches]). When the switch was locked by `setUpPath` but NOT
+	 * switch-ownership maps ([SwitchOwnershipTable]) when the switch is registered to this train
+	 * (after [PathReservationRegistry.registerSwitches]). When the switch was locked by `setUpPath` but NOT
 	 * yet registered (switch-config-failure path, before registration), unregisterSwitch is a no-op —
 	 * so fall back to an explicit unlock to release the physical lock.
 	 *
