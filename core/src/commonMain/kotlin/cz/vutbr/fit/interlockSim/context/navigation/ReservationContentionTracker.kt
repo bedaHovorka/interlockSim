@@ -41,8 +41,13 @@ import cz.vutbr.fit.interlockSim.util.currentSimulationTime
  *    NOT a live/running-clock threshold; "unresolved when the run ends" is the
  *    actual signal, checked exactly once after the run has stopped.
  *
- * The map is cleared per-train on Success and in releasePath(), so it stays
- * bounded to currently-active trains.
+ * The map is cleared per-train on a reservation attempt that ends with Success, and by the
+ * whole-route release ([DefaultPathReservationService.releaseAllBlocks]). NOT every
+ * [DefaultPathReservationService.releasePath] call clears it: a release that holds no block
+ * (or keeps blocks via approach locking) returns without clearing, so a contention can
+ * outlive such a release -- pinned behavior (`PathReservationContentionTrackingTest`), not
+ * an accident. Entries therefore stay bounded to trains that are or may still be contending,
+ * not merely to currently-active trains.
  *
  * **NOT thread-safe**, like the service that owns it.
  *
@@ -98,8 +103,10 @@ internal class ReservationContentionTracker(
 	 * This is the "unresolved by end of run" signal: genuine, never-clearing contention
 	 * (e.g. an actual deadlock) is still surfaced -- but routine "train waits its turn,
 	 * then proceeds" contention, however long it takes mid-run, is never reported this
-	 * way, because by definition it resolves ([DefaultPathReservationService.reservePath]
-	 * Success or [DefaultPathReservationService.releasePath]) before the run ends.
+	 * way, because it resolves ([DefaultPathReservationService.reservePath] Success, or a
+	 * whole-route release that actually cancels held blocks) before the run ends. A release
+	 * call that holds no block does NOT resolve the contention that way -- it survives here
+	 * by design-as-pinned (`PathReservationContentionTrackingTest`).
 	 *
 	 * Deliberately does **not** call [emitCustom] -- that top-level function is a no-op
 	 * once the simulation's event loop has stopped (`Process.activeContext == null`),
@@ -130,11 +137,14 @@ internal class ReservationContentionTracker(
 	/**
 	 * Forget any in-progress blocked-path contention tracked for [trainId].
 	 *
-	 * Called whenever [trainId] resolves its reservation attempt (Success) or gives
-	 * up its reservations entirely ([DefaultPathReservationService.releasePath]), so
-	 * [blockedSince] never conflates a stale, already-resolved contention with a fresh
-	 * one on the same block later, and so [flushUnresolvedConflicts] never reports
-	 * contention that actually resolved.
+	 * Called when [trainId]'s reservation attempt resolves with Success, and by the
+	 * whole-route release ([DefaultPathReservationService.releaseAllBlocks]). A release
+	 * call that holds no block (or keeps blocks via approach locking) does NOT call this,
+	 * so contention survives it -- pinned behavior (`PathReservationContentionTrackingTest`);
+	 * the whole-route release is the only release-path clear. This keeps [blockedSince] from
+	 * conflating a stale, already-resolved contention with a fresh one on the same block
+	 * later, and keeps [flushUnresolvedConflicts] from reporting contention that actually
+	 * resolved.
 	 */
 	fun clearBlockedTracking(trainId: String) {
 		blockedSince.keys.removeAll { it.first == trainId }
