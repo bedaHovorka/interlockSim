@@ -132,6 +132,9 @@ The native step is 44 s longer than on `develop` because SP1 adds tests to `comm
    (Dijkstra, a bounded candidate search, a static route cache per InOut pair). SP1 fixed the gate
    and the train length check. A failing `reservePath` still lists all switch-constrained paths before
    it applies its candidate cap (~2.7 s JVM on Praha, from #591).
+   *Correction 2026-10-11 (SP4, #1151): the ~2.7 s was the switch-blind listing time, not a
+   `reservePath` cost; a failing `reservePath` takes milliseconds — see
+   [SP4-bounded-route-search.md](SP4-bounded-route-search.md).*
 2. **Retry trigger.** Blocked entries are re-polled every dispatcher cycle. The already-emitted
    `ConflictDetectedEvent` (or a block-release event) should trigger the retry instead.
 3. **Route pairs must be legal.** ✅ **Done (#1179).** A scale scenario must draw its
