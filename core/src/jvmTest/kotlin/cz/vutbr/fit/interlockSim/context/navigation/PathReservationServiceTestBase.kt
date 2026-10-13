@@ -100,6 +100,17 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 			?: throw IllegalStateException("Semaphore $name not found in grid")
 
 	/**
+	 * The rail switch named [name] in the loaded grid, the switch twin of [findSemaphoreByName]
+	 * ([DynamicRailSwitch] is not a [cz.vutbr.fit.interlockSim.objects.cells.NodeCell], so the
+	 * generic by-name lookups do not cover it).
+	 *
+	 * @throws IllegalStateException when the grid holds no switch of that name
+	 */
+	protected fun findSwitchByName(name: String): DynamicRailSwitch =
+		simulationContext.cellsOfType<DynamicRailSwitch>().firstOrNull { it.name == name }
+			?: throw IllegalStateException("Switch $name not found in grid")
+
+	/**
 	 * The dynamic InOut named [name].
 	 *
 	 * Reads the context's `getInOuts()` and maps through `toDynamic`, so the returned wrapper is
