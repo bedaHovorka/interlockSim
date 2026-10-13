@@ -60,6 +60,7 @@
 		hides behind a disabled log level. The appenders filter at WARN, so nothing extra prints.
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService" level="DEBUG"/>
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteReleaser" level="DEBUG"/>
 
 	<!--
 		ReservationResultMapping.kt logs one INFO "Route GRANTED/DENIED" line per kernel outcome.
