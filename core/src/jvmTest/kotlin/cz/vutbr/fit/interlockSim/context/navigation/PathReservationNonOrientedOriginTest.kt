@@ -14,8 +14,6 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -35,64 +33,42 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 class PathReservationNonOrientedOriginTest : PathReservationServiceTestBase() {
-	/** The switch named [name] in the loaded `vyhybna.xml` grid. */
-	private fun switchNamed(name: String): DynamicRailSwitch =
-		simulationContext.cellsOfType<DynamicRailSwitch>().firstOrNull { it.name == name }
-			?: throw IllegalStateException("Switch $name not found in grid")
-
 	@Test
 	fun `reservePathToAny from a switch start is refused and reserves nothing`() {
 		// Arrange - vA is a switch, i.e. a non-oriented separator
-		val switchVA = switchNamed("vA")
+		val switchVA = findSwitchByName("vA")
 
 		// Act - must return a typed result, never throw
 		val result = service.reservePathToAny("train1", switchVA)
 
-		// Assert - refused, and nothing was reserved, registered or configured
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
-		assertThat(service.getReservedBlocks("train1")).isEmpty()
-		assertThat(registry.getSwitches("train1")).isEmpty()
-		assertThat(registry.getPathInfo("train1")).isNull()
+		// Assert
+		assertRefusedAndNothingTouched(result)
 	}
 
 	@Test
 	fun `reservePath from a switch start is refused and reserves nothing`() {
 		// Arrange
-		val switchVA = switchNamed("vA")
+		val switchVA = findSwitchByName("vA")
 
 		// Act
 		val result = service.reservePath("train1", switchVA, inOut2)
 
 		// Assert
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
-		assertThat(service.getReservedBlocks("train1")).isEmpty()
-		assertThat(registry.getSwitches("train1")).isEmpty()
-		assertThat(registry.getPathInfo("train1")).isNull()
+		assertRefusedAndNothingTouched(result)
 	}
 
 	@Test
 	fun `reservePathToAnyNextSemaphore from a switch start is refused and reserves nothing`() {
 		// Arrange - the outer semaphore scan delegates to reservePath once per semaphore it finds,
 		// so the Step 0 guard refuses each attempt and the scan reports the permanent verdict.
-		val switchVA = switchNamed("vA")
-		val doA1 = findSemaphoreByName("doA1")
-		val next =
-			simulationContext
-				.getRoutingServices()
-				.getTopologyNavigator()
-				.findAllTopologicalPaths(switchVA, doA1)
-				.first()
-				.filterIsInstance<TrackSection>()
-				.first()
+		val switchVA = findSwitchByName("vA")
+		val next = blockBetween("vA", "doA1")
 
 		// Act
 		val result = service.reservePathToAnyNextSemaphore("train1", switchVA, next)
 
 		// Assert
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
-		assertThat(service.getReservedBlocks("train1")).isEmpty()
-		assertThat(registry.getSwitches("train1")).isEmpty()
-		assertThat(registry.getPathInfo("train1")).isNull()
+		assertRefusedAndNothingTouched(result)
 	}
 
 	@Test
@@ -100,7 +76,7 @@ class PathReservationNonOrientedOriginTest : PathReservationServiceTestBase() {
 		// Arrange - the refused request used to leak two RESERVED blocks onto train1,
 		// which made every later request from a separator that does not bound them fail
 		// as NonContiguousStart (the train's footprint was no longer empty).
-		val switchVA = switchNamed("vA")
+		val switchVA = findSwitchByName("vA")
 		assertThat(service.reservePathToAny("train1", switchVA))
 			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
@@ -109,5 +85,13 @@ class PathReservationNonOrientedOriginTest : PathReservationServiceTestBase() {
 
 		// Assert
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+	}
+
+	/** [result] must be the request-level refusal, touching no block, switch or PathInfo. */
+	private fun assertRefusedAndNothingTouched(result: PathReservationService.ReservationResult) {
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		assertThat(service.getReservedBlocks("train1")).isEmpty()
+		assertThat(registry.getSwitches("train1")).isEmpty()
+		assertThat(registry.getPathInfo("train1")).isNull()
 	}
 }
