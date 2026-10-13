@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.Process
-import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
@@ -20,10 +19,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -150,9 +146,9 @@ class ShuntingLoop(
 				ReportType.NODE_EVENTS
 			)
 
-		// Vyhybna network coordinate contract.
-		// Single source of truth: ShuntingLoop.init uses these and
-		// ShuntingLoopNetworkValidator (in :fast-sim) iterates them.
+		// Vyhybna network coordinate contract. ShuntingLoop.init no longer reads it (it derives the
+		// blocks through Station, Issue #1161); ShuntingLoopNetworkValidator (in :fast-sim) still
+		// iterates it until Issue #1162 moves the validator onto Station and deletes these.
 		const val COORD_IN_A_X = 11
 		const val COORD_IN_A_Y = 8
 		const val COORD_IN_B_X = 30
@@ -325,57 +321,26 @@ class ShuntingLoop(
 		}
 		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		val inB: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_B_X, COORD_IN_B_Y)
-		val inA: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_A_X, COORD_IN_A_Y)
-		val zA: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZA_X, COORD_SEM_ZA_Y)
-		val doA1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA1_X, COORD_SEM_DOA1_Y)
-		val doB1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB1_X, COORD_SEM_DOB1_Y)
-		val zB: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZB_X, COORD_SEM_ZB_Y)
-		val doA2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA2_X, COORD_SEM_DOA2_Y)
-		val doB2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB2_X, COORD_SEM_DOB2_Y)
-		// Topology preconditions (SIM-004): assert vyhybna.xml really has switches at these
-		// coordinates. elementAt() throws if the cell is missing or of the wrong type.
-		elementAt<DynamicRailSwitch>(context, COORD_SW_A_X, COORD_SW_A_Y)
-		elementAt<DynamicRailSwitch>(context, COORD_SW_B_X, COORD_SW_B_Y)
-
-		val k1: DynamicTrackBlock = getBlock(context, "k1", doA1, doB1)
-		val k2: DynamicTrackBlock = getBlock(context, "k2", doA2, doB2)
-		val kA: DynamicTrackBlock = getBlock(context, "kA", inA, zA)
-		val kB: DynamicTrackBlock = getBlock(context, "kB", inB, zB)
+		// Goal 1B SP2.1 (Issue #1161, SIM-004): the blocks and signals come from the topology
+		// through [Station] instead of hand-written coordinates. On vyhybna.xml the derivation
+		// yields exactly the former lookup (pinned by StationTest):
+		// - innerTrackBlocks: platform tracks with RailSemaphore ends only (k1, k2)
+		// - outerTrackblocks: entry/exit blocks with one InOut end, to their home signal (kB, kA)
+		val station = Station.from(context)
+		val signalledEntryExitBlocks = station.entryExitBlocks.filter { it.signals.isNotEmpty() }
+		requireSimulation(station.platformTracks.isNotEmpty() && signalledEntryExitBlocks.isNotEmpty()) {
+			"ShuntingLoop needs at least one platform track and one entry/exit block with a home signal, " +
+				"found ${station.platformTracks.size} platform track(s) and " +
+				"${signalledEntryExitBlocks.size} signalled entry/exit block(s)"
+		}
+		station.applyBlockNames()
 
 		// Issue #296: Removed manual path construction (~100 lines)
 		// Paths are now discovered dynamically using TopologyNavigator when needed
-		// - innerTrackBlocks: middle blocks with RailSemaphore ends only (k1, k2)
-		// - outerTrackblocks: entry/exit blocks with one InOut end (kB, kA)
-		innerTrackBlocks.addAll(listOf(k1, k2))
-		outerTrackblocks[kB] = zB
-		outerTrackblocks[kA] = zA
-	}
-
-	private inline fun <reified T : Cell> elementAt(
-		context: SimulationContext,
-		x: Int,
-		y: Int
-	): T {
-		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		val cell = railWayNetGrid.getCellAt(x, y) ?: throw IllegalArgumentException("No cell at position ($x, $y)")
-		return Util.assertInstanceOf(cell)
-	}
-
-	private fun getBlock(
-		context: SimulationContext,
-		name: String,
-		cell1: Cell,
-		cell2: Cell
-	): DynamicTrackBlock {
-		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		val graph = context.getGraph() // ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>
-		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
-		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
-		val block = graph[point1, point2] ?: throw IllegalArgumentException("Cannot get block between cells")
-		val dynamicBlock = Util.assertInstanceOf<DynamicTrackBlock>(block)
-		dynamicBlock.name = name
-		return dynamicBlock
+		innerTrackBlocks.addAll(station.platformTracks.map { it.block })
+		for (entryExit in signalledEntryExitBlocks) {
+			outerTrackblocks[entryExit.block] = entryExit.signals.single()
+		}
 	}
 
 	override suspend fun startAction() {
