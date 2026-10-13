@@ -492,7 +492,8 @@ class DefaultPathReservationService(
 	 */
 	private fun rejectNonOrientedStart(
 		trainId: String,
-		start: DynamicPathSeparator
+		start: DynamicPathSeparator,
+		entryPoint: String
 	): PathReservationService.ReservationResult.GeometricallyImpossible? {
 		if (start is OrientedPathSeparator) return null
 		val startName = separatorLabel(start)
@@ -501,7 +502,7 @@ class DefaultPathReservationService(
 				"${start::class.simpleName ?: "unknown"}): a route runs signal-to-signal, so it can only " +
 				"start at a semaphore or an InOut. Request for train '$trainId' refused before any " +
 				"block, switch or signal was touched."
-		logger.warn { "reservePath: rejected non-oriented start — $reason" }
+		logger.warn { "$entryPoint: rejected non-oriented start — $reason" }
 		return PathReservationService.ReservationResult.GeometricallyImpossible(reason)
 	}
 
@@ -588,7 +589,7 @@ class DefaultPathReservationService(
 		// Step 0 (Issue #1188): a route runs signal-to-signal, so a non-oriented start (a switch)
 		// is refused here, before any block is reserved or registered -- see
 		// [rejectNonOrientedStart] for the leak this prevents.
-		rejectNonOrientedStart(trainId, start)?.let { return it }
+		rejectNonOrientedStart(trainId, start, "reservePath")?.let { return it }
 
 		// Step 0 (Issue #893, task A-R1): a route may only start where the train actually is.
 		// Checked BEFORE candidate-path discovery so it also governs the already-owned
@@ -1986,7 +1987,7 @@ class DefaultPathReservationService(
 		// refuse it too, before its candidate-path enumeration, but only after STEP 1 had already
 		// discovered every target, and then once per target with the same reason and warning.
 		// Refusing up front skips the target discovery and the repeated calls.
-		rejectNonOrientedStart(trainId, start)?.let { return it }
+		rejectNonOrientedStart(trainId, start, "reservePathToAny")?.let { return it }
 
 		// ========================================
 		// STEP 1: Target Discovery
