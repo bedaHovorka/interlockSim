@@ -34,7 +34,7 @@ import org.junit.jupiter.api.Test
  * endpoint (the same invariant Issue #938 pinned for `PathInfo.start`).
  */
 @Tag("integration-test")
-class PathReservationSwitchStartTest : PathReservationServiceTestBase() {
+class PathReservationNonOrientedOriginTest : PathReservationServiceTestBase() {
 	/** The switch named [name] in the loaded `vyhybna.xml` grid. */
 	private fun switchNamed(name: String): DynamicRailSwitch =
 		simulationContext.cellsOfType<DynamicRailSwitch>().firstOrNull { it.name == name }

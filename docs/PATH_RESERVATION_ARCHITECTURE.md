@@ -175,11 +175,11 @@ fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): R
 
 #### Step 0: Endpoint Precondition (Issue #1188)
 
-**Method:** `rejectNonOrientedStart(trainId, start)` (`DefaultPathReservationService.kt`)
+**Method:** `rejectNonOrientedStart(trainId, start, entryPoint)` (`DefaultPathReservationService.kt`)
 
 **Purpose:** Routes run signal-to-signal, so `start` must be an `OrientedPathSeparator` (a semaphore or an InOut). A switch is interior track, never an endpoint — the same invariant Issue #938 pinned for `PathInfo.start`. A non-oriented origin is rejected with `GeometricallyImpossible` **before** anything is touched, and `reservePathToAny` repeats the guard up front so the rejection is not re-derived once per candidate target.
 
-**Why it must precede everything:** without it, a switch start passed Step 2c/2d (blocks reserved AND registered to the train) and only then threw `SimulationException[FATAL]` ("PathSeparator must be OrientedPathSeparator") out of `configureSwitchesInPath` → `DefaultSimulationContext.getSegment`, past every rollback path. The blocks stayed registered to a route that was never granted, so a later request from a separator that does not bound them was refused as `NonContiguousStart`. Pinned by `PathReservationSwitchStartTest`.
+**Why it must precede everything:** without it, a switch start passed Step 2c/2d (blocks reserved AND registered to the train) and only then threw `SimulationException[FATAL]` ("PathSeparator must be OrientedPathSeparator") out of `configureSwitchesInPath` → `DefaultSimulationContext.getSegment`, past every rollback path. The blocks stayed registered to a route that was never granted, so a later request from a separator that does not bound them was refused as `NonContiguousStart`. Pinned by `PathReservationNonOrientedOriginTest`.
 
 #### Step 0: Contiguity Precondition (Issue #893, task A-R1)
 
