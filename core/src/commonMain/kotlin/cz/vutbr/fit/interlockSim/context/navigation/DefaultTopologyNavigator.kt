@@ -322,6 +322,46 @@ class DefaultTopologyNavigator(
 		}
 
 	/**
+	 * Dijkstra search over the moves of [getAllNextTrackSections], so the result matches the
+	 * minimum route length of [findAllTopologicalPaths] without listing every path.
+	 *
+	 * A search state is the separator plus the section that led into it, because the next moves
+	 * depend on the travel direction. States are normalized to static cells and blocks, so static
+	 * and dynamic contexts give the same result. A state is expanded, or accepted as the target,
+	 * only while its depth is below [maxDepth], checked in the same order as the path listing.
+	 *
+	 * The search itself is [boundedShortestDistance]: its depth bound is exact. The one difference from the
+	 * listing is that the search does not forbid a route from passing one separator twice. On all
+	 * 174 InOut pairs of the test fixtures and `vyhybna.xml` both give the same value at the
+	 * default depth (Issue #1148).
+	 */
+	override fun findShortestTopologicalDistance(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int
+	): Double? =
+		boundedShortestDistance(
+			start = DistanceState(start, null),
+			isTarget = { CellUtilities.isSameSeparator(it.separator, target) },
+			maxDepth = maxDepth,
+			key = DistanceState::key
+		) { state ->
+			getAllNextTrackSections(state.separator, state.section).map { section ->
+				DistanceState(section.getSecondEnd(state.separator), section) to section.length()
+			}
+		}
+
+	/** Search state of [findShortestTopologicalDistance]: a separator and the section that led into it. */
+	private class DistanceState(
+		val separator: PathSeparator,
+		val section: TrackSection?
+	) {
+		/** Identity of the state, normalized to the static cell and the static block. */
+		fun key(): Pair<NodeCell, Any?> =
+			CellUtilities.assertNodeCell(separator) to section?.let { (it as? DynamicTrackBlock)?.staticRef ?: it }
+	}
+
+	/**
 	 * Find all topologically possible paths with pre-computed cost breakdown.
 	 *
 	 * Delegates to [findAllTopologicalPaths] and wraps each result in a [PathCandidate]

@@ -23,27 +23,26 @@ import java.util.concurrent.TimeUnit
  *
  * [ShuntingLoop.toBlockInputObservation] resolves [BlockInputObservation.candidateTargets]
  * via [ReservationTargetQuery.findReservationTargetCandidates][cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery.findReservationTargetCandidates],
- * which is a BFS plus a per-candidate topological-path enumeration, and derives
- * [BlockInputObservation.toSeparatorName] as [ReservationTargetPolicy.pick] over that list
- * (Issue #970). Running the query for every
+ * which is a BFS plus a per-candidate topological-path enumeration (Issue #970).
+ * Running the query for every
  * block input on every tick — including inputs that provably cannot take a forward
  * reservation — accounted for ~9% of `fast-sim example shuntingLoop 300` wall time.
  *
- * The contract: `toSeparatorName` is populated **only** for inputs that could actually
+ * The contract: `candidateTargets` is populated **only** for inputs that could actually
  * yield a [DispatchDecision.ReservePath] — a train occupying the block and approaching this
  * input, or a path already set up toward it — and only when the path is not already extended
- * beyond it. For every other input it is `null`.
+ * beyond it. For every other input it is empty.
  *
  * [RuleBasedDispatcher.checkInput] returns `null` for exactly those non-eligible cases, so
  * narrowing the contract is behaviour-preserving; the golden `shuntingLoop` output is
  * byte-for-byte unchanged.
  *
- * Reverting the gate (computing `toSeparatorName` unconditionally) makes this test fail:
- * FREE inputs with clear track ahead resolve to a non-null target.
+ * Reverting the gate (resolving the candidates unconditionally) makes this test fail:
+ * FREE inputs with clear track ahead resolve to a non-empty candidate list.
  *
- * Since Issue #970 the same gate guards [BlockInputObservation.candidateTargets], the list the
- * dispatcher chooses from; `toSeparatorName` is the policy's pick over that list. The last two
- * tests pin that relation and the list's content against
+ * Since Issue #970 the list the dispatcher chooses from is the only target the shell reports
+ * (Issue #1152 removed the single-name projection). The last two
+ * tests pin the list's content against
  * [ReservationTargetQuery.findReservationTargetCandidates][cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery.findReservationTargetCandidates].
  */
 @DisplayName("ShuntingLoop forward-reservation-target laziness contract")
@@ -51,7 +50,7 @@ import java.util.concurrent.TimeUnit
 class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	fun `toSeparatorName is null for every input that cannot take a forward reservation`() {
+	fun `candidateTargets is empty for every input that cannot take a forward reservation`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
 
@@ -78,13 +77,13 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 							(input.isApproachingThisInput || input.pathSetUpTowardThisInput)
 					if (canReserveForward) {
 						eligibleInputsSeen++
-					} else if (input.toSeparatorName != null) {
+					} else if (input.candidateTargets.isNotEmpty()) {
 						violations +=
 							"block=${input.blockId} toward=${input.towardSemaphoreName} state=${input.state} " +
 							"approaching=${input.isApproachingThisInput} " +
 							"setUpToward=${input.pathSetUpTowardThisInput} " +
 							"extendedBeyond=${input.pathAlreadyExtendedBeyond} " +
-							"toSeparatorName=${input.toSeparatorName}"
+							"candidateTargets=${input.candidateTargets}"
 					}
 				}
 				wired?.onControlStep()
@@ -98,7 +97,7 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		assertThat(freeInputsSeen, "FREE inputs observed").isGreaterThan(0)
 		assertThat(eligibleInputsSeen, "reservation-eligible inputs observed").isGreaterThan(0)
 
-		assertThat(violations.size, "non-eligible inputs carrying a toSeparatorName: $violations").isEqualTo(0)
+		assertThat(violations.size, "non-eligible inputs carrying candidate targets: $violations").isEqualTo(0)
 	}
 
 	@Test
@@ -117,8 +116,8 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 				(loop.getInnerBlockInputs() + loop.getOuterBlockInputs())
 					.filter { it.state == TrackFacility.State.FREE }
 					.forEach { input ->
-						if (input.toSeparatorName != null) {
-							freeWithTarget += "${input.blockId}->${input.towardSemaphoreName}=${input.toSeparatorName}"
+						if (input.candidateTargets.isNotEmpty()) {
+							freeWithTarget += "${input.blockId}->${input.towardSemaphoreName}=${input.candidateTargets}"
 						}
 					}
 				wired?.onControlStep()
@@ -132,7 +131,7 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	fun `candidateTargets is empty for every non-eligible input and toSeparatorName is the policy's pick`() {
+	fun `candidateTargets is empty for every non-eligible input`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
 
@@ -148,11 +147,6 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 					if (input.candidateTargets.isNotEmpty()) inputsWithCandidates++
 					if (!canReserveForward(input) && input.candidateTargets.isNotEmpty()) {
 						violations += "non-eligible ${input.blockId}->${input.towardSemaphoreName} lists ${input.candidateTargets}"
-					}
-					val pick = ReservationTargetPolicy.pick(input.candidateTargets)?.name
-					if (input.toSeparatorName != pick) {
-						violations +=
-							"${input.blockId}->${input.towardSemaphoreName} projects ${input.toSeparatorName} but the pick is $pick"
 					}
 				}
 				wired?.onControlStep()
@@ -185,7 +179,7 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 					if (!canReserveForward(input)) continue
 					val start = semaphores.first { it.name == input.towardSemaphoreName } as OrientedPathSeparator
 					val owner = if (input.awaitingRouteExtension) input.ownerTrainId else null
-					val expected = query.findReservationTargetCandidates(start, owner).map { it.toCandidateTarget() }
+					val expected = query.findReservationTargetCandidates(start, owner).map { it.expectedCandidateTarget() }
 					listsCompared++
 					if (input.candidateTargets != expected) {
 						violations += "${input.blockId}->${input.towardSemaphoreName}: ${input.candidateTargets} != $expected"
@@ -206,8 +200,12 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
 			(input.isApproachingThisInput || input.pathSetUpTowardThisInput)
 
-	/** The expected observation fact for a query result: the kind follows the separator's class. */
-	private fun ReservationTargetCandidate.toCandidateTarget(): CandidateTarget =
+	/**
+	 * The expected observation fact for a query result, computed independently of
+	 * [cz.vutbr.fit.interlockSim.sim.toCandidateTarget] so this test is a real oracle for the
+	 * production conversion rather than a restatement of it.
+	 */
+	private fun ReservationTargetCandidate.expectedCandidateTarget(): CandidateTarget =
 		when (val sep = separator) {
 			is DynamicInOut -> CandidateTarget(sep.name, SeparatorKind.IN_OUT, available)
 			is DynamicRailSemaphore -> CandidateTarget(sep.name, SeparatorKind.SEMAPHORE, available)

@@ -9,6 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
@@ -117,26 +121,6 @@ data class QueuedTrainObservation(
  *
  * @property blockId Name of the track block.
  * @property towardSemaphoreName Name of the semaphore at this input.
- * @property toSeparatorName Compatibility projection of the dispatcher's choice:
- *   `ReservationTargetPolicy.pick(candidateTargets)?.name` (Issue #970) — the first
- *   available next separator one section ahead (InOuts prioritised over semaphores):
- *   a semaphore, or the destination InOut for the final section. The shell
- *   ([ShuntingLoop]) fills it from the same [candidateTargets] list it publishes, so a
- *   reader that only needs the pick (`:dispatcher-agent`'s `NextHopResolver`) need not
- *   re-run the policy; [RuleBasedDispatcher] itself reads [candidateTargets] and never
- *   this field.
- *   **Destination-agnostic**: `ReservationTargetQuery.findReservationTargetCandidates`
- *   takes only a start separator, so it cannot know where the train is headed —
- *   like a real interlocking granting *"postav jízdní cestu od X k Y"*, start and
- *   end are given to it; knowing the destination is the dispatcher's job. Because
- *   InOuts are always prioritised, the nearest exit wins whenever a branch
- *   terminating at an InOut competes with one continuing into the station; on
- *   `vyhybna.xml`'s two-InOut passing loop both branches lead to the same exit, so
- *   this happens to look destination-directed there. `null` when no FREE next
- *   separator exists, in which case the dispatcher emits
- *   [DispatchDecision.NoAction] for this input (the train waits and is
- *   reconsidered next tick).
- *
  * @property state Occupancy state of the block.
  * @property ownerTrainId Name of the train associated with this block: the
  *   occupant's name when OCCUPIED, [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.trainName]
@@ -154,7 +138,7 @@ data class QueuedTrainObservation(
  *   the train until the route is extended to the next signal facing it (Issue #1060). The
  *   route is extended beyond the input, yet a further reservation is NOT a no-op, so a
  *   dispatcher treats the input like one that is not extended
- *   ([toSeparatorName] is resolved for it). The flag is set for any train that stands at the
+ *   ([candidateTargets] is resolved for it). The flag is set for any train that stands at the
  *   signal while navigation answers an ownership conflict — including a foreign-owned block
  *   ahead of an otherwise valid leg, not only the rear-facing-end case. A later reservation
  *   re-validates everything, so a false positive only costs one search. Defaults to `false`.
@@ -162,31 +146,41 @@ data class QueuedTrainObservation(
  *   [towardSemaphoreName] that the interlocking could set a route to, in the
  *   interlocking's search order (InOuts first), each with its availability
  *   ([CandidateTarget.available]) — the facts the dispatcher chooses from (Issue #970).
- *   The choice itself is [ReservationTargetPolicy.pick]. Every candidate listed has
- *   been evaluated: a candidate is never reported `available = false` without the
- *   availability check having run.
+ *   The choice itself is [ReservationTargetPolicy.pick]; this list is the **only**
+ *   target-selection input a dispatcher gets (Issue #1152 — one target-selection path).
+ *   Every candidate listed has been evaluated: a candidate is never reported
+ *   `available = false` without the availability check having run.
+ *
+ *   **Destination-agnostic**: `ReservationTargetQuery.findReservationTargetCandidates`
+ *   takes only a start separator, so it cannot know where the train is headed —
+ *   like a real interlocking granting *"postav jízdní cestu od X k Y"*, start and
+ *   end are given to it; knowing the destination is the dispatcher's job. Because
+ *   [ReservationTargetPolicy] always prioritises InOuts, the nearest exit wins whenever a
+ *   branch terminating at an InOut competes with one continuing into the station; on
+ *   `vyhybna.xml`'s two-InOut passing loop both branches lead to the same exit, so
+ *   this happens to look destination-directed there.
  *
  *   **Populated only where a forward reservation is possible** (Issue #749). The shell
- *   resolves the list (and the [toSeparatorName] projection) exclusively for inputs satisfying
+ *   resolves the list exclusively for inputs satisfying
  *   `(!pathAlreadyExtendedBeyond || awaitingRouteExtension) && (isApproachingThisInput || pathSetUpTowardThisInput)`;
  *   for every other input — FREE, not approaching this input, or already extended beyond
- *   it without awaiting an extension ([awaitingRouteExtension]) — the list is empty and
- *   the projection `null` **without the search having been run**. Resolving it means a BFS
+ *   it without awaiting an extension ([awaitingRouteExtension]) — the list is empty
+ *   **without the search having been run**. Resolving it means a BFS
  *   plus a per-candidate topological-path enumeration
  *   ([PathReservationService.findReservationTargetCandidates][cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery.findReservationTargetCandidates]);
  *   running it for the ~98% of inputs whose value is then discarded cost ~9% of fast-sim
  *   wall time.
  *
- *   An empty list (a `null` projection) therefore means *"no forward-reservation target
- *   applies"*, not *"the search found nothing"* — the two are indistinguishable to a
- *   dispatcher, and both call for the same response (no reservation for this input on this
- *   tick). Dispatcher implementations — including future LLM-backed ones — must not read an
- *   empty list or `toSeparatorName == null` as evidence that the track ahead is occupied.
+ *   An empty list (or one with no available candidate) therefore means *"no
+ *   forward-reservation target applies"*, not *"the search found nothing"* — the two are
+ *   indistinguishable to a dispatcher, and both call for the same response (no reservation
+ *   for this input on this tick), namely [DispatchDecision.NoAction]: the train waits and is
+ *   reconsidered next tick. Dispatcher implementations — including future LLM-backed ones —
+ *   must not read an empty list as evidence that the track ahead is occupied.
  */
 data class BlockInputObservation(
 	val blockId: String,
 	val towardSemaphoreName: String,
-	val toSeparatorName: String? = null,
 	val state: TrackFacility.State,
 	val ownerTrainId: String?,
 	val isApproachingThisInput: Boolean,
@@ -227,3 +221,29 @@ data class CandidateTarget(
 	val kind: SeparatorKind,
 	val available: Boolean
 )
+
+/**
+ * The observation fact for one [ReservationTargetCandidate]: its separator's name and
+ * [SeparatorKind], carried across the pure [Dispatcher] seam as plain values. A
+ * [DynamicInOut] becomes a [SeparatorKind.IN_OUT], a [DynamicRailSemaphore] a
+ * [SeparatorKind.SEMAPHORE] — the only separator kinds
+ * [ReservationTargetQuery.findReservationTargetCandidates] returns.
+ *
+ * Any other separator class (a switch, say — never a legal route endpoint) is a programming
+ * error, not a fact to hide: silently dropping it would shrink the dispatcher's only
+ * target-selection input without a trace, so this fails loudly instead (Issue #1152).
+ *
+ * @throws IllegalStateException when [ReservationTargetCandidate.separator] is neither a
+ *   [DynamicInOut] nor a [DynamicRailSemaphore].
+ * @since Issue #1152 (SP5 — Goal 1B), extracted from `ShuntingLoop` so the failure is testable
+ */
+internal fun ReservationTargetCandidate.toCandidateTarget(): CandidateTarget =
+	when (val separator = this.separator) {
+		is DynamicInOut -> CandidateTarget(separator.name, SeparatorKind.IN_OUT, available)
+		is DynamicRailSemaphore -> CandidateTarget(separator.name, SeparatorKind.SEMAPHORE, available)
+		else ->
+			error(
+				"Unknown reservation target separator type: ${separator::class.simpleName ?: "unknown"} — " +
+					"only DynamicInOut and DynamicRailSemaphore can be reported as candidate targets"
+			)
+	}

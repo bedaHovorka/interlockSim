@@ -11,23 +11,27 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyNotifier
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
+import io.github.oshai.kotlinlogging.KLogger
 import io.github.oshai.kotlinlogging.KotlinLogging
 
-private val logger = KotlinLogging.logger {}
+/**
+ * The registry's logger, shared by its units ([BlockOwnershipTable], [SwitchOwnershipTable],
+ * [PathInfoStore], [PathInfoMerger]) so that every message keeps the logger name it had before the
+ * split (Issue #1172) -- log configuration and log-capturing tests key on that name.
+ */
+internal val registryLogger: KLogger = KotlinLogging.logger {}
+
+private val logger: KLogger = registryLogger
 
 /**
  * Registry tracking train ownership of reserved track blocks.
@@ -80,11 +84,17 @@ private val logger = KotlinLogging.logger {}
  * is stale stays with its caller (`OrphanReservationSweeper` in `:dispatcher-agent`). No production
  * code reads the timestamps yet -- not even for diagnostics: they are a stepping stone for #975.
  *
- * ## Size
+ * ## Structure (Issue #1172)
  *
- * The registry is the single owner of the train -> blocks / switches / PathInfo state, so every
- * operation on that state lives here. It exceeds detekt's `TooManyFunctions` limit (Issues #1063,
- * #1067); splitting the registry is out of scope for those fixes.
+ * The registry is the single public owner of the train -> blocks / switches / PathInfo state and
+ * keeps the whole public contract. Since Issue #1172 it delegates to three internal units, one per
+ * ownership concern, and composes the operations that span them (whole-route teardown in
+ * [unregister], the per-block release funnel in [unregisterBlock]):
+ * - [BlockOwnershipTable] -- block ownership and registration timestamps
+ * - [SwitchOwnershipTable] -- switch claims, their flank purpose and the stale-claim rule
+ * - [PathInfoStore] -- the stored PathInfo and its trim bookkeeping, merging through [PathInfoMerger]
+ *
+ * The facade still exceeds detekt's `TooManyFunctions` limit: every public operation stays on it.
  *
  * @param context Simulation context (needed for PathInfo merging with ArrayPath)
  * @param simTimeSource Current simulation time, read when a block is registered. The default is
@@ -94,8 +104,8 @@ private val logger = KotlinLogging.logger {}
  */
 @Suppress("TooManyFunctions")
 class PathReservationRegistry(
-	private val context: SimulationContext,
-	private val simTimeSource: () -> Double = ::currentSimulationTime
+	context: SimulationContext,
+	simTimeSource: () -> Double = ::currentSimulationTime
 ) : BlockOccupancyNotifier {
 	/**
 	 * Registered external listeners for block occupancy/release events.
@@ -138,7 +148,7 @@ class PathReservationRegistry(
 	}
 
 	/**
-	 * Outcome of [registerPathInfo] / [mergePathInfo], distinguishing a genuine merge from an
+	 * Outcome of [registerPathInfo] ([PathInfoMerger.merge]), distinguishing a genuine merge from an
 	 * abort so the caller can react to the abort instead of assuming the stored [PathInfo] now
 	 * reflects what it just registered.
 	 *
@@ -162,7 +172,7 @@ class PathReservationRegistry(
 		 * [pathInfo] — the pre-merge value — by reference.
 		 *
 		 * @property reason English explanation of which abort condition fired, forwarded from
-		 *   [mergePathInfo]'s own WARN log.
+		 *   [PathInfoMerger.merge]'s own WARN log.
 		 */
 		data class Aborted(
 			override val pathInfo: PathInfo,
@@ -189,63 +199,14 @@ class PathReservationRegistry(
 		OCCUPIED_BY_OTHER_TRAIN
 	}
 
-	/**
-	 * Mapping: Train ID → List of reserved blocks
-	 */
-	private val trainToBlocks = mutableMapOf<String, MutableList<DynamicTrackBlock>>()
+	/** Block ownership: Train ID <-> blocks, and when each block was registered (Issue #975). */
+	private val blockTable = BlockOwnershipTable(simTimeSource)
 
-	/**
-	 * Mapping: Block → Owning train ID
-	 */
-	private val blockToTrain = mutableMapOf<DynamicTrackBlock, String>()
+	/** Switch ownership (Tier 2): Train ID <-> switches, with each claim's purpose (Issue #1103). */
+	private val switchTable = SwitchOwnershipTable(blockTable::getBlocks)
 
-	/**
-	 * Mapping: Block → simulation time it was registered to its current owner (Issue #975).
-	 * Holds exactly the keys of [blockToTrain]; see the class KDoc.
-	 */
-	private val blockRegisteredAt = mutableMapOf<DynamicTrackBlock, Double>()
-
-	/**
-	 * Mapping: Train ID → List of reserved switches (Tier 2)
-	 *
-	 * Tracks railway switches that are locked for specific trains.
-	 * Switches are locked during path reservation and unlocked during release.
-	 *
-	 * @since Issue #291 Fix Trains 4 & 5 Deadlock
-	 */
-	private val trainToSwitches = mutableMapOf<String, MutableList<DynamicRailSwitch>>()
-
-	/**
-	 * Mapping: Switch → the owning train's [SwitchClaim] (Tier 2)
-	 *
-	 * Reverse mapping to quickly determine which train owns a given switch, and why.
-	 * Used for conflict detection during path reservation.
-	 *
-	 * The claim's [SwitchClaim.isFlank] marks FLANK protection (Issue #1076 review). A facade
-	 * `lockRouteAtomic` grant locks `route.flank` switches that protect a route the switch is NOT
-	 * adjacent to (see `docs/INTERLOCKING_SCOPE_LIMITATIONS.md` §B2). The "owner holds no block
-	 * bounded by it" staleness rule of [isStaleSwitchOwnership] is unsound for such a switch -- a
-	 * live flank grant has no adjacent block by definition -- so a flank claim is never stale while
-	 * it stands. Owner and purpose live in one record (Issue #1103), so every removal
-	 * ([unregisterSwitch], [unregisterSwitches], [clear]) drops the purpose with the claim. The
-	 * purpose is per switch, not per route: if the same train later also registers the switch as a
-	 * running switch, the claim stays a flank claim until release -- the registry cannot tell
-	 * whether the earlier flank route is still live, so it keeps the conservative answer.
-	 *
-	 * @since Issue #291 Fix Trains 4 & 5 Deadlock; the flank purpose since Issue #1076, in the
-	 *   claim since Issue #1103
-	 */
-	private val switchToTrain = mutableMapOf<DynamicRailSwitch, SwitchClaim>()
-
-	/**
-	 * Mapping: Train ID → PathInfo metadata
-	 *
-	 * Stores complete path information including entry directions for each train.
-	 * This enables TrainNavigationService to determine correct direction at switches.
-	 *
-	 * @since Issue #295/#296 Phase 3
-	 */
-	private val trainToPathInfo = mutableMapOf<String, PathInfo>()
+	/** PathInfo bookkeeping: Train ID -> the route it is driving (Issue #295/#296). */
+	private val pathInfoStore = PathInfoStore(context, blockTable::getBlocks)
 
 	/**
 	 * Subscribe an external agent to block occupancy/release events.
@@ -282,46 +243,18 @@ class PathReservationRegistry(
 	 * the same simulation step: the first caller succeeds, subsequent callers see
 	 * the updated ownership and receive a deterministic [RegistrationResult.Conflict].
 	 *
-	 * ## Atomicity Guarantee
-	 *
-	 * This operation is atomic with respect to the registry state:
-	 * - Either all blocks are registered
-	 * - Or no blocks are registered
-	 *
 	 * ## Conflict Detection
 	 *
 	 * A conflict occurs when any block is already owned by a **different** train.
 	 * The check consults, in order:
-	 * 1. The registry's `blockToTrain` mapping.
+	 * 1. The registry's block -> train mapping.
 	 * 2. The block's own `trainName` reservation field (defence in depth).
 	 * 3. The block's current physical `occupant` (defence in depth).
 	 *
 	 * If the same train attempts to register the same block again, it is allowed
-	 * (idempotent operation).
-	 *
-	 * ## Conflict Reason
-	 *
-	 * The returned [RegistrationResult.Conflict] includes a [ConflictReason] that
-	 * tells the caller whether the block is merely reserved by another train or is
-	 * currently physically occupied by another train. Occupied conflicts are more
-	 * severe and callers should typically wait longer before retrying.
-	 *
-	 * ## Usage Example
-	 *
-	 * ```kotlin
-	 * when (val result = registry.registerAtomic("train1", blocks)) {
-	 *     is RegistrationResult.Success -> {
-	 *         logger.info { "All blocks registered" }
-	 *     }
-	 *     is RegistrationResult.Conflict -> {
-	 *         logger.warn {
-	 *             "Block ${result.conflictingBlock} owned by ${result.existingOwner} " +
-	 *             "(reason=${result.reason})"
-	 *         }
-	 *         rollbackBlockReservations(blocks)
-	 *     }
-	 * }
-	 * ```
+	 * (idempotent operation). The returned [RegistrationResult.Conflict] carries a [ConflictReason]
+	 * telling whether the block is merely reserved or physically occupied by another train;
+	 * occupied conflicts are more severe and callers should typically wait longer before retrying.
 	 *
 	 * @param trainId The train identifier
 	 * @param blocks List of blocks to register
@@ -330,59 +263,7 @@ class PathReservationRegistry(
 	fun registerAtomic(
 		trainId: String,
 		blocks: List<DynamicTrackBlock>
-	): RegistrationResult {
-		// Phase 1: Validate no conflicts
-		for (block in blocks) {
-			val registryOwner = blockToTrain[block]
-			if (registryOwner != null && registryOwner != trainId) {
-				return RegistrationResult.Conflict(block, registryOwner, classifyConflict(block))
-			}
-
-			// Defence in depth: also check the block's own reservation state in case
-			// the registry and the dynamic block have diverged (e.g. manual cleanup).
-			val blockOwner = block.trainName
-			if (blockOwner != null && blockOwner != trainId) {
-				return RegistrationResult.Conflict(block, blockOwner, classifyConflict(block))
-			}
-
-			// Defence in depth: a block may be occupied even if the registry has no
-			// record of it. Reject the reservation to avoid entering an occupied block.
-			val occupant = block.occupant
-			if (occupant != null && occupant.name != trainId) {
-				return RegistrationResult.Conflict(
-					block,
-					occupant.name,
-					ConflictReason.OCCUPIED_BY_OTHER_TRAIN
-				)
-			}
-		}
-
-		// Phase 2: All checks passed - register all blocks
-		val blockList = trainToBlocks.getOrPut(trainId) { mutableListOf() }
-		blocks.forEach { block ->
-			if (block !in blockList) {
-				blockList.add(block)
-			}
-			blockToTrain[block] = trainId
-			// The clock is read only for a newly registered block; it does not advance within this call.
-			blockRegisteredAt.getOrPut(block) { simTimeSource() }
-		}
-
-		return RegistrationResult.Success
-	}
-
-	/**
-	 * Classify a conflict based on the block's physical state.
-	 *
-	 * @return [ConflictReason.OCCUPIED_BY_OTHER_TRAIN] if the block currently has
-	 *         a physical occupant, [ConflictReason.RESERVED_BY_OTHER_TRAIN] otherwise.
-	 */
-	private fun classifyConflict(block: DynamicTrackBlock): ConflictReason =
-		if (block.occupant != null) {
-			ConflictReason.OCCUPIED_BY_OTHER_TRAIN
-		} else {
-			ConflictReason.RESERVED_BY_OTHER_TRAIN
-		}
+	): RegistrationResult = blockTable.registerAtomic(trainId, blocks)
 
 	/**
 	 * Unregister all blocks reserved by a train (whole-route teardown).
@@ -392,67 +273,47 @@ class PathReservationRegistry(
 	 *
 	 * ## State Changes
 	 *
-	 * - Removes trainToBlocks[trainId]
-	 * - Removes blockToTrain[block] and the block's registration timestamp for all blocks owned by this train
-	 * - Removes trainToPathInfo[trainId] (Issue #295/#296)
+	 * - Removes the train's blocks, their owners and their registration timestamps
+	 * - Removes the train's PathInfo (Issue #295/#296)
 	 * - Releases the train's held switch claims too ([unregisterSwitches]): a whole-route teardown
 	 *   unlocks every held switch unconditionally, so the bulk API cannot leave a stale claim behind
 	 *   any more than the per-block funnel can (Issue #1103 review). Already-blockless trains release
-	 *   their claims too -- a switch claim without a held block is exactly the stale shape. Callers
-	 *   that also call [unregisterSwitches] themselves get an idempotent no-op.
+	 *   their claims too -- a switch claim without a held block is exactly the stale shape; their
+	 *   PathInfo stays. Callers that also call [unregisterSwitches] themselves get an idempotent no-op.
 	 *
 	 * @param trainId The train identifier
 	 * @return List of blocks that were released (empty if train had no reservations)
 	 */
 	fun unregister(trainId: String): List<DynamicTrackBlock> {
-		if (trainToBlocks[trainId] == null) {
-			// No blocks to release, but a switch claim can exist without one -- exactly the stale
-			// shape -- so the wholesale switch release still runs.
-			unregisterSwitches(trainId)
-			return emptyList()
-		}
+		val blocks = blockTable.removeTrain(trainId)
+		if (blocks != null) pathInfoStore.remove(trainId)
 
-		val blocks: List<DynamicTrackBlock> = trainToBlocks[trainId] ?: return emptyList()
+		// Issue #1103 review: whole-route teardown releases the switch claims too. A switch claim
+		// can exist without a block entry -- exactly the stale shape -- so the wholesale release
+		// runs unconditionally, and no train leaves this method with stale ownership anywhere in
+		// the registry.
+		switchTable.unregisterSwitches(trainId)
 
-		// Remove all blocks from mappings (regardless of state)
-		blocks.forEach { block ->
-			blockToTrain.remove(block)
-			blockRegisteredAt.remove(block)
-		}
-
-		// Remove train entry and PathInfo
-		trainToBlocks.remove(trainId)
-		trainToPathInfo.remove(trainId)
-
-		// Issue #1103 review: whole-route teardown releases the switch claims too, so no train
-		// leaves this method with stale ownership anywhere in the registry.
-		unregisterSwitches(trainId)
-
+		if (blocks == null) return emptyList()
 		logger.debug {
 			"unregister: Released ${blocks.size} blocks for '$trainId'"
 		}
 
-		return blocks.toList()
+		return blocks
 	}
 
 	/**
 	 * Unregister a single block for a train.
 	 *
-	 * Removes the block from registry mappings if it is FREE (no occupant).
-	 * This is called automatically when a train's Tail leaves a block, ensuring
-	 * blocks are cleaned up as soon as they become available for subsequent trains.
-	 *
-	 * ## Preconditions
-	 *
-	 * - Block must be FREE (no occupant, state == FREE)
-	 * - Block must be registered to the given train
+	 * Removes the block from registry mappings if it is FREE (no occupant, state FREE) and owned by
+	 * [trainId]. This is called automatically when a train's Tail leaves a block, ensuring blocks are
+	 * cleaned up as soon as they become available for subsequent trains.
 	 *
 	 * ## State Changes
 	 *
 	 * If block is FREE and owned by trainId:
-	 * - Removes block from trainToBlocks[trainId]
-	 * - Removes blockToTrain[block] and the block's registration timestamp
-	 * - If this was the last block, removes trainToBlocks[trainId] (but keeps trainToPathInfo[trainId])
+	 * - Removes the block, its owner and its registration timestamp; the train's entry goes with its
+	 *   last block, but its PathInfo stays
 	 * - Releases every switch claim at the block's [DynamicTrackBlock.ends] that is stale afterwards
 	 *   ([isStaleSwitchOwnership]: a plain claim whose owner holds no block bounded by the switch any
 	 *   more) through [unregisterSwitch]. This makes [unregisterBlock] the funnel for per-block
@@ -463,28 +324,14 @@ class PathReservationRegistry(
 	 *
 	 * ## PathInfo Lifecycle (Issue #301 Fix)
 	 *
-	 * PathInfo represents the train's **intended path** (where it's going) and is semantically
-	 * separate from the train's **current reservations** (which blocks it owns). A train needs
-	 * PathInfo for navigation queries even after all blocks are unregistered (e.g., when the
-	 * tail has cleared all blocks but the front is requesting the next path segment).
-	 *
-	 * PathInfo is only deleted in:
-	 * - `releaseTrainReservations()` - when train completes its journey
-	 * - `unregister()` - explicit full unregistration
-	 * - `clear()` - clear all registrations
+	 * PathInfo represents the train's **intended path** and is separate from its **current
+	 * reservations**: a train needs it for navigation even after all its blocks are unregistered.
+	 * PathInfo is only deleted by `releaseTrainReservations()`, [unregister] and [clear].
 	 *
 	 * This method never shortens the PathInfo. A caller that releases the un-travelled tail of a
 	 * route in front of a train must call [trimPathInfoToHeldBlocks] afterwards (Issue #1063,
 	 * #1067); otherwise the PathInfo keeps describing the released track and [isPathExtendedBeyond]
 	 * stays `true`.
-	 *
-	 * ## Use Case
-	 *
-	 * Called by Train's Tail process after calling block.leave():
-	 * ```kotlin
-	 * current.leave(this@Train)
-	 * env.unregisterBlock(trainId, current)
-	 * ```
 	 *
 	 * @param trainId The train identifier
 	 * @param block The block to unregister
@@ -494,43 +341,7 @@ class PathReservationRegistry(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean {
-		// Validate block is owned by this train
-		val owner = blockToTrain[block]
-		if (owner != trainId) {
-			logger.debug {
-				"unregisterBlock: Block $block not owned by '$trainId' (owner='$owner')"
-			}
-			return false
-		}
-
-		// Only unregister if block is FREE
-		if (block.occupant != null || block.getState() != TrackFacility.State.FREE) {
-			logger.debug {
-				"unregisterBlock: Block $block still occupied (occupant=${block.occupant}, " +
-					"state=${block.getState()})"
-			}
-			return false
-		}
-
-		// Remove from mappings
-		blockToTrain.remove(block)
-		blockRegisteredAt.remove(block)
-		trainToBlocks[trainId]?.remove(block)
-
-		val remainingBlocks = trainToBlocks[trainId]?.size ?: 0
-		logger.debug {
-			"unregisterBlock: Released block $block for '$trainId', $remainingBlocks blocks remaining"
-		}
-
-		// If no blocks remain, remove train entry from trainToBlocks
-		// BUT keep PathInfo for navigation queries (Issue #301 - deadlock fix)
-		if (trainToBlocks[trainId]?.isEmpty() == true) {
-			trainToBlocks.remove(trainId)
-			logger.debug {
-				"unregisterBlock: All blocks released for '$trainId', " +
-					"removed from trainToBlocks (PathInfo retained for navigation)"
-			}
-		}
+		if (!blockTable.release(trainId, block)) return false
 
 		// Issue #1103: the block is gone, so a plain claim at its ends that no held block protects
 		// any more is stale now; release it here, where every per-block release passes, rather than
@@ -550,67 +361,35 @@ class PathReservationRegistry(
 	 *
 	 * This is the mechanism that makes the SI-5 guard in `DynamicRailSwitch.setUpPath` livable
 	 * (Issue #1065): without it, a train that has passed a switch keeps it locked until its FULL
-	 * journey completes (the whole-route `unregister` + `unregisterSwitches` pair's unconditional
-	 * unlock), and the next train needing the other position would be refused forever instead of
-	 * merely waiting -- confirmed on EVERY repetition of the vyhybna shunting loop.
-	 * [unregisterBlock] runs it for the freed block's ends; `DefaultPathReservationService` runs it
-	 * for a candidate's switches before taking them (reservePath Step 2e.5, Issue #1076).
+	 * journey completes, and the next train needing the other position would be refused forever
+	 * instead of merely waiting. [unregisterBlock] runs it for the freed block's ends;
+	 * `DefaultPathReservationService` runs it for a candidate's switches before taking them
+	 * (reservePath Step 2e.5, Issue #1076).
 	 *
 	 * Listener containment: `unregisterSwitch` -> `DynamicRailSwitch.unlock()` invokes property
-	 * listeners synchronously. A throwing listener is contained by the cell itself
-	 * (`DynamicRailSwitch.notifyListeners`: logged, the remaining listeners and the lock state
-	 * change still complete); the try/catch here is defense-in-depth, so the caller's own work
-	 * (block release, event emission, reservePath) also survives a throw. Both ownership maps stay
-	 * consistent -- [unregisterSwitch] removes the map entries only after `unlock()`.
+	 * listeners synchronously. A throwing listener is contained by the cell itself; the try/catch in
+	 * [SwitchOwnershipTable.reclaimStaleSwitchOwnership] is defense-in-depth, so the caller's own work
+	 * also survives a throw. Both ownership maps stay consistent.
 	 *
 	 * @return the owner whose stale claim was released, or `null` when nothing was released or the
 	 *   release failed and was contained
 	 * @since Issue #1065 (moved here from the service, Issue #1103)
 	 */
-	fun reclaimStaleSwitchOwnership(switch: DynamicRailSwitch): String? {
-		val switchName = switch.staticRef.getName()
-		val claim = getSwitchClaim(switch)
-		if (claim == null || !isStaleSwitchOwnership(switch)) return null
-		val owner = claim.trainId
-		try {
-			unregisterSwitch(owner, switch)
-		} catch (e: Exception) {
-			logger.warn(e) {
-				"reclaimStaleSwitchOwnership: Failed to release stale ownership of switch $switchName " +
-					"held by '$owner' -- the claim stays in the ownership maps and the switch stays " +
-					"unlocked; a later reclaim cleans it"
-			}
-			return null
-		}
-		logger.info {
-			"reclaimStaleSwitchOwnership: Released stale ownership of switch $switchName held by " +
-				"'$owner' -- the owner holds no block bounded by it"
-		}
-		return owner
-	}
+	fun reclaimStaleSwitchOwnership(switch: DynamicRailSwitch): String? = switchTable.reclaimStaleSwitchOwnership(switch)
 
-	/**
-	 * Get the train ID that owns a block.
-	 *
-	 * @param block The block to query
-	 * @return Train ID if block is registered, null otherwise
-	 */
-	fun getOwner(block: DynamicTrackBlock): String? = blockToTrain[block]
+	/** The train ID that owns [block], or `null` if no train has registered it. */
+	fun getOwner(block: DynamicTrackBlock): String? = blockTable.getOwner(block)
 
 	/**
 	 * The simulation time at which [block] was registered to its current owner, or `null` when no
 	 * train holds it (Issue #975). A read-only fact -- see the class KDoc; the registry never
 	 * expires a reservation by it. It has no production reader yet; only tests call it.
 	 */
-	fun getRegisteredAtSimTime(block: DynamicTrackBlock): Double? = blockRegisteredAt[block]
+	fun getRegisteredAtSimTime(block: DynamicTrackBlock): Double? = blockTable.getRegisteredAtSimTime(block)
 
 	/**
-	 * Check whether a block is available for a new reservation.
-	 *
-	 * A block is considered available when:
-	 * - Its dynamic state is [TrackFacility.State.FREE]
-	 * - It has no registry owner
-	 * - It has no physical occupant
+	 * Check whether a block is available for a new reservation: its dynamic state is
+	 * [TrackFacility.State.FREE], it has no registry owner and no physical occupant.
 	 *
 	 * This predicate is used by [createBlockAvailableCondition] to build kDisco
 	 * [Condition]s that wake a waiting process as soon as a block is released.
@@ -619,10 +398,7 @@ class PathReservationRegistry(
 	 * @return true if the block can be reserved by another train
 	 * @since Issue #582 (Goal 1 SP3)
 	 */
-	fun isBlockAvailable(block: DynamicTrackBlock): Boolean =
-		block.getState() == TrackFacility.State.FREE &&
-			blockToTrain[block] == null &&
-			block.occupant == null
+	fun isBlockAvailable(block: DynamicTrackBlock): Boolean = blockTable.isBlockAvailable(block)
 
 	/**
 	 * Create a kDisco [Condition] that becomes true when [block] is released.
@@ -651,64 +427,30 @@ class PathReservationRegistry(
 	 */
 	fun getOccupant(block: DynamicTrackBlock): TrackOccupant? = block.occupant
 
-	/**
-	 * Get the train ID of the current physical occupant of a block.
-	 *
-	 * @param block The block to query
-	 * @return Train ID if block is currently occupied, null otherwise
-	 * @since Issue #581 (Goal 1 SP2)
-	 */
+	/** The train ID of [block]'s current physical occupant, or `null`. @since Issue #581 (Goal 1 SP2) */
 	fun getOccupantName(block: DynamicTrackBlock): String? = block.occupant?.name
 
-	/**
-	 * Check whether a block is currently physically occupied.
-	 *
-	 * @param block The block to check
-	 * @return true if a train is currently on the block, false otherwise
-	 * @since Issue #581 (Goal 1 SP2)
-	 */
+	/** Whether a train is currently physically on [block]. @since Issue #581 (Goal 1 SP2) */
 	fun isOccupied(block: DynamicTrackBlock): Boolean = block.occupant != null
 
-	/**
-	 * Get all blocks currently physically occupied by a train.
-	 *
-	 * @param trainId The train identifier
-	 * @return List of blocks currently occupied by this train (empty if none)
-	 * @since Issue #581 (Goal 1 SP2)
-	 */
-	fun getOccupiedBlocks(trainId: String): List<DynamicTrackBlock> =
-		trainToBlocks[trainId]?.filter { it.occupant?.name == trainId } ?: emptyList()
+	/** The held blocks [trainId] currently physically occupies (empty if none). @since Issue #581 (Goal 1 SP2) */
+	fun getOccupiedBlocks(trainId: String): List<DynamicTrackBlock> = blockTable.getOccupiedBlocks(trainId)
 
 	/**
 	 * Register switches as reserved by a train (Tier 2).
 	 *
-	 * This creates bidirectional mappings for all switches in the list and locks them.
-	 * If the train already has reserved switches, the new switches are added to the existing list.
-	 *
-	 * ## Preconditions
-	 *
-	 * - No switch in the list may be already owned by a different train — violating this
-	 *   throws (see below) instead of silently overwriting `switchToTrain` (Issue #1076)
-	 * - Caller is responsible for validating switches are not locked by another train
-	 *
-	 * ## State Changes
-	 *
-	 * For each switch:
-	 * - Adds switch to trainToSwitches[trainId]
-	 * - Sets switchToTrain[switch] to a plain [SwitchClaim] for trainId (a flank claim the train
-	 *   already holds stays a flank claim)
-	 * - Locks the switch
+	 * Locks every switch newly registered to the train and records a plain [SwitchClaim] for it (a
+	 * flank claim the train already holds stays a flank claim). If the train already has reserved
+	 * switches, the new switches are added to the existing list.
 	 *
 	 * ## Foreign ownership is rejected atomically (Issue #1076)
 	 *
-	 * A plain overwrite of `switchToTrain[switch]` used to silently steal the entry from
-	 * its current owner while that owner's `trainToSwitches` list still contained the
-	 * switch — the two maps then disagreed, and the OLD owner's release path could later
-	 * unlock a switch the NEW owner was actively using. All switches are therefore
-	 * pre-checked BEFORE any mutation: if ANY switch is registered to a different train,
-	 * an [IllegalStateException] is thrown and the registry is left completely untouched.
-	 * Callers must release stale foreign ownership first (e.g. via [unregisterSwitch]) or
-	 * refuse the route as transient contention.
+	 * A plain overwrite used to silently steal a switch from its current owner while that owner's
+	 * switch list still contained it -- the old owner's release path could later unlock a switch the
+	 * new owner was actively using. All switches are therefore pre-checked BEFORE any mutation: if ANY
+	 * switch is registered to a different train, an [IllegalStateException] is thrown and the
+	 * registry is left completely untouched. Callers must release stale foreign ownership first (e.g.
+	 * via [unregisterSwitch]) or refuse the route as transient contention.
 	 *
 	 * @param trainId The train identifier
 	 * @param switches List of switches to register as reserved
@@ -720,48 +462,14 @@ class PathReservationRegistry(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
 	) {
-		registerClaims(trainId, switches, isFlank = false)
-	}
-
-	/**
-	 * [registerSwitches] with the claim's purpose. A plain registration over the train's own flank
-	 * claim keeps it a flank claim -- see [switchToTrain].
-	 */
-	private fun registerClaims(
-		trainId: String,
-		switches: List<DynamicRailSwitch>,
-		isFlank: Boolean
-	) {
-		switches.forEach { switch ->
-			check(!isOwnedByOtherTrain(switch, trainId)) {
-				"registerSwitches: Switch ${switch.staticRef.getName()} is already registered to " +
-					"'${getSwitchOwner(switch)}' and cannot be registered to '$trainId' (Issue #1076); " +
-					"nothing was registered"
-			}
-		}
-		val switchList = trainToSwitches.getOrPut(trainId) { mutableListOf() }
-		switches.forEach { switch ->
-			if (switch !in switchList) {
-				switchList.add(switch)
-				// Lock switch when first registered to this train
-				switch.lock()
-				logger.info {
-					"registerSwitches: Locked switch ${switch.hashCode()} for '$trainId', locked=${switch.locked}"
-				}
-			}
-			switchToTrain[switch] = SwitchClaim(trainId, isFlank || switchToTrain[switch]?.isFlank == true)
-		}
-
-		logger.info {
-			"registerSwitches: Registered ${switches.size} switches for '$trainId'"
-		}
+		switchTable.registerSwitches(trainId, switches)
 	}
 
 	/**
 	 * Register switches as FLANK protection for a train (Issue #1076 review).
 	 *
 	 * [registerSwitches] (same atomic foreign-owner rejection), with flank claims -- see
-	 * [switchToTrain] for why.
+	 * [SwitchOwnershipTable] for why. An empty list registers nothing.
 	 *
 	 * @throws IllegalStateException if any switch is already registered to a different
 	 *   train; no registry state is mutated in that case
@@ -771,16 +479,15 @@ class PathReservationRegistry(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
 	) {
-		if (switches.isEmpty()) return
-		registerClaims(trainId, switches, isFlank = true)
+		switchTable.registerFlankSwitches(trainId, switches)
 	}
 
 	/**
-	 * Whether [switch] is currently registered as flank protection -- see [switchToTrain].
+	 * Whether [switch] is currently registered as flank protection -- see [SwitchOwnershipTable].
 	 *
 	 * @since Issue #1076
 	 */
-	fun isFlankProtected(switch: DynamicRailSwitch): Boolean = switchToTrain[switch]?.isFlank == true
+	fun isFlankProtected(switch: DynamicRailSwitch): Boolean = switchTable.isFlankProtected(switch)
 
 	/**
 	 * Whether [switch] is registered to a train OTHER than [trainId] -- the ownership a
@@ -791,10 +498,7 @@ class PathReservationRegistry(
 	fun isOwnedByOtherTrain(
 		switch: DynamicRailSwitch,
 		trainId: String
-	): Boolean {
-		val owner = getSwitchOwner(switch)
-		return owner != null && owner != trainId
-	}
+	): Boolean = switchTable.isOwnedByOtherTrain(switch, trainId)
 
 	/**
 	 * Whether [switch]'s ownership protects no live route any more, so it may be released.
@@ -808,49 +512,17 @@ class PathReservationRegistry(
 	 *
 	 * @since Issue #1076 (the #1065 reclamation predicate, moved here with its flank exception)
 	 */
-	fun isStaleSwitchOwnership(switch: DynamicRailSwitch): Boolean {
-		val claim = switchToTrain[switch] ?: return false
-		if (claim.isFlank) return false
-		return trainToBlocks[claim.trainId]?.none { switch in it.ends() } ?: true
-	}
+	fun isStaleSwitchOwnership(switch: DynamicRailSwitch): Boolean = switchTable.isStaleSwitchOwnership(switch)
 
 	/**
-	 * Unregister all switches reserved by a train (Tier 2).
-	 *
-	 * Removes all bidirectional mappings for the given train's switches and unlocks them.
-	 * This is used for simulation cleanup and forced release.
-	 *
-	 * ## State Changes
-	 *
-	 * - Unlocks all switches
-	 * - Removes trainToSwitches[trainId]
-	 * - Removes switchToTrain[switch] for all switches owned by this train
+	 * Unregister all switches reserved by a train (Tier 2): unlocks them and removes both ownership
+	 * mappings. Used for simulation cleanup and forced release.
 	 *
 	 * @param trainId The train identifier
 	 * @return List of switches that were released (empty if train had no switches)
 	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
 	 */
-	fun unregisterSwitches(trainId: String): List<DynamicRailSwitch> {
-		val switches: List<DynamicRailSwitch> = trainToSwitches[trainId] ?: return emptyList()
-
-		// Unlock and remove all switches from mappings
-		switches.forEach { switch ->
-			switch.unlock()
-			switchToTrain.remove(switch)
-			logger.info {
-				"unregisterSwitches: Unlocked switch ${switch.hashCode()} for '$trainId', locked=${switch.locked}"
-			}
-		}
-
-		// Remove train entry
-		trainToSwitches.remove(trainId)
-
-		logger.info {
-			"unregisterSwitches: Released ${switches.size} switches for '$trainId'"
-		}
-
-		return switches.toList()
-	}
+	fun unregisterSwitches(trainId: String): List<DynamicRailSwitch> = switchTable.unregisterSwitches(trainId)
 
 	/**
 	 * Unregister a SINGLE switch reserved by a train (Tier 2).
@@ -859,13 +531,8 @@ class PathReservationRegistry(
 	 * rejected candidate path whose switches were already registered (e.g. a signal-config
 	 * failure after [registerSwitches] succeeded, Issue #742 SP0.11 review follow-up).
 	 * Unlike [unregisterSwitches] (which removes ALL of the train's switches), this only
-	 * releases the one switch — leaving the train's earlier-hop switches intact.
-	 *
-	 * ## State Changes
-	 *
-	 * - Unlocks the switch (if owned by [trainId])
-	 * - Removes `switchToTrain[switch]`
-	 * - Removes the switch from `trainToSwitches[trainId]` (collapsing the list if empty)
+	 * releases the one switch — leaving the train's earlier-hop switches intact. It unlocks the
+	 * switch first and then removes both ownership mappings.
 	 *
 	 * @param trainId The train identifier
 	 * @param switch The switch to release
@@ -876,83 +543,39 @@ class PathReservationRegistry(
 	fun unregisterSwitch(
 		trainId: String,
 		switch: DynamicRailSwitch
-	): Boolean {
-		if (getSwitchOwner(switch) != trainId) {
-			logger.debug {
-				"unregisterSwitch: Switch ${switch.hashCode()} not owned by '$trainId' " +
-					"(owner='${getSwitchOwner(switch)}')"
-			}
-			return false
-		}
-		switch.unlock()
-		switchToTrain.remove(switch)
-		trainToSwitches[trainId]?.remove(switch)
-		if (trainToSwitches[trainId]?.isEmpty() == true) {
-			trainToSwitches.remove(trainId)
-		}
-		logger.debug {
-			"unregisterSwitch: Released switch ${switch.hashCode()} for '$trainId'"
-		}
-		return true
-	}
+	): Boolean = switchTable.unregisterSwitch(trainId, switch)
 
-	/**
-	 * Get all switches registered to a train (Tier 2).
-	 *
-	 * @param trainId The train identifier
-	 * @return List of switches owned by the train (empty if none)
-	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
-	 */
-	fun getSwitches(trainId: String): List<DynamicRailSwitch> = trainToSwitches[trainId]?.toList() ?: emptyList()
+	/** All switches registered to [trainId] (empty if none). @since Issue #291 - Tier 2 */
+	fun getSwitches(trainId: String): List<DynamicRailSwitch> = switchTable.getSwitches(trainId)
 
-	/**
-	 * Get the train ID that owns a switch (Tier 2).
-	 *
-	 * @param switch The switch to query
-	 * @return Train ID if switch is registered, null otherwise
-	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
-	 */
-	fun getSwitchOwner(switch: DynamicRailSwitch): String? = switchToTrain[switch]?.trainId
+	/** The train ID that owns [switch], or `null`. @since Issue #291 - Tier 2 */
+	fun getSwitchOwner(switch: DynamicRailSwitch): String? = switchTable.getSwitchOwner(switch)
 
 	/**
 	 * The [SwitchClaim] on [switch] -- its owner and purpose in one record -- or `null` when no
 	 * train owns it (Issue #1103).
 	 */
-	internal fun getSwitchClaim(switch: DynamicRailSwitch): SwitchClaim? = switchToTrain[switch]
+	internal fun getSwitchClaim(switch: DynamicRailSwitch): SwitchClaim? = switchTable.getSwitchClaim(switch)
 
-	/**
-	 * Get all blocks reserved by a train.
-	 *
-	 * @param trainId The train identifier
-	 * @return List of blocks reserved by this train (empty if no reservations)
-	 */
-	fun getBlocks(trainId: String): List<DynamicTrackBlock> = trainToBlocks[trainId]?.toList() ?: emptyList()
+	/** All blocks reserved by [trainId] (empty if no reservations). */
+	fun getBlocks(trainId: String): List<DynamicTrackBlock> = blockTable.getBlocks(trainId)
 
-	/**
-	 * Check if a block is registered to any train.
-	 *
-	 * @param block The block to check
-	 * @return true if block is registered, false otherwise
-	 */
-	fun isRegistered(block: DynamicTrackBlock): Boolean = blockToTrain.containsKey(block)
+	/** Whether [block] is registered to any train. */
+	fun isRegistered(block: DynamicTrackBlock): Boolean = blockTable.isRegistered(block)
 
 	/**
 	 * Register PathInfo for a train.
 	 *
-	 * ## PathInfo Extension (Issue #296 Phase 8)
-	 *
-	 * Instead of overwriting the old PathInfo, this method **extends** it by merging:
-	 * - Appends new path elements to old path (preserves Tail navigation)
-	 * - Updates target to new target (allows Front to progress)
-	 * - Merges entry directions (new overwrites old for conflicts)
-	 *
-	 * This fixes the "Train Tail Double-Leave Bug" where overwriting PathInfo caused
-	 * the Tail to lose track of its position, leading to wrong-direction navigation.
+	 * Instead of overwriting the old PathInfo, this method **extends** it (Issue #296 Phase 8):
+	 * appends the new path elements to the old path (preserving Tail navigation), updates the target
+	 * (letting the Front progress) and merges the entry directions (new overwrites old). The merge
+	 * never throws; a rejected merge is a fail-safe abort that keeps the stored PathInfo -- see
+	 * [PathInfoMerger.merge] for the four abort conditions and why they must not throw.
 	 *
 	 * @param trainId The train identifier
 	 * @param newPathInfo Complete path metadata to register or merge
 	 * @return [MergeOutcome.Merged] on a genuine merge (or first registration); [MergeOutcome.Aborted]
-	 *   when [mergePathInfo]'s fail-safe abort fired and the stored `PathInfo` is unchanged.
+	 *   when the merge's fail-safe abort fired and the stored `PathInfo` is unchanged.
 	 * @since Issue #295/#296 Phase 3
 	 * @since Issue #296 Phase 8 (PathInfo extension fix)
 	 * @since Issue #904 (return type widened from `Unit` to [MergeOutcome])
@@ -960,385 +583,14 @@ class PathReservationRegistry(
 	fun registerPathInfo(
 		trainId: String,
 		newPathInfo: PathInfo
-	): MergeOutcome {
-		val oldPathInfo = trainToPathInfo[trainId]
-
-		if (oldPathInfo == null) {
-			// First registration, just store it
-			logger.debug {
-				"registerPathInfo: first registration for '$trainId', storing PathInfo " +
-					"(start=${newPathInfo.start}, target=${newPathInfo.target}, " +
-					"path length=${newPathInfo.reservedPath.size})"
-			}
-			trainToPathInfo[trainId] = newPathInfo
-			return MergeOutcome.Merged(newPathInfo)
-		}
-
-		// Merge old and new PathInfo (pass trainId for switch cleanup)
-		val outcome = mergePathInfo(trainId, oldPathInfo, newPathInfo)
-		val mergedPathInfo = outcome.pathInfo
-		trainToPathInfo[trainId] = mergedPathInfo
-
-		logger.debug {
-			"registerPathInfo: merged PathInfo for '$trainId' " +
-				"(old: ${oldPathInfo.start}→${oldPathInfo.target}, " +
-				"new: ${newPathInfo.start}→${newPathInfo.target}, " +
-				"merged: ${mergedPathInfo.start}→${mergedPathInfo.target}, " +
-				"path length: ${oldPathInfo.reservedPath.size} + ${newPathInfo.reservedPath.size} " +
-				"= ${mergedPathInfo.reservedPath.size})"
-		}
-
-		// Log merged PathInfo (debug level for normal operation)
-		logger.debug {
-			"registerPathInfo: Created/merged PathInfo for '$trainId': " +
-				"start=${mergedPathInfo.start}, target=${mergedPathInfo.target}, " +
-				"path length=${mergedPathInfo.reservedPath.size}"
-		}
-		return outcome
-	}
+	): MergeOutcome = pathInfoStore.register(trainId, newPathInfo)
 
 	/**
-	 * Rejects a new route that reverses the train over the section it has just travelled.
+	 * Check if path extends beyond the given separator: the train has a PathInfo, the separator is on
+	 * it, and at least one element follows the separator's last occurrence.
 	 *
-	 * A train arrives at `old.target` over the last [TrackSection] of the stored route and must
-	 * leave it over a *different* one. When the new route's first section is that same section,
-	 * the merged path doubles back on itself: the train would have to reverse direction mid-route,
-	 * which is not a route extension at all but a distinct shunting movement the interlocking
-	 * never authorised.
-	 *
-	 * **Why the occurrence counter in [addElementWithCycleDetection] cannot catch this.** That
-	 * guard counts how often a separator appears and only rejects the 3rd occurrence, treating a
-	 * 2nd as a legitimate circular route. Both a genuine loop and a reversal revisit separators
-	 * twice, so counting cannot tell them apart. Direction can: a train continuing around a loop
-	 * leaves a separator by a different section than it arrived on, a reversing train by the same
-	 * one.
-	 *
-	 * **The measured deadlock (Issue #944).** In `exampleGui shuntingLoopAI 333`, Train #4
-	 * (running B → A) was granted `zB → doA2`, then `doA2 → zB`. Each of `doB2`, `vB` and `zB`
-	 * reached only two occurrences, so the merge was accepted and logged as a "LEGITIMATE
-	 * CIRCULAR ROUTE", storing an out-and-back path that retraces section `k2` in the opposite
-	 * direction. Nothing can follow such a path:
-	 * [DefaultTrainNavigationService.buildPathWithDirection] walks the reservation, revisits a
-	 * `(separator, previous)` pair, finds the cycle exit rear-facing and returns `null` — surfaced
-	 * as [PathResult.OwnershipConflict], on which the train waits while holding its blocks. That
-	 * wait is now bounded (Issue #943: one WARN after
-	 * [cz.vutbr.fit.interlockSim.sim.Train.OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS], then
-	 * `errorStop`), so the same defect would now be named in the log instead of stalling silently —
-	 * but it was unbounded when this was measured. Train #4 stalled at `zB` holding the blocks
-	 * Train #5 needed to leave `doB1`, and the
-	 * layout deadlocked: the dispatcher observed "no reservable sections ahead" for both trains
-	 * and correctly no-opped for the rest of the run.
-	 *
-	 * Path elements are per-block [DynamicTrackBlock] singletons, so a retraced section is the
-	 * same instance on both sides of the seam and `==` compares exactly (verified against
-	 * `vyhybna.xml`: every forward/backward separator pair yields identical element identity).
-	 *
-	 * **Interaction with commanded reversal.** `Train.reverseDirection()` (GitHub #62) is a
-	 * distinct operation — the train must be at a standstill and a delay models the driver
-	 * changing cab — and it has no production call site today, so it never reaches this guard.
-	 * Should it gain one, the train's stored authority must be **cleared** at that point and a
-	 * fresh route requested from its current position, rather than this guard being relaxed: a
-	 * reversal is a new movement requiring its own clearance, never an extension of the authority
-	 * granted for the outbound journey. Retaining the outbound path across a reversal would make
-	 * the first post-reversal route look exactly like the defect this guard exists to refuse.
-	 *
-	 * @return the abort reason, or `null` when the new route continues the stored one forward.
-	 */
-	private fun reversalAbortReason(
-		trainId: String,
-		old: PathInfo,
-		new: PathInfo
-	): String? {
-		val arrivedOver = old.reservedPath.filterIsInstance<TrackSection>().lastOrNull() ?: return null
-		val departsOver = new.reservedPath.filterIsInstance<TrackSection>().firstOrNull() ?: return null
-		if (arrivedOver != departsOver) return null
-		return "merge for train $trainId would reverse it at ${old.target} back over $arrivedOver, " +
-			"the section it just travelled"
-	}
-
-	private fun addElementWithCycleDetection(
-		element: cz.vutbr.fit.interlockSim.objects.core.PathElement,
-		mergedPath: ArrayPath,
-		trainId: String,
-		old: PathInfo,
-		new: PathInfo
-	): String? {
-		if (element is cz.vutbr.fit.interlockSim.objects.core.PathSeparator &&
-			mergedPath.any { it == element }
-		) {
-			val occurrenceCount = mergedPath.count { it == element }
-			if (occurrenceCount >= 2) {
-				// 3rd occurrence — infinite loop detected (Issue #316)
-				val reason =
-					"merge for train $trainId would create cycle (separator $element at 3+ occurrences)"
-				logger.warn {
-					"mergePathInfo: $reason. Keeping existing valid PathInfo unchanged. " +
-						"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-				}
-				return reason
-			}
-			// 2nd occurrence — legitimate circular route
-			logger.info {
-				"mergePathInfo: LEGITIMATE CIRCULAR ROUTE - separator $element appears ${occurrenceCount + 1}x " +
-					"in path (train '$trainId' progressing through circular shunting loop). " +
-					"Allowing (old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-			}
-		}
-		mergedPath.add(element)
-		return null
-	}
-
-	/**
-	 * Merge two PathInfo instances by extending old path with new path.
-	 *
-	 * ## This method NEVER throws (Issue #834)
-	 *
-	 * Every rejection is a **fail-safe abort**: log a WARN and `return old` unchanged. There are
-	 * four of them — non-contiguous start, duplicated new start, the direction reversal guard
-	 * ([reversalAbortReason], Issue #944), and the 3rd-occurrence cycle guard — and they all
-	 * behave identically from the caller's point of view.
-	 *
-	 * This is not stylistic. `registerPathInfo` is called from
-	 * [DefaultPathReservationService.reservePath] Step 2i and from its already-owned early return,
-	 * in both cases **after** blocks are reserved, switches locked and a START signal cleared, on
-	 * the kDisco simulation thread, with no rollback and nothing catching a throw
-	 * (`DispatchDecisionApplier.onControlStep` catches only `IllegalArgumentException`). An
-	 * exception here therefore did not fail a run loudly — it killed the simulation thread while
-	 * the run still wrote a well-formed result file, i.e. it fabricated a measurement.
-	 *
-	 * **Transactional completion at abort time (Issue #904).** An abort here no longer leaves an
-	 * orphaned RESERVED tail: [DefaultPathReservationService.reservePath] inspects the returned
-	 * [MergeOutcome] at both of its call sites (Step 2i, and the already-owned early return) and,
-	 * on [MergeOutcome.Aborted], releases exactly what *that* `reservePath` invocation acquired
-	 * for the rejected candidate — blocks, switch locks, and the signal it cleared, driven back
-	 * to STOP (G1) — using the same scoped-rollback helpers Step 2g's own signal-failure rollback
-	 * already uses. This applies the PR #901 standard (no exit from `reservePath` leaves resources
-	 * unreleased without rollback) to the one exit that previously didn't meet it, and it holds in
-	 * every host — `:fast-sim` and bare-`:core` included — because it no longer depends on
-	 * anything outside this call.
-	 *
-	 * **`OrphanReservationSweeper`'s role is narrower now, not gone.** Before this fix, the sweeper
-	 * (in `dispatcher-agent`, wired only in `desktop-ui`/`dispatcher-agent` via `ExampleRegistry`)
-	 * was the *only* mechanism that ever reclaimed a merge-abort's orphaned tail — and only in the
-	 * hosts that wire it; `:fast-sim` and bare-`:core` never reclaimed it at all. The sweeper still
-	 * has an independent, legitimate job: reclaiming a route held un-travelled past its staleness
-	 * threshold and phantom-owner routes (a train that exited without releasing). It is simply no
-	 * longer relied on for *this* residue, because there is none left to reclaim.
-	 *
-	 * ## Algorithm
-	 *
-	 * 0. Abort unless the new path continues the stored one (new.start == old.target)
-	 * 1. Abort unless new.start appears exactly once in new.reservedPath
-	 * 1b. Abort if the new route reverses the train back over the section it just travelled
-	 * 2. Create new ArrayPath and add all elements from old path
-	 * 3. Find overlap point (old.target == new.start)
-	 * 4. Add elements from new path, skipping first occurrence if it overlaps
-	 * 5. Distinguish legitimate circular routes from infinite loop bugs
-	 * 6. Merge entry directions (new overwrites old for same blocks)
-	 *
-	 * ## Example
-	 *
-	 * ```
-	 * old: B → zB → vB → doB1  (Tail at B, Front at doB1)
-	 * new: doB1 → k1 → A       (Front reserves forward to A)
-	 * merged: B → zB → vB → doB1 → k1 → A  (complete path for both Front and Tail)
-	 * ```
-	 *
-	 * ## Preconditions (each one aborts the merge rather than throwing)
-	 *
-	 * - `new.start == old.target` — the new path must CONTINUE the stored one. A path that starts
-	 *   elsewhere is not merged: concatenating it yields two adjacent `PathSeparator`s, which every
-	 *   navigation reader handles safely (`ArrayPath.getNext` returns `deque[i+2]` only when it
-	 *   `is TrackSection`, so it returns `null`; `DefaultTrainNavigationService`'s
-	 *   `determineNextFromPathInfo` hits its `is PathSeparator -> null` arm) — so there is no
-	 *   teleport and no weakening of the `allowingSignal` gate, navigation simply truncates at
-	 *   `old.target`. The damage is the orphaned RESERVED tail described above, not a safety
-	 *   violation. Note this is a *merge* precondition only: it is unrelated to
-	 *   `DefaultPathReservationService.rejectNonContiguousStart`, which tests the route origin
-	 *   against the train's physical block footprint and must stay permissive enough for entry,
-	 *   bidirectional reversal (PR #356) and post-partial-release re-reservation.
-	 * - `new.start` appears exactly ONCE in `new.reservedPath` (at the beginning)
-	 * - Circular routes are ALLOWED if train completes one full loop back to original start
-	 * - Repeated cycles (>1 loop) are REJECTED to prevent infinite loops
-	 *
-	 * ## Circular Route Handling
-	 *
-	 * **Shunting Loop Scenario (LEGITIMATE):**
-	 * - Train starts at A, travels A → B → C → A (one complete loop)
-	 * - old.start = A, new path returns to A
-	 * - This is ALLOWED: train completes circular shunting operation
-	 *
-	 * **Infinite Loop Bug (REJECTED):**
-	 * - Train oscillates: A → B → A → B → A (repeated back-and-forth)
-	 * - Separator would appear 3+ times in merged path
-	 * - The entire merge is ABORTED and the original `old` PathInfo is returned unchanged
-	 *   (Issue #316 fix: a truncated PathInfo ending mid-path is worse than keeping the valid original)
-	 *
-	 * ## Entry Direction Merging
-	 *
-	 * When old and new have the same block with different entry directions,
-	 * the NEW direction overwrites the old (most recent direction is used).
-	 *
-	 * ## Resource Safety
-	 *
-	 * `mergePathInfo()` itself is still a **pure data-structure operation** — it does not acquire
-	 * or release track blocks or switches. All resource locking happens in
-	 * `DefaultPathReservationService.reservePath()` via `registerAtomic()` and
-	 * `registerSwitches()`, which use their own tracking maps (`trainToBlocks` /
-	 * `trainToSwitches`), independent of PathInfo.
-	 *
-	 * **PathInfo / block divergence — resolved by the caller (Issue #904):** When this method
-	 * returns [MergeOutcome.Aborted], the train's `trainToBlocks` entry momentarily contains the
-	 * newly reserved blocks (step 2d in `reservePath()`) while `trainToPathInfo` still holds the
-	 * pre-merge value — but `reservePath` itself resolves that divergence before returning to its
-	 * own caller: it inspects the [MergeOutcome], sees the abort, and releases exactly those newly
-	 * reserved blocks (and any switches locked, and any signal cleared) for the rejected candidate.
-	 * The divergence therefore never outlives the `reservePath` call that created it — there is no
-	 * window in which `trainToBlocks` and `trainToPathInfo` disagree from any other caller's point
-	 * of view, and nothing is left for a later sweep to reclaim.
-	 *
-	 * @param trainId Owner of the PathInfo being merged (used in the abort WARNs)
-	 * @param old Previous PathInfo (Tail may still be navigating through this)
-	 * @param new New PathInfo (Front just reserved this)
-	 * @return [MergeOutcome.Merged] wrapping the merged PathInfo, or [MergeOutcome.Aborted]
-	 *         wrapping [old] unchanged if the merge was aborted: [new] does not start at
-	 *         `old.target`, `new.start` is duplicated inside [new], or the merge would create a
-	 *         third occurrence of a separator (cycle guard). Never throws.
-	 * @since Issue #296 Phase 8; never-throw abort semantics from Issue #834 (SP2c.11); return
-	 *   type widened from `PathInfo` to [MergeOutcome] by Issue #904.
-	 */
-	private fun mergePathInfo(
-		trainId: String,
-		old: PathInfo,
-		new: PathInfo
-	): MergeOutcome {
-		logger.trace {
-			"mergePathInfo: merging old path ${old.start}->${old.target} " +
-				"with new ${new.start}->${new.target} for '$trainId'"
-		}
-
-		// Step 0a (Issue #834): the new path must CONTINUE the stored one. Concatenating a path
-		// that starts somewhere else produces two adjacent separators; navigation truncates there
-		// safely, so the train never teleports, but everything past the seam becomes an orphaned
-		// RESERVED tail behind a cleared aspect the train will never reach. Abort fail-safe.
-		// Issue #904: the caller now releases exactly what it acquired for this attempt, so the
-		// tail is no longer orphaned -- it never gets a chance to persist.
-		val nonContiguousReason = nonContiguousMergeReason(trainId, old, new)
-		if (nonContiguousReason != null) {
-			logger.warn {
-				"mergePathInfo: aborting $nonContiguousReason. Keeping existing valid PathInfo unchanged. " +
-					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-			}
-			return MergeOutcome.Aborted(old, nonContiguousReason)
-		}
-
-		// Step 0b: new.start must occur exactly once in its own path (see "Preconditions" above).
-		// Until Issue #834 this threw IllegalStateException — from reservePath Step 2i, i.e. after
-		// blocks were reserved and a signal was already cleared, on the kDisco simulation thread,
-		// with nothing catching it. Abort the same fail-safe way instead; never throw from here.
-		val occurrences = new.reservedPath.count { it == new.start }
-		if (occurrences != 1) {
-			val reason =
-				"merge with duplicated new start for train $trainId — ${new.start} appears " +
-					"$occurrences times in the new path, expected exactly 1 at its beginning"
-			logger.warn {
-				"mergePathInfo: aborting $reason. Keeping existing valid PathInfo unchanged. " +
-					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-			}
-			return MergeOutcome.Aborted(old, reason)
-		}
-
-		// Step 0c: the new route must not send the train back over the section it just
-		// travelled (Issue #944). See [reversalAbortReason] for why occurrence counting alone
-		// cannot catch this.
-		val reversalReason = reversalAbortReason(trainId, old, new)
-		if (reversalReason != null) {
-			logger.warn {
-				"mergePathInfo: aborting $reversalReason. Keeping existing valid PathInfo unchanged. " +
-					"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-			}
-			return MergeOutcome.Aborted(old, reversalReason)
-		}
-
-		// Step 1: Create merged path starting from old path
-		val mergedPath = ArrayPath(context)
-
-		// Step 2: Add all elements from old path
-		old.reservedPath.forEach { mergedPath.add(it) }
-
-		// Step 3: Find overlap point (old.target == new.start). Always true past Step 0a; kept as an
-		// explicit predicate so the skip below reads on its own terms rather than on the guard's.
-		val skipFirst = (new.start == old.target)
-		var skipped = false
-
-		// Step 4: Add elements from new path (skip first separator if overlapping, detect cycles)
-		for (element in new.reservedPath) {
-			if (skipFirst && !skipped && element == new.start) {
-				skipped = true // Skip this occurrence (already in old path)
-				logger.trace {
-					"mergePathInfo: skipping overlap element $element (old.target == new.start)"
-				}
-			} else {
-				val cycleAbortReason = addElementWithCycleDetection(element, mergedPath, trainId, old, new)
-				if (cycleAbortReason != null) return MergeOutcome.Aborted(old, cycleAbortReason)
-			}
-		}
-
-		// Step 5: Merge entry directions (new overwrites old for conflicts)
-		val mergedDirections = old.entryDirections.toMutableMap()
-		mergedDirections.putAll(new.entryDirections)
-
-		logger.trace {
-			"mergePathInfo: merged ${old.reservedPath.size} + ${new.reservedPath.size} " +
-				"elements into ${mergedPath.size} elements " +
-				"(overlap: ${if (skipFirst) "yes" else "no"})"
-		}
-
-		return MergeOutcome.Merged(
-			PathInfo(
-				start = old.start, // Keep original start (where Tail might still be)
-				target = new.target,
-				reservedPath = mergedPath,
-				entryDirections = mergedDirections
-			)
-		)
-	}
-
-	/**
-	 * Check if path extends beyond the given separator.
-	 *
-	 * Prevents redundant reservation attempts by dispatcher while allowing path extensions.
-	 * This implements an idempotent check similar to the working tag's `isSetUpPath()` pattern.
-	 *
-	 * ## Usage Pattern
-	 *
-	 * ```kotlin
-	 * // Before attempting path extension from a semaphore:
-	 * if (registry.isPathExtendedBeyond(trainId, currentSemaphore)) {
-	 *     // Path already extends beyond this semaphore, skip reservation
-	 *     return true
-	 * }
-	 * // Otherwise, proceed with extension
-	 * pathReservationService.reservePathToAnyNextSemaphore(trainId, currentSemaphore)
-	 * ```
-	 *
-	 * ## Path Extension Check
-	 *
-	 * A path is considered extended beyond a separator if:
-	 * 1. PathInfo exists for this train
-	 * 2. The separator appears in the reserved path
-	 * 3. There is at least one more element AFTER the separator in the path
-	 *
-	 * This allows the dispatcher to extend paths that END at a semaphore but prevents
-	 * redundant reservations when the path already extends beyond it.
-	 *
-	 * ## Benefits
-	 *
-	 * - Prevents dispatcher from repeatedly calling reservePathToAnyNextSemaphore()
-	 * - Allows path extensions when train is approaching a semaphore
-	 * - Reduces cycle detection trigger rate
-	 * - Matches working tag's idempotent behavior
-	 * - Cheap O(n) check (linear scan of path elements)
+	 * Prevents redundant reservation attempts by the dispatcher while still allowing an extension of
+	 * a path that ENDS at a semaphore (the idempotent check of the working tag's `isSetUpPath()`).
 	 *
 	 * @param trainId Train identifier
 	 * @param separator Semaphore/separator to check
@@ -1347,49 +599,21 @@ class PathReservationRegistry(
 	 */
 	fun isPathExtendedBeyond(
 		trainId: String,
-		separator: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-	): Boolean {
-		val pathInfo = trainToPathInfo[trainId] ?: return false
-
-		// Find the separator in the path
-		val separatorIndex = pathInfo.reservedPath.indexOfLast { it == separator }
-		if (separatorIndex == -1) {
-			// Separator not in path
-			return false
-		}
-
-		// Path extends beyond if there are elements after the separator
-		val extendsBeyond = separatorIndex < pathInfo.reservedPath.size - 1
-
-		if (extendsBeyond) {
-			logger.debug {
-				"Path already extends beyond $separator for '$trainId' " +
-					"(${pathInfo.reservedPath.size} elements, separator at index $separatorIndex)"
-			}
-		}
-
-		return extendsBeyond
-	}
+		separator: DynamicPathSeparator
+	): Boolean = pathInfoStore.isPathExtendedBeyond(trainId, separator)
 
 	/**
-	 * Get PathInfo for a train.
-	 *
-	 * Retrieves complete path metadata including entry directions.
-	 * Used by TrainNavigationService to determine correct direction.
-	 *
-	 * @param trainId The train identifier
-	 * @return PathInfo if registered, null otherwise
-	 * @since Issue #295/#296 Phase 3
+	 * The PathInfo (path metadata with entry directions) of [trainId], or `null`; read by
+	 * TrainNavigationService to determine the correct direction. @since Issue #295/#296 Phase 3
 	 */
-	fun getPathInfo(trainId: String): PathInfo? = trainToPathInfo[trainId]
+	fun getPathInfo(trainId: String): PathInfo? = pathInfoStore.get(trainId)
 
 	/**
-	 * Read-only probe of [mergePathInfo]'s Step 0a precondition (Issue #1066): would [candidate]
+	 * Read-only probe of the merge's Step 0a precondition (Issue #1066): would [candidate]
 	 * CONTINUE the route [trainId] currently holds?
 	 *
 	 * Lets `DefaultPathReservationService.reservePath` refuse a divergent candidate BEFORE it
-	 * reserves blocks, throws switches or clears signals, instead of discovering the same
-	 * condition at Step 2i and rolling everything back. Changes no state.
+	 * reserves blocks, throws switches or clears signals. Changes no state.
 	 *
 	 * @return `null` when [candidate] continues the stored path, or when the train has no stored
 	 *   PathInfo yet (a first registration is always accepted); otherwise an English reason naming
@@ -1399,48 +623,16 @@ class PathReservationRegistry(
 	fun nonContinuingCandidateReason(
 		trainId: String,
 		candidate: PathInfo
-	): String? {
-		val old = trainToPathInfo[trainId] ?: return null
-		return nonContiguousMergeReason(trainId, old, candidate)
-	}
-
-	/** Step 0a's predicate and wording, shared by [mergePathInfo] and [nonContinuingCandidateReason]. */
-	private fun nonContiguousMergeReason(
-		trainId: String,
-		old: PathInfo,
-		new: PathInfo
-	): String? =
-		if (new.start != old.target) {
-			"non-contiguous merge for train $trainId — new path starts at ${new.start} but " +
-				"the stored path ends at ${old.target}"
-		} else {
-			null
-		}
+	): String? = pathInfoStore.nonContinuingCandidateReason(trainId, candidate)
 
 	/**
 	 * Restore a train's PathInfo to a previously snapshotted value, bypassing [registerPathInfo]'s
-	 * merge logic.
+	 * merge logic: a non-null snapshot replaces the entry (exact restore, not a merge), a `null`
+	 * snapshot removes it.
 	 *
-	 * ## Purpose: transaction rollback only
-	 *
-	 * `registerPathInfo` is merge-only by design (Issue #296 Phase 8), and the merge is NOT
-	 * invertible — it has cycle-guard abort semantics and entry-direction overwrites that make a
-	 * "subtract the last registration" operation ill-defined. A caller that must undo a registration
-	 * therefore snapshots the PathInfo via [getPathInfo] BEFORE attempting the mutation, and passes
-	 * that snapshot here on rollback:
-	 *
-	 * - Non-null snapshot → replaces the current entry with the snapshot object (exact restore,
-	 *   not a merge).
-	 * - Null snapshot → removes the entry entirely (the train had no PathInfo before the attempt).
-	 *
-	 * The sole production caller is the bypass-rollback in
-	 * `DefaultPathReservationService.reservePathToAnyNextSemaphore`: a candidate that committed its
-	 * reservation and merged its PathInfo is rejected after the fact, and its contribution must be
-	 * removed exactly — a merged-through-the-rejected-route PathInfo would steer the train onto
-	 * track that was just released.
-	 *
-	 * Do NOT use this for general PathInfo editing: route extensions belong in [registerPathInfo]
-	 * so the merge invariants (overlap handling, cycle guard) keep applying.
+	 * For transaction rollback only -- the merge is not invertible, so a caller that must undo a
+	 * registration snapshots via [getPathInfo] first. Route extensions belong in [registerPathInfo]
+	 * (details: [PathInfoStore.restore]).
 	 *
 	 * @param trainId The train identifier
 	 * @param snapshot The value previously read via [getPathInfo], or `null` when the train had
@@ -1451,48 +643,20 @@ class PathReservationRegistry(
 		trainId: String,
 		snapshot: PathInfo?
 	) {
-		if (snapshot == null) {
-			trainToPathInfo.remove(trainId)
-			logger.debug { "restorePathInfo: removed PathInfo entry for '$trainId' (no pre-attempt PathInfo)" }
-		} else {
-			trainToPathInfo[trainId] = snapshot
-			logger.debug {
-				"restorePathInfo: restored PathInfo for '$trainId' to snapshot " +
-					"(start=${snapshot.start}, target=${snapshot.target}, path length=${snapshot.reservedPath.size})"
-			}
-		}
+		pathInfoStore.restore(trainId, snapshot)
 	}
 
 	/**
 	 * Cut a train's stored PathInfo back so that it ends at [boundary], after the blocks beyond that
-	 * separator were released.
-	 *
-	 * ## Why
-	 *
-	 * [unregisterBlock] deliberately keeps the PathInfo (Issue #301): the train still needs it to
-	 * navigate the blocks it holds. After a partial release of an un-travelled tail, however, the
-	 * untrimmed PathInfo still describes the released track. [isPathExtendedBeyond] reads only the
-	 * PathInfo, so it keeps reporting the route as extended beyond the head's exit signal: the rule
-	 * engine skips the train, the LLM is told "route already set", and a new route from that signal
-	 * aborts in [mergePathInfo] Step 0a because the stored path still ends further on. The train
-	 * then stands for the rest of the run (Issue #1063, the permanent stall of Issue #1031).
-	 *
-	 * This is not the whole-route deletion of Issue #301: the head keeps its PathInfo, only the
-	 * released tail goes.
-	 *
-	 * ## Contract
+	 * separator were released (Issue #1063: an untrimmed PathInfo keeps [isPathExtendedBeyond] `true`
+	 * and stalls the train).
 	 *
 	 * The trimmed PathInfo keeps [PathInfo.start], ends at the first occurrence of [boundary] after
 	 * the last block the train still holds, and keeps only the entry directions of blocks that
-	 * remain on the trimmed path. Nothing is changed and `false` is returned when the train has no
-	 * PathInfo, holds no block on it, or [boundary] does not follow its last held block — trimming
-	 * there would drop track the train still owns. It is also refused when [boundary] is a switch:
-	 * a route runs signal to signal and a switch is never its end (Issue #938), so a PathInfo ending
-	 * at one would make every later extension fail the merge. It is likewise refused when [boundary]
-	 * is a semaphore facing away from the train's direction of travel (Issue #1067 gap 2): the
-	 * trimmed PathInfo's end is about to become the START of the train's next route request, and G4
-	 * ([DefaultPathReservationService.startFacesTravelDirection]) refuses every route starting at a
-	 * rear-facing signal, which would strand the train exactly like the untrimmed PathInfo did.
+	 * remain on it. Nothing is changed and `false` is returned when the train has no PathInfo, holds
+	 * no block on it, [boundary] does not follow its last held block, or [boundary] is not a valid
+	 * end ([isValidPathInfoEnd]: a switch, or a signal facing away from the train). Details:
+	 * [PathInfoStore.trimPathInfoTo].
 	 *
 	 * @param trainId The train identifier
 	 * @param boundary The separator where the train's held track now ends
@@ -1502,54 +666,19 @@ class PathReservationRegistry(
 	fun trimPathInfoTo(
 		trainId: String,
 		boundary: DynamicPathSeparator
-	): Boolean {
-		val pathInfo = trainToPathInfo[trainId] ?: return false
-		val elements = pathInfo.reservedPath.toList()
-		val boundaryIndex = trimBoundaryIndex(trainId, pathInfo, elements, boundary) ?: return false
-		if (!isValidPathInfoEnd(boundary, elements.getOrNull(boundaryIndex + 1)?.let(::blockOf))) {
-			logger.warn {
-				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — a route cannot end " +
-					"there (a switch, or a signal facing away from the train), so the PathInfo is kept " +
-					"(path ${pathInfo.start}→${pathInfo.target})"
-			}
-			return false
-		}
-		if (boundaryIndex == elements.lastIndex) return true
-
-		trainToPathInfo[trainId] = pathInfo.truncatedAt(elements, boundaryIndex, boundary, context)
-		logger.info {
-			"trimPathInfoTo: trimmed the PathInfo of '$trainId' from ${pathInfo.start}→${pathInfo.target} " +
-				"to ${pathInfo.start}→$boundary after its tail beyond $boundary was released"
-		}
-		return true
-	}
+	): Boolean = pathInfoStore.trimPathInfoTo(trainId, boundary)
 
 	/**
 	 * Whether [separator] may be the end of a stored PathInfo, the separator a train's next route
-	 * request starts from.
-	 *
-	 * - A switch never may: a route runs signal to signal and a switch is never its end (Issue #938),
-	 *   so a PathInfo ending at one would make every later extension fail the merge.
-	 * - A semaphore facing away from [nextBlock] (the block the train would enter past it) never may
-	 *   (Issue #1067 gap 2): G4 refuses every route starting at a rear-facing signal, so the train
-	 *   would stand exactly as with an untrimmed PathInfo. Without a [nextBlock] the direction is
-	 *   unknown and only the switch rule applies.
-	 *
-	 * [trimPathInfoTo] refuses such an end. A caller that must not change anything unless the trim
-	 * will follow checks it first, with the end from [pathInfoEndAfter].
+	 * request starts from: never a switch (Issue #938), never a semaphore facing away from
+	 * [nextBlock] (Issue #1067 gap 2); without a [nextBlock] only the switch rule applies.
 	 *
 	 * @since Issue #1063
 	 */
 	fun isValidPathInfoEnd(
 		separator: DynamicPathSeparator,
 		nextBlock: DynamicTrackBlock? = null
-	): Boolean =
-		when {
-			separator is DynamicRailSwitch -> false
-			separator is DynamicRailSemaphore && nextBlock != null ->
-				semaphoreFacesNextBlock(context, separator, nextBlock)
-			else -> true
-		}
+	): Boolean = pathInfoStore.isValidPathInfoEnd(separator, nextBlock)
 
 	/**
 	 * Where the stored PathInfo of [trainId] would end if the train kept only [kept]: the separator
@@ -1563,13 +692,7 @@ class PathReservationRegistry(
 	fun pathInfoEndAfter(
 		trainId: String,
 		kept: Collection<DynamicTrackBlock>
-	): PathInfoEnd? {
-		val elements = trainToPathInfo[trainId]?.reservedPath?.toList() ?: return null
-		val lastKeptIndex = lastIndexOfBlockIn(elements, kept)
-		if (lastKeptIndex < 0) return null
-		val boundary = elements.getOrNull(lastKeptIndex + 1) as? DynamicPathSeparator ?: return null
-		return PathInfoEnd(boundary, elements.getOrNull(lastKeptIndex + 2)?.let(::blockOf))
-	}
+	): PathInfoEnd? = pathInfoStore.pathInfoEndAfter(trainId, kept)
 
 	/** The end [pathInfoEndAfter] finds. @since Issue #1067 */
 	data class PathInfoEnd(
@@ -1578,48 +701,9 @@ class PathReservationRegistry(
 	)
 
 	/**
-	 * The index of [boundary] in [elements] that [trimPathInfoTo] may cut at, or `null` (with a WARN)
-	 * when [boundary] does not follow the last block the train still holds.
-	 */
-	private fun trimBoundaryIndex(
-		trainId: String,
-		pathInfo: PathInfo,
-		elements: List<PathElement>,
-		boundary: DynamicPathSeparator
-	): Int? {
-		val held = getBlocks(trainId)
-		val lastHeldIndex = lastIndexOfBlockIn(elements, held)
-		val boundaryIndex =
-			if (lastHeldIndex < 0) {
-				null
-			} else {
-				(lastHeldIndex + 1 until elements.size).firstOrNull { elements[it] == boundary }
-			}
-		if (boundaryIndex == null) {
-			logger.warn {
-				"trimPathInfoTo: not trimming the PathInfo of '$trainId' to $boundary — the separator does " +
-					"not follow the last block the train still holds, or the path passes one of those blocks twice " +
-					"(path ${pathInfo.start}→${pathInfo.target}, ${held.size} block(s) held)"
-			}
-		}
-		return boundaryIndex
-	}
-
-	/**
 	 * [trimPathInfoTo], but finds the boundary itself: the separator immediately following the
-	 * last block the train still holds in the stored PathInfo.
-	 *
-	 * ## Why (Issue #1067 gap 1)
-	 *
-	 * [RegistryPartialRouteReleaser] used to derive the boundary from the ends shared by the
-	 * occupied head and the blocks it released **in that one call**. A tail released over two
-	 * sweeps — one block refused or throwing on the first sweep, freed on a later retry — then
-	 * finds no boundary on the sweep that finally frees it: that block is no longer adjacent to
-	 * the occupied head, only to the block released earlier. The trim was skipped with a warning
-	 * and never retried, reproducing the permanent stall [trimPathInfoTo] exists to prevent.
-	 * Deriving the boundary from the blocks the train currently holds — rather than from what
-	 * changed in the current call — makes the operation idempotent: whichever sweep frees the
-	 * last remaining tail block computes the same boundary and the trim goes through.
+	 * last block the train still holds in the stored PathInfo. Idempotent, so a tail released over
+	 * several sweeps is trimmed by whichever sweep frees its last block (Issue #1067 gap 1).
 	 *
 	 * @param trainId The train identifier
 	 * @return `true` if the stored PathInfo now ends at the boundary, `false` if there was nothing
@@ -1627,132 +711,40 @@ class PathReservationRegistry(
 	 *   [trimPathInfoTo] refused it (see [isValidPathInfoEnd])
 	 * @since Issue #1067
 	 */
-	fun trimPathInfoToHeldBlocks(trainId: String): Boolean {
-		val end = pathInfoEndAfter(trainId, getBlocks(trainId))
-		if (end == null) {
-			logger.debug {
-				"trimPathInfoToHeldBlocks: nothing to trim for '$trainId' — it has no PathInfo, or holds no " +
-					"block on it"
-			}
-			return false
-		}
-		return trimPathInfoTo(trainId, end.boundary)
-	}
+	fun trimPathInfoToHeldBlocks(trainId: String): Boolean = pathInfoStore.trimPathInfoToHeldBlocks(trainId)
 
 	/**
 	 * Whether freeing every block of [trainId] except [kept] would leave its stored PathInfo
 	 * consistent: pure query, changes nothing.
 	 *
-	 * `true` when no trim is needed (no PathInfo, or [kept] reaches the path's end so nothing
-	 * beyond it can go stale) or when the trim [trimPathInfoTo] would perform will follow --
-	 * the boundary past the last kept block passes [isValidPathInfoEnd]. A caller that must
-	 * not change anything unless the trim will follow ([DefaultPathReservationService]'s
-	 * approach-locked release) checks this BEFORE freeing any block: a freed tail that
-	 * survives in the PathInfo because the trim is refused later stalls the train with
-	 * `OwnershipConflict` (Issue #1050 review round).
-	 *
-	 * `false` when [kept] holds no block on the path (the whole PathInfo would be a stale
-	 * tail with no derivable boundary) or the boundary is one [trimPathInfoTo] refuses.
+	 * `true` when no trim is needed (no PathInfo, or [kept] reaches the path's end) or when the trim
+	 * [trimPathInfoTo] would perform will follow. `false` when [kept] holds no block on the path or
+	 * the boundary is one [trimPathInfoTo] refuses. A caller that must not change anything unless the
+	 * trim will follow checks this BEFORE freeing any block (Issue #1050 review round).
 	 *
 	 * @since Issue #1050
 	 */
 	fun canTrimPathInfoTo(
 		trainId: String,
 		kept: Collection<DynamicTrackBlock>
-	): Boolean {
-		val elements = trainToPathInfo[trainId]?.reservedPath?.toList() ?: return true
-		val lastKeptIndex = lastIndexOfBlockIn(elements, kept)
-		if (lastKeptIndex < 0) return false
-		if (lastKeptIndex == elements.lastIndex) return true
-		val boundary = elements[lastKeptIndex + 1] as? DynamicPathSeparator ?: return false
-		val nextBlock = elements.getOrNull(lastKeptIndex + 2)?.let(::blockOf)
-		return isValidPathInfoEnd(boundary, nextBlock)
-	}
+	): Boolean = pathInfoStore.canTrimPathInfoTo(trainId, kept)
 
 	/**
 	 * Clear all registrations.
 	 *
 	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-claim mappings
-	 * (a claim's flank purpose goes with it).
+	 * (a claim's flank purpose goes with it), every registration timestamp and every PathInfo.
 	 * Used for simulation reset or cleanup.
 	 */
 	fun clear() {
-		trainToBlocks.clear()
-		blockToTrain.clear()
-		blockRegisteredAt.clear()
-		trainToSwitches.clear()
-		switchToTrain.clear()
-		trainToPathInfo.clear()
+		blockTable.clear()
+		switchTable.clear()
+		pathInfoStore.clear()
 	}
 
-	/**
-	 * Get total number of registered trains.
-	 *
-	 * @return Count of trains with at least one reserved block
-	 */
-	fun trainCount(): Int = trainToBlocks.size
+	/** Count of trains with at least one reserved block. */
+	fun trainCount(): Int = blockTable.trainCount()
 
-	/**
-	 * Get total number of registered blocks across all trains.
-	 *
-	 * @return Count of blocks currently reserved
-	 */
-	fun blockCount(): Int = blockToTrain.size
-}
-
-/** The block a [PathInfo.reservedPath] element belongs to, or `null` when the element is a separator. */
-private fun blockOf(element: cz.vutbr.fit.interlockSim.objects.core.PathElement): DynamicTrackBlock? =
-	(element as? TrackSection)?.getTrackBlock() as? DynamicTrackBlock
-
-/**
- * The index of the last element of [elements] whose block is in [blocks], or `-1` when there is none.
- *
- * Also `-1` when a block of [blocks] appears in two separate places (a merged circular route may pass a
- * block twice). "The last occurrence" is then ambiguous — it can lie ahead of the train rather than
- * under it — and a trim there would drop track the train still holds (PR #1068 review), so the caller
- * finds no boundary and refuses.
- */
-private fun lastIndexOfBlockIn(
-	elements: List<PathElement>,
-	blocks: Collection<DynamicTrackBlock>
-): Int {
-	val blockSet = blocks.toSet()
-	val seen = mutableSetOf<DynamicTrackBlock>()
-	var previous: DynamicTrackBlock? = null
-	var lastIndex = -1
-	elements.forEachIndexed { index, element ->
-		val block = blockOf(element)
-		if (block == null) {
-			// A separator ends a place: a block right after it again (a route that turns back into
-			// the block it came from) is a second place, not a continuation (PR #1068 review).
-			if (element is DynamicPathSeparator) previous = null
-			return@forEachIndexed
-		}
-		if (block in blockSet) {
-			if (block != previous && !seen.add(block)) return -1
-			lastIndex = index
-		}
-		previous = block
-	}
-	return lastIndex
-}
-
-/**
- * A copy of this PathInfo that ends at [boundary], the element at [boundaryIndex] of [elements] (this
- * PathInfo's reserved path). It keeps [PathInfo.start] and only the entry directions of blocks that
- * stay on the shorter path.
- */
-private fun PathInfo.truncatedAt(
-	elements: List<cz.vutbr.fit.interlockSim.objects.core.PathElement>,
-	boundaryIndex: Int,
-	boundary: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator,
-	context: SimulationContext
-): PathInfo {
-	val kept = elements.subList(0, boundaryIndex + 1)
-	val keptBlocks = kept.mapNotNull(::blockOf).toSet()
-	return copy(
-		target = boundary,
-		reservedPath = ArrayPath(context).apply { kept.forEach { add(it) } },
-		entryDirections = entryDirections.filterKeys { it in keptBlocks }
-	)
+	/** Count of blocks currently reserved across all trains. */
+	fun blockCount(): Int = blockTable.blockCount()
 }

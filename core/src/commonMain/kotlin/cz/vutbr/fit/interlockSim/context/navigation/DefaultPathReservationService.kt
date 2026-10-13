@@ -98,30 +98,9 @@ class DefaultPathReservationService(
 ) : PathReservationService,
 	ReservationTargetQuery,
 	BlockRollbackStep {
-	// ── Conflict-vs-routine-contention disambiguation (Issue #612 follow-up) ──
-	//
-	// reservePath() returning AllPathsBlocked is the ORDINARY outcome whenever a
-	// candidate path is merely busy right now (e.g. another train is still using a
-	// shared switch during routine ShuntingLoop choreography). That must not, on
-	// its own, be treated as a [BlockEvent.ReservationConflictDetected] -- doing so
-	// makes DefaultCollisionDetectionService auto-pause the simulation on completely
-	// routine contention (regression: SimulationSpeedPerformanceTest hang).
-	//
-	// No timing signal derived from an AllPathsBlocked outcome can distinguish a
-	// genuine race from ordinary queueing at a shared bottleneck (three heuristics
-	// were tried and all misfired at high-traffic chokepoints -- see issue #612).
-	// Genuine conflicts are therefore surfaced by exactly two mechanisms, neither
-	// based on AllPathsBlocked timing:
-	// 1. Live, mid-run: the atomic registry race ([PathReservationRegistry.RegistrationResult.Conflict]
-	//    in [reservePath]) -- a real double-booking detected at reservation time.
-	// 2. End-of-run: [flushUnresolvedConflicts] -- blocked-path contention that never
-	//    resolved before the run ended (deadlock/starvation indicator). Deliberately
-	//    NOT a live/running-clock threshold; "unresolved when the run ends" is the
-	//    actual signal, checked exactly once after the run has stopped.
-	//
-	// The map is cleared per-train on Success and in releasePath(), so it stays
-	// bounded to currently-active trains.
-	private val blockedSince: MutableMap<Pair<String, DynamicTrackBlock>, Double> = mutableMapOf()
+	// Contention and blocked-request tracking (Issue #612 follow-up): see [ReservationContentionTracker]
+	// for why AllPathsBlocked is routine contention and only unresolved-at-end-of-run is reported.
+	private val contention = ReservationContentionTracker(registry)
 
 	// ── Cleared-signal ownership, so a proceed aspect cannot outlive its route ──
 	//
@@ -153,10 +132,12 @@ class DefaultPathReservationService(
 	// `resetSemaphoreSet`, never the whole per-train set, so a pre-existing reservation's signals
 	// stay lit.
 	//
-	// Ownership is last-writer-wins, mirroring PathReservationRegistry.blockToTrain: if a
-	// semaphore is re-cleared for another train, that train becomes its owner and the earlier
-	// train's release leaves it alone. Without this a stale release could drop a signal to STOP
-	// under a train actively running against it.
+	// Ownership is last-writer-wins -- unlike block ownership, where registerAtomic rejects a
+	// foreign reservation instead of reassigning it (the same contrast
+	// PathReservationService.recordExternalClearedSemaphore states): if a semaphore is re-cleared
+	// for another train, that train becomes its owner and the earlier train's release leaves it
+	// alone. Without this a stale release could drop a signal to STOP under a train actively
+	// running against it.
 	private val clearedSemaphores: MutableMap<String, MutableSet<DynamicRailSemaphore>> = mutableMapOf()
 
 	private val semaphoreClearedFor: MutableMap<DynamicRailSemaphore, String> = mutableMapOf()
@@ -484,6 +465,47 @@ class DefaultPathReservationService(
 		return PathReservationService.ReservationResult.NonContiguousStart(startName, reason)
 	}
 
+	/**
+	 * The endpoint invariant (Issue #1188): a route runs signal-to-signal, so its origin must be
+	 * an [OrientedPathSeparator] (a semaphore or an InOut). A switch is interior track, never an
+	 * endpoint — the same rule [forwardOnlyPathInfo] enforces for a trimmed PathInfo start
+	 * (Issue #938).
+	 *
+	 * Returns `null` when [start] is oriented, or the
+	 * [PathReservationService.ReservationResult.GeometricallyImpossible] to return otherwise.
+	 *
+	 * ## Why this must be a Step 0 guard
+	 *
+	 * Without it a switch start passed Step 2c/2d (blocks reserved AND registered to the train)
+	 * and only then threw `SimulationException[FATAL]` out of
+	 * [cz.vutbr.fit.interlockSim.context.SimulationContext.getSegment] ("PathSeparator must be
+	 * OrientedPathSeparator") from inside `configureSwitchesInPath`, past every rollback path.
+	 * The blocks stayed registered to a route that was never granted — a leak that made later
+	 * requests from an unrelated separator fail as `NonContiguousStart`, because the train's
+	 * footprint was no longer empty.
+	 *
+	 * ## Why `GeometricallyImpossible` and not a new result class
+	 *
+	 * It is exactly that contract: permanent for the identical request, never retryable, and the
+	 * caller has to ask for a different origin — unlike ordinary
+	 * [PathReservationService.ReservationResult.AllPathsBlocked] contention.
+	 */
+	private fun rejectNonOrientedStart(
+		trainId: String,
+		start: DynamicPathSeparator,
+		entryPoint: String
+	): PathReservationService.ReservationResult.GeometricallyImpossible? {
+		if (start is OrientedPathSeparator) return null
+		val startName = separatorLabel(start)
+		val reason =
+			"Route origin '$startName' is not an oriented separator (it is a " +
+				"${start::class.simpleName ?: "unknown"}): a route runs signal-to-signal, so it can only " +
+				"start at a semaphore or an InOut. Request for train '$trainId' refused before any " +
+				"block, switch or signal was touched."
+		logger.warn { "$entryPoint: rejected non-oriented start — $reason" }
+		return PathReservationService.ReservationResult.GeometricallyImpossible(reason)
+	}
+
 	private fun findCandidatePaths(
 		trainId: String,
 		start: DynamicPathSeparator,
@@ -517,7 +539,8 @@ class DefaultPathReservationService(
 	 * For other separator types (e.g. semaphore-to-InOut), BFS topology paths from
 	 * [TopologyNavigator] are used instead.
 	 *
-	 * 0. Reject a [start] that is not contiguous with the train's own footprint (Issue #893) —
+	 * 0. Reject a non-oriented [start] (a switch — Issue #1188, see [rejectNonOrientedStart]) and a
+	 *    [start] that is not contiguous with the train's own footprint (Issue #893) —
 	 *    see [rejectNonContiguousStart]
 	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise)
 	 * 2. For each path in priority order (cheapest cost first for InOut routes):
@@ -531,6 +554,7 @@ class DefaultPathReservationService(
 	 * ## Error Handling
 	 *
 	 * - Start not contiguous with the train's footprint → return NonContiguousStart
+	 * - Start is not an OrientedPathSeparator (a switch) → return GeometricallyImpossible
 	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
 	 * - Registry conflict → roll back only the forward blocks THIS call reserved (never the
@@ -562,6 +586,11 @@ class DefaultPathReservationService(
 		maxDepth: Int,
 		topologicalPaths: Lazy<List<List<TrackSection>>>?
 	): PathReservationService.ReservationResult {
+		// Step 0 (Issue #1188): a route runs signal-to-signal, so a non-oriented start (a switch)
+		// is refused here, before any block is reserved or registered -- see
+		// [rejectNonOrientedStart] for the leak this prevents.
+		rejectNonOrientedStart(trainId, start, "reservePath")?.let { return it }
+
 		// Step 0 (Issue #893, task A-R1): a route may only start where the train actually is.
 		// Checked BEFORE candidate-path discovery so it also governs the already-owned
 		// early-return branch further down, which would otherwise report Success for a route
@@ -620,7 +649,7 @@ class DefaultPathReservationService(
 			// Step 2b: Check if all forward blocks are available (FREE or RESERVED by THIS train)
 			if (!forwardBlocks.areAllFreeOrOwnedBy(trainId)) {
 				// Capture a blocked (block, owner) pair for the AllPathsBlocked conflict warning.
-				firstBlockedConflict = findFirstBlockedConflict(forwardBlocks, trainId)
+				firstBlockedConflict = contention.findFirstBlockedConflict(forwardBlocks, trainId)
 				continue
 			}
 
@@ -700,14 +729,14 @@ class DefaultPathReservationService(
 		// re-issuing request_route for a train it already granted a route to, since it
 		// has no memory of its own prior tool calls) must be a no-op here. Re-registering
 		// an identical PathInfo would duplicate every separator in the merge
-		// (PathReservationRegistry.registerPathInfo/mergePathInfo), and a further
+		// (PathReservationRegistry.registerPathInfo / PathInfoMerger.merge), and a further
 		// redundant call can hit the registry's 3rd-occurrence cycle-abort — silently
 		// discarding the merge while this method still reports Success, an invisible
 		// PathInfo/reality divergence that can strand the train permanently once it
 		// reaches whatever depends on the discarded segment.
 		val existingPathInfo = registry.getPathInfo(trainId)
 		if (existingPathInfo != null && existingPathInfo.target == target) {
-			clearBlockedTracking(trainId)
+			contention.clearBlockedTracking(trainId)
 			return PathReservationService.ReservationResult.Success(blocks)
 		}
 
@@ -723,7 +752,7 @@ class DefaultPathReservationService(
 		resetSignalsIfMergeAborted(mergeOutcome, trainId, start, clearedBeforeStart)
 
 		// Resolved -- this train is no longer contending for any block.
-		clearBlockedTracking(trainId)
+		contention.clearBlockedTracking(trainId)
 		return PathReservationService.ReservationResult.Success(blocks)
 	}
 
@@ -951,7 +980,7 @@ class DefaultPathReservationService(
 		val mergeCandidate = forwardOnlyPathInfo(start, target, path, forwardBlocks)
 		val mergeOutcome = registry.registerPathInfo(trainId, mergeCandidate)
 		// If the registry's merge fail-safe STILL aborted
-		// (PathReservationRegistry.mergePathInfo's KDoc lists the four reasons) --
+		// (PathInfoMerger.merge's KDoc lists the four reasons) --
 		// now only the genuinely pathological ones: duplicated new-start, the
 		// direction reversal guard (Issue #944), or the cycle guard -- release
 		// exactly what THIS candidate acquired --
@@ -980,7 +1009,7 @@ class DefaultPathReservationService(
 		emitForwardBlockReservedEvents(trainId, forwardBlocks)
 
 		// Resolved -- this train is no longer contending for any block.
-		clearBlockedTracking(trainId)
+		contention.clearBlockedTracking(trainId)
 
 		return PathReservationService.ReservationResult.Success(blocks)
 	}
@@ -1107,11 +1136,11 @@ class DefaultPathReservationService(
 	 * Otherwise: no [BlockEvent.ReservationConflictDetected] emission here (Goal 3) -- a
 	 * blocked-path outcome is routine "path busy, will retry" contention for the
 	 * collision-warning layer. The contention is recorded so [flushUnresolvedConflicts] can
-	 * surface it if it never resolves before the run ends (see the class-level disambiguation
-	 * comment). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted mid-run (it does not trigger an
+	 * surface it if it never resolves before the run ends (see
+	 * [ReservationContentionTracker]'s class KDoc). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted mid-run (it does not trigger an
 	 * automatic simulation pause, so it can be delivered without the false-positive-pause problem
 	 * that led to the Goal 3 restriction) -- but only the FIRST time a given (trainId, block)
-	 * contention is observed; see [recordContentionAndEmitIfNew].
+	 * contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
 	 */
 	private fun classifyExhaustedAttempt(
 		trainId: String,
@@ -1140,136 +1169,14 @@ class DefaultPathReservationService(
 			return PathReservationService.ReservationResult.GeometricallyImpossible(geometricFailures.reason)
 		}
 		firstBlockedConflict?.let { (blockedBlock, owningTrain) ->
-			recordContentionAndEmitIfNew(trainId, blockedBlock, owningTrain)
+			contention.recordContentionAndEmitIfNew(trainId, blockedBlock, owningTrain)
 		}
 		return PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths)
 	}
 
-	/**
-	 * Record a blocked-path contention and emit [ConflictDetectedEvent] only the first time
-	 * it is observed, mirroring [recordBlockedContention]'s dedup semantics.
-	 *
-	 * reservePath() is called on every poll tick while a train is queued behind a busy
-	 * shared block (ShuntingLoop/MultiTrainLoop retry once per control step — every 2.0
-	 * simulated seconds, since `iteration()` holds 1.0 and `interLoopSleep()` holds another
-	 * 1.0), so without
-	 * this guard the same still-blocked contention would re-emit the event once per tick
-	 * for the entire wait instead of once per contention.
-	 *
-	 * Extracted from [reservePath] to keep that method within the cyclomatic-complexity budget.
-	 */
-	private fun recordContentionAndEmitIfNew(
-		trainId: String,
-		blockedBlock: DynamicTrackBlock,
-		owningTrain: String
-	) {
-		if (!recordBlockedContention(trainId, blockedBlock)) return
-		val simTime = currentSimulationTime()
-		emitCustom(
-			ConflictDetectedEvent(
-				block = blockedBlock,
-				trainId = trainId,
-				conflictingTrainId = owningTrain,
-				time = simTime
-			)
-		)
-	}
-
-	/**
-	 * Record a blocked-path contention for [trainId] on [blockedBlock] in [blockedSince],
-	 * keeping the earliest blocked time if the same contention repeats. Never emits
-	 * anything mid-run; [flushUnresolvedConflicts] reports whatever is still unresolved
-	 * once the run has ended, and [clearBlockedTracking] forgets contention that resolved.
-	 *
-	 * @return `true` if `(trainId, blockedBlock)` was not already tracked -- i.e. this is
-	 *   the first observation of this contention since it last resolved. `false` if it was
-	 *   already present (a routine polling retry of a still-blocked, already-known
-	 *   contention). Callers use this to emit a one-shot [ConflictDetectedEvent] exactly
-	 *   once per contention rather than once per retry tick -- see the `AllPathsBlocked`
-	 *   branch of [reservePath].
-	 */
-	private fun recordBlockedContention(
-		trainId: String,
-		blockedBlock: DynamicTrackBlock
-	): Boolean {
-		val key = trainId to blockedBlock
-		if (blockedSince.containsKey(key)) return false
-		blockedSince[key] = currentSimulationTime()
-		return true
-	}
-
-	/**
-	 * Emit [BlockEvent.ReservationConflictDetected] for every (trainId, block) contention
-	 * that is still tracked as blocked when the simulation ends.
-	 *
-	 * This is the "unresolved by end of run" signal: genuine, never-clearing contention
-	 * (e.g. an actual deadlock) is still surfaced -- but routine "train waits its turn,
-	 * then proceeds" contention, however long it takes mid-run, is never reported this
-	 * way, because by definition it resolves ([reservePath] Success or [releasePath])
-	 * before the run ends.
-	 *
-	 * Deliberately does **not** call [emitCustom] -- that top-level function is a no-op
-	 * once the simulation's event loop has stopped (`Process.activeContext == null`),
-	 * which is exactly the state the caller is in when the run has just ended. Instead,
-	 * this returns the events for the caller ([cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.run])
-	 * to deliver directly to its buffered block-event listeners. Calling this mid-run
-	 * would reintroduce the original false-positive-pause bug this design avoids, so it
-	 * must only be called once, after the run has fully stopped.
-	 *
-	 * @param simulationEndTime Simulation clock value to stamp on the returned event(s).
-	 * @since Issue #612 (Goal 3 SP2 follow-up)
-	 */
-	override fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> {
-		if (blockedSince.isEmpty()) return emptyList()
-		val unresolved = blockedSince.keys.toList()
-		blockedSince.clear()
-		return unresolved.mapNotNull { (trainId, block) ->
-			val owner = ownerOf(block) ?: return@mapNotNull null
-			BlockEvent.ReservationConflictDetected(
-				block = block,
-				trainId = trainId,
-				conflictingTrainId = owner,
-				time = simulationEndTime
-			)
-		}
-	}
-
-	/**
-	 * Forget any in-progress blocked-path contention tracked for [trainId].
-	 *
-	 * Called whenever [trainId] resolves its reservation attempt (Success) or gives
-	 * up its reservations entirely ([releasePath]), so [blockedSince] never conflates
-	 * a stale, already-resolved contention with a fresh one on the same block later,
-	 * and so [flushUnresolvedConflicts] never reports contention that actually resolved.
-	 */
-	private fun clearBlockedTracking(trainId: String) {
-		blockedSince.keys.removeAll { it.first == trainId }
-	}
-
-	/**
-	 * Find the first block in [blocks] that is not free and not owned by [trainId],
-	 * and return it paired with its owning train ID.
-	 *
-	 * Returns `null` when no such block exists (all blocks are free or owned by [trainId]).
-	 *
-	 * Extracted from [reservePath] to keep that method within the cyclomatic-complexity budget.
-	 *
-	 * @since Issue #612 (Goal 3 SP2)
-	 */
-	private fun findFirstBlockedConflict(
-		blocks: List<DynamicTrackBlock>,
-		trainId: String
-	): Pair<DynamicTrackBlock, String>? {
-		val blockedBlock =
-			blocks.firstOrNull { block ->
-				block.getState() != TrackFacility.State.FREE && block.trainName != trainId
-			} ?: return null
-		val owner = ownerOf(blockedBlock) ?: return null
-		return Pair(blockedBlock, owner)
-	}
-
-	/** The train that owns [block]: the registry's record first, the block's own `trainName` as fallback. */
-	private fun ownerOf(block: DynamicTrackBlock): String? = registry.getOwner(block) ?: block.trainName
+	/** Delegates to [ReservationContentionTracker.flushUnresolvedConflicts] (Issue #612, #1167). */
+	override fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> =
+		contention.flushUnresolvedConflicts(simulationEndTime)
 
 	/**
 	 * Release all blocks reserved by a train.
@@ -1444,7 +1351,7 @@ class DefaultPathReservationService(
 				emitBlockReleased(block, trainId, simTime)
 			}
 			// Train is done contending for any block it may have been blocked on.
-			clearBlockedTracking(trainId)
+			contention.clearBlockedTracking(trainId)
 		}
 	}
 
@@ -1748,8 +1655,10 @@ class DefaultPathReservationService(
 	 * carries the full rationale.
 	 *
 	 * Extracted so [reservePathToAnyNextSemaphore] stays within its method-length budget.
+	 * `internal` so tests can pin the all-divergent branch directly: since Issue #1188 no legal
+	 * (oriented, contiguous) origin on `vyhybna.xml` reaches it through the real scan.
 	 */
-	private fun classifyExhaustedSemaphores(
+	internal fun classifyExhaustedSemaphores(
 		lastResult: PathReservationService.ReservationResult?,
 		permanentAttempts: Int,
 		attemptCount: Int
@@ -2073,6 +1982,12 @@ class DefaultPathReservationService(
 		logger.debug {
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
+
+		// Issue #1188: a non-oriented start (a switch) is refused once, here. reservePath would
+		// refuse it too, before its candidate-path enumeration, but only after STEP 1 had already
+		// discovered every target, and then once per target with the same reason and warning.
+		// Refusing up front skips the target discovery and the repeated calls.
+		rejectNonOrientedStart(trainId, start, "reservePathToAny")?.let { return it }
 
 		// ========================================
 		// STEP 1: Target Discovery
@@ -3206,8 +3121,8 @@ class DefaultPathReservationService(
 		val usable = mutableListOf<IndexedValue<List<cz.vutbr.fit.interlockSim.objects.tracks.TrackSection>>>()
 		// Early-out for the common case: a train with no stored route cannot diverge from one, so
 		// skip the per-candidate PathInfo build entirely. reservePath sits on the per-tick polling
-		// path (see [recordContentionAndEmitIfNew]'s KDoc), so this guard saves a full probe build
-		// per candidate on every first reservation.
+		// path (see [ReservationContentionTracker.recordContentionAndEmitIfNew]'s KDoc), so this guard
+		// saves a full probe build per candidate on every first reservation.
 		if (registry.getPathInfo(trainId) == null) return failures to candidates
 		for (candidate in candidates) {
 			val forwardBlocks = extractUniqueBlocks(candidate.value).filterNot { it.trainName == trainId }
@@ -3293,7 +3208,7 @@ class DefaultPathReservationService(
 	 * in production) passes a `start` that no longer bounds the first forward block -- every
 	 * block adjacent to it is already owned. Building the merge candidate from that `start`
 	 * therefore makes `new.start != old.target` on every such call, not a rare shape but the
-	 * routine one, and [PathReservationRegistry.mergePathInfo]'s Step 0a fail-safe aborts every
+	 * routine one, and [PathInfoMerger.merge]'s Step 0a fail-safe aborts every
 	 * time, discarding a legitimate extension. Starting the merge candidate where the NEW blocks
 	 * actually begin makes `new.start` agree with `old.target` naturally, so the merge succeeds
 	 * and properly extends PathInfo instead of aborting -- leaving [rollbackIfMergeAborted]'s
@@ -3739,8 +3654,8 @@ class DefaultPathReservationService(
 	 * ([rollbackUnconfigurableCandidate], the bypass rollback in [reservePathToAnyNextSemaphore]).
 	 *
 	 * [PathReservationRegistry.unregisterSwitch] unlocks + removes the switch from the registry's
-	 * switchToTrain/trainToSwitches maps when the switch is registered to this train (after
-	 * [PathReservationRegistry.registerSwitches]). When the switch was locked by `setUpPath` but NOT
+	 * switch-ownership maps ([SwitchOwnershipTable]) when the switch is registered to this train
+	 * (after [PathReservationRegistry.registerSwitches]). When the switch was locked by `setUpPath` but NOT
 	 * yet registered (switch-config-failure path, before registration), unregisterSwitch is a no-op —
 	 * so fall back to an explicit unlock to release the physical lock.
 	 *

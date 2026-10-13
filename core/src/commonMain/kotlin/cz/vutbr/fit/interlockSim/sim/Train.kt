@@ -1666,8 +1666,8 @@ class Train :
 	 * - Prevents runtime simulation errors from track being too short
 	 *
 	 * **Implementation:**
-	 * - Uses TopologyNavigator to find all possible paths
-	 * - Calculates total track distance for each path
+	 * - Uses [cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator.findShortestTopologicalDistance] for the shortest route length
+	 *   (a shortest-path search since Issue #1148, not a listing of every path)
 	 * - Validates train length against shortest available path
 	 * - Gracefully handles test mocks by catching exceptions
 	 *
@@ -1695,24 +1695,19 @@ class Train :
 		try {
 			val topologyNavigator = env.getRoutingServices().getTopologyNavigator()
 
-			// Find all topologically possible paths between InOuts
-			val paths =
-				topologyNavigator.findAllTopologicalPaths(
-					start = inOut,
-					target = outOut,
-					maxDepth = 100
-				)
-
-			requireSimulation(paths.isNotEmpty()) {
-				"Train length validation failed: No route exists between " +
-					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
-					"Railway network must provide at least one path between entry and exit points."
-			}
-
-			// Calculate distance for each path and find the shortest using idiomatic Kotlin
+			// Shortest topological route length between the InOuts. Issue #1148: computed by a
+			// shortest-path search instead of listing every path (912 paths for one Praha pair).
 			val shortestPathDistance =
-				paths.minOf { path ->
-					path.sumOf { section -> section.length() }
+				requireSimulationNotNull(
+					topologyNavigator.findShortestTopologicalDistance(
+						start = inOut,
+						target = outOut,
+						maxDepth = 100
+					)
+				) {
+					"Train length validation failed: No route exists between " +
+						"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+						"Railway network must provide at least one path between entry and exit points."
 				}
 
 			// Validate train length against shortest path

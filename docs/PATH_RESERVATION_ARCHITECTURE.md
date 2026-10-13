@@ -173,6 +173,14 @@ fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): R
 
 ### Detailed Steps
 
+#### Step 0: Endpoint Precondition (Issue #1188)
+
+**Method:** `rejectNonOrientedStart(trainId, start, entryPoint)` (`DefaultPathReservationService.kt`)
+
+**Purpose:** Routes run signal-to-signal, so `start` must be an `OrientedPathSeparator` (a semaphore or an InOut). A switch is interior track, never an endpoint — the same invariant Issue #938 pinned for `PathInfo.start`. A non-oriented origin is rejected with `GeometricallyImpossible` **before** anything is touched, and `reservePathToAny` repeats the guard up front so the rejection is not re-derived once per candidate target.
+
+**Why it must precede everything:** without it, a switch start passed Step 2c/2d (blocks reserved AND registered to the train) and only then threw `SimulationException[FATAL]` ("PathSeparator must be OrientedPathSeparator") out of `configureSwitchesInPath` → `DefaultSimulationContext.getSegment`, past every rollback path. The blocks stayed registered to a route that was never granted, so a later request from a separator that does not bound them was refused as `NonContiguousStart`. Pinned by `PathReservationNonOrientedOriginTest`.
+
 #### Step 0: Contiguity Precondition (Issue #893, task A-R1)
 
 **Method:** `rejectNonContiguousStart(trainId, start)` (`DefaultPathReservationService.kt:422`)
@@ -394,7 +402,7 @@ when (val result = registry.registerAtomic(trainId, blocks)) {
 
 ## 5. Signal-Clearing Invariants (Issue #893, G1–G7)
 
-**Contract** (pinned by `PathReservationServiceTest.kt:1571-1592`): *a proceed aspect may not outlive the reservation that produced it.* Every release path resets the train's cleared signals to STOP before any block becomes FREE/available to another train. Until the #893 fix, `releasePath` and `unregister` cancelled blocks and unlocked switches but never touched a semaphore, so every aspect they cleared stayed lit forever — observed live on `exampleGui shuntingLoopAI 333`, where an `A → B` route granted at t=26.0 cleared `zA`, `doA1`, `doB1`; the `OrphanReservationSweeper` cancelled the stale route at t=88.0; all three were still showing S80 at the end of the run. `Signal.STOP` is always the fail-safe direction: it authorises nothing, so resetting too eagerly can only ever be over-restrictive.
+**Contract** (pinned by `PathReservationSignalReleaseTest`): *a proceed aspect may not outlive the reservation that produced it.* Every release path resets the train's cleared signals to STOP before any block becomes FREE/available to another train. Until the #893 fix, `releasePath` and `unregister` cancelled blocks and unlocked switches but never touched a semaphore, so every aspect they cleared stayed lit forever — observed live on `exampleGui shuntingLoopAI 333`, where an `A → B` route granted at t=26.0 cleared `zA`, `doA1`, `doB1`; the `OrphanReservationSweeper` cancelled the stale route at t=88.0; all three were still showing S80 at the end of the run. `Signal.STOP` is always the fail-safe direction: it authorises nothing, so resetting too eagerly can only ever be over-restrictive.
 
 ### G1–G7 Invariant Table
 
@@ -411,7 +419,7 @@ when (val result = registry.registerAtomic(trainId, blocks)) {
 | G9 | Safety property SI-5: `DynamicRailSwitch.setUpPath` must never move a switch that is locked in a DIFFERENT position — a live route's own switch lock is authoritative, the same way `changeConf` already honours it. A candidate that needs the other position throws `SwitchLockedException`, caught before configuration touches `conf` or `locked`. Unlike G4/G8, this is TRANSIENT contention (`AllPathsBlocked`), never `GeometricallyImpossible` — the switch frees once its holder's route releases it, and misclassifying it would make `InOutWorker` throw instead of letting the train wait (the #1031 stall's root cause: `configureSwitchesInPath` silently re-threw a live route's switch, corrupting it before the Step 2i merge-abort rollback ever ran). A companion reclamation (`PathReservationRegistry.unregisterBlock` → `reclaimStaleSwitchOwnership`, since #1103; before that `DefaultPathReservationService.dropFreedBlock` → `reclaimStaleSwitchLocks`) releases a switch lock once its owner holds no block adjacent to it, so a train that has merely PASSED a switch does not block every other train forever. | #1065 | `DynamicRailSwitch.kt` `setUpPath`; `DefaultPathReservationService.kt` `configureSwitchesInPath`/`SwitchConfigOutcome`; `PathReservationRegistry.kt` `unregisterBlock`/`reclaimStaleSwitchOwnership` |
 | G10 | Switch ownership is never overwritten: `PathReservationRegistry.registerSwitches` rejects a switch registered to a DIFFERENT train atomically (pre-scan before any mutation), so `switchToTrain` and `trainToSwitches` can never disagree about the owner. A candidate that needs such a switch even in the SAME position is refused as transient `Locked` contention (`AllPathsBlocked`) — but only when the required configuration is known, so a #742 geometric impossibility still classifies as `Unconfigurable`. STALE foreign ownership (owner holds no adjacent block) cannot survive a block release: `PathReservationRegistry.unregisterBlock` reclaims it at the freed block's ends on every release path, including a direct registry call (#1103 item 1). The only way a stale claim can still arise is the public `registerSwitches` taken with no adjacent block held; `reservePath` Step 2e.5 reclaims that one before the candidate takes the switch. Facade flank grants (`registerFlankSwitches`) are never stale, since a flank switch protects a route it is not adjacent to (see `INTERLOCKING_SCOPE_LIMITATIONS.md` §B2). | #1076, #1103 | `PathReservationRegistry.registerSwitches`/`isStaleSwitchOwnership`/`unregisterBlock`/`reclaimStaleSwitchOwnership`; `DefaultPathReservationService.kt` `switchOwnershipPreCheck`/`reclaimStaleForeignSwitchOwnership` |
 
-**Malformation class note:** G4 (rear-facing START rejection), G8 (rear-facing END rejection) and the contiguity precondition (A-R1, [Step 0](#step-0-contiguity-precondition-issue-893-task-a-r1)) are the same malformation class — a route the train cannot actually use (`PathReservationServiceTest.kt:2957`). G9 is explicitly NOT in that class: a G9 refusal is ordinary, resolving contention over a shared switch, not a route the train can never use.
+**Malformation class note:** G4 (rear-facing START rejection), G8 (rear-facing END rejection) and the contiguity precondition (A-R1, [Step 0](#step-0-contiguity-precondition-issue-893-task-a-r1)) are the same malformation class — a route the train cannot actually use (`PathReservationStartDirectionTest`). G9 is explicitly NOT in that class: a G9 refusal is ordinary, resolving contention over a shared switch, not a route the train can never use.
 
 ### Ownership-Aware Reset APIs
 
@@ -451,7 +459,7 @@ A semaphore that has since been re-cleared for a DIFFERENT train is left alone b
 - `resetClearedSemaphores` (`:181-203`) skips when `semaphoreClearedFor[semaphore] != trainId` (at `:184`).
 - `resetSemaphoreSet` (`:219-249`) applies the same guard (at `:232`).
 
-**Test:** `PathReservationServiceTest.kt:1649-1707` — *"resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone, and a later releasePath does too"*. After `t2` re-clears a semaphore `t1` released, a stale `resetSemaphoresForReleasedBlocks("t1", ...)` and a subsequent `releasePath("t1")` both leave `t2`'s live signal untouched.
+**Test:** `PathReservationSignalReleaseTest` — *"resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone, and a later releasePath does too"*. After `t2` re-clears a semaphore `t1` released, a stale `resetSemaphoresForReleasedBlocks("t1", ...)` and a subsequent `releasePath("t1")` both leave `t2`'s live signal untouched.
 
 ---
 
@@ -1197,7 +1205,7 @@ fun reserveSection(trainId: String, section: TrackSection) {
 > **Note:** These files grow over the life of the project. Specific line counts rot quickly and are intentionally omitted — consult the current source for sizes. (At the time of v1.2, `PathReservationService.kt` is ~728 lines and `DefaultPathReservationService.kt` is ~2983 lines.)
 
 **Test Files:**
-- `PathReservationServiceTest.kt` - 15 test cases (382 lines)
+- `PathReservationServiceTestBase.kt` + one `PathReservation<Group>Test.kt` per group (split out of the monolithic `PathReservationServiceTest.kt` per Issue #1165; in v1.2 the monolith had 15 test cases and 382 lines)
 - `PathReservationRegistryTest.kt` - 16 test cases (NEW)
 
 **Total Test Coverage:**

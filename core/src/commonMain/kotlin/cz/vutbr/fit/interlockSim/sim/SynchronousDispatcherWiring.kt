@@ -164,7 +164,7 @@ internal fun applyDecision(
 			actuatorPort.requestRoute(
 				decision.trainId,
 				decision.fromSemaphoreName,
-				decision.toSeparatorName
+				decision.toTargetName
 			)
 		when (result) {
 			is RouteRequestResult.Reserved -> loop.incrementBlockTransition(decision.trainId)
@@ -172,7 +172,7 @@ internal fun applyDecision(
 				// Blocked/conflict outcomes are routine "wait and retry next tick" contention.
 				logger.debug {
 					"wireSynchronousDispatcher: ReservePath ${decision.fromSemaphoreName} → " +
-						"${decision.toSeparatorName} for ${decision.trainId} not applied: $result"
+						"${decision.toTargetName} for ${decision.trainId} not applied: $result"
 				}
 				loop.incrementFailedReservation()
 			}

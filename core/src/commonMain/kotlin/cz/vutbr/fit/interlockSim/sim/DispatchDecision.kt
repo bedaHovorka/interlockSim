@@ -127,13 +127,13 @@ sealed class DispatchDecision {
 
 	/**
 	 * The dispatcher decided to reserve a forward path of **one section** from
-	 * [fromSemaphoreName] to [toSeparatorName] for [trainId].
+	 * [fromSemaphoreName] to [toTargetName] for [trainId].
 	 *
 	 * [fromSemaphoreName] is the semaphore the train is approaching (the value the
 	 * shell carried as [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName]);
-	 * [toSeparatorName] is the next separator one section ahead — destination-agnostic
-	 * (a semaphore, or the destination InOut for the final section; see
-	 * [BlockInputObservation.toSeparatorName] for why). The dispatcher chooses `to` among
+	 * [toTargetName] is the [CandidateTarget.name] of the next separator one section ahead —
+	 * destination-agnostic (a semaphore, or the destination InOut for the final section; see
+	 * [BlockInputObservation.candidateTargets] for why). The dispatcher chooses `to` among
 	 * the candidates the shell reports with their availability
 	 * ([BlockInputObservation.candidateTargets]) through [ReservationTargetPolicy]
 	 * (Issue #970), so the applier can call
@@ -145,14 +145,14 @@ sealed class DispatchDecision {
 	 * @property trainId The train to reserve a path for.
 	 * @property fromSemaphoreName The semaphore to reserve the path from (the
 	 *   semaphore the train is approaching).
-	 * @property toSeparatorName The separator to reserve the path to — the next
-	 *   separator one section ahead, destination-agnostic (a semaphore, or the
-	 *   destination InOut for the final section).
+	 * @property toTargetName The name of the chosen [CandidateTarget] to reserve the path
+	 *   to — the next separator one section ahead, destination-agnostic (a semaphore, or
+	 *   the destination InOut for the final section).
 	 */
 	data class ReservePath(
 		val trainId: String,
 		val fromSemaphoreName: String,
-		val toSeparatorName: String
+		val toTargetName: String
 	) : DispatchDecision() {
 		override val kind: DispatchDecisionKind get() = DispatchDecisionKind.RESERVE_PATH
 		override val trainName: String get() = trainId

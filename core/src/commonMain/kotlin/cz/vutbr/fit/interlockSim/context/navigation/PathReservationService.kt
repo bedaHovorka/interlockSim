@@ -160,7 +160,7 @@ interface PathReservationService :
 		 * queued-train half. A train with **no** footprint at all (neither registered nor occupied
 		 * blocks) passes the kernel check vacuously, because tightening it would reject every
 		 * legitimate train-entry reservation (an entry InOut with an empty footprint, by design).
-		 * Pinned by `PathReservationServiceTest` ("a train with no footprint at all passes
+		 * Pinned by `PathReservationContiguityTest` ("a train with no footprint at all passes
 		 * vacuously").
 		 *
 		 * @property startName Name of the offending start separator (or its `toString()` when
@@ -175,9 +175,12 @@ interface PathReservationService :
 		) : ReservationResult()
 
 		/**
-		 * The candidate that came closest was **permanently** impossible, not merely busy: a
-		 * candidate's START semaphore faced away from the requested direction of travel (G4), or
-		 * a switch along a candidate could not be set to the position the route required.
+		 * The request was **permanently** impossible, not merely busy. Two shapes: at the request
+		 * level -- the origin is not an [OrientedPathSeparator] (a switch), refused before any
+		 * candidate is discovered (Issue #1188) -- and at the candidate level: the candidate that
+		 * came closest failed permanently because its START or END semaphore faced away from the
+		 * requested direction of travel (G4, and its END-side twin G8 from Issue #1064), or a
+		 * switch along it could not be set to the position the route required.
 		 *
 		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention (a block
 		 * occupied/reserved by another train) and clears on its own, so a caller should simply
@@ -189,14 +192,20 @@ interface PathReservationService :
 		 * (`PATH_RESERVATION_ARCHITECTURE.md` §5: G4 and the contiguity precondition are "the
 		 * same malformation class -- a route the train cannot actually use").
 		 *
-		 * Set whenever **any** candidate in the attempt hits this failure mode, even if other
+		 * For the per-candidate classes (rear-facing START, rear-facing END, unconfigurable
+		 * switch) it is set
+		 * whenever **any** candidate in the attempt hits this failure mode, even if other
 		 * candidates in the same attempt were only ordinarily blocked -- first-hit-wins, mirroring
 		 * how [NonContiguousStart] already short-circuits ahead of blocked-candidate tracking
 		 * (traffic-simulation-expert ruling, Issue #903: the fact one candidate is permanently
 		 * impossible is real and permanent information regardless of what other candidates did).
+		 * A non-oriented route origin (Issue #1188) is a request-level refusal instead: it fires
+		 * before any candidate is discovered.
 		 *
-		 * @property reason English explanation of which permanent-impossibility class fired
-		 *   (rear-facing START or unconfigurable switch) and which candidate hit it.
+		 * @property reason English explanation of which permanent-impossibility class fired. For
+		 *   a rear-facing START, a rear-facing END or an unconfigurable switch it names the
+		 *   candidate that hit it; for a non-oriented route origin (Issue #1188) it names the
+		 *   origin, because no candidate exists yet.
 		 * @since Issue #903
 		 */
 		data class GeometricallyImpossible(
@@ -238,6 +247,13 @@ interface PathReservationService :
 
 	/**
 	 * Find and reserve a free path from start to target separator.
+	 *
+	 * ## Endpoint precondition (Issue #1188)
+	 *
+	 * [start] must be an [OrientedPathSeparator] — a semaphore or an InOut. Routes run
+	 * signal-to-signal; a switch is interior track, never an endpoint. A request that fails this
+	 * is rejected with [ReservationResult.GeometricallyImpossible] before any block, switch or
+	 * signal is touched.
 	 *
 	 * ## Contiguity precondition (Issue #893)
 	 *
@@ -333,8 +349,9 @@ interface PathReservationService :
 	 * are IDENTICAL: a write that leaves [semaphore] at
 	 * [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP] (or a constant semaphore's no-op
 	 * write) records nothing, and a semaphore already owned by a different train under this
-	 * service is simply reassigned to [trainId] (mirroring [PathReservationRegistry.blockToTrain]'s
-	 * last-writer-wins semantics elsewhere in this service).
+	 * service is simply reassigned to [trainId]: the service's own per-semaphore ledger records the
+	 * last writer. This differs from block ownership, where
+	 * [PathReservationRegistry.registerAtomic] rejects a block owned by another train.
 	 *
 	 * @param trainId The train the write was made on behalf of.
 	 * @param semaphore The semaphore that was just written by the external caller.
@@ -415,6 +432,13 @@ interface PathReservationService :
 	 * This method navigates from the starting separator through the given track section
 	 * to find ALL reachable semaphores. If the network has switches creating multiple routes,
 	 * it tries to reserve a path to each semaphore until one succeeds.
+	 *
+	 * ## Endpoint precondition (Issue #1188)
+	 *
+	 * [start] must be an [OrientedPathSeparator], exactly as for [reservePath]. A non-oriented
+	 * start (a switch) is refused by the per-semaphore attempts; the scan still enumerates the
+	 * reachable semaphores and the final [ReservationResult] is the request-level
+	 * [ReservationResult.GeometricallyImpossible].
 	 *
 	 * ## Algorithm
 	 *
@@ -648,6 +672,12 @@ interface PathReservationService :
 	 * - No type casting to SimulationContext
 	 * - Single responsibility (all target discovery in service layer)
 	 * - Automatic semaphore signal configuration
+	 *
+	 * ## Endpoint precondition (Issue #1188)
+	 *
+	 * [start] must be an [OrientedPathSeparator], exactly as for [reservePath]. A non-oriented
+	 * start (a switch) is rejected once, up front, with
+	 * [ReservationResult.GeometricallyImpossible] — no target is attempted.
 	 *
 	 * @param trainId Unique identifier for the train
 	 * @param start Starting path separator (typically a semaphore)
