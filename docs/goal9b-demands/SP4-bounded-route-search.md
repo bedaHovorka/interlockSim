@@ -131,7 +131,7 @@ hard node budget for networks larger than the fixtures.
 | Over-budget enumeration returns a structured failure within the budget | `RouteSearchBudgetTest.overBudgetEnumerationReturnsStructuredFailureWithinTheBudget`, `overBudgetPairHasNoRoutesAndIsNotSearchedAgain` |
 | Praha pair: ≤ 50 `reservePath` calls, ≤ 10 s | `PrahaBoundedRouteSearchTest` (`integration-test`), table above |
 | Cache holds no reservation state | `RouteSearchCacheTest.cacheHoldsNoReservationState`: reserve, query again (same routes), second train `AllPathsBlocked`, release, second train `Success` |
-| Existing `PathReservationService` tests unmodified and green | no existing test file changed; full gate `build detekt ktlintCheck test integrationTest` green on fcd08a4f (core 3872 tests, 0 failures) |
+| Existing `PathReservationService` tests unmodified and green | no existing test file changed; full gate `build detekt ktlintCheck test integrationTest` green on 7b5f8b53 (core 3927, total 6,938 tests, 0 failures, 0 errors); only this row and the footnote below changed afterwards |
 | #895 re-baseline before and after | table below |
 
 The two `commonTest` classes also pass on `:core:linuxX64Test` (8/8).
@@ -147,8 +147,9 @@ perRunTimeoutSeconds 900, example: ["shuntingLoop"]`). Railway outcomes summed o
 | head 15d42b13 † | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 
 Both sweeps: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Base == head.
-† Pre-review revision of fcd08a4f; the review round changed only visibility, KDoc and the test's
-entry-attempt cap, nothing the sweep exercises.
+† Pre-review revision of fcd08a4f; the PR 1190 review rounds afterwards changed only visibility,
+KDoc, test setup helpers, documentation wording, and the cached route list became a private copy
+at cache write (same routes), nothing the sweep exercises.
 
 ## Demands for Goal 9B
 
