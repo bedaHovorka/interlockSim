@@ -58,8 +58,11 @@ class DefaultTopologyNavigator(
 		 * search nodes [searchSwitchConstrainedPaths] takes from its queue before it gives up with
 		 * [RouteSearch.BudgetExceeded].
 		 *
-		 * Measured basis (JVM, 2026-10-11, depth cap 100). The search expands the whole switch-legal
-		 * tree reachable from the start whatever the target, so the count depends on the start only.
+		 * Measured basis (JVM, 2026-10-11, depth cap 100). The BFS is cut at the target, so the
+		 * count depends on the target too; for InOut targets it depends on the start only, because
+		 * InOuts are dead ends and nothing behind them can be pruned. Mid-network targets (for
+		 * example semaphores behind `isPathAvailable`) prune their subtree at the target, so their
+		 * counts are smaller.
 		 * - Shipped networks: the largest enumeration of any ordered InOut pair expands 236 nodes on
 		 *   `praha-hlavni-nadrazi.xml` (50 switches, about 2.5 ms), 47 on `cerveny_ujezd.xml` and 13
 		 *   on `vyhybna.xml`.
@@ -550,13 +553,12 @@ class DefaultTopologyNavigator(
 		target: PathSeparator,
 		maxDepth: Int
 	): List<List<TrackSection>> {
+		val freshSearch = { searchSwitchConstrainedPaths(start, target, maxDepth, routeNodeBudget) }
 		val search =
 			if (cacheRoutes) {
-				routeCache.getOrPut(RouteKey(start, target, maxDepth)) {
-					searchSwitchConstrainedPaths(start, target, maxDepth, routeNodeBudget)
-				}
+				routeCache.getOrPut(RouteKey(start, target, maxDepth), freshSearch)
 			} else {
-				searchSwitchConstrainedPaths(start, target, maxDepth, routeNodeBudget)
+				freshSearch()
 			}
 		return when (search) {
 			is RouteSearch.Completed -> search.paths
@@ -583,7 +585,9 @@ class DefaultTopologyNavigator(
 				getSwitchConstrainedNextTrackSections(separator, section)
 			}
 		if (!outcome.budgetExceeded) {
-			return RouteSearch.Completed(outcome.paths, outcome.expandedNodes)
+			// The BFS list is the cache's outgoing answer: it must be private to the entry, or one
+			// future sorting consumer would corrupt every later answer.
+			return RouteSearch.Completed(outcome.paths.toList(), outcome.expandedNodes)
 		}
 		logger.warn {
 			"Route search from $start to $target stopped after ${outcome.expandedNodes} expanded nodes " +
@@ -685,11 +689,7 @@ class DefaultTopologyNavigator(
 		override fun equals(other: Any?): Boolean =
 			other is RouteKey && start === other.start && target === other.target && maxDepth == other.maxDepth
 
-		override fun hashCode(): Int = (start.hashCode() * HASH_MULTIPLIER + target.hashCode()) * HASH_MULTIPLIER + maxDepth
-
-		private companion object {
-			const val HASH_MULTIPLIER: Int = 31
-		}
+		override fun hashCode(): Int = (start.hashCode() * 31 + target.hashCode()) * 31 + maxDepth
 	}
 
 	/**

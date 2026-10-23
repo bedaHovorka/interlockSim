@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.util.Util
 import org.koin.core.component.get
 import kotlin.test.Test
 
@@ -42,10 +43,11 @@ class RouteSearchBudgetTest : CommonKoinTestBase() {
 		val (from, to) = ctx.getInOuts().toList()
 		val navigator = DefaultTopologyNavigator(ctx)
 
-		val search = navigator.searchSwitchConstrainedPaths(from, to, maxDepth = 100, nodeBudget = TINY_BUDGET)
+		val search =
+			Util.assertInstanceOf<RouteSearch.BudgetExceeded>(
+				navigator.searchSwitchConstrainedPaths(from, to, maxDepth = 100, nodeBudget = TINY_BUDGET)
+			)
 
-		assertThat(search).isInstanceOf<RouteSearch.BudgetExceeded>()
-		search as RouteSearch.BudgetExceeded
 		assertThat(search.nodeBudget, name = "budget").isEqualTo(TINY_BUDGET)
 		assertThat(search.expandedNodes, name = "expanded nodes").isLessThanOrEqualTo(TINY_BUDGET)
 		assertThat(search.start, name = "start").isSameInstanceAs(from)

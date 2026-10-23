@@ -83,10 +83,11 @@ class RouteSearchCacheTest : CommonKoinTestBase() {
 		val changed =
 			CommonTestFixtures.parseSimulationContext(NetworkResources.CERVENY_UJEZD_XML, get()).tracked()
 
-		assertThat(changed.navigator(), name = "navigator of the changed topology")
+		val changedNavigator = changed.navigator()
+		assertThat(changedNavigator, name = "navigator of the changed topology")
 			.isNotSameInstanceAs(first.navigator())
-		assertThat(changed.navigator().routeCacheSize, name = "cache of the new navigator").isZero()
-		assertThat(changed.navigator().routeEnumerationCount, name = "enumerations of the new navigator")
+		assertThat(changedNavigator.routeCacheSize, name = "cache of the new navigator").isZero()
+		assertThat(changedNavigator.routeEnumerationCount, name = "enumerations of the new navigator")
 			.isZero()
 	}
 
@@ -110,8 +111,8 @@ class RouteSearchCacheTest : CommonKoinTestBase() {
 		val navigator = ctx.navigator()
 		val service = ctx.getRoutingServices().getPathReservationService()
 		val (from, to) = ctx.inOutPair()
-		val dynamicFrom = ctx.getInOuts().single { it.staticRef === from }
-		val dynamicTo = ctx.getInOuts().single { it.staticRef === to }
+		val dynamicFrom = ctx.toDynamic(from)
+		val dynamicTo = ctx.toDynamic(to)
 		val routesBefore = ctx.getRouteFinder().findRoutes(from, to, ctx).map { it.segments }
 		assertThat(routesBefore.size, name = "vyhybna routes between the InOuts").isEqualTo(2)
 

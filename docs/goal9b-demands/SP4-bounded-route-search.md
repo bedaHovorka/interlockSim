@@ -25,8 +25,11 @@ is untouched.
    nodes from its queue. Over the budget, `searchSwitchConstrainedPaths` answers the structured
    `RouteSearch.BudgetExceeded(start, target, nodeBudget, expandedNodes)` and logs one warning;
    `findAllSwitchConstrainedPaths` then answers an empty list, so `reservePath` reports
-   `NoPathExists` (permanent for `MultiTrainLoop`, which is correct: the answer depends on the
-   topology only and would never change). The over-budget answer is cached like any other.
+   `NoPathExists`, a permanent refusal for `MultiTrainLoop`. For a search that ran to the end this
+   permanence is exact: the answer is topology-only and never changes. Over the budget the same
+   empty list is lossy and inconclusive, not correct: a valid route may exist beyond the cutoff,
+   and the cached pair is treated as having no route forever. Demand 3 records surfacing that
+   case with a distinct reason. The over-budget answer is cached like any other.
 4. **No behaviour change within the budget.** The enumeration code is the same BFS; the budget
    check sits before each dequeue. The routes and their order are those of the unbounded search
    (`RouteSearchCacheTest.cachedRoutesMatchAnUncachedEnumerationInOrder`). The switch-blind
@@ -38,8 +41,11 @@ JVM, local machine, 2026-10-11, uncached navigator, depth cap 100, second of two
 All 110 ordered InOut pairs of `praha-hlavni-nadrazi.xml`: **30 pairs have a switch-legal route,
 80 have none.** All 110 searches together take 121 ms; the slowest one takes 2.6 ms.
 
-The search expands the whole switch-legal tree reachable from the start, whatever the target, so
-the expanded-node count depends on the start only (pairs without a route expand the same number):
+The BFS is cut at the target: reaching a target adds the route and does not expand behind it, so
+the expanded-node count depends on the target too. For the measured InOut pairs the count depends
+on the start only, because InOuts are dead ends and nothing behind them can be pruned (pairs
+without a route expand the same number). Mid-network targets — for example semaphores behind
+`isPathAvailable` — prune their own subtree, so their counts are smaller and differ per target:
 
 | Start | Expanded nodes | Time per pair |
 |---|---:|---:|
@@ -168,7 +174,9 @@ entry-attempt cap, nothing the sweep exercises.
    for non-InOut `reservePath` starts and `findCandidatePaths`) has neither cache nor budget. It is
    not on a Praha hot path today, but it is the one that grows exponentially (760 paths for one
    Praha pair, SP1).
-5. **Memoise the expansion per start.** The search expands the same tree from a start whatever the
-   target, but the cache key includes the target, so each target of one start pays the full
-   expansion once. A per-start memo (one tree, all targets) would cut that to one expansion per
-   start; not needed at today's sizes.
+5. **Memoise the expansion per start.** For InOut targets the search expands the same tree from a
+   start whatever the target, but the cache key includes the target, so each target of one start
+   pays the full expansion once. A per-start memo (one tree, all targets) would cut that to one
+   expansion per start; not needed at today's sizes. The premise above — the count depends on the
+   start only — holds for the dead-end InOut pairs, not for mid-network targets, which prune at
+   the target; a per-start memo needs its own measurements.
