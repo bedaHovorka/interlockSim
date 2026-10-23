@@ -96,9 +96,10 @@ class Station private constructor(
 			val graph = context.getGraph()
 			val nodes = graph.nodeSet().sortedWith(Array2DMap.POINT_COMPARATOR)
 
-			val endpoints: Map<DynamicTrackBlock, List<Point>> = nodes
-				.flatMap { node -> graph[node].map { it to node } }
-				.groupBy(keySelector = { it.first }, valueTransform = { it.second })
+			val endpoints: Map<DynamicTrackBlock, List<Point>> =
+				nodes
+					.flatMap { node -> graph[node].map { it to node } }
+					.groupBy(keySelector = { it.first }, valueTransform = { it.second })
 
 			val entryExitBlocks = mutableListOf<StationBlock>()
 			context.getInOuts().forEachIndexed { index, inOut ->
