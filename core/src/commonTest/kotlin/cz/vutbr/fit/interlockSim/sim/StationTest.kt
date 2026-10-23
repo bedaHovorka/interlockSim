@@ -8,12 +8,16 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
@@ -21,13 +25,15 @@ import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.util.Point
 import org.koin.core.component.get
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * Topology derivation of [Station] (Goal 1B SP2.1, Issue #1161; SIM-004).
  *
  * The vyhybna parity tests pin the derived blocks, signals and switches against the
  * hand-written `ShuntingLoop.COORD_*` contract that the derivation replaces. The other tests
- * show that the same derivation builds a [Station] from the larger fixture networks.
+ * show that the same derivation builds a [Station] from the larger fixture networks and
+ * rejects networks `ShuntingLoop` cannot run.
  */
 class StationTest : CommonKoinTestBase() {
 	private fun load(xml: String): DefaultSimulationContext {
@@ -36,12 +42,16 @@ class StationTest : CommonKoinTestBase() {
 		return ctx
 	}
 
+	private fun vyhybna(): Pair<DefaultSimulationContext, Station> {
+		val ctx = load(NetworkResources.VYHYBNA_XML)
+		return ctx to Station.from(ctx)
+	}
+
 	private fun DefaultSimulationContext.locationOf(cell: Cell): Point? = getRailWayNetGrid().getLocation(cell)
 
 	@Test
 	fun vyhybnaPlatformTracksMatchTheOldCoordinateContract() {
-		val ctx = load(NetworkResources.VYHYBNA_XML)
-		val station = Station.from(ctx)
+		val (ctx, station) = vyhybna()
 
 		assertThat(station.platformTracks.map { it.name }).containsExactly("k1", "k2")
 		val (k1, k2) = station.platformTracks
@@ -71,8 +81,7 @@ class StationTest : CommonKoinTestBase() {
 
 	@Test
 	fun vyhybnaEntryExitBlocksMatchTheOldCoordinateContract() {
-		val ctx = load(NetworkResources.VYHYBNA_XML)
-		val station = Station.from(ctx)
+		val (ctx, station) = vyhybna()
 
 		// Order kB, kA is the old ShuntingLoop insertion order; it feeds the dispatcher
 		// observation, so it must not change.
@@ -107,8 +116,7 @@ class StationTest : CommonKoinTestBase() {
 
 	@Test
 	fun vyhybnaSwitchesMatchTheOldCoordinateContract() {
-		val ctx = load(NetworkResources.VYHYBNA_XML)
-		val station = Station.from(ctx)
+		val (ctx, station) = vyhybna()
 
 		assertThat(station.switches.map { ctx.locationOf(it) }).containsExactlyInAnyOrder(
 			Point(ShuntingLoop.COORD_SW_A_X, ShuntingLoop.COORD_SW_A_Y),
@@ -117,30 +125,18 @@ class StationTest : CommonKoinTestBase() {
 	}
 
 	@Test
-	fun signalsOfReturnsTheSignalPerBlockMapping() {
-		val ctx = load(NetworkResources.VYHYBNA_XML)
-		val station = Station.from(ctx)
-
-		for (stationBlock in station.platformTracks + station.entryExitBlocks) {
-			assertThat(station.signalsOf(stationBlock.block)).isEqualTo(stationBlock.signals)
-		}
-	}
-
-	@Test
 	fun applyBlockNamesNamesTheVyhybnaBlocks() {
-		val ctx = load(NetworkResources.VYHYBNA_XML)
-		val station = Station.from(ctx)
+		val (_, station) = vyhybna()
 
 		station.applyBlockNames()
 
-		assertThat((station.platformTracks + station.entryExitBlocks).map { it.block.name })
+		assertThat(station.allBlocks.map { it.block.name })
 			.containsExactly("k1", "k2", "kB", "kA")
 	}
 
 	@Test
 	fun buildsFromCervenyUjezd() {
-		val ctx = load(NetworkResources.CERVENY_UJEZD_XML)
-		val station = Station.from(ctx)
+		val station = Station.from(load(NetworkResources.CERVENY_UJEZD_XML))
 
 		// Four signal-bounded station tracks (rows 30-33), four InOut lines, twelve switches.
 		assertThat(station.platformTracks).hasSize(4)
@@ -151,13 +147,43 @@ class StationTest : CommonKoinTestBase() {
 
 	@Test
 	fun buildsFromPrahaHlavniNadrazi() {
-		val ctx = load(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML)
-		val station = Station.from(ctx)
+		val station = Station.from(load(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML))
 
 		// Eight platform tracks plus the bypass station track; the signal-bounded block next to
 		// the N-Bypass home signal is a throat block, not a station track.
 		assertThat(station.platformTracks).hasSize(9)
 		assertThat(station.entryExitBlocks).hasSize(11)
 		assertThat(station.switches).hasSize(50)
+	}
+
+	@Test
+	fun entryExitBlockWithoutHomeSignalHasNoSignals() {
+		val ctx = load(NetworkResources.SWITCH_BETWEEN_SEMAPHORES_XML)
+		val station = Station.from(ctx)
+
+		// No block here is bounded by semaphores at both ends, so no platform track exists; and
+		// the block at InOut C ends at the switch, not at a semaphore, so C has no home signal.
+		assertThat(station.platformTracks).isEmpty()
+		assertThat(station.entryExitBlocks.map { it.name }).containsExactly("kA", "kB", "kC")
+		assertThat(station.entryExitBlocks.single { it.name == "kC" }.signals).isEmpty()
+	}
+
+	@Test
+	fun cellOnlyNetworkYieldsAnEmptyStation() {
+		val ctx = load(NetworkResources.LEGACY_NETWORK_NO_NAMES_XML)
+		val station = Station.from(ctx)
+
+		// The fixture has cells but no track blocks, so nothing joins the track graph.
+		assertThat(station.allBlocks).isEmpty()
+		assertThat(station.switches).isEmpty()
+	}
+
+	@Test
+	fun shuntingLoopGuardRejectsASemaphoreFreeNetwork() {
+		val ctx = load(NetworkResources.LINEAR_TRACK_XML)
+
+		val exception = assertFailsWith<SimulationException> { ShuntingLoop(ctx, 1000) }
+
+		assertThat(exception.message).isNotNull().contains("found 0 platform track(s)")
 	}
 }

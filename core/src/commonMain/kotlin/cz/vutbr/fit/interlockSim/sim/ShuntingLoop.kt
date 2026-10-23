@@ -317,9 +317,8 @@ class ShuntingLoop(
 
 	init {
 		requireSimulation(context.getGraph().size() > 0) {
-			"Railway network graph is empty - must be loaded from vyhybna.xml first"
+			"Railway network graph is empty - load a network XML first"
 		}
-		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
 		// Goal 1B SP2.1 (Issue #1161, SIM-004): the blocks and signals come from the topology
 		// through [Station] instead of hand-written coordinates. On vyhybna.xml the derivation
@@ -339,6 +338,8 @@ class ShuntingLoop(
 		// Paths are now discovered dynamically using TopologyNavigator when needed
 		innerTrackBlocks.addAll(station.platformTracks.map { it.block })
 		for (entryExit in signalledEntryExitBlocks) {
+			// single() stays a loud failure: SP3 (issue #1192) direction-aware signals may add a
+			// second entry/exit signal, and then this must be decided, not silently picked.
 			outerTrackblocks[entryExit.block] = entryExit.signals.single()
 		}
 	}

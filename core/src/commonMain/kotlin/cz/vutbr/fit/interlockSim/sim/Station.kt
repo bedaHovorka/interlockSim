@@ -14,20 +14,28 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.Point
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * A station as the dispatcher sees it, derived from the topology of any loaded network
  * (Goal 1B SP2, SIM-004).
  *
- * Nothing here is written by hand for one network: the block set, the entry/exit blocks and the
- * signal-per-block mapping all come from the track graph and the cells at its nodes.
+ * Nothing here is written by hand for one network: the block set, the entry/exit blocks with
+ * their home signals and the switches all come from the track graph and the cells at its nodes.
+ * This is a static inventory view; `:dispatcher-agent`'s `StationTopology` is the compact
+ * prompt view of the same inventory, and `GridScanUtils.cellsOfType` scans whole-grid cells
+ * rather than graph nodes.
  *
  * **Derivation rules**
  * - An **entry/exit block** is the block at an InOut. Its signal is the home signal: the
  *   [DynamicRailSemaphore] at the other end of that block, when there is one. Entry/exit
  *   blocks keep the order of [SimulationEnvironment.getInOuts] (the document order of the
- *   network XML).
+ *   network XML). Corners: an InOut node may host more than one block (the blocks then share
+ *   the derived name, and the last name wins in [applyBlockNames]), two InOuts joined by a
+ *   single block produce two entry/exit blocks over the same block, and an InOut with no grid
+ *   location is skipped with a warning.
  * - A **platform track** is a block bounded by a [DynamicRailSemaphore] at both ends where
  *   neither end is a home signal. A signal-bounded block next to a home signal belongs to the
  *   station throat, not to the station tracks. Platform tracks are ordered row by row (grid
@@ -52,65 +60,58 @@ class Station private constructor(
 	/** Every switch of the network, row order. */
 	val switches: List<DynamicRailSwitch>
 ) {
-	/** What role a [StationBlock] plays in the station. */
-	enum class Kind {
-		PLATFORM_TRACK,
-		ENTRY_EXIT
-	}
+	/** All station blocks: platform tracks first, then entry/exit blocks. */
+	val allBlocks: List<StationBlock>
+		get() = platformTracks + entryExitBlocks
 
 	/**
 	 * One station block with its derived name and signals.
 	 *
 	 * @property signals for a platform track both end signals; for an entry/exit block the home
 	 *   signal, or nothing when the block does not end at a semaphore
-	 * @property inOut the InOut of an entry/exit block; `null` for a platform track
+	 * @property inOut the InOut of an entry/exit block; `null` for a platform track, which makes
+	 *   `inOut == null` the marker of the platform-track role
 	 */
 	class StationBlock(
 		val name: String,
-		val kind: Kind,
 		val block: DynamicTrackBlock,
 		val signals: List<DynamicRailSemaphore>,
 		val inOut: DynamicInOut?
 	)
 
-	private val signalsByBlock: Map<DynamicTrackBlock, List<DynamicRailSemaphore>> =
-		(platformTracks + entryExitBlocks).associate { it.block to it.signals }
-
-	/** The signals of [block], or an empty list for a block that is not a station block. */
-	fun signalsOf(block: DynamicTrackBlock): List<DynamicRailSemaphore> = signalsByBlock[block].orEmpty()
-
 	/** Writes the derived names onto the blocks (block names appear in observations and logs). */
 	fun applyBlockNames() {
-		for (stationBlock in platformTracks + entryExitBlocks) {
+		for (stationBlock in allBlocks) {
 			stationBlock.block.name = stationBlock.name
 		}
 	}
 
 	companion object {
+		private val logger = KotlinLogging.logger {}
 		private const val BLOCK_PREFIX = "k"
-		private val ROW_ORDER: Comparator<Point> = compareBy<Point>({ it.y }, { it.x })
 
 		/** Derives the station of the network loaded into [context]. */
 		fun from(context: SimulationEnvironment): Station {
 			val grid = context.getRailWayNetGrid()
 			val graph = context.getGraph()
-			val nodes = graph.nodeSet().sortedWith(ROW_ORDER)
+			val nodes = graph.nodeSet().sortedWith(Array2DMap.POINT_COMPARATOR)
 
-			val endpoints = LinkedHashMap<DynamicTrackBlock, MutableList<Point>>()
-			for (node in nodes) {
-				for (block in graph[node]) {
-					endpoints.getOrPut(block) { mutableListOf() }.add(node)
-				}
-			}
+			val endpoints: Map<DynamicTrackBlock, List<Point>> = nodes
+				.flatMap { node -> graph[node].map { it to node } }
+				.groupBy(keySelector = { it.first }, valueTransform = { it.second })
 
 			val entryExitBlocks = mutableListOf<StationBlock>()
 			context.getInOuts().forEachIndexed { index, inOut ->
-				val at = grid.getLocation(inOut) ?: return@forEachIndexed
+				val at = grid.getLocation(inOut)
+				if (at == null) {
+					logger.warn { "InOut ${inOut.name} has no grid location; skipped from the station derivation" }
+					return@forEachIndexed
+				}
 				val name = BLOCK_PREFIX + inOut.name.ifBlank { "InOut${index + 1}" }
 				for (block in graph[at]) {
 					val farEnd = endpoints[block].orEmpty().firstOrNull { it != at }
 					val homeSignal = farEnd?.let { grid[it] } as? DynamicRailSemaphore
-					entryExitBlocks += StationBlock(name, Kind.ENTRY_EXIT, block, listOfNotNull(homeSignal), inOut)
+					entryExitBlocks += StationBlock(name, block, listOfNotNull(homeSignal), inOut)
 				}
 			}
 
@@ -122,7 +123,7 @@ class Station private constructor(
 						val isStationTrack = ends.size == 2 && signals.size == 2 && signals.none { it in homeSignals }
 						if (isStationTrack) block to signals else null
 					}.mapIndexed { index, (block, signals) ->
-						StationBlock(BLOCK_PREFIX + (index + 1), Kind.PLATFORM_TRACK, block, signals, inOut = null)
+						StationBlock(BLOCK_PREFIX + (index + 1), block, signals, inOut = null)
 					}
 
 			val switches = nodes.mapNotNull { grid[it] as? DynamicRailSwitch }
