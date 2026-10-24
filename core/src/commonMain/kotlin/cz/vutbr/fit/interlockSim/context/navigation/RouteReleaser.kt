@@ -244,10 +244,7 @@ internal class RouteReleaser(
 			// whole footprint is gone (Issue #1050 review round).
 			blocks.forEach { approachLockDeferredUntil.remove(it) }
 			// Emit BlockReleased after registry cleanup so isBlockAvailable() returns true for subscribers
-			val simTime = currentSimulationTime()
-			blocks.forEach { block ->
-				emitBlockReleased(block, trainId, simTime)
-			}
+			emitReleasesContained("releasePath", blocks, trainId)
 			// Train is done contending for any block it may have been blocked on.
 			clearBlockedTracking(trainId)
 		}
@@ -444,11 +441,38 @@ internal class RouteReleaser(
 			"unregister: Released ${releasedBlocks.size} blocks for train '$trainId': " +
 				releasedBlocks.joinToString(", ") { it.toString() }
 		}
-		val simTime = currentSimulationTime()
-		releasedBlocks.forEach { block ->
-			emitBlockReleased(block, trainId, simTime)
-		}
+		emitReleasesContained("unregister", releasedBlocks, trainId)
 		return releasedBlocks
+	}
+
+	/**
+	 * Announce the release of every block of a whole-route funnel ([releaseAllBlocks],
+	 * [unregister]), containing each block's emission on its own (Issue #1202).
+	 *
+	 * The legacy [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener] channel
+	 * ([PathReservationRegistry.emit]) does not catch listener exceptions, and the whole train
+	 * footprint is already gone from the registry by the time these events go out: a throwing
+	 * listener must not cost the remaining freed blocks their announcement, skip the funnel's
+	 * contention clear, or reach the release caller (`NetworkActuatorPort.releaseRoute`:
+	 * `cancel_route` and the orphan sweeper). The catch spans the whole announce step, so a
+	 * throwing subscriber on the kDisco event channel is contained the same way; the legacy
+	 * channel is just the one issue #1202 names. The per-block funnel keeps propagating instead --
+	 * there the caller releases one block and can act on the failure (pinned by
+	 * `PathReservationReleaseAndRollbackBlockTest` and `Issue1076RegressionTest`).
+	 */
+	private fun emitReleasesContained(
+		step: String,
+		blocks: List<DynamicTrackBlock>,
+		trainId: String
+	) {
+		val simTime = currentSimulationTime()
+		blocks.forEach { block ->
+			try {
+				emitBlockReleased(block, trainId, simTime)
+			} catch (e: Exception) {
+				logger.warn(e) { "$step: Failed to announce the release of block $block for '$trainId'" }
+			}
+		}
 	}
 
 	/**
