@@ -145,7 +145,7 @@ internal class SwitchConfigurator(
 	 *   ([PathSeparatorChangeException] with both segments known): the candidate route is
 	 *   physically impossible (e.g. the sibling-branch "diversion" doB1→doB2 through vB, whose
 	 *   legs no configuration of vB connects). This now FAILS the whole configuration —
-	 *   returning `false` — instead of being silently skipped. Silently skipping reserved
+	 *   returning [SwitchConfigOutcome.Unconfigurable] — instead of being silently skipped. Silently skipping reserved
 	 *   untraversable routes and permanently stalled trains (captured in failing
 	 *   `RuleBasedDispatcherDeterminismTest` runs).
 	 *
@@ -200,44 +200,8 @@ internal class SwitchConfigurator(
 			// Only process switches
 			if (element !is DynamicRailSwitch) return@forEachIndexed
 
-			// Find previous and next Track (skip over separators)
-			val previous = nearestTrackBefore(pathElements, index)
-			val next = nearestTrackAfter(pathElements, index)
-
-			// Skip if we don't have a next track (required for configuration)
-			if (next == null) {
-				logger.warn {
-					"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
-						"has no next track, skipping configuration"
-				}
-				return@forEachIndexed
-			}
-
-			// Calculate from/to segments using context.getSegment()
-			// from = segment the train is coming FROM
-			// to = segment the train is going TO
-			val from = context.getSegment(element, previous, next)
-			val to = context.getSegment(element, next, previous)
-
-			// Lenient skip (pre-#742 behavior): segments undeterminable means the path does
-			// not geometrically traverse this switch, so there is nothing to configure.
-			if (from == null || to == null) {
-				logger.info {
-					"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
-						"for train $trainId - segments undeterminable, path does not traverse it " +
-						"(from=${from?.hashCode()}, to=${to?.hashCode()})"
-				}
-				return@forEachIndexed
-			}
-
-			// Issues #1065/#1076: non-throwing pre-check of ownership/lock contention
-			// (see switchOwnershipPreCheck for the classification rules).
-			switchOwnershipPreCheck(trainId, element, element.pathConf(from, to))?.let { outcome ->
-				pendingLocked = pendingLocked ?: outcome
-				return@forEachIndexed
-			}
-
-			when (val outcome = setUpTraversedSwitch(trainId, element, from, to)) {
+			val outcome = configureSwitchAt(trainId, context, pathElements, index, element) ?: return@forEachIndexed
+			when (outcome) {
 				SwitchConfigOutcome.Configured -> configuredCount++
 				SwitchConfigOutcome.Unconfigurable -> return outcome
 				is SwitchConfigOutcome.Locked -> pendingLocked = pendingLocked ?: outcome
@@ -248,6 +212,59 @@ internal class SwitchConfigurator(
 			"configureSwitchesInPath: Configured $configuredCount switch(es) for train $trainId"
 		}
 		return pendingLocked ?: SwitchConfigOutcome.Configured
+	}
+
+	/**
+	 * The per-switch step of [configureSwitchesInPath] for [element], the switch sitting at
+	 * [index] in [pathElements] (issue #1170 review). Determines the neighbours, classifies the
+	 * configuration outcome for this one element; the caller keeps the loop-level bookkeeping
+	 * (first-hit-wins `Locked`, immediate bail on `Unconfigurable`).
+	 *
+	 * @return the outcome for the caller's loop, or `null` when the path does not genuinely
+	 *   traverse [element] (no next track, or no segment joins it) — skip, contributes nothing
+	 */
+	private fun configureSwitchAt(
+		trainId: String,
+		context: cz.vutbr.fit.interlockSim.context.SimulationContext,
+		pathElements: List<PathElement>,
+		index: Int,
+		element: DynamicRailSwitch
+	): SwitchConfigOutcome? {
+		// Find previous and next Track (skip over separators)
+		val previous = nearestTrackBefore(pathElements, index)
+		val next = nearestTrackAfter(pathElements, index)
+
+		// Skip if we don't have a next track (required for configuration)
+		if (next == null) {
+			logger.warn {
+				"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
+					"has no next track, skipping configuration"
+			}
+			return null
+		}
+
+		// Calculate from/to segments using context.getSegment()
+		// from = segment the train is coming FROM
+		// to = segment the train is going TO
+		val from = context.getSegment(element, previous, next)
+		val to = context.getSegment(element, next, previous)
+
+		// Lenient skip (pre-#742 behavior): segments undeterminable means the path does
+		// not geometrically traverse this switch, so there is nothing to configure.
+		if (from == null || to == null) {
+			logger.info {
+				"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
+					"for train $trainId - segments undeterminable, path does not traverse it " +
+					"(from=${from?.hashCode()}, to=${to?.hashCode()})"
+			}
+			return null
+		}
+
+		// Issues #1065/#1076: non-throwing pre-check of ownership/lock contention
+		// (see switchOwnershipPreCheck for the classification rules).
+		switchOwnershipPreCheck(trainId, element, element.pathConf(from, to))?.let { return it }
+
+		return setUpTraversedSwitch(trainId, element, from, to)
 	}
 
 	/**
@@ -373,6 +390,9 @@ internal class SwitchConfigurator(
 	 * Behaviour pinned by `SwitchConfiguratorTest` (Issue #1170): a listed switch the candidate does
 	 * not genuinely traverse is registered (and locked) too, even when [trainId] holds no block
 	 * bounded by it -- a claim born stale. Issue #1173 changes this on purpose.
+	 *
+	 * Correct only inside Step 2f, after Step 2e.5 and after [configureSwitchesInPath] returned
+	 * `Configured`; called alone it registers a switch the candidate never touched (born stale).
 	 *
 	 * @since Issue #1170 (extracted from `DefaultPathReservationService.configureAndRegisterSwitches`)
 	 */
