@@ -14,11 +14,13 @@ import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -154,5 +156,54 @@ class RouteSignalConfiguratorTest : PathReservationServiceTestBase() {
 
 		assertThat(inOutA.inSemaphore.signal.isAllowing()).isTrue()
 		assertThat(ledger.snapshotClearedSemaphores("t1").toList()).containsExactly(inOutA.inSemaphore)
+	}
+
+	// Issue #1103's producer contract and the two fail-open guards. The listener pins inject the
+	// failure on the semaphore's listener list, so the aspect write misbehaves mid-flight (the
+	// field is already written when the listener fires). The fail-open pins starve the guard of
+	// what it would normally read — a context it cannot consult, or a pair it cannot resolve.
+
+	@Test
+	fun `configureStartSignal reports ConfigFailed when an InOut START's write throws mid-flight`() {
+		val inOutA = inOutNamed("A") as DynamicInOut
+		inOutA.inSemaphore.addPropertyChangeListener {
+			throw IllegalStateException("injected signal-write listener failure")
+		}
+
+		val result = configurator.configureStartSignal("t1", inOutA, aToB, aToB.first())
+
+		assertThat(result).isEqualTo(StartSignalResult.ConfigFailed)
+		assertThat(ledger.snapshotClearedSemaphores("t1")).isEmpty()
+		assertThat(inOutA.inSemaphore.signal.isAllowing())
+			.withMessage("the aspect write landed in front of the throwing listener")
+			.isTrue()
+	}
+
+	@Test
+	fun `configureBypassStartSignal lights a rear-facing START when the environment offers no segment map`() {
+		val doA1 = findSemaphoreByName("doA1")
+		val segmentLess: SimulationEnvironment = object : SimulationEnvironment by environment {}
+		val bare = RouteSignalConfigurator(segmentLess, ledger)
+
+		// The context-backed twin of this exact call leaves doA1 at STOP (rear-facing skip); with
+		// no SimulationContext to consult, facesDirectionOfTravel must fail open and light it.
+		bare.configureBypassStartSignal("t1", doA1, listOf(blockBetween("doA1", "doB1")))
+
+		assertThat(doA1.signal.isAllowing()).isTrue()
+		assertThat(ledger.snapshotClearedSemaphores("t1").toList()).containsExactly(doA1)
+	}
+
+	@Test
+	fun `configureAlreadyOwnedStartSignal takes an unresolvable start-block pair as facing`() {
+		val zA = findSemaphoreByName("zA")
+		val farBlock = blockBetween("doB1", "vB")
+
+		configurator.configureAlreadyOwnedStartSignal("t1", zA, listOf(farBlock))
+
+		// The tolerant guard catches the unresolved pair and treats zA as facing; the resulting
+		// write cannot resolve the pair either and configureSemaphoreSignal swallows that
+		// (SEMAPHORE_CONFIG_WARNING, non-fatal), so zA stays STOP and nothing gets recorded.
+		assertThat(zA.signal).isEqualTo(Signal.STOP)
+		assertThat(ledger.snapshotClearedSemaphores("t1")).isEmpty()
 	}
 }

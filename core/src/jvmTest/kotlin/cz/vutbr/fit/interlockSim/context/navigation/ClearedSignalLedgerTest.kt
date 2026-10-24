@@ -190,4 +190,81 @@ class ClearedSignalLedgerTest : PathReservationServiceTestBase() {
 		assertThat(doB1.signal).isEqualTo(Signal.STOP)
 		assertThat(zA.signal).isEqualTo(Signal.S80)
 	}
+
+	// Issue #1103's producer contract: a listener must not throw, and every producer of a signal
+	// write must contain a throwing listener. These three pins hold the ledger to that contract
+	// on each of its reset paths. The injected failure sits on the semaphore's listener list, so
+	// the `signal = STOP` write itself misbehaves mid-flight (the field is already written when
+	// the listener fires), and the ledger must still finish its bookkeeping.
+
+	@Test
+	fun `resetClearedSemaphores survives a throwing STOP write and still resets the rest`() {
+		val zA = lit("zA")
+		val doB1 = lit("doB1")
+		zA.addPropertyChangeListener { throw IllegalStateException("injected signal-write listener failure") }
+		ledger.recordClearedSemaphore("t1", zA)
+		ledger.recordClearedSemaphore("t1", doB1)
+
+		ledger.resetClearedSemaphores("t1")
+
+		assertThat(zA.signal).isEqualTo(Signal.STOP)
+		assertThat(doB1.signal).isEqualTo(Signal.STOP)
+		assertThat(ledger.hasClearedSignals("t1")).isFalse()
+	}
+
+	@Test
+	fun `resetSemaphoreSet survives a throwing STOP write and still resets the rest of the set`() {
+		val zA = lit("zA")
+		val doB1 = lit("doB1")
+		doB1.addPropertyChangeListener { throw IllegalStateException("injected signal-write listener failure") }
+		ledger.recordClearedSemaphore("t1", zA)
+		ledger.recordClearedSemaphore("t1", doB1)
+
+		ledger.resetSemaphoreSet("t1", setOf(zA, doB1))
+
+		assertThat(zA.signal).isEqualTo(Signal.STOP)
+		assertThat(doB1.signal).isEqualTo(Signal.STOP)
+		assertThat(ledger.hasClearedSignals("t1")).isFalse()
+	}
+
+	@Test
+	fun `resetUnrecordedStartSignal survives a throwing STOP write`() {
+		val doA1 = lit("doA1")
+		doA1.addPropertyChangeListener { throw IllegalStateException("injected signal-write listener failure") }
+
+		ledger.resetUnrecordedStartSignal("t1", doA1, clearedBeforeStart = emptySet())
+
+		assertThat(doA1.signal).isEqualTo(Signal.STOP)
+	}
+
+	@Test
+	fun `resetUnrecordedStartSignal ignores a switch START that carries no signal`() {
+		ledger.resetUnrecordedStartSignal("t1", findSwitchByName("vA"), clearedBeforeStart = emptySet())
+
+		assertThat(ledger.hasClearedSignals("t1")).isFalse()
+	}
+
+	@Test
+	fun `resetUnrecordedStartSignal keeps the train's other cleared semaphores`() {
+		val zA = lit("zA")
+		val doA1 = lit("doA1")
+		ledger.recordClearedSemaphore("t1", zA)
+
+		// doA1 stays unrecorded: the partial-write shape (lit by this attempt, never recorded).
+		ledger.resetUnrecordedStartSignal("t1", doA1, clearedBeforeStart = emptySet())
+
+		assertThat(doA1.signal).isEqualTo(Signal.STOP)
+		assertThat(ledger.snapshotClearedSemaphores("t1").toList()).containsExactly(zA)
+	}
+
+	@Test
+	fun `resetUnrecordedStartSignal drops the train's entry when its own set empties`() {
+		val doA1 = lit("doA1")
+		ledger.recordClearedSemaphore("t1", doA1)
+
+		ledger.resetUnrecordedStartSignal("t1", doA1, clearedBeforeStart = emptySet())
+
+		assertThat(doA1.signal).isEqualTo(Signal.STOP)
+		assertThat(ledger.hasClearedSignals("t1")).isFalse()
+	}
 }
