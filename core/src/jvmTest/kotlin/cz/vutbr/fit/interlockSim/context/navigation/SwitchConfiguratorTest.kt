@@ -14,20 +14,27 @@ import assertk.assertions.containsExactly
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFailure
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
-import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.spyk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Unit tests for [SwitchConfigurator], the switch-configuration seam extracted from
@@ -58,15 +65,12 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 		zA = findSemaphoreByName("zA")
 		doB1 = findSemaphoreByName("doB1")
 		doB2 = findSemaphoreByName("doB2")
-		vA = switchNamed("vA")
-		vB = switchNamed("vB")
+		vA = findSwitchByName("vA")
+		vB = findSwitchByName("vB")
 		if (vA.conf != Conf.MAIN) {
 			vA.changeConf()
 		}
 	}
-
-	private fun switchNamed(name: String): DynamicRailSwitch =
-		simulationContext.cellsOfType<DynamicRailSwitch>().single { it.name == name }
 
 	/** PathInfo of the shortest topological path from [start] to [target]. */
 	private fun pathInfo(
@@ -89,12 +93,24 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 		return info
 	}
 
+	/**
+	 * A hand-built PathInfo listing [vA] twice (via [RegistryUnitFixture.pathInfo]). Production
+	 * paths never repeat a separator; this pins the dedup branch of [SwitchConfigurator.extractUniqueSwitches].
+	 */
+	private fun pathInfoListingVAInTwice(): PathInfo = RegistryUnitFixture(simulationContext).pathInfo(vA, vA)
+
 	@Nested
 	@DisplayName("extractUniqueSwitches")
 	inner class ExtractUniqueSwitches {
 		@Test
 		fun `lists every switch of the path once`() {
 			assertThat(configurator.extractUniqueSwitches(pathInfo(zA, doB1))).containsExactly(vA)
+		}
+
+		@Test
+		fun `a switch listed twice is extracted once`() {
+			assertThat(configurator.extractUniqueSwitches(pathInfoListingVAInTwice()))
+				.containsExactly(vA)
 		}
 
 		@Test
@@ -160,6 +176,16 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 
 			assertThat(outcome).isEqualTo(SwitchConfigOutcome.Configured)
 			assertThat(vA.locked).isFalse()
+		}
+
+		@Test
+		fun `a plain environment fails the configuration fast`() {
+			val onPlainEnvironment = SwitchConfigurator(mockk<SimulationEnvironment>(), registry)
+
+			assertThatBlock { onPlainEnvironment.configureSwitchesInPath(TRAIN, pathInfo(zA, doB1)) }
+				.isFailure()
+				.isInstanceOf(IllegalStateException::class)
+				.hasMessageContaining("requires SimulationContext")
 		}
 	}
 
@@ -271,6 +297,22 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 
 			assertThat(registry.getSwitchOwner(vA)).isEqualTo(OTHER)
 			assertThat(vA.locked).isTrue()
+		}
+
+		@Test
+		fun `a failing registry release is contained and the rest of the candidate still releases`() {
+			val spyRegistry = spyk(registry)
+			every { spyRegistry.unregisterSwitch(TRAIN, vA) } throws
+				IllegalStateException("unit-test registry failure")
+			val onSpyRegistry = SwitchConfigurator(environment, spyRegistry)
+			spyRegistry.registerSwitches(TRAIN, listOf(vA))
+			vB.lock()
+
+			onSpyRegistry.releaseCandidateSwitches(TRAIN, listOf(vA, vB))
+
+			assertThat(registry.getSwitchOwner(vA), name = "the failing entry is untouched").isEqualTo(TRAIN)
+			assertThat(vA.locked, name = "the failing entry is untouched").isTrue()
+			assertThat(vB.locked, name = "the release continued past the failing entry").isFalse()
 		}
 	}
 
