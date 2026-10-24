@@ -494,8 +494,8 @@ internal class RouteReleaser(
 		}
 		// Signals first, then registry: reset the governing semaphore to STOP BEFORE the block
 		// leaves the registry, so there is no instant where a block is owner-less-and-FREE while
-		// its authorising signal still shows proceed. Matches release's "signals first, then
-		// registry" step.
+		// its authorising signal still shows proceed. Matches release's "Signals first, blocks
+		// second" step.
 		// Emission stays last, so a subscriber still never observes a FREE block whose signal
 		// shows proceed.
 		resetSemaphoresForReleasedBlocks(trainId, listOf(block))

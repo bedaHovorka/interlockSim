@@ -225,15 +225,12 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `releasePath tolerates a block whose path setup someone already cancelled`() {
-		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		val blocks = reserveRouteWithStaleLastBlock()
 		val preCancelled = blocks.last()
-		preCancelled.cancelPathSetup(checkNotNull(preCancelled.reservedFrom))
-		assertThat(preCancelled.getState(), "state after the manual cancel").isEqualTo(TrackFacility.State.FREE)
 
 		val released = service.releasePath("train1")
 
-		assertThat(released.toSet(), "the whole route releases despite the stale block")
-			.isEqualTo(blocks.toSet())
+		assertThat(released, "the whole route releases despite the stale block").isEqualTo(blocks)
 		blocks.forEach { block ->
 			assertThat(block.getState(), "state of $block").isEqualTo(TrackFacility.State.FREE)
 			assertThat(registry.getOwner(block), "owner of $block").isNull()
@@ -242,9 +239,7 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `releaseBlock drops a block whose reservation was already cancelled`() {
-		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
-		val block = blocks.last()
-		block.cancelPathSetup(checkNotNull(block.reservedFrom))
+		val block = reserveRouteWithStaleLastBlock().last()
 
 		assertThat(recordingReleaser().releaseBlock("train1", block)).isTrue()
 
@@ -254,9 +249,7 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `rollbackBlock drops an already-cancelled block without touching the signals`() {
-		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
-		val block = blocks.last()
-		block.cancelPathSetup(checkNotNull(block.reservedFrom))
+		val block = reserveRouteWithStaleLastBlock().last()
 
 		assertThat(recordingReleaser().rollbackBlock("train1", block)).isTrue()
 
@@ -270,7 +263,6 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		val stuck =
 			mockk<DynamicTrackBlock> {
 				every { reservedFrom } returns separator
-				every { trainName } returns "train1"
 				every { cancelPathSetup(separator) } answers { throw IllegalStateException("forced") }
 			}
 		val healthy =
@@ -285,6 +277,16 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		verify(exactly = 1) { healthy.cancelPathSetup(separator) }
 		assertThat(calls).isEmpty()
 	}
+
+	/**
+	 * Reserves the vyhybna route for train1 and cancels its last block's path setup by hand,
+	 * leaving that block FREE with a null `reservedFrom` still owned in the registry — the
+	 * "someone released part of the route under us" state the three pins below exercise.
+	 */
+	private fun reserveRouteWithStaleLastBlock(): List<DynamicTrackBlock> =
+		assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks.also { blocks ->
+			blocks.last().cancelPathSetup(checkNotNull(blocks.last().reservedFrom))
+		}
 
 	private companion object {
 		val RESERVED = TrackFacility.State.RESERVED

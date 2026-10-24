@@ -47,6 +47,16 @@ import org.koin.test.inject
  * @since Issue #1165 (extracted from PathReservationServiceTest)
  */
 abstract class PathReservationServiceTestBase : KoinTestBase() {
+	/**
+	 * The simulation context the concrete test class runs on. Default: vyhybna.xml (the
+	 * bundled example). Override to run on another fixture network — every lookup and helper
+	 * below (inOut1/inOut2, findSemaphoreByName, findSwitchByName, inOutNamed, blockBetween,
+	 * occupy, assertPathContainsSeparators) reads from this one context and works for any
+	 * loaded network, so a new fixture is an override, not a fork of this base (PR #1194
+	 * review round).
+	 */
+	protected open fun loadTestContext(): DefaultSimulationContext = loadVyhybnaContext()
+
 	protected val editingContextFactory: JvmEditingContextFactory by inject()
 	protected val simulationContextFactory: SimulationContextFactory by inject()
 
@@ -60,8 +70,8 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		// Load vyhybna.xml from resources
-		simulationContext = loadVyhybnaContext().tracked()
+		// Load the test class's network from resources
+		simulationContext = loadTestContext().tracked()
 
 		environment = simulationContext
 
