@@ -865,6 +865,12 @@ PathReservationUnregisterBlockSignalOrderingTest"`. Line anchors die at the firs
 `grep` cannot find them; each extraction or reformat re-breaks every one of them (PR #901 and
 PR #1194 both paid a refresh round for stale `(:913)`-style anchors). A symbol survives the move.
 
+A class-qualified KDoc link does **not** survive a move: `[OldClass.member]` dies the moment the
+member changes class (PR #1195 retargeted nine of them after the SP12.3 signal extraction). After
+an extraction, grep for `[OldClass.` and for the moved members' names across `.kt` files **and**
+the goal-docs pages, and retarget every hit to the new owner. Unqualified symbol names are the
+only links that survive every move.
+
 ### Logger Declaration
 
 ```kotlin

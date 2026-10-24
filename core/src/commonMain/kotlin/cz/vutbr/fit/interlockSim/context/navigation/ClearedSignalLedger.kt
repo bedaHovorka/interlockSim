@@ -25,8 +25,9 @@ private val logger = KotlinLogging.logger {}
  *
  * Extracted from [DefaultPathReservationService] by Issue #1169 (SP12.3) as a pure move: the
  * bookkeeping, its ownership semantics and the order of every reset are unchanged. The service
- * owns exactly one instance per simulation context and is its only writer, apart from
- * [RouteSignalConfigurator], which records the aspects it clears here.
+ * owns exactly one instance per simulation context, and its writes come only from inside the
+ * kernel: the service itself, the [RouteReleaser] release/rollback callbacks the service binds
+ * to it, and [RouteSignalConfigurator], which records the aspects it clears here.
  *
  * **NOT thread-safe**, like the service it belongs to.
  *
