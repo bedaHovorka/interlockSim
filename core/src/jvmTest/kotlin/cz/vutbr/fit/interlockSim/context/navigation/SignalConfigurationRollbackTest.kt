@@ -14,7 +14,6 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
@@ -32,13 +31,13 @@ import org.junit.jupiter.api.Test
  * - Deadlocks due to permanently locked switches
  */
 class SignalConfigurationRollbackTest : PathReservationServiceTestBase() {
-	private lateinit var startSemaphore: DynamicRailSemaphore
-
-	@BeforeEach
-	fun pickStartSemaphore() {
+	// The first semaphore in vyhybna's scan order: this regression test needs A semaphore
+	// start, not a specific one. The require keeps the original English failure text on an
+	// empty grid.
+	private val startSemaphore: DynamicRailSemaphore by lazy {
 		val semaphores = simulationContext.cellsOfType<DynamicRailSemaphore>()
 		require(semaphores.isNotEmpty()) { "vyhybna.xml must have at least one semaphore" }
-		startSemaphore = semaphores.first()
+		semaphores.first()
 	}
 
 	@Test

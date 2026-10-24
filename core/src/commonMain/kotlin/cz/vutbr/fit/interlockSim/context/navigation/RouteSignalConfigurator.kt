@@ -97,18 +97,8 @@ internal class RouteSignalConfigurator(
 				environment.configureSemaphoreSignal(start, blocks.first())
 				ledger.recordClearedSemaphore(trainId, start)
 			}
-			start is DynamicInOut -> {
-				val firstBlock = blocks.first()
-				val maxSpeed = firstBlock.maxSpeed(start)
-				start.inSemaphore.setUpSpeed(
-					from = start.direction(),
-					to =
-						cz.vutbr.fit.interlockSim.objects.core
-							.anti(start.direction()),
-					allowedSpeed = maxSpeed
-				)
-				ledger.recordClearedSemaphore(trainId, start.inSemaphore)
-			}
+			start is DynamicInOut ->
+				configureInOutInSemaphore(trainId, start, blocks.first().maxSpeed(start))
 		}
 	}
 
@@ -153,12 +143,9 @@ internal class RouteSignalConfigurator(
 
 	/**
 	 * Semaphore branch of [configureStartSignal]: the START is a [DynamicRailSemaphore] the train
-	 * departs from. A START facing away from the travel direction is rejected as
-	 * [StartSignalResult.RejectedG4] before anything is configured or recorded (G4, Issue #893
-	 * task A1), and any configuration exception maps to [StartSignalResult.ConfigFailed].
-	 *
-	 * Extracted from [configureStartSignal] in the 2026-10-24 review round so the when stays a
-	 * dispatch table; body moved verbatim, write order and log messages unchanged.
+	 * departs from. Rejects as [StartSignalResult.RejectedG4] before anything is configured or
+	 * recorded when it faces away from the travel direction; maps any configuration exception to
+	 * [StartSignalResult.ConfigFailed]. Branch of [configureStartSignal]; see the class KDoc note.
 	 */
 	private fun configureSemaphoreStartSignal(
 		trainId: String,
@@ -172,38 +159,35 @@ internal class RouteSignalConfigurator(
 		// is authority-defining: granting the route anyway would strand the train with
 		// no signal it is entitled to obey, a #566-class stall. Reject before
 		// configuring/recording anything, so the caller's rollback has nothing to undo.
-		return if (!startFacesTravelDirection(start, startBlock)) {
+		if (!startFacesTravelDirection(start, startBlock)) {
 			logger.debug {
 				"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
 					"away from the requested direction of travel toward $startBlock"
 			}
-			StartSignalResult.RejectedG4
-		} else {
-			try {
-				environment.configureSemaphoreSignal(start, startBlock)
-				ledger.recordClearedSemaphore(trainId, start)
-				logger.debug {
-					"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
-				}
-				StartSignalResult.Configured
-			} catch (e: Exception) {
-				logger.warn(e) {
-					"reservePath: Semaphore signal configuration failed - rolling back reservation"
-				}
-				StartSignalResult.ConfigFailed
+			return StartSignalResult.RejectedG4
+		}
+		return try {
+			environment.configureSemaphoreSignal(start, startBlock)
+			ledger.recordClearedSemaphore(trainId, start)
+			logger.debug {
+				"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
 			}
+			StartSignalResult.Configured
+		} catch (e: Exception) {
+			logger.warn(e) {
+				"reservePath: Semaphore signal configuration failed - rolling back reservation"
+			}
+			StartSignalResult.ConfigFailed
 		}
 	}
 
 	/**
-	 * InOut branch of [configureStartSignal]: the START is a [DynamicInOut]; its embedded
-	 * inSemaphore is configured (`from` = the InOut's direction, `to` = its anti) for a train
-	 * entering from the external network, at [firstBlock]'s max speed. A boundary the InOut
-	 * does not literally bound (route extension, Issue #911) is treated as already configured,
-	 * and any configuration exception maps to [StartSignalResult.ConfigFailed].
-	 *
-	 * Extracted from [configureStartSignal] in the 2026-10-24 review round so the when stays a
-	 * dispatch table; body moved verbatim, write order and log messages unchanged.
+	 * InOut branch of [configureStartSignal]: the START is a [DynamicInOut]; the train enters
+	 * from the external network, so its embedded inSemaphore is configured at [firstBlock]'s max
+	 * speed via [configureInOutInSemaphore]. A boundary the InOut does not literally bound
+	 * (route extension, Issue #911) is treated as already configured on the same result the
+	 * semaphore branch's direction guard tolerates, and any configuration exception maps to
+	 * [StartSignalResult.ConfigFailed].
 	 */
 	private fun configureInOutStartSignal(
 		trainId: String,
@@ -235,18 +219,7 @@ internal class RouteSignalConfigurator(
 				return StartSignalResult.Configured
 			}
 		return try {
-			// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
-			// For valid direction: from=anti(inSem.dir), to=inSem.dir
-			// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
-			start.inSemaphore.setUpSpeed(
-				from = start.direction(), // InOut's direction
-				to =
-					cz.vutbr.fit.interlockSim.objects.core
-						.anti(start.direction()),
-				// Anti = inSemaphore's direction
-				allowedSpeed = maxSpeed
-			)
-			ledger.recordClearedSemaphore(trainId, start.inSemaphore)
+			configureInOutInSemaphore(trainId, start, maxSpeed)
 			logger.debug {
 				"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
 			}
@@ -257,6 +230,34 @@ internal class RouteSignalConfigurator(
 			}
 			StartSignalResult.ConfigFailed
 		}
+	}
+
+	/**
+	 * Configure a [DynamicInOut]'s embedded inSemaphore for [trainId] and record it:
+	 * `from` = the InOut's direction, `to` = its anti — with
+	 * `inSemaphore.direction() == anti(InOut.direction())` per `InOut.kt` this clears the
+	 * embedded semaphore in the InOut's travel direction. The write is followed by
+	 * [ClearedSignalLedger.recordClearedSemaphore] in both callers, so no drift between the
+	 * fresh-candidate and already-owned semantics can occur silently. The caller owns any
+	 * try/catch or debug logging around this core.
+	 */
+	private fun configureInOutInSemaphore(
+		trainId: String,
+		start: DynamicInOut,
+		allowedSpeed: Double
+	) {
+		// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
+		// For valid direction: from=anti(inSem.dir), to=inSem.dir
+		// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
+		start.inSemaphore.setUpSpeed(
+			from = start.direction(), // InOut's direction
+			to =
+				cz.vutbr.fit.interlockSim.objects.core
+					.anti(start.direction()),
+			// Anti = inSemaphore's direction
+			allowedSpeed = allowedSpeed
+		)
+		ledger.recordClearedSemaphore(trainId, start.inSemaphore)
 	}
 
 	/**
