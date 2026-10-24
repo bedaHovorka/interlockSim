@@ -65,7 +65,7 @@ class PathReservationSwitchStartPathInfoRegressionTest : PathReservationServiceT
 	 *   `branch↔mainDir`. At vB, `merging` faces zB, `mainDir` faces doB1 and `branch` faces
 	 *   doB2, so entering from doB2 and leaving toward doB1 is the physically impossible
 	 *   sibling-branch diversion that
-	 *   [DefaultPathReservationService.configureSwitchesInPath] rejects (Issue #742). The only
+	 *   [SwitchConfigurator.configureSwitchesInPath] rejects (Issue #742). The only
 	 *   other candidate, `doA2 → vA → doA1 → doB1`, needs vA as `branch↔mainDir` and fails
 	 *   for the same reason — so the request is `GeometricallyImpossible`, never Success.
 	 * - **doA2 is a rear-facing START going east.** `orientation="true"` means it faces
