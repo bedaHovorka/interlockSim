@@ -404,7 +404,8 @@ internal class RouteReleaser(
 		// drive block state RESERVED->FREE. Without this, a journey completing with
 		// RESERVED-but-never-entered blocks (reachable via bidirectional reversal or an
 		// abandoned forward extension) leaves orphan RESERVED blocks no other train can ever
-		// reserve (isBlockAvailable fails on state != FREE). Mirrors releasePath (:913-922).
+		// reserve (isBlockAvailable fails on state != FREE). Mirrors the cancelBlock loop of
+		// releaseAllBlocks.
 		// The reservedFrom != null guard skips already-entered/left blocks (enter() nulls
 		// reservedFrom), so only RESERVED-unentered blocks are freed.
 		// unregister is the production train-completion path; releasePath is test-only.
@@ -420,8 +421,8 @@ internal class RouteReleaser(
 			}
 		}
 
-		// Unlock switches AFTER their route blocks are cancelled, matching releasePath behavior
-		// (:924-933): a switch is unlocked only once nothing it protects is still RESERVED.
+		// Unlock switches AFTER their route blocks are cancelled, matching releaseAllBlocks' switch
+		// step: a switch is unlocked only once nothing it protects is still RESERVED.
 		val switches = registry.getSwitches(trainId)
 		switches.forEach { switch ->
 			try {
@@ -493,7 +494,8 @@ internal class RouteReleaser(
 		}
 		// Signals first, then registry: reset the governing semaphore to STOP BEFORE the block
 		// leaves the registry, so there is no instant where a block is owner-less-and-FREE while
-		// its authorising signal still shows proceed. Matches releasePath's invariant (:897-900).
+		// its authorising signal still shows proceed. Matches release's "signals first, then
+		// registry" step.
 		// Emission stays last, so a subscriber still never observes a FREE block whose signal
 		// shows proceed.
 		resetSemaphoresForReleasedBlocks(trainId, listOf(block))

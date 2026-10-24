@@ -164,7 +164,7 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 	}
 
 	@Test
-	fun `unregisterBlock resets the released block's signals before it leaves the registry`() {
+	fun `unregisterBlock resets the released block's signals and drops it from the registry`() {
 		val block = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks.first()
 		block.cancelPathSetup(checkNotNull(block.reservedFrom))
 
