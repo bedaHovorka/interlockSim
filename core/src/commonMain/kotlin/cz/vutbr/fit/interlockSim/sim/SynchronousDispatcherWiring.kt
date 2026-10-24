@@ -67,8 +67,10 @@ private val logger = KotlinLogging.logger {}
  * @param env The simulation environment backing the ports
  * @param loop The loop to wire; its [ShuntingLoop.snapshotCaptureHook] and
  *   [ShuntingLoop.controlStepListener] are overwritten
- * @param maxConcurrentTrains Admission cap, defaults to production's
- *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS]
+ * @param maxConcurrentTrains Admission cap, defaults to the loop's station capacity
+ *   ([ShuntingLoop.stationCapacity]: 2 on `vyhybna.xml`, the topology value elsewhere — the
+ *   vyhybna default [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] does not leak into other
+ *   stations, Issue #1162)
  * @param interlockingFacade SP3.5 (Issue #573): when non-null, [DefaultNetworkActuatorPort.requestRoute]
  *   is routed through the interlocking safety kernel as the single chokepoint.
  *   Pass `null` (default) for `:fast-sim` native binary and legacy test wiring that runs
@@ -77,15 +79,16 @@ private val logger = KotlinLogging.logger {}
  *   applied once per approved train after dispatcher decisions.  Defaults to
  *   [AlgorithmicTrainDecisionPolicy].  Pass a custom implementation to spy on or
  *   replace the algorithmic acceleration logic in tests.
+ * @return the wired dispatcher (Issue #1162: lets a caller read the admission cap it got)
  * @since Issue #733 / #742 follow-up (SP0.11 green-up); SP4.3 (#565) adds [trainDecisionPolicy]
  */
 fun wireSynchronousDispatcher(
 	env: SimulationEnvironment,
 	loop: ShuntingLoop,
-	maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
+	maxConcurrentTrains: Int = loop.stationCapacity,
 	interlockingFacade: InterlockingFacade? = null,
 	trainDecisionPolicy: TrainDecisionPolicy = AlgorithmicTrainDecisionPolicy()
-) {
+): RuleBasedDispatcher {
 	val perceptionPort =
 		DefaultNetworkPerceptionPort(
 			env = env,
@@ -124,6 +127,7 @@ fun wireSynchronousDispatcher(
 			// admission/reservation this tick are visible.
 			applyTrainDecisions(loop, perceptionPort, trainDecisionPolicy)
 		}
+	return dispatcher
 }
 
 /**
