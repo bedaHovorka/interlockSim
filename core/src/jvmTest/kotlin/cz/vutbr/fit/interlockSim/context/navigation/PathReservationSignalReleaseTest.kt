@@ -34,9 +34,9 @@ import org.junit.jupiter.api.Test
  *
  * ## The defect these tests pin down
  *
- * `reservePath` clears the START separator ([DefaultPathReservationService.configureStartSignal])
+ * `reservePath` clears the START separator ([RouteSignalConfigurator.configureStartSignal])
  * and every semaphore between two consecutive reserved blocks
- * (`configureIntermediateSemaphores`).  Until this suite was added, **no** release path
+ * (`[RouteSignalConfigurator.configureIntermediateSemaphores]`).  Until this suite was added, **no** release path
  * undid that: `releasePath` and `unregister` cancelled blocks and unlocked switches but
  * never touched a semaphore, so every aspect they cleared stayed lit forever.
  *

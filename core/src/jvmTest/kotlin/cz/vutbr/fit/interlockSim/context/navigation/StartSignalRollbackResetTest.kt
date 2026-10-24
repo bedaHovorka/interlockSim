@@ -14,28 +14,19 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * G3 (Issue #893, phase alpha, task A5): rollback must reset partial aspect writes after a
@@ -43,7 +34,7 @@ import org.koin.test.inject
  *
  * ## Defect
  *
- * `reservePath` Step 2g: when `configureStartSignal` returns `false` (config exception
+ * `reservePath` Step 2g: when `configureStartSignal` reports `ConfigFailed`/`RejectedG4` (config exception
  * swallowed, or -- since task A1 -- a rear-facing START), `rollbackUnconfigurableCandidate`
  * unwinds the registry and switches but never touches a semaphore. Yet a PARTIAL aspect write
  * is possible: `DefaultSimulationContext.configureSemaphoreSignal` can set the physical aspect
@@ -62,55 +53,28 @@ import org.koin.test.inject
  *
  * ## Topology
  *
- * `doA1` faces B->A (see [DefaultPathReservationService.facesDirectionOfTravel] via task A1's
+ * `doA1` faces B->A (see [RouteSignalConfigurator.facesDirectionOfTravel] via task A1's
  * `StartDirectionTests`), so `doA1 -> zA` is a legitimately-facing START -- task
  * A1's rear-facing-START guard passes and the request reaches signal configuration, which is
  * this test's actual concern. The train id is fresh with an empty footprint, so task A-R1's
  * contiguity predicate passes vacuously.
  */
 @Tag("integration-test")
-class StartSignalRollbackResetTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var realEnvironment: SimulationContext
-	private lateinit var navigator: TopologyNavigator
-	private lateinit var registry: PathReservationRegistry
+class StartSignalRollbackResetTest : PathReservationServiceTestBase() {
 	private lateinit var pathInfoBuilder: PathInfoBuilder
 	private lateinit var routeFinder: RouteFinder
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-
-		realEnvironment = simulationContext
-		navigator = simulationContext.scope.get()
-		registry = simulationContext.scope.get()
+	fun resolveServiceParts() {
+		// Base setUp loads vyhybna and resolves navigator/registry/service; this class rebuilds
+		// the service directly (a fault-injecting wrapper), so only pathInfoBuilder and
+		// routeFinder still need resolving here.
 		pathInfoBuilder = simulationContext.scope.get()
 		routeFinder = simulationContext.scope.get()
 	}
 
-	private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
-		val grid = simulationContext.getRailWayNetGrid()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid[Point(x, y)]
-				if (cell is DynamicRailSemaphore && cell.name == name) {
-					return cell
-				}
-			}
-		}
-		throw IllegalStateException("Semaphore $name not found in grid")
-	}
-
-	private fun inOutNamed(name: String): DynamicPathSeparator =
-		simulationContext
-			.getInOuts()
-			.map { simulationContext.toDynamic(it) }
-			.filterIsInstance<DynamicInOut>()
-			.single { it.name == name }
+	private fun rebuiltService(env: SimulationContext) =
+		DefaultPathReservationService(navigator, env, registry, pathInfoBuilder, routeFinder)
 
 	/**
 	 * Delegates every [SimulationEnvironment] call to [real] except [configureSemaphoreSignal]:
@@ -153,9 +117,8 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 		val doA1 = findSemaphoreByName("doA1")
 		assertThat(doA1.signal).isEqualTo(Signal.STOP)
 
-		val faultyEnvironment = PartialWriteFaultEnvironment(realEnvironment, faultOn = doA1)
-		val service =
-			DefaultPathReservationService(navigator, faultyEnvironment, registry, pathInfoBuilder, routeFinder)
+		val faultyEnvironment = PartialWriteFaultEnvironment(simulationContext, faultOn = doA1)
+		val service = rebuiltService(faultyEnvironment)
 
 		// maxDepth = 4 restricts the topological search to the single direct doA1 -> A route (doA1 -> vA ->
 		// zA -> A, three sections; not doA1 -> zA, whose end faces away from the train, Issue #1064),
@@ -203,7 +166,7 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 	 * start (`zA`) extends the route further in the same direction (`zA -> B`); the injected fault
 	 * fires on THIS attempt's own re-config of `zA` (a route extension always re-invokes
 	 * `configureStartSignal` on the original start, even though it was already cleared -- see
-	 * [DefaultPathReservationService.configureStartSignal]). Before the fix,
+	 * [RouteSignalConfigurator.configureStartSignal]). Before the fix,
 	 * `resetUnrecordedStartSignal` could not tell "written by an earlier, still-valid
 	 * reservation" apart from "written by this failed attempt" and reset the start regardless,
 	 * stranding the train behind its own signal while its earlier blocks stayed registered.
@@ -220,9 +183,8 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 
 		// armed=false: the FIRST call below must succeed for real, exactly like the liveness
 		// twin, so zA ends up genuinely cleared and recorded for extendTrain.
-		val faultyEnvironment = PartialWriteFaultEnvironment(realEnvironment, faultOn = zA, armed = false)
-		val service =
-			DefaultPathReservationService(navigator, faultyEnvironment, registry, pathInfoBuilder, routeFinder)
+		val faultyEnvironment = PartialWriteFaultEnvironment(simulationContext, faultOn = zA, armed = false)
+		val service = rebuiltService(faultyEnvironment)
 
 		val initial = service.reservePath("extendTrain", zA, doB1)
 		assertThat(initial)
@@ -270,8 +232,7 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 	fun `liveness twin - the same route succeeds and lights the START without fault injection`() {
 		val doA1 = findSemaphoreByName("doA1")
 
-		val service =
-			DefaultPathReservationService(navigator, realEnvironment, registry, pathInfoBuilder, routeFinder)
+		val service = rebuiltService(simulationContext)
 
 		val result = service.reservePath("liveTrain", doA1, inOutNamed("A"))
 

@@ -152,7 +152,7 @@ class PathReservationRegistry(
 	 * abort so the caller can react to the abort instead of assuming the stored [PathInfo] now
 	 * reflects what it just registered.
 	 *
-	 * Precedent: [StartSignalResult][DefaultPathReservationService] (Issue #903) is the same
+	 * Precedent: [StartSignalResult][RouteSignalConfigurator] (Issue #903) is the same
 	 * "a call that used to silently swallow its failure now needs to report why" shape.
 	 *
 	 * @since Issue #904

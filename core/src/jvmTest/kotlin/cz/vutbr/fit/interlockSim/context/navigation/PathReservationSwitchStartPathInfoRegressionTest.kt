@@ -69,7 +69,7 @@ class PathReservationSwitchStartPathInfoRegressionTest : PathReservationServiceT
 	 *   other candidate, `doA2 → vA → doA1 → doB1`, needs vA as `branch↔mainDir` and fails
 	 *   for the same reason — so the request is `GeometricallyImpossible`, never Success.
 	 * - **doA2 is a rear-facing START going east.** `orientation="true"` means it faces
-	 *   B→A, so the G4 guard in [DefaultPathReservationService.configureStartSignal] rejects
+	 *   B→A, so the G4 guard in [RouteSignalConfigurator.configureStartSignal] rejects
 	 *   it regardless of contiguity.
 	 *
 	 * The chosen route avoids both: doB2 faces A→B (forward-facing START), and vB is

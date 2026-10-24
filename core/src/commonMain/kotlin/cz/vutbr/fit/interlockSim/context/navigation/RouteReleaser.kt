@@ -31,16 +31,16 @@ private val logger = KotlinLogging.logger {}
  *
  * Pure extraction: the service keeps every `PathReservationService` / [BlockRollbackStep] entry point
  * and delegates here. The unit owns the approach-lock deferral window ([approachLockDeferredUntil]);
- * the signal ledger stays with the service and the blocked-contention tracking with
+ * the cleared-signal bookkeeping lives in [ClearedSignalLedger] and the blocked-contention tracking in
  * [ReservationContentionTracker]; both are reached through the three callbacks below.
  *
  * **NOT thread-safe**, like the service it belongs to.
  *
  * @property registry Ownership registry shared with the service
- * @property resetSemaphoresForReleasedBlocks The service's
- *   [PathReservationService.resetSemaphoresForReleasedBlocks]
- * @property resetClearedSemaphores Sets every semaphore the service recorded as cleared for a train
- *   back to STOP
+ * @property resetSemaphoresForReleasedBlocks [ClearedSignalLedger.resetSemaphoresForReleasedBlocks], the
+ *   body of [PathReservationService.resetSemaphoresForReleasedBlocks]
+ * @property resetClearedSemaphores [ClearedSignalLedger.resetClearedSemaphores]: sets every semaphore
+ *   recorded as cleared for a train back to STOP
  * @property clearBlockedTracking [ReservationContentionTracker.clearBlockedTracking]: forgets the
  *   blocked-path contention recorded for a train
  * @since Issue #1168

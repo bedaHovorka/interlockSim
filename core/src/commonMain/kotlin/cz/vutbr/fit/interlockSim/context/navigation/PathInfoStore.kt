@@ -283,7 +283,7 @@ internal class PathInfoStore(
 	 * at one would make every later extension fail the merge. It is likewise refused when [boundary]
 	 * is a semaphore facing away from the train's direction of travel (Issue #1067 gap 2): the
 	 * trimmed PathInfo's end is about to become the START of the train's next route request, and G4
-	 * ([DefaultPathReservationService.startFacesTravelDirection]) refuses every route starting at a
+	 * ([RouteSignalConfigurator.startFacesTravelDirection]) refuses every route starting at a
 	 * rear-facing signal, which would strand the train exactly like the untrimmed PathInfo did.
 	 *
 	 * @param trainId The train identifier

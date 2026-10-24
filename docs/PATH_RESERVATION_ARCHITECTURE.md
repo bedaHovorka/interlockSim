@@ -410,8 +410,8 @@ when (val result = registry.registerAtomic(trainId, blocks)) {
 |---|-----------|------|--------|
 | G1 | A partial (tail) route release must reset the governing semaphores of every released block through the ownership-aware `resetSemaphoresForReleasedBlocks`, not just `reservedFrom as? DynamicRailSemaphore`. | A3 | `PathReservationService.kt:660-712`; impl `DefaultPathReservationService.kt:2723-2744` |
 | G2 | `unregisterBlock` (per-block tail-clearance) must return the released block's governing semaphores to STOP, not just update the registry. | A4 | impl `DefaultPathReservationService.kt:2687-2704` (reset call at :2698 before `registry.unregisterBlock` :2699 and emit at :2701) |
-| G3 | A signal-config failure in `reservePath` Step 2g must undo any PARTIAL aspect write (START may be physically lit though `recordClearedSemaphore` never ran) via `resetSemaphoreSet` + `resetUnrecordedStartSignal`. | A5 | `DefaultPathReservationService.kt:219`, `:290`, Step 2g `:641-659` |
-| G4 | A route whose START semaphore faces AWAY from the requested direction must be rejected outright (a rear-facing START grants no proceed authority — a #566-class stall). | A1 | `DefaultPathReservationService.kt:2349-2417` (`configureStartSignal` G4 guard) |
+| G3 | A signal-config failure in `reservePath` Step 2g must undo any PARTIAL aspect write (START may be physically lit though `recordClearedSemaphore` never ran) via `resetSemaphoreSet` + `resetUnrecordedStartSignal`. | A5 | `DefaultPathReservationService.reservePath` Step 2g; resets in `ClearedSignalLedger.resetSemaphoreSet` / `resetUnrecordedStartSignal` |
+| G4 | A route whose START semaphore faces AWAY from the requested direction must be rejected outright (a rear-facing START grants no proceed authority — a #566-class stall). | A1 | `RouteSignalConfigurator.configureStartSignal` (the G4 guard, `StartSignalResult.RejectedG4`) |
 | G5 | `DispatchDecision.SetSignalAspect` carries an optional `trainName`; `DefaultNetworkActuatorPort.setSignalAspect` has an attributed 3-arg overload recording through the same single ledger — closing the tracking-contract hole for any future caller. (Attribution-only; no live behaviour change.) | A6 | commit `e8f5460e` |
 | G6 | Every cleared signal — including ones written by external paths (`DefaultInterlockingFacade.clearSignal`, the facade's block-list `requestRoute`) — must be folded into the single service ledger (`recordExternalClearedSemaphore`) so a later `releasePath`/sweeper reset can find and drop it. | A6 | `PathReservationService.kt:277-312`; impl `DefaultPathReservationService.kt:959-970` |
 | G7 | `releasePath` must reset a train's cleared signals BEFORE its `blocks.isEmpty()` early return, and `releaseRoute` must report truthfully (via `hasClearedSignals`) when a train holds cleared signals but zero blocks — a signals-only reclaim counts as work done. | A7 | impl `DefaultPathReservationService.kt:896-906` (reset at :901 before empty-blocks early return), `:957` |
@@ -455,9 +455,9 @@ The impl performs no route-position validation of its own; the caller is respons
 
 A semaphore that has since been re-cleared for a DIFFERENT train is left alone by a later release. This is **single-threaded sequential ownership hygiene** (the simulation is single-threaded — kDisco runs one sim thread), not a concurrency guard. Backed by the `semaphoreClearedFor` map:
 
-- `recordClearedSemaphore` (`:165-172`) records `semaphoreClearedFor[semaphore] = trainId`.
-- `resetClearedSemaphores` (`:181-203`) skips when `semaphoreClearedFor[semaphore] != trainId` (at `:184`).
-- `resetSemaphoreSet` (`:219-249`) applies the same guard (at `:232`).
+- `recordClearedSemaphore` records `semaphoreClearedFor[semaphore] = trainId`.
+- `resetClearedSemaphores` skips when `semaphoreClearedFor[semaphore] != trainId`.
+- `resetSemaphoreSet` applies the same guard.
 
 **Test:** `PathReservationSignalReleaseTest` — *"resetSemaphoresForReleasedBlocks leaves a since re-cleared semaphore alone, and a later releasePath does too"*. After `t2` re-clears a semaphore `t1` released, a stale `resetSemaphoresForReleasedBlocks("t1", ...)` and a subsequent `releasePath("t1")` both leave `t2`'s live signal untouched.
 
