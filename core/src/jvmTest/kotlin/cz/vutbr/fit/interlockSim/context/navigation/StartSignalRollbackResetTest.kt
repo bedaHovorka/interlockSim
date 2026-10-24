@@ -62,7 +62,7 @@ import org.koin.test.inject
  *
  * ## Topology
  *
- * `doA1` faces B->A (see [DefaultPathReservationService.facesDirectionOfTravel] via task A1's
+ * `doA1` faces B->A (see [RouteSignalConfigurator.facesDirectionOfTravel] via task A1's
  * `StartDirectionTests`), so `doA1 -> zA` is a legitimately-facing START -- task
  * A1's rear-facing-START guard passes and the request reaches signal configuration, which is
  * this test's actual concern. The train id is fresh with an empty footprint, so task A-R1's
@@ -203,7 +203,7 @@ class StartSignalRollbackResetTest : KoinTestBase() {
 	 * start (`zA`) extends the route further in the same direction (`zA -> B`); the injected fault
 	 * fires on THIS attempt's own re-config of `zA` (a route extension always re-invokes
 	 * `configureStartSignal` on the original start, even though it was already cleared -- see
-	 * [DefaultPathReservationService.configureStartSignal]). Before the fix,
+	 * [RouteSignalConfigurator.configureStartSignal]). Before the fix,
 	 * `resetUnrecordedStartSignal` could not tell "written by an earlier, still-valid
 	 * reservation" apart from "written by this failed attempt" and reset the start regardless,
 	 * stranding the train behind its own signal while its earlier blocks stayed registered.

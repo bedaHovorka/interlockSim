@@ -18,9 +18,9 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
 /**
- * Issue #911: the InOut branch of [DefaultPathReservationService.configureStartSignal]
+ * Issue #911: the InOut branch of [RouteSignalConfigurator.configureStartSignal]
  * must fail OPEN on a route-extension's non-adjacent `start`/`forwardBlocks.first()` pair,
- * mirroring the semaphore branch's existing [DefaultPathReservationService.startFacesTravelDirection]
+ * mirroring the semaphore branch's existing [RouteSignalConfigurator.startFacesTravelDirection]
  * tolerance (Issue #893 task A1). A route extension re-invokes `reservePath` with the
  * train's ORIGINAL start; once every block adjacent to that start is already owned, the
  * first genuinely new `forwardBlocks.first()` is several hops away -- not literally an end

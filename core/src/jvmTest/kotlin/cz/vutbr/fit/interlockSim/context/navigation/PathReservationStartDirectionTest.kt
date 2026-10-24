@@ -37,7 +37,7 @@ import org.junit.jupiter.api.Test
  * passes from behind; only the START is authority-defining.
  *
  * Topology facts (`vyhybna.xml`): `zA`, `doB1`, `doB2` face A->B; `doA1`, `doA2`, `zB`
- * face B->A (see [DefaultPathReservationService.facesDirectionOfTravel]).
+ * face B->A (see [RouteSignalConfigurator.facesDirectionOfTravel]).
  */
 @Tag("integration-test")
 class PathReservationStartDirectionTest : PathReservationServiceTestBase() {

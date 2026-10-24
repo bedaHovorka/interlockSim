@@ -96,7 +96,7 @@ class PathReservationSignalConfigurationTest : PathReservationServiceTestBase() 
 		// two authorised a train coming the other way and produced an aspect that never
 		// returned to danger -- Train.separatorAction skips a rear-passed separator, so the
 		// reset at the end of semaphoreAction never ran for it. See
-		// DefaultPathReservationService.facesDirectionOfTravel.
+		// RouteSignalConfigurator.facesDirectionOfTravel.
 		//
 		// The stall this test guards against is unaffected: a train never waits on a
 		// semaphore it passes from behind, so leaving that one at STOP cannot halt it.

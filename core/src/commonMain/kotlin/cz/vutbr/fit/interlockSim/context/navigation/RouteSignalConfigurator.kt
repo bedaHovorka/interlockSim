@@ -186,7 +186,7 @@ internal class RouteSignalConfigurator(
 				// SimulationException[FATAL] instead of returning a value. There is nothing new
 				// to configure at a boundary this InOut does not bound -- the adjacent block
 				// already carries the speed set by the original grant
-				// (PathReservationRegistry.resetUnrecordedStartSignal's KDoc documents this
+				// (ClearedSignalLedger.resetUnrecordedStartSignal's KDoc documents this
 				// exact steady state) -- so treat the START as already configured rather than
 				// failing the whole candidate. A genuine configuration failure below (e.g.
 				// setUpSpeed itself throwing) still fails closed, unchanged.
