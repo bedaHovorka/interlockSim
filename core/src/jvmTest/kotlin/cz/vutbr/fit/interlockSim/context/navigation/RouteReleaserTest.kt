@@ -14,17 +14,15 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
-import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
+import cz.vutbr.fit.interlockSim.testutil.ThrowingBlockReleaseListener
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import io.mockk.Runs
@@ -75,10 +73,7 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		val released = service.releasePath("train1")
 
 		assertThat(released).isEqualTo(blocks)
-		blocks.forEach { block ->
-			assertThat(block.getState(), "state of $block").isEqualTo(TrackFacility.State.FREE)
-			assertThat(registry.getOwner(block), "owner of $block").isNull()
-		}
+		assertBlocksFreeAndUnowned(blocks)
 		switches.forEach { switch -> assertThat(switch.locked, "lock of ${switch.name}").isFalse() }
 		assertThat(registry.getSwitches("train1")).isEmpty()
 		assertThat(entry.signal.isAllowing(), "entry after release").isFalse()
@@ -234,10 +229,7 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		val released = service.releasePath("train1")
 
 		assertThat(released, "the whole route releases despite the stale block").isEqualTo(blocks)
-		blocks.forEach { block ->
-			assertThat(block.getState(), "state of $block").isEqualTo(TrackFacility.State.FREE)
-			assertThat(registry.getOwner(block), "owner of $block").isNull()
-		}
+		assertBlocksFreeAndUnowned(blocks)
 	}
 
 	@Test
@@ -282,48 +274,31 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 	}
 
 	/**
-	 * Issue #1202: the whole-route funnel contains a throwing legacy block-occupancy listener per
-	 * block, so every freed block is still announced and the caller
-	 * (`NetworkActuatorPort.releaseRoute`: `cancel_route` and the orphan sweeper) sees no
-	 * exception. The per-block funnel keeps propagating instead — pinned elsewhere by
-	 * `PathReservationReleaseAndRollbackBlockTest` and `Issue1076RegressionTest`.
+	 * Issue #1202: the whole-route funnel's contention clear runs although a legacy
+	 * block-occupancy listener throws on every release event. The announcement itself is pinned
+	 * through the service API by `PathReservationExternalObserverApiTest`; the per-block funnel
+	 * keeps PROPAGATING instead (`PathReservationReleaseAndRollbackBlockTest`,
+	 * `Issue1076RegressionTest`).
 	 */
 	@Test
-	fun `releasePath announces every block although the release listener throws on each`() {
-		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
-		assertThat(blocks.size, "the route must span more than one block").isGreaterThan(1)
-		val throwing = ThrowingReleaseListener()
-		environment.addBlockOccupancyListener(throwing)
-
-		val released = service.releasePath("train1")
-		environment.removeBlockOccupancyListener(throwing)
-
-		assertThat(released, "the whole route still releases").isEqualTo(blocks)
-		assertThat(throwing.announced, "every freed block was still announced").isEqualTo(blocks)
-		blocks.forEach { block ->
-			assertThat(block.getState(), "state of $block").isEqualTo(TrackFacility.State.FREE)
-			assertThat(registry.getOwner(block), "owner of $block").isNull()
-		}
-	}
-
-	/** Issue #1202: the funnel's contention clear runs after a throwing release listener. */
-	@Test
 	fun `a throwing release listener does not skip the funnel's contention clear`() {
-		assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
-		val throwing = ThrowingReleaseListener()
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		val throwing = ThrowingBlockReleaseListener()
 		environment.addBlockOccupancyListener(throwing)
 
 		recordingReleaser().releasePath("train1")
 		environment.removeBlockOccupancyListener(throwing)
 
-		assertThat(calls.last(), "the train's contention is still forgotten").isEqualTo("clearBlocked(train1)")
+		assertThat(calls, "the funnel's sequence is unchanged despite the throwing listener").isEqualTo(
+			listOf("resetBlocks(train1,0)", "resetCleared(train1,held=${blocks.size})", "clearBlocked(train1)")
+		)
 	}
 
 	/** Issue #1202: the other wholesale funnel, the train-completion path, is contained the same way. */
 	@Test
 	fun `unregister announces every block although the release listener throws on each`() {
 		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
-		val throwing = ThrowingReleaseListener()
+		val throwing = ThrowingBlockReleaseListener()
 		environment.addBlockOccupancyListener(throwing)
 
 		val released = service.unregister("train1")
@@ -345,16 +320,5 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 
 	private companion object {
 		val RESERVED = TrackFacility.State.RESERVED
-	}
-
-	/** A [BlockOccupancyListener] that records every BlockReleased notification and then throws. */
-	private class ThrowingReleaseListener : BlockOccupancyListener {
-		val announced = mutableListOf<DynamicTrackBlock>()
-
-		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
-			if (event.type != BlockOccupancyEventType.BLOCK_RELEASED) return
-			announced += event.block
-			throw IllegalStateException("release listener failure (test)")
-		}
 	}
 }

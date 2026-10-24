@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
+import cz.vutbr.fit.interlockSim.testutil.ThrowingBlockReleaseListener
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import org.junit.jupiter.api.Tag
@@ -188,7 +189,24 @@ class PathReservationExternalObserverApiTest : PathReservationServiceTestBase() 
 
 		assertThat(service.dropFreedBlock("otherTrain", firstBlock)).isFalse()
 
-		assertThat(listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }).isEmpty()
-		assertThat(registry.getOwner(firstBlock)).isEqualTo("train1")
+	/**
+	 * Issue #1202: a legacy listener that throws on every BLOCK_RELEASED event cannot abort the
+	 * whole-route release funnel. Every freed block is still announced and the release caller
+	 * (`NetworkActuatorPort.releaseRoute`: `cancel_route` and the orphan sweeper) sees no
+	 * exception. The per-block release keeps propagating instead, pinned by
+	 * `PathReservationReleaseAndRollbackBlockTest` and `Issue1076RegressionTest`.
+	 */
+	@Test
+	fun `a throwing legacy listener cannot abort the whole-route release`() {
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		val throwing = ThrowingBlockReleaseListener()
+		environment.addBlockOccupancyListener(throwing)
+
+		val released = service.releasePath("train1")
+		environment.removeBlockOccupancyListener(throwing)
+
+		assertThat(released, "the whole route still releases").isEqualTo(blocks)
+		assertThat(throwing.announced, "every freed block was still announced").isEqualTo(blocks)
+		assertBlocksFreeAndUnowned(blocks)
 	}
 }
