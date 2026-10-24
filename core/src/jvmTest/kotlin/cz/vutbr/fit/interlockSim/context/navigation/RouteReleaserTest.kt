@@ -24,6 +24,11 @@ import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
+import io.mockk.Runs
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.Test
 
 /**
@@ -209,6 +214,76 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		assertThat(event.trainId).isEqualTo("train1")
 		assertThat(event.previousState).isEqualTo(RESERVED)
 		assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+	}
+
+	// ── Review round: fail-closed exception containment and switch protection of the partial release ──
+
+	// The partial-release switch-protection pins (both directions) and the failed-release-event
+	// containment live in RouteReleaserPartialReleaseTest: they need the two-switch-line.xml
+	// fixture, on which the PathInfo trim cuts at a semaphore with one switch kept and one
+	// freed. vyhybna.xml cannot run those scenarios (see that class's KDoc).
+
+	@Test
+	fun `releasePath tolerates a block whose path setup someone already cancelled`() {
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		val preCancelled = blocks.last()
+		preCancelled.cancelPathSetup(checkNotNull(preCancelled.reservedFrom))
+		assertThat(preCancelled.getState(), "state after the manual cancel").isEqualTo(TrackFacility.State.FREE)
+
+		val released = service.releasePath("train1")
+
+		assertThat(released.toSet(), "the whole route releases despite the stale block")
+			.isEqualTo(blocks.toSet())
+		blocks.forEach { block ->
+			assertThat(block.getState(), "state of $block").isEqualTo(TrackFacility.State.FREE)
+			assertThat(registry.getOwner(block), "owner of $block").isNull()
+		}
+	}
+
+	@Test
+	fun `releaseBlock drops a block whose reservation was already cancelled`() {
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		val block = blocks.last()
+		block.cancelPathSetup(checkNotNull(block.reservedFrom))
+
+		assertThat(recordingReleaser().releaseBlock("train1", block)).isTrue()
+
+		assertThat(registry.getOwner(block)).isNull()
+		assertThat(calls).isEqualTo(listOf("resetBlocks(train1,1)"))
+	}
+
+	@Test
+	fun `rollbackBlock drops an already-cancelled block without touching the signals`() {
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		val block = blocks.last()
+		block.cancelPathSetup(checkNotNull(block.reservedFrom))
+
+		assertThat(recordingReleaser().rollbackBlock("train1", block)).isTrue()
+
+		assertThat(registry.getOwner(block)).isNull()
+		assertThat(calls).isEmpty()
+	}
+
+	@Test
+	fun `rollbackBlocks swallows one block's failed cancellation and rolls the rest back`() {
+		val separator = inOut1 as DynamicInOut
+		val stuck =
+			mockk<DynamicTrackBlock> {
+				every { reservedFrom } returns separator
+				every { trainName } returns "train1"
+				every { cancelPathSetup(separator) } answers { throw IllegalStateException("forced") }
+			}
+		val healthy =
+			mockk<DynamicTrackBlock> {
+				every { reservedFrom } returns separator
+				every { cancelPathSetup(separator) } just Runs
+			}
+
+		recordingReleaser().rollbackReservation(separator, listOf(stuck, healthy))
+
+		verify(exactly = 1) { stuck.cancelPathSetup(separator) }
+		verify(exactly = 1) { healthy.cancelPathSetup(separator) }
+		assertThat(calls).isEmpty()
 	}
 
 	private companion object {
