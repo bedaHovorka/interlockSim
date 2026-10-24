@@ -189,6 +189,10 @@ class PathReservationExternalObserverApiTest : PathReservationServiceTestBase() 
 
 		assertThat(service.dropFreedBlock("otherTrain", firstBlock)).isFalse()
 
+		assertThat(listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }).isEmpty()
+		assertThat(registry.getOwner(firstBlock)).isEqualTo("train1")
+	}
+
 	/**
 	 * Issue #1202: a legacy listener that throws on every BLOCK_RELEASED event cannot abort the
 	 * whole-route release funnel. Every freed block is still announced and the release caller
