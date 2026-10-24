@@ -10,22 +10,12 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
-import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Regression test for signal-configuration failure rollback bug.
@@ -41,39 +31,15 @@ import org.koin.test.inject
  * - False conflicts in future path reservations
  * - Deadlocks due to permanently locked switches
  */
-class SignalConfigurationRollbackTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var environment: SimulationEnvironment
-	private lateinit var service: DefaultPathReservationService
-	private lateinit var inOut1: DynamicRailSemaphore
+class SignalConfigurationRollbackTest : PathReservationServiceTestBase() {
+	private lateinit var startSemaphore: DynamicRailSemaphore
 
 	@BeforeEach
-	fun setUp() {
-		// Load vyhybna.xml from resources
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
-		environment = simulationContext
-
-		// Get navigation services from the simulation context
-		// Cast to DefaultPathReservationService to access internal registry for testing
-		service = simulationContext.getRoutingServices().getPathReservationService() as DefaultPathReservationService
-
-		// Get a semaphore to use as start point
-		val semaphores = collectSemaphores()
+	fun pickStartSemaphore() {
+		val semaphores = simulationContext.cellsOfType<DynamicRailSemaphore>()
 		require(semaphores.isNotEmpty()) { "vyhybna.xml must have at least one semaphore" }
-		inOut1 = semaphores[0]
+		startSemaphore = semaphores.first()
 	}
-
-	private fun collectSemaphores(): List<DynamicRailSemaphore> = simulationContext.cellsOfType<DynamicRailSemaphore>()
-
-	private fun collectFreeBlocks(): List<DynamicTrackBlock> =
-		simulationContext.cellsOfType<DynamicTrackBlock>().filter { it.getState() == TrackFacility.State.FREE }
-
-	private fun collectSwitches(): List<cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch> =
-		simulationContext.cellsOfType<cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch>()
 
 	@Test
 	fun `reservePath rolls back completely when semaphore signal configuration fails`() {
@@ -91,7 +57,7 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 		val trainId = "TestTrain"
 
 		// Act: Reserve a path (should succeed with fix in place)
-		val result = service.reservePath(trainId, inOut1, target)
+		val result = service.reservePath(trainId, startSemaphore, target)
 
 		// Assert: Reservation succeeds with proper signal configuration
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
@@ -120,7 +86,7 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 		val target = simulationContext.getInOuts().toList()[0]
 
 		// Act: Reserve a path (baseline - currently succeeds)
-		val result = service.reservePath(trainId, inOut1, target)
+		val result = service.reservePath(trainId, startSemaphore, target)
 
 		// Assert: Reservation succeeds (baseline behavior)
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
