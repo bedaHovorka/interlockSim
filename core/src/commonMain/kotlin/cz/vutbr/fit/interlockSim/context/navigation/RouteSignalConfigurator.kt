@@ -48,6 +48,10 @@ internal enum class StartSignalResult {
  * semaphores are cleared, the direction guards, and the order of every signal write are
  * unchanged. The service stays the only caller.
  *
+ * **Review round (2026-10-24):** [configureStartSignal]'s two when-case bodies moved verbatim
+ * into [configureSemaphoreStartSignal] and [configureInOutStartSignal] so the when stays a
+ * dispatch table. Write order and log messages are unchanged.
+ *
  * **NOT thread-safe**, like the service it belongs to.
  *
  * @property environment Simulation environment the signal writes go through
@@ -142,91 +146,118 @@ internal class RouteSignalConfigurator(
 		startBlock: DynamicTrackBlock
 	): StartSignalResult =
 		when {
-			// Case 1: START is a semaphore -> configure it (train departing from semaphore)
-			start is DynamicRailSemaphore -> {
-				// Issue #893 task A1 (G4): a START that faces away from the requested direction
-				// of travel has no proceed authority to give -- the block the train needs to
-				// enter lies behind the semaphore's facing, not ahead of it. Unlike an
-				// intermediate semaphore (configureIntermediateSemaphores, PR #892), the START
-				// is authority-defining: granting the route anyway would strand the train with
-				// no signal it is entitled to obey, a #566-class stall. Reject before
-				// configuring/recording anything, so the caller's rollback has nothing to undo.
-				if (!startFacesTravelDirection(start, startBlock)) {
-					logger.debug {
-						"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
-							"away from the requested direction of travel toward $startBlock"
-					}
-					StartSignalResult.RejectedG4
-				} else {
-					try {
-						environment.configureSemaphoreSignal(start, startBlock)
-						ledger.recordClearedSemaphore(trainId, start)
-						logger.debug {
-							"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
-						}
-						StartSignalResult.Configured
-					} catch (e: Exception) {
-						logger.warn(e) {
-							"reservePath: Semaphore signal configuration failed - rolling back reservation"
-						}
-						StartSignalResult.ConfigFailed
-					}
-				}
-			}
-			// Case 2: START is InOut -> configure inSemaphore (train entering from external network)
-			// Path is conceptually: inOut.inSemaphore → blocks → target
-			// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
-			start is DynamicInOut -> {
-				val firstBlock = forwardBlocks.first()
-				// Issue #911: mirror startFacesTravelDirection's fail-open tolerance for a
-				// route extension's non-adjacent start (Issue #893 task A1). A route extension
-				// re-invokes reservePath with the ORIGINAL start; once every block adjacent to
-				// it is already owned, forwardBlocks.first() is several hops away and is not
-				// literally an end of this InOut's track, so maxSpeed(start) throws
-				// SimulationException[FATAL] instead of returning a value. There is nothing new
-				// to configure at a boundary this InOut does not bound -- the adjacent block
-				// already carries the speed set by the original grant
-				// (ClearedSignalLedger.resetUnrecordedStartSignal's KDoc documents this
-				// exact steady state) -- so treat the START as already configured rather than
-				// failing the whole candidate. A genuine configuration failure below (e.g.
-				// setUpSpeed itself throwing) still fails closed, unchanged.
-				val maxSpeed =
-					try {
-						firstBlock.maxSpeed(start)
-					} catch (e: SimulationException) {
-						logger.debug(e) {
-							"reservePath: Could not resolve maxSpeed for InOut START ${start.name} " +
-								"toward $firstBlock (likely non-adjacent, e.g. a route extension); " +
-								"treating as already configured"
-						}
-						return StartSignalResult.Configured
-					}
-				try {
-					// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
-					// For valid direction: from=anti(inSem.dir), to=inSem.dir
-					// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
-					start.inSemaphore.setUpSpeed(
-						from = start.direction(), // InOut's direction
-						to =
-							cz.vutbr.fit.interlockSim.objects.core
-								.anti(start.direction()),
-						// Anti = inSemaphore's direction
-						allowedSpeed = maxSpeed
-					)
-					ledger.recordClearedSemaphore(trainId, start.inSemaphore)
-					logger.debug {
-						"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
-					}
-					StartSignalResult.Configured
-				} catch (e: Exception) {
-					logger.warn(e) {
-						"reservePath: InOut inSemaphore configuration failed - rolling back reservation"
-					}
-					StartSignalResult.ConfigFailed
-				}
-			}
+			start is DynamicRailSemaphore -> configureSemaphoreStartSignal(trainId, start, startBlock)
+			start is DynamicInOut -> configureInOutStartSignal(trainId, start, forwardBlocks)
 			else -> StartSignalResult.ConfigFailed
 		}
+
+	/**
+	 * Semaphore branch of [configureStartSignal]: the START is a [DynamicRailSemaphore] the train
+	 * departs from. A START facing away from the travel direction is rejected as
+	 * [StartSignalResult.RejectedG4] before anything is configured or recorded (G4, Issue #893
+	 * task A1), and any configuration exception maps to [StartSignalResult.ConfigFailed].
+	 *
+	 * Extracted from [configureStartSignal] in the 2026-10-24 review round so the when stays a
+	 * dispatch table; body moved verbatim, write order and log messages unchanged.
+	 */
+	private fun configureSemaphoreStartSignal(
+		trainId: String,
+		start: DynamicRailSemaphore,
+		startBlock: DynamicTrackBlock
+	): StartSignalResult {
+		// Issue #893 task A1 (G4): a START that faces away from the requested direction
+		// of travel has no proceed authority to give -- the block the train needs to
+		// enter lies behind the semaphore's facing, not ahead of it. Unlike an
+		// intermediate semaphore (configureIntermediateSemaphores, PR #892), the START
+		// is authority-defining: granting the route anyway would strand the train with
+		// no signal it is entitled to obey, a #566-class stall. Reject before
+		// configuring/recording anything, so the caller's rollback has nothing to undo.
+		return if (!startFacesTravelDirection(start, startBlock)) {
+			logger.debug {
+				"reservePath: Rejected START semaphore ${start.name} for $trainId - it faces " +
+					"away from the requested direction of travel toward $startBlock"
+			}
+			StartSignalResult.RejectedG4
+		} else {
+			try {
+				environment.configureSemaphoreSignal(start, startBlock)
+				ledger.recordClearedSemaphore(trainId, start)
+				logger.debug {
+					"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
+				}
+				StartSignalResult.Configured
+			} catch (e: Exception) {
+				logger.warn(e) {
+					"reservePath: Semaphore signal configuration failed - rolling back reservation"
+				}
+				StartSignalResult.ConfigFailed
+			}
+		}
+	}
+
+	/**
+	 * InOut branch of [configureStartSignal]: the START is a [DynamicInOut]; its embedded
+	 * inSemaphore is configured (`from` = the InOut's direction, `to` = its anti) for a train
+	 * entering from the external network, at [firstBlock]'s max speed. A boundary the InOut
+	 * does not literally bound (route extension, Issue #911) is treated as already configured,
+	 * and any configuration exception maps to [StartSignalResult.ConfigFailed].
+	 *
+	 * Extracted from [configureStartSignal] in the 2026-10-24 review round so the when stays a
+	 * dispatch table; body moved verbatim, write order and log messages unchanged.
+	 */
+	private fun configureInOutStartSignal(
+		trainId: String,
+		start: DynamicInOut,
+		forwardBlocks: List<DynamicTrackBlock>
+	): StartSignalResult {
+		val firstBlock = forwardBlocks.first()
+		// Issue #911: mirror startFacesTravelDirection's fail-open tolerance for a
+		// route extension's non-adjacent start (Issue #893 task A1). A route extension
+		// re-invokes reservePath with the ORIGINAL start; once every block adjacent to
+		// it is already owned, forwardBlocks.first() is several hops away and is not
+		// literally an end of this InOut's track, so maxSpeed(start) throws
+		// SimulationException[FATAL] instead of returning a value. There is nothing new
+		// to configure at a boundary this InOut does not bound -- the adjacent block
+		// already carries the speed set by the original grant
+		// (ClearedSignalLedger.resetUnrecordedStartSignal's KDoc documents this
+		// exact steady state) -- so treat the START as already configured rather than
+		// failing the whole candidate. A genuine configuration failure below (e.g.
+		// setUpSpeed itself throwing) still fails closed, unchanged.
+		val maxSpeed =
+			try {
+				firstBlock.maxSpeed(start)
+			} catch (e: SimulationException) {
+				logger.debug(e) {
+					"reservePath: Could not resolve maxSpeed for InOut START ${start.name} " +
+						"toward $firstBlock (likely non-adjacent, e.g. a route extension); " +
+						"treating as already configured"
+				}
+				return StartSignalResult.Configured
+			}
+		return try {
+			// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
+			// For valid direction: from=anti(inSem.dir), to=inSem.dir
+			// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
+			start.inSemaphore.setUpSpeed(
+				from = start.direction(), // InOut's direction
+				to =
+					cz.vutbr.fit.interlockSim.objects.core
+						.anti(start.direction()),
+				// Anti = inSemaphore's direction
+				allowedSpeed = maxSpeed
+			)
+			ledger.recordClearedSemaphore(trainId, start.inSemaphore)
+			logger.debug {
+				"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
+			}
+			StartSignalResult.Configured
+		} catch (e: Exception) {
+			logger.warn(e) {
+				"reservePath: InOut inSemaphore configuration failed - rolling back reservation"
+			}
+			StartSignalResult.ConfigFailed
+		}
+	}
 
 	/**
 	 * Re-configure a [DynamicRailSemaphore] START after [DefaultPathReservationService.reservePathToAnyNextSemaphore]
