@@ -857,6 +857,14 @@ InterlockSim DI modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSi
 
 ## Common Patterns
 
+### Code Comments That Reference Other Code
+
+Reference code by **symbol name, never by line number**, in comments, KDoc and docs:
+`"Mirrors the cancelBlock loop of releaseAllBlocks"`, `"pinned by
+PathReservationUnregisterBlockSignalOrderingTest"`. Line anchors die at the first move and
+`grep` cannot find them; each extraction or reformat re-breaks every one of them (PR #901 and
+PR #1194 both paid a refresh round for stale `(:913)`-style anchors). A symbol survives the move.
+
 ### Logger Declaration
 
 ```kotlin

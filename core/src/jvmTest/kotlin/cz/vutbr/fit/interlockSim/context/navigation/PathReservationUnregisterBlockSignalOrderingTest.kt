@@ -72,7 +72,8 @@ class PathReservationUnregisterBlockSignalOrderingTest : PathReservationServiceT
 		// Then: at BlockReleased-receipt time the governing semaphore must already be STOP.
 		// Before the swap, emitBlockReleased fired before resetSemaphoresForReleasedBlocks,
 		// so the subscriber observed a FREE block whose authorising signal still showed proceed
-		// -- the signals-before-blocks invariant violation (releasePath :897-900).
+		// -- the signals-before-blocks invariant violation (the step whose ordering
+		// RouteReleaser.release enforces first).
 		assertThat(aspectAtRelease).isNotEmpty()
 		aspectAtRelease.forEach { assertThat(it).isEqualTo(Signal.STOP) }
 	}
