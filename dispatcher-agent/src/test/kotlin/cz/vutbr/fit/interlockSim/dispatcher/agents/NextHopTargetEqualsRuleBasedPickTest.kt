@@ -32,14 +32,12 @@ import java.util.concurrent.TimeUnit
  *
  * [RuleBasedDispatcher] chooses its [DispatchDecision.ReservePath] target through
  * `ReservationTargetPolicy` over [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets];
- * [NextHopResolver] still reads the compatibility projection
- * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName], which the shell fills
- * from the same policy over the same list. While the two read sites exist, this test pins that
- * they agree on every tick of a live `vyhybna.xml` run — in both directions: every
+ * since Issue #1152 [NextHopResolver] reads the very same list through the very same policy.
+ * This test pins that the two arms agree on every tick of a live `vyhybna.xml` run — in both
+ * directions: every
  * [NextHopOutcome.Hop] has a `ReservePath` with the same target for the same train, and every
- * `ReservePath` has a `Hop` with the same target. Should the projection ever drift from the
- * policy (or a reader stop going through it), this fails before the prompt and the oracle
- * disagree in production.
+ * `ReservePath` has a `Hop` with the same target. Should a reader ever stop going through the
+ * policy, this fails before the prompt and the oracle disagree in production.
  *
  * Same wiring idea as `RuleBasedDispatcherDeterminismRunner`: a real `ShuntingLoop` drives the
  * simulation, and the oracle (`RuleBasedDispatcher().decide`) is evaluated on the exact
@@ -107,7 +105,7 @@ class NextHopTargetEqualsRuleBasedPickTest : DispatcherKoinTestBase() {
 	) = oracle
 		.decide(observation)
 		.filterIsInstance<DispatchDecision.ReservePath>()
-		.groupBy({ it.trainId }, { it.toSeparatorName })
+		.groupBy({ it.trainId }, { it.toTargetName })
 
 	/** The LLM arm's next hops per train for [observation]. */
 	private fun hopsOf(observation: DispatchObservation): Map<String, NextHopOutcome.Hop> {
@@ -132,9 +130,9 @@ class NextHopTargetEqualsRuleBasedPickTest : DispatcherKoinTestBase() {
 		for ((trainId, hop) in hops) {
 			compared++
 			val targets = reserveTargets[trainId]
-			if (targets != listOf(hop.toSeparatorName)) {
+			if (targets != listOf(hop.toTargetName)) {
 				violations +=
-					"t=${observation.snapshot.simTime} $trainId: Hop to ${hop.toSeparatorName} but ReservePath to $targets"
+					"t=${observation.snapshot.simTime} $trainId: Hop to ${hop.toTargetName} but ReservePath to $targets"
 			}
 		}
 		return compared

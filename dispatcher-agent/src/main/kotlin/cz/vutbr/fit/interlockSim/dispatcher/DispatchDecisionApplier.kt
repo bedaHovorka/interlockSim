@@ -651,24 +651,24 @@ class DispatchDecisionApplier(
 	 * navigation/registry code that other callers (e.g. `InOutWorker`) also depend on.
 	 */
 	private fun applyReservePath(decision: DispatchDecision.ReservePath) {
-		val reservationKey = ReservationKey(decision.trainId, decision.fromSemaphoreName, decision.toSeparatorName)
+		val reservationKey = ReservationKey(decision.trainId, decision.fromSemaphoreName, decision.toTargetName)
 		if (reservationKey in appliedReservations) {
 			logger.debug {
 				"Skipping duplicate ReservePath: trainId=${decision.trainId} " +
-					"${decision.fromSemaphoreName} → ${decision.toSeparatorName} (already applied)"
+					"${decision.fromSemaphoreName} → ${decision.toTargetName} (already applied)"
 			}
 			return
 		}
 
 		logger.debug {
 			"Applying ReservePath: trainId=${decision.trainId} " +
-				"${decision.fromSemaphoreName} → ${decision.toSeparatorName}"
+				"${decision.fromSemaphoreName} → ${decision.toTargetName}"
 		}
 		val result =
 			networkActuator.requestRoute(
 				decision.trainId,
 				decision.fromSemaphoreName,
-				decision.toSeparatorName
+				decision.toTargetName
 			)
 		// Exhaustive `when` *expression* over the sealed RouteRequestResult type —
 		// returning the `when` forces the compiler to enforce coverage, so a future
@@ -685,7 +685,7 @@ class DispatchDecisionApplier(
 			is RouteRequestResult.AllPathsBlocked -> {
 				logger.warn {
 					"ReservePath: all paths blocked for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}); " +
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}); " +
 						"attempted: ${result.attemptedPaths}"
 				}
 				onFailedReservation()
@@ -700,7 +700,7 @@ class DispatchDecisionApplier(
 			is RouteRequestResult.NoRouteExists -> {
 				logger.warn {
 					"ReservePath: no route exists " +
-						"${decision.fromSemaphoreName} → ${decision.toSeparatorName} " +
+						"${decision.fromSemaphoreName} → ${decision.toTargetName} " +
 						"for ${decision.trainId}"
 				}
 				onFailedReservation()
@@ -708,7 +708,7 @@ class DispatchDecisionApplier(
 			is RouteRequestResult.UnresolvedEndpoint -> {
 				logger.warn {
 					"ReservePath: unresolved endpoint '${result.endpointName}' for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName})"
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName})"
 				}
 				onFailedReservation()
 			}
@@ -722,7 +722,7 @@ class DispatchDecisionApplier(
 			is RouteRequestResult.ConditionFailed -> {
 				logger.warn {
 					"ReservePath: four-condition refusal for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}" +
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}" +
 						"${if (result.retryable) ", transient" else ", permanent"}): ${result.reason}"
 				}
 				onFailedReservation()
@@ -730,14 +730,14 @@ class DispatchDecisionApplier(
 			is RouteRequestResult.GeometricallyImpossible -> {
 				logger.warn {
 					"ReservePath: geometrically impossible for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}): ${result.reason}"
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}): ${result.reason}"
 				}
 				onFailedReservation()
 			}
 			is RouteRequestResult.DivergesFromHeldRoute -> {
 				logger.warn {
 					"ReservePath: route diverges from the held route for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}, " +
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}, " +
 						"held target ${result.heldTarget}): ${result.reason}"
 				}
 				onFailedReservation()

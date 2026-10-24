@@ -12,11 +12,13 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -46,11 +48,11 @@ import org.koin.test.inject
  * [DefaultPathReservationService.reservePathToAnyNextSemaphore] returns the semaphores it cleared
  * to [Signal.STOP] (Issue #847, SP2c.24 code-review follow-up).
  *
- * ## Why this is a separate class from [PathReservationServiceTest]
+ * ## Why this is a separate class from [PathReservationServiceTestBase]
  *
  * The rollback needs a *reachable alternative route*: `reservePath` must succeed via a path that
  * does not contain the required `next` block. `vyhybna.xml` — which
- * [PathReservationServiceTest] is built around — never produces that shape; a sweep over every
+ * [PathReservationServiceTestBase] is built around — never produces that shape; a sweep over every
  * (start × adjacent block × blocked/free) combination in it reaches the branch zero times.
  * `parallel-routes.xml` does, because its two genuinely parallel routes between `swA` and `swB`
  * give `reservePath` somewhere else to go when the direct one is taken.
@@ -72,14 +74,32 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
+	private lateinit var editing: EditingContext
 	private lateinit var context: DefaultSimulationContext
 	private lateinit var service: PathReservationService
 
 	@BeforeEach
 	fun setUp() {
-		val editing = editingContextFactory.createContext(TestFixtures.loadParallelRoutesXml()) as EditingContext
-		context = simulationContextFactory.createContext(editing) as DefaultSimulationContext
+		editing = editingContextFactory.createContext(TestFixtures.loadParallelRoutesXml()) as EditingContext
+		// The editing context is consumed by the transformation and closed right after it (the
+		// `TestFixtures.loadShunting*` pattern); the simulation context lives for the test and is
+		// closed by `tearDownKoin()` through `tracked()` -- Issues #1038, #1183.
+		context = editing.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }.tracked()
 		service = context.getRoutingServices().getPathReservationService()
+	}
+
+	@Test
+	@DisplayName("the fixture leaks no context: the editing context is closed, the simulation context is tracked")
+	fun setUpClosesTheEditingContextAndTracksTheSimulationContext() {
+		assertThat(editing.scope.closed)
+			.withMessage("the editing context is consumed by the transformation and must not outlive it")
+			.isTrue()
+		assertThat(context.scope.closed)
+			.withMessage("the simulation context must stay open for the test body")
+			.isFalse()
+		assertThat(trackedContextCount)
+			.withMessage("the simulation context must be registered for tearDownKoin() to close")
+			.isEqualTo(1)
 	}
 
 	@Test
@@ -101,7 +121,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		// that SIMPLE_RIGHT_FALSE cannot make). Which failure class comes back is deliberately not
 		// pinned here — this test's concern is the bypass-rollback signal/switch cleanup below,
 		// which runs identically regardless. (It is AllPathsBlocked since Issue #937, because not
-		// every candidate is geometrically impossible; PathReservationServiceTest owns that rule.)
+		// every candidate is geometrically impossible; PathReservationOrientedSeparatorOverloadTest owns that rule.)
 		assertThat(result)
 			.withMessage("a reservation whose every candidate failed must not report success")
 			.isNotInstanceOf<PathReservationService.ReservationResult.Success>()
@@ -201,7 +221,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		// (swA must join F-to-G, a main-to-branch join SIMPLE_RIGHT_FALSE cannot make). Which
 		// failure class comes back is deliberately not pinned here — this test's concern is the
 		// switch cleanup below, which runs identically regardless. (It is AllPathsBlocked since
-		// Issue #937; PathReservationServiceTest owns that rule.)
+		// Issue #937; PathReservationOrientedSeparatorOverloadTest owns that rule.)
 		assertThat(result)
 			.withMessage("a reservation whose every candidate failed must not report success")
 			.isNotInstanceOf<PathReservationService.ReservationResult.Success>()

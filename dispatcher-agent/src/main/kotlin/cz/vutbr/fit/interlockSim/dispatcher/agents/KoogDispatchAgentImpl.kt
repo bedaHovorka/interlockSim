@@ -242,23 +242,23 @@ class KoogDispatchAgentImpl(
 	 *
 	 * ## Field style, quoted names, never a block id
 	 *
-	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toSeparatorName] come from
-	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName]/
-	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName] (the latter is the
-	 * `ReservationTargetPolicy` pick over `candidateTargets`, carried by the compatibility
-	 * projection — Issue #970) — signal or InOut names, both legal `request_route` endpoints — never
+	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toTargetName] come from
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName] and the
+	 * `ReservationTargetPolicy` pick over
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] (Issue #970) —
+	 * signal or InOut names, both legal `request_route` endpoints — never
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.blockId]. See this class's
 	 * [buildUserPrompt] KDoc ("Never render a name the model cannot use as an argument") for why
 	 * that distinction matters.
 	 *
-	 * ## `toSeparatorName == null` is never "blocked" or "occupied"
+	 * ## "No next target" is never "blocked" or "occupied"
 	 *
-	 * Per [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName]'s own contract, a
-	 * `null` next separator means "no forward-reservation target applies", not "the track ahead is
-	 * occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must never claim
-	 * otherwise, and must never invite a route request the kernel has no target for. The same rule
-	 * applies to [NextHopOutcome.ClaimedByAnotherTrain]: the section is not occupied or blocked, it
-	 * is simply going to a different train this cycle.
+	 * Per [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets]'s own contract, a
+	 * candidate list with no available entry means "no forward-reservation target applies", not
+	 * "the track ahead is occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must
+	 * never claim otherwise, and must never invite a route request the kernel has no target for.
+	 * The same rule applies to [NextHopOutcome.ClaimedByAnotherTrain]: the section is not occupied
+	 * or blocked, it is simply going to a different train this cycle.
 	 *
 	 * ## Standing at a signal reads the same perception field the tool guard reads
 	 *
@@ -293,7 +293,7 @@ class KoogDispatchAgentImpl(
 	private fun renderNextHopClause(outcome: NextHopOutcome): String =
 		when (outcome) {
 			is NextHopOutcome.Hop ->
-				"NEXT SECTION to reserve: from \"${outcome.fromSignalName}\" to \"${outcome.toSeparatorName}\" " +
+				"NEXT SECTION to reserve: from \"${outcome.fromSignalName}\" to \"${outcome.toTargetName}\" " +
 					"— the one route request that helps this train now."
 
 			NextHopOutcome.RouteAlreadySet -> "route already set — needs nothing this cycle."
@@ -302,7 +302,7 @@ class KoogDispatchAgentImpl(
 				"no section ahead is reservable this cycle — make no route request for this train; it waits."
 
 			is NextHopOutcome.ClaimedByAnotherTrain ->
-				"section to \"${outcome.toSeparatorName}\" is going to another train this cycle — make no route " +
+				"section to \"${outcome.toTargetName}\" is going to another train this cycle — make no route " +
 					"request for this train; it is re-evaluated next cycle."
 		}
 

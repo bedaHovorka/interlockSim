@@ -34,7 +34,7 @@ The interlockSim project uses Czech railway terminology primarily in:
 |------------------|-------------------------------|---------------------|-------|
 | **vyhybna.xml** | výhybna | "shunting loop.xml" | Main example railway network configuration |
 | **praha-hlavni-nadrazi.xml** | Praha Hlavní Nádraží | "Prague Main Station.xml" | Complex station network with 4 entry + 6 exit points |
-| **rudyUjezd.xml** | Rudý Újezd | "Red Settlement.xml" (fictional) | Test network configuration |
+| **cerveny_ujezd.xml** | Červený Újezd | "Red Settlement.xml" (fictional) | Test network configuration |
 
 **Filename Convention:**
 - **All filenames use ASCII without diacritics** for filesystem compatibility and encoding safety
@@ -45,7 +45,7 @@ The interlockSim project uses Czech railway terminology primarily in:
 - **vyhybna** - Czech term for "shunting loop" or "marshaling yard switching area"
 - **hlavní nádraží** - "main station" (with diacritics: nádraží, not nadrazi)
 - **Praha** - Prague (capital city of Czech Republic)
-- **Rudý Újezd** - Fictional place name for testing purposes
+- **Červený Újezd** - Fictional place name for testing purposes
 
 ---
 

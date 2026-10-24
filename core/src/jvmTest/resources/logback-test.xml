@@ -60,6 +60,17 @@
 		hides behind a disabled log level. The appenders filter at WARN, so nothing extra prints.
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService" level="DEBUG"/>
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteReleaser" level="DEBUG"/>
+	<!-- Its signal bookkeeping and signal configuration moved out of the service (Issue #1169). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.ClearedSignalLedger" level="DEBUG"/>
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteSignalConfigurator" level="DEBUG"/>
+
+	<!--
+		SwitchConfigurator (Issue #1170) holds the switch side of reservePath, extracted from
+		DefaultPathReservationService with its own logger. Same rationale as above: DEBUG so its
+		log lambdas evaluate during tests; the appenders filter at WARN, so nothing extra prints.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.SwitchConfigurator" level="DEBUG"/>
 
 	<!--
 		ReservationResultMapping.kt logs one INFO "Route GRANTED/DENIED" line per kernel outcome.

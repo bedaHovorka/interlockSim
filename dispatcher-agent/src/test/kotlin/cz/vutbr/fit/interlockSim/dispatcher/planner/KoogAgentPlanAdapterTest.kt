@@ -38,6 +38,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -237,7 +238,7 @@ class KoogAgentPlanAdapterTest {
 	) = BlockInputObservation(
 		blockId = "b1",
 		towardSemaphoreName = "S-t1",
-		toSeparatorName = "sep",
+		candidateTargets = semaphoreCandidates("sep"),
 		state = state,
 		ownerTrainId = "t1",
 		isApproachingThisInput = approaching,

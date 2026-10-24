@@ -48,7 +48,7 @@ import org.koin.test.inject
  * `request_route(from, to)` does, so the interlocking must refuse it — permanently, before it
  * touches any block, switch or signal, and naming the ends that would work.
  *
- * G4 (Issue #903) is the START-side twin of this rule; see `PathReservationServiceTest.StartDirectionTests`.
+ * G4 (Issue #903) is the START-side twin of this rule; see `PathReservationStartDirectionTest`.
  */
 @Tag("integration-test")
 @DisplayName("G8 — a route must end at a signal facing the direction of travel")

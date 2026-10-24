@@ -10,22 +10,16 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.Process
-import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
-import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -83,24 +77,27 @@ class ShuntingLoop(
 	private val enableRealTimeSync: Boolean = false,
 	initialSpeedMultiplier: Double = 1.0,
 	/**
-	 * Station capacity — the fixed number of parallel tracks the physical station has, i.e. the
-	 * maximum number of trains that may be simultaneously approved (admitted) at any tick.
+	 * Per-scenario override of the station capacity — the maximum number of trains that may be
+	 * simultaneously approved (admitted) at any tick. `null` (the default) takes the capacity from
+	 * the topology, [Station.topologyCapacity]: 2 for `vyhybna.xml` (tracks k1, k2), which equals
+	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], so vyhybna behaves as before; another
+	 * station gets its own track count, never the vyhybna default (Issue #1162).
 	 *
-	 * This is the hard capacity gate enforced by [approveQueuedTrain]: once [approwedTrains] is
-	 * at capacity, further admissions for this tick are refused (a logged no-op) and the trains
-	 * stay queued until a slot frees. It defaults to
-	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2 for `vyhybna.xml`: tracks k1, k2) —
-	 * the same constant the rule-based dispatcher and the LLM `approve_train` tool/safety net
-	 * use, so the three agree by default. The value is the physical-track count, not a tunable
-	 * performance knob: exceeding it would admit a train with no track left to occupy.
+	 * The resolved value ([stationCapacity]) is the hard capacity gate enforced by
+	 * [approveQueuedTrain]: once [approwedTrains] is at capacity, further admissions for this
+	 * tick are refused (a logged no-op) and the trains stay queued until a slot frees. By
+	 * default the cap is the topology capacity, the physical track count: a train admitted
+	 * beyond it would have no track left to occupy. A scenario override may exceed the
+	 * topology capacity (warned at init) — the scenario that sets it owns that risk.
 	 *
 	 * @since SP2b.9 review follow-up (PR #811) — closes the "approve_train cap is not a hard
 	 *   gate" finding. Previously [approveQueuedTrain] admitted blindly and the LLM path could
 	 *   overshoot the capacity contract within a single cycle because the tool and the admission
 	 *   safety net read stale approved-count snapshots; the sim-thread [approveQueuedTrain] is
-	 *   the single chokepoint that owns the true count, so the gate lives here.
+	 *   the single chokepoint that owns the true count, so the gate lives here. Topology-derived
+	 *   default since Goal 1B SP2.2 (Issue #1162).
 	 */
-	private val maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+	maxConcurrentTrains: Int? = null
 ) : Interlocking(context),
 	SpeedControllable,
 	KoinComponent,
@@ -117,7 +114,9 @@ class ShuntingLoop(
 		require(initialSpeedMultiplier > 0.0) {
 			"Speed multiplier must be positive, got: $initialSpeedMultiplier"
 		}
-		require(maxConcurrentTrains > 0) { "maxConcurrentTrains must be positive, got: $maxConcurrentTrains" }
+		require(maxConcurrentTrains == null || maxConcurrentTrains > 0) {
+			"maxConcurrentTrains must be positive, got: $maxConcurrentTrains"
+		}
 	}
 
 	// Inject registry for idempotent path reservation checks
@@ -129,13 +128,10 @@ class ShuntingLoop(
 		context.getRoutingServices().getTrainNavigationService()
 	}
 
-	// Lazy injection (SP0.11: moved from ctor param to lazy property — construction stays in scope)
-	private val pathReservationService: PathReservationService by lazy {
-		context.getRoutingServices().getPathReservationService()
-	}
-
 	// The candidates the dispatcher chooses from; the read-only capability is served by the
-	// same instance as the reserving service (Issue #970).
+	// same instance as the reserving service (Issue #970). The shell deliberately holds no
+	// PathReservationService handle: selecting and applying a target is not its job
+	// (Issue #1152 — see TargetSelectionSingleEntryTest).
 	private val reservationTargetQuery: ReservationTargetQuery by lazy {
 		context.getRoutingServices().getReservationTargetQuery()
 	}
@@ -155,29 +151,43 @@ class ShuntingLoop(
 				ReportType.NODE_EVENTS
 			)
 
-		// Vyhybna network coordinate contract.
-		// Single source of truth: ShuntingLoop.init uses these and
-		// ShuntingLoopNetworkValidator (in :fast-sim) iterates them.
-		const val COORD_IN_A_X = 11
-		const val COORD_IN_A_Y = 8
-		const val COORD_IN_B_X = 30
-		const val COORD_IN_B_Y = 8
-		const val COORD_SW_A_X = 15
-		const val COORD_SW_A_Y = 8
-		const val COORD_SW_B_X = 26
-		const val COORD_SW_B_Y = 8
-		const val COORD_SEM_ZA_X = 14
-		const val COORD_SEM_ZA_Y = 8
-		const val COORD_SEM_DOA1_X = 16
-		const val COORD_SEM_DOA1_Y = 8
-		const val COORD_SEM_DOA2_X = 17
-		const val COORD_SEM_DOA2_Y = 9
-		const val COORD_SEM_DOB1_X = 25
-		const val COORD_SEM_DOB1_Y = 8
-		const val COORD_SEM_DOB2_X = 24
-		const val COORD_SEM_DOB2_Y = 9
-		const val COORD_SEM_ZB_X = 27
-		const val COORD_SEM_ZB_Y = 8
+		/**
+		 * What keeps [station] from carrying a ShuntingLoop run; empty when it can. ShuntingLoop is
+		 * the vyhybna scenario, generalised only as far as it really runs (Issue #1162):
+		 * - at least one platform track;
+		 * - exactly 2 InOuts — its train generator pairs random InOuts, so with more it would send
+		 *   trains between same-side exits (the first runnable Červený Újezd scenario is SP3, #1150);
+		 * - every entry/exit block ends at a home signal — the dispatcher only moves trains from
+		 *   outer blocks toward a home signal;
+		 * - every RailSemaphore is a home signal or a platform-track end — the dispatcher only
+		 *   reads block inputs at those signals, a train held at any other one would never move.
+		 *
+		 * The constructor enforces it and `:fast-sim` validates a network file with it before
+		 * construction, so both read the one rule (it replaced the vyhybna coordinate contract).
+		 */
+		fun compatibilityIssues(station: Station): List<String> =
+			buildList {
+				if (station.platformTracks.isEmpty()) {
+					add("no platform track: no block has a RailSemaphore at both ends away from the home signals")
+				}
+				if (station.inOuts.size != SHUNTING_LOOP_IN_OUTS) {
+					add(
+						"ShuntingLoop needs exactly $SHUNTING_LOOP_IN_OUTS InOuts (its train generator pairs " +
+							"them), found ${station.inOuts.size}"
+					)
+				}
+				station.entryExitBlocks.filter { it.signals.isEmpty() }.forEach { entryExit ->
+					add("entry/exit block ${entryExit.name} ${entryExit.id} has no home signal: it does not end at a RailSemaphore")
+				}
+				val attached = station.allBlocks.flatMap { it.signals }.toSet()
+				val unattached = station.signals.count { it !in attached }
+				if (unattached > 0) {
+					add("$unattached RailSemaphore(s) are neither a home signal nor a platform-track end")
+				}
+			}
+
+		/** InOuts the ShuntingLoop train generator needs (see [compatibilityIssues]). */
+		private const val SHUNTING_LOOP_IN_OUTS = 2
 	}
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
@@ -206,6 +216,12 @@ class ShuntingLoop(
 	private var approwedTrains: List<Train> = emptyList()
 	private val generator: InnerGenerator = InnerGenerator(context)
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
+
+	/**
+	 * The admission cap this loop enforces: the scenario override, else the station's topology
+	 * capacity (Issue #1162). Not to be confused with [getMaxConcurrentTrains], the observed peak.
+	 */
+	val stationCapacity: Int
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
 	/**
@@ -326,61 +342,43 @@ class ShuntingLoop(
 
 	init {
 		requireSimulation(context.getGraph().size() > 0) {
-			"Railway network graph is empty - must be loaded from vyhybna.xml first"
+			"Railway network graph is empty - load a network XML first"
 		}
-		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		val inB: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_B_X, COORD_IN_B_Y)
-		val inA: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_A_X, COORD_IN_A_Y)
-		val zA: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZA_X, COORD_SEM_ZA_Y)
-		val doA1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA1_X, COORD_SEM_DOA1_Y)
-		val doB1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB1_X, COORD_SEM_DOB1_Y)
-		val zB: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZB_X, COORD_SEM_ZB_Y)
-		val doA2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA2_X, COORD_SEM_DOA2_Y)
-		val doB2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB2_X, COORD_SEM_DOB2_Y)
-		// Topology preconditions (SIM-004): assert vyhybna.xml really has switches at these
-		// coordinates. elementAt() throws if the cell is missing or of the wrong type.
-		elementAt<DynamicRailSwitch>(context, COORD_SW_A_X, COORD_SW_A_Y)
-		elementAt<DynamicRailSwitch>(context, COORD_SW_B_X, COORD_SW_B_Y)
-
-		val k1: DynamicTrackBlock = getBlock(context, "k1", doA1, doB1)
-		val k2: DynamicTrackBlock = getBlock(context, "k2", doA2, doB2)
-		val kA: DynamicTrackBlock = getBlock(context, "kA", inA, zA)
-		val kB: DynamicTrackBlock = getBlock(context, "kB", inB, zB)
+		// Goal 1B SP2.1 (Issue #1161, SIM-004): the blocks and signals come from the topology
+		// through [Station] instead of hand-written coordinates. On vyhybna.xml the derivation
+		// yields exactly the former lookup (pinned by StationTest):
+		// - innerTrackBlocks: platform tracks with RailSemaphore ends only (k1, k2)
+		// - outerTrackblocks: entry/exit blocks with one InOut end, to their home signal (kB, kA)
+		val station = Station.from(context)
+		val issues = compatibilityIssues(station)
+		requireSimulation(issues.isEmpty()) {
+			"ShuntingLoop only works with vyhybna.xml-like stations: ${issues.joinToString("; ")}"
+		}
+		station.applyBlockNames()
+		stationCapacity = station.capacity(scenarioOverride = maxConcurrentTrains)
+		// SP2.2 review tripwire (Issue #1162): the override wins by design, but a value above
+		// the station's real track count is worth a warn line — it changes no verdict.
+		if (maxConcurrentTrains != null && maxConcurrentTrains > station.topologyCapacity) {
+			logger.warn {
+				"ShuntingLoop: scenario override $maxConcurrentTrains exceeds the topology " +
+					"capacity ${station.topologyCapacity}; the override wins"
+			}
+		}
+		logger.info {
+			"ShuntingLoop: station capacity $stationCapacity " +
+				"(topology ${station.topologyCapacity}, scenario override ${maxConcurrentTrains ?: "none"})"
+		}
+		val signalledEntryExitBlocks = station.entryExitBlocks.filter { it.signals.isNotEmpty() }
 
 		// Issue #296: Removed manual path construction (~100 lines)
 		// Paths are now discovered dynamically using TopologyNavigator when needed
-		// - innerTrackBlocks: middle blocks with RailSemaphore ends only (k1, k2)
-		// - outerTrackblocks: entry/exit blocks with one InOut end (kB, kA)
-		innerTrackBlocks.addAll(listOf(k1, k2))
-		outerTrackblocks[kB] = zB
-		outerTrackblocks[kA] = zA
-	}
-
-	private inline fun <reified T : Cell> elementAt(
-		context: SimulationContext,
-		x: Int,
-		y: Int
-	): T {
-		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		val cell = railWayNetGrid.getCellAt(x, y) ?: throw IllegalArgumentException("No cell at position ($x, $y)")
-		return Util.assertInstanceOf(cell)
-	}
-
-	private fun getBlock(
-		context: SimulationContext,
-		name: String,
-		cell1: Cell,
-		cell2: Cell
-	): DynamicTrackBlock {
-		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		val graph = context.getGraph() // ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>
-		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
-		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
-		val block = graph[point1, point2] ?: throw IllegalArgumentException("Cannot get block between cells")
-		val dynamicBlock = Util.assertInstanceOf<DynamicTrackBlock>(block)
-		dynamicBlock.name = name
-		return dynamicBlock
+		innerTrackBlocks.addAll(station.platformTracks.map { it.block })
+		for (entryExit in signalledEntryExitBlocks) {
+			// single() stays a loud failure: SP3 (issue #1192) direction-aware signals may add a
+			// second entry/exit signal, and then this must be decided, not silently picked.
+			outerTrackblocks[entryExit.block] = entryExit.signals.single()
+		}
 	}
 
 	override suspend fun startAction() {
@@ -453,9 +451,8 @@ class ShuntingLoop(
 	 * [BlockInputObservation.candidateTargets] lists every next separator one section ahead of
 	 * [to] with its availability ([ReservationTargetQuery.findReservationTargetCandidates]) — the
 	 * read-only twin of the pre-#729 `reservePathToAnyNextSemaphore(to)` call; the
-	 * [Dispatcher] chooses among them (Issue #970). [BlockInputObservation.toSeparatorName] is
-	 * the compatibility projection of that choice, [ReservationTargetPolicy.pick] over the same
-	 * list, so a reader that needs only the pick gets the prior first-FREE outcome.
+	 * [Dispatcher] chooses among them (Issue #970), and that list is the only target-selection
+	 * input it gets (Issue #1152).
 	 */
 	private fun toBlockInputObservation(
 		block: DynamicTrackBlock,
@@ -491,7 +488,6 @@ class ShuntingLoop(
 		return BlockInputObservation(
 			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
 			towardSemaphoreName = to.name,
-			toSeparatorName = ReservationTargetPolicy.pick(candidateTargets)?.name,
 			candidateTargets = candidateTargets,
 			state = state,
 			ownerTrainId = ownerTrainId,
@@ -541,25 +537,11 @@ class ShuntingLoop(
 				.findReservationTargetCandidates(
 					to,
 					if (awaitingRouteExtension) ownerTrainId else null
-				).mapNotNull(::toCandidateTarget)
+				).map { it.toCandidateTarget() }
 		} else {
 			emptyList()
 		}
 	}
-
-	/**
-	 * The observation fact for one [ReservationTargetCandidate]: its separator's name and
-	 * [SeparatorKind], carried across the pure [Dispatcher] seam as plain values. A
-	 * [DynamicInOut] is an [SeparatorKind.IN_OUT], a [DynamicRailSemaphore] a
-	 * [SeparatorKind.SEMAPHORE] — the only separator kinds
-	 * [ReservationTargetQuery.findReservationTargetCandidates] returns; `null` for any other.
-	 */
-	private fun toCandidateTarget(candidate: ReservationTargetCandidate): CandidateTarget? =
-		when (val separator = candidate.separator) {
-			is DynamicInOut -> CandidateTarget(separator.name, SeparatorKind.IN_OUT, candidate.available)
-			is DynamicRailSemaphore -> CandidateTarget(separator.name, SeparatorKind.SEMAPHORE, candidate.available)
-			else -> null
-		}
 
 	/**
 	 * Returns the list of trains currently queued but not yet approved, as published at the
@@ -677,15 +659,15 @@ class ShuntingLoop(
 		// method. The LLM `approve_train` tool and the KoogAgentPlanAdapter admission safety net
 		// both read an off-thread approved-count snapshot that can go stale within one cycle
 		// (multiple tool calls see the same count), so without this gate the LLM path could
-		// admit more trains than the station has physical tracks (maxConcurrentTrains). The
+		// admit more trains than the station has physical tracks (stationCapacity). The
 		// rule-based path never hits this branch: it produces exactly `cap - approvedCount`
 		// ApproveTrain decisions per cycle. Refusing here is a safe, idempotent no-op — the
 		// train stays queued and is admitted on a later tick once a slot frees (terminated
 		// trains are pruned from approwedTrains at the start of each iteration). Enforces the
 		// capacity invariant documented on getMaxConcurrentTrains.
-		if (approwedTrains.size >= maxConcurrentTrains) {
+		if (approwedTrains.size >= stationCapacity) {
 			logger.warn {
-				"approveQueuedTrain: refusing to admit '$trainId' — $maxConcurrentTrains train(s) " +
+				"approveQueuedTrain: refusing to admit '$trainId' — $stationCapacity train(s) " +
 					"already approved (station capacity reached); train stays queued"
 			}
 			return
@@ -763,14 +745,12 @@ class ShuntingLoop(
 	 * Peak number of trains simultaneously approved (holding an admitted slot) at any
 	 * observed tick during this run.
 	 *
-	 * **Safety invariant:** this value must never exceed the station's fixed topology
-	 * capacity ([RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], or whatever
-	 * `maxConcurrentTrains` the wired dispatcher was constructed with) — that capacity is
-	 * not a tunable performance knob, it is how many parallel tracks the physical station
-	 * actually has (2 for `vyhybna.xml`: k1, k2). If a dispatcher ever let a 3rd train in
-	 * concurrently on this topology, that train would have no physical track left to occupy —
-	 * an unresolvable state, not a recoverable "wait and retry" condition, since every
-	 * available parallel track is already held by the other two approved trains.
+	 * **Safety invariant:** this value never exceeds the admission cap ([stationCapacity]: the
+	 * scenario override, else the topology value). With the default topology value the cap is
+	 * the physical parallel-track count (2 for `vyhybna.xml`: k1, k2), and a dispatcher letting
+	 * a 3rd train in concurrently would leave it no physical track to occupy — an unresolvable
+	 * state, not a recoverable "wait and retry" condition. A scenario override above the
+	 * topology value is warned about at init; the scenario that sets it owns that risk.
 	 */
 	fun getMaxConcurrentTrains(): Int = maxConcurrentTrainsCount
 

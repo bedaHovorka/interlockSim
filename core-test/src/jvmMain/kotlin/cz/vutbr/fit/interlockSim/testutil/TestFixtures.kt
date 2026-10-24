@@ -53,7 +53,7 @@ object TestFixtures {
 
 	fun loadPrahaHlavniNadraziXml(): InputStream = fixture("praha-hlavni-nadrazi.xml")
 
-	fun loadRudyUjezdXml(): InputStream = fixture("rudyUjezd.xml")
+	fun loadCervenyUjezdXml(): InputStream = fixture("cerveny_ujezd.xml")
 
 	/**
 	 * Two-parallel-route network (Issue #598 Goal 2 SP6).
@@ -80,6 +80,8 @@ object TestFixtures {
 	fun loadInvalidNameTooLongXml(): InputStream = fixture("invalid-name-too-long.xml")
 
 	fun loadSwitchBetweenSemaphoresXml(): InputStream = fixture("switch-between-semaphores.xml")
+
+	fun loadTwoSwitchLineXml(): InputStream = fixture("two-switch-line.xml")
 
 	/**
 	 * Issue #903 regression fixture: a candidate ordering where the GEOMETRIC candidate
@@ -166,6 +168,40 @@ object TestFixtures {
 		editingContextFactory: JvmEditingContextFactory? = null
 	): DefaultSimulationContext =
 		loadSwitchBetweenSemaphoresXml().use { xmlStream ->
+			val created =
+				if (editingContextFactory == null) {
+					simulationContextFactory.createContext(xmlStream)
+				} else {
+					val editingContext =
+						Util.assertInstanceOf<EditingContext>(editingContextFactory.createContext(xmlStream))
+					editingContext.use { simulationContextFactory.createContext(it) }
+				}
+			Util.assertInstanceOf<DefaultSimulationContext>(created)
+		}
+
+	/**
+	 * Loads `two-switch-line.xml` into a fresh [DefaultSimulationContext].
+	 *
+	 * The linear two-switch line built for PR #1194's partial-release switch-protection pins:
+	 * route A→B = k1..k6, with one switch inside the keep head (`swX`) and one inside the freed
+	 * tail (`swY`); the fixture header carries the layout. The Koin-injected sibling of
+	 * [loadShuntingSimulationContext] for this fixture, modeled on
+	 * [loadSwitchBetweenSemaphoresSimulationContext].
+	 *
+	 * The returned context owns a Koin scope and must be closed by the caller, exactly as
+	 * documented on [loadShuntingSimulationContext].
+	 *
+	 * @param simulationContextFactory factory performing the editing → simulation transformation
+	 * @param editingContextFactory when non-null, parses the XML explicitly; when `null` the
+	 *   [simulationContextFactory]'s own stream overload is used (it delegates to the editing
+	 *   factory it was constructed with). Both paths consume the stream synchronously before
+	 *   returning, so closing it once the `use { … }` block exits is safe.
+	 */
+	fun loadTwoSwitchLineSimulationContext(
+		simulationContextFactory: SimulationContextFactory,
+		editingContextFactory: JvmEditingContextFactory? = null
+	): DefaultSimulationContext =
+		loadTwoSwitchLineXml().use { xmlStream ->
 			val created =
 				if (editingContextFactory == null) {
 					simulationContextFactory.createContext(xmlStream)

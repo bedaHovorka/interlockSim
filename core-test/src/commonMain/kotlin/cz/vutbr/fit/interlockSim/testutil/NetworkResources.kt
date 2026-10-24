@@ -42,6 +42,9 @@ object NetworkResources {
 	/** Network with a simple right-diverging switch. */
 	val SWITCH_BASIC_XML: String by lazy { fixture("switch-basic.xml") }
 
+	/** Network with a switch flanked by a semaphore and an InOut on each side (no platform track). */
+	val SWITCH_BETWEEN_SEMAPHORES_XML: String by lazy { fixture("switch-between-semaphores.xml") }
+
 	/** Network with a horizontal semaphore. */
 	val SEMAPHORE_BASIC_XML: String by lazy { fixture("semaphore-basic.xml") }
 
@@ -50,4 +53,13 @@ object NetworkResources {
 
 	/** Small grid with two InOut elements (used for grid/cell tests). */
 	val EMPTY_GRID_XML: String by lazy { fixture("empty-grid.xml") }
+
+	/** Legacy network with unnamed semaphores/switches and no track blocks (cell-only graph). */
+	val LEGACY_NETWORK_NO_NAMES_XML: String by lazy { fixture("legacy-network-no-names.xml") }
+
+	/** Station-scale Praha hlavní nádraží network (117 blocks, 50 switches, 11 InOuts). */
+	val PRAHA_HLAVNI_NADRAZI_XML: String by lazy { fixture("praha-hlavni-nadrazi.xml") }
+
+	/** Červený Újezd station network. */
+	val CERVENY_UJEZD_XML: String by lazy { fixture("cerveny_ujezd.xml") }
 }

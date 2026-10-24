@@ -62,7 +62,7 @@ and rules. Claude Code loads them automatically when working with files in that 
 - [core/CLAUDE.md](core/CLAUDE.md) — KMP domain model, simulation engine, XML;
   **sim/ package rules**; purity gate; known issues
 - [core-test/CLAUDE.md](core-test/CLAUDE.md) — shared test-fixture library
-  (fixtures in `commonMain`/`jvmMain`; 25 XML fixture networks)
+  (fixtures in `commonMain`/`jvmMain`; 26 XML fixture networks)
 - [dispatcher-agent/CLAUDE.md](dispatcher-agent/CLAUDE.md) — Goal 10 LLM dispatcher,
   Ollama setup, **manual-only `aiSweep`**
 - [desktop-ui/CLAUDE.md](desktop-ui/CLAUDE.md) — Swing GUI, entry point and its six
