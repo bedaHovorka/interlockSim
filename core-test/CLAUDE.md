@@ -46,7 +46,7 @@ tripwire of Issue #1011 (see Contents).
   `logback-test.xml` (Issue #1011) — the same single-console-stream wiring every other
   JVM test config has. The module ships no logging engine of its own, so this dependency
   (`logback-classic`) also stops SLF4J's no-provider banner writing to stderr.
-- `src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` — 25 XML
+- `src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` — 26 XML
   fixture networks, from `minimal-network.xml` up to `praha-hlavni-nadrazi.xml`,
   including six `invalid-*.xml` negative cases. This directory is one of the
   roots baked into `:core`'s generated `NATIVE_RESOURCE_ROOTS` — see
