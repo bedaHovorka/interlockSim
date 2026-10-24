@@ -44,7 +44,7 @@ home signal (`(4,20)-(8,20)`) is part of the throat and does not count. A scenar
 (`Station.capacity(scenarioOverride)`, `ShuntingLoop(maxConcurrentTrains = n)`).
 
 **The dispatcher default 2 no longer leaks** through the core seam: `ShuntingLoop` resolves its
-admission gate from the station (`getStationCapacity()`), and `wireSynchronousDispatcher`
+admission gate from the station (`ShuntingLoop.stationCapacity`), and `wireSynchronousDispatcher`
 defaults the `RuleBasedDispatcher` cap to that value. On vyhybna both still equal
 `RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS` (2), which is why the A3 and #895 checks
 below are unchanged.
@@ -75,7 +75,7 @@ two sites), `KoogDispatchAgentImpl` (prompt text), `DispatcherObservation` /
 the leak this SP removed from the core seam. Removing station literals from prompts and tools
 is SP8 (#1155).
 
-**Demand:** the agent stack reads capacity from the `Station` (`getStationCapacity()` of the
+**Demand:** the agent stack reads capacity from the `Station` (`ShuntingLoop.stationCapacity` of the
 loop it drives), never from the vyhybna constant.
 
 ### D2 — Home signals reached through the throat

@@ -10,6 +10,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.hasMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
@@ -79,6 +80,17 @@ class StationCapacityTest : CommonKoinTestBase() {
 	}
 
 	@Test
+	fun nonPositiveLoopOverrideIsRejected() {
+		val ctx = load(NetworkResources.VYHYBNA_XML)
+
+		assertFailure { ShuntingLoop(ctx, endTime = 10L, maxConcurrentTrains = 0) }
+			.isInstanceOf<IllegalArgumentException>()
+		assertFailure { ShuntingLoop(ctx, endTime = 10L, maxConcurrentTrains = -1) }
+			.isInstanceOf<IllegalArgumentException>()
+			.hasMessage("maxConcurrentTrains must be positive, got: -1")
+	}
+
+	@Test
 	fun vyhybnaBlockIdsAreTheirEndPoints() {
 		val station = Station.from(load(NetworkResources.VYHYBNA_XML))
 
@@ -122,7 +134,7 @@ class StationCapacityTest : CommonKoinTestBase() {
 
 		val loop = ShuntingLoop(ctx, endTime = 10L)
 
-		assertThat(loop.getStationCapacity()).isEqualTo(Station.from(ctx).topologyCapacity)
+		assertThat(loop.stationCapacity).isEqualTo(Station.from(ctx).topologyCapacity)
 	}
 
 	@Test
@@ -131,7 +143,7 @@ class StationCapacityTest : CommonKoinTestBase() {
 
 		val loop = ShuntingLoop(ctx, endTime = 10L, maxConcurrentTrains = 1)
 
-		assertThat(loop.getStationCapacity()).isEqualTo(1)
+		assertThat(loop.stationCapacity).isEqualTo(1)
 	}
 
 	@Test

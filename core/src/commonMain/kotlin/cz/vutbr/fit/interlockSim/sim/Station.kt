@@ -72,12 +72,6 @@ class Station private constructor(
 	/** Every RailSemaphore at a graph node, row order (InOut-embedded semaphores are not cells). */
 	val signals: List<DynamicRailSemaphore>
 ) {
-	/** What role a [StationBlock] plays in the station. */
-	enum class Kind {
-		PLATFORM_TRACK,
-		ENTRY_EXIT
-	}
-
 	/**
 	 * One station block with its derived name and signals.
 	 *
@@ -90,7 +84,6 @@ class Station private constructor(
 	class StationBlock(
 		val id: String,
 		val name: String,
-		val kind: Kind,
 		val block: DynamicTrackBlock,
 		val signals: List<DynamicRailSemaphore>,
 		val inOuts: List<DynamicInOut>
@@ -105,9 +98,6 @@ class Station private constructor(
 	/** Station capacity from the topology: the number of [platformTracks]. */
 	val topologyCapacity: Int = platformTracks.size
 
-	private val signalsByBlock: Map<DynamicTrackBlock, List<DynamicRailSemaphore>> =
-		allBlocks.associate { it.block to it.signals }
-
 	/**
 	 * The capacity a scenario runs with: [scenarioOverride] when given, else [topologyCapacity].
 	 *
@@ -119,9 +109,6 @@ class Station private constructor(
 		}
 		return scenarioOverride ?: topologyCapacity
 	}
-
-	/** The signals of [block], or an empty list for a block that is not a station block. */
-	fun signalsOf(block: DynamicTrackBlock): List<DynamicRailSemaphore> = signalsByBlock[block].orEmpty()
 
 	/** Writes the derived names onto the blocks (block names appear in observations and logs). */
 	fun applyBlockNames() {
@@ -141,35 +128,34 @@ class Station private constructor(
 			val graph = context.getGraph()
 			val nodes = graph.nodeSet().sortedWith(Array2DMap.POINT_COMPARATOR)
 
-			val endpoints = LinkedHashMap<DynamicTrackBlock, MutableList<Point>>()
-			for (node in nodes) {
-				for (block in graph[node]) {
-					endpoints.getOrPut(block) { mutableListOf() }.add(node)
-				}
-			}
+			val endpoints: Map<DynamicTrackBlock, List<Point>> =
+				nodes
+					.flatMap { node -> graph[node].map { it to node } }
+					.groupBy(keySelector = { it.first }, valueTransform = { it.second })
 
 			// One entry/exit block per block at an InOut: a block joining two InOuts (a plain
 			// linear track) is one block naming both, so ids stay unique.
 			val inOuts = context.getInOuts().toList()
 			val inOutLabels = inOuts.mapIndexed { index, inOut -> inOut.name.ifBlank { "InOut${index + 1}" } }
-			val inOutsByBlock = LinkedHashMap<DynamicTrackBlock, MutableList<Int>>()
-			inOuts.forEachIndexed { index, inOut ->
-				val at = grid.getLocation(inOut)
-				if (at == null) {
-					logger.warn { "InOut ${inOut.name} has no grid location; skipped from the station derivation" }
-					return@forEachIndexed
-				}
-				for (block in graph[at]) {
-					inOutsByBlock.getOrPut(block) { mutableListOf() }.add(index)
-				}
-			}
+			val inOutsByBlock: Map<DynamicTrackBlock, List<Int>> =
+				inOuts
+					.withIndex()
+					.flatMap { (index, inOut) ->
+						val at = grid.getLocation(inOut)
+						if (at == null) {
+							logger.warn { "InOut ${inOut.name} has no grid location; skipped from the station derivation" }
+							emptyList<Pair<DynamicTrackBlock, Int>>()
+						} else {
+							graph[at].map { it to index }
+						}
+					}.groupBy(keySelector = { it.first }, valueTransform = { it.second })
 			val entryExitBlocks =
 				inOutsByBlock.map { (block, indices) ->
 					val ends = endpoints[block].orEmpty()
 					val homeSignal = ends.map { grid[it] }.filterIsInstance<DynamicRailSemaphore>().singleOrNull()
 					val name = BLOCK_PREFIX + indices.joinToString("/") { inOutLabels[it] }
 					val blockInOuts = indices.map { inOuts[it] }
-					StationBlock(idOf(ends), name, Kind.ENTRY_EXIT, block, listOfNotNull(homeSignal), blockInOuts)
+					StationBlock(idOf(ends), name, block, listOfNotNull(homeSignal), blockInOuts)
 				}
 
 			val homeSignals = entryExitBlocks.flatMap { it.signals }.toSet()
@@ -181,7 +167,7 @@ class Station private constructor(
 						if (isStationTrack) block to signals else null
 					}.mapIndexed { index, (block, signals) ->
 						val name = BLOCK_PREFIX + (index + 1)
-						StationBlock(idOf(endpoints.getValue(block)), name, Kind.PLATFORM_TRACK, block, signals, emptyList())
+						StationBlock(idOf(endpoints.getValue(block)), name, block, signals, emptyList())
 					}
 
 			val switches = nodes.mapNotNull { grid[it] as? DynamicRailSwitch }

@@ -83,11 +83,12 @@ class ShuntingLoop(
 	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], so vyhybna behaves as before; another
 	 * station gets its own track count, never the vyhybna default (Issue #1162).
 	 *
-	 * The resolved value ([getStationCapacity]) is the hard capacity gate enforced by
+	 * The resolved value ([stationCapacity]) is the hard capacity gate enforced by
 	 * [approveQueuedTrain]: once [approwedTrains] is at capacity, further admissions for this
-	 * tick are refused (a logged no-op) and the trains stay queued until a slot frees. It is the
-	 * physical-track count, not a tunable performance knob: exceeding it would admit a train with
-	 * no track left to occupy.
+	 * tick are refused (a logged no-op) and the trains stay queued until a slot frees. By
+	 * default the cap is the topology capacity, the physical track count: a train admitted
+	 * beyond it would have no track left to occupy. A scenario override may exceed the
+	 * topology capacity (warned at init) — the scenario that sets it owns that risk.
 	 *
 	 * @since SP2b.9 review follow-up (PR #811) — closes the "approve_train cap is not a hard
 	 *   gate" finding. Previously [approveQueuedTrain] admitted blindly and the LLM path could
@@ -216,8 +217,11 @@ class ShuntingLoop(
 	private val generator: InnerGenerator = InnerGenerator(context)
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 
-	/** The resolved station capacity: the scenario override, else the topology value (Issue #1162). */
-	private val stationCapacity: Int
+	/**
+	 * The admission cap this loop enforces: the scenario override, else the station's topology
+	 * capacity (Issue #1162). Not to be confused with [getMaxConcurrentTrains], the observed peak.
+	 */
+	val stationCapacity: Int
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
 	/**
@@ -353,6 +357,14 @@ class ShuntingLoop(
 		}
 		station.applyBlockNames()
 		stationCapacity = station.capacity(scenarioOverride = maxConcurrentTrains)
+		// SP2.2 review tripwire (Issue #1162): the override wins by design, but a value above
+		// the station's real track count is worth a warn line — it changes no verdict.
+		if (maxConcurrentTrains != null && maxConcurrentTrains > station.topologyCapacity) {
+			logger.warn {
+				"ShuntingLoop: scenario override $maxConcurrentTrains exceeds the topology " +
+					"capacity ${station.topologyCapacity}; the override wins"
+			}
+		}
 		logger.info {
 			"ShuntingLoop: station capacity $stationCapacity " +
 				"(topology ${station.topologyCapacity}, scenario override ${maxConcurrentTrains ?: "none"})"
@@ -733,21 +745,14 @@ class ShuntingLoop(
 	 * Peak number of trains simultaneously approved (holding an admitted slot) at any
 	 * observed tick during this run.
 	 *
-	 * **Safety invariant:** this value must never exceed the station's fixed topology
-	 * capacity ([getStationCapacity]: the topology value, or the scenario override) — that capacity is
-	 * not a tunable performance knob, it is how many parallel tracks the physical station
-	 * actually has (2 for `vyhybna.xml`: k1, k2). If a dispatcher ever let a 3rd train in
-	 * concurrently on this topology, that train would have no physical track left to occupy —
-	 * an unresolvable state, not a recoverable "wait and retry" condition, since every
-	 * available parallel track is already held by the other two approved trains.
+	 * **Safety invariant:** this value never exceeds the admission cap ([stationCapacity]: the
+	 * scenario override, else the topology value). With the default topology value the cap is
+	 * the physical parallel-track count (2 for `vyhybna.xml`: k1, k2), and a dispatcher letting
+	 * a 3rd train in concurrently would leave it no physical track to occupy — an unresolvable
+	 * state, not a recoverable "wait and retry" condition. A scenario override above the
+	 * topology value is warned about at init; the scenario that sets it owns that risk.
 	 */
 	fun getMaxConcurrentTrains(): Int = maxConcurrentTrainsCount
-
-	/**
-	 * The admission cap this loop enforces: the scenario override, else the station's topology
-	 * capacity (Issue #1162). Not to be confused with [getMaxConcurrentTrains], the observed peak.
-	 */
-	fun getStationCapacity(): Int = stationCapacity
 
 	fun getBlockTransitions(trainId: String): Int = blockTransitionsByTrain[trainId] ?: 0
 

@@ -68,7 +68,7 @@ private val logger = KotlinLogging.logger {}
  * @param loop The loop to wire; its [ShuntingLoop.snapshotCaptureHook] and
  *   [ShuntingLoop.controlStepListener] are overwritten
  * @param maxConcurrentTrains Admission cap, defaults to the loop's station capacity
- *   ([ShuntingLoop.getStationCapacity]: 2 on `vyhybna.xml`, the topology value elsewhere — the
+ *   ([ShuntingLoop.stationCapacity]: 2 on `vyhybna.xml`, the topology value elsewhere — the
  *   vyhybna default [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] does not leak into other
  *   stations, Issue #1162)
  * @param interlockingFacade SP3.5 (Issue #573): when non-null, [DefaultNetworkActuatorPort.requestRoute]
@@ -85,7 +85,7 @@ private val logger = KotlinLogging.logger {}
 fun wireSynchronousDispatcher(
 	env: SimulationEnvironment,
 	loop: ShuntingLoop,
-	maxConcurrentTrains: Int = loop.getStationCapacity(),
+	maxConcurrentTrains: Int = loop.stationCapacity,
 	interlockingFacade: InterlockingFacade? = null,
 	trainDecisionPolicy: TrainDecisionPolicy = AlgorithmicTrainDecisionPolicy()
 ): RuleBasedDispatcher {
