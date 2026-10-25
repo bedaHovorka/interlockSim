@@ -36,10 +36,11 @@ import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
 /**
- * Covers every branch of `DefaultPathReservationService.resolveForwardSection` (Issue #957)
+ * Covers every branch of [ReservationTargetDiscovery.resolveForwardSection] (Issue #957)
  * through its callers: the oriented [PathReservationService.reservePathToAnyNextSemaphore]
  * overload, [PathReservationService.findNextReservationTarget], and
- * [ReservationTargetQuery.findReservationTargetCandidates] (Issue #970, which the former now wraps).
+ * [ReservationTargetQuery.findReservationTargetCandidates] (Issue #970; the service's entry
+ * points delegate into the class).
  *
  * The two failure branches (separator without a grid location, separator without a forward
  * track section) are reached by wrapping the real `vyhybna.xml` context in a delegating
