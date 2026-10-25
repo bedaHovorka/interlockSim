@@ -11,9 +11,12 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.each
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEmpty
+import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.assertions.startsWith
@@ -204,13 +207,35 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		}
 
 		@Test
-		@DisplayName("reservePathToAnyTargets keeps the recorded order; only InOuts carry precomputed paths")
+		@DisplayName("reservePathToAnyTargets keeps the recorded order; only InOut targets carry precomputed paths")
 		fun wholeNetworkTargetsFromZA() {
 			val targets = discovery.reservePathToAnyTargets(separator("zA") as OrientedPathSeparator)
 
-			assertThat(targets.map { separatorLabel(it.first) })
+			assertThat(targets.map { separatorLabel(it.target) })
 				.containsExactly("B", "A", "doA1", "doA2", "doB2", "doB1", "zB")
-			assertThat(targets.filter { it.second != null }.map { separatorLabel(it.first) }).containsExactly("B", "A")
+			assertThat(targets.filterIsInstance<TargetAttempt.InOutTarget>().map { separatorLabel(it.target) })
+				.containsExactly("B", "A")
+			assertThat(targets.filterIsInstance<TargetAttempt.SemaphoreTarget>().map { separatorLabel(it.target) })
+				.containsExactly("doA1", "doA2", "doB2", "doB1", "zB")
+			assertThat(targets.filterIsInstance<TargetAttempt.SemaphoreTarget>().map { it.topologicalPaths })
+				.each { it.isNull() }
+		}
+
+		@Test
+		@DisplayName("an InOut target's paths are the topological paths of exactly that target")
+		fun inOutTargetPathsBelongToTheirTarget() {
+			val zA = separator("zA") as OrientedPathSeparator
+			val inOutTargets = discovery.reservePathToAnyTargets(zA).filterIsInstance<TargetAttempt.InOutTarget>()
+
+			assertThat(inOutTargets).isNotEmpty()
+			for (attempt in inOutTargets) {
+				assertThat(attempt.topologicalPaths.value, name = "paths to ${separatorLabel(attempt.target)}")
+					.isEqualTo(
+						simulationContext.scope
+							.get<TopologyNavigator>()
+							.findAllTopologicalPaths(zA, attempt.target, DEFAULT_MAX_PATH_DEPTH)
+					)
+			}
 		}
 
 		@Test
@@ -225,7 +250,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 				assertThat(
 					discovery
 						.reservePathToAnyTargets(separator(start) as OrientedPathSeparator)
-						.map { separatorLabel(it.first) },
+						.map { separatorLabel(it.target) },
 					name = "order from $start"
 				).containsExactly(*expected.toTypedArray())
 			}
