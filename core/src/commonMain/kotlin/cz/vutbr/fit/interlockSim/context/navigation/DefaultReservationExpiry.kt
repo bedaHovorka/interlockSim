@@ -100,9 +100,12 @@ internal class DefaultReservationExpiry(
 	 * loop tick expires the holding.
 	 */
 	internal fun expireStale(exceptTrainId: String?): Int {
+		// Paid at every request top and loop tick: the common case (nothing stale, no failure
+		// remembered) must stop right at the query, before any chain or set is built.
+		val reported = registry.expiredHoldings(ttl = ttlSimSeconds)
+		if (reported.isEmpty() && failedExpiryTrains.isEmpty()) return 0
 		val stale =
-			registry
-				.expiredHoldings(ttl = ttlSimSeconds)
+			reported
 				.filter { it.trainId != exceptTrainId }
 				// The registry judges occupancy only over the blocks it attributes to the train; a train
 				// standing on a block it holds no entry for (Issue #893) is on the track all the same.

@@ -14,6 +14,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.SourceScan
 import org.junit.jupiter.api.Test
 import java.io.File
 
@@ -39,21 +40,10 @@ class NavigationWallClockTripwireTest {
 
 		val WALL_CLOCK_READ =
 			Regex("""currentTimeMillisKMP|System\.currentTimeMillis|Clock\.System|\bTimeSource\b|\bmeasureTime""")
-
-		fun isCode(line: String): Boolean {
-			val trimmed = line.trim()
-			return trimmed.isNotEmpty() &&
-				!trimmed.startsWith("//") &&
-				!trimmed.startsWith("*") &&
-				!trimmed.startsWith("/*")
-		}
 	}
 
 	private val navigationSources: List<File> by lazy {
-		val root =
-			ROOT_SPELLINGS.map(::File).firstOrNull { it.isDirectory }
-				?: error("context/navigation sources not found under any of $ROOT_SPELLINGS")
-		root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+		SourceScan.kotlinFiles(SourceScan.directory(*ROOT_SPELLINGS.toTypedArray()))
 	}
 
 	@Test
@@ -63,7 +53,7 @@ class NavigationWallClockTripwireTest {
 				file
 					.readLines()
 					.withIndex()
-					.filter { (_, line) -> isCode(line) && WALL_CLOCK_READ.containsMatchIn(line) }
+					.filter { (_, line) -> SourceScan.isCode(line) && WALL_CLOCK_READ.containsMatchIn(line) }
 					.map { (index, line) -> "${file.name}:${index + 1}: ${line.trim()}" }
 			}
 

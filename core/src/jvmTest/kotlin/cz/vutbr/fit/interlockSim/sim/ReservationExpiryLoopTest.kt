@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
@@ -34,8 +35,8 @@ import java.util.concurrent.TimeUnit
  */
 @Tag("integration-test")
 class ReservationExpiryLoopTest : KoinTestBase() {
-	private fun expiryOf(context: DefaultSimulationContext): DefaultPathReservationService =
-		context.getRoutingServices().getPathReservationService() as DefaultPathReservationService
+	private fun expiryOf(context: DefaultSimulationContext): DefaultReservationExpiry =
+		(context.getRoutingServices().getPathReservationService() as DefaultPathReservationService).expiry
 
 	private fun inOut(
 		context: DefaultSimulationContext,
@@ -56,26 +57,22 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun `ShuntingLoop expires a stale holding on its own tick`() {
-		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
-		grantPhantomRoute(context)
 		// No dispatcher is wired: nothing calls reservePath, so only the loop's tick can expire it.
-		val loop = ShuntingLoop(context, endTime = 100L)
-		context.setMainProcess(loop)
-
-		context.run()
-
-		assertThat(context.getRoutingServices().getPathReservationService().getReservedBlocks(PHANTOM)).isEmpty()
-		assertThat(expiryOf(context).expiredHoldingCount).isEqualTo(1)
+		assertPhantomRouteExpiresOnTicksOnly { ShuntingLoop(it, endTime = 100L) }
 	}
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun `MultiTrainLoop expires a stale holding on its own tick`() {
+		// No train specs: the loop never calls reservePath itself.
+		assertPhantomRouteExpiresOnTicksOnly { MultiTrainLoop(it, endTime = 100L) }
+	}
+
+	/** A loop that never asks the kernel for a route: only the loop's own tick can expire the phantom. */
+	private fun assertPhantomRouteExpiresOnTicksOnly(makeLoop: (DefaultSimulationContext) -> LoopProcess) {
 		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
 		grantPhantomRoute(context)
-		// No train specs: the loop never calls reservePath itself.
-		val loop = MultiTrainLoop(context, endTime = 100L)
-		context.setMainProcess(loop)
+		context.setMainProcess(makeLoop(context))
 
 		context.run()
 

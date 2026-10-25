@@ -56,7 +56,7 @@ class PathReservationRegistryExpiredHoldingsTest : PathReservationServiceTestBas
 	fun `an un-entered holding is reported once its newest registration is TTL old`() {
 		claim("t1", kA, at = 0.0)
 
-		assertThat(timedRegistry.expiredHoldings(ttl = TTL, now = 59.999)).isEmpty()
+		assertThat(timedRegistry.expiredHoldings(ttl = TTL, now = TTL - 0.001)).isEmpty()
 		assertThat(timedRegistry.expiredHoldings(ttl = TTL, now = 60.0)).containsExactly(ExpiredHolding("t1", 60.0))
 	}
 

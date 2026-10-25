@@ -236,23 +236,36 @@ internal class BlockOwnershipTable(
 	fun blockCount(): Int = blockToTrain.size
 
 	/**
-	 * The holdings [PathReservationRegistry.expiredHoldings] reports, in registration order: every
-	 * held block of the train is RESERVED and no train stands on it ([isTrainOnBlock], read live),
-	 * and the train's NEWEST registration is at least [ttl] older than [now].
+	 * The holdings [PathReservationRegistry.expiredHoldings] reports, in train-claim order: the
+	 * train's held blocks are all RESERVED with nobody standing on them ([isTrainOnBlock], read
+	 * live), and the NEWEST registration among them is at least [ttl] older than [now].
 	 */
 	fun expiredHoldings(
 		ttl: Double,
 		now: Double
 	): List<ExpiredHolding> =
 		trainToBlocks.mapNotNull { (trainId, blocks) ->
-			val newest =
-				blocks
-					.takeIf { held -> held.isNotEmpty() && held.all(::isUnenteredReservation) }
-					?.mapNotNull { blockRegisteredAt[it] }
-					?.maxOrNull()
-			val age = newest?.let { now - it }
-			if (age != null && age >= ttl) ExpiredHolding(trainId, age) else null
+			val age = unenteredAgeOf(blocks, now) ?: return@mapNotNull null
+			if (age >= ttl) ExpiredHolding(trainId, age) else null
 		}
+
+	/**
+	 * The age of the newest registration over an all-un-entered [blocks] list, `null` when any
+	 * block is entered/occupied or carries no timestamp, in one pass with no intermediate list.
+	 */
+	private fun unenteredAgeOf(
+		blocks: List<DynamicTrackBlock>,
+		now: Double
+	): Double? {
+		if (blocks.isEmpty()) return null
+		var newest: Double? = null
+		for (block in blocks) {
+			if (!isUnenteredReservation(block)) return null
+			val stamped = blockRegisteredAt[block]
+			if (stamped != null && (newest == null || newest < stamped)) newest = stamped
+		}
+		return newest?.let { now - it }
+	}
 
 	/** RESERVED and nobody on it: a block of a route its train has not entered. */
 	private fun isUnenteredReservation(block: DynamicTrackBlock): Boolean =

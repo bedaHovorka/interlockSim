@@ -149,9 +149,10 @@ class DefaultPathReservationService(
 	 * The one kernel-side reservation expiry (Issue #1174): the TTL, the candidate query and the
 	 * release policy live in [DefaultReservationExpiry]; the service stays the single facade and
 	 * exposes the trigger through [ReservationExpiry] (the #1152 allow-list keeps `ShuntingLoop`
-	 * free of any reservation-service handle).
+	 * free of any reservation-service handle). `internal`, like its sibling collaborators: tests
+	 * reach the release seam and the counter through it, the real wiring included.
 	 */
-	private val expiry =
+	internal val expiry =
 		DefaultReservationExpiry(
 			registry = registry,
 			candidateScreen = candidateScreen,
@@ -252,6 +253,13 @@ class DefaultPathReservationService(
 	 * only there, so a caller that already enumerated the paths (for example to sort targets)
 	 * does not enumerate them again. InOut↔InOut requests still go to [RouteFinder]. `null`
 	 * means "enumerate here", exactly as the public overload does.
+	 *
+	 * The expiry-trigger cadence (Issue #1174) makes this form load-bearing: it runs NO expiry.
+	 * The entry-point overloads ([reservePath], [reservePathToAny]) run the trigger at their top;
+	 * the attempt loops call this one so no expiry can move the before/after snapshots their
+	 * bypass rollback relies on. Do not "simplify" a `DEFAULT_MAX_PATH_DEPTH,
+	 * topologicalPaths = null` call site back to the short overload — that would re-enable
+	 * per-attempt expiry.
 	 */
 	internal fun reservePath(
 		trainId: String,
@@ -1007,22 +1015,6 @@ class DefaultPathReservationService(
 	 * the holding.
 	 */
 	internal fun expireStaleReservations(exceptTrainId: String): Int = expiry.expireStale(exceptTrainId)
-
-	/**
-	 * The release handoff tests replace to pin that a throwing release is contained; see
-	 * [DefaultReservationExpiry.expiryRelease].
-	 */
-	internal var expiryRelease: (String) -> PathRelease
-		get() = expiry.expiryRelease
-		set(value) {
-			expiry.expiryRelease = value
-		}
-
-	/**
-	 * Holdings [expireStaleReservations] has released completely since this service was built
-	 * (Issue #1174). A holding approach locking deferred is counted once, when its release completes.
-	 */
-	internal val expiredHoldingCount: Int get() = expiry.expiredHoldingCount
 
 	/** See [RouteReleaser.unregister]. */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> = releaser.unregister(trainId)
