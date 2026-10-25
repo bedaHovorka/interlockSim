@@ -361,7 +361,7 @@ internal class RouteSignalConfigurator(
 	 * is unexpectedly not adjacent, without changing [facesDirectionOfTravel]'s contract or its callers within
 	 * [configureIntermediateSemaphores] (which only ever pass a genuinely adjacent pair). A START that does not touch
 	 * the requesting train's footprint at all is refused earlier by the A-R1 contiguity predicate
-	 * ([DefaultPathReservationService.rejectNonContiguousStart]).
+	 * ([RouteCandidateScreen.rejectNonContiguousStart]).
 	 */
 	private fun startFacesTravelDirection(
 		semaphore: DynamicRailSemaphore,

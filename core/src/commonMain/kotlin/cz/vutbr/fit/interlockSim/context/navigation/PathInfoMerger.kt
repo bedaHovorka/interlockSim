@@ -192,7 +192,7 @@ internal class PathInfoMerger(
 	 *   teleport and no weakening of the `allowingSignal` gate, navigation simply truncates at
 	 *   `old.target`. The damage is the orphaned RESERVED tail described above, not a safety
 	 *   violation. Note this is a *merge* precondition only: it is unrelated to
-	 *   `DefaultPathReservationService.rejectNonContiguousStart`, which tests the route origin
+	 *   `RouteCandidateScreen.rejectNonContiguousStart`, which tests the route origin
 	 *   against the train's physical block footprint and must stay permissive enough for entry,
 	 *   bidirectional reversal (PR #356) and post-partial-release re-reservation.
 	 * - `new.start` appears exactly ONCE in `new.reservedPath` (at the beginning)
