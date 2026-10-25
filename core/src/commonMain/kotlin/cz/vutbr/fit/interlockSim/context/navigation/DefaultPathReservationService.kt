@@ -150,17 +150,6 @@ class DefaultPathReservationService(
 			allBlocksCache.filter { it.occupant?.name == trainId }
 
 	/**
-	 * Name of [separator] for diagnostics, falling back to its `toString()` when it has none.
-	 */
-	private fun separatorLabel(separator: PathSeparator): String =
-		when (separator) {
-			is DynamicRailSemaphore -> separator.name.takeIf { it.isNotBlank() }
-			is DynamicInOut -> separator.name.takeIf { it.isNotBlank() }
-			is DynamicRailSwitch -> separator.name.takeIf { it.isNotBlank() }
-			else -> null
-		} ?: separator.toString()
-
-	/**
 	 * The contiguity invariant (Issue #893, task A-R1): a route may only start where the
 	 * requesting train actually is.
 	 *
@@ -1441,25 +1430,6 @@ class DefaultPathReservationService(
 	) = releaser.rollbackReservation(separator, blocks)
 
 	/**
-	 * Permanent geometric impossibilities seen while trying a request's candidate paths.
-	 *
-	 * Two facts, deliberately kept apart (Issue #937):
-	 * - [reason] is the **first** one hit, because a geometric reason is the most informative
-	 *   thing to report and later candidates must not overwrite it (the Issue #903 ruling, which
-	 *   still stands for reporting).
-	 * - [count] is how many candidates hit one, because whether the *request* is permanently
-	 *   unsatisfiable is an AND over candidates, not an OR. One impossible candidate alongside a
-	 *   merely-busy one means "wait and retry", not "give up".
-	 *
-	 * @property reason First geometric failure reason, or `null` if no candidate hit one.
-	 * @property count Number of candidates that failed geometrically.
-	 */
-	private data class GeometricFailures(
-		val reason: String? = null,
-		val count: Int = 0
-	)
-
-	/**
 	 * The per-candidate snapshots Step 2f takes before configuring anything (Issue #893 task
 	 * A5 / Issue #904 / Issue #1065): the candidate's [cz.vutbr.fit.interlockSim.objects.paths.PathInfo],
 	 * its switches, the switches the train already owned, and the semaphores already cleared.
@@ -1491,17 +1461,6 @@ class DefaultPathReservationService(
 		val forwardBlocks: List<DynamicTrackBlock>,
 		val index: Int
 	)
-
-	/**
-	 * Records one geometric candidate failure: keeps the first [reason], increments the count
-	 * (Issue #903 for the reason, Issue #937 for the count). Extracted so the call site in
-	 * [reservePath]'s candidate loop stays a single line, keeping that method's cyclomatic
-	 * complexity under threshold.
-	 */
-	private fun recordGeometricFailureOnce(
-		current: GeometricFailures,
-		reason: String
-	): GeometricFailures = GeometricFailures(current.reason ?: reason, current.count + 1)
 
 	/**
 	 * Step 2f's post-[configureAndRegisterSwitches] classification (Issue #1065): a failed
