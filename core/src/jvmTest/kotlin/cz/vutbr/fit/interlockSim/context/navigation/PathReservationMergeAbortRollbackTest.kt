@@ -14,7 +14,6 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
-import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
@@ -81,8 +80,8 @@ class PathReservationMergeAbortRollbackTest : PathReservationServiceTestBase() {
 			navigator = navigator,
 			environment = environment,
 			registry = spyRegistry,
-			pathInfoBuilder = simulationContext.scope.get(),
-			routeFinder = simulationContext.scope.get<RouteFinder>()
+			pathInfoBuilder = pathInfoBuilder,
+			routeFinder = routeFinder
 		)
 	}
 

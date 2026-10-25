@@ -14,26 +14,18 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
-import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Covers every branch of [ReservationTargetDiscovery.resolveForwardSection] (Issue #957)
@@ -47,28 +39,12 @@ import org.koin.test.inject
  * environment that hides the location or the graph edges.
  */
 @DisplayName("resolveForwardSection (Issue #957)")
-class ForwardSectionResolutionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var navigator: TopologyNavigator
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var pathInfoBuilder: PathInfoBuilder
-	private lateinit var routeFinder: RouteFinder
-
+class ForwardSectionResolutionTest : PathReservationServiceTestBase() {
 	private lateinit var inOutA: OrientedPathSeparator
 	private lateinit var semaphoreZA: OrientedPathSeparator // zA at (14,8), faces vA
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-		navigator = simulationContext.scope.get()
-		registry = simulationContext.scope.get()
-		pathInfoBuilder = simulationContext.scope.get()
-		routeFinder = simulationContext.scope.get()
-
+	fun setUpFixtures() {
 		// Order from XML: [0]=B at X=30, [1]=A at X=11
 		inOutA = simulationContext.toDynamic(simulationContext.getInOuts().toList()[1]) as DynamicInOut
 		semaphoreZA = simulationContext.separatorAt(14, 8) as OrientedPathSeparator

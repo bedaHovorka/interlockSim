@@ -16,6 +16,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -24,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -66,6 +68,13 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	protected lateinit var environment: SimulationEnvironment
 	protected lateinit var navigator: TopologyNavigator
 	protected lateinit var registry: PathReservationRegistry
+
+	/** Resolved eagerly from [simulationContext]'s scope in [setUp] (a cheap scope lookup). */
+	protected lateinit var pathInfoBuilder: PathInfoBuilder
+
+	/** Resolved eagerly from [simulationContext]'s scope in [setUp] (a cheap scope lookup). */
+	protected lateinit var routeFinder: RouteFinder
+
 	protected lateinit var service: PathReservationService
 	protected lateinit var inOut1: DynamicPathSeparator
 	protected lateinit var inOut2: DynamicPathSeparator
@@ -85,6 +94,8 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 		// Create it directly for test purposes (not from scope)
 		navigator = simulationContext.scope.get()
 		registry = simulationContext.scope.get()
+		pathInfoBuilder = simulationContext.scope.get()
+		routeFinder = simulationContext.scope.get()
 
 		// Get InOut elements
 		val inOuts = simulationContext.getInOuts()

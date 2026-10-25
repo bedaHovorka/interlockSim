@@ -21,8 +21,6 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -32,28 +30,26 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Proves the bypass-rollback in
  * [DefaultPathReservationService.reservePathToAnyNextSemaphore] returns the semaphores it cleared
  * to [Signal.STOP] (Issue #847, SP2c.24 code-review follow-up).
  *
- * ## Why this is a separate class from [PathReservationServiceTestBase]
+ * ## Why this class loads `parallel-routes.xml`
  *
+ * The class reuses the scaffold of [PathReservationServiceTestBase] and overrides
+ * `loadTestContext()` to load `parallel-routes.xml` instead of the base's default `vyhybna.xml`.
  * The rollback needs a *reachable alternative route*: `reservePath` must succeed via a path that
- * does not contain the required `next` block. `vyhybna.xml` — which
- * [PathReservationServiceTestBase] is built around — never produces that shape; a sweep over every
- * (start × adjacent block × blocked/free) combination in it reaches the branch zero times.
+ * does not contain the required `next` block. `vyhybna.xml` never produces that shape; a sweep over
+ * every (start × adjacent block × blocked/free) combination in it reaches the branch zero times.
  * `parallel-routes.xml` does, because its two genuinely parallel routes between `swA` and `swB`
  * give `reservePath` somewhere else to go when the direct one is taken.
  *
@@ -70,22 +66,18 @@ import org.koin.test.inject
  */
 @Tag("integration-test")
 @DisplayName("SP2c.24 — the bypass-rollback resets the signals it cleared (#847)")
-class BypassRollbackSignalResetTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
+class BypassRollbackSignalResetTest : PathReservationServiceTestBase() {
 	private lateinit var editing: EditingContext
-	private lateinit var context: DefaultSimulationContext
-	private lateinit var service: PathReservationService
 
-	@BeforeEach
-	fun setUp() {
+	/**
+	 * Builds `parallel-routes.xml` instead of the base's `vyhybna.xml`. The editing context is
+	 * consumed by the transformation and closed right after it (the `TestFixtures.loadShunting*`
+	 * pattern); the simulation context lives for the test and is closed by `tearDownKoin()`
+	 * through the base's `tracked()` -- Issues #1038, #1183.
+	 */
+	override fun loadTestContext(): DefaultSimulationContext {
 		editing = editingContextFactory.createContext(TestFixtures.loadParallelRoutesXml()) as EditingContext
-		// The editing context is consumed by the transformation and closed right after it (the
-		// `TestFixtures.loadShunting*` pattern); the simulation context lives for the test and is
-		// closed by `tearDownKoin()` through `tracked()` -- Issues #1038, #1183.
-		context = editing.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }.tracked()
-		service = context.getRoutingServices().getPathReservationService()
+		return editing.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
 	}
 
 	@Test
@@ -94,7 +86,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		assertThat(editing.scope.closed)
 			.withMessage("the editing context is consumed by the transformation and must not outlive it")
 			.isTrue()
-		assertThat(context.scope.closed)
+		assertThat(simulationContext.scope.closed)
 			.withMessage("the simulation context must stay open for the test body")
 			.isFalse()
 		assertThat(trackedContextCount)
@@ -110,7 +102,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		// reservePath to reach its target the other way round the loop -- via sem2 -- producing a
 		// Success whose blocks do not contain the `next` this call requires, which is exactly the
 		// bypass condition.
-		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		val requiredNext = blockBetweenRefs("RailSemaphore:sem1", "RailSwitch:swB")
 		requiredNext.setUpPath(sem1, "other-train")
 
 		val result = service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
@@ -152,9 +144,9 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 	@Test
 	@DisplayName("a rolled-back bypass candidate publishes one release for every reserve it published")
 	fun bypassRollbackBalancesItsReservationEvents() {
-		val registry: PathReservationRegistry = context.scope.get()
+		val registry: PathReservationRegistry = simulationContext.scope.get()
 		val sem1 = semaphoreNamed("sem1")
-		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		val requiredNext = blockBetweenRefs("RailSemaphore:sem1", "RailSwitch:swB")
 		requiredNext.setUpPath(sem1, "other-train")
 		val events = mutableListOf<BlockOccupancyEvent>()
 		service.addBlockOccupancyListener { event -> if (event.trainId == "train1") events += event }
@@ -193,7 +185,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		val litAfterFirstHop = litSemaphoreNames()
 
 		val sem1 = semaphoreNamed("sem1")
-		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swA")
+		val requiredNext = blockBetweenRefs("RailSemaphore:sem1", "RailSwitch:swA")
 		requiredNext.setUpPath(sem1, "other-train")
 
 		service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
@@ -209,9 +201,9 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 	@Test
 	@DisplayName("a rolled-back bypass candidate registers no switches and locks none")
 	fun bypassRollbackLocksNoSwitchesWhenNothingSurvives() {
-		val registry: PathReservationRegistry = context.scope.get()
+		val registry: PathReservationRegistry = simulationContext.scope.get()
 		val sem1 = semaphoreNamed("sem1")
-		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swB")
+		val requiredNext = blockBetweenRefs("RailSemaphore:sem1", "RailSwitch:swB")
 		requiredNext.setUpPath(sem1, "other-train")
 
 		val result = service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
@@ -239,7 +231,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 	@Test
 	@DisplayName("the rollback restores the pre-attempt PathInfo and switch registrations exactly")
 	fun bypassRollbackRestoresPathInfoAndSwitchesToTheirPreAttemptSnapshots() {
-		val registry: PathReservationRegistry = context.scope.get()
+		val registry: PathReservationRegistry = simulationContext.scope.get()
 		// Westbound (Issue #1064): a first hop must end at a signal facing the train. sem1 faces west,
 		// so a train from B can be routed to it; a train from A could not (G8 refuses A -> sem1).
 		// The bypass shape is the mirror image of the eastbound tests above: the block on sem1's far
@@ -252,7 +244,7 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 		val lockedBefore = switches().associate { it.name to it.locked }
 
 		val sem1 = semaphoreNamed("sem1")
-		val requiredNext = blockBetween("RailSemaphore:sem1", "RailSwitch:swA")
+		val requiredNext = blockBetweenRefs("RailSemaphore:sem1", "RailSwitch:swA")
 		requiredNext.setUpPath(sem1, "other-train")
 		service.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
 
@@ -272,9 +264,6 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 	private fun semaphoreNamed(name: String): DynamicRailSemaphore =
 		separators().filterIsInstance<DynamicRailSemaphore>().single { it.name == name }
 
-	private fun inOutNamed(name: String): DynamicInOut =
-		separators().filterIsInstance<DynamicInOut>().single { it.name == name }
-
 	private fun litSemaphoreNames(): List<String> =
 		separators()
 			.filterIsInstance<DynamicRailSemaphore>()
@@ -282,17 +271,20 @@ class BypassRollbackSignalResetTest : KoinTestBase() {
 			.mapNotNull { it.name }
 
 	private fun separators(): List<DynamicPathSeparator> =
-		context.cellsOfType<DynamicPathSeparator>().filter { it is DynamicRailSemaphore || it is DynamicInOut }
+		simulationContext.cellsOfType<DynamicPathSeparator>().filter { it is DynamicRailSemaphore || it is DynamicInOut }
 
-	private fun switches(): List<DynamicRailSwitch> = context.cellsOfType<DynamicRailSwitch>()
+	private fun switches(): List<DynamicRailSwitch> = simulationContext.cellsOfType<DynamicRailSwitch>()
 
-	/** The block whose `staticRef` names both [a] and [b] as its ends. */
-	private fun blockBetween(
+	/**
+	 * The block whose `staticRef` names both [a] and [b] as its ends (a substring match on the static
+	 * refs, unlike the base's by-name [blockBetween]).
+	 */
+	private fun blockBetweenRefs(
 		a: String,
 		b: String
 	): DynamicTrackBlock {
-		val grid = context.getRailWayNetGrid()
-		val graph = context.getGraph()
+		val grid = simulationContext.getRailWayNetGrid()
+		val graph = simulationContext.getGraph()
 		for (x in 0 until grid.cols) {
 			for (y in 0 until grid.rows) {
 				val cell = grid[Point(x, y)] ?: continue

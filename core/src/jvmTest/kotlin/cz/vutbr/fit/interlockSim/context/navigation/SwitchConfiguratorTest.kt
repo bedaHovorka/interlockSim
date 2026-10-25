@@ -25,7 +25,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import io.mockk.every
 import io.mockk.mockk
@@ -49,7 +48,6 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @DisplayName("SwitchConfigurator (Issue #1170)")
 class SwitchConfiguratorTest : PathReservationServiceTestBase() {
-	private lateinit var pathInfoBuilder: PathInfoBuilder
 	private lateinit var configurator: SwitchConfigurator
 
 	private lateinit var zA: DynamicPathSeparator
@@ -60,7 +58,6 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 
 	@BeforeEach
 	fun setUpConfigurator() {
-		pathInfoBuilder = simulationContext.scope.get()
 		configurator = SwitchConfigurator(environment, registry)
 		zA = findSemaphoreByName("zA")
 		doB1 = findSemaphoreByName("doB1")

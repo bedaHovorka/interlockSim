@@ -14,18 +14,12 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Issue #944: a route that reverses a train over the section it just travelled must be refused,
@@ -69,13 +63,7 @@ import org.koin.test.inject
  */
 @DisplayName("Issue #944: a reversing route is refused and the train stays navigable")
 @Tag("integration-test")
-class Issue944ReversalDeadlockRegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
+class Issue944ReversalDeadlockRegressionTest : PathReservationServiceTestBase() {
 	private lateinit var navigation: TrainNavigationService
 
 	private lateinit var zB: DynamicPathSeparator
@@ -84,12 +72,7 @@ class Issue944ReversalDeadlockRegressionTest : KoinTestBase() {
 	private val trainId = "Train #4"
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-
-		registry = simulationContext.scope.get()
-		service = simulationContext.getRoutingServices().getPathReservationService()
+	fun setUpFixtures() {
 		navigation = simulationContext.getRoutingServices().getTrainNavigationService()
 
 		zB = simulationContext.separatorAt(27, 8)

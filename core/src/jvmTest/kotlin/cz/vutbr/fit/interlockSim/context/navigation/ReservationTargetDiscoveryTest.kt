@@ -22,14 +22,9 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorLabel
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
@@ -39,7 +34,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
@@ -60,22 +54,14 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("Reservation target discovery order (Issue #1171)")
 @Timeout(30, unit = TimeUnit.SECONDS)
-class ReservationTargetDiscoveryTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var service: PathReservationService
+class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 	private lateinit var query: ReservationTargetQuery
 
 	/** Names to separators, one grid scan per test; the lookups below are map hits. */
 	private lateinit var separatorsByName: Map<String, DynamicPathSeparator>
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-		service = simulationContext.getRoutingServices().getPathReservationService()
+	fun setUpFixtures() {
 		query = simulationContext.getRoutingServices().getReservationTargetQuery()
 		separatorsByName =
 			simulationContext

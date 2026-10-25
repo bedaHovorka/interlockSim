@@ -23,7 +23,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType.BLOCK_RE
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.LinearSemaphoreTopology
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
@@ -49,14 +48,21 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 @DisplayName("Issue #1050 review — the detailed release keeps an occupied block on every call")
-class Issue1050ApproachLockOccupiedReleaseTest : KoinTestBase() {
+class Issue1050ApproachLockOccupiedReleaseTest : PathReservationServiceTestBase() {
+	private lateinit var network: LinearSemaphoreTopology
+
+	/** The linear `A — Sem — B` network instead of the base's `vyhybna.xml`; [network] keeps its semaphore handle. */
+	override fun loadTestContext(): DefaultSimulationContext {
+		// The base setUp() calls this hook exactly once per test, so assigning `network` here is safe.
+		network = TestTopologies.linearPathWithSemaphoreNetwork()
+		return network.context
+	}
+
 	@Test
 	fun `an occupied block stays registered and reserved while the detailed release frees the tail (Issue 1050)`() {
-		val network = TestTopologies.linearPathWithSemaphoreNetwork()
-		val context = network.context.tracked()
-		val reservation = reserve(network, context)
+		val reservation = reserve()
 		val releasedEvents = mutableListOf<BlockOccupancyEvent>()
-		context.addBlockOccupancyListener(
+		simulationContext.addBlockOccupancyListener(
 			BlockOccupancyListener { event ->
 				if (event.type ==
 					BLOCK_RELEASED
@@ -72,25 +78,23 @@ class Issue1050ApproachLockOccupiedReleaseTest : KoinTestBase() {
 		// not approach-locked and can be freed while the occupied head is kept.
 		network.semaphore.signal = Signal.STOP
 
-		val release = reservation.service.releasePathDetailed(reservation.trainId)
+		val release = service.releasePathDetailed(reservation.trainId)
 
 		assertThat(release.deferred.toSet(), "deferred blocks").isEqualTo(setOf(head))
 		assertThat(release.released.toSet(), "released blocks").isEqualTo((reservation.blocks - head).toSet())
 		assertThat(head.getState(), "the occupied head stays OCCUPIED").isEqualTo(TrackFacility.State.OCCUPIED)
-		assertThat(reservation.registry.getOwner(head), "the occupied head stays registered").isEqualTo(reservation.trainId)
+		assertThat(registry.getOwner(head), "the occupied head stays registered").isEqualTo(reservation.trainId)
 		assertThat(releasedEvents.map { it.block }, "no BlockReleased for the occupied head").doesNotContain(head)
-		val pathInfo = reservation.registry.getPathInfo(reservation.trainId)
+		val pathInfo = registry.getPathInfo(reservation.trainId)
 		assertThat(pathInfo, "the PathInfo survives the partial release").isNotNull()
 		assertThat(pathInfo!!.target, "the PathInfo is trimmed to the semaphore").isEqualTo(network.semaphore)
 	}
 
 	@Test
 	fun `a repeat release after the train booked the deferred head keeps it occupied and registered (Issue 1050)`() {
-		val network = TestTopologies.linearPathWithSemaphoreNetwork()
-		val context = network.context.tracked()
-		val reservation = reserve(network, context)
+		val reservation = reserve()
 		val releasedEvents = mutableListOf<BlockOccupancyEvent>()
-		context.addBlockOccupancyListener(
+		simulationContext.addBlockOccupancyListener(
 			BlockOccupancyListener { event ->
 				if (event.type ==
 					BLOCK_RELEASED
@@ -105,7 +109,7 @@ class Issue1050ApproachLockOccupiedReleaseTest : KoinTestBase() {
 		// and frees the tail across the valid semaphore boundary.
 		val head = reservation.blocks.first()
 		val tail = reservation.blocks.last()
-		val first = reservation.service.releasePathDetailed(reservation.trainId)
+		val first = service.releasePathDetailed(reservation.trainId)
 		assertThat(first.released.toSet(), "the first release frees the tail").isEqualTo(setOf(tail))
 		assertThat(first.deferred.toSet(), "the first release defers the head").isEqualTo(setOf(head))
 
@@ -113,50 +117,40 @@ class Issue1050ApproachLockOccupiedReleaseTest : KoinTestBase() {
 		// the dispatcher to expect -- and repeats the release. The head is now OCCUPIED, so it
 		// is kept by the occupied rule instead of falling through to the wholesale release.
 		head.enter(FakeTrackOccupant(reservation.trainId))
-		val repeat = reservation.service.releasePathDetailed(reservation.trainId)
+		val repeat = service.releasePathDetailed(reservation.trainId)
 
 		assertThat(repeat.released, "the repeat frees nothing").isEmpty()
 		assertThat(repeat.deferred.toSet(), "the repeat still defers the occupied head").isEqualTo(setOf(head))
 		assertThat(head.getState(), "the booked head stays OCCUPIED").isEqualTo(TrackFacility.State.OCCUPIED)
-		assertThat(reservation.registry.getOwner(head), "the booked head stays registered").isEqualTo(reservation.trainId)
+		assertThat(registry.getOwner(head), "the booked head stays registered").isEqualTo(reservation.trainId)
 
 		// A third repeat changes nothing: the head stays occupied and registered, the release
 		// stays partial, and no BlockReleased is ever emitted for it.
-		val third = reservation.service.releasePathDetailed(reservation.trainId)
+		val third = service.releasePathDetailed(reservation.trainId)
 		assertThat(third.released, "the third repeat frees nothing").isEmpty()
 		assertThat(third.deferred.toSet(), "the third repeat still defers the head").isEqualTo(setOf(head))
-		assertThat(reservation.registry.getOwner(head), "the head is still registered").isEqualTo(reservation.trainId)
+		assertThat(registry.getOwner(head), "the head is still registered").isEqualTo(reservation.trainId)
 		assertThat(
 			releasedEvents.none { it.block === head },
 			"no BlockReleased was ever emitted for the occupied block"
 		).isTrue()
 	}
 
-	/**
-	 * Reserves `A → B` on the linear network and hands back the reservation's blocks with the
-	 * service and registry that produced them.
-	 */
-	private fun reserve(
-		network: LinearSemaphoreTopology,
-		context: DefaultSimulationContext
-	): Reservation {
-		val inOuts = context.getInOuts().toList()
+	/** Reserves `A → B` on the linear network and hands back the reservation's blocks. */
+	private fun reserve(): Reservation {
+		val inOuts = simulationContext.getInOuts().toList()
 		val a = inOuts.single { it.name == "A" }
 		val b = inOuts.single { it.name == "B" }
-		val service = context.getRoutingServices().getPathReservationService()
-		val registry = context.scope.get<PathReservationRegistry>()
 		val trainId = "train1"
 		val blocks = assertReservationSuccess(service.reservePath(trainId, a, b)).reservedBlocks
 		require(blocks.size >= 2) { "Test requires a route of at least two blocks" }
 		require(blocks.first().reservedFrom == a) { "The first reserved block must start at A" }
-		return Reservation(trainId, blocks, service, registry)
+		return Reservation(trainId, blocks)
 	}
 
 	/** Everything [reserve] produces for a test body. */
 	private data class Reservation(
 		val trainId: String,
-		val blocks: List<DynamicTrackBlock>,
-		val service: PathReservationService,
-		val registry: PathReservationRegistry
+		val blocks: List<DynamicTrackBlock>
 	)
 }
