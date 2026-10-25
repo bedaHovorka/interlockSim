@@ -463,7 +463,13 @@ val sonarJavaLibraries by tasks.registering {
 // interlocksim.sonar-module convention plugin (buildSrc), which adds the cross-module aggregate.
 sonarModule {
     coverageReport.set(layout.buildDirectory.file("reports/jacoco/jvmTest/jacocoTestReport.xml"))
-    junitReportPaths.set(listOf("build/test-results/jvmTest", "build/test-results/integrationTest"))
+    junitReportPaths.set(
+        listOf(
+            "build/test-results/jvmTest",
+            "build/test-results/integrationTest",
+            "build/test-results/docLineAnchorCheck",
+        ),
+    )
 }
 
 // :core declares its own Sonar paths. The root build.gradle.kts deliberately lists none,
@@ -536,6 +542,81 @@ val jacocoTestReport by tasks.registering(JacocoReport::class) {
 
 tasks.named("jvmTest") {
     finalizedBy(jacocoTestReport)
+}
+
+// ===========================================
+// Doc line-anchor tripwire task (Issue #1230)
+// ===========================================
+// DocLineAnchorTripwireTest reads every docs/**/*.md page and every *.kt file of the repository,
+// none of which is an input of :core:jvmTest, so a docs-only change or a .kt edit in another
+// module could reuse an UP-TO-DATE or FROM-CACHE jvmTest result and skip the tripwire. The test
+// therefore runs on its own task that declares both trees as inputs, and jvmTest leaves it out.
+// The excludes mirror the test's SKIPPED_DIRECTORIES; keep the two lists in step.
+//
+// jvmTest is finalizedBy this task: every build that runs :core:jvmTest (root `test`, `build`,
+// `sonar`, jacocoAggregatedReport) runs the tripwire too, and `check` depends on it explicitly.
+// The working directory stays the default (the project directory): the test finds the repository
+// root by walking up from there.
+
+val docLineAnchorCheck by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Run DocLineAnchorTripwireTest (Issue #1205) with the docs and .kt trees it scans as inputs"
+
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("*.DocLineAnchorTripwireTest")
+        isFailOnNoMatchingTests = true
+    }
+
+    testClassesDirs =
+        kotlin
+            .jvm()
+            .compilations["test"]
+            .output.classesDirs
+    classpath = kotlin.jvm().compilations["test"].runtimeDependencyFiles
+
+    inputs
+        .files(fileTree(rootDir.resolve("docs")) { include("**/*.md") })
+        .withPropertyName("anchorDocs")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs
+        .files(
+            fileTree(rootDir) {
+                include("**/*.kt")
+                exclude("**/build/**", "**/.git/**", "**/.gradle/**", "**/.kotlin/**", "**/.idea/**")
+                exclude("**/.worktrees/**", "**/node_modules/**")
+            },
+        ).withPropertyName("anchorSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // Its coverage adds nothing; a separate .exec would only sit next to the jvmTest and
+    // integrationTest data the JaCoCo reports read.
+    extensions.configure<JacocoTaskExtension> { isEnabled = false }
+
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        showStandardStreams = false
+    }
+
+    reports {
+        junitXml.required.set(true)
+        junitXml.outputLocation.set(file("${layout.buildDirectory.get()}/test-results/docLineAnchorCheck"))
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/tests/docLineAnchorCheck"))
+    }
+}
+
+tasks.named<Test>("jvmTest") {
+    filter.excludeTestsMatching("*.DocLineAnchorTripwireTest")
+    finalizedBy(docLineAnchorCheck)
+}
+
+tasks.named("check") {
+    dependsOn(docLineAnchorCheck)
 }
 
 // ===========================================
