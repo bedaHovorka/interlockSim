@@ -24,13 +24,12 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.separatorLabel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -66,21 +65,23 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 	private lateinit var service: PathReservationService
 	private lateinit var query: ReservationTargetQuery
 
+	/** Names to separators, one grid scan per test; the lookups below are map hits. */
+	private lateinit var separatorsByName: Map<String, DynamicPathSeparator>
+
 	@BeforeEach
 	fun setUp() {
 		simulationContext =
 			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
 		service = simulationContext.getRoutingServices().getPathReservationService()
 		query = simulationContext.getRoutingServices().getReservationTargetQuery()
+		separatorsByName =
+			simulationContext
+				.cellsOfType<DynamicPathSeparator>()
+				.associateBy { separatorLabel(it) }
 	}
 
-	/** Every separator of the grid with the given name: a semaphore, an InOut or a switch. */
-	private fun separator(name: String): DynamicPathSeparator =
-		(
-			simulationContext.cellsOfType<DynamicRailSemaphore>() +
-				simulationContext.cellsOfType<DynamicInOut>() +
-				simulationContext.cellsOfType<DynamicRailSwitch>()
-		).single { label(it) == name }
+	/** The separator of the grid with the given name: a semaphore, an InOut or a switch. */
+	private fun separator(name: String): DynamicPathSeparator = separatorsByName.getValue(name)
 
 	@Nested
 	@DisplayName("next-separator enumeration (findNextSemaphoresVia)")
@@ -104,7 +105,7 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 			for ((start, expected) in expectedCandidates) {
 				val candidates =
 					query.findReservationTargetCandidates(separator(start) as OrientedPathSeparator, null)
-				assertThat(candidates.map { label(it.separator) to it.available }, name = "candidates from $start")
+				assertThat(candidates.map { separatorLabel(it.separator) to it.available }, name = "candidates from $start")
 					.isEqualTo(expected)
 			}
 		}
@@ -216,15 +217,15 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 		fun wholeNetworkTargetsFromZA() {
 			val targets = discovery.reservePathToAnyTargets(separator("zA"))
 
-			assertThat(targets.map { label(it.first) })
+			assertThat(targets.map { separatorLabel(it.first) })
 				.containsExactly("B", "A", "doA1", "doA2", "doB2", "doB1", "zB")
-			assertThat(targets.filter { it.second != null }.map { label(it.first) }).containsExactly("B", "A")
+			assertThat(targets.filter { it.second != null }.map { separatorLabel(it.first) }).containsExactly("B", "A")
 		}
 
 		@Test
 		@DisplayName("reservePathToAnyTargets from a switch sorts InOuts by distance only")
 		fun wholeNetworkTargetsFromSwitch() {
-			assertThat(discovery.reservePathToAnyTargets(separator("vB")).map { label(it.first) })
+			assertThat(discovery.reservePathToAnyTargets(separator("vB")).map { separatorLabel(it.first) })
 				.containsExactly("B", "A", "zA", "doA1", "doA2", "doB2", "doB1", "zB")
 		}
 
@@ -235,7 +236,7 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 			val (start, next) = discovery.resolveForwardSection(zA, "test")!!
 
 			assertThat(start).isSameInstanceAs(zA)
-			assertThat(discovery.findNextSemaphoresVia(start, next).map { label(it) })
+			assertThat(discovery.findNextSemaphoresVia(start, next).map { separatorLabel(it) })
 				.containsExactly("doB1", "doB2")
 		}
 
@@ -245,7 +246,7 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 			val doB1 = separator("doB1") as OrientedPathSeparator
 			val (start, next) = discovery.resolveForwardSection(doB1, "test")!!
 
-			assertThat(discovery.findNextSemaphoresVia(start, next).map { label(it) })
+			assertThat(discovery.findNextSemaphoresVia(start, next).map { separatorLabel(it) })
 				.containsExactly("B", "doB2")
 		}
 
@@ -264,28 +265,11 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 		fun nullNextIsUnavailable() {
 			assertThat(discovery.isAnyNextTargetAvailable(separator("zA"), null)).isFalse()
 		}
-
-		@Test
-		@DisplayName("the semaphore list is the grid's, computed once")
-		fun semaphoresAreCachedInGridOrder() {
-			val first = discovery.allSemaphores()
-
-			assertThat(first.map { it.name }).containsExactly("zA", "doA1", "doA2", "doB2", "doB1", "zB")
-			assertThat(discovery.allSemaphores()).isSameInstanceAs(first)
-		}
 	}
 
 	private companion object {
 		/** The name inside a dynamic separator's `toString()` (`Dynamic[zA, signal=STOP]`). */
 		val NAME_IN_TO_STRING = Regex("""Dynamic\[([^,\]]+)""")
-
-		fun label(separator: DynamicPathSeparator): String =
-			when (separator) {
-				is DynamicRailSemaphore -> separator.name
-				is DynamicInOut -> separator.name
-				is DynamicRailSwitch -> separator.name
-				else -> separator.toString()
-			}
 
 		/** Same forward segment `resolveForwardSection` derives (InOut: its track connection). */
 		fun forwardSegment(start: OrientedPathSeparator) =

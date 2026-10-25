@@ -41,8 +41,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Pins the work [DefaultPathReservationService.reservePathToAny] no longer repeats:
- * the semaphore grid scan (Issue #965) and the second topological path enumeration per InOut
- * target (Issue #966).
+ * the semaphore grid scan (Issue #965, [ReservationTargetDiscovery]'s since SP12.5) and the
+ * second topological path enumeration per InOut target (Issue #966).
  */
 @DisplayName("reservePathToAny de-duplication")
 class ReservePathToAnyDedupTest : KoinTestBase() {
@@ -88,25 +88,31 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 	@Nested
 	@DisplayName("semaphore cache (Issue #965)")
 	inner class SemaphoreCache {
+		private lateinit var discovery: ReservationTargetDiscovery
+
+		@BeforeEach
+		fun setUp() {
+			// The Issue #965 cache moved into the discovery class (SP12.5); the reach pins it there.
+			discovery = ReservationTargetDiscovery(navigator, simulationContext)
+		}
+
 		@Test
 		fun `cached semaphores equal a fresh grid scan in the same order`() {
 			val expected = freshSemaphoreScan()
 			assertThat(expected).isNotEmpty()
 
-			assertThat(newService().allSemaphores()).containsExactly(*expected.toTypedArray())
+			assertThat(discovery.allSemaphores()).containsExactly(*expected.toTypedArray())
 		}
 
 		@Test
-		fun `the semaphore list is computed once and reused across reservePathToAny calls`() {
-			val service = newService()
-			val first = service.allSemaphores()
+		fun `the semaphore list is computed once and reused across target-order calls`() {
+			val first = discovery.allSemaphores()
 
 			val zA = simulationContext.separatorAt(14, 8) as DynamicRailSemaphore
-			service.reservePathToAny("train1", zA)
-			service.releasePath("train1")
-			service.reservePathToAny("train1", zA)
+			discovery.reservePathToAnyTargets(zA)
+			discovery.reservePathToAnyTargets(zA)
 
-			assertThat(service.allSemaphores()).isSameInstanceAs(first)
+			assertThat(discovery.allSemaphores()).isSameInstanceAs(first)
 		}
 	}
 

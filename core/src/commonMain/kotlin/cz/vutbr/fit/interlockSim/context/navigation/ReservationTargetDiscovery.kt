@@ -48,6 +48,11 @@ internal typealias TargetWithPaths = Pair<DynamicPathSeparator, Lazy<List<List<T
  * only says what to try. Extracted from that service without behaviour change: the target order
  * is pinned by `ReservationTargetDiscoveryTest`.
  *
+ * The orientation-free sorting in [reservePathToAnyTargets] (a start with no orientation, e.g. a
+ * switch) is unreachable from this class's only production caller today: `reservePathToAny`
+ * refuses a non-oriented origin before discovery (Issue #1188 guard). It is kept as the recorded
+ * extraction behaviour; a follow-up under #1159 narrows the signature to [OrientedPathSeparator].
+ *
  * Not thread-safe, like the service it serves.
  *
  * @property navigator Static topology navigator; paths for sorting and availability checks

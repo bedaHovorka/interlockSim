@@ -17,6 +17,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 
+/** Path-search depth bound shared by this interface's `maxDepth` defaults and the discovery enumeration. */
+internal const val DEFAULT_MAX_PATH_DEPTH = 100
+
 /**
  * Service for finding and reserving free paths in railway network.
  *
@@ -291,14 +294,14 @@ interface PathReservationService :
 	 * @param trainId Unique identifier for the train (typically Train.toString())
 	 * @param start Starting path separator (typically InOut or semaphore)
 	 * @param target Target path separator to reach
-	 * @param maxDepth Maximum search depth for path finding (default: 100)
+	 * @param maxDepth Maximum search depth for path finding (default: [DEFAULT_MAX_PATH_DEPTH])
 	 * @return ReservationResult indicating success or failure reason
 	 */
 	fun reservePath(
 		trainId: String,
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
-		maxDepth: Int = 100
+		maxDepth: Int = DEFAULT_MAX_PATH_DEPTH
 	): ReservationResult
 
 	/**
@@ -397,13 +400,13 @@ interface PathReservationService :
 	 *
 	 * @param start Starting path separator
 	 * @param target Target path separator
-	 * @param maxDepth Maximum search depth for path finding (default: 100)
+	 * @param maxDepth Maximum search depth for path finding (default: [DEFAULT_MAX_PATH_DEPTH])
 	 * @return true if at least one free path exists, false otherwise
 	 */
 	fun isPathAvailable(
 		start: PathSeparator,
 		target: PathSeparator,
-		maxDepth: Int = 100
+		maxDepth: Int = DEFAULT_MAX_PATH_DEPTH
 	): Boolean
 
 	/**

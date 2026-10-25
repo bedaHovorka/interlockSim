@@ -135,9 +135,6 @@ class DefaultPathReservationService(
 			.toList()
 	}
 
-	/** All semaphores of this context's grid, cached by [targetDiscovery]; `internal` for tests. */
-	internal fun allSemaphores(): List<DynamicRailSemaphore> = targetDiscovery.allSemaphores()
-
 	/**
 	 * Every block that constitutes [trainId]'s current authority: those the registry records as
 	 * reserved for it, plus those it physically occupies.
@@ -959,28 +956,15 @@ class DefaultPathReservationService(
 	 * 1. Find all topological paths
 	 * 2. For each path, check if all blocks are FREE
 	 * 3. Return true if at least one free path exists
+	 *
+	 * For the switch-CONSTRAINED semantics (Issue #797 follow-up) see
+	 * [ReservationTargetDiscovery.isPathAvailableFor], which carries the full rationale.
 	 */
 	override fun isPathAvailable(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int
-	): Boolean {
-		// Switch-CONSTRAINED enumeration (Issue #797 follow-up): a target is available only if a
-		// physically legal, all-free route reaches it. The switch-blind findAllTopologicalPaths
-		// admits phantom routes that reverse through a switch to reach a target's back side while
-		// bypassing the occupied block in front of it (e.g. reaching doB1 via the free k2 + a vB
-		// reversal while k1 is occupied), producing a false positive that steers
-		// findNextReservationTarget onto the blocked track and deadlocks opposing trains.
-		return isPathAvailableFor(start, target, maxDepth, ownerTrainId = null)
-	}
-
-	/** [isPathAvailable], owner-aware (Issue #1060); see [ReservationTargetDiscovery.isPathAvailableFor]. */
-	private fun isPathAvailableFor(
-		start: PathSeparator,
-		target: PathSeparator,
-		maxDepth: Int,
-		ownerTrainId: String?
-	): Boolean = targetDiscovery.isPathAvailableFor(start, target, maxDepth, ownerTrainId)
+	): Boolean = targetDiscovery.isPathAvailableFor(start, target, maxDepth, ownerTrainId = null)
 
 	override fun reservePathToAnyNextSemaphore(
 		trainId: String,
@@ -1976,6 +1960,3 @@ class DefaultPathReservationService(
 		simTime: Double
 	) = releaser.emitBlockReleased(block, trainId, simTime)
 }
-
-/** Path-search depth bound shared with the interface defaults of [PathReservationService]. */
-internal const val DEFAULT_MAX_PATH_DEPTH = 100
