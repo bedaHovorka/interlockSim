@@ -57,8 +57,10 @@ import java.io.File
  *
  * The check is skipped (not failed) when `docs/` is not on disk -- the Docker test stage copies only
  * the module `src/` directories, so there is nothing to scan there; every checkout (CI included) has
- * it. The test is not vacuous: it fails when fewer than [MIN_ANCHORS] anchors are found, and the
- * checker itself is proven on a synthetic tree by the tests below.
+ * it. The test is not vacuous: it fails when fewer than [MIN_DOCS] pages are scanned (so a wrong root or
+ * a moved directory cannot pass silently). It requires no minimum number of anchors, because the goal
+ * state is a documentation set with none; the synthetic-tree tests below prove that the checker finds
+ * anchors and reports each failure kind.
  */
 class DocLineAnchorTripwireTest {
 	@TempDir
@@ -72,9 +74,9 @@ class DocLineAnchorTripwireTest {
 		val checker = AnchorChecker(root)
 
 		val docs = File(root, "docs").walkTopDown().filter { it.isFile && it.extension == "md" }.toList()
+		assertThat(docs.size).isGreaterThanOrEqualTo(MIN_DOCS)
 		val result = checker.checkAll(docs)
 
-		assertThat(result.anchorCount).isGreaterThanOrEqualTo(MIN_ANCHORS)
 		assertThat(result.violations.map { it.render() }).isEmpty()
 	}
 
@@ -135,6 +137,34 @@ class DocLineAnchorTripwireTest {
 		val rendered = result.violations.map { it.render() }
 		assertThat(rendered[0]).contains("page.md:2", "Foo.kt:16", "target")
 		assertThat(rendered[1]).contains("page.md:3", "Foo.kt:14-18", "target")
+	}
+
+	@Test
+	fun `the symbol window reaches exactly three lines either side and matches whole words`() {
+		write("Foo.kt", (1..20).joinToString("\n") { if (it == 10) "fun target()" else "// filler $it" } + "\n")
+		write("Bar.kt", (1..20).joinToString("\n") { if (it == 10) "fun targetFoo()" else "// filler $it" } + "\n")
+		write(
+			"docs/page.md",
+			listOf(
+				"below `target` at `Foo.kt:13`", // symbol 3 lines above the anchor -> ok
+				"below `target` at `Foo.kt:14`", // 4 lines above -> reported
+				"above `target` at `Foo.kt:7`", // symbol 3 lines below -> ok
+				"above `target` at `Foo.kt:6`", // 4 lines below -> reported
+				"range `target` at `Foo.kt:11-12`", // window is 8..15 -> ok
+				"range `target` at `Foo.kt:2-6`", // window is 1..9 -> reported
+				"prefix only `target` at `Bar.kt:10`" // `targetFoo` is a different word -> reported
+			).joinToString("\n") + "\n"
+		)
+
+		val result = AnchorChecker(tmp).checkAll(listOf(File(tmp, "docs/page.md")))
+
+		assertThat(result.anchorCount).isEqualTo(7)
+		val rendered = result.violations.map { it.render() }
+		assertThat(rendered).hasSize(4)
+		assertThat(rendered[0]).contains("page.md:2", "Foo.kt:14")
+		assertThat(rendered[1]).contains("page.md:4", "Foo.kt:6")
+		assertThat(rendered[2]).contains("page.md:6", "Foo.kt:2-6")
+		assertThat(rendered[3]).contains("page.md:7", "Bar.kt:10")
 	}
 
 	@Test
@@ -266,7 +296,8 @@ class DocLineAnchorTripwireTest {
 			val symbol = identifiers.single()
 			val from = (first - CONTEXT_LINES).coerceAtLeast(1)
 			val to = (last + CONTEXT_LINES).coerceAtMost(source.size)
-			val near = (from..to).any { symbol in source[it - 1] }
+			val word = Regex("""\b""" + Regex.escape(symbol) + """\b""")
+			val near = (from..to).any { word.containsMatchIn(source[it - 1]) }
 			return if (near) {
 				null
 			} else {
@@ -276,8 +307,8 @@ class DocLineAnchorTripwireTest {
 	}
 
 	private companion object {
-		/** The tripwire must see at least this many anchors, or it is scanning the wrong place. */
-		const val MIN_ANCHORS = 15
+		/** The tripwire must scan at least this many pages (113 today), or it is looking in the wrong place. */
+		const val MIN_DOCS = 50
 
 		/** Lines either side of an anchored range in which its symbol must still occur. */
 		const val CONTEXT_LINES = 3
