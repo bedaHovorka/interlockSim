@@ -88,7 +88,9 @@ class DefaultPathReservationService(
 	BlockRollbackStep {
 	// Contention and blocked-request tracking (Issue #612 follow-up): see [ReservationContentionTracker]
 	// for why AllPathsBlocked is routine contention and only unresolved-at-end-of-run is reported.
-	private val contention = ReservationContentionTracker(registry)
+
+	/** Internal so tests observe the real tracker through the service's wiring. */
+	internal val contention = ReservationContentionTracker(registry)
 
 	// ── Cleared-signal ledger and route signal configuration (Issue #1169, SP12.3) ──
 	//
