@@ -118,8 +118,17 @@ internal class SwitchOwnershipTable(
 	fun isStaleSwitchOwnership(switch: DynamicRailSwitch): Boolean {
 		val claim = switchToTrain[switch] ?: return false
 		if (claim.isFlank) return false
-		return heldBlocks(claim.trainId).none { switch in it.ends() }
+		return wouldBeStaleClaim(switch, claim.trainId)
 	}
+
+	/**
+	 * Whether a plain claim of [switch] by [trainId] is stale by the [isStaleSwitchOwnership] rule:
+	 * [trainId] holds no block bounded by it -- see [PathReservationRegistry.wouldBeStaleClaim].
+	 */
+	fun wouldBeStaleClaim(
+		switch: DynamicRailSwitch,
+		trainId: String
+	): Boolean = heldBlocks(trainId).none { switch in it.ends() }
 
 	/**
 	 * Release [switch]'s ownership if [isStaleSwitchOwnership] says it protects no live route, through

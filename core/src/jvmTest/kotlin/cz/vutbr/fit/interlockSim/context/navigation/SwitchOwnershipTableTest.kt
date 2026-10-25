@@ -91,6 +91,20 @@ class SwitchOwnershipTableTest : KoinTestBase() {
 	}
 
 	@Test
+	fun `wouldBeStaleClaim applies the staleness rule to a claim not made yet, whoever owns the switch`() {
+		assertThat(table.wouldBeStaleClaim(fixture.vB, "t1"), "no held blocks at all").isTrue()
+
+		held["t1"] = mutableListOf(fixture.blockBtoZB)
+		assertThat(table.wouldBeStaleClaim(fixture.vB, "t1"), "held block away from the switch").isTrue()
+
+		held["t1"] = mutableListOf(fixture.blockZBtoVB)
+		table.registerFlankSwitches("t2", listOf(fixture.vB))
+		assertThat(table.wouldBeStaleClaim(fixture.vB, "t1"), "held block at the switch").isFalse()
+		assertThat(table.wouldBeStaleClaim(fixture.vB, "t2"), "a flank claim does not make it live").isTrue()
+		assertThat(table.getSwitches("t1"), "a pure query").isEmpty()
+	}
+
+	@Test
 	fun `reclaimStaleSwitchOwnership releases only a stale claim`() {
 		held["t1"] = mutableListOf(fixture.blockVBtoDoB1)
 		table.registerSwitches("t1", listOf(fixture.vB))

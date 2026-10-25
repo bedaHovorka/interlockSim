@@ -515,6 +515,19 @@ class PathReservationRegistry(
 	fun isStaleSwitchOwnership(switch: DynamicRailSwitch): Boolean = switchTable.isStaleSwitchOwnership(switch)
 
 	/**
+	 * Whether a plain claim of [switch] by [trainId] would be stale the moment it is made: [trainId]
+	 * holds no block bounded by it, the [isStaleSwitchOwnership] rule applied to the would-be claim.
+	 * Independent of the switch's current owner. [registerSwitches] does not consult it (it accepts
+	 * such a claim); the reservation path skips a switch it is `true` for instead of registering it.
+	 *
+	 * @since Issue #1173
+	 */
+	internal fun wouldBeStaleClaim(
+		switch: DynamicRailSwitch,
+		trainId: String
+	): Boolean = switchTable.wouldBeStaleClaim(switch, trainId)
+
+	/**
 	 * Unregister all switches reserved by a train (Tier 2): unlocks them and removes both ownership
 	 * mappings. Used for simulation cleanup and forced release.
 	 *
