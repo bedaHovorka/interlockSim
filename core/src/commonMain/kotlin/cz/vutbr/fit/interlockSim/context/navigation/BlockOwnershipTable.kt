@@ -235,11 +235,28 @@ internal class BlockOwnershipTable(
 	/** Count of held blocks across all trains. */
 	fun blockCount(): Int = blockToTrain.size
 
-	/** The holdings [PathReservationRegistry.expiredHoldings] reports. */
+	/**
+	 * The holdings [PathReservationRegistry.expiredHoldings] reports, in registration order: every
+	 * held block of the train is RESERVED and no train stands on it ([isTrainOnBlock], read live),
+	 * and the train's NEWEST registration is at least [ttl] older than [now].
+	 */
 	fun expiredHoldings(
 		now: Double,
 		ttl: Double
-	): List<ExpiredHolding> = emptyList()
+	): List<ExpiredHolding> =
+		trainToBlocks.mapNotNull { (trainId, blocks) ->
+			val newest =
+				blocks
+					.takeIf { held -> held.isNotEmpty() && held.all(::isUnenteredReservation) }
+					?.mapNotNull { blockRegisteredAt[it] }
+					?.maxOrNull()
+			val age = newest?.let { now - it }
+			if (age != null && age >= ttl) ExpiredHolding(trainId, age) else null
+		}
+
+	/** RESERVED and nobody on it: a block of a route its train has not entered. */
+	private fun isUnenteredReservation(block: DynamicTrackBlock): Boolean =
+		block.getState() == TrackFacility.State.RESERVED && !isTrainOnBlock(block)
 
 	/** Drop every owner, held block and timestamp. */
 	fun clear() {

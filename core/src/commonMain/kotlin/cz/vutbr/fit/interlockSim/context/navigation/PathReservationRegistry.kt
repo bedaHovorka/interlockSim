@@ -80,9 +80,13 @@ private val logger: KLogger = registryLogger
  * ([getRegisteredAtSimTime]). It is a read-only fact, not a policy: nothing in the registry expires
  * a reservation. A block keeps its first timestamp while its owner re-registers it, loses it on
  * every removal ([unregisterBlock], [unregister], [clear] -- every release and rollback path goes
- * through one of them), and gets a new one if it is registered again later. Deciding when a holding
- * is stale stays with its caller (`OrphanReservationSweeper` in `:dispatcher-agent`). No production
- * code reads the timestamps yet -- not even for diagnostics: they are a stepping stone for #975.
+ * through one of them), and gets a new one if it is registered again later.
+ *
+ * Since Issue #1174 the timestamps have their reader: [expiredHoldings], the pure query that names
+ * every train holding only un-entered blocks whose newest registration is at least a TTL old.
+ * Releasing those holdings is the reservation service's policy
+ * ([DefaultPathReservationService.expireStaleReservations]), never the registry's; the registry
+ * reads only simulation time ([simTimeSource]), never wall-clock time.
  *
  * ## Structure (Issue #1172)
  *
@@ -97,8 +101,9 @@ private val logger: KLogger = registryLogger
  * The facade still exceeds detekt's `TooManyFunctions` limit: every public operation stays on it.
  *
  * @param context Simulation context (needed for PathInfo merging with ArrayPath)
- * @param simTimeSource Current simulation time, read when a block is registered. The default is
- *   [currentSimulationTime]: the running kDisco clock, 0.0 outside a simulation (unit tests).
+ * @param simTimeSource Current simulation time, read when a block is registered and as the default
+ *   `now` of [expiredHoldings]. The default is [currentSimulationTime]: the running kDisco clock, 0.0
+ *   outside a simulation (unit tests).
  * @since Issue #294 (Phase 2 of Issue #292)
  * @since Issue #296 Phase 8 (PathInfo extension fix)
  */
@@ -383,12 +388,29 @@ class PathReservationRegistry(
 	/**
 	 * The simulation time at which [block] was registered to its current owner, or `null` when no
 	 * train holds it (Issue #975). A read-only fact -- see the class KDoc; the registry never
-	 * expires a reservation by it. It has no production reader yet; only tests call it.
+	 * expires a reservation by it ([expiredHoldings] reads the same timestamps for the kernel expiry,
+	 * Issue #1174). Only tests call this accessor.
 	 */
 	fun getRegisteredAtSimTime(block: DynamicTrackBlock): Double? = blockTable.getRegisteredAtSimTime(block)
 
 	/**
-	 * The trains whose holding has gone stale (Issue #1174): pure query, changes nothing.
+	 * The trains whose holding has gone stale (Issue #1174, absorbs #975): pure query, changes
+	 * nothing. A train is reported when
+	 * - every block it holds is RESERVED and no train stands on it (the release's own
+	 *   [isTrainOnBlock] notion, read live from the blocks) -- a route it has not entered; and
+	 * - its NEWEST block registration is at least [ttl] older than [now]. Every new claim (a route
+	 *   extension) restarts the clock; re-registering a block it already holds does not, since a
+	 *   block keeps its first timestamp.
+	 *
+	 * A train that stands on any block of its holding is never reported, however old: entering a
+	 * reserved block is not a registry write, so registration age says nothing about the progress
+	 * of a train on the track (the reason `OrphanReservationSweeper` does not judge by it either).
+	 * The stalled RESERVED tail of such a train is phase 2 (#1220). A held block in any other state
+	 * (a FREE block the registry still attributes to the train, the Issue #1025 divergence) also
+	 * keeps the train out: that is not an un-entered route.
+	 *
+	 * The policy -- the TTL and the release -- belongs to
+	 * [DefaultPathReservationService.expireStaleReservations].
 	 *
 	 * @param ttl Simulated seconds a holding may go without a new block registration
 	 * @param now The current simulation time; defaults to this registry's own clock, the one every
