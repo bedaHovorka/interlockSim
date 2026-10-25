@@ -1280,7 +1280,10 @@ class DefaultPathReservationService(
 	 * - if all fail: NoPathExists when there was no target, else the last failure.
 	 *
 	 * Called rarely (when a train needs a new path, ~once per train per network traversal), so the
-	 * target list is recomputed per call rather than cached: network state changes continuously.
+	 * target list is recomputed per call rather than cached: each call's targets carry lazy path
+	 * lists (`TargetWithPaths`, Issue #966) valid for exactly that one call. The order itself
+	 * carries no dynamic state: it follows from the network's endpoint set and the static topology;
+	 * occupancy is only evaluated later, per attempt.
 	 *
 	 * @param trainId Unique identifier for the train
 	 * @param start Starting path separator (typically a semaphore)
