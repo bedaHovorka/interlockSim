@@ -42,9 +42,9 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * Runs on `vyhybna.xml`: `zA → vA → k1 → doB1` is the same-position route over vA in
  * [Conf.MAIN]; `doB1 → doB2` is the physically impossible sibling-branch diversion (Issue #742).
  *
- * The [RegisterSwitches] group PINS today's `registerSwitches` behaviour, including the
- * born-stale claim on a switch the candidate never traverses. Issue #1173 changes that
- * behaviour on purpose; its diff must show up here.
+ * The [RegisterSwitches] group pins `registerSwitches`, including the born-stale case: a listed
+ * switch the train holds no adjacent block for is not registered (Issue #1173; until then it was
+ * claimed and locked with no block held, a claim stale the moment it was made).
  */
 @DisplayName("SwitchConfigurator (Issue #1170)")
 class SwitchConfiguratorTest : PathReservationServiceTestBase() {
@@ -187,14 +187,23 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 	}
 
 	/**
-	 * PIN of today's behaviour (Issue #1170). Issue #1173 changes the born-stale case on purpose;
-	 * update these tests in that PR, so the behaviour change is a visible diff.
+	 * `registerSwitches` registers a listed switch only when the train holds a block bounded by it
+	 * (Issue #1173). The born-stale tests were pinned by Issue #1170 with the opposite outcome --
+	 * a claim made with no block held -- and flipped by Issue #1173.
 	 */
 	@Nested
-	@DisplayName("registerSwitches (pinned behaviour)")
+	@DisplayName("registerSwitches")
 	inner class RegisterSwitches {
+		/** [TRAIN] holds `zA → vA` and `doB1 → vB`: a block bounded by each of vA and vB. */
+		private fun holdBlocksAtVAAndVB() {
+			val result = registry.registerAtomic(TRAIN, listOf(blockBetween("zA", "vA"), blockBetween("doB1", "vB")))
+			assertThat(result).isEqualTo(PathReservationRegistry.RegistrationResult.Success)
+		}
+
 		@Test
-		fun `registers and locks every candidate switch the train does not see owned by another train`() {
+		fun `registers and locks every candidate switch the train holds an adjacent block for`() {
+			holdBlocksAtVAAndVB()
+
 			configurator.registerSwitches(TRAIN, listOf(vA, vB))
 
 			assertThat(registry.getSwitches(TRAIN)).containsExactlyInAnyOrder(vA, vB)
@@ -204,6 +213,7 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 
 		@Test
 		fun `skips a switch owned by another train instead of throwing`() {
+			holdBlocksAtVAAndVB()
 			registry.registerSwitches(OTHER, listOf(vB))
 
 			configurator.registerSwitches(TRAIN, listOf(vA, vB))
@@ -213,31 +223,49 @@ class SwitchConfiguratorTest : PathReservationServiceTestBase() {
 		}
 
 		@Test
-		fun `born stale - a listed switch the candidate never traverses is registered with no block held`() {
+		fun `a listed switch at the end of a held block is registered although the candidate does not traverse it`() {
+			val info = pathInfoEndingAtVA()
+			assertThat(registry.registerAtomic(TRAIN, listOf(blockBetween("zA", "vA"))))
+				.isEqualTo(PathReservationRegistry.RegistrationResult.Success)
+			assertThat(configurator.configureSwitchesInPath(TRAIN, info)).isEqualTo(SwitchConfigOutcome.Configured)
+
+			configurator.registerSwitches(TRAIN, configurator.extractUniqueSwitches(info))
+
+			// The held block zA → vA ends at vA, so the claim protects track the train holds: it is
+			// live, not born stale.
+			assertThat(registry.getSwitchOwner(vA)).isEqualTo(TRAIN)
+			assertThat(vA.locked).isTrue()
+			assertThat(registry.isStaleSwitchOwnership(vA), name = "born stale").isFalse()
+		}
+
+		@Test
+		fun `born stale - a listed switch the train holds no adjacent block for is not registered`() {
 			val info = pathInfoEndingAtVA()
 			val switches = configurator.extractUniqueSwitches(info)
 			assertThat(configurator.configureSwitchesInPath(TRAIN, info)).isEqualTo(SwitchConfigOutcome.Configured)
 			assertThat(vA.locked, name = "configuration skipped vA").isFalse()
+			assertThat(registry.getBlocks(TRAIN)).isEmpty()
 
 			configurator.registerSwitches(TRAIN, switches)
 
-			// Today vA is claimed and locked although it was never configured and TRAIN holds no
-			// block bounded by it: the claim is stale the moment it is made.
-			assertThat(registry.getSwitchOwner(vA)).isEqualTo(TRAIN)
-			assertThat(vA.locked).isTrue()
-			assertThat(registry.getBlocks(TRAIN)).isEmpty()
-			assertThat(registry.isStaleSwitchOwnership(vA), name = "born stale").isTrue()
+			// TRAIN holds no block bounded by vA, so a claim would be stale the moment it is made
+			// (Issue #1173): vA stays unowned and unlocked.
+			assertThat(registry.getSwitchOwner(vA)).isNull()
+			assertThat(vA.locked).isFalse()
+			assertThat(registry.getSwitches(TRAIN)).isEmpty()
 		}
 
 		@Test
-		fun `born stale - the claim lasts until another train's candidate reclaims it`() {
+		fun `born stale - no claim is left that another train's candidate would have to reclaim first`() {
 			configurator.registerSwitches(TRAIN, configurator.extractUniqueSwitches(pathInfoEndingAtVA()))
-			assertThat(registry.getSwitchOwner(vA), name = "born-stale claim").isEqualTo(TRAIN)
+			assertThat(registry.getSwitchOwner(vA), name = "no born-stale claim").isNull()
 
-			configurator.reclaimStaleForeignSwitchOwnership(OTHER, listOf(vA))
+			// Without the Step 2e.5 reclaim, another train's same-position candidate over vA is
+			// configured, not refused as Locked contention on a claim that protects nothing.
+			val outcome = configurator.configureSwitchesInPath(OTHER, pathInfo(zA, doB1))
 
-			assertThat(registry.getSwitchOwner(vA)).isNull()
-			assertThat(vA.locked).isFalse()
+			assertThat(outcome).isEqualTo(SwitchConfigOutcome.Configured)
+			assertThat(vA.locked).isTrue()
 		}
 	}
 
