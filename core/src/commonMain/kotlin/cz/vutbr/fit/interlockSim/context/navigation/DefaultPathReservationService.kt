@@ -966,8 +966,9 @@ class DefaultPathReservationService(
 	 * `GeometricallyImpossible` is a PERMANENT impossibility (rear-facing START or END, unconfigurable
 	 * switch, or a non-oriented route origin or end), not ordinary contention: once seen for one
 	 * candidate semaphore, it must win over any later contention result (`AllPathsBlocked`,
-	 * `NoPathExists`, or the bypass-rollback branch's `AllPathsBlocked`) so the caller -- [cz.vutbr.fit.interlockSim.sim.InOutWorker] on
-	 * the train-navigation path -- throws [cz.vutbr.fit.interlockSim.exceptions.SimulationException]
+	 * `NoPathExists`, or the bypass-rollback branch's `AllPathsBlocked`) so the caller --
+	 * [cz.vutbr.fit.interlockSim.sim.InOutWorker] on the train-navigation path -- throws
+	 * [cz.vutbr.fit.interlockSim.exceptions.SimulationException]
 	 * instead of spinning on `waitUntil(pathFree)` retrying a path that will never become
 	 * available. Before Issue #903's fix, the `AllPathsBlocked` / `NoPathExists` / bypass-rollback
 	 * branches wrote `lastResult` directly and silently overwrote an earlier geometric result.
