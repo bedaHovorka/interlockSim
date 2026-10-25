@@ -823,6 +823,9 @@ class DefaultPathReservationService(
 		// discovered every target, and then once per target with the same reason and warning.
 		// Refusing up front skips the target discovery and the repeated calls.
 		candidateScreen.rejectNonOrientedStart(trainId, start, "reservePathToAny")?.let { return it }
+		check(start is OrientedPathSeparator) {
+			"reservePathToAny: start is not oriented, which the Issue #1188 guard above makes impossible"
+		}
 
 		// Steps 1-3: target discovery and prioritization (see ReservationTargetDiscovery)
 		val sortedTargetsWithPaths = targetDiscovery.reservePathToAnyTargets(start)

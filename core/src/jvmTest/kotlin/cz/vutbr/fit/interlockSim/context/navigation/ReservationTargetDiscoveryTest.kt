@@ -177,7 +177,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		@Test
 		@DisplayName("a switch start is refused by the Issue #1188 guard before any target is discovered")
 		fun switchStartIsRefusedBeforeDiscovery() {
-			// The order a switch start would get is pinned in Direct.wholeNetworkTargetsFromSwitch.
+			// Discovery takes an OrientedPathSeparator (Issue #1207): a switch has no order to pin.
 			for (start in listOf("vA", "vB")) {
 				appender.list.clear()
 				val result = service.reservePathToAny("train-$start", separator(start))
@@ -204,7 +204,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		@Test
 		@DisplayName("reservePathToAnyTargets keeps the recorded order; only InOuts carry precomputed paths")
 		fun wholeNetworkTargetsFromZA() {
-			val targets = discovery.reservePathToAnyTargets(separator("zA"))
+			val targets = discovery.reservePathToAnyTargets(separator("zA") as OrientedPathSeparator)
 
 			assertThat(targets.map { separatorLabel(it.first) })
 				.containsExactly("B", "A", "doA1", "doA2", "doB2", "doB1", "zB")
@@ -212,16 +212,18 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		}
 
 		@Test
-		@DisplayName("reservePathToAnyTargets from a switch sorts InOuts by distance only")
-		fun wholeNetworkTargetsFromSwitch() {
-			// Recorded on the pin commit: from each switch the nearer exit InOut leads, so the
-			// distance-sort direction is pinned from both switches.
+		@DisplayName("reservePathToAnyTargets from an InOut puts the opposite-side exit first")
+		fun wholeNetworkTargetsFromInOut() {
+			// Recorded: from each exit the far exit leads (opposite side), the start itself is
+			// absent, and the semaphores follow in grid order.
 			for ((start, expected) in mapOf(
-				"vA" to listOf("A", "B", "zA", "doA1", "doA2", "doB2", "doB1", "zB"),
-				"vB" to listOf("B", "A", "zA", "doA1", "doA2", "doB2", "doB1", "zB")
+				"A" to listOf("B", "zA", "doA1", "doA2", "doB2", "doB1", "zB"),
+				"B" to listOf("A", "zA", "doA1", "doA2", "doB2", "doB1", "zB")
 			)) {
 				assertThat(
-					discovery.reservePathToAnyTargets(separator(start)).map { separatorLabel(it.first) },
+					discovery
+						.reservePathToAnyTargets(separator(start) as OrientedPathSeparator)
+						.map { separatorLabel(it.first) },
 					name = "order from $start"
 				).containsExactly(*expected.toTypedArray())
 			}

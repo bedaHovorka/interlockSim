@@ -48,10 +48,9 @@ internal typealias TargetWithPaths = Pair<DynamicPathSeparator, Lazy<List<List<T
  * only says what to try. Extracted from that service without behaviour change: the target order
  * is pinned by `ReservationTargetDiscoveryTest`.
  *
- * The orientation-free sorting in [reservePathToAnyTargets] (a start with no orientation, e.g. a
- * switch) is unreachable from this class's only production caller today: `reservePathToAny`
- * refuses a non-oriented origin before discovery (Issue #1188 guard). It is kept as the recorded
- * extraction behaviour; a follow-up under #1159 narrows the signature to [OrientedPathSeparator].
+ * [reservePathToAnyTargets] takes an [OrientedPathSeparator]: a route runs signal-to-signal, and
+ * `reservePathToAny` refuses a non-oriented origin before discovery (Issue #1188 guard), so the
+ * orientation-free sort a switch start once needed (Issue #1207) no longer exists.
  *
  * Not thread-safe, like the service it serves.
  *
@@ -249,15 +248,14 @@ internal class ReservationTargetDiscovery(
 	 * grid ([allSemaphores], cached once per service, Issue #965), except [start] itself.
 	 * O(grid size + InOuts).
 	 *
-	 * **Step 2: InOut sorting** — if [start] has an orientation (a semaphore or an InOut):
+	 * **Step 2: InOut sorting** — [start] is oriented (a semaphore or an InOut):
 	 * 1. partition the InOuts into opposite-side (orientation differs from the start's: crossing
 	 *    the network, forward progress) and same-side (returning to the same side),
 	 * 2. sort each partition by shortest topological path length (unreachable last),
 	 * 3. combine: [opposite-side InOuts] + [same-side InOuts].
 	 *
 	 * Partitioning before sorting ensures ALL opposite-side targets are tried before ANY same-side
-	 * target, even a closer one. Without an orientation (e.g. a switch) the InOuts are sorted by
-	 * path length only.
+	 * target, even a closer one.
 	 *
 	 * **Step 3: Prioritization** — sorted InOuts first (reaching an exit is better than stopping
 	 * mid-network), then the semaphores unsorted, in grid order: they are secondary targets, the
@@ -285,7 +283,7 @@ internal class ReservationTargetDiscovery(
 	 *
 	 * @return the targets in attempt order; empty when the network has no other separator
 	 */
-	fun reservePathToAnyTargets(start: DynamicPathSeparator): List<TargetWithPaths> {
+	fun reservePathToAnyTargets(start: OrientedPathSeparator): List<TargetWithPaths> {
 		// Step 1: target discovery. InOuts and semaphores in two lists: only InOuts are sorted.
 		// toDynamic() converts a static InOut to its DynamicInOut for state tracking.
 		val inouts = mutableListOf<DynamicInOut>()
@@ -313,17 +311,10 @@ internal class ReservationTargetDiscovery(
 		// firstOrNull() is the shortest; Int.MAX_VALUE sorts unreachable targets last.
 		val shortestPathLength: (Pair<DynamicInOut, Lazy<List<List<TrackSection>>>>) -> Int =
 			{ (_, paths) -> paths.value.firstOrNull()?.size ?: Int.MAX_VALUE }
-		val sortedInOuts =
-			when (start) {
-				is OrientedPathSeparator -> {
-					val startOrientation = start.getOrientation()
-					val (oppositeSide, sameSide) =
-						inOutsWithPaths.partition { (inout, _) -> inout.getOrientation() != startOrientation }
-					oppositeSide.sortedBy(shortestPathLength) + sameSide.sortedBy(shortestPathLength)
-				}
-				// No orientation (e.g. a switch): sort by distance only.
-				else -> inOutsWithPaths.sortedBy(shortestPathLength)
-			}
+		val startOrientation = start.getOrientation()
+		val (oppositeSide, sameSide) =
+			inOutsWithPaths.partition { (inout, _) -> inout.getOrientation() != startOrientation }
+		val sortedInOuts = oppositeSide.sortedBy(shortestPathLength) + sameSide.sortedBy(shortestPathLength)
 
 		// Step 3: sorted InOuts first, then the semaphores in grid order. Semaphores carry no
 		// precomputed paths: reservePath enumerates theirs.
