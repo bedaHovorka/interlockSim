@@ -129,7 +129,8 @@ class DefaultInterlockingFacade(
 	private sealed interface RouteLockOutcome {
 		/**
 		 * The locks one successful `lockRouteAtomic` acquired — exactly what a LATER failed
-		 * condition must undo.
+		 * condition must undo. [switches] holds only the switches this call newly registered, not
+		 * the ones the train already owned from an earlier route (Issue #1173).
 		 */
 		data class Locked(
 			val blocks: List<DynamicTrackBlock>,
@@ -390,12 +391,15 @@ class DefaultInterlockingFacade(
 			registerBlocks(trainId, blocks, fromSeparator)?.let { return RouteLockOutcome.Denied(it) }
 		}
 
+		// Issue #1173: lockSwitches admits a switch the train already owns from an earlier route;
+		// a later rollback of THIS call must leave that switch alone.
+		val priorSwitches = registry.getSwitches(trainId).toSet()
 		lockSwitches(trainId, runningSwitches, flankSwitches)?.let { switchDenial ->
 			rollbackBlocks(trainId, registered = blocks)
 			return RouteLockOutcome.Denied(switchDenial)
 		}
 
-		return RouteLockOutcome.Locked(blocks, switches)
+		return RouteLockOutcome.Locked(blocks, switches.filterNot { it in priorSwitches })
 	}
 
 	/**
@@ -476,11 +480,6 @@ class DefaultInterlockingFacade(
 	 * it is standing on — and its `PathInfo` are left alone: the whole-train
 	 * `PathReservationService.releasePath` this arm used before would drop all of them while the
 	 * blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
-	 *
-	 * Known corner: a switch the train's EARLIER route flank-locked that a later failing route
-	 * lists again is admitted by `lockSwitches` (same owner) but released outright here — the
-	 * registry has no per-route count for switches, so this rollback can drop that earlier flank
-	 * lock. Not a regression: the old whole-train release dropped ALL of the train's switches.
 	 */
 	private fun rollbackRouteLocks(
 		trainId: String,
