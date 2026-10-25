@@ -15,12 +15,10 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
-import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
@@ -42,17 +40,11 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("resolveForwardSection (Issue #957)")
 class ForwardSectionResolutionTest : PathReservationServiceTestBase() {
-	private lateinit var pathInfoBuilder: PathInfoBuilder
-	private lateinit var routeFinder: RouteFinder
-
 	private lateinit var inOutA: OrientedPathSeparator
 	private lateinit var semaphoreZA: OrientedPathSeparator // zA at (14,8), faces vA
 
 	@BeforeEach
 	fun setUpFixtures() {
-		pathInfoBuilder = simulationContext.scope.get()
-		routeFinder = simulationContext.scope.get()
-
 		// Order from XML: [0]=B at X=30, [1]=A at X=11
 		inOutA = simulationContext.toDynamic(simulationContext.getInOuts().toList()[1]) as DynamicInOut
 		semaphoreZA = simulationContext.separatorAt(14, 8) as OrientedPathSeparator

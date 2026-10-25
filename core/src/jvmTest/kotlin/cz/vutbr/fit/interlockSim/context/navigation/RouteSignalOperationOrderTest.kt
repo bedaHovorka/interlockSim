@@ -12,12 +12,10 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isInstanceOf
-import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.BeforeEach
@@ -61,8 +59,6 @@ class RouteSignalOperationOrderTest : PathReservationServiceTestBase() {
 
 	@BeforeEach
 	fun setUpOrderedService() {
-		val pathInfoBuilder: PathInfoBuilder = simulationContext.scope.get()
-		val routeFinder: RouteFinder = simulationContext.scope.get()
 		orderedService =
 			DefaultPathReservationService(
 				navigator,

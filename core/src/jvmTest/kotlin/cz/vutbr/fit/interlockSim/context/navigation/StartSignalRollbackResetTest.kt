@@ -14,17 +14,14 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -61,18 +58,6 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 class StartSignalRollbackResetTest : PathReservationServiceTestBase() {
-	private lateinit var pathInfoBuilder: PathInfoBuilder
-	private lateinit var routeFinder: RouteFinder
-
-	@BeforeEach
-	fun resolveServiceParts() {
-		// Base setUp loads vyhybna and resolves navigator/registry/service; this class rebuilds
-		// the service directly (a fault-injecting wrapper), so only pathInfoBuilder and
-		// routeFinder still need resolving here.
-		pathInfoBuilder = simulationContext.scope.get()
-		routeFinder = simulationContext.scope.get()
-	}
-
 	private fun rebuiltService(env: SimulationContext) =
 		DefaultPathReservationService(navigator, env, registry, pathInfoBuilder, routeFinder)
 

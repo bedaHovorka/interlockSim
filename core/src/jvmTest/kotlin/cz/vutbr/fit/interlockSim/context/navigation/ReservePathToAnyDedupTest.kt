@@ -21,11 +21,9 @@ import assertk.assertions.isSameInstanceAs
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
@@ -45,15 +43,6 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("reservePathToAny de-duplication")
 class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
-	private lateinit var pathInfoBuilder: PathInfoBuilder
-	private lateinit var routeFinder: RouteFinder
-
-	@BeforeEach
-	fun setUpFixtures() {
-		pathInfoBuilder = simulationContext.scope.get()
-		routeFinder = simulationContext.scope.get()
-	}
-
 	private fun newService(navigator: TopologyNavigator = this.navigator): DefaultPathReservationService =
 		DefaultPathReservationService(navigator, simulationContext, registry, pathInfoBuilder, routeFinder)
 
