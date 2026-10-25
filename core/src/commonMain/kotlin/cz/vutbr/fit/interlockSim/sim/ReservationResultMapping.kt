@@ -112,9 +112,9 @@ internal fun PathReservationService.ReservationResult.toRouteResponse(
 			)
 		}
 		is PathReservationService.ReservationResult.GeometricallyImpossible -> {
-			// Issue #903: a permanent impossibility (rear-facing START or unconfigurable
-			// switch), not ordinary contention. The GeometricallyImpossible cause lets
-			// DefaultNetworkActuatorPort map this denial to its own
+			// Issue #903: a permanent impossibility (rear-facing START or END, unconfigurable
+			// switch, or non-oriented route origin or end), not ordinary contention. The
+			// GeometricallyImpossible cause lets DefaultNetworkActuatorPort map this denial to its own
 			// RouteRequestResult.GeometricallyImpossible, excluded from the contention bucket.
 			logger.info {
 				"Route DENIED for trainId=$trainName: geometrically impossible " +

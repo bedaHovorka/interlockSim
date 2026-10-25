@@ -25,9 +25,9 @@ The simulator has **one** release path (the six call sites in [PATH_RESERVATION_
 **Admission is gated on reservation, and every signal is re-read live at its boundary.** Two distinct mechanisms are at play, and only the second one carries safety *after* a route is changed:
 
 1. **Entry gate** — a train is admitted to the network only once the interlocking has reserved the blocks ahead AND cleared the START signal. There is no sighting/visibility predicate anywhere in the admission gate:
-   - `InOutWorker.kt:50-64` — `pathFree` is a `Condition` polling `isPathToAnyNextSemaphoreAvailable(inOut, next)`.
-   - `InOutWorker.kt:72` — `waitUntil(pathFree)`: the train waits until a free path exists.
-   - `InOutWorker.kt:93-95` — `reservePathToAnyNextSemaphore(trainId, inOut, next)`; only on `Success` (`:99-106`) does the train proceed.
+   - `InOutWorker.pathFree` is a `Condition` polling `isPathToAnyNextSemaphoreAvailable(inOut, next)`.
+   - `InOutWorker` calls `waitUntil(pathFree)`: the train waits until a free path exists.
+   - `InOutWorker` then calls `reservePathToAnyNextSemaphore(trainId, inOut, next)`; only on `Success` does the train proceed.
 
    This covers the *admission* hazard: a train is never given proceed authority over unreserved track at entry.
 2. **Live-aspect re-read at every semaphore** — the train's `Front` consults the signal when it reaches the semaphore's decision point (`Train.kt` ~:440-461): on `Signal.STOP` it halts and suspends in `waitUntil(allowingSignal(...))`. The aspect consulted is the live one, not one sighted earlier and acted upon past the decision point, and the kinematics stop the train exactly at the signal boundary (no overrun physics — see §B3).
@@ -55,15 +55,15 @@ What it *does* cost is a permanent stall: the train holds its admission slot and
 
 `PathReservationService` locks **only on-route (running) switches**, NOT flank-protection (*odvratné*) switches/derailers:
 
-- `extractUniqueSwitches` (`DefaultPathReservationService.kt:2171`) derives switches solely from `pathInfo.reservedPath` — the running path.
-- `configureAndRegisterSwitches` (`:3143`) → `registry.registerSwitches` (`:3158`) locks each on-route switch. No flank switches are provisioned or locked.
+- `SwitchConfigurator.extractUniqueSwitches` derives switches solely from `pathInfo.reservedPath` — the running path.
+- `CandidateCommitter.configureAndRegisterSwitches` → `SwitchConfigurator.registerSwitches` → `registry.registerSwitches` locks each on-route switch. No flank switches are provisioned or locked.
 - Since Issue #1065, that lock is now HONOURED by the reservation path itself, not only by the legacy facade below: `DynamicRailSwitch.setUpPath` refuses to move a switch a live route already holds locked in a different position (safety property SI-5, `changeConf` already honoured it; `setUpPath` did not). Before #1065, `configureSwitchesInPath` silently re-threw an on-route switch already locked for a DIFFERENT train's live route.
 
 Flank protection is a concept of the **legacy `InterlockingFacade` path only**:
 
-- `InterlockingFacade.kt:24-30` — ESA-11 condition 2: "All flank-protection switches (odvratné výhybky) are in their required (safe) position."
-- `TrainRoute.flank` (`lang/vocab/TrainRoute.kt:22` KDoc, `:33` field) — `val flank: List<SwitchSetting> = emptyList()`.
-- `DefaultInterlockingFacade.kt:150` (condition-2 check), `:181` (lock count), `:326` (condition-2 method), `:340` (`for (switchSetting in route.flank)`), `:374` (`route.running + route.flank` locked).
+- The `InterlockingFacade` class KDoc — ESA-11 condition 2: "All flank-protection switches (odvratné výhybky) are in their required (safe) position."
+- `TrainRoute.flank` (`lang/vocab/TrainRoute.kt`, the `flank` property and its `@property` KDoc) — `val flank: List<SwitchSetting> = emptyList()`.
+- `DefaultInterlockingFacade`: the condition-2 call `checkSwitchPositions(route)` in `requestRoute`, the granted-route log's switch count (`route.running.size + route.flank.size`), the `checkSwitchPositions` method itself, its `for (switchSetting in route.flank)` loop, and `lockSwitches(trainId, runningSwitches, flankSwitches)` (the `running + flank` switches locked).
 
 **Known scope limitation:** the reservation-service path does not provision flank protection. It relies on the route's running switches being sufficient, or on the facade path for flank-sensitive layouts. A topology that requires flank-protection switches to be locked for safety, accessed only through the reservation-service path, would not have them locked.
 
@@ -106,11 +106,11 @@ The conflation is a **known simplification**: the simulator does not distinguish
 
 ## B5. Revisiting / Circular-Route Partial-Release Caveat (F5)
 
-`resetSemaphoresForReleasedBlocks` is **fail-safe but not proven-safe** for a revisiting / circular route. Per the interface KDoc (`PathReservationService.kt:693-706`):
+`resetSemaphoresForReleasedBlocks` is **fail-safe but not proven-safe** for a revisiting / circular route. Per the interface KDoc (`PathReservationService.resetSemaphoresForReleasedBlocks`):
 
 > This is proven safe for **suffix / rearmost releases on a non-revisiting route**: the un-travelled tail of a route the train will never traverse again. It is NOT proven safe for an arbitrary mid-route subset of `blocks` — the semaphore governing a released block can also be the one a DIFFERENT, still-reserved downstream block on the same route depends on. A route that loops back and becomes adjacent to a released block again has the same exposure: the semaphore this call resets may be the one that governs re-entry into the loop.
 
-**Failure direction is fail-safe** — `Signal.STOP` authorises nothing, so the worst case is a stalled train, never an unauthorized opposing movement. The caller is responsible for staying within the proven-safe scope (`DefaultPathReservationService.kt:2717-2719`): the impl performs no route-position validation of its own.
+**Failure direction is fail-safe** — `Signal.STOP` authorises nothing, so the worst case is a stalled train, never an unauthorized opposing movement. The caller is responsible for staying within the proven-safe scope (the same interface KDoc; the implementation is `ClearedSignalLedger.resetSemaphoresForReleasedBlocks`): the impl performs no route-position validation of its own.
 
 Cross-reference: the same caveat appears in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) v1.2 §5 (Proven-Safe Scope).
 

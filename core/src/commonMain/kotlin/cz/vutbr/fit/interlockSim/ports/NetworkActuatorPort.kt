@@ -142,7 +142,7 @@ interface NetworkActuatorPort {
 	 *    forever. Treat `false` purely as **information** ("there was nothing here"), never as a
 	 *    **command to retry**.
 	 * 2. **`true` reports a registry/signal STATE CHANGE, not per-element success.** The
-	 *    reference implementation ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.releasePath])
+	 *    reference implementation ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.releasePathDetailed])
 	 *    catches, logs, and swallows individual element failures internally -- a block whose
 	 *    `cancelPathSetup` throws, or a switch whose `unlock` throws, is logged at WARN and
 	 *    skipped, never surfaced to the caller. `releaseRoute` still reports `true` in that case,
@@ -151,8 +151,11 @@ interface NetworkActuatorPort {
 	 *    and did I act on it", not "did every underlying element operation individually succeed".
 	 *
 	 * @param trainName Name of the train whose route should be released (non-blank).
-	 * @return `true` if at least one block or one cleared signal was released; `false` if the
-	 *   train held neither. Never a failure signal either way -- see the two guarantees above.
+	 * @return `true` if at least one block or one cleared signal was released, or a block was
+	 *   deferred (Issue #1050); `false` if the train held neither. Never a failure signal either way
+	 *   -- see the two guarantees above. Because a deferred release also returns `true`, a caller
+	 *   that must retry a partial release calls [releaseRouteDetailed] and reads
+	 *   [RouteRelease.deferredBlockIds] instead.
 	 * @throws IllegalArgumentException if [trainName] is blank.
 	 */
 	fun releaseRoute(trainName: String): Boolean
@@ -419,9 +422,10 @@ sealed class RouteRequestResult {
 	) : RouteRequestResult()
 
 	/**
-	 * The candidate that came closest was **permanently** impossible, not merely busy: a
-	 * candidate's START semaphore faced away from the requested direction of travel (G4), or a
-	 * switch along a candidate could not be set to the position the route required. Maps from
+	 * The request was **permanently** impossible, not merely busy: a candidate's START or END
+	 * semaphore faced away from the requested direction of travel (G4, and its END-side twin G8), a
+	 * switch along a candidate could not be set to the position the route required, or the route's
+	 * origin or end was not an oriented separator (Issues #1188, #1200). Maps from
 	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible]
 	 * via
 	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible].

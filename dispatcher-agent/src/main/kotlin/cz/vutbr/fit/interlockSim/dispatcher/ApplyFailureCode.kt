@@ -157,9 +157,10 @@ enum class ApplyFailureCode {
 	DROPPED_INVALID,
 
 	/**
-	 * The candidate that came closest was **permanently** impossible, not merely busy: a
-	 * candidate's START semaphore faced away from the requested direction of travel (G4), or a
-	 * switch along a candidate could not be set to the position the route required.
+	 * The request was **permanently** impossible, not merely busy: a candidate's START or END
+	 * semaphore faced away from the requested direction of travel (G4, and its END-side twin G8), a
+	 * switch along a candidate could not be set to the position the route required, or the route's
+	 * origin or end was not an oriented separator (Issues #1188, #1200).
 	 *
 	 * Maps to `RouteRequestResult.GeometricallyImpossible` (`:core`, read-only).
 	 *

@@ -280,10 +280,10 @@ internal class CandidateCommitter(
 
 	/**
 	 * Steps 2h/2i of [DefaultPathReservationService.reservePath]'s candidate loop: configures the
-	 * intermediate semaphores,
-	 * registers the forward-only PathInfo, emits the reservation events, and reports
-	 * [PathReservationService.ReservationResult.Success]. Extracted (SonarCloud S3776, PR
-	 * #1109) so this branching stays out of [DefaultPathReservationService.reservePath]'s own cognitive complexity.
+	 * intermediate semaphores, registers the forward-only PathInfo, emits the reservation events,
+	 * and reports [PathReservationService.ReservationResult.Success]. Extracted (SonarCloud S3776,
+	 * PR #1109) so this branching stays out of [DefaultPathReservationService.reservePath]'s own
+	 * cognitive complexity.
 	 *
 	 * @return the candidate's result, or `null` when the PathInfo merge aborted (Issue #904;
 	 *   [rollbackIfMergeAborted] has already released exactly what this candidate acquired)

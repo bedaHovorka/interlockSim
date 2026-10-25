@@ -291,8 +291,8 @@ class DefaultPathReservationService(
 		// Used to emit ReservationConflictDetected when AllPathsBlocked is about to be returned.
 		var firstBlockedConflict: Pair<DynamicTrackBlock, String>? = null
 
-		// Issue #903/#937: the permanent geometric impossibilities (rear-facing START or END, or
-		// unconfigurable switch) seen across candidates — first reason kept for reporting, count
+		// Issue #903/#937: the permanent per-candidate geometric impossibilities (rear-facing START or
+		// END, or unconfigurable switch) seen across candidates — first reason kept for reporting, count
 		// kept so classifyExhaustedAttempt can tell "every candidate is impossible" (permanent)
 		// from "one is, another is merely busy" (retryable).
 		//
@@ -963,11 +963,13 @@ class DefaultPathReservationService(
 	/**
 	 * Single write path for [reservePathToAnyNextSemaphore]'s `lastResult` tracker (Issue #903).
 	 *
-	 * `GeometricallyImpossible` is a PERMANENT impossibility (rear-facing START or unconfigurable
-	 * switch), not ordinary contention: once seen for one candidate semaphore, it must win over
-	 * any later contention result (`AllPathsBlocked`, `NoPathExists`, or the bypass-rollback
-	 * branch's `AllPathsBlocked`) so the caller -- [cz.vutbr.fit.interlockSim.sim.InOutWorker] on
-	 * the train-navigation path -- throws [cz.vutbr.fit.interlockSim.exceptions.SimulationException]
+	 * `GeometricallyImpossible` is a PERMANENT impossibility (rear-facing START or END, unconfigurable
+	 * switch, or a non-oriented route origin; every target here is a semaphore, so a non-oriented
+	 * end cannot arise), not ordinary contention: once seen for one
+	 * candidate semaphore, it must win over any later contention result (`AllPathsBlocked`,
+	 * `NoPathExists`, or the bypass-rollback branch's `AllPathsBlocked`) so the caller --
+	 * [cz.vutbr.fit.interlockSim.sim.InOutWorker] on the train-navigation path -- throws
+	 * [cz.vutbr.fit.interlockSim.exceptions.SimulationException]
 	 * instead of spinning on `waitUntil(pathFree)` retrying a path that will never become
 	 * available. Before Issue #903's fix, the `AllPathsBlocked` / `NoPathExists` / bypass-rollback
 	 * branches wrote `lastResult` directly and silently overwrote an earlier geometric result.

@@ -316,7 +316,7 @@ internal class ReservationTargetDiscovery(
 	 *
 	 * `sortedBy` evaluates its selector on both sides of every comparison, so enumerating inside it
 	 * ran `findAllTopologicalPaths` O(n log n) times, and the reservation attempt enumerated the
-	 * same paths again. Each InOut is therefore an [TargetAttempt.InOutTarget] holding one lazy
+	 * same paths again. Each InOut is therefore a [TargetAttempt.InOutTarget] holding one lazy
 	 * enumeration shared by the sort key and the attempt. The key is unchanged and `sortedBy` is stable,
 	 * so the order is identical. `LazyThreadSafetyMode.NONE` is safe and cheaper: each lazy is
 	 * created and consumed inside a single `reservePathToAny` call.

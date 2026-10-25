@@ -967,7 +967,8 @@ class DispatchDecisionApplier(
 	 * LongMethod budget).
 	 *
 	 * Publishes [AppliedOutcome.GeometricallyImpossible] so the agent learns the requested route
-	 * is permanently impossible (rear-facing START or unconfigurable switch), not merely busy.
+	 * is permanently impossible (rear-facing START or END, unconfigurable switch, or non-oriented
+	 * route origin or end), not merely busy.
 	 *
 	 * @since Issue #903
 	 */

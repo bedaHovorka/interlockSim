@@ -197,12 +197,13 @@ interface PathReservationService :
 		 * same malformation class -- a route the train cannot actually use").
 		 *
 		 * For the per-candidate classes (rear-facing START, rear-facing END, unconfigurable
-		 * switch) it is set
-		 * whenever **any** candidate in the attempt hits this failure mode, even if other
-		 * candidates in the same attempt were only ordinarily blocked -- first-hit-wins, mirroring
-		 * how [NonContiguousStart] already short-circuits ahead of blocked-candidate tracking
-		 * (traffic-simulation-expert ruling, Issue #903: the fact one candidate is permanently
-		 * impossible is real and permanent information regardless of what other candidates did).
+		 * switch), one route request returns it only when **every** attempted candidate hits one of
+		 * them (Issue #937): a mix with a merely blocked candidate stays [AllPathsBlocked], because
+		 * that candidate can still succeed on a retry. Across the targets of
+		 * [reservePathToAnyNextSemaphore], a target's [GeometricallyImpossible] wins over the
+		 * contention results of later targets (Issue #903, first-hit-wins; the
+		 * traffic-simulation-expert ruling: the fact one target is permanently impossible is real
+		 * information regardless of what other targets did).
 		 * A non-oriented route origin or end (Issues #1188, #1200) is a request-level refusal
 		 * instead: it fires before any candidate is discovered.
 		 *
