@@ -12,10 +12,10 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import cz.vutbr.fit.interlockSim.testutil.SourceScan
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -133,30 +133,16 @@ class TargetSelectionSingleEntryTest {
 		val SCANNED_SOURCES: Map<String, List<String>> by lazy {
 			SOURCE_ROOTS
 				.flatMap { (label, moduleDirSpelling) ->
-					val root =
-						listOf(moduleDirSpelling, label)
-							.map(::File)
-							.firstOrNull { it.isDirectory }
-							?: error("Source root for $label does not exist under any spelling")
-					root
-						.walkTopDown()
-						.filter { it.isFile && it.extension == "kt" }
+					val root = SourceScan.directory(moduleDirSpelling, label)
+					SourceScan
+						.kotlinFiles(root)
 						.filterNot { file ->
 							file.relativeTo(root).invariantSeparatorsPath.contains(DECLARING_PACKAGE_PATH)
 						}.map { file ->
 							label + "/" + file.relativeTo(root).invariantSeparatorsPath to
-								file.readLines().filter { isCode(it) }
+								file.readLines().filter { SourceScan.isCode(it) }
 						}.toList()
 				}.toMap()
-		}
-
-		/** `true` for a line that is neither blank nor a comment/KDoc line. */
-		private fun isCode(line: String): Boolean {
-			val trimmed = line.trim()
-			return trimmed.isNotEmpty() &&
-				!trimmed.startsWith("//") &&
-				!trimmed.startsWith("*") &&
-				!trimmed.startsWith("/*")
 		}
 	}
 

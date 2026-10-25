@@ -410,6 +410,7 @@ class ShuntingLoop(
 			approwedTrains = survivors
 			trainsExitedCount += terminated.size
 		}
+		env.getRoutingServices().getReservationExpiry().expireStaleReservations() // Issue #1174
 
 		// SP0.11: Publish a fresh snapshot and per-block observation data for the off-kernel
 		// driver thread.  Published before the applier fires so the applier's callbacks and

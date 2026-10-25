@@ -71,7 +71,8 @@ internal const val DEFAULT_MAX_PATH_DEPTH = 100
  */
 interface PathReservationService :
 	ApproachLockedPathRelease,
-	BlockReleaseSteps {
+	BlockReleaseSteps,
+	ReservationExpiry {
 	/**
 	 * Result of a path reservation attempt.
 	 *

@@ -68,6 +68,9 @@ private val logger = KotlinLogging.logger {}
  * @property registry Ownership registry for tracking train reservations
  * @property pathInfoBuilder Builder for PathInfo metadata (Issue #295/#296 Phase 4)
  * @property routeFinder Cost-based route planner for InOut-to-InOut automatic route selection (Issue #597)
+ * @property reservationTtlSimSeconds Simulated seconds a holding of un-entered blocks may go without a
+ *   new block registration before [expireStaleReservations] releases it (Issue #1174); see
+ *   [DEFAULT_RESERVATION_TTL_SIM_SECONDS]
  * @since Issue #294 (Phase 2 of Issue #292)
  */
 class DefaultPathReservationService(
@@ -75,10 +78,31 @@ class DefaultPathReservationService(
 	private val environment: SimulationEnvironment,
 	private val registry: PathReservationRegistry,
 	private val pathInfoBuilder: PathInfoBuilder,
-	private val routeFinder: RouteFinder
+	private val routeFinder: RouteFinder,
+	private val reservationTtlSimSeconds: Double = DEFAULT_RESERVATION_TTL_SIM_SECONDS
 ) : PathReservationService,
 	ReservationTargetQuery,
 	BlockRollbackStep {
+	companion object {
+		/**
+		 * Default reservation TTL, in simulated seconds (Issue #1174).
+		 *
+		 * The same 60 simulated seconds as the dispatcher's
+		 * `OrphanReservationSweeper.DEFAULT_STALE_AFTER_SIM_SECONDS` and the #943 WARN horizon of a
+		 * train stalled on an ownership conflict: one horizon for "this holding is not being used".
+		 * It is comfortably longer than a train on `vyhybna.xml` takes to enter a route it intends to
+		 * travel, so a merely slow train is not mistaken for one that abandoned its route. It is read
+		 * against simulation time only, never wall-clock time.
+		 */
+		const val DEFAULT_RESERVATION_TTL_SIM_SECONDS: Double = 60.0
+	}
+
+	init {
+		require(reservationTtlSimSeconds > 0.0) {
+			"reservationTtlSimSeconds must be positive, was $reservationTtlSimSeconds"
+		}
+	}
+
 	// Contention and blocked-request tracking (Issue #612 follow-up): see [ReservationContentionTracker]
 	// for why AllPathsBlocked is routine contention and only unresolved-at-end-of-run is reported.
 	private val contention = ReservationContentionTracker(registry)
@@ -119,6 +143,21 @@ class DefaultPathReservationService(
 			resetSemaphoresForReleasedBlocks = signalLedger::resetSemaphoresForReleasedBlocks,
 			resetClearedSemaphores = signalLedger::resetClearedSemaphores,
 			clearBlockedTracking = contention::clearBlockedTracking
+		)
+
+	/**
+	 * The one kernel-side reservation expiry (Issue #1174): the TTL, the candidate query and the
+	 * release policy live in [DefaultReservationExpiry]; the service stays the single facade and
+	 * exposes the trigger through [ReservationExpiry] (the #1152 allow-list keeps `ShuntingLoop`
+	 * free of any reservation-service handle). `internal`, like its sibling collaborators: tests
+	 * reach the release seam and the counter through it, the real wiring included.
+	 */
+	internal val expiry =
+		DefaultReservationExpiry(
+			registry = registry,
+			candidateScreen = candidateScreen,
+			ttlSimSeconds = reservationTtlSimSeconds,
+			initialRelease = releaser::releasePathDetailed
 		)
 
 	/**
@@ -199,7 +238,11 @@ class DefaultPathReservationService(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
 		maxDepth: Int
-	): PathReservationService.ReservationResult = reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
+	): PathReservationService.ReservationResult {
+		// Issue #1174: a stale holding of another train must not refuse this request.
+		expireStaleReservations(exceptTrainId = trainId)
+		return reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
+	}
 
 	/**
 	 * [reservePath] with the topological candidate paths supplied by the caller (Issue #966).
@@ -210,6 +253,13 @@ class DefaultPathReservationService(
 	 * only there, so a caller that already enumerated the paths (for example to sort targets)
 	 * does not enumerate them again. InOut↔InOut requests still go to [RouteFinder]. `null`
 	 * means "enumerate here", exactly as the public overload does.
+	 *
+	 * The expiry-trigger cadence (Issue #1174) makes this form load-bearing: it runs NO expiry.
+	 * The entry-point overloads ([reservePath], [reservePathToAny]) run the trigger at their top;
+	 * the attempt loops call this one so no expiry can move the before/after snapshots their
+	 * bypass rollback relies on. Do not "simplify" a `DEFAULT_MAX_PATH_DEPTH,
+	 * topologicalPaths = null` call site back to the short overload — that would re-enable
+	 * per-attempt expiry.
 	 */
 	internal fun reservePath(
 		trainId: String,
@@ -571,7 +621,7 @@ class DefaultPathReservationService(
 			val switchesBefore = registry.getSwitches(trainId).toSet()
 			val pathInfoBefore = registry.getPathInfo(trainId)
 
-			val result = reservePath(trainId, start, semaphore)
+			val result = reservePath(trainId, start, semaphore, DEFAULT_MAX_PATH_DEPTH, topologicalPaths = null)
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
@@ -821,6 +871,8 @@ class DefaultPathReservationService(
 		logger.debug {
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
+		// Issue #1174: once per request, not per target -- the attempts below call the internal overload.
+		expireStaleReservations(exceptTrainId = trainId)
 
 		// Issue #1188: a non-oriented start (a switch) is refused once, here. reservePath would
 		// refuse it too, before its candidate-path enumeration, but only after STEP 1 had already
@@ -945,6 +997,24 @@ class DefaultPathReservationService(
 		attemptCount: Int
 	): PathReservationService.ReservationResult =
 		recordAttemptResult(current, PathReservationService.ReservationResult.AllPathsBlocked(attemptCount))
+
+	/**
+	 * Kernel-side reservation expiry (Issue #1174, absorbs #975): the loop tick, judging every
+	 * train. The policy and the containment live in [DefaultReservationExpiry]; the release goes
+	 * only through [RouteReleaser.releasePathDetailed] -- never [releasePath] or a raw registry
+	 * removal -- and nothing that occupies track is ever released.
+	 */
+	override fun expireStaleReservations(): Int = expiry.expireStale(exceptTrainId = null)
+
+	/**
+	 * [expireStaleReservations] at the top of a request by [exceptTrainId], which is exempt (Issue
+	 * #1174 ruling D8): its new claim restarts its clock, as it restarts the #847 sweeper's. Expiring
+	 * it first would empty its footprint, so `rejectNonContiguousStart` would pass vacuously and a
+	 * mid-station extension would be granted as an orphan route. [reservePath] and
+	 * [reservePathToAny] call this at their top; if the request fails, the next loop tick expires
+	 * the holding.
+	 */
+	internal fun expireStaleReservations(exceptTrainId: String): Int = expiry.expireStale(exceptTrainId)
 
 	/** See [RouteReleaser.unregister]. */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> = releaser.unregister(trainId)

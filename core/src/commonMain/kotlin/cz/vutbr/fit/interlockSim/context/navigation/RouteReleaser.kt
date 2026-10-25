@@ -23,6 +23,15 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 /**
+ * Whether a train stands on [block]: it has an occupant or is already booked as OCCUPIED. The one
+ * "occupied" notion of the route release ([RouteReleaser]'s kept blocks and approach locking) and of
+ * the kernel reservation expiry ([PathReservationRegistry.expiredHoldings], Issue #1174), so the two
+ * can never disagree about which train is on the track.
+ */
+internal fun isTrainOnBlock(block: DynamicTrackBlock): Boolean =
+	block.occupant != null || block.getState() == TrackFacility.State.OCCUPIED
+
+/**
  * Route release and rollback of [DefaultPathReservationService] (Issue #1168, SP12.2): the
  * whole-route releases ([releasePath], [releasePathDetailed], [unregister]), the per-block release
  * funnel ([unregisterBlock], [dropFreedBlock], [releaseBlock]), the rollback steps ([rollbackBlock],
@@ -159,7 +168,7 @@ internal class RouteReleaser(
 	): List<DynamicTrackBlock> =
 		blocks.filter { block ->
 			block in approachLocked ||
-				isOccupied(block) ||
+				isTrainOnBlock(block) ||
 				// Kept through the expiry instant itself (Issue #1050 review round): Train.Front
 				// resumes from hold(1.0) and books the block AT the expiry timestamp, before
 				// next.enter() runs. A retry scheduled first at that same simulation time must
@@ -179,7 +188,7 @@ internal class RouteReleaser(
 	 * along the route.
 	 */
 	private fun approachLockedBlocks(held: List<DynamicTrackBlock>): List<DynamicTrackBlock> {
-		val occupied = held.filter(::isOccupied)
+		val occupied = held.filter(::isTrainOnBlock)
 		val headEnds = occupied.flatMap { it.ends().asList() }.toSet()
 		return held.filter { block ->
 			block.occupant == null &&
@@ -187,10 +196,6 @@ internal class RouteReleaser(
 				boundarySemaphores(block, occupied.isNotEmpty(), headEnds).any { it.signal.isAllowing() }
 		}
 	}
-
-	/** Whether a train stands on [block]: it has an occupant or is already booked as OCCUPIED. */
-	private fun isOccupied(block: DynamicTrackBlock): Boolean =
-		block.occupant != null || block.getState() == TrackFacility.State.OCCUPIED
 
 	/** The semaphores a train reads to enter [block]: see [approachLockedBlocks]. */
 	private fun boundarySemaphores(

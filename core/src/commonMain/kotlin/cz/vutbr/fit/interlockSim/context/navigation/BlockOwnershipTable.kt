@@ -235,6 +235,42 @@ internal class BlockOwnershipTable(
 	/** Count of held blocks across all trains. */
 	fun blockCount(): Int = blockToTrain.size
 
+	/**
+	 * The holdings [PathReservationRegistry.expiredHoldings] reports, in train-claim order: the
+	 * train's held blocks are all RESERVED with nobody standing on them ([isTrainOnBlock], read
+	 * live), and the NEWEST registration among them is at least [ttl] older than [now].
+	 */
+	fun expiredHoldings(
+		ttl: Double,
+		now: Double
+	): List<ExpiredHolding> =
+		trainToBlocks.mapNotNull { (trainId, blocks: List<DynamicTrackBlock>) ->
+			val age = unenteredAgeOf(blocks, now) ?: return@mapNotNull null
+			if (age >= ttl) ExpiredHolding(trainId, age) else null
+		}
+
+	/**
+	 * The age of the newest registration over an all-un-entered [blocks] list, `null` when any
+	 * block is entered/occupied or carries no timestamp, in one pass with no intermediate list.
+	 */
+	private fun unenteredAgeOf(
+		blocks: List<DynamicTrackBlock>,
+		now: Double
+	): Double? {
+		if (blocks.isEmpty()) return null
+		var newest: Double? = null
+		for (block in blocks) {
+			if (!isUnenteredReservation(block)) return null
+			val stamped = blockRegisteredAt[block]
+			if (stamped != null && (newest == null || newest < stamped)) newest = stamped
+		}
+		return newest?.let { now - it }
+	}
+
+	/** RESERVED and nobody on it: a block of a route its train has not entered. */
+	private fun isUnenteredReservation(block: DynamicTrackBlock): Boolean =
+		block.getState() == TrackFacility.State.RESERVED && !isTrainOnBlock(block)
+
 	/** Drop every owner, held block and timestamp. */
 	fun clear() {
 		trainToBlocks.clear()
@@ -242,3 +278,14 @@ internal class BlockOwnershipTable(
 		blockRegisteredAt.clear()
 	}
 }
+
+/**
+ * A stale holding found by [PathReservationRegistry.expiredHoldings] (Issue #1174).
+ *
+ * @property trainId The train that holds the blocks
+ * @property ageSimSeconds Simulated seconds since the train's newest block registration
+ */
+internal data class ExpiredHolding(
+	val trainId: String,
+	val ageSimSeconds: Double
+)
