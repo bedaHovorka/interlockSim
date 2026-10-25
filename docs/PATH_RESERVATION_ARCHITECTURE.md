@@ -435,7 +435,7 @@ Three ownership-aware APIs underpin G1–G7. All share a single cleared-signal l
 
 - **Interface:** `PathReservationService.hasClearedSignals`
 - **Impl:** `ClearedSignalLedger.hasClearedSignals` (`= clearedSemaphores.containsKey(trainId)`; the service's override delegates)
-- **Purpose:** Read by `DefaultNetworkActuatorPort.releaseRoute` BEFORE `releasePathDetailed` purges the bookkeeping this reads — so a signals-only release can be reported truthfully instead of being masked as "nothing happened" (G7).
+- **Purpose:** Read by `DefaultNetworkActuatorPort.releaseRouteDetailed` (which `releaseRoute` delegates to) BEFORE `releasePathDetailed` purges the bookkeeping this reads — so a signals-only release can be reported truthfully instead of being masked as "nothing happened" (G7).
 
 #### `recordExternalClearedSemaphore(trainId, semaphore)`
 
@@ -981,7 +981,7 @@ sequenceDiagram
     Applier-->>LLM: outcome
 ```
 
-**Source:** `DefaultNetworkActuatorPort.releaseRoute`; `hasClearedSignals` is read before `releasePathDetailed`; the truthfulness ruling is the `anyReleased` expression (`release.released.isNotEmpty() || release.deferred.isNotEmpty() || hadClearedSignals`). Test: `DefaultNetworkActuatorPortTest` › `hasClearedSignalsQueriedBeforeReleasePath` documents the read-before-purge ordering.
+**Source:** `DefaultNetworkActuatorPort.releaseRouteDetailed` (which `releaseRoute` delegates to); `hasClearedSignals` is read before `releasePathDetailed`; the truthfulness ruling is the `anyReleased` expression (`release.released.isNotEmpty() || release.deferred.isNotEmpty() || hadClearedSignals`). Test: `DefaultNetworkActuatorPortTest` › `hasClearedSignalsQueriedBeforeReleasePath` documents the read-before-purge ordering.
 
 ---
 
