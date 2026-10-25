@@ -68,8 +68,13 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	protected lateinit var environment: SimulationEnvironment
 	protected lateinit var navigator: TopologyNavigator
 	protected lateinit var registry: PathReservationRegistry
+
+	/** Resolved eagerly from [simulationContext]'s scope in [setUp] (a cheap scope lookup). */
 	protected lateinit var pathInfoBuilder: PathInfoBuilder
+
+	/** Resolved eagerly from [simulationContext]'s scope in [setUp] (a cheap scope lookup). */
 	protected lateinit var routeFinder: RouteFinder
+
 	protected lateinit var service: PathReservationService
 	protected lateinit var inOut1: DynamicPathSeparator
 	protected lateinit var inOut2: DynamicPathSeparator

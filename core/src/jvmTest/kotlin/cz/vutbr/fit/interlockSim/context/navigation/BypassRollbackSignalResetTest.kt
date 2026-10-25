@@ -43,12 +43,13 @@ import org.junit.jupiter.api.Test
  * [DefaultPathReservationService.reservePathToAnyNextSemaphore] returns the semaphores it cleared
  * to [Signal.STOP] (Issue #847, SP2c.24 code-review follow-up).
  *
- * ## Why this is a separate class from [PathReservationServiceTestBase]
+ * ## Why this class loads `parallel-routes.xml`
  *
+ * The class reuses the scaffold of [PathReservationServiceTestBase] and overrides
+ * `loadTestContext()` to load `parallel-routes.xml` instead of the base's default `vyhybna.xml`.
  * The rollback needs a *reachable alternative route*: `reservePath` must succeed via a path that
- * does not contain the required `next` block. `vyhybna.xml` — which
- * [PathReservationServiceTestBase] is built around — never produces that shape; a sweep over every
- * (start × adjacent block × blocked/free) combination in it reaches the branch zero times.
+ * does not contain the required `next` block. `vyhybna.xml` never produces that shape; a sweep over
+ * every (start × adjacent block × blocked/free) combination in it reaches the branch zero times.
  * `parallel-routes.xml` does, because its two genuinely parallel routes between `swA` and `swB`
  * give `reservePath` somewhere else to go when the direct one is taken.
  *

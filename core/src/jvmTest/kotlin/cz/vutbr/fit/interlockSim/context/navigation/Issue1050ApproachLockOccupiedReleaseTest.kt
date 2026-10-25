@@ -53,6 +53,7 @@ class Issue1050ApproachLockOccupiedReleaseTest : PathReservationServiceTestBase(
 
 	/** The linear `A — Sem — B` network instead of the base's `vyhybna.xml`; [network] keeps its semaphore handle. */
 	override fun loadTestContext(): DefaultSimulationContext {
+		// The base setUp() calls this hook exactly once per test, so assigning `network` here is safe.
 		network = TestTopologies.linearPathWithSemaphoreNetwork()
 		return network.context
 	}
