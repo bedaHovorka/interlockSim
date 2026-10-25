@@ -42,7 +42,7 @@ class PathReservationRollbackCleanupOnCancelThrowTest : PathReservationServiceTe
 		assertThat(registry.isRegistered(mockBlock)).isTrue()
 
 		// When: rollback runs and cancelPathSetup throws.
-		(service as DefaultPathReservationService).rollbackUnconfigurableCandidate(
+		(service as DefaultPathReservationService).candidateCommitter.rollbackUnconfigurableCandidate(
 			trainId = "train1",
 			forwardBlocks = listOf(mockBlock),
 			switches = emptyList(),

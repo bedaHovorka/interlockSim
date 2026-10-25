@@ -34,7 +34,7 @@ internal data class GeometricFailures(
 /**
  * Records one geometric candidate failure: keeps the first [reason], increments the count
  * (Issue #903 for the reason, Issue #937 for the count). Extracted so each call site stays a
- * single line: the two screens in [RouteCandidateScreen] and the service's switch-configuration
+ * single line: the two screens in [RouteCandidateScreen] and [CandidateCommitter]'s switch-configuration
  * and G4 failure recorders.
  */
 internal fun recordGeometricFailureOnce(

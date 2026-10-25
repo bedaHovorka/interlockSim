@@ -26,7 +26,7 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Outcome of [SwitchConfigurator.configureSwitchesInPath] /
- * [DefaultPathReservationService.configureAndRegisterSwitches], distinguishing a permanent
+ * [CandidateCommitter.configureAndRegisterSwitches], distinguishing a permanent
  * geometric impossibility (Issue #742: no [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf]
  * joins the route's segments) from a transient SI-5 refusal (Issue #1065: the switch is
  * locked in a different position by a live route) so the caller records only the former as
@@ -466,7 +466,7 @@ internal class SwitchConfigurator(
 
 	/**
 	 * Unlock and unregister THIS candidate's switches, shared by all scoped rollback paths
-	 * ([DefaultPathReservationService.rollbackUnconfigurableCandidate], the bypass rollback in
+	 * ([CandidateCommitter.rollbackUnconfigurableCandidate], the bypass rollback in
 	 * [DefaultPathReservationService.reservePathToAnyNextSemaphore]).
 	 *
 	 * [PathReservationRegistry.unregisterSwitch] unlocks + removes the switch from the registry's
