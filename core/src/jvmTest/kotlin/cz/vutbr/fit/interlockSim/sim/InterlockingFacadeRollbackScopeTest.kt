@@ -386,7 +386,11 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	 * Route 1 lists vB as a running switch but holds no block next to it (`TrainRoute` does not
 	 * require its blocks to bound its running switches), so its plain claim is stale as soon as
 	 * route 2's block next to vB is rolled back. Left promoted, the flank claim would be immune to
-	 * that reclaim and vB would stay locked until the train's whole-route release.
+	 * that reclaim and vB would stay locked until the train's whole-route release. A well-formed
+	 * dispatcher route always bounds its running switches with a held block, so this input is a
+	 * facade-boundary construction that makes the demote-before-`rollbackBlocks` order observable; it
+	 * does not model a route `PathReservationService` produces. The test pins that order: do not
+	 * "fix" route 1 into a live claim.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)

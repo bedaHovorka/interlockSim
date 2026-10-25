@@ -489,11 +489,13 @@ class DefaultInterlockingFacade(
 	 * ([PathReservationRegistry.unregisterSwitch]) and demotes the earlier plain claims this call
 	 * promoted to flank ([PathReservationRegistry.demoteFlankClaim], Issue #1218), then physically
 	 * cancels and unregisters only this call's blocks via [rollbackBlocks]. The demote runs first so
-	 * that a demoted claim bounding no block the train still holds is reclaimed as stale by the block
-	 * rollback, as it would have been without the failed route. The train's other registry entries —
-	 * earlier routes it is standing on — and its `PathInfo` are left alone: the whole-train
-	 * `PathReservationService.releasePath` this arm used before would drop all of them while the
-	 * blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
+	 * that a demoted claim bounding no block the train still holds can be reclaimed as stale by the
+	 * block rollback -- but only when one of THIS call's rolled-back blocks borders the switch
+	 * (`unregisterBlock` checks the released block's ends). Otherwise the stale plain claim survives
+	 * until the train's next release, the same state as if the failed route had never happened. The
+	 * train's other registry entries — earlier routes it is standing on — and its `PathInfo` are left
+	 * alone: the whole-train `PathReservationService.releasePath` this arm used before would drop all
+	 * of them while the blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
 	 */
 	private fun rollbackRouteLocks(
 		trainId: String,
