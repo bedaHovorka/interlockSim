@@ -72,10 +72,12 @@ class NavigationWallClockTripwireTest {
 
 	@Test
 	fun `the scan is not vacuous`() {
-		// The package really is scanned, and the registry and service the expiry lives in are in it.
+		// The package really is scanned, and the registry the expiry queries, the service that
+		// delegates to it, and the expiry policy class itself are all in it.
 		assertThat(navigationSources.size).isGreaterThan(10)
 		assertThat(navigationSources.any { it.name == "PathReservationRegistry.kt" }).isTrue()
 		assertThat(navigationSources.any { it.name == "DefaultPathReservationService.kt" }).isTrue()
+		assertThat(navigationSources.any { it.name == "DefaultReservationExpiry.kt" }).isTrue()
 		// Every forbidden spelling is caught, and the registry's own sim clock is not.
 		listOf(
 			"val t = currentTimeMillisKMP()",
