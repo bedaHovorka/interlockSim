@@ -150,14 +150,14 @@ class DefaultPathReservationService(
 	 * release policy live in [DefaultReservationExpiry]; the service stays the single facade and
 	 * exposes the trigger through [ReservationExpiry] (the #1152 allow-list keeps `ShuntingLoop`
 	 * free of any reservation-service handle). `internal`, like its sibling collaborators: tests
-	 * reach the release seam and the counter through it, the real wiring included.
+	 * reach the counter through it, the real wiring included.
 	 */
 	internal val expiry =
 		DefaultReservationExpiry(
 			registry = registry,
 			candidateScreen = candidateScreen,
 			ttlSimSeconds = reservationTtlSimSeconds,
-			initialRelease = releaser::releasePathDetailed
+			expiryRelease = releaser::releasePathDetailed
 		)
 
 	/**

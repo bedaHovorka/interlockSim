@@ -21,12 +21,6 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import cz.ksimulantenbande.kdisco.Process
-import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -38,10 +32,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
-import cz.vutbr.fit.interlockSim.util.currentSimulationTime
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
-import org.slf4j.LoggerFactory
 
 /**
  * Kernel-side reservation expiry, Issue #1174 (SP12.8, absorbs #975): a holding of un-entered
@@ -54,47 +45,7 @@ import org.slf4j.LoggerFactory
  * is also measured in simulation time, so only a running clock can close it. No wall-clock time is
  * involved anywhere.
  */
-class ReservationExpiryTest : PathReservationServiceTestBase() {
-	private companion object {
-		/** The configured TTL and the sim times the scenarios sit on, all derived from it. */
-		private val TTL = DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS
-		private val BELOW_TTL = TTL - 0.5
-		private val PAST_TTL = TTL + 1.5
-		private val BELOW_TWO_TTLS = 2 * TTL - 0.5
-		private val TWO_TTLS = 2 * TTL
-		private val PAST_TWO_TTLS = 2 * TTL + 1.5
-	}
-
-	private val expiry: DefaultReservationExpiry
-		get() = (service as DefaultPathReservationService).expiry
-
-	/**
-	 * Run each step at its absolute simulation time, in order, inside one kDisco process. A step
-	 * that throws fails the run, so assertions may sit inside the steps.
-	 */
-	private fun atSimTimes(vararg steps: Pair<Double, () -> Unit>) =
-		runBlocking {
-			var failure: Throwable? = null
-			Simulation
-				.create {
-					Process.activate(
-						object : Process() {
-							override suspend fun actions() {
-								for ((at, step) in steps) {
-									hold(at - currentSimulationTime())
-									try {
-										step()
-									} catch (e: Throwable) {
-										failure = failure ?: e
-									}
-								}
-							}
-						}
-					)
-				}.run(steps.last().first + 10.0)
-			failure?.let { throw it }
-		}
-
+class ReservationExpiryTest : ReservationExpiryTestBase() {
 	private fun entrySemaphoreOf(blocks: List<DynamicTrackBlock>): DynamicRailSemaphore =
 		(blocks.first().reservedFrom as DynamicInOut).inSemaphore
 
@@ -420,113 +371,6 @@ class ReservationExpiryTest : PathReservationServiceTestBase() {
 	}
 
 	@Test
-	fun `a throwing release is contained, logged once, and the other trains are still expired`() {
-		withFailingRelease("train1") { appender ->
-			lateinit var train1Blocks: List<DynamicTrackBlock>
-			val returned = mutableListOf<Int>()
-
-			atSimTimes(
-				0.0 to {
-					train1Blocks =
-						assertReservationSuccess(
-							service.reservePath("train1", findSemaphoreByName("zA"), findSemaphoreByName("doB1"))
-						).reservedBlocks
-					assertReservationSuccess(
-						service.reservePath("train2", findSemaphoreByName("zB"), findSemaphoreByName("doA2"))
-					)
-				},
-				TTL to { returned += service.expireStaleReservations() },
-				PAST_TTL to { returned += service.expireStaleReservations() },
-				// Two calls more: still one WARN for train1.
-				(TTL + 3.5) to { returned += service.expireStaleReservations() }
-			)
-
-			// No crash, and train2 was expired although train1's release threw on every call ...
-			assertThat(service.getReservedBlocks("train2")).isEmpty()
-			assertThat(returned.sum()).isEqualTo(1)
-			assertThat(expiry.expiredHoldingCount).isEqualTo(1)
-			// ... train1 keeps its holding for the next call ...
-			train1Blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
-			// ... and the failure was logged at WARN once, not on every call.
-			assertThat(expiringWarnings(appender, "train1").size).isEqualTo(1)
-		}
-	}
-
-	@Test
-	fun `a failed self-request preserves the failed-expiry WARN suppression`() {
-		withFailingRelease("train1") { appender ->
-			val zA = findSemaphoreByName("zA")
-			val doB1 = findSemaphoreByName("doB1")
-			val zB = findSemaphoreByName("zB")
-			lateinit var blocks: List<DynamicTrackBlock>
-			val results = mutableListOf<PathReservationService.ReservationResult>()
-
-			atSimTimes(
-				0.0 to {
-					blocks = assertReservationSuccess(service.reservePath("train1", zA, doB1)).reservedBlocks
-					// No proceed aspect at the head, so nothing is approach-locked.
-					zA.signal = Signal.STOP
-				},
-				// First failure: logged at WARN, and the marker remembers train1.
-				TTL to { service.expireStaleReservations() },
-				// The requester exemption drops train1 from this call's candidate set. The holding is
-				// not attempted, so the marker must survive the call. The request itself is refused:
-				// zB is not contiguous with the holding train1 holds.
-				PAST_TTL to {
-					results += service.reservePath("train1", zB, inOutNamed("B"))
-				},
-				// The next loop tick releases train1 again; the failure must stay at DEBUG now.
-				(TTL + 3.5) to { service.expireStaleReservations() }
-			)
-
-			assertThat(results.single()).isNotInstanceOf<PathReservationService.ReservationResult.Success>()
-			// The holding survived both calls: nothing was released, none of it is stale-released.
-			blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
-			assertThat(expiry.expiredHoldingCount).isEqualTo(0)
-			// The containment holds: exactly one WARN for train1's repeated release failure.
-			assertThat(expiringWarnings(appender, "train1").size).isEqualTo(1)
-		}
-	}
-
-	@Test
-	fun `a train no longer stale is un-suppressed and warns fresh on a new episode`() {
-		withFailingRelease("train1") { appender ->
-			lateinit var blocks: List<DynamicTrackBlock>
-			lateinit var firstSegment: List<DynamicTrackBlock>
-
-			atSimTimes(
-				0.0 to {
-					firstSegment =
-						assertReservationSuccess(
-							service.reservePath("train1", findSemaphoreByName("zA"), findSemaphoreByName("doB1"))
-						).reservedBlocks
-					findSemaphoreByName("zA").signal = Signal.STOP
-				},
-				// First episode: the failure is logged at WARN, and the marker remembers train1.
-				TTL to { service.expireStaleReservations() },
-				// A successful extension claims new blocks, so the whole holding's newest claim is
-				// fresh and the holding leaves the candidate set; the next loop tick (a call where
-				// train1 is not the requester) clears the marker.
-				PAST_TTL to {
-					blocks = firstSegment +
-						assertReservationSuccess(
-							service.reservePath("train1", findSemaphoreByName("doB1"), inOutNamed("B"))
-						).reservedBlocks
-				},
-				(TTL + 2.0) to { service.expireStaleReservations() },
-				// A TTL after the extension claim: the holding is stale again and fails again --
-				// with a fresh WARN, because the marker was cleared.
-				PAST_TWO_TTLS to { service.expireStaleReservations() }
-			)
-
-			blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
-			assertThat(expiry.expiredHoldingCount).isEqualTo(0)
-			// One WARN per episode -- the new episode was not silenced by the old marker.
-			assertThat(expiringWarnings(appender, "train1").size).isEqualTo(2)
-		}
-	}
-
-	@Test
 	fun `the next-semaphore query and reservation never expire a stale holding`() {
 		lateinit var blocks: List<DynamicTrackBlock>
 
@@ -554,37 +398,4 @@ class ReservationExpiryTest : PathReservationServiceTestBase() {
 			DefaultPathReservationService(navigator, environment, registry, pathInfoBuilder, routeFinder, 0.0)
 		}.isInstanceOf<IllegalArgumentException>()
 	}
-
-	/**
-	 * Runs [body] with a Logback appender attached to the expiry and [trainId]'s expiry release
-	 * replaced by a throwing stub; the appender and the real release are restored in `finally`.
-	 */
-	private fun withFailingRelease(
-		trainId: String,
-		body: (ListAppender<ILoggingEvent>) -> Unit
-	) {
-		val expiryLogger = LoggerFactory.getLogger(DefaultReservationExpiry::class.java.name) as Logger
-		val appender = ListAppender<ILoggingEvent>().also { it.start() }
-		expiryLogger.addAppender(appender)
-		val realRelease = expiry.expiryRelease
-		expiry.expiryRelease = { holding ->
-			check(holding != trainId) { "release of $trainId fails under test" }
-			realRelease(holding)
-		}
-		try {
-			body(appender)
-		} finally {
-			expiryLogger.detachAppender(appender)
-			expiry.expiryRelease = realRelease
-		}
-	}
-
-	/** This run's failures of [trainId]'s expiry release, logged at WARN. */
-	private fun expiringWarnings(
-		appender: ListAppender<ILoggingEvent>,
-		trainId: String
-	): List<ILoggingEvent> =
-		appender.list.filter {
-			it.level == Level.WARN && it.formattedMessage.startsWith("Reservation expiry of '$trainId' failed")
-		}
 }
