@@ -88,9 +88,14 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 				// not attempted, so the marker must survive the call. The request itself is refused:
 				// zB is not contiguous with the holding train1 holds.
 				PAST_TTL to {
-					// The call the request makes at its top, with the requester exempt ...
+					// Hand-simulates the expiry call at the top of a request, with the requester exempt: it
+					// runs on `failing`, the expiry whose suppression state this test pins ...
 					failing.expireStale(exceptTrainId = "train1")
-					// ... and the refused request itself.
+					// ... while the real request below runs only the service's own, healthy expiry and
+					// never touches `failing`. That the service exempts the requester at the top of
+					// reservePath / reservePathToAny is pinned in ReservationExpiryTest by `the requesting
+					// train's own stale holding survives its extension request` and `reservePathToAny
+					// exempts the requesting train's own stale holding`.
 					results += service.reservePath("train1", zB, inOutNamed("B"))
 				},
 				// The next loop tick releases train1 again; the failure must stay at DEBUG now.
