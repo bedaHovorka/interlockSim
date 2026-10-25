@@ -39,7 +39,7 @@ override fun decide(observed: DispatchObservation): List<DispatchDecision> {
   FIFO-takes up to `freeSlots = maxConcurrentTrains - observed.approvedTrainCount` from
   `observed.unapprovedTrains`, emitting `ApproveTrain(queued.trainId)` at line 136. Empty when
   `freeSlots <= 0`.
-- `checkAllInputs` (RuleBasedDispatcher.kt:142-143) is declared `List<DispatchDecision.ReservePath>`,
+- `checkAllInputs` (`RuleBasedDispatcher`) is declared `List<DispatchDecision.ReservePath>`,
   built via `(observed.innerBlockInputs + observed.outerBlockInputs).mapNotNull(::checkInput)`.
   - `checkInput` (RuleBasedDispatcher.kt:154-213) is declared `DispatchDecision.ReservePath?`, a
     `when(input.state)` over the three `TrackFacility.State` values:
@@ -60,18 +60,18 @@ confirms zero occurrences of `HoldTrain(`, `SetSignalAspect(`, `SetSwitchPositio
 
 | `DispatchDecision` subtype | Production constructor site(s) | Emitted by `RuleBasedDispatcher`? |
 |---|---|---|
-| `ApproveTrain` | `RuleBasedDispatcher.kt:136`; `dispatcher-agent/.../planner/KoogAgentPlanAdapter.kt:282` (LLM admission safety net, `maybeForceAdmission` — the one #822 §6 marks for deletion); `dispatcher-agent/.../DefaultDispatchLoopActuatorPort.kt:46` (`approve_train` LLM tool) | **Yes** |
+| `ApproveTrain` | `RuleBasedDispatcher.kt:136`; `dispatcher-agent/.../planner/KoogAgentPlanAdapter.kt:282` (LLM admission safety net, `maybeForceAdmission` — the one #822 §6 marks for deletion); `dispatcher-agent/.../DispatchTickLoop.kt` and `KoogAgentFactory.kt` (the `approve_train` LLM action; the `DefaultDispatchLoopActuatorPort` site cited here earlier is gone) | **Yes** |
 | `ReservePath` | **`RuleBasedDispatcher.kt` only** (lines 178, 206) — no other production constructor exists anywhere in the repo | **Yes** |
-| `NoAction` | `RuleBasedDispatcher.kt:124` (the only production constructor; `data object`) | **Yes** — 8 distinct scenarios in `RuleBasedDispatcherTest.kt` (e.g. lines 151-157, 163-169, 233-252) exercise this branch directly |
-| `HoldTrain` | **None found anywhere in production code** — all ~25 grep hits for `DispatchDecision.HoldTrain(` are in test files (`DispatchDecisionSp2b1Test.kt`, `DispatchDecisionSp2b5Test.kt`, `SynchronousDispatcherWiringTest.kt:191`, `dispatcher-agent/.../DispatchDecisionApplierTest.kt`, `DispatchDecisionApplierModeGatingTest.kt`, `DispatchDecisionListenerHubTest.kt`) constructing it as a fixture to test the *applier's* handling | **No** |
-| `SetSignalAspect` | `core/.../sim/PathCommandTranslator.kt:189,197` | **No** |
-| `SetSwitchPosition` | `core/.../sim/PathCommandTranslator.kt:158` | **No** |
+| `NoAction` | `RuleBasedDispatcher.kt` (the only production constructor; `data object`) | **Yes** — 8 distinct scenarios in `RuleBasedDispatcherTest.kt` (e.g. lines 151-157, 163-169, 233-252) exercise this branch directly |
+| `HoldTrain` | **None found anywhere in production code** — all ~25 grep hits for `DispatchDecision.HoldTrain(` are in test files (`DispatchDecisionSp2b1Test.kt`, `DispatchDecisionSp2b5Test.kt`, `SynchronousDispatcherWiringTest`, `dispatcher-agent/.../DispatchDecisionApplierTest.kt`, `DispatchDecisionApplierModeGatingTest.kt`, `DispatchDecisionListenerHubTest.kt`) constructing it as a fixture to test the *applier's* handling | **No** |
+| `SetSignalAspect` | `core/.../sim/PathCommandTranslator.kt` (two sites) | **No** |
+| `SetSwitchPosition` | `core/.../sim/PathCommandTranslator.kt` | **No** |
 | `ReleaseRoute` | `dispatcher-agent/.../agents/tools/CancelRouteTool.kt:70` (LLM `cancel_route` tool) | **No** |
 | `RequestRoute` (tool-driven, 3-arg) | `dispatcher-agent/.../agents/tools/RequestRouteTool.kt:132` (LLM `request_route` tool) | **No** |
 
 `PathCommandTranslator` (the only producer of `SetSignalAspect`/`SetSwitchPosition`) is itself
 unwired: a grep for `PathCommandTranslator(` / `.translate` outside its own file and test found
-only a KDoc mention in `ToolGroupRegistry.kt:191`, no call site. `RuleBasedDispatcher`'s own KDoc
+only a KDoc mention in `ToolGroupRegistry`, no call site. `RuleBasedDispatcher`'s own KDoc
 (RuleBasedDispatcher.kt:74-76) confirms this is deliberate-but-incomplete:
 
 > "This per-tick `decide` currently reserves a single pre-computed section per input and does

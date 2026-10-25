@@ -71,10 +71,10 @@ line required by the issue.
 code queues or drops a turn during a step, the step returns `StepOutcome.RESTART` and the step is
 retried. Two cases differ:
 
-- **Mutation restarts** (`Monitor.kt:132-134`, and `locateCrossings` at `:251`) unwind the
+- **Mutation restarts** (`Monitor.kt` lines 132-134 and `locateCrossings` at line 251, kDisco `b0828aa`) unwind the
   variables and the clock to the step start. Simulated time does not advance, so every guard that
   watches simulated time (including interlockSim's own run-until-time limits) is blind to the retry.
-- **The notice-release restart** (`Monitor.kt:146-152`, after `checkWaitNotices` and
+- **The notice-release restart** (`Monitor.kt` lines 146-152 at kDisco `b0828aa`, after `checkWaitNotices` and
   `checkLevelCrossings` when user code also changed the queue) does **not** unwind: the accepted
   step-end state is kept.
 
@@ -93,11 +93,11 @@ stall has not been confirmed as this loop.
 ### F2 — Continuous solver limits are silent
 
 `ContinuousMonitor.probeStateAt` stops after `MAX_PROBE_SUB_STEPS = 1000` re-integration sub-steps
-(`Monitor.kt:352`) and can leave the clock short of its target with no log, flag or exception. A
+(`Monitor.kt` line 352 at kDisco `b0828aa`) and can leave the clock short of its target with no log, flag or exception. A
 train whose threshold-crossing time (for example reaching a block boundary or a switch) was affected
 may then trigger that event late or at the wrong simulated time, with no diagnostic. The other limit,
 `MAX_BISECTION_ITERATIONS = 100` in `locateCrossingTime`, is effectively unreachable: the bracket
-collapses to floating-point resolution (`Monitor.kt:316`) after about 60 iterations, and the cap
+collapses to floating-point resolution (`Monitor.kt` line 316 at kDisco `b0828aa`) after about 60 iterations, and the cap
 returns the upper bracket anyway. Only the probe limit needs a log line.
 
 - **Home:** kdisco · **Severity:** medium
@@ -360,8 +360,8 @@ bedaHovorka/interlockSim#1147 once they exist (acceptance criterion 5).
 > **Repository:** bedaHovorka/kdisco · **prerequisite-of-1B: yes**
 >
 > When user code queues or drops a turn during a step, the step returns `StepOutcome.RESTART` and is
-> retried. Mutation restarts (`Monitor.kt:132-134`, `:251`) unwind the clock to the step start; the
-> notice-release restart (`Monitor.kt:146-152`) keeps the accepted step-end state. In both cases the
+> retried. Mutation restarts (`Monitor.kt` lines 132-134 and 251, kDisco `b0828aa`) unwind the clock to the step start; the
+> notice-release restart (`Monitor.kt` lines 146-152) keeps the accepted step-end state. In both cases the
 > retry count is unbounded and nothing is logged, and `beforeEvent` is skipped on a retry. Where the
 > clock unwinds, every simulated-time guard is blind, and the process can spin on wall-clock at a
 > constant `simTime`. This shape is consistent with the stall in bedaHovorka/interlockSim#591; that
@@ -375,10 +375,10 @@ bedaHovorka/interlockSim#1147 once they exist (acceptance criterion 5).
 
 > **Repository:** bedaHovorka/kdisco · **prerequisite-of-1B: waivable**
 >
-> `ContinuousMonitor.probeStateAt` stops after `MAX_PROBE_SUB_STEPS = 1000` (`Monitor.kt:352`) and can
+> `ContinuousMonitor.probeStateAt` stops after `MAX_PROBE_SUB_STEPS = 1000` (`Monitor.kt` line 352) and can
 > leave the clock short of its target with no log, flag or exception, so a non-converged probe is
 > indistinguishable from a good one. The bisection cap in `locateCrossingTime` is effectively
-> unreachable (the bracket collapses first, `Monitor.kt:316`) and needs no change. A `warn` log with
+> unreachable (the bracket collapses first, `Monitor.kt` line 316) and needs no change. A `warn` log with
 > the variable and the interval for the probe limit would be enough. Filed by SP9 (bedaHovorka/interlockSim#1156).
 
 ### 7.4 — kdisco: document (and then enforce) the threading contract

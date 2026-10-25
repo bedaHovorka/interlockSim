@@ -20,7 +20,7 @@ After fixing train deadlock #275 (path reservation conflict), a NEW deadlock app
                    ↑ acceleration is ZERO!                               ↑ distance to semaphore is ZERO!
 ```
 
-**Root Cause Hypothesis:** `distanceToSemaphore()` returns 0, causing motor to stop accelerating (Train.kt:542).
+**Root Cause Hypothesis:** `distanceToSemaphore()` returns 0, causing motor to stop accelerating (`Train`).
 
 ## Timeline and Versions
 
@@ -84,7 +84,7 @@ This allows:
    - Verify semaphore cache (ShuntingLoop.kt:63) correctness
 
 4. **Verify Path Consumption Logic** (Task #3)
-   - Why `removeFirst()` called twice? (Train.kt:341-344)
+   - Why `removeFirst()` called twice? (`Train`, the `pathToSemaphore?.removeFirst()` calls)
    - Is path being consumed too quickly?
    - Are path elements matching separator positions correctly?
 

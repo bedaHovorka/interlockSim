@@ -192,7 +192,7 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations (fictional examp
 
 Found **1 Czech comment** in source code:
 
-**Location:** `src/main/kotlin/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.kt:44`
+**Location:** `ShuntingLoop` (`sim/ShuntingLoop.kt`), the comment above the network load
 
 ```kotlin
 // Sit jiz musi byt nactena z vyhybna.xml !!!

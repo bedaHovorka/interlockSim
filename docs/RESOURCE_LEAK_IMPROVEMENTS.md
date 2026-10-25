@@ -13,7 +13,7 @@ This document summarizes improvements made to address resource leak concerns in 
 If `worker.terminate()` threw an exception during simulation stop, subsequent workers and the main process wouldn't be terminated, causing resource leaks.
 
 ### Solution
-**File**: `src/main/kotlin/cz/vutbr/fit/interlockSim/context/DefaultSimulationContext.kt:780-815`
+**File**: `DefaultSimulationContext` (`context/DefaultSimulationContext.kt`), the stop path that terminates the workers and the main process
 
 Implemented comprehensive exception safety:
 - Wrapped each termination in try-catch blocks
@@ -81,7 +81,7 @@ Investigated jDisco threading model to understand resource management:
 - Located in: `jDisco/Coroutine.java:156-196` (Runner class)
 
 ### Solution
-**File**: `src/test/kotlin/cz/vutbr/fit/interlockSim/context/SimulationLifecycleTest.kt:145-254`
+**File**: `SimulationLifecycleTest` (`context/SimulationLifecycleTest.kt`), test `thread cleanup verification after stop`
 
 Added comprehensive thread cleanup verification test:
 - Creates multiple SimulationContexts sequentially
@@ -167,8 +167,8 @@ The `errorStop()` method lacked clear documentation about its intended behavior,
 
 ### Solution
 **Files**:
-- `src/main/kotlin/cz/vutbr/fit/interlockSim/context/DefaultSimulationContext.kt:817-871`
-- `src/main/kotlin/cz/vutbr/fit/interlockSim/context/SimulationEnvironment.kt:187-205`
+- `DefaultSimulationContext.errorStop` (`context/DefaultSimulationContext.kt`)
+- `SimulationEnvironment.errorStop` (`context/SimulationEnvironment.kt`)
 
 Added comprehensive KDoc documentation clarifying:
 
