@@ -990,7 +990,10 @@ class DefaultPathReservationService(
 	 * so the release is the one `cancel_route` and the orphan sweeper use: signals reset to STOP
 	 * first, blocks cancelled, switches unlocked and unregistered, the PathInfo removed, one
 	 * `BlockReleased` per block. Only trains that occupy nothing qualify, which is the same
-	 * whole-route rule `OrphanReservationSweeper` applies before its `releaseRouteDetailed`.
+	 * whole-route rule `OrphanReservationSweeper` applies before its `releaseRouteDetailed`. The
+	 * registry's query sees only the blocks it attributes to a train, so a train physically standing
+	 * on any other block ([RouteCandidateScreen.standsOnAnyBlock], the Issue #893 state) is dropped
+	 * here too: a train on the track is the occupying-train case, phase 2 (#1220).
 	 *
 	 * **Approach lock (Issue #1050).** A proceed aspect at the head of the holding may have a train
 	 * committed to it; the release then keeps that block, drops the signals to STOP and frees the
@@ -1007,7 +1010,13 @@ class DefaultPathReservationService(
 	 * so it cannot fail the request that triggered it; the holding is offered again on the next call.
 	 */
 	override fun expireStaleReservations(): Int {
-		val completed = registry.expiredHoldings(ttl = reservationTtlSimSeconds).count { expireHolding(it) }
+		val completed =
+			registry
+				.expiredHoldings(ttl = reservationTtlSimSeconds)
+				// The registry judges occupancy only over the blocks it attributes to the train; a train
+				// standing on a block it holds no entry for (Issue #893) is on the track all the same.
+				.filterNot { candidateScreen.standsOnAnyBlock(it.trainId) }
+				.count { expireHolding(it) }
 		expiredHoldingCount += completed
 		return completed
 	}

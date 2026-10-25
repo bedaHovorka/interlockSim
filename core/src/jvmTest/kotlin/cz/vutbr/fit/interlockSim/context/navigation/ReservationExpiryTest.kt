@@ -176,6 +176,37 @@ class ReservationExpiryTest : PathReservationServiceTestBase() {
 	}
 
 	@Test
+	fun `a train standing on a block the registry does not attribute to it never expires`() {
+		val zA = findSemaphoreByName("zA")
+		val doB1 = findSemaphoreByName("doB1")
+		val kB = blockBetween("B", "zB")
+		lateinit var route: List<DynamicTrackBlock>
+
+		atSimTimes(
+			0.0 to { route = assertReservationSuccess(service.reservePath("train1", zA, doB1)).reservedBlocks },
+			1.0 to {
+				// The Issue #893 state: the train physically stands on kB with no registry entry for it,
+				// so the registry sees only an un-entered route (see RouteCandidateScreen.footprintOf).
+				occupy(kB, "train1")
+				assertThat(registry.getOwner(kB)).isNull()
+			},
+			100.0 to {
+				// The registry-relative query does condemn the holding ...
+				assertThat(registry.expiredHoldings(ttl = 60.0).map { it.trainId }).containsExactly("train1")
+				// ... but a train on the track is the occupying-train case, phase 2 (#1220): kept.
+				assertThat(service.expireStaleReservations()).isEqualTo(0)
+			}
+		)
+
+		route.forEach { block ->
+			assertThat(registry.getOwner(block)).isEqualTo("train1")
+			assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+		}
+		assertThat(zA.signal.isAllowing()).isTrue()
+		assertThat(expiry.expiredHoldingCount).isEqualTo(0)
+	}
+
+	@Test
 	fun `a train occupying one block of its route never expires at any age`() {
 		lateinit var blocks: List<DynamicTrackBlock>
 

@@ -99,6 +99,14 @@ internal class RouteCandidateScreen(
 			allBlocksCache.filter { it.occupant?.name == trainId }
 
 	/**
+	 * Whether [trainId] physically stands on any block of the network -- the occupancy arm of
+	 * [footprintOf] alone, by the same graph scan, so it also sees a block the registry does not
+	 * attribute to the train (Issue #893). The kernel reservation expiry exempts such a train
+	 * (Issue #1174): a train on the track is the occupying-train case, phase 2 (#1220).
+	 */
+	internal fun standsOnAnyBlock(trainId: String): Boolean = allBlocksCache.any { it.occupant?.name == trainId }
+
+	/**
 	 * The contiguity invariant (Issue #893, task A-R1): a route may only start where the
 	 * requesting train actually is.
 	 *
