@@ -21,12 +21,17 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -36,6 +41,7 @@ import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 
 /**
  * Kernel-side reservation expiry, Issue #1174 (SP12.8, absorbs #975): a holding of un-entered
@@ -366,6 +372,75 @@ class ReservationExpiryTest : PathReservationServiceTestBase() {
 		assertThat(results[1]).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		assertThat(service.getReservedBlocks("train1")).isEmpty()
 		assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+	}
+
+	@Test
+	fun `a throwing release is contained, logged once, and the other trains are still expired`() {
+		val serviceLogger = LoggerFactory.getLogger(DefaultPathReservationService::class.java.name) as Logger
+		val appender = ListAppender<ILoggingEvent>().also { it.start() }
+		serviceLogger.addAppender(appender)
+		val realRelease = expiry.expiryRelease
+		expiry.expiryRelease = { trainId ->
+			check(trainId != "train1") { "release of train1 fails under test" }
+			realRelease(trainId)
+		}
+		lateinit var train1Blocks: List<DynamicTrackBlock>
+		val returned = mutableListOf<Int>()
+
+		try {
+			atSimTimes(
+				0.0 to {
+					train1Blocks =
+						assertReservationSuccess(
+							service.reservePath("train1", findSemaphoreByName("zA"), findSemaphoreByName("doB1"))
+						).reservedBlocks
+					assertReservationSuccess(
+						service.reservePath("train2", findSemaphoreByName("zB"), findSemaphoreByName("doA2"))
+					)
+				},
+				60.0 to { returned += service.expireStaleReservations() },
+				61.5 to { returned += service.expireStaleReservations() },
+				63.5 to { returned += service.expireStaleReservations() }
+			)
+		} finally {
+			serviceLogger.detachAppender(appender)
+			expiry.expiryRelease = realRelease
+		}
+
+		// No crash, and train2 was expired although train1's release threw on every call ...
+		assertThat(service.getReservedBlocks("train2")).isEmpty()
+		assertThat(returned.sum()).isEqualTo(1)
+		assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+		// ... train1 keeps its holding for the next call ...
+		train1Blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
+		// ... and the failure was logged at WARN once, not on every call.
+		val warnings =
+			appender.list.filter {
+				it.level == Level.WARN && it.formattedMessage.startsWith("Reservation expiry of 'train1' failed")
+			}
+		assertThat(warnings.size).isEqualTo(1)
+	}
+
+	@Test
+	fun `the next-semaphore query and reservation never expire a stale holding`() {
+		lateinit var blocks: List<DynamicTrackBlock>
+
+		atSimTimes(
+			0.0 to {
+				blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+				// No proceed aspect at the head: any expiry would free the whole holding at once.
+				entrySemaphoreOf(blocks).signal = Signal.STOP
+			},
+			100.0 to {
+				val next = checkNotNull(navigator.getNextTrackSection(inOut2, null))
+				service.isPathToAnyNextSemaphoreAvailable(inOut2, next)
+				service.reservePathToAnyNextSemaphore("train2", inOut2, next)
+				service.reservePathToAnyNextSemaphore("train2", inOut2 as OrientedPathSeparator)
+			}
+		)
+
+		blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
+		assertThat(expiry.expiredHoldingCount).isEqualTo(0)
 	}
 
 	@Test

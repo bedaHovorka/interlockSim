@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlin.math.round
 
 private val logger = KotlinLogging.logger {}
 
@@ -95,6 +96,9 @@ class DefaultPathReservationService(
 		 * against simulation time only, never wall-clock time.
 		 */
 		const val DEFAULT_RESERVATION_TTL_SIM_SECONDS: Double = 60.0
+
+		/** Rounding factor of the logged expiry age (one decimal). */
+		private const val TENTHS: Double = 10.0
 	}
 
 	init {
@@ -151,6 +155,16 @@ class DefaultPathReservationService(
 			resetClearedSemaphores = signalLedger::resetClearedSemaphores,
 			clearBlockedTracking = contention::clearBlockedTracking
 		)
+
+	/**
+	 * The release [expireStaleReservations] hands a stale holding to: always
+	 * [RouteReleaser.releasePathDetailed] in production. Replaced only by tests, to pin that a throwing
+	 * release is contained (Issue #1174).
+	 */
+	internal var expiryRelease: (String) -> PathRelease = releaser::releasePathDetailed
+
+	/** Trains whose expiry release threw and was logged at WARN; later failures log at DEBUG (Issue #1174). */
+	private val failedExpiryTrains = mutableSetOf<String>()
 
 	/**
 	 * Candidate commit, finalize and rollback (Issue #1211, SP12.10); exposed so tests reach the
@@ -1023,14 +1037,16 @@ class DefaultPathReservationService(
 	internal fun expireStaleReservations(exceptTrainId: String): Int = expireStale(exceptTrainId)
 
 	private fun expireStale(exceptTrainId: String?): Int {
-		val completed =
+		val stale =
 			registry
 				.expiredHoldings(ttl = reservationTtlSimSeconds)
 				.filter { it.trainId != exceptTrainId }
 				// The registry judges occupancy only over the blocks it attributes to the train; a train
 				// standing on a block it holds no entry for (Issue #893) is on the track all the same.
 				.filterNot { candidateScreen.standsOnAnyBlock(it.trainId) }
-				.count { expireHolding(it) }
+		// A train that is no longer a candidate gets a fresh WARN should its release ever throw again.
+		failedExpiryTrains.retainAll(stale.map { it.trainId }.toSet())
+		val completed = stale.count { expireHolding(it) }
 		expiredHoldingCount += completed
 		return completed
 	}
@@ -1038,29 +1054,37 @@ class DefaultPathReservationService(
 	/** Release one stale [holding]; `true` when nothing of it is left. */
 	private fun expireHolding(holding: ExpiredHolding): Boolean {
 		val trainId = holding.trainId
+		val age = roundedToTenth(holding.ageSimSeconds)
 		val release =
 			try {
-				releaser.releasePathDetailed(trainId)
+				expiryRelease(trainId)
 			} catch (e: Exception) {
-				logger.warn(e) { "Reservation expiry of '$trainId' failed; the holding is offered again (Issue #1174)" }
+				if (failedExpiryTrains.add(trainId)) {
+					logger.warn(e) { "Reservation expiry of '$trainId' failed; the holding is offered again (Issue #1174)" }
+				} else {
+					logger.debug { "Reservation expiry of '$trainId' failed again: ${e.message} (Issue #1174)" }
+				}
 				return false
 			}
+		failedExpiryTrains.remove(trainId)
 		if (release.deferred.isNotEmpty()) {
 			logger.info {
-				"Reservation expiry deferred for '$trainId': no new claim for ${holding.ageSimSeconds}s of " +
-					"simulated time (TTL ${reservationTtlSimSeconds}s), but approach locking kept " +
-					"${release.deferred.size} block(s) reserved with signals at STOP; retried on the next call " +
-					"(Issue #1174)"
+				"Reservation expiry deferred for '$trainId': no new claim for ${age}s of simulated time " +
+					"(TTL ${reservationTtlSimSeconds}s), but approach locking kept ${release.deferred.size} " +
+					"block(s) reserved with signals at STOP; retried on the next call (Issue #1174)"
 			}
 			return false
 		}
 		logger.info {
-			"Reservation expired for '$trainId': ${release.released.size} un-entered block(s) held with no new " +
-				"claim for ${holding.ageSimSeconds}s of simulated time (TTL ${reservationTtlSimSeconds}s), " +
-				"released through releasePathDetailed (Issue #1174)"
+			"Reservation expired for '$trainId': no new claim for ${age}s of simulated time " +
+				"(TTL ${reservationTtlSimSeconds}s); released the remaining ${release.released.size} un-entered " +
+				"block(s) through releasePathDetailed (Issue #1174)"
 		}
 		return true
 	}
+
+	/** [value] rounded to one decimal, so the expiry log lines stay stable to grep. */
+	private fun roundedToTenth(value: Double): Double = round(value * TENTHS) / TENTHS
 
 	/** See [RouteReleaser.unregister]. */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> = releaser.unregister(trainId)

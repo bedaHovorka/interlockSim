@@ -241,8 +241,8 @@ internal class BlockOwnershipTable(
 	 * and the train's NEWEST registration is at least [ttl] older than [now].
 	 */
 	fun expiredHoldings(
-		now: Double,
-		ttl: Double
+		ttl: Double,
+		now: Double
 	): List<ExpiredHolding> =
 		trainToBlocks.mapNotNull { (trainId, blocks) ->
 			val newest =

@@ -419,7 +419,7 @@ class PathReservationRegistry(
 	internal fun expiredHoldings(
 		ttl: Double,
 		now: Double = simTimeSource()
-	): List<ExpiredHolding> = blockTable.expiredHoldings(now, ttl)
+	): List<ExpiredHolding> = blockTable.expiredHoldings(ttl = ttl, now = now)
 
 	/**
 	 * Check whether a block is available for a new reservation: its dynamic state is
