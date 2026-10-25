@@ -153,7 +153,7 @@ interface PathReservationService :
 		 *
 		 * | Origin case | Guarded by |
 		 * |---|---|
-		 * | Train on the network (footprint non-empty) | kernel, `rejectNonContiguousStart` (this result) |
+		 * | Train on the network (footprint non-empty) | kernel, `RouteCandidateScreen.rejectNonContiguousStart` (this result) |
 		 * | Train queued (footprint empty) | tool, `RequestRouteTool.queuedOriginError` (self-disabling, see below) |
 		 * | Any other caller of `reservePath` | no queued-train protection |
 		 *
