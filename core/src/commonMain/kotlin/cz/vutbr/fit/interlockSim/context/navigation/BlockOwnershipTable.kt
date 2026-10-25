@@ -244,7 +244,7 @@ internal class BlockOwnershipTable(
 		ttl: Double,
 		now: Double
 	): List<ExpiredHolding> =
-		trainToBlocks.mapNotNull { (trainId, blocks) ->
+		trainToBlocks.mapNotNull { (trainId, blocks: List<DynamicTrackBlock>) ->
 			val age = unenteredAgeOf(blocks, now) ?: return@mapNotNull null
 			if (age >= ttl) ExpiredHolding(trainId, age) else null
 		}

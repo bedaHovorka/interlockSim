@@ -85,7 +85,7 @@ private val logger: KLogger = registryLogger
  * Since Issue #1174 the timestamps have their reader: [expiredHoldings], the pure query that names
  * every train holding only un-entered blocks whose newest registration is at least a TTL old.
  * Releasing those holdings is the reservation kernel's policy
- * ([DefaultReservationExpiry.expireStaleReservations]), never the registry's; the registry
+ * ([DefaultReservationExpiry.expireStale]), never the registry's; the registry
  * reads only simulation time ([simTimeSource]), never wall-clock time.
  *
  * ## Structure (Issue #1172)
@@ -410,7 +410,7 @@ class PathReservationRegistry(
 	 * keeps the train out: that is not an un-entered route.
 	 *
 	 * The policy -- the TTL and the release -- belongs to
-	 * [DefaultReservationExpiry.expireStaleReservations].
+	 * [DefaultReservationExpiry.expireStale].
 	 *
 	 * @param ttl Simulated seconds a holding may go without a new block registration
 	 * @param now The current simulation time; defaults to this registry's own clock, the one every

@@ -30,10 +30,10 @@ import kotlin.math.round
  * simulation time — or, if the committed train booked the block meanwhile, it now occupies track and
  * never expires. The completion is logged and counted once, on the call that frees the last block.
  *
- * [expireStaleReservations] is the loop tick: the simulation loops call it once per control step,
- * and it judges every train. [DefaultPathReservationService.reservePath] and
- * [DefaultPathReservationService.reservePathToAny] call [expireStale] at their top instead, which
- * exempts the requesting train. It never runs per attempt inside
+ * [expireStale] with no exempt train is the loop tick ([ReservationExpiry.expireStaleReservations]
+ * on the service): the simulation loops call it once per control step, and it judges every train.
+ * [DefaultPathReservationService.reservePath] and [DefaultPathReservationService.reservePathToAny]
+ * call it at their top with the requesting train exempt. It never runs per attempt inside
  * [PathReservationService.reservePathToAnyNextSemaphore], whose attempts call the internal
  * [DefaultPathReservationService.reservePath] overload so an expiry cannot move the before/after
  * snapshots its bypass rollback relies on, and
@@ -59,7 +59,7 @@ internal class DefaultReservationExpiry(
 	private val candidateScreen: RouteCandidateScreen,
 	private val ttlSimSeconds: Double,
 	initialRelease: (String) -> PathRelease
-) : ReservationExpiry {
+) {
 	companion object {
 		/** Rounding factor of the logged expiry age (one decimal). */
 		private const val TENTHS: Double = 10.0
@@ -68,14 +68,14 @@ internal class DefaultReservationExpiry(
 	private val logger = KotlinLogging.logger {}
 
 	/**
-	 * The release [expireStaleReservations] hands a stale holding to: always
+	 * The release [expireStale] hands a stale holding to: always
 	 * [RouteReleaser.releasePathDetailed] in production. Replaced only by tests, to pin that a
 	 * throwing release is contained (Issue #1174).
 	 */
 	internal var expiryRelease: (String) -> PathRelease = initialRelease
 
 	/**
-	 * Holdings [expireStaleReservations] has released completely since this expiry was built
+	 * Holdings [expireStale] has released completely since this expiry was built
 	 * (Issue #1174). A holding approach locking deferred is counted once, when its release completes.
 	 */
 	internal var expiredHoldingCount: Int = 0
@@ -90,14 +90,13 @@ internal class DefaultReservationExpiry(
 	 */
 	private val failedExpiryTrains = mutableSetOf<String>()
 
-	override fun expireStaleReservations(): Int = expireStale(exceptTrainId = null)
-
 	/**
-	 * [expireStaleReservations] at the top of a request by [exceptTrainId], which is exempt (Issue
-	 * #1174 ruling): its new claim restarts its clock, as it restarts the #847 sweeper's. Expiring it
-	 * first would empty its footprint, so `rejectNonContiguousStart` would pass vacuously (ruling D8)
-	 * and a mid-station extension would be granted as an orphan route. If the request fails, the next
-	 * loop tick expires the holding.
+	 * Release every stale holding and return how many it released completely. [exceptTrainId] is
+	 * `null` on the loop tick, which judges every train; at the top of a request it is the
+	 * requesting train, which is exempt (Issue #1174 ruling): its new claim restarts its clock, as
+	 * it restarts the #847 sweeper's. Expiring it first would empty its footprint, so
+	 * `rejectNonContiguousStart` would pass vacuously (ruling D8) and a mid-station extension would
+	 * be granted as an orphan route. If the request fails, the next loop tick expires the holding.
 	 */
 	internal fun expireStale(exceptTrainId: String?): Int {
 		// Paid at every request top and loop tick: the common case (nothing stale, no failure

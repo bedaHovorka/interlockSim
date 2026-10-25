@@ -1004,7 +1004,7 @@ class DefaultPathReservationService(
 	 * only through [RouteReleaser.releasePathDetailed] -- never [releasePath] or a raw registry
 	 * removal -- and nothing that occupies track is ever released.
 	 */
-	override fun expireStaleReservations(): Int = expiry.expireStaleReservations()
+	override fun expireStaleReservations(): Int = expiry.expireStale(exceptTrainId = null)
 
 	/**
 	 * [expireStaleReservations] at the top of a request by [exceptTrainId], which is exempt (Issue
