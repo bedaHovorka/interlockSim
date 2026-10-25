@@ -119,6 +119,8 @@ internal class CandidateCommitter(
 	 * switch ownership, configures the candidate's switches and START signal, and snapshots
 	 * what a rollback of either would need. Extracted (SonarCloud S3776, PR #1109) so this
 	 * branching stays out of [DefaultPathReservationService.reservePath]'s own cognitive complexity.
+	 * Its flagged long body was extracted again on PR #1216 review into step-sized helpers:
+	 * [buildCandidatePathInfo], [reclaimCandidateSwitchOwnership] and [configureCandidateStartSignal].
 	 *
 	 * @return the updated [GeometricFailures] and the [CandidatePreparation] snapshots a
 	 *   successful candidate needs for Steps 2h/2i, or `null` when the candidate was rejected
@@ -129,35 +131,9 @@ internal class CandidateCommitter(
 		candidate: CandidateRequest,
 		geometricFailures: GeometricFailures
 	): Pair<GeometricFailures, CandidatePreparation?> {
-		val (trainId, start, target, path, blocks, forwardBlocks, index) = candidate
-		var failures = geometricFailures
-		// Success - path reserved and registered
-
-		// Step 2e: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
-		logger.debug {
-			"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
-		}
-		val pathInfo =
-			pathInfoBuilder.buildPathInfo(
-				start = start,
-				target = target,
-				trackSections = path // path is List<TrackSection> here
-			)
-
-		// Step 2e.5: Release any ORPHAN lock among this candidate's switches --
-		// locked by a stray setUpPath call that never reached
-		// registry.registerSwitches (Issue #1065; see releaseOrphanSwitchLocks).
-		// Must run BEFORE configureSwitchesInPath below: a stale orphan lock would
-		// otherwise masquerade as transient Locked contention and refuse an
-		// otherwise valid candidate. Ordering relative to the priorSwitches snapshot
-		// is irrelevant -- an orphan has no registered owner, so it can never appear
-		// in registry.getSwitches(trainId) in the first place.
-		val candidateSwitches = switchConfigurator.extractUniqueSwitches(pathInfo)
-		switchConfigurator.releaseOrphanSwitchLocks(candidateSwitches)
-		// Issue #1076: likewise reclaim STALE foreign ownership among them, so the
-		// candidate never overwrites it; a foreign owner that survives this step
-		// protects a live route and refuses the candidate in configureSwitchesInPath.
-		switchConfigurator.reclaimStaleForeignSwitchOwnership(trainId, candidateSwitches)
+		val (trainId, start, target, path, _, forwardBlocks, index) = candidate
+		val pathInfo = buildCandidatePathInfo(trainId, start, target, path)
+		val candidateSwitches = reclaimCandidateSwitchOwnership(trainId, pathInfo)
 
 		// Step 2f: Configure and register switches (Issue #300, #291, #742).
 		// A candidate whose switches cannot be configured is physically impossible
@@ -183,11 +159,79 @@ internal class CandidateCommitter(
 		// contention instead, extracted to keep this branch out of reservePath's own
 		// cyclomatic complexity count.
 		if (switchOutcome != SwitchConfigOutcome.Configured) {
-			failures = recordSwitchConfigFailureIfGeometric(switchOutcome, failures, trainId, index)
-			return failures to null
+			return recordSwitchConfigFailureIfGeometric(switchOutcome, geometricFailures, trainId, index) to null
 		}
 
 		// Step 2g: Configure semaphore signal after successful reservation.
+		return configureCandidateStartSignal(candidate, preparation, geometricFailures)
+	}
+
+	/**
+	 * Step 2e of [DefaultPathReservationService.reservePath]'s candidate loop: builds the
+	 * candidate's [PathInfo] with entry directions (Issue #295/#296 Phase 4). Split out of
+	 * [prepareReservedCandidate]'s flagged long body on PR #1216 review.
+	 */
+	private fun buildCandidatePathInfo(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		path: List<TrackSection>
+	): PathInfo {
+		logger.debug {
+			"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
+		}
+		return pathInfoBuilder.buildPathInfo(
+			start = start,
+			target = target,
+			trackSections = path // path is List<TrackSection> here
+		)
+	}
+
+	/**
+	 * Step 2e.5 of [DefaultPathReservationService.reservePath]'s candidate loop: reclaims the
+	 * candidate's switch ownership and collects the candidate's switches.
+	 * Split out of [prepareReservedCandidate]'s flagged long body on PR #1216 review.
+	 *
+	 * @return the candidate's unique switches along [pathInfo]
+	 */
+	private fun reclaimCandidateSwitchOwnership(
+		trainId: String,
+		pathInfo: PathInfo
+	): List<DynamicRailSwitch> {
+		// Step 2e.5: Release any ORPHAN lock among this candidate's switches --
+		// locked by a stray setUpPath call that never reached
+		// registry.registerSwitches (Issue #1065; see releaseOrphanSwitchLocks).
+		// Must run BEFORE configureSwitchesInPath below: a stale orphan lock would
+		// otherwise masquerade as transient Locked contention and refuse an
+		// otherwise valid candidate. Ordering relative to the priorSwitches snapshot
+		// is irrelevant -- an orphan has no registered owner, so it can never appear
+		// in registry.getSwitches(trainId) in the first place.
+		val candidateSwitches = switchConfigurator.extractUniqueSwitches(pathInfo)
+		switchConfigurator.releaseOrphanSwitchLocks(candidateSwitches)
+		// Issue #1076: likewise reclaim STALE foreign ownership among them, so the
+		// candidate never overwrites it; a foreign owner that survives this step
+		// protects a live route and refuses the candidate in configureSwitchesInPath.
+		switchConfigurator.reclaimStaleForeignSwitchOwnership(trainId, candidateSwitches)
+		return candidateSwitches
+	}
+
+	/**
+	 * Step 2g of [DefaultPathReservationService.reservePath]'s candidate loop: configures the
+	 * candidate's START signal (the START for [candidate]'s [CandidateRequest.forwardBlocks]) and,
+	 * when that fails, rolls the candidate back ([rollbackFailedStartSignalCandidate]).
+	 * Split out of [prepareReservedCandidate]'s flagged long body on PR #1216 review.
+	 *
+	 * @return the updated [GeometricFailures] and the [CandidatePreparation] for Step 2h/2i,
+	 *   or `null` preparation when the signal step failed and rolled the candidate back, so the
+	 *   caller must try the next candidate
+	 */
+	private fun configureCandidateStartSignal(
+		candidate: CandidateRequest,
+		preparation: CandidatePreparation,
+		geometricFailures: GeometricFailures
+	): Pair<GeometricFailures, CandidatePreparation?> {
+		val (trainId, start, _, _, blocks, forwardBlocks, index) = candidate
+
 		// A semaphore START is configured for blocks.first() (the block next to it, also on a
 		// route extension, Issue #1062); forwardBlocks (just reserved) only drive an InOut START.
 		if (forwardBlocks.isNotEmpty()) {
@@ -203,20 +247,18 @@ internal class CandidateCommitter(
 			// through route. The candidate is then rolled back cleanly, so try the
 			// remaining candidate paths like the other failure modes.
 			if (signalResult != StartSignalResult.Configured) {
-				failures =
-					rollbackFailedStartSignalCandidate(
-						trainId,
-						start,
-						forwardBlocks,
-						signalResult,
-						index,
-						failures,
-						preparation
-					)
-				return failures to null
+				return rollbackFailedStartSignalCandidate(
+					trainId,
+					start,
+					forwardBlocks,
+					signalResult,
+					index,
+					geometricFailures,
+					preparation
+				) to null
 			}
 		}
-		return failures to preparation
+		return geometricFailures to preparation
 	}
 
 	/**
@@ -460,38 +502,56 @@ internal class CandidateCommitter(
 			// All blocks reserved successfully
 			return null
 		} catch (e: Exception) {
-			// Partial failure - rollback all blocks reserved so far
-			logger.debug(e) {
-				"tryAtomicReservation: Reservation failed for $trainId, " +
-					"rolling back ${reservedSoFar.size} block(s)"
-			}
-			releaser.rollbackReservation(separator, reservedSoFar)
+			return rollbackAndClassifyReservationFailure(separator, trainId, reservedSoFar, e)
+		}
+	}
 
-			// Classify error using type-safe exception hierarchy
-			return when (e) {
-				is TrackReservationException.AlreadyReservedConflict -> {
-					// TOCTOU race: block became reserved between check and reservation
-					logger.warn {
-						"tryAtomicReservation: TOCTOU race detected - " +
-							"Block ${e.block} reserved by ${e.existingSeparator}"
-					}
-					PathReservationService.ReservationResult.AllPathsBlocked(1)
+	/**
+	 * [tryAtomicReservation]'s catch path: rolls the partial reservation back and classifies the
+	 * failure through the type-safe exception hierarchy. Extracted from
+	 * [tryAtomicReservation]'s flagged long catch block on PR #1216 review; the log lines are
+	 * byte-identical to the moved body.
+	 *
+	 * @return the failure result to report to the caller -- never `null`, the catch path always
+	 *   fails the candidate
+	 */
+	private fun rollbackAndClassifyReservationFailure(
+		separator: DynamicPathSeparator,
+		trainId: String,
+		reservedSoFar: List<DynamicTrackBlock>,
+		e: Exception
+	): PathReservationService.ReservationResult {
+		// Partial failure - rollback all blocks reserved so far
+		logger.debug(e) {
+			"tryAtomicReservation: Reservation failed for $trainId, " +
+				"rolling back ${reservedSoFar.size} block(s)"
+		}
+		releaser.rollbackReservation(separator, reservedSoFar)
+
+		// Classify error using type-safe exception hierarchy
+		return when (e) {
+			is TrackReservationException.AlreadyReservedConflict -> {
+				// TOCTOU race: block became reserved between check and reservation
+				logger.warn {
+					"tryAtomicReservation: TOCTOU race detected - " +
+						"Block ${e.block} reserved by ${e.existingSeparator}"
 				}
-				is TrackReservationException.InvalidStateTransition -> {
-					// State machine violation
-					logger.error(e) {
-						"tryAtomicReservation: State machine violation in ${e.block} - " +
-							"${e.operation} from ${e.fromState}"
-					}
-					PathReservationService.ReservationResult.AllPathsBlocked(1)
+				PathReservationService.ReservationResult.AllPathsBlocked(1)
+			}
+			is TrackReservationException.InvalidStateTransition -> {
+				// State machine violation
+				logger.error(e) {
+					"tryAtomicReservation: State machine violation in ${e.block} - " +
+						"${e.operation} from ${e.fromState}"
 				}
-				else -> {
-					// Unexpected error (should not happen)
-					logger.error(e) {
-						"tryAtomicReservation: Unexpected error during reservation: ${e::class.simpleName}"
-					}
-					PathReservationService.ReservationResult.AllPathsBlocked(1)
+				PathReservationService.ReservationResult.AllPathsBlocked(1)
+			}
+			else -> {
+				// Unexpected error (should not happen)
+				logger.error(e) {
+					"tryAtomicReservation: Unexpected error during reservation: ${e::class.simpleName}"
 				}
+				PathReservationService.ReservationResult.AllPathsBlocked(1)
 			}
 		}
 	}
