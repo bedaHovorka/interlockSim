@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -184,6 +185,30 @@ class ReservationContentionTrackerTest {
 			tracker.clearBlockedTracking("nobody")
 
 			assertThat(tracker.flushUnresolvedConflicts(1.0)).hasSize(1)
+		}
+	}
+
+	@Nested
+	inner class BlockedTrainIds {
+		@Test
+		fun `projects the multi-block contention of one train as a single deduplicated id`() {
+			tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+			tracker.recordContentionAndEmitIfNew("me", busyB, "owner")
+			tracker.recordContentionAndEmitIfNew("other", busyA, "owner")
+
+			assertThat(tracker.blockedTrainIds()).containsExactlyInAnyOrder("me", "other")
+		}
+
+		@Test
+		fun `snapshot is independent of later tracking changes`() {
+			tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+			tracker.recordContentionAndEmitIfNew("other", busyB, "owner")
+			val snapshot = tracker.blockedTrainIds()
+
+			tracker.clearBlockedTracking("me")
+
+			assertThat(snapshot).containsExactlyInAnyOrder("me", "other")
+			assertThat(tracker.blockedTrainIds()).containsExactlyInAnyOrder("other")
 		}
 	}
 }

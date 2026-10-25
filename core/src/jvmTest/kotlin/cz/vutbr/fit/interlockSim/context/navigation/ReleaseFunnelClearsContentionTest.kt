@@ -17,7 +17,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
-import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -26,11 +25,11 @@ import org.junit.jupiter.api.Test
  * Positive pin (Issue #1203) that the whole-route release funnel clears the REAL
  * [ReservationContentionTracker] behind the service, through its `clearBlockedTracking` callback.
  *
- * `RouteReleaserTest` pins that callback only against recording fakes, and the only service-API
- * observable, [PathReservationService.flushUnresolvedConflicts], is destructive and drops ownerless
- * events -- a no-op callback would pass through it unnoticed. These tests read the tracker
- * non-destructively through [ReservationContentionTracker.blockedTrainIds] instead, so a mis-wired
- * or no-op callback fails them.
+ * `RouteReleaserTest` pins that callback only against recording fakes, and the service API offers no
+ * unambiguous pin: [PathReservationService.flushUnresolvedConflicts] is destructive and drops
+ * ownerless events, so an entry's absence at flush time cannot tell a funnel clear from the drop
+ * itself. These tests read the real tracker non-destructively through
+ * [ReservationContentionTracker.blockedTrainIds] instead, so a mis-wired or no-op callback fails them.
  *
  * Fixture (vyhybna.xml): [TRAIN_A] holds the route `zA -> doB1` (upper track, eastbound), which
  * includes the `zA`-`vA` block every westbound route to `A` must cross. [TRAIN_B] holds the
@@ -50,13 +49,12 @@ class ReleaseFunnelClearsContentionTest : PathReservationServiceTestBase() {
 	private lateinit var inOutA: DynamicPathSeparator
 	private lateinit var inOutB: DynamicInOut
 
-	private val tracker: ReservationContentionTracker
-		get() = (service as DefaultPathReservationService).contention
+	private fun blockedTrainIds(): Set<String> = (service as DefaultPathReservationService).blockedTrainIds()
 
 	@BeforeEach
 	fun resolveEndpoints() {
 		inOutA = inOutNamed("A")
-		inOutB = simulationContext.cellsOfType<DynamicInOut>().single { it.name == "B" }
+		inOutB = inOutNamed("B") as DynamicInOut
 	}
 
 	/** Train A holds the upper track; trains B and C each hold a block of their own and are blocked by A. */
@@ -68,7 +66,7 @@ class ReleaseFunnelClearsContentionTest : PathReservationServiceTestBase() {
 			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 		assertThat(service.reservePath(TRAIN_C, inOutA, inOutB))
 			.isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
-		assertThat(tracker.blockedTrainIds()).isEqualTo(setOf(TRAIN_B, TRAIN_C))
+		assertThat(blockedTrainIds()).isEqualTo(setOf(TRAIN_B, TRAIN_C))
 	}
 
 	@Test
@@ -78,7 +76,7 @@ class ReleaseFunnelClearsContentionTest : PathReservationServiceTestBase() {
 
 		assertThat(service.releasePath(TRAIN_B)).isNotEmpty()
 
-		assertThat(tracker.blockedTrainIds()).isEqualTo(setOf(TRAIN_C))
+		assertThat(blockedTrainIds()).isEqualTo(setOf(TRAIN_C))
 		assertThat(registry.getBlocks(TRAIN_A)).isEqualTo(heldByA)
 	}
 
@@ -93,7 +91,7 @@ class ReleaseFunnelClearsContentionTest : PathReservationServiceTestBase() {
 
 		assertThat(service.releasePathDetailed(TRAIN_B).released).isNotEmpty()
 
-		assertThat(tracker.blockedTrainIds()).isEqualTo(setOf(TRAIN_C))
+		assertThat(blockedTrainIds()).isEqualTo(setOf(TRAIN_C))
 		assertThat(registry.getBlocks(TRAIN_A)).isEqualTo(heldByA)
 	}
 
