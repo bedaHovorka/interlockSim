@@ -18,6 +18,8 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isSameInstanceAs
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.RouteFinder
@@ -37,6 +39,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
+import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
 /**
@@ -101,7 +104,15 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 			val expected = freshSemaphoreScan()
 			assertThat(expected).isNotEmpty()
 
-			assertThat(discovery.allSemaphores()).containsExactly(*expected.toTypedArray())
+			// At TRACE the cache's own grid-scan log line runs, too (it is otherwise below DEBUG).
+			val discoveryLogger = LoggerFactory.getLogger(ReservationTargetDiscovery::class.java.name) as Logger
+			val savedLevel = discoveryLogger.level
+			discoveryLogger.level = Level.TRACE
+			try {
+				assertThat(discovery.allSemaphores()).containsExactly(*expected.toTypedArray())
+			} finally {
+				discoveryLogger.level = savedLevel
+			}
 		}
 
 		@Test

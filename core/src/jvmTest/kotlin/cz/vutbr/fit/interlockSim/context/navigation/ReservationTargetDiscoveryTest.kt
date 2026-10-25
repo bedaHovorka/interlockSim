@@ -15,6 +15,8 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isSameInstanceAs
+import assertk.assertions.isTrue
+import assertk.assertions.startsWith
 import assertk.fail
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -30,6 +32,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorLabel
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -273,6 +276,137 @@ class ReservationTargetDiscoveryTest : KoinTestBase() {
 		@DisplayName("no forward section means nothing is available")
 		fun nullNextIsUnavailable() {
 			assertThat(discovery.isAnyNextTargetAvailable(separator("zA"), null)).isFalse()
+		}
+
+		@Test
+		@DisplayName("candidates evaluate the same when the querying train owns no blocks")
+		fun ownerBlocksCountAsFree() {
+			val zA = separator("zA") as OrientedPathSeparator
+
+			// Issue #1060: blocks owned by ownerTrainId count as free; with no reservation the
+			// verdict list is therefore the owner-less one.
+			assertThat(discovery.findReservationTargetCandidates(zA, "owner-train"))
+				.isEqualTo(discovery.findReservationTargetCandidates(zA, null))
+		}
+
+		@Test
+		@DisplayName("blocks owned by the querying train count as free (Issue #1060)")
+		fun ownedBlocksCountAsFree() {
+			val b = separator("B")
+			val a = separator("A")
+
+			try {
+				assertThat(service.reservePathToAny("train-owner", separator("zA")))
+					.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+
+				// B→A crosses the just-reserved route: available to its owner, not to another train.
+				assertThat(
+					discovery.isPathAvailableFor(b, a, DEFAULT_MAX_PATH_DEPTH, "train-owner"),
+					name = "B to A for the owner"
+				).isTrue()
+				assertThat(
+					discovery.isPathAvailableFor(b, a, DEFAULT_MAX_PATH_DEPTH, null),
+					name = "B to A for another train"
+				).isFalse()
+			} finally {
+				service.releasePath("train-owner")
+			}
+		}
+
+		@Test
+		@DisplayName("a static InOut resolves its forward section to the dynamic wrapper")
+		fun staticInOutForwardSectionResolves() {
+			val dynamicB = separator("B")
+			val staticInOutB = DynamicWrapperUtils.unwrapToStatic(dynamicB) as OrientedPathSeparator
+			val bBoundaryBlock =
+				simulationContext
+					.getGraph()
+					.assignedEdges(simulationContext.getRailWayNetGrid().getLocation(dynamicB)!!)
+					.values
+					.first()
+
+			val (start, section) = discovery.resolveForwardSection(staticInOutB, "test")!!
+
+			assertThat(start).isSameInstanceAs(dynamicB)
+			assertThat(section).isSameInstanceAs(bBoundaryBlock)
+		}
+
+		@Test
+		@DisplayName("a next section not connected to the start throws")
+		fun unrelatedNextThrows() {
+			val zA = separator("zA") as OrientedPathSeparator
+			val inOutB = simulationContext.toDynamic(simulationContext.getInOuts().toList()[0]) as DynamicInOut
+			val bBoundaryBlock =
+				simulationContext
+					.getGraph()
+					.assignedEdges(simulationContext.getRailWayNetGrid().getLocation(inOutB)!!)
+					.values
+					.first()
+
+			val thrown =
+				runCatching { discovery.findNextSemaphoresVia(zA, bBoundaryBlock) }
+					.exceptionOrNull()
+					?: fail("the unconnected next block did not throw")
+
+			assertThat(thrown).isInstanceOf(IllegalStateException::class)
+			assertThat(thrown.message ?: "", name = "throw reason").startsWith("No connection")
+		}
+
+		@Test
+		@DisplayName("the availability probe walks a behind-block: from zA through its exit-side block")
+		fun backwardSectionStillEnumerates() {
+			val zA = separator("zA") as OrientedPathSeparator
+			val forwardSection = discovery.resolveForwardSection(zA, "test")!!.second
+			val backwardBlock =
+				simulationContext
+					.getGraph()
+					.assignedEdges(simulationContext.getRailWayNetGrid().getLocation(zA)!!)
+					.values
+					.last { it != forwardSection }
+
+			// The enumeration is directionless: the InOut A endpoint ends the walk and, free, makes
+			// the probe true. The whole-network order below is not affected by the section choice.
+			assertThat(discovery.isAnyNextTargetAvailable(zA, backwardBlock)).isTrue()
+		}
+
+		@Test
+		@DisplayName("enumerating from an InOut collects the semaphore behind it")
+		fun fromInOutCollectsBackwardSemaphore() {
+			val a = separator("A")
+			val ablock =
+				simulationContext
+					.getGraph()
+					.assignedEdges(simulationContext.getRailWayNetGrid().getLocation(a)!!)
+					.values
+					.single()
+
+			assertThat(discovery.findNextSemaphoresVia(a, ablock)).isEqualTo(listOf(separator("zA")))
+		}
+
+		@Test
+		@DisplayName("the candidate verdicts are identical at TRACE level")
+		fun enumerationTracesUnderTraceLevel() {
+			val loggerByName = LoggerFactory.getLogger(ReservationTargetDiscovery::class.java.name) as Logger
+			val expected =
+				listOf("zA", "doA1", "doA2", "doB2", "doB1", "zB", "A", "B").associateWith { name ->
+					discovery.findReservationTargetCandidates(separator(name) as OrientedPathSeparator, null)
+				}
+			val savedLevel = loggerByName.level
+			loggerByName.level = Level.TRACE
+			try {
+				for ((start, expect) in expected) {
+					assertThat(
+						discovery.findReservationTargetCandidates(separator(start) as OrientedPathSeparator, null),
+						name = "candidates from $start"
+					).isEqualTo(expect)
+				}
+				val (sweepStart, sweepSection) =
+					discovery
+						.resolveForwardSection(separator("zA") as OrientedPathSeparator, "sweep")!!
+				assertThat(discovery.isAnyNextTargetAvailable(sweepStart, sweepSection)).isTrue()
+			} finally {
+				loggerByName.level = savedLevel
+			}
 		}
 	}
 
