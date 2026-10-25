@@ -151,6 +151,15 @@ internal class ReservationContentionTracker(
 	}
 
 	/**
+	 * The ids of the trains that currently have at least one blocked-path contention tracked.
+	 *
+	 * Read-only snapshot that exists so tests can observe the real tracker without the destructive
+	 * [flushUnresolvedConflicts], which empties the map and also drops any contention whose block
+	 * no longer has an owner -- so it cannot tell a cleared entry from a dropped ownerless one.
+	 */
+	fun blockedTrainIds(): Set<String> = blockedSince.keys.map { it.first }.toSet()
+
+	/**
 	 * Find the first block in [blocks] that is not free and not owned by [trainId],
 	 * and return it paired with its owning train ID.
 	 *

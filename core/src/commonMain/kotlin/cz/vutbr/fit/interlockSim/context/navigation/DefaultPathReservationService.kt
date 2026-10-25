@@ -90,6 +90,17 @@ class DefaultPathReservationService(
 	// for why AllPathsBlocked is routine contention and only unresolved-at-end-of-run is reported.
 	private val contention = ReservationContentionTracker(registry)
 
+	/**
+	 * The ids of the trains that currently have at least one blocked-path contention tracked.
+	 *
+	 * Exposed as `internal` purely so unit tests can observe the real tracker behind the release
+	 * funnel's `clearBlockedTracking` wiring (the [RouteReleaser] constructed below is wired with
+	 * `contention::clearBlockedTracking`); the destructive [flushUnresolvedConflicts] cannot serve
+	 * that pin, because it empties the map and drops ownerless entries. The tracker itself stays
+	 * private: tests may observe the wiring, never seed or clear contention beside it.
+	 */
+	internal fun blockedTrainIds(): Set<String> = contention.blockedTrainIds()
+
 	// ── Cleared-signal ledger and route signal configuration (Issue #1169, SP12.3) ──
 	//
 	// Which semaphore is lit for which train, and every reset back to STOP, live in
