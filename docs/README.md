@@ -71,6 +71,7 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 - [goal9b-demands/SP12.4-switch-configuration.md](goal9b-demands/SP12.4-switch-configuration.md) - switch-configuration seams extracted into `SwitchConfigurator`: which a Goal 9B dispatcher may surface (the `Locked` outcome's holder and positions) and which must stay private, plus the `registerSwitches` rule (Goal 1B SP12.4, #1170).
 - [goal9b-demands/SP12.5-target-discovery.md](goal9b-demands/SP12.5-target-discovery.md) - target discovery extracted from `DefaultPathReservationService`: which discovery seams a Goal 9B dispatcher may call and which stay private, with the #895 re-baseline (Goal 1B SP12.5, #1171).
 - [goal9b-demands/SP12.6-registry-split.md](goal9b-demands/SP12.6-registry-split.md) - `PathReservationRegistry` split into block, switch and PathInfo units; which registry seams a dispatcher may call (Goal 1B SP12.6, #1172).
+- [goal9b-demands/SP12.8-reservation-expiry.md](goal9b-demands/SP12.8-reservation-expiry.md) - kernel-side reservation expiry (progress = newest block registration, 60 s simulation-time TTL, only trains that occupy nothing): the expiry seam a dispatcher may call, the failure-mode table, and the falling sweeper `staleReleaseCount` (Goal 1B SP12.8, #1174; phase 2 #1220).
 
 ## History
 
