@@ -37,10 +37,11 @@ private val logger = KotlinLogging.logger {}
  * - **2c** [tryAtomicReservation]: reserve the candidate's forward blocks all-or-nothing.
  * - **2d** [registerAndFinalizeCandidate]: register the blocks with the registry, or roll the
  *   registry conflict back ([rollbackRegistryConflict]).
- * - **2e-2g** [prepareReservedCandidate]: build the PathInfo, reclaim orphan/stale switch
- *   ownership, configure and register the switches ([configureAndRegisterSwitches]) and light
- *   the START signal; a failed switch or START configuration rolls the candidate back
- *   ([rollbackUnconfigurableCandidate], [rollbackFailedStartSignalCandidate]).
+ * - **2e-2g** [prepareReservedCandidate]: build the PathInfo ([buildCandidatePathInfo]),
+ *   reclaim orphan/stale switch ownership ([reclaimCandidateSwitchOwnership]), configure and
+ *   register the switches ([configureAndRegisterSwitches]) and light the START signal
+ *   ([configureCandidateStartSignal]); a failed switch or START configuration rolls the
+ *   candidate back ([rollbackUnconfigurableCandidate], [rollbackFailedStartSignalCandidate]).
  * - **2h/2i** [finalizePreparedCandidate]: light the intermediate semaphores, register the
  *   forward-only PathInfo (a merge abort rolls the candidate back, [rollbackIfMergeAborted]) and
  *   announce the reserved blocks ([emitForwardBlockReservedEvents]).
@@ -93,23 +94,10 @@ internal class CandidateCommitter(
 		when (val result = registry.registerAtomic(candidate.trainId, candidate.forwardBlocks)) {
 			is PathReservationRegistry.RegistrationResult.Success -> {
 				val (failures, preparation) = prepareReservedCandidate(candidate, geometricFailures)
-				if (preparation == null) {
-					failures to null
-				} else {
-					failures to finalizePreparedCandidate(candidate, preparation)
-				}
+				failures to preparation?.let { finalizePreparedCandidate(candidate, it) }
 			}
-			is PathReservationRegistry.RegistrationResult.Conflict -> {
-				val conflict =
-					rollbackRegistryConflict(
-						candidate.trainId,
-						candidate.start,
-						candidate.forwardBlocks,
-						candidate.blocks,
-						result
-					)
-				geometricFailures to conflict
-			}
+			is PathReservationRegistry.RegistrationResult.Conflict ->
+				geometricFailures to rollbackRegistryConflict(candidate, result)
 		}
 
 	/**
@@ -119,8 +107,6 @@ internal class CandidateCommitter(
 	 * switch ownership, configures the candidate's switches and START signal, and snapshots
 	 * what a rollback of either would need. Extracted (SonarCloud S3776, PR #1109) so this
 	 * branching stays out of [DefaultPathReservationService.reservePath]'s own cognitive complexity.
-	 * Its flagged long body was extracted again on PR #1216 review into step-sized helpers:
-	 * [buildCandidatePathInfo], [reclaimCandidateSwitchOwnership] and [configureCandidateStartSignal].
 	 *
 	 * @return the updated [GeometricFailures] and the [CandidatePreparation] snapshots a
 	 *   successful candidate needs for Steps 2h/2i, or `null` when the candidate was rejected
@@ -148,7 +134,7 @@ internal class CandidateCommitter(
 		// exactly what THIS candidate cleared (Issue #893 task A5).
 		val clearedBeforeCandidate = signalLedger.snapshotClearedSemaphores(trainId)
 		val preparation = CandidatePreparation(pathInfo, candidateSwitches, priorSwitches, clearedBeforeCandidate)
-		val switchOutcome = configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)
+		val switchOutcome = configureAndRegisterSwitches(trainId, preparation, forwardBlocks)
 		// The candidate has already been rolled back inside configureAndRegisterSwitches
 		// for either failure kind, so try the remaining candidate paths like the other
 		// failure modes (blocks-not-free, atomic-reservation-fail) rather than giving up
@@ -180,11 +166,7 @@ internal class CandidateCommitter(
 		logger.debug {
 			"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
 		}
-		return pathInfoBuilder.buildPathInfo(
-			start = start,
-			target = target,
-			trackSections = path // path is List<TrackSection> here
-		)
+		return pathInfoBuilder.buildPathInfo(start = start, target = target, trackSections = path)
 	}
 
 	/**
@@ -230,7 +212,7 @@ internal class CandidateCommitter(
 		preparation: CandidatePreparation,
 		geometricFailures: GeometricFailures
 	): Pair<GeometricFailures, CandidatePreparation?> {
-		val (trainId, start, _, _, blocks, forwardBlocks, index) = candidate
+		val (trainId, start, _, _, blocks, forwardBlocks, _) = candidate
 
 		// A semaphore START is configured for blocks.first() (the block next to it, also on a
 		// route extension, Issue #1062); forwardBlocks (just reserved) only drive an InOut START.
@@ -248,11 +230,8 @@ internal class CandidateCommitter(
 			// remaining candidate paths like the other failure modes.
 			if (signalResult != StartSignalResult.Configured) {
 				return rollbackFailedStartSignalCandidate(
-					trainId,
-					start,
-					forwardBlocks,
+					candidate,
 					signalResult,
-					index,
 					geometricFailures,
 					preparation
 				) to null
@@ -266,19 +245,17 @@ internal class CandidateCommitter(
 	 * (a genuine configuration exception stays ordinary contention, unchanged), resets the
 	 * candidate's cleared signals, and releases the candidate's blocks and switches. Extracted
 	 * (SonarCloud S3776, PR #1109) in the [recordSwitchConfigFailureIfGeometric] take-and-return
-	 * shape so [prepareReservedCandidate] stays under its line threshold.
+	 * shape so [configureCandidateStartSignal]'s failed branch stays a single call.
 	 *
 	 * @return the updated [GeometricFailures] after the G4 recording
 	 */
 	private fun rollbackFailedStartSignalCandidate(
-		trainId: String,
-		start: DynamicPathSeparator,
-		forwardBlocks: List<DynamicTrackBlock>,
+		candidate: CandidateRequest,
 		signalResult: StartSignalResult,
-		index: Int,
 		geometricFailures: GeometricFailures,
 		preparation: CandidatePreparation
 	): GeometricFailures {
+		val (trainId, start, _, _, _, forwardBlocks, index) = candidate
 		// Issue #903: a G4 rejection is a PERMANENT impossibility, not ordinary
 		// contention -- record it (first-hit-wins) so the fallthrough return can
 		// classify it correctly. A genuine configuration exception stays folded
@@ -350,16 +327,7 @@ internal class CandidateCommitter(
 		// transactionally complete, matching Step 2g's own rollback -- rather than
 		// leaving an orphaned RESERVED tail for OrphanReservationSweeper (which is
 		// not even wired in :fast-sim or bare-:core).
-		if (rollbackIfMergeAborted(
-				mergeOutcome,
-				trainId,
-				start,
-				forwardBlocks,
-				preparation.pathInfo,
-				preparation.priorSwitches,
-				preparation.clearedBeforeCandidate
-			)
-		) {
+		if (rollbackIfMergeAborted(mergeOutcome, candidate, preparation)) {
 			return null
 		}
 		logger.debug {
@@ -422,12 +390,10 @@ internal class CandidateCommitter(
 	 * arm's branching stays out of [DefaultPathReservationService.reservePath]'s own cognitive complexity.
 	 */
 	private fun rollbackRegistryConflict(
-		trainId: String,
-		start: DynamicPathSeparator,
-		forwardBlocks: List<DynamicTrackBlock>,
-		blocks: List<DynamicTrackBlock>,
+		candidate: CandidateRequest,
 		result: PathReservationRegistry.RegistrationResult.Conflict
 	): PathReservationService.ReservationResult.Conflict {
+		val (trainId, start, _, _, blocks, forwardBlocks, _) = candidate
 		// Registry conflict - rollback block reservations
 		logger.warn {
 			"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}; " +
@@ -529,31 +495,28 @@ internal class CandidateCommitter(
 		releaser.rollbackReservation(separator, reservedSoFar)
 
 		// Classify error using type-safe exception hierarchy
-		return when (e) {
-			is TrackReservationException.AlreadyReservedConflict -> {
+		when (e) {
+			is TrackReservationException.AlreadyReservedConflict ->
 				// TOCTOU race: block became reserved between check and reservation
 				logger.warn {
 					"tryAtomicReservation: TOCTOU race detected - " +
 						"Block ${e.block} reserved by ${e.existingSeparator}"
 				}
-				PathReservationService.ReservationResult.AllPathsBlocked(1)
-			}
-			is TrackReservationException.InvalidStateTransition -> {
+			is TrackReservationException.InvalidStateTransition ->
 				// State machine violation
 				logger.error(e) {
 					"tryAtomicReservation: State machine violation in ${e.block} - " +
 						"${e.operation} from ${e.fromState}"
 				}
-				PathReservationService.ReservationResult.AllPathsBlocked(1)
-			}
-			else -> {
+			else ->
 				// Unexpected error (should not happen)
 				logger.error(e) {
 					"tryAtomicReservation: Unexpected error during reservation: ${e::class.simpleName}"
 				}
-				PathReservationService.ReservationResult.AllPathsBlocked(1)
-			}
 		}
+		// Every classification fails the candidate the same way: ordinary contention
+		// (AllPathsBlocked), so the outer candidate loop tries the remaining paths (SP0.11).
+		return PathReservationService.ReservationResult.AllPathsBlocked(1)
 	}
 
 	/**
@@ -601,31 +564,28 @@ internal class CandidateCommitter(
 	 * 2g's own rollback, rather than leaving an orphaned RESERVED tail for
 	 * `OrphanReservationSweeper` (not wired in `:fast-sim` or bare-`:core`). Extracted so the
 	 * `is Aborted` check and its rollback body stay out of [DefaultPathReservationService.reservePath]'s own cyclomatic
-	 * complexity count; the caller still needs its own `if (...) continue` since a non-local
-	 * `continue` cannot live inside this helper.
+	 * complexity count; the caller early-exits (`return null`), after which `reservePath`'s own
+	 * loop continues -- a non-local `continue` cannot live inside this helper.
 	 *
 	 * @return `true` if the merge aborted (and the candidate was rolled back); `false` if it merged.
 	 */
 	private fun rollbackIfMergeAborted(
 		mergeOutcome: PathReservationRegistry.MergeOutcome,
-		trainId: String,
-		start: DynamicPathSeparator,
-		forwardBlocks: List<DynamicTrackBlock>,
-		pathInfo: PathInfo,
-		priorSwitches: Set<DynamicRailSwitch>,
-		clearedBeforeCandidate: Set<DynamicRailSemaphore>
+		candidate: CandidateRequest,
+		preparation: CandidatePreparation
 	): Boolean {
 		if (mergeOutcome !is PathReservationRegistry.MergeOutcome.Aborted) return false
+		val (trainId, start, _, _, _, forwardBlocks, _) = candidate
 		logger.warn {
 			"reservePath: merge aborted for $trainId (${mergeOutcome.reason}) -- releasing " +
 				"this candidate's blocks, switches and signal instead of leaving an orphaned tail"
 		}
-		signalLedger.resetCandidateSignals(trainId, start, clearedBeforeCandidate)
+		signalLedger.resetCandidateSignals(trainId, start, preparation.clearedBeforeCandidate)
 		rollbackUnconfigurableCandidate(
 			trainId,
 			forwardBlocks,
-			switchConfigurator.extractUniqueSwitches(pathInfo),
-			priorSwitches
+			preparation.candidateSwitches,
+			preparation.priorSwitches
 		)
 		return true
 	}
@@ -670,11 +630,11 @@ internal class CandidateCommitter(
 	 * the through route is reserved at a future simulation time once it frees.
 	 *
 	 * @param trainId The train identifier
-	 * @param pathInfo The candidate's PathInfo (switches are extracted from its path)
-	 * @param forwardBlocks The candidate's freshly reserved blocks (for rollback on failure)
-	 * @param priorSwitches Switches the train already owned before this candidate (snapshot
-	 *   by the caller before this step), forwarded to [rollbackUnconfigurableCandidate] so
+	 * @param preparation The candidate's snapshots: `pathInfo` configures the switches,
+	 *   `candidateSwitches` (already extracted from that PathInfo by the caller) are configured
+	 *   and registered, `priorSwitches` is forwarded to [rollbackUnconfigurableCandidate] so
 	 *   only this candidate's new switches are released on failure
+	 * @param forwardBlocks The candidate's freshly reserved blocks (for rollback on failure)
 	 * @return [SwitchConfigOutcome.Configured] when the candidate's switches are configured
 	 *   and registered (or the path has none); a failure variant when the candidate was rolled
 	 *   back and the reservation must fail -- the rollback is identical for both failure
@@ -682,20 +642,23 @@ internal class CandidateCommitter(
 	 */
 	private fun configureAndRegisterSwitches(
 		trainId: String,
-		pathInfo: PathInfo,
-		forwardBlocks: List<DynamicTrackBlock>,
-		priorSwitches: Set<DynamicRailSwitch>
+		preparation: CandidatePreparation,
+		forwardBlocks: List<DynamicTrackBlock>
 	): SwitchConfigOutcome {
-		val switches = switchConfigurator.extractUniqueSwitches(pathInfo)
-		if (switches.isEmpty()) {
+		if (preparation.candidateSwitches.isEmpty()) {
 			return SwitchConfigOutcome.Configured
 		}
-		val outcome = switchConfigurator.configureSwitchesInPath(trainId, pathInfo)
+		val outcome = switchConfigurator.configureSwitchesInPath(trainId, preparation.pathInfo)
 		if (outcome != SwitchConfigOutcome.Configured) {
-			rollbackUnconfigurableCandidate(trainId, forwardBlocks, switches, priorSwitches)
+			rollbackUnconfigurableCandidate(
+				trainId,
+				forwardBlocks,
+				preparation.candidateSwitches,
+				preparation.priorSwitches
+			)
 			return outcome
 		}
-		switchConfigurator.registerSwitches(trainId, switches)
+		switchConfigurator.registerSwitches(trainId, preparation.candidateSwitches)
 		return SwitchConfigOutcome.Configured
 	}
 
@@ -753,10 +716,10 @@ internal class CandidateCommitter(
  * The per-candidate snapshots Step 2f takes before configuring anything (Issue #893 task
  * A5 / Issue #904 / Issue #1065): the candidate's [PathInfo],
  * its switches, the switches the train already owned, and the semaphores already cleared.
- * Carried between [prepareReservedCandidate] and [finalizePreparedCandidate] (and into
- * [rollbackFailedStartSignalCandidate]) so neither helper exceeds the parameter-count
- * threshold. Built only from values that exist before [configureAndRegisterSwitches] runs,
- * so building it has no side effects.
+ * Carried between [prepareReservedCandidate], [finalizePreparedCandidate],
+ * [configureAndRegisterSwitches], [rollbackIfMergeAborted] and [rollbackFailedStartSignalCandidate]
+ * so no helper exceeds the parameter-count threshold. Built only from values that exist before
+ * [configureAndRegisterSwitches] runs, so building it has no side effects.
  */
 private data class CandidatePreparation(
 	val pathInfo: PathInfo,
@@ -769,8 +732,9 @@ private data class CandidatePreparation(
  * The per-candidate slice of one [DefaultPathReservationService.reservePath] request: the values Step 2d's extracted
  * helpers need, unpacked once at each helper's head so the moved candidate-loop body can
  * stay verbatim. Built once per candidate iteration (no side effects) and carried so
- * [registerAndFinalizeCandidate], [prepareReservedCandidate] and [finalizePreparedCandidate]
- * stay under the parameter-count threshold (SonarCloud S3776, PR #1109).
+ * [registerAndFinalizeCandidate], [prepareReservedCandidate], [finalizePreparedCandidate] and
+ * the rollback helpers they hand the whole [candidate] to stay under the parameter-count
+ * threshold (SonarCloud S3776, PR #1109).
  */
 internal data class CandidateRequest(
 	val trainId: String,

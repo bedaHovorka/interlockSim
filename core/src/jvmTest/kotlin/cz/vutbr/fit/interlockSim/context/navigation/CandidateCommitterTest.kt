@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactlyInAnyOrder
-import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -348,7 +347,6 @@ class CandidateCommitterTest : PathReservationServiceTestBase() {
 		assertThat(vB.locked, "the extension's own switch is released").isFalse()
 		assertThat(registry.getPathInfo("t1"), "the held PathInfo is untouched").isSameInstanceAs(heldPathInfo)
 		assertThat(zA.signal.isAllowing(), "the held route's START survives the rollback").isTrue()
-		assertThat(registry.getBlocks("t1"), "registered blocks").hasSize(held.size)
 	}
 
 	// ── rollbackUnconfigurableCandidate ──

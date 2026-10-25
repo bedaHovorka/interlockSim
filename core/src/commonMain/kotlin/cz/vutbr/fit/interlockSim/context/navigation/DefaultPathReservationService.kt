@@ -284,10 +284,11 @@ class DefaultPathReservationService(
 				continue
 			}
 
-			// TOCTOU Note: Small window between areAllBlocksFree() check and tryAtomicReservation() use.
+			// TOCTOU Note: Small window between areAllBlocksFree() check and
+			// candidateCommitter.tryAtomicReservation() use.
 			// This is acceptable because:
 			// - Single-threaded access to simulation state (documented in class KDoc)
-			// - tryAtomicReservation() has rollback logic if state changed
+			// - candidateCommitter.tryAtomicReservation() has rollback logic if state changed
 			// - Worst case: false positive on free check, caught during reservation, try next path
 			//
 			// Step 2c: Attempt atomic reservation with rollback (only forward blocks)
@@ -558,10 +559,11 @@ class DefaultPathReservationService(
 			// blocks (it only updates ownership maps), so the snapshot is stable across the attempt.
 			val blocksBefore = registry.getBlocks(trainId).toSet()
 			// Same reason on the switch and PathInfo sides (PR #901 review): a successful bypass
-			// candidate has already locked/registered its switches (configureAndRegisterSwitches,
-			// inside reservePath's Step 2f) and merged its PathInfo (Step 2i) before the bypass
-			// check below can reject it. The snapshots let the rollback undo exactly what THIS
-			// candidate added on those two sides too, mirroring the semaphore/block deltas above.
+			// candidate has already locked/registered its switches (CandidateCommitter's
+			// configureAndRegisterSwitches, inside reservePath's Step 2f) and merged its PathInfo
+			// (Step 2i) before the bypass check below can reject it. The snapshots let the
+			// rollback undo exactly what THIS candidate added on those two sides too, mirroring
+			// the semaphore/block deltas above.
 			val switchesBefore = registry.getSwitches(trainId).toSet()
 			val pathInfoBefore = registry.getPathInfo(trainId)
 
