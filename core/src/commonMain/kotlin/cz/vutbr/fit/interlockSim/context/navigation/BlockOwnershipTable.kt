@@ -235,6 +235,12 @@ internal class BlockOwnershipTable(
 	/** Count of held blocks across all trains. */
 	fun blockCount(): Int = blockToTrain.size
 
+	/** The holdings [PathReservationRegistry.expiredHoldings] reports. */
+	fun expiredHoldings(
+		now: Double,
+		ttl: Double
+	): List<ExpiredHolding> = emptyList()
+
 	/** Drop every owner, held block and timestamp. */
 	fun clear() {
 		trainToBlocks.clear()
@@ -242,3 +248,14 @@ internal class BlockOwnershipTable(
 		blockRegisteredAt.clear()
 	}
 }
+
+/**
+ * A stale holding found by [PathReservationRegistry.expiredHoldings] (Issue #1174).
+ *
+ * @property trainId The train that holds the blocks
+ * @property ageSimSeconds Simulated seconds since the train's newest block registration
+ */
+internal data class ExpiredHolding(
+	val trainId: String,
+	val ageSimSeconds: Double
+)

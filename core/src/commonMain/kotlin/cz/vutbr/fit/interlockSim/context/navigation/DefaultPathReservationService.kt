@@ -68,6 +68,9 @@ private val logger = KotlinLogging.logger {}
  * @property registry Ownership registry for tracking train reservations
  * @property pathInfoBuilder Builder for PathInfo metadata (Issue #295/#296 Phase 4)
  * @property routeFinder Cost-based route planner for InOut-to-InOut automatic route selection (Issue #597)
+ * @property reservationTtlSimSeconds Simulated seconds a holding of un-entered blocks may go without a
+ *   new block registration before [expireStaleReservations] releases it (Issue #1174); see
+ *   [DEFAULT_RESERVATION_TTL_SIM_SECONDS]
  * @since Issue #294 (Phase 2 of Issue #292)
  */
 class DefaultPathReservationService(
@@ -75,10 +78,38 @@ class DefaultPathReservationService(
 	private val environment: SimulationEnvironment,
 	private val registry: PathReservationRegistry,
 	private val pathInfoBuilder: PathInfoBuilder,
-	private val routeFinder: RouteFinder
+	private val routeFinder: RouteFinder,
+	private val reservationTtlSimSeconds: Double = DEFAULT_RESERVATION_TTL_SIM_SECONDS
 ) : PathReservationService,
 	ReservationTargetQuery,
 	BlockRollbackStep {
+	companion object {
+		/**
+		 * Default reservation TTL, in simulated seconds (Issue #1174).
+		 *
+		 * The same 60 simulated seconds as the dispatcher's
+		 * `OrphanReservationSweeper.DEFAULT_STALE_AFTER_SIM_SECONDS` and the #943 WARN horizon of a
+		 * train stalled on an ownership conflict: one horizon for "this holding is not being used".
+		 * It is comfortably longer than a train on `vyhybna.xml` takes to enter a route it intends to
+		 * travel, so a merely slow train is not mistaken for one that abandoned its route. It is read
+		 * against simulation time only, never wall-clock time.
+		 */
+		const val DEFAULT_RESERVATION_TTL_SIM_SECONDS: Double = 60.0
+	}
+
+	init {
+		require(reservationTtlSimSeconds > 0.0) {
+			"reservationTtlSimSeconds must be positive, was $reservationTtlSimSeconds"
+		}
+	}
+
+	/**
+	 * Holdings [expireStaleReservations] has released completely since this service was built
+	 * (Issue #1174). A holding approach locking deferred is counted once, when its release completes.
+	 */
+	internal var expiredHoldingCount: Int = 0
+		private set
+
 	// Contention and blocked-request tracking (Issue #612 follow-up): see [ReservationContentionTracker]
 	// for why AllPathsBlocked is routine contention and only unresolved-at-end-of-run is reported.
 	private val contention = ReservationContentionTracker(registry)
@@ -945,6 +976,8 @@ class DefaultPathReservationService(
 		attemptCount: Int
 	): PathReservationService.ReservationResult =
 		recordAttemptResult(current, PathReservationService.ReservationResult.AllPathsBlocked(attemptCount))
+
+	override fun expireStaleReservations(): Int = 0
 
 	/** See [RouteReleaser.unregister]. */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> = releaser.unregister(trainId)

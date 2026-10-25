@@ -105,7 +105,7 @@ private val logger: KLogger = registryLogger
 @Suppress("TooManyFunctions")
 class PathReservationRegistry(
 	context: SimulationContext,
-	simTimeSource: () -> Double = ::currentSimulationTime
+	private val simTimeSource: () -> Double = ::currentSimulationTime
 ) : BlockOccupancyNotifier {
 	/**
 	 * Registered external listeners for block occupancy/release events.
@@ -386,6 +386,18 @@ class PathReservationRegistry(
 	 * expires a reservation by it. It has no production reader yet; only tests call it.
 	 */
 	fun getRegisteredAtSimTime(block: DynamicTrackBlock): Double? = blockTable.getRegisteredAtSimTime(block)
+
+	/**
+	 * The trains whose holding has gone stale (Issue #1174): pure query, changes nothing.
+	 *
+	 * @param ttl Simulated seconds a holding may go without a new block registration
+	 * @param now The current simulation time; defaults to this registry's own clock, the one every
+	 *   registration timestamp was read from
+	 */
+	internal fun expiredHoldings(
+		ttl: Double,
+		now: Double = simTimeSource()
+	): List<ExpiredHolding> = blockTable.expiredHoldings(now, ttl)
 
 	/**
 	 * Check whether a block is available for a new reservation: its dynamic state is
