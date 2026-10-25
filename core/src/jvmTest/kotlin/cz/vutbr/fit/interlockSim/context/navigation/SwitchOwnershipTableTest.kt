@@ -79,6 +79,42 @@ class SwitchOwnershipTableTest : KoinTestBase() {
 	}
 
 	@Test
+	fun `demoteFlankClaim turns the train's own flank claim into a plain claim, owner and lock unchanged`() {
+		table.registerSwitches("t1", listOf(fixture.vB))
+		table.registerFlankSwitches("t1", listOf(fixture.vB))
+
+		assertThat(table.demoteFlankClaim("t1", fixture.vB)).isTrue()
+
+		assertThat(table.getSwitchClaim(fixture.vB)).isEqualTo(SwitchClaim("t1", isFlank = false))
+		assertThat(fixture.vB.locked).isTrue()
+		assertThat(table.getSwitches("t1")).containsExactly(fixture.vB)
+		assertThat(table.isStaleSwitchOwnership(fixture.vB), "a plain claim with no held block").isTrue()
+	}
+
+	@Test
+	fun `demoteFlankClaim leaves another train's flank claim alone`() {
+		table.registerFlankSwitches("t2", listOf(fixture.vB))
+
+		assertThat(table.demoteFlankClaim("t1", fixture.vB)).isFalse()
+
+		assertThat(table.getSwitchClaim(fixture.vB)).isEqualTo(SwitchClaim("t2", isFlank = true))
+		assertThat(fixture.vB.locked).isTrue()
+		assertThat(table.getSwitches("t1")).isEmpty()
+	}
+
+	@Test
+	fun `demoteFlankClaim changes nothing for a plain claim or an unowned switch`() {
+		assertThat(table.demoteFlankClaim("t1", fixture.vB), "no claim").isFalse()
+		assertThat(table.getSwitchClaim(fixture.vB)).isNull()
+		assertThat(fixture.vB.locked).isFalse()
+
+		table.registerSwitches("t1", listOf(fixture.vB))
+		assertThat(table.demoteFlankClaim("t1", fixture.vB), "own plain claim").isFalse()
+		assertThat(table.getSwitchClaim(fixture.vB)).isEqualTo(SwitchClaim("t1", isFlank = false))
+		assertThat(fixture.vB.locked).isTrue()
+	}
+
+	@Test
 	fun `a plain claim is stale exactly when its owner holds no block bounded by the switch`() {
 		table.registerSwitches("t1", listOf(fixture.vB))
 		assertThat(table.isStaleSwitchOwnership(fixture.vB), "no held blocks at all").isTrue()

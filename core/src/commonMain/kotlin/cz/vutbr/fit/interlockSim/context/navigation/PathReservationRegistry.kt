@@ -517,6 +517,22 @@ class PathReservationRegistry(
 	}
 
 	/**
+	 * Undo a flank promotion: turn [trainId]'s flank claim on [switch] back into a plain claim, with
+	 * the owner and the physical lock unchanged (Issue #1218). Only a caller that knows the claim was
+	 * plain before its own failed registration may call it -- the facade's route rollback, for a
+	 * switch a failed route listed as flank over the train's earlier plain claim. Once plain, the
+	 * claim is subject to the [isStaleSwitchOwnership] rule again.
+	 *
+	 * @return `true` if demoted; `false` (and no change) when [switch] has no claim, another train
+	 *   owns it, or the claim is already plain
+	 * @since Issue #1218
+	 */
+	internal fun demoteFlankClaim(
+		trainId: String,
+		switch: DynamicRailSwitch
+	): Boolean = switchTable.demoteFlankClaim(trainId, switch)
+
+	/**
 	 * Whether [switch] is currently registered as flank protection -- see [SwitchOwnershipTable].
 	 *
 	 * @since Issue #1076

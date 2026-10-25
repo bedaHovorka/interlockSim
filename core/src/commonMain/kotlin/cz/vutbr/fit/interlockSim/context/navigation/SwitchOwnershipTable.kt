@@ -31,7 +31,11 @@ private val logger: KLogger = registryLogger
  * drops the purpose with the claim. The purpose is per switch, not per route: if the same train
  * later also registers the switch as a running switch, the claim stays a flank claim until release
  * -- the table cannot tell whether the earlier flank route is still live, so it keeps the
- * conservative answer.
+ * conservative answer. The same rule promotes the train's own plain claim to a flank claim when a
+ * later route registers the switch as flank. The one exception to "flank until release" is a
+ * rolled-back route's promotion: the facade, which knows the claim was plain before its failed
+ * route, undoes it with [demoteFlankClaim] (Issue #1218). A claim that was already a flank claim
+ * is never promoted, so it is never demoted.
  *
  * **NOT thread-safe**, like the registry.
  *
@@ -97,6 +101,24 @@ internal class SwitchOwnershipTable(
 		logger.info {
 			"registerSwitches: Registered ${switches.size} switches for '$trainId'"
 		}
+	}
+
+	/**
+	 * Turn [trainId]'s flank claim on [switch] back into a plain claim, owner and lock unchanged --
+	 * see [PathReservationRegistry.demoteFlankClaim].
+	 *
+	 * @return `true` if demoted; `false` (and no change) when [switch] has no claim, another train
+	 *   owns it, or the claim is already plain
+	 */
+	fun demoteFlankClaim(
+		trainId: String,
+		switch: DynamicRailSwitch
+	): Boolean {
+		val claim = switchToTrain[switch]
+		if (claim == null || claim.trainId != trainId || !claim.isFlank) return false
+		switchToTrain[switch] = claim.copy(isFlank = false)
+		logger.debug { "demoteFlankClaim: Switch ${switch.hashCode()} of '$trainId' is a plain claim again" }
+		return true
 	}
 
 	/** Whether [switch] is currently registered as flank protection. */
