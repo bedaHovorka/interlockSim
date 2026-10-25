@@ -171,7 +171,8 @@ class DefaultPathReservationService(
 	 * [TopologyNavigator] are used instead.
 	 *
 	 * 0. Reject a non-oriented [start] (a switch — Issue #1188, see
-	 *    [RouteCandidateScreen.rejectNonOrientedStart]) and a [start] that is not contiguous with
+	 *    [RouteCandidateScreen.rejectNonOrientedStart]), a non-oriented [target] (Issue #1200, see
+	 *    [RouteCandidateScreen.rejectNonOrientedEnd]) and a [start] that is not contiguous with
 	 *    the train's own footprint (Issue #893) — see [RouteCandidateScreen.rejectNonContiguousStart]
 	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise)
 	 * 2. For each path in priority order (cheapest cost first for InOut routes):
@@ -185,7 +186,7 @@ class DefaultPathReservationService(
 	 * ## Error Handling
 	 *
 	 * - Start not contiguous with the train's footprint → return NonContiguousStart
-	 * - Start is not an OrientedPathSeparator (a switch) → return GeometricallyImpossible
+	 * - Start or target is not an OrientedPathSeparator (a switch) → return GeometricallyImpossible
 	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
 	 * - Registry conflict → roll back only the forward blocks THIS call reserved (never the
@@ -221,6 +222,8 @@ class DefaultPathReservationService(
 		// is refused here, before any block is reserved or registered -- see
 		// [RouteCandidateScreen.rejectNonOrientedStart] for the leak this prevents.
 		candidateScreen.rejectNonOrientedStart(trainId, start, "reservePath")?.let { return it }
+		// Step 0 (Issue #1200): the END-side twin -- a route can only end at a semaphore or an InOut.
+		candidateScreen.rejectNonOrientedEnd(trainId, target, "reservePath")?.let { return it }
 
 		// Step 0 (Issue #893, task A-R1): a route may only start where the train actually is.
 		// Checked BEFORE candidate-path discovery so it also governs the already-owned

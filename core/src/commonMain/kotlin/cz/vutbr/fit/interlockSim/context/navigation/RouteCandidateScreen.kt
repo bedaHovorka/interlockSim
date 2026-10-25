@@ -32,9 +32,8 @@ private val logger = KotlinLogging.logger {}
  * configures or signals, so a refused request or candidate leaves nothing to roll back.
  *
  * Two kinds of check live here:
- * - **Origin guards** (Step 0), applied once per request: [rejectNonOrientedStart] and
- *   [rejectNonContiguousStart]. They are kept together because further Step 0 guards
- *   (the END-side twin of the oriented-origin rule) belong next to them.
+ * - **Endpoint guards** (Step 0), applied once per request: [rejectNonOrientedStart],
+ *   its END-side twin [rejectNonOrientedEnd], and [rejectNonContiguousStart].
  * - **Candidate screens** (Steps 1.5 and 1.6), applied to the enumerated candidate paths:
  *   [screenRearFacingEnds] (G8, the END must face the train) and [screenDivergentCandidates]
  *   (the candidate must continue the route the train already holds). Both report the screened-out
@@ -45,8 +44,9 @@ private val logger = KotlinLogging.logger {}
  *
  * Extracted from [DefaultPathReservationService] without behaviour change: the denial reasons and
  * log lines are byte-identical, and the service-level tests (`PathReservationContiguityTest`,
- * `PathReservationNonOrientedOriginTest`, `RouteEndDirectionTest`, `Issue1066RegressionTest`,
- * `PathReservationSwitchStartPathInfoRegressionTest`) still pin them through the public API.
+ * `PathReservationNonOrientedOriginTest`, `PathReservationNonOrientedEndTest`, `RouteEndDirectionTest`,
+ * `Issue1066RegressionTest`, `PathReservationSwitchStartPathInfoRegressionTest`) still pin them
+ * through the public API.
  *
  * **NOT thread-safe**, like its owner: single-threaded simulation access only.
  *
@@ -192,6 +192,41 @@ internal class RouteCandidateScreen(
 	}
 
 	/**
+	 * The END-side twin of [rejectNonOrientedStart] (Issue #1200, traffic-simulation-expert
+	 * ruling): a route endpoint, origin **or** end, must be an [OrientedPathSeparator] (a semaphore
+	 * or an InOut). A switch is interior track, never an endpoint — the same switch rule
+	 * [PathReservationRegistry.isValidPathInfoEnd] already applies to the end of a stored PathInfo
+	 * (Issue #938).
+	 *
+	 * Returns `null` when [target] is oriented, or the
+	 * [PathReservationService.ReservationResult.GeometricallyImpossible] to return otherwise.
+	 *
+	 * ## Why this must be a Step 0 guard
+	 *
+	 * Without it a switch end was granted: G8 ([rearFacingEndReason]) declines to judge the
+	 * direction of a non-oriented end, the switch configuration skips a terminal switch, and
+	 * [PathInfoBuilder.buildPathInfo] stores the target verbatim. The train then held a route
+	 * ending at a switch, and every extension FROM that switch was refused by
+	 * [rejectNonOrientedStart], so it held track it could never leave. Refusing before candidate
+	 * discovery leaves nothing reserved, registered, configured or merged.
+	 */
+	internal fun rejectNonOrientedEnd(
+		trainId: String,
+		target: DynamicPathSeparator,
+		entryPoint: String
+	): PathReservationService.ReservationResult.GeometricallyImpossible? {
+		if (target is OrientedPathSeparator) return null
+		val targetName = separatorLabel(target)
+		val reason =
+			"Route end '$targetName' is not an oriented separator (it is a " +
+				"${target::class.simpleName ?: "unknown"}): a route runs signal-to-signal, so it can only " +
+				"end at a semaphore or an InOut. Request for train '$trainId' refused before any " +
+				"block, switch or signal was touched."
+		logger.warn { "$entryPoint: rejected non-oriented end — $reason" }
+		return PathReservationService.ReservationResult.GeometricallyImpossible(reason)
+	}
+
+	/**
 	 * G8 screening of [candidatePaths] (Issue #1064): splits off every candidate whose end faces away
 	 * from the train ([rearFacingEndReason]) and records each one as a geometric failure. Extracted so
 	 * the screening adds no branch to [DefaultPathReservationService.reservePath]'s own cyclomatic complexity.
@@ -277,9 +312,16 @@ internal class RouteCandidateScreen(
 	 * [path]'s last section enters the target, reversed, is the direction of travel there. A loop-
 	 * around candidate therefore arrives from the other side and is judged on its own.
 	 *
+	 * The `target !is OrientedPathSeparator` arm performs the smart cast for [OrientedPathSeparator.direction]:
+	 * it does not grant a switch end. Such an end is unreachable from
+	 * [DefaultPathReservationService.reservePath] after the Step 0 END guard
+	 * ([rejectNonOrientedEnd], Issue #1200), so the arm no longer fires — but it must stay, because
+	 * the [OrientedPathSeparator.direction] call below compiles only through its smart cast.
+	 *
 	 * @return the English denial reason when [target] faces away from the train at the end of
-	 *   [path]; `null` when the end is usable — an InOut (bidirectional), a separator without an
-	 *   orientation, or a signal facing the direction of travel.
+	 *   [path]; `null` when the end is usable — an InOut (bidirectional) or a signal facing the
+	 *   direction of travel — or when there is nothing to judge (an empty [path], or a
+	 *   non-oriented [target], which the END guard has already refused).
 	 */
 	internal fun rearFacingEndReason(
 		start: DynamicPathSeparator,

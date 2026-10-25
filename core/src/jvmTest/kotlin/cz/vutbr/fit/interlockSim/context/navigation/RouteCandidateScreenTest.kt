@@ -37,10 +37,11 @@ import java.util.concurrent.TimeUnit
 /**
  * Pins [RouteCandidateScreen] directly (Issue #1210, SP12.9): the read-only candidate geometry
  * screening extracted from [DefaultPathReservationService]. The service-level suites
- * (`PathReservationContiguityTest`, `PathReservationNonOrientedOriginTest`, `RouteEndDirectionTest`,
- * `Issue1066RegressionTest`, `PathReservationSwitchStartPathInfoRegressionTest`) pin the same rules
- * through `reservePath`; this class pins each moved function on its own, so a regression is
- * located without going through the whole reservation.
+ * (`PathReservationContiguityTest`, `PathReservationNonOrientedOriginTest`,
+ * `PathReservationNonOrientedEndTest`, `RouteEndDirectionTest`, `Issue1066RegressionTest`,
+ * `PathReservationSwitchStartPathInfoRegressionTest`) pin the same rules through `reservePath`;
+ * this class pins each function on its own, so a regression is located without going through the
+ * whole reservation.
  *
  * Topology (`vyhybna.xml`): InOuts `A` and `B`; semaphores `zA`, `doA1`, `doA2`, `doB2`, `doB1`,
  * `zB`; switches `vA` and `vB`. `zA`, `doB1` and `doB2` face A to B; `doA1`, `doA2` and `zB` face
@@ -128,6 +129,25 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 	fun `semaphore and InOut starts pass the oriented-start guard`() {
 		assertThat(screen.rejectNonOrientedStart("train1", findSemaphoreByName("zA"), "reservePath")).isNull()
 		assertThat(screen.rejectNonOrientedStart("train1", inOut1, "reservePath")).isNull()
+	}
+
+	/** Issue #1200: the END-side twin of the oriented-start guard. */
+	@Test
+	fun `a switch end is refused as geometrically impossible naming the separator and its type`() {
+		val result = screen.rejectNonOrientedEnd("train1", findSwitchByName("vB"), "reservePath")
+
+		assertThat(result).isNotNull()
+		val reason = result!!.reason
+		assertThat(reason).startsWith("Route end 'vB' is not an oriented separator (it is a DynamicRailSwitch)")
+		assertThat(reason).contains("can only end at a semaphore or an InOut")
+		assertThat(reason).contains("train 'train1'")
+		assertThat(reason).contains("before any block, switch or signal was touched")
+	}
+
+	@Test
+	fun `semaphore and InOut ends pass the oriented-end guard`() {
+		assertThat(screen.rejectNonOrientedEnd("train1", findSemaphoreByName("doB1"), "reservePath")).isNull()
+		assertThat(screen.rejectNonOrientedEnd("train1", inOutB(), "reservePath")).isNull()
 	}
 
 	@Test
@@ -384,6 +404,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val candidates = candidatePaths(zA, doA1)
 
 		screen.rejectNonOrientedStart("t1", findSwitchByName("vA"), "reservePath")
+		screen.rejectNonOrientedEnd("t1", findSwitchByName("vB"), "reservePath")
 		screen.rejectNonContiguousStart("t1", zA)
 		screen.screenRearFacingEnds(zA, doA1, candidates)
 		screen.screenDivergentCandidates("t1", zA, doA1, candidates.withIndex().toList())
