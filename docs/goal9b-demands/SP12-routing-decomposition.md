@@ -99,7 +99,7 @@ None of these is addressed by SP12; each names where the change would land.
 
 | Demand | Leaf | Where it would land |
 | --- | --- | --- |
-| Read-only snapshot of open contentions (train, block, owner, since) or a "resolved" event, one of the two | SP12.1 D1, D2 | a query on `PathReservationService`; `blockedSince` already records the time (see #1221) |
+| Read-only snapshot of open contentions (train, block, owner, since) or a "resolved" event, one of the two | SP12.1 D1, D2 | a query on `PathReservationService`; `blockedSince` already records the "since" time, kept (#1221) as the source of that column until this consumer exists |
 | Which train a lit signal belongs to (semaphore → train view) | SP12.3 D1 | the facade or perception, never the ledger |
 | One semaphore cache instead of two (`allSemaphores()` and `DefaultNetworkPerceptionPort`) | SP12.3 D2 | kept for layering, see 3.10 |
 | Carry `switch`, `holder`, `held`, `required` of `SwitchConfigOutcome.Locked` through the reservation result | SP12.4 (SP5 D3) | the result type; today `Locked` is folded into `AllPathsBlocked` |

@@ -16,11 +16,15 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
@@ -98,6 +102,23 @@ class ReservationContentionTrackerTest {
 			assertThat(event.conflictingTrainId).isEqualTo("owner")
 			// Outside a running simulation currentSimulationTime() falls back to 0.0.
 			assertThat(event.time).isEqualTo(0.0)
+		}
+
+		@Test
+		fun `the conflict event time equals the recorded contention start`() {
+			// The stored "since" value is not readable (no consumer yet, Issue #1221), so the single clock
+			// read is pinned through the event: a second read would stamp the event with 9.0, not 5.0.
+			mockkObject(Process.Companion)
+			try {
+				every { Process.time() } returnsMany listOf(5.0, 9.0)
+
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+
+				assertThat(emitted.single().time).isEqualTo(5.0)
+				verify(exactly = 1) { Process.time() }
+			} finally {
+				unmockkObject(Process.Companion)
+			}
 		}
 
 		@Test
