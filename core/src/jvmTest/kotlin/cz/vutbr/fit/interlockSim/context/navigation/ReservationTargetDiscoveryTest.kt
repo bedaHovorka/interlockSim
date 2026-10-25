@@ -11,9 +11,12 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.each
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEmpty
+import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.assertions.startsWith
@@ -25,6 +28,8 @@ import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorLabel
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
@@ -177,7 +182,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		@Test
 		@DisplayName("a switch start is refused by the Issue #1188 guard before any target is discovered")
 		fun switchStartIsRefusedBeforeDiscovery() {
-			// The order a switch start would get is pinned in Direct.wholeNetworkTargetsFromSwitch.
+			// Discovery takes an OrientedPathSeparator (Issue #1207): a switch has no order to pin.
 			for (start in listOf("vA", "vB")) {
 				appender.list.clear()
 				val result = service.reservePathToAny("train-$start", separator(start))
@@ -202,26 +207,50 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		}
 
 		@Test
-		@DisplayName("reservePathToAnyTargets keeps the recorded order; only InOuts carry precomputed paths")
+		@DisplayName("reservePathToAnyTargets keeps the recorded order; only InOut targets carry precomputed paths")
 		fun wholeNetworkTargetsFromZA() {
-			val targets = discovery.reservePathToAnyTargets(separator("zA"))
+			val targets = discovery.reservePathToAnyTargets(separator("zA") as OrientedPathSeparator)
 
-			assertThat(targets.map { separatorLabel(it.first) })
+			assertThat(targets.map { separatorLabel(it.target) })
 				.containsExactly("B", "A", "doA1", "doA2", "doB2", "doB1", "zB")
-			assertThat(targets.filter { it.second != null }.map { separatorLabel(it.first) }).containsExactly("B", "A")
+			assertThat(targets.filterIsInstance<TargetAttempt.InOutTarget>().map { separatorLabel(it.target) })
+				.containsExactly("B", "A")
+			assertThat(targets.filterIsInstance<TargetAttempt.SemaphoreTarget>().map { separatorLabel(it.target) })
+				.containsExactly("doA1", "doA2", "doB2", "doB1", "zB")
+			assertThat(targets.filterIsInstance<TargetAttempt.SemaphoreTarget>().map { it.topologicalPaths })
+				.each { it.isNull() }
 		}
 
 		@Test
-		@DisplayName("reservePathToAnyTargets from a switch sorts InOuts by distance only")
-		fun wholeNetworkTargetsFromSwitch() {
-			// Recorded on the pin commit: from each switch the nearer exit InOut leads, so the
-			// distance-sort direction is pinned from both switches.
+		@DisplayName("an InOut target's paths are the topological paths of exactly that target")
+		fun inOutTargetPathsBelongToTheirTarget() {
+			val zA = separator("zA") as OrientedPathSeparator
+			val inOutTargets = discovery.reservePathToAnyTargets(zA).filterIsInstance<TargetAttempt.InOutTarget>()
+
+			assertThat(inOutTargets).isNotEmpty()
+			for (attempt in inOutTargets) {
+				assertThat(attempt.topologicalPaths.value, name = "paths to ${separatorLabel(attempt.target)}")
+					.isEqualTo(
+						simulationContext.scope
+							.get<TopologyNavigator>()
+							.findAllTopologicalPaths(zA, attempt.target, DEFAULT_MAX_PATH_DEPTH)
+					)
+			}
+		}
+
+		@Test
+		@DisplayName("reservePathToAnyTargets from an InOut puts the opposite-side exit first")
+		fun wholeNetworkTargetsFromInOut() {
+			// Recorded: from each exit the far exit leads (opposite side), the start itself is
+			// absent, and the semaphores follow in grid order.
 			for ((start, expected) in mapOf(
-				"vA" to listOf("A", "B", "zA", "doA1", "doA2", "doB2", "doB1", "zB"),
-				"vB" to listOf("B", "A", "zA", "doA1", "doA2", "doB2", "doB1", "zB")
+				"A" to listOf("B", "zA", "doA1", "doA2", "doB2", "doB1", "zB"),
+				"B" to listOf("A", "zA", "doA1", "doA2", "doB2", "doB1", "zB")
 			)) {
 				assertThat(
-					discovery.reservePathToAnyTargets(separator(start)).map { separatorLabel(it.first) },
+					discovery
+						.reservePathToAnyTargets(separator(start) as OrientedPathSeparator)
+						.map { separatorLabel(it.target) },
 					name = "order from $start"
 				).containsExactly(*expected.toTypedArray())
 			}
@@ -393,6 +422,75 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 			} finally {
 				loggerByName.level = savedLevel
 			}
+		}
+	}
+
+	/** Counts [TopologyNavigator.findAllSwitchConstrainedPaths] calls: one per availability evaluation. */
+	private class AvailabilityCountingNavigator(
+		private val real: TopologyNavigator
+	) : TopologyNavigator by real {
+		var evaluations = 0
+
+		override fun findAllSwitchConstrainedPaths(
+			start: PathSeparator,
+			target: PathSeparator,
+			maxDepth: Int
+		): List<List<TrackSection>> {
+			evaluations++
+			return real.findAllSwitchConstrainedPaths(start, target, maxDepth)
+		}
+	}
+
+	@Nested
+	@DisplayName("the shared next-target primitive (Issue #1208)")
+	inner class NextTargetPrimitive {
+		private lateinit var counting: AvailabilityCountingNavigator
+		private lateinit var discovery: ReservationTargetDiscovery
+
+		@BeforeEach
+		fun createCountingDiscovery() {
+			counting = AvailabilityCountingNavigator(simulationContext.scope.get())
+			discovery = ReservationTargetDiscovery(counting, simulationContext)
+		}
+
+		private fun zAForwardSection(): Pair<DynamicPathSeparator, TrackSection> =
+			discovery.resolveForwardSection(separator("zA") as OrientedPathSeparator, "test")!!
+
+		@Test
+		@DisplayName("the sequence evaluates availability lazily, one target per step")
+		fun sequenceIsLazy() {
+			val (start, next) = zAForwardSection()
+
+			val candidates = discovery.evaluateTargets(start, discovery.findNextSemaphoresVia(start, next), null)
+			assertThat(counting.evaluations, name = "evaluations before iterating").isEqualTo(0)
+
+			val first = candidates.first()
+			assertThat(separatorLabel(first.separator)).isEqualTo("doB1")
+			assertThat(counting.evaluations, name = "evaluations after the first element").isEqualTo(1)
+		}
+
+		@Test
+		@DisplayName("isAnyNextTargetAvailable stops at the first available of two targets")
+		fun anyAvailableStopsEarly() {
+			val (start, next) = zAForwardSection()
+			assertThat(discovery.findNextSemaphoresVia(start, next).map { separatorLabel(it) })
+				.containsExactly("doB1", "doB2")
+			counting.evaluations = 0
+
+			assertThat(discovery.isAnyNextTargetAvailable(start, next)).isTrue()
+
+			assertThat(counting.evaluations, name = "availability evaluations").isEqualTo(1)
+		}
+
+		@Test
+		@DisplayName("findReservationTargetCandidates evaluates every target of the same two")
+		fun candidatesEvaluateEveryTarget() {
+			counting.evaluations = 0
+
+			val candidates = discovery.findReservationTargetCandidates(separator("zA") as OrientedPathSeparator, null)
+
+			assertThat(candidates.map { separatorLabel(it.separator) }).containsExactly("doB1", "doB2")
+			assertThat(counting.evaluations, name = "availability evaluations").isEqualTo(2)
 		}
 	}
 

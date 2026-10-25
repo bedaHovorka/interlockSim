@@ -203,7 +203,8 @@ class DefaultPathReservationService(
 	/**
 	 * [reservePath] with the topological candidate paths supplied by the caller (Issue #966).
 	 *
-	 * [topologicalPaths] must be `navigator.findAllTopologicalPaths(start, target, maxDepth)`. It
+	 * [topologicalPaths] must be `navigator.findAllTopologicalPaths(start, target, maxDepth)`; the
+	 * `reservePathToAny` attempt loop takes it from [TargetAttempt.topologicalPaths]. It
 	 * replaces that enumeration in the non-InOut↔InOut branch of candidate discovery and is read
 	 * only there, so a caller that already enumerated the paths (for example to sort targets)
 	 * does not enumerate them again. InOut↔InOut requests still go to [RouteFinder]. `null`
@@ -802,7 +803,7 @@ class DefaultPathReservationService(
 	 *
 	 * Called rarely (when a train needs a new path, ~once per train per network traversal), so the
 	 * target list is recomputed per call rather than cached: each call's targets carry lazy path
-	 * lists (`TargetWithPaths`, Issue #966) valid for exactly that one call. The order itself
+	 * lists ([TargetAttempt], Issue #966) valid for exactly that one call. The order itself
 	 * carries no dynamic state: it follows from the network's endpoint set and the static topology;
 	 * occupancy is only evaluated later, per attempt.
 	 *
@@ -823,13 +824,16 @@ class DefaultPathReservationService(
 		// discovered every target, and then once per target with the same reason and warning.
 		// Refusing up front skips the target discovery and the repeated calls.
 		candidateScreen.rejectNonOrientedStart(trainId, start, "reservePathToAny")?.let { return it }
+		check(start is OrientedPathSeparator) {
+			"reservePathToAny: start is not oriented, which the Issue #1188 guard above makes impossible"
+		}
 
 		// Steps 1-3: target discovery and prioritization (see ReservationTargetDiscovery)
-		val sortedTargetsWithPaths = targetDiscovery.reservePathToAnyTargets(start)
+		val attempts = targetDiscovery.reservePathToAnyTargets(start)
 
 		logger.debug {
 			"reservePathToAny: Target order (InOuts first): " +
-				sortedTargetsWithPaths.joinToString(", ") { it.first.toString() }
+				attempts.joinToString(", ") { it.target.toString() }
 		}
 
 		// ========================================
@@ -844,8 +848,9 @@ class DefaultPathReservationService(
 		// - Trying all paths to find "optimal" would be wasteful (dynamic state changes anyway)
 		var lastResult: PathReservationService.ReservationResult? = null
 
-		for ((target, topologicalPaths) in sortedTargetsWithPaths) {
-			val result = reservePath(trainId, start, target, DEFAULT_MAX_PATH_DEPTH, topologicalPaths)
+		for (attempt in attempts) {
+			val target = attempt.target
+			val result = reservePath(trainId, start, target, DEFAULT_MAX_PATH_DEPTH, attempt.topologicalPaths)
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
@@ -884,18 +889,18 @@ class DefaultPathReservationService(
 		// STEP 5: All Targets Failed
 		// ========================================
 		// No available path found after trying all targets.
-		if (sortedTargetsWithPaths.isEmpty()) {
+		if (attempts.isEmpty()) {
 			logger.warn { "reservePathToAny: No targets found from $start" }
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
 		logger.warn {
 			"reservePathToAny: No available path from $start for $trainId " +
-				"(tried ${sortedTargetsWithPaths.size} targets, all blocked or unreachable)"
+				"(tried ${attempts.size} targets, all blocked or unreachable)"
 		}
 
 		// Return last failure result (or AllPathsBlocked if no result available)
-		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(sortedTargetsWithPaths.size)
+		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attempts.size)
 	}
 
 	// ========== Private helper methods ==========

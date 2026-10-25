@@ -26,11 +26,42 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 /**
- * A `reservePathToAny` target with its topological candidate paths, enumerated lazily and at most
- * once (Issue #966). The paths are `null` for a semaphore target: `reservePath` enumerates those
- * itself.
+ * One target of the `reservePathToAny` attempt loop, as [ReservationTargetDiscovery.reservePathToAnyTargets]
+ * hands it over (Issue #1209). Sealed, so the two kinds of target cannot be told apart by a silent
+ * `null`: an [InOutTarget] carries the topological paths enumerated for sorting (Issue #966), a
+ * [SemaphoreTarget] carries none.
  */
-internal typealias TargetWithPaths = Pair<DynamicPathSeparator, Lazy<List<List<TrackSection>>>?>
+internal sealed interface TargetAttempt {
+	/** The separator the attempt reserves a route to. */
+	val target: DynamicPathSeparator
+
+	/**
+	 * What the attempt hands to `reservePath` as its `topologicalPaths`: this target's
+	 * `findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)`, or `null` when `reservePath`
+	 * has to enumerate them itself.
+	 */
+	val topologicalPaths: Lazy<List<List<TrackSection>>>?
+
+	/**
+	 * An InOut target with its topological candidate paths, enumerated lazily and at most once
+	 * (Issue #966): [paths] is shared by the sort key and the reservation attempt. It is
+	 * `findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)` for this exact target and
+	 * the `start` the targets were discovered for, valid for one `reservePathToAny` call.
+	 */
+	class InOutTarget(
+		override val target: DynamicInOut,
+		val paths: Lazy<List<List<TrackSection>>>
+	) : TargetAttempt {
+		override val topologicalPaths: Lazy<List<List<TrackSection>>> get() = paths
+	}
+
+	/** A semaphore target: secondary, unsorted, with no precomputed paths. */
+	class SemaphoreTarget(
+		override val target: DynamicRailSemaphore
+	) : TargetAttempt {
+		override val topologicalPaths: Lazy<List<List<TrackSection>>>? get() = null
+	}
+}
 
 /**
  * Reservation target discovery (Issue #1171, SP12.5): which separators a route can be set to,
@@ -39,8 +70,9 @@ internal typealias TargetWithPaths = Pair<DynamicPathSeparator, Lazy<List<List<T
  * Two enumerations live here:
  * - **One section ahead** ([findNextSemaphoresVia]): the forward-facing semaphores and InOuts
  *   reachable through one given track section. It serves
- *   [PathReservationService.reservePathToAnyNextSemaphore], the read-only candidate query
- *   [findReservationTargetCandidates] (Issue #970) and [isAnyNextTargetAvailable].
+ *   [PathReservationService.reservePathToAnyNextSemaphore], and, with each target's availability
+ *   attached by the shared primitive [evaluateTargets] (Issue #1208), the read-only candidate
+ *   query [findReservationTargetCandidates] (Issue #970) and [isAnyNextTargetAvailable].
  * - **Whole network** ([reservePathToAnyTargets]): every InOut and semaphore except the start,
  *   in the priority order [PathReservationService.reservePathToAny] tries them.
  *
@@ -48,10 +80,9 @@ internal typealias TargetWithPaths = Pair<DynamicPathSeparator, Lazy<List<List<T
  * only says what to try. Extracted from that service without behaviour change: the target order
  * is pinned by `ReservationTargetDiscoveryTest`.
  *
- * The orientation-free sorting in [reservePathToAnyTargets] (a start with no orientation, e.g. a
- * switch) is unreachable from this class's only production caller today: `reservePathToAny`
- * refuses a non-oriented origin before discovery (Issue #1188 guard). It is kept as the recorded
- * extraction behaviour; a follow-up under #1159 narrows the signature to [OrientedPathSeparator].
+ * [reservePathToAnyTargets] takes an [OrientedPathSeparator]: a route runs signal-to-signal, and
+ * `reservePathToAny` refuses a non-oriented origin before discovery (Issue #1188 guard), so the
+ * orientation-free sort a switch start once needed (Issue #1207) no longer exists.
  *
  * Not thread-safe, like the service it serves.
  *
@@ -156,12 +187,10 @@ internal class ReservationTargetDiscovery(
 			return emptyList()
 		}
 		// Every candidate is evaluated (Issue #970 ruling: never report an unevaluated candidate
-		// as unavailable). isPathAvailableFor is read-only, so the extra evaluations past the
-		// first available target change no state and the pick stays byte-identical.
-		val candidates =
-			targets.map {
-				ReservationTargetCandidate(it, isPathAvailableFor(dynamicStart, it, DEFAULT_MAX_PATH_DEPTH, ownerTrainId))
-			}
+		// as unavailable), so the lazy sequence is materialised. isPathAvailableFor is read-only,
+		// so the extra evaluations past the first available target change no state and the pick
+		// stays byte-identical.
+		val candidates = evaluateTargets(dynamicStart, targets, ownerTrainId).toList()
 		logger.debug {
 			"findReservationTargetCandidates: ${targets.size} target(s) from $start via $next, " +
 				"available = ${candidates.filter { it.available }.map { it.separator }}"
@@ -197,14 +226,14 @@ internal class ReservationTargetDiscovery(
 				"checking availability: $semaphores"
 		}
 
-		// Check if ANY semaphore has an available path
-		for (semaphore in semaphores) {
-			if (isPathAvailableFor(start, semaphore, DEFAULT_MAX_PATH_DEPTH, ownerTrainId = null)) {
-				logger.debug {
-					"isPathToAnyNextSemaphoreAvailable: Path available to $semaphore"
-				}
-				return true
+		// Check if ANY semaphore has an available path: the sequence is lazy, so the targets after
+		// the first available one are never evaluated. The owner is not known on this probe path.
+		val available = evaluateTargets(start, semaphores, ownerTrainId = null).firstOrNull { it.available }
+		if (available != null) {
+			logger.debug {
+				"isPathToAnyNextSemaphoreAvailable: Path available to ${available.separator}"
 			}
+			return true
 		}
 
 		logger.debug {
@@ -212,6 +241,27 @@ internal class ReservationTargetDiscovery(
 		}
 		return false
 	}
+
+	/**
+	 * The shared section-level primitive behind [findReservationTargetCandidates] and
+	 * [isAnyNextTargetAvailable] (Issue #1208): pairs each of [targets] — the result of
+	 * [findNextSemaphoresVia] for [start] — with its availability from [isPathAvailableFor] under
+	 * [ownerTrainId].
+	 *
+	 * Takes the target list rather than the section so a caller enumerates once and can log what it
+	 * found before anything is evaluated. The sequence is lazy: a target's availability is
+	 * evaluated only when the sequence reaches it, in the order of [targets], once per iteration.
+	 * A caller that needs one answer stops early; a caller that needs them all materialises it.
+	 * It does not log, so each caller keeps its own vocabulary.
+	 */
+	fun evaluateTargets(
+		start: PathSeparator,
+		targets: List<DynamicPathSeparator>,
+		ownerTrainId: String?
+	): Sequence<ReservationTargetCandidate> =
+		targets.asSequence().map { target ->
+			ReservationTargetCandidate(target, isPathAvailableFor(start, target, DEFAULT_MAX_PATH_DEPTH, ownerTrainId))
+		}
 
 	/**
 	 * Whether a physically legal route from [start] to [target] exists whose blocks are all FREE —
@@ -249,15 +299,14 @@ internal class ReservationTargetDiscovery(
 	 * grid ([allSemaphores], cached once per service, Issue #965), except [start] itself.
 	 * O(grid size + InOuts).
 	 *
-	 * **Step 2: InOut sorting** — if [start] has an orientation (a semaphore or an InOut):
+	 * **Step 2: InOut sorting** — [start] is oriented (a semaphore or an InOut):
 	 * 1. partition the InOuts into opposite-side (orientation differs from the start's: crossing
 	 *    the network, forward progress) and same-side (returning to the same side),
 	 * 2. sort each partition by shortest topological path length (unreachable last),
 	 * 3. combine: [opposite-side InOuts] + [same-side InOuts].
 	 *
 	 * Partitioning before sorting ensures ALL opposite-side targets are tried before ANY same-side
-	 * target, even a closer one. Without an orientation (e.g. a switch) the InOuts are sorted by
-	 * path length only.
+	 * target, even a closer one.
 	 *
 	 * **Step 3: Prioritization** — sorted InOuts first (reaching an exit is better than stopping
 	 * mid-network), then the semaphores unsorted, in grid order: they are secondary targets, the
@@ -267,8 +316,8 @@ internal class ReservationTargetDiscovery(
 	 *
 	 * `sortedBy` evaluates its selector on both sides of every comparison, so enumerating inside it
 	 * ran `findAllTopologicalPaths` O(n log n) times, and the reservation attempt enumerated the
-	 * same paths again. Each InOut is therefore paired with one lazy enumeration shared by the
-	 * sort key and the attempt ([TargetWithPaths]). The key is unchanged and `sortedBy` is stable,
+	 * same paths again. Each InOut is therefore an [TargetAttempt.InOutTarget] holding one lazy
+	 * enumeration shared by the sort key and the attempt. The key is unchanged and `sortedBy` is stable,
 	 * so the order is identical. `LazyThreadSafetyMode.NONE` is safe and cheaper: each lazy is
 	 * created and consumed inside a single `reservePathToAny` call.
 	 *
@@ -285,7 +334,7 @@ internal class ReservationTargetDiscovery(
 	 *
 	 * @return the targets in attempt order; empty when the network has no other separator
 	 */
-	fun reservePathToAnyTargets(start: DynamicPathSeparator): List<TargetWithPaths> {
+	fun reservePathToAnyTargets(start: OrientedPathSeparator): List<TargetAttempt> {
 		// Step 1: target discovery. InOuts and semaphores in two lists: only InOuts are sorted.
 		// toDynamic() converts a static InOut to its DynamicInOut for state tracking.
 		val inouts = mutableListOf<DynamicInOut>()
@@ -295,39 +344,36 @@ internal class ReservationTargetDiscovery(
 				inouts.add(dynamicInOut as DynamicInOut)
 			}
 		}
-		val semaphores: List<DynamicPathSeparator> = allSemaphores().filter { semaphore -> semaphore != start }
+		val semaphores = allSemaphores().filter { semaphore -> semaphore != start }
 
 		logger.debug {
 			"reservePathToAny: Found ${inouts.size} InOut(s) and ${semaphores.size} semaphore(s) from $start"
 		}
 
-		// Step 2: InOut sorting, each InOut paired with its one lazy path enumeration (Issue #966).
-		val inOutsWithPaths: List<Pair<DynamicInOut, Lazy<List<List<TrackSection>>>>> =
+		// Step 2: InOut sorting, each InOut holding its one lazy path enumeration (Issue #966).
+		val inOutAttempts =
 			inouts.map { target ->
-				target to
+				TargetAttempt.InOutTarget(
+					target,
 					lazy(LazyThreadSafetyMode.NONE) {
 						navigator.findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)
 					}
+				)
 			}
 		// findAllTopologicalPaths returns the paths sorted by length (empty if none exists), so
 		// firstOrNull() is the shortest; Int.MAX_VALUE sorts unreachable targets last.
-		val shortestPathLength: (Pair<DynamicInOut, Lazy<List<List<TrackSection>>>>) -> Int =
-			{ (_, paths) -> paths.value.firstOrNull()?.size ?: Int.MAX_VALUE }
-		val sortedInOuts =
-			when (start) {
-				is OrientedPathSeparator -> {
-					val startOrientation = start.getOrientation()
-					val (oppositeSide, sameSide) =
-						inOutsWithPaths.partition { (inout, _) -> inout.getOrientation() != startOrientation }
-					oppositeSide.sortedBy(shortestPathLength) + sameSide.sortedBy(shortestPathLength)
-				}
-				// No orientation (e.g. a switch): sort by distance only.
-				else -> inOutsWithPaths.sortedBy(shortestPathLength)
-			}
+		val shortestPathLength: (TargetAttempt.InOutTarget) -> Int = { attempt ->
+			val shortest = attempt.paths.value.firstOrNull()
+			shortest?.size ?: Int.MAX_VALUE
+		}
+		val startOrientation = start.getOrientation()
+		val (oppositeSide, sameSide) =
+			inOutAttempts.partition { it.target.getOrientation() != startOrientation }
+		val sortedInOuts = oppositeSide.sortedBy(shortestPathLength) + sameSide.sortedBy(shortestPathLength)
 
 		// Step 3: sorted InOuts first, then the semaphores in grid order. Semaphores carry no
 		// precomputed paths: reservePath enumerates theirs.
-		return sortedInOuts + semaphores.map { it to null }
+		return sortedInOuts + semaphores.map { TargetAttempt.SemaphoreTarget(it) }
 	}
 
 	/**
