@@ -179,11 +179,11 @@ interface PathReservationService :
 
 		/**
 		 * The request was **permanently** impossible, not merely busy. Two shapes: at the request
-		 * level -- the origin is not an [OrientedPathSeparator] (a switch), refused before any
-		 * candidate is discovered (Issue #1188) -- and at the candidate level: the candidate that
-		 * came closest failed permanently because its START or END semaphore faced away from the
-		 * requested direction of travel (G4, and its END-side twin G8 from Issue #1064), or a
-		 * switch along it could not be set to the position the route required.
+		 * level -- the origin or the end is not an [OrientedPathSeparator] (a switch), refused
+		 * before any candidate is discovered (Issues #1188, #1200) -- and at the candidate level:
+		 * the candidate that came closest failed permanently because its START or END semaphore
+		 * faced away from the requested direction of travel (G4, and its END-side twin G8 from
+		 * Issue #1064), or a switch along it could not be set to the position the route required.
 		 *
 		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention (a block
 		 * occupied/reserved by another train) and clears on its own, so a caller should simply
@@ -202,13 +202,13 @@ interface PathReservationService :
 		 * how [NonContiguousStart] already short-circuits ahead of blocked-candidate tracking
 		 * (traffic-simulation-expert ruling, Issue #903: the fact one candidate is permanently
 		 * impossible is real and permanent information regardless of what other candidates did).
-		 * A non-oriented route origin (Issue #1188) is a request-level refusal instead: it fires
-		 * before any candidate is discovered.
+		 * A non-oriented route origin or end (Issues #1188, #1200) is a request-level refusal
+		 * instead: it fires before any candidate is discovered.
 		 *
 		 * @property reason English explanation of which permanent-impossibility class fired. For
 		 *   a rear-facing START, a rear-facing END or an unconfigurable switch it names the
-		 *   candidate that hit it; for a non-oriented route origin (Issue #1188) it names the
-		 *   origin, because no candidate exists yet.
+		 *   candidate that hit it; for a non-oriented route origin or end (Issues #1188, #1200) it
+		 *   names the offending endpoint, because no candidate exists yet.
 		 * @since Issue #903
 		 */
 		data class GeometricallyImpossible(
@@ -251,12 +251,12 @@ interface PathReservationService :
 	/**
 	 * Find and reserve a free path from start to target separator.
 	 *
-	 * ## Endpoint precondition (Issue #1188)
+	 * ## Endpoint precondition (Issues #1188, #1200)
 	 *
-	 * [start] must be an [OrientedPathSeparator] — a semaphore or an InOut. Routes run
-	 * signal-to-signal; a switch is interior track, never an endpoint. A request that fails this
-	 * is rejected with [ReservationResult.GeometricallyImpossible] before any block, switch or
-	 * signal is touched.
+	 * [start] and [target] must each be an [OrientedPathSeparator] — a semaphore or an InOut.
+	 * Routes run signal-to-signal; a rail switch is interior track, never an endpoint. A request
+	 * that fails this is rejected with [ReservationResult.GeometricallyImpossible], whose reason
+	 * names the offending endpoint, before any block, switch or signal is touched.
 	 *
 	 * ## Contiguity precondition (Issue #893)
 	 *

@@ -22,7 +22,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.Tag
@@ -53,6 +52,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 		val switchVA = findSwitchByName("vA")
 		val signalsBefore = signalStates()
 		val switchesBefore = switchStates()
+		// Registered after the arrangement, so it records only the refused call's events
 		val listener = RecordingBlockOccupancyListener()
 		environment.addBlockOccupancyListener(listener)
 
@@ -70,8 +70,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 		assertThat(service.hasClearedSignals("train1"), "cleared-signal ledger").isFalse()
 		assertThat(signalStates(), "signals").isEqualTo(signalsBefore)
 		assertThat(switchStates(), "switch positions and locks").isEqualTo(switchesBefore)
-		assertThat(listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RESERVED }, "BlockReserved")
-			.isEmpty()
+		assertThat(listener.events, "block occupancy events of the refused call").isEmpty()
 	}
 
 	@Test
@@ -87,6 +86,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 		assertThat(pathInfoBefore).isNotNull()
 		val signalsBefore = signalStates()
 		val switchesBefore = switchStates()
+		// Registered after the held route was granted, so it records only the refused call's events
 		val listener = RecordingBlockOccupancyListener()
 		environment.addBlockOccupancyListener(listener)
 
@@ -100,8 +100,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 		assertThat(registry.getPathInfo("train1"), "stored PathInfo").isSameInstanceAs(pathInfoBefore)
 		assertThat(signalStates(), "signals").isEqualTo(signalsBefore)
 		assertThat(switchStates(), "switch positions and locks").isEqualTo(switchesBefore)
-		assertThat(listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RESERVED }, "BlockReserved")
-			.isEmpty()
+		assertThat(listener.events, "block occupancy events of the refused call").isEmpty()
 	}
 
 	@Test
