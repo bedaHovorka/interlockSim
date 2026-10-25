@@ -70,7 +70,6 @@ private val logger = KotlinLogging.logger {}
  * @property routeFinder Cost-based route planner for InOut-to-InOut automatic route selection (Issue #597)
  * @since Issue #294 (Phase 2 of Issue #292)
  */
-@Suppress("LargeClass") // SP12's last leaf removes this once the candidate commit extraction lands
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
@@ -210,7 +209,6 @@ class DefaultPathReservationService(
 	 * does not enumerate them again. InOut↔InOut requests still go to [RouteFinder]. `null`
 	 * means "enumerate here", exactly as the public overload does.
 	 */
-	@Suppress("LongMethod")
 	internal fun reservePath(
 		trainId: String,
 		start: DynamicPathSeparator,
