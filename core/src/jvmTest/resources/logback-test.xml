@@ -73,6 +73,8 @@
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.SwitchConfigurator" level="DEBUG"/>
 	<!-- Same rationale for the target discovery extracted from that service (Issue #1171). -->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetDiscovery" level="DEBUG"/>
+	<!-- Same rationale for the candidate geometry screening extracted from that service (Issue #1210, SP12.9). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteCandidateScreen" level="DEBUG"/>
 
 	<!--
 		ReservationResultMapping.kt logs one INFO "Route GRANTED/DENIED" line per kernel outcome.
