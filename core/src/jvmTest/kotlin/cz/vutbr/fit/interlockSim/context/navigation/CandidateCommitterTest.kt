@@ -99,7 +99,7 @@ class CandidateCommitterTest : PathReservationServiceTestBase() {
 	): CandidateRequest {
 		val path = navigator.findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH).first()
 		val blocks = extractUniqueBlocks(path)
-		val forwardBlocks = blocks.filterNot { it.trainName == trainId }
+		val forwardBlocks = blocks.excludingOwnedBy(trainId)
 		return CandidateRequest(trainId, start, target, path, blocks, forwardBlocks, 0)
 	}
 

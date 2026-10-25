@@ -45,3 +45,24 @@ internal fun extractUniqueBlocks(path: List<TrackSection>): List<DynamicTrackBlo
 		}
 	}
 }
+
+/**
+ * Returns the blocks of this list that train [trainId] does not already own, in the original order.
+ *
+ * A block is "owned" when its [DynamicTrackBlock.trainName] equals [trainId] (RESERVED or OCCUPIED by
+ * that train). What remains is the forward part of a candidate path: free blocks and blocks held by
+ * other trains. Owned blocks must be left out because:
+ * 1. OCCUPIED: the train has already been there (blocks behind it).
+ * 2. RESERVED: the block is already reserved from a (possibly different) separator, and re-reserving it
+ *    from another separator causes TOCTOU conflicts (Issue #296).
+ *
+ * Both callers read [DynamicTrackBlock.trainName] on the block itself, not the registry, and they must keep
+ * doing so with this one form: the Step 1.6 probe in `RouteCandidateScreen.screenDivergentCandidates`
+ * predicts the merge that Step 2i (in `CandidateCommitter`, called from `reservePath`) would perform, and the
+ * already-owned early return of `reservePath` (empty result) matches the screen's carve-out for a
+ * candidate with no forward blocks. If the two selections diverged, the probe would lie about the merge.
+ *
+ * @since Issue #1224 -- replaces the two hand-written copies of this exclusion (SP12 report section 3.7)
+ */
+internal fun List<DynamicTrackBlock>.excludingOwnedBy(trainId: String): List<DynamicTrackBlock> =
+	filterNot { it.trainName == trainId }
