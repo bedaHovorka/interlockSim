@@ -322,10 +322,8 @@ class DefaultPathReservationService(
 			// 1. OCCUPIED: Train has already been there (blocks behind the train)
 			// 2. RESERVED: Already reserved from a (possibly different) separator
 			// Including owned blocks causes TOCTOU conflicts when trying to re-reserve from different separator.
-			val forwardBlocks =
-				blocks.filterNot { block ->
-					block.trainName == trainId
-				}
+			// The same form is shared with the Step 1.6 probe, see [excludingOwnedBy].
+			val forwardBlocks = blocks.excludingOwnedBy(trainId)
 
 			if (forwardBlocks.isEmpty()) {
 				return reserveAlreadyOwnedPath(trainId, start, target, blocks, path)

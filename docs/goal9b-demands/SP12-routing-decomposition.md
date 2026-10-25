@@ -4,7 +4,7 @@
 SP12.10, the SP12.5 follow-ups #1207–#1209, #1173 (SP12.7), #1174 (SP12.8) and #1200
 
 **SP12 is still open.** This is an interim status report, not the close-out: #1159 has open sub-issues
-(#1218, #1220, #1221, #1222, #1224, #1228, #1229, #1230, see [section 6](#6-open-follow-ups)), and the page is
+(#1218, #1220, #1221, #1222, #1224 (PR #1235 open; closes with it), #1228, #1229, #1230, see [section 6](#6-open-follow-ups)), and the page is
 updated as they land. The PR that adds it closes only #1205 (the doc-anchor tripwire).
 
 SP12 cut `context/navigation/` into small units behind one facade-style entry, found the duplicate
@@ -124,7 +124,7 @@ routing logic: "kept" means kept with a reason, "removed" names the change that 
 | 3.4 | Orientation-free sort arm of `reservePathToAnyTargets` | **removed** (#1207) |
 | 3.5 | Availability predicates | kept (deliberate, #1060) |
 | 3.6 | Contiguity, two different checks | kept; shared predicate already single-sourced |
-| 3.7 | "Forward blocks = not owned by this train" filter | kept, tracked by #1224 |
+| 3.7 | "Forward blocks = not owned by this train" filter | **single-sourced** (#1224) |
 | 3.8 | Oriented start / end guards | kept (deliberate, #1188 / #1200) |
 | 3.9 | Switch-ownership layering | kept (defence in depth) |
 | 3.10 | Owned-blocks / occupancy scans, semaphore caches | kept (#893) |
@@ -214,15 +214,18 @@ train's own blocks (#1060). The per-block rule has one source, `DynamicTrackBloc
 They guard different invariants (where the train is vs where its route ends), so there is nothing to merge;
 the one genuine duplicate (probe vs merge) was single-sourced by SP12.6.
 
-### 3.7 "Forward blocks = not owned by this train" filter — kept, tracked by #1224
+### 3.7 "Forward blocks = not owned by this train" filter — single-sourced (#1224)
 
-The exclusion `filterNot { it.trainName == trainId }` is written twice: in `DefaultPathReservationService.reservePath`
-(Step 2a.5, over the unique blocks of a candidate path, which also drives the already-owned early return) and in
-`RouteCandidateScreen.screenDivergentCandidates` (the Step 1.6 probe, over `extractUniqueBlocks` of the candidate).
-The two must keep selecting the same candidates: the probe predicts the merge that Step 2i would perform, so a
-divergence would let the probe lie. Hosting one shared form, the way `extractUniqueBlocks` is a file-level helper,
-is a code change and was ruled out of the PR that added this report (#1227, docs and tests only); it is filed as
-**#1224** and is a two-line move.
+The exclusion used to be written twice: in `DefaultPathReservationService.reservePath` (Step 2a.5, over the
+unique blocks of a candidate path, which also drives the already-owned early return) and in
+`RouteCandidateScreen.screenDivergentCandidates` (the Step 1.6 probe, over `extractUniqueBlocks` of the
+candidate). #1224 hosts one shared form, `excludingOwnedBy` in `UniqueBlocks.kt` next to `extractUniqueBlocks`,
+and both sites call it. Both read `DynamicTrackBlock.trainName` on the block itself, not the registry.
+
+The equivalence is load-bearing: the probe predicts the merge that Step 2i would perform, and the already-owned
+early return matches the screen's carve-out for a candidate with no forward blocks, so the two must keep
+selecting the same candidates. A divergence would let the probe lie. A unit test in `UniqueBlocksTest` pins the
+helper (own block dropped, another train's and free blocks kept, order kept).
 
 ### 3.8 Oriented start / end guards — kept (deliberate, #1188 / #1200)
 
@@ -378,7 +381,7 @@ were not changed in PR #1227 (test resource, no behaviour); no new issue was ope
 | --- | --- | --- |
 | #1218 | Facade rollback does not demote a plain switch claim that a failed route promoted to flank (safe direction, follow-up of #1173) | open |
 | #1220 | Reservation expiry phase 2: expire the stalled RESERVED tail of a train that occupies part of its route (needs a physical-progress signal and its own `[sim]` ruling) | open |
-| #1224 | Host one shared form of the forward-block exclusion (3.7) | open |
+| #1224 | Host one shared form of the forward-block exclusion (3.7) | PR #1235 open; closes with it |
 | #1221 | `ReservationContentionTracker.blockedSince` is a set masquerading as a map (the `Double` values are never read) | open |
 | #1222 | Narrow `PathReservationServiceTestBase.inOutNamed` to `DynamicInOut` (removes five test casts) | open |
 | #1228 | Minor follow-ups from the final review of the SP12 stack | open |

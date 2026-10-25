@@ -295,7 +295,7 @@ internal class RouteCandidateScreen(
 		// saves a full probe build per candidate on every first reservation.
 		if (registry.getPathInfo(trainId) == null) return failures to candidates
 		for (candidate in candidates) {
-			val forwardBlocks = extractUniqueBlocks(candidate.value).filterNot { it.trainName == trainId }
+			val forwardBlocks = extractUniqueBlocks(candidate.value).excludingOwnedBy(trainId)
 			val reason =
 				if (forwardBlocks.isEmpty()) {
 					null
