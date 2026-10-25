@@ -4,7 +4,7 @@
 SP12.10, the SP12.5 follow-ups #1207–#1209, #1173 (SP12.7), #1174 (SP12.8) and #1200
 
 **SP12 is still open.** This is an interim status report, not the close-out: #1159 has open sub-issues
-(#1218, #1220, #1221, #1222, #1224, #1228, #1229, see [section 6](#6-open-follow-ups)), and the page is
+(#1218, #1220, #1221, #1222, #1224, #1228, #1229, #1230, see [section 6](#6-open-follow-ups)), and the page is
 updated as they land. The PR that adds it closes only #1205 (the doc-anchor tripwire).
 
 SP12 cut `context/navigation/` into small units behind one facade-style entry, found the duplicate
@@ -383,6 +383,7 @@ were not changed in PR #1227 (test resource, no behaviour); no new issue was ope
 | #1222 | Narrow `PathReservationServiceTestBase.inOutNamed` to `DynamicInOut` (removes five test casts) | open |
 | #1228 | Minor follow-ups from the final review of the SP12 stack | open |
 | #1229 | SP12.8 follow-ups: expiry trigger shape, seams and test cleanups (from the #1226 review round) | open |
+| #1230 | Declare the docs and `.kt` files that `DocLineAnchorTripwireTest` scans as `:core:jvmTest` inputs (a doc-only change can reuse a cached result locally) | open |
 | #1205 | the doc-anchor tripwire | PR #1227 open; closes with it |
 | Goal 9B demands | section 2.3 | recorded, none addressed by SP12 |
 
