@@ -47,7 +47,9 @@ import org.junit.jupiter.api.Test
 @Tag("integration-test")
 class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 	@Test
-	fun `reservePath to a switch end is refused and touches nothing`() {
+	fun `reservePath to a switch end is refused and touches none of its own state`() {
+		// "Its own state": the top-of-request expiry runs before the guards, so a refused request can
+		// still expire other trains' stale holdings; this train1 request registers nothing for itself.
 		// Arrange - vA is a switch, i.e. a non-oriented separator; zA is a legal origin facing it
 		val zA = findSemaphoreByName("zA")
 		val switchVA = findSwitchByName("vA")

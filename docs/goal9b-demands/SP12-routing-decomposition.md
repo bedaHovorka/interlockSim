@@ -89,7 +89,7 @@ through `releasePathDetailed` only.
 | `ReservationTargetDiscovery`: `findNextSemaphoresVia`, `reservePathToAnyTargets`, `isPathAvailableFor`, `resolveForwardSection`, `allSemaphores`, `evaluateTargets` | the service | The raw enumeration is a second opinion about which route to set (what SP5 removed); `reservePathToAnyTargets` is the interlocking's own fallback order; availability reaches a dispatcher only as `CandidateTarget.available`. |
 | `RouteCandidateScreen`: `rejectNonOrientedStart`, `rejectNonOrientedEnd`, `rejectNonContiguousStart`, `screenRearFacingEnds`, `screenDivergentCandidates`, `forwardOnlyPathInfo`, `footprintOf`, `standsOnAnyBlock` | `reservePath` | Request-level guards and screens of one `reservePath` call; their verdicts reach a dispatcher as the typed denials above. |
 | `CandidateCommitter`: `tryAtomicReservation`, `registerAndFinalizeCandidate`, `rollbackUnconfigurableCandidate` | `reservePath` | Steps of one transaction; the rollback is correct only with the `priorSwitches` snapshot taken for the same candidate. |
-| `PathReservationRegistry.expiredHoldings` (internal), `isTrainOnBlock` (a top-level internal function in `RouteReleaser.kt`), the reservation TTL | `DefaultReservationExpiry`, `RouteReleaser` | A query that only makes sense together with the release policy that acts on it (`DefaultReservationExpiry` is the only caller of `expiredHoldings`); the TTL is a behavioural constant. |
+| `PathReservationRegistry.expiredHoldings` and `PathReservationRegistry.wouldBeStaleClaim` (both internal), `isTrainOnBlock` (a top-level internal function in `TrainOnBlock.kt`), the reservation TTL | `DefaultReservationExpiry`, `RouteReleaser` | A query that only makes sense together with the release policy that acts on it (`DefaultReservationExpiry` is the only caller of `expiredHoldings`); the TTL is a behavioural constant. |
 | Every mutating registry operation: `registerAtomic`, `registerSwitches`, `registerFlankSwitches`, `registerPathInfo`, `unregister*`, `reclaimStaleSwitchOwnership`, `restorePathInfo`, `trimPathInfoTo*`, `clear` | reservation transactions | Called alone each can leave blocks, switches, signals and PathInfo disagreeing. |
 | `BlockOwnershipTable`, `SwitchOwnershipTable`, `PathInfoStore`, `PathInfoMerger`, `getSwitchClaim` | `internal` to `:core` | A dispatcher module cannot see them; Goal 9B should not ask for them to be widened. What it needs is a query on the registry facade. |
 
@@ -262,7 +262,7 @@ from outside the registry, a stale claim, a facade path with no `SwitchConfigura
   next to the registry's O(1) `getBlocks` / `getOccupiedBlocks`. The scan is the only one that sees a
   train standing on a block the registry does not attribute to it (the Issue #893 stall at t=17); the
   registry reads are blind to that state. Kept.
-- "A train stands on this block" has one definition, `isTrainOnBlock` (`RouteReleaser.kt`), shared by the
+- "A train stands on this block" has one definition, `isTrainOnBlock` (`TrainOnBlock.kt`), shared by the
   route release and the kernel expiry (`PathReservationRegistry.expiredHoldings`) so they cannot disagree.
 - `ReservationTargetDiscovery.allSemaphores` (Issue #965) and `DefaultNetworkPerceptionPort`'s cache scan
   the same grid and keep the same list. Kept (SP12.3 D2): the kernel must not depend on a port and the port

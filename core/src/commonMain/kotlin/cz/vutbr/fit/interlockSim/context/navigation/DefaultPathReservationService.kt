@@ -1012,7 +1012,10 @@ class DefaultPathReservationService(
 	 * it first would empty its footprint, so `rejectNonContiguousStart` would pass vacuously and a
 	 * mid-station extension would be granted as an orphan route. [reservePath] and
 	 * [reservePathToAny] call this at their top; if the request fails, the next loop tick expires
-	 * the holding.
+	 * the holding. The expiry runs before the Step 0 guards, so a request that is then refused
+	 * (`GeometricallyImpossible`, `NonContiguousStart`) can still expire other trains' stale
+	 * holdings -- correct, as a stale holding is stale regardless and the loop tick would do the
+	 * same about a second later.
 	 */
 	internal fun expireStaleReservations(exceptTrainId: String): Int = expiry.expireStale(exceptTrainId)
 

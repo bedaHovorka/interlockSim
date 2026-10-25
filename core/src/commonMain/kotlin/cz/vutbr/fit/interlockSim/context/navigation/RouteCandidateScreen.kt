@@ -384,9 +384,9 @@ internal class RouteCandidateScreen(
 	 * time, discarding a legitimate extension. Starting the merge candidate where the NEW blocks
 	 * actually begin makes `new.start` agree with `old.target` naturally, so the merge succeeds
 	 * and properly extends PathInfo instead of aborting -- leaving
-	 * [CandidateCommitter.rollbackIfMergeAborted]'s rollback to fire only for genuinely
-	 * pathological aborts (duplicated new-start, the 3rd-occurrence cycle guard), not for this
-	 * routine extension shape.
+	 * the merge-abort rollback of [CandidateCommitter] (its private `rollbackIfMergeAborted`) to
+	 * fire only for genuinely pathological aborts (duplicated new-start, the 3rd-occurrence cycle
+	 * guard), not for this routine extension shape.
 	 *
 	 * @param path The FULL candidate path (including any already-owned prefix).
 	 * @param forwardBlocks The blocks this candidate newly reserves (excludes any already-owned
