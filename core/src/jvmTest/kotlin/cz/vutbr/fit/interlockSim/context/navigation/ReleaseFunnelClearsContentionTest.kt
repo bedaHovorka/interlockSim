@@ -54,7 +54,7 @@ class ReleaseFunnelClearsContentionTest : PathReservationServiceTestBase() {
 	@BeforeEach
 	fun resolveEndpoints() {
 		inOutA = inOutNamed("A")
-		inOutB = inOutNamed("B") as DynamicInOut
+		inOutB = inOutNamed("B")
 	}
 
 	/** Train A holds the upper track; trains B and C each hold a block of their own and are blocked by A. */
