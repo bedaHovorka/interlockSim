@@ -21,7 +21,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
  *   merely-busy one means "wait and retry", not "give up".
  *
  * Shared by [DefaultPathReservationService.reservePath], the candidate screening in
- * [RouteCandidateScreen] and the attempt classification there (Issue #1210, SP12.9).
+ * [RouteCandidateScreen] and the service's attempt classification (Issue #1210, SP12.9).
  *
  * @property reason First geometric failure reason, or `null` if no candidate hit one.
  * @property count Number of candidates that failed geometrically.
@@ -33,9 +33,9 @@ internal data class GeometricFailures(
 
 /**
  * Records one geometric candidate failure: keeps the first [reason], increments the count
- * (Issue #903 for the reason, Issue #937 for the count). Extracted so the call site in
- * [DefaultPathReservationService.reservePath]'s candidate loop stays a single line, keeping that
- * method's cyclomatic complexity under threshold.
+ * (Issue #903 for the reason, Issue #937 for the count). Extracted so each call site stays a
+ * single line: the two screens in [RouteCandidateScreen] and the service's switch-configuration
+ * and G4 failure recorders.
  */
 internal fun recordGeometricFailureOnce(
 	current: GeometricFailures,

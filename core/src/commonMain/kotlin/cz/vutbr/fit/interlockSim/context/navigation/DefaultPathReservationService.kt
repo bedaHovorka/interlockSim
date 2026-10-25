@@ -76,7 +76,7 @@ private val logger = KotlinLogging.logger {}
  * @property routeFinder Cost-based route planner for InOut-to-InOut automatic route selection (Issue #597)
  * @since Issue #294 (Phase 2 of Issue #292)
  */
-@Suppress("LargeClass") // Core reservation service; splitting would obscure the algorithm
+@Suppress("LargeClass") // SP12's last leaf removes this once the candidate commit extraction lands
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
