@@ -232,7 +232,7 @@ class DefaultPathReservationService(
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
 		// Issue #1174: a stale holding of another train must not refuse this request.
-		expireStaleReservations()
+		expireStaleReservations(exceptTrainId = trainId)
 		return reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
 	}
 
@@ -857,7 +857,7 @@ class DefaultPathReservationService(
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
 		// Issue #1174: once per request, not per target -- the attempts below call the internal overload.
-		expireStaleReservations()
+		expireStaleReservations(exceptTrainId = trainId)
 
 		// Issue #1188: a non-oriented start (a switch) is refused once, here. reservePath would
 		// refuse it too, before its candidate-path enumeration, but only after STEP 1 had already
@@ -1002,17 +1002,31 @@ class DefaultPathReservationService(
 	 * occupies track and never expires. The completion is logged and counted once, on the call that
 	 * frees the last block.
 	 *
-	 * Triggered at the top of [reservePath] and [reservePathToAny] (never per attempt inside
+	 * This public form is the loop tick: the simulation loops call it once per control step, and it
+	 * judges every train. [reservePath] and [reservePathToAny] call the `exceptTrainId` overload at
+	 * their top instead, which exempts the requesting train. It never runs per attempt inside
 	 * [reservePathToAnyNextSemaphore], whose attempts call the internal `reservePath` overload so an
-	 * expiry cannot move the before/after snapshots its bypass rollback relies on;
-	 * [isPathToAnyNextSemaphoreAvailable] stays a pure query) and
-	 * once per control step by the simulation loops. A release that throws is contained and logged,
-	 * so it cannot fail the request that triggered it; the holding is offered again on the next call.
+	 * expiry cannot move the before/after snapshots its bypass rollback relies on, and
+	 * [isPathToAnyNextSemaphoreAvailable] stays a pure query. A release that throws is contained and
+	 * logged, so it cannot fail the request that triggered it; the holding is offered again on the
+	 * next call.
 	 */
-	override fun expireStaleReservations(): Int {
+	override fun expireStaleReservations(): Int = expireStale(exceptTrainId = null)
+
+	/**
+	 * [expireStaleReservations] at the top of a request by [exceptTrainId], which is exempt (Issue
+	 * #1174 ruling): its new claim restarts its clock, as it restarts the #847 sweeper's. Expiring it
+	 * first would empty its footprint, so `rejectNonContiguousStart` would pass vacuously (ruling D8)
+	 * and a mid-station extension would be granted as an orphan route. If the request fails, the next
+	 * loop tick expires the holding.
+	 */
+	internal fun expireStaleReservations(exceptTrainId: String): Int = expireStale(exceptTrainId)
+
+	private fun expireStale(exceptTrainId: String?): Int {
 		val completed =
 			registry
 				.expiredHoldings(ttl = reservationTtlSimSeconds)
+				.filter { it.trainId != exceptTrainId }
 				// The registry judges occupancy only over the blocks it attributes to the train; a train
 				// standing on a block it holds no entry for (Issue #893) is on the track all the same.
 				.filterNot { candidateScreen.standsOnAnyBlock(it.trainId) }

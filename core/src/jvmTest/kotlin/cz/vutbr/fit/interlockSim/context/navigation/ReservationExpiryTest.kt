@@ -257,6 +257,59 @@ class ReservationExpiryTest : PathReservationServiceTestBase() {
 	}
 
 	@Test
+	fun `the requesting train's own stale holding survives its extension request`() {
+		val zA = findSemaphoreByName("zA")
+		val doB1 = findSemaphoreByName("doB1")
+		lateinit var firstSegment: List<DynamicTrackBlock>
+		var extension: PathReservationService.ReservationResult? = null
+
+		atSimTimes(
+			0.0 to { firstSegment = assertReservationSuccess(service.reservePath("train1", zA, doB1)).reservedBlocks },
+			60.0 to {
+				// The first segment is TTL old, but the requesting train is exempt from the expiry at the
+				// top of its own request: its new claim restarts the clock instead. Expiring it first
+				// would empty its footprint and let the extension pass contiguity vacuously (ruling D8).
+				extension = service.reservePath("train1", doB1, inOutNamed("B"))
+				firstSegment.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
+				assertThat(zA.signal.isAllowing()).isTrue()
+			},
+			119.5 to {
+				assertThat(service.expireStaleReservations()).isEqualTo(0)
+				firstSegment.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
+			},
+			// TTL after the extension: the loop tick (the public call) expires the whole holding.
+			120.0 to { service.expireStaleReservations() },
+			121.5 to { service.expireStaleReservations() }
+		)
+
+		assertReservationSuccess(checkNotNull(extension) { "the extension was never requested" })
+		assertThat(service.getReservedBlocks("train1")).isEmpty()
+		assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+	}
+
+	@Test
+	fun `reservePathToAny exempts the requesting train's own stale holding`() {
+		val zB = findSemaphoreByName("zB")
+		lateinit var held: List<DynamicTrackBlock>
+		val results = mutableListOf<PathReservationService.ReservationResult>()
+
+		atSimTimes(
+			0.0 to {
+				held = assertReservationSuccess(service.reservePath("train1", inOut1, zB)).reservedBlocks
+				// No proceed aspect at the head: a self-expiry would free the whole holding at once.
+				entrySemaphoreOf(held).signal = Signal.STOP
+			},
+			60.0 to {
+				results += service.reservePathToAny("train1", zB)
+				held.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
+			}
+		)
+
+		assertThat(results.single()).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(expiry.expiredHoldingCount).isEqualTo(0)
+	}
+
+	@Test
 	fun `the contender's single reservePath succeeds after the expiry`() {
 		lateinit var blocks: List<DynamicTrackBlock>
 		var contender: PathReservationService.ReservationResult? = null
