@@ -26,7 +26,6 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import org.junit.jupiter.api.BeforeEach
@@ -61,7 +60,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 				registry,
 				environment,
 				ReservationTargetDiscovery(navigator, environment),
-				simulationContext.scope.get<PathInfoBuilder>()
+				pathInfoBuilder
 			)
 	}
 
@@ -246,6 +245,18 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		assertThat(
 			screen.rearFacingEndReason(findSemaphoreByName("zA"), findSemaphoreByName("doA1"), emptyList(), 0)
 		).isNull()
+	}
+
+	@Test
+	fun `a switch target is never rear-facing`() {
+		val zA = findSemaphoreByName("zA")
+		val vB = findSwitchByName("vB")
+		val candidates = candidatePaths(zA, vB)
+		assertThat(candidates).isNotEmpty()
+
+		candidates.withIndex().forEach { (index, path) ->
+			assertThat(screen.rearFacingEndReason(zA, vB, path, index), "candidate $index").isNull()
+		}
 	}
 
 	@Test
