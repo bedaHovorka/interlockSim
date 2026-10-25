@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test
  * reports [PathReservationRegistry.MergeOutcome.Aborted] the candidate that reached the final
  * commit step blocks-reserved, switches locked, START signal lit — must be released
  * transactionally (exactly what it acquired), and
- * [DefaultPathReservationService.finalizePreparedCandidate] must report `null` so
+ * [CandidateCommitter.finalizePreparedCandidate] must report `null` so
  * [DefaultPathReservationService.reservePath] tries the next candidate.
  *
  * The registry-level abort causes (duplicated new-start, reversal, cycle) are pinned by

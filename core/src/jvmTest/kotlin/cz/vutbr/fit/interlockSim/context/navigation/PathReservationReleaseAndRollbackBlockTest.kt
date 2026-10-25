@@ -199,7 +199,7 @@ class PathReservationReleaseAndRollbackBlockTest : PathReservationServiceTestBas
 		val listener = RecordingBlockOccupancyListener()
 		environment.addBlockOccupancyListener(listener)
 
-		(service as DefaultPathReservationService).rollbackUnconfigurableCandidate(
+		(service as DefaultPathReservationService).candidateCommitter.rollbackUnconfigurableCandidate(
 			trainId = "train1",
 			forwardBlocks = success.reservedBlocks,
 			switches = emptyList(),
@@ -224,7 +224,7 @@ class PathReservationReleaseAndRollbackBlockTest : PathReservationServiceTestBas
 			assertThat(registry.getRegisteredAtSimTime(block), "timestamp of $block after reserve").isNotNull()
 		}
 
-		(service as DefaultPathReservationService).rollbackUnconfigurableCandidate(
+		(service as DefaultPathReservationService).candidateCommitter.rollbackUnconfigurableCandidate(
 			trainId = "train1",
 			forwardBlocks = success.reservedBlocks,
 			switches = emptyList(),

@@ -108,7 +108,7 @@ internal class RouteSignalConfigurator(
 	 * Extracted from [DefaultPathReservationService.reservePath] so the candidate-loop body stays under the cyclomatic
 	 * complexity threshold. Returns [StartSignalResult.Configured] when the start signal/inSemaphore was configured for
 	 * the reserved candidate, and a specific failure variant otherwise — in which case the caller rolls the candidate
-	 * back via [DefaultPathReservationService.rollbackUnconfigurableCandidate] and continues to the next candidate.
+	 * back via [CandidateCommitter.rollbackUnconfigurableCandidate] and continues to the next candidate.
 	 *
 	 * - START is a [DynamicRailSemaphore]: configure it for [startBlock], the path's first block --
 	 *   the one the semaphore actually bounds. The first *forward* block is not that block on a route
