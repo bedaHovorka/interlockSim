@@ -161,8 +161,9 @@ class InOutWorker(
 					}
 					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
 						// Issue #903, same reasoning as the NonContiguousStart branch above: this
-						// is a permanent impossibility (rear-facing START or END, unconfigurable
-						// switch, or non-oriented route origin or end), not ordinary contention, so
+						// is a permanent impossibility (rear-facing START or END, or unconfigurable
+						// switch; the non-oriented endpoint refusals cannot arise here, because the
+						// origin is an InOut and every target a semaphore), not ordinary contention, so
 						// `continue`-and-retry via waitUntil(pathFree) would spin without advancing simulation
 						// time -- the condition it waits on is path AVAILABILITY, which this failure mode
 						// leaves untouched.

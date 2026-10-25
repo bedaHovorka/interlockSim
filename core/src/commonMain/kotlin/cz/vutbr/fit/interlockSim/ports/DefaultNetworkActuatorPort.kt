@@ -43,7 +43,8 @@ private val logger = KotlinLogging.logger {}
  *
  * The `requestRoute` method maps directly to
  * [PathReservationService.reservePath] with the located [DynamicInOut] objects as
- * endpoints.  `releaseRoute` maps to [PathReservationService.releasePath].  Switch and
+ * endpoints.  `releaseRouteDetailed` maps to [PathReservationService.releasePathDetailed], and
+ * `releaseRoute` reduces its result to a Boolean.  Switch and
  * signal commands mutate the respective dynamic wrapper's property directly (same pattern
  * used by the interlocking and dispatcher logic in [ShuntingLoop]).
  *

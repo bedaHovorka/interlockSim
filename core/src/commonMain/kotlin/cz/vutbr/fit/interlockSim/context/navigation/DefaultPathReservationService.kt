@@ -964,7 +964,8 @@ class DefaultPathReservationService(
 	 * Single write path for [reservePathToAnyNextSemaphore]'s `lastResult` tracker (Issue #903).
 	 *
 	 * `GeometricallyImpossible` is a PERMANENT impossibility (rear-facing START or END, unconfigurable
-	 * switch, or a non-oriented route origin or end), not ordinary contention: once seen for one
+	 * switch, or a non-oriented route origin; every target here is a semaphore, so a non-oriented
+	 * end cannot arise), not ordinary contention: once seen for one
 	 * candidate semaphore, it must win over any later contention result (`AllPathsBlocked`,
 	 * `NoPathExists`, or the bypass-rollback branch's `AllPathsBlocked`) so the caller --
 	 * [cz.vutbr.fit.interlockSim.sim.InOutWorker] on the train-navigation path -- throws
