@@ -230,7 +230,11 @@ class DefaultPathReservationService(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
 		maxDepth: Int
-	): PathReservationService.ReservationResult = reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
+	): PathReservationService.ReservationResult {
+		// Issue #1174: a stale holding of another train must not refuse this request.
+		expireStaleReservations()
+		return reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
+	}
 
 	/**
 	 * [reservePath] with the topological candidate paths supplied by the caller (Issue #966).
@@ -602,7 +606,7 @@ class DefaultPathReservationService(
 			val switchesBefore = registry.getSwitches(trainId).toSet()
 			val pathInfoBefore = registry.getPathInfo(trainId)
 
-			val result = reservePath(trainId, start, semaphore)
+			val result = reservePath(trainId, start, semaphore, DEFAULT_MAX_PATH_DEPTH, topologicalPaths = null)
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
@@ -852,6 +856,8 @@ class DefaultPathReservationService(
 		logger.debug {
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
+		// Issue #1174: once per request, not per target -- the attempts below call the internal overload.
+		expireStaleReservations()
 
 		// Issue #1188: a non-oriented start (a switch) is refused once, here. reservePath would
 		// refuse it too, before its candidate-path enumeration, but only after STEP 1 had already
@@ -977,7 +983,61 @@ class DefaultPathReservationService(
 	): PathReservationService.ReservationResult =
 		recordAttemptResult(current, PathReservationService.ReservationResult.AllPathsBlocked(attemptCount))
 
-	override fun expireStaleReservations(): Int = 0
+	/**
+	 * Kernel-side reservation expiry (Issue #1174, absorbs #975): every holding
+	 * [PathReservationRegistry.expiredHoldings] reports for [reservationTtlSimSeconds] is released
+	 * through [RouteReleaser.releasePathDetailed] -- never [releasePath] or a raw registry removal --
+	 * so the release is the one `cancel_route` and the orphan sweeper use: signals reset to STOP
+	 * first, blocks cancelled, switches unlocked and unregistered, the PathInfo removed, one
+	 * `BlockReleased` per block. Only trains that occupy nothing qualify, which is the same
+	 * whole-route rule `OrphanReservationSweeper` applies before its `releaseRouteDetailed`.
+	 *
+	 * **Approach lock (Issue #1050).** A proceed aspect at the head of the holding may have a train
+	 * committed to it; the release then keeps that block, drops the signals to STOP and frees the
+	 * rest. The holding is reported again on the next call and freed once the booking window has
+	 * closed in simulation time -- or, if the committed train booked the block meanwhile, it now
+	 * occupies track and never expires. The completion is logged and counted once, on the call that
+	 * frees the last block.
+	 *
+	 * Triggered at the top of [reservePath] and [reservePathToAny] (never per attempt inside
+	 * [reservePathToAnyNextSemaphore], whose attempts call the internal `reservePath` overload so an
+	 * expiry cannot move the before/after snapshots its bypass rollback relies on;
+	 * [isPathToAnyNextSemaphoreAvailable] stays a pure query) and
+	 * once per control step by the simulation loops. A release that throws is contained and logged,
+	 * so it cannot fail the request that triggered it; the holding is offered again on the next call.
+	 */
+	override fun expireStaleReservations(): Int {
+		val completed = registry.expiredHoldings(ttl = reservationTtlSimSeconds).count { expireHolding(it) }
+		expiredHoldingCount += completed
+		return completed
+	}
+
+	/** Release one stale [holding]; `true` when nothing of it is left. */
+	private fun expireHolding(holding: ExpiredHolding): Boolean {
+		val trainId = holding.trainId
+		val release =
+			try {
+				releaser.releasePathDetailed(trainId)
+			} catch (e: Exception) {
+				logger.warn(e) { "Reservation expiry of '$trainId' failed; the holding is offered again (Issue #1174)" }
+				return false
+			}
+		if (release.deferred.isNotEmpty()) {
+			logger.info {
+				"Reservation expiry deferred for '$trainId': no new claim for ${holding.ageSimSeconds}s of " +
+					"simulated time (TTL ${reservationTtlSimSeconds}s), but approach locking kept " +
+					"${release.deferred.size} block(s) reserved with signals at STOP; retried on the next call " +
+					"(Issue #1174)"
+			}
+			return false
+		}
+		logger.info {
+			"Reservation expired for '$trainId': ${release.released.size} un-entered block(s) held with no new " +
+				"claim for ${holding.ageSimSeconds}s of simulated time (TTL ${reservationTtlSimSeconds}s), " +
+				"released through releasePathDetailed (Issue #1174)"
+		}
+		return true
+	}
 
 	/** See [RouteReleaser.unregister]. */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> = releaser.unregister(trainId)

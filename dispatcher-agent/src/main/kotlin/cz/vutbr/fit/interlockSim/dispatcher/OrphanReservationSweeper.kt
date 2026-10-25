@@ -41,6 +41,20 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * below is the progress signal — it restarts on every block the train enters — and it also keeps
  * the Issue #1025 approach-lock postponement, where a booked tail block restarts the clock.
  *
+ * ## The kernel now expires the un-travelled whole-route case too (Issue #1174)
+ *
+ * Since Issue #1174 `:core` releases a holding whose blocks are all RESERVED and un-entered once the
+ * train's newest block registration is `DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS`
+ * (the same 60 simulated seconds as [DEFAULT_STALE_AFTER_SIM_SECONDS]) old, through the same
+ * `releasePathDetailed` this sweeper reaches via [NetworkActuatorPort.releaseRouteDetailed]. Its age
+ * judges only trains that occupy nothing, so the progress argument above does not apply to it. It
+ * runs at the top of every `reservePath` and once per loop tick, before the control step that calls
+ * [sweep], and its clock starts at the registration rather than at the first sweep that saw the
+ * holding, so it fires no later than this sweeper would. [staleReleaseCount] therefore falls toward
+ * zero in AI runs; phantom owners and the occupying-train tail stay this sweeper's. A sweep that
+ * finds a holding the kernel has half-released (approach lock deferral) releases the remainder through
+ * the same idempotent call, so the two never conflict -- they only share the work.
+ *
  * `MultiTrainLoop` runs `BlockResourceRegistry.releaseFreeResources()` once per iteration as its
  * safety net. `ShuntingLoop` — the loop `shuntingLoopAI` runs — has none, and could not use that
  * one regardless: it holds no kDisco `Resource`s at all, and `BlockResourceRegistry` is `internal`
