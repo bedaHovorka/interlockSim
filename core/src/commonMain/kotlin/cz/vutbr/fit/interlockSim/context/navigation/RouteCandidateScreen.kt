@@ -326,7 +326,7 @@ internal class RouteCandidateScreen(
 	 * routine one, and [PathInfoMerger.merge]'s Step 0a fail-safe aborts every
 	 * time, discarding a legitimate extension. Starting the merge candidate where the NEW blocks
 	 * actually begin makes `new.start` agree with `old.target` naturally, so the merge succeeds
-	 * and properly extends PathInfo instead of aborting -- leaving [DefaultPathReservationService.rollbackIfMergeAborted]'s
+	 * and properly extends PathInfo instead of aborting -- leaving `DefaultPathReservationService.rollbackIfMergeAborted`'s
 	 * rollback to fire only for genuinely pathological aborts (duplicated new-start, the
 	 * 3rd-occurrence cycle guard), not for this routine extension shape.
 	 *
