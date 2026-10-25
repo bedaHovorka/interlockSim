@@ -522,7 +522,7 @@ class PathReservationRegistry(
 	 *
 	 * @since Issue #1173
 	 */
-	fun wouldBeStaleClaim(
+	internal fun wouldBeStaleClaim(
 		switch: DynamicRailSwitch,
 		trainId: String
 	): Boolean = switchTable.wouldBeStaleClaim(switch, trainId)

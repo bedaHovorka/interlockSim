@@ -337,8 +337,8 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 	 * again as FLANK is promoted to a flank claim by `registerFlankSwitches`, and the rollback keeps
 	 * the switch (it is not this call's new lock) without demoting it. This is a known over-hold in
 	 * the safe direction -- the switch stays locked longer than route 1 needs, bounded by the
-	 * train's journey -- and a follow-up of #1173 tracks it. When that follow-up demotes the claim
-	 * on rollback, the flank assertion below flips.
+	 * train's journey -- and #1218 tracks it. When #1218 demotes the claim on rollback, the flank
+	 * assertion below flips.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -376,7 +376,7 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		assertThat(registry.getSwitchOwner(switch)).withMessage("owner of route 1's running switch").isEqualTo(train)
 		assertThat(switch.locked).withMessage("route 1's running switch must stay locked").isTrue()
 		assertThat(registry.isFlankProtected(switch))
-			.withMessage("promoted by the failed route and not demoted by its rollback (follow-up of #1173)")
+			.withMessage("promoted by the failed route and not demoted by its rollback (#1218)")
 			.isTrue()
 		assertHeld(listOf(heldBlock), train)
 	}

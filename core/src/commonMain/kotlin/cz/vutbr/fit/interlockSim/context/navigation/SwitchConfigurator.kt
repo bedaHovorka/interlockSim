@@ -390,8 +390,9 @@ internal class SwitchConfigurator(
 	 *
 	 * The second skip keeps a claim from being born stale (Issue #1173): a listed switch the
 	 * candidate does not genuinely traverse used to be registered (and locked) with no adjacent
-	 * block held, and only another train's Step 2e.5 ever reclaimed it. Inside Step 2f the train
-	 * holds every candidate block, so every traversed switch has a held adjacent block and stays
+	 * block held, and only another train's Step 2e.5 ever reclaimed it. At Step 2f every candidate
+	 * block is registry-held by the train: the new blocks since Step 2d, the owned-prefix blocks since
+	 * their own reservation. So every traversed switch has a held adjacent block and stays
 	 * registered (Issue #1103 item 3 ruling: every switch the train rolls over stays held); only a
 	 * switch at a path end or in a hand-built list with no held block next to it is skipped.
 	 *
@@ -408,8 +409,10 @@ internal class SwitchConfigurator(
 		// traverse (configureSwitchesInPath skips them leniently when their segments are
 		// undeterminable). A non-traversed switch registered to ANOTHER train must not be
 		// registered here -- registerSwitches throws on a foreign owner. Every genuinely
-		// TRAVERSED switch passes this filter: a live foreign owner was refused as Locked
-		// by configureSwitchesInPath (the caller's previous step) and stale foreign ownership was reclaimed in reservePath Step 2e.5.
+		// TRAVERSED switch passes the owner filter: a live foreign owner was refused as Locked
+		// by configureSwitchesInPath (the caller's previous step), and stale foreign ownership
+		// was reclaimed in reservePath Step 2e.5. Issue #1173: the born-stale filter then drops
+		// a switch the train holds no adjacent block for (see the KDoc).
 		val (bornStale, registrable) =
 			switches
 				.filterNot { registry.isOwnedByOtherTrain(it, trainId) }
@@ -460,8 +463,9 @@ internal class SwitchConfigurator(
 	 * `unregisterSwitches`) unlocks wholesale instead. [registerSwitches] no longer makes a claim
 	 * born stale (Issue #1173), but this step stays for the one remaining path: the registry is
 	 * public, and [PathReservationRegistry.registerSwitches] accepts a switch the train holds no
-	 * adjacent block for -- a claim born stale, which no block release ever visits. Without this step the G10 pre-check would refuse a same-position
-	 * candidate for such a switch forever (the Issue #1065 trap).
+	 * adjacent block for -- a claim born stale, which no block release ever visits. Without this
+	 * step the G10 pre-check would refuse a same-position candidate for such a switch forever (the
+	 * Issue #1065 trap).
 	 *
 	 * A foreign owner that survives this step is live and refuses the candidate in
 	 * [configureSwitchesInPath] instead.

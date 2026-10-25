@@ -650,6 +650,21 @@ class PathReservationRegistryTest : PathReservationServiceTestBase() {
 			return Triple(before, switch, after)
 		}
 
+		@Test
+		fun `wouldBeStaleClaim asks whether the train holds a block bounded by the switch, without claiming it`() {
+			// Issue #1173: the registry entry point SwitchConfigurator.registerSwitches uses.
+			val (_, switch, block) = straddledSwitch()
+			assertThat(registry.wouldBeStaleClaim(switch, "train1"), "no block held").isTrue()
+
+			assertThat(registry.registerAtomic("train1", listOf(block)))
+				.isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+
+			assertThat(registry.wouldBeStaleClaim(switch, "train1"), "block at the switch held").isFalse()
+			assertThat(registry.wouldBeStaleClaim(switch, "train2"), "another train's block").isTrue()
+			assertThat(registry.getSwitchOwner(switch), "a pure query").isNull()
+			assertThat(switch.locked, "a pure query").isFalse()
+		}
+
 		@ParameterizedTest(name = "release-time reclaim, flank = {0}")
 		@ValueSource(booleans = [false, true])
 		fun `unregisterBlock reclaims a stale plain claim at the freed block's ends and keeps a flank claim`(flank: Boolean) {
