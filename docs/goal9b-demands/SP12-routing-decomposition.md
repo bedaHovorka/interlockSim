@@ -394,8 +394,34 @@ Closed along the way: #1202 (PR #1206), #1204 (PR #1213), #1188 (PR #1189).
 | `PathReservationServiceTest` groups (SP6.1) and `TargetSelectionSingleEntryTest` pass at every leaf's merge | each leaf page, "Acceptance evidence" |
 | `reservationExpiryFollowsProgress` passes | `ReservationExpiryTest` (SP12.8 page) |
 | Duplicate-check report | section 3 |
-| `heavyTest` run on the final state | Recorded by the controller (base `e3fade0f` vs M7 head). |
-| #895 re-baseline recorded before and after | Recorded by the controller (base `e3fade0f` vs M7 head). Per-leaf control-arm tables are on the leaf pages (base == head on every column for each). |
+| `heavyTest` run on the final state | Green; see "heavyTest" below. |
+| #895 re-baseline recorded before and after | Base == head on every column; see "#895 re-baseline" below. Per-leaf control-arm tables are on the leaf pages. |
+
+### #895 re-baseline — rule-based control arm
+
+Manual `aiSweep` control arm, grid `endTimeSeconds 600, repeat 10, perRunTimeoutSeconds 900,
+axes: example: ["shuntingLoop"]`, other axes at their defaults. Railway outcomes summed over the 10 runs:
+
+| Revision | Runs | Journeys | Entered | Exited | Max concurrent | Block transitions | Conflicts | Failed reservations |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base `e3fade0f` (before SP12.9) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| SP12 close-out head (`f2d25ab9` build; `840b0302` differs in comments, docs and tests only) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+
+Both sweeps: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Base == head on every column.
+The same identity held at every leaf head in between (SP12.9, SP12.10, the SP12.5 follow-ups, #1173,
+#1200, #1174); each PR records its own row.
+
+### heavyTest
+
+On the close-out head, solo, all three modules: `BUILD SUCCESSFUL in 11m 15s`.
+
+| Module | Tests | Failures | Errors | Notes |
+| --- | --- | --- | --- | --- |
+| `:core` | 2,003 | 0 | 0 | includes the Praha `MultiTrainScaleStressTest` |
+| `:dispatcher-agent` | 3,020 | 0 | 0 | includes `RuleBasedDispatcherDeterminismHeavyTest` |
+| `:desktop-ui` | — | — | — | has no heavy tests; recorded as empty, not as evidence |
+
+Gate on `840b0302` (`build detekt ktlintCheck test integrationTest`): 7,151 tests, 0 failures, 0 errors.
 
 ### This PR
 
