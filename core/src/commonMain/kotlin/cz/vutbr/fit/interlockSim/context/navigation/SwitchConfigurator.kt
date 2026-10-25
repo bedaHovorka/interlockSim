@@ -394,7 +394,7 @@ internal class SwitchConfigurator(
 	 * Correct only inside Step 2f, after Step 2e.5 and after [configureSwitchesInPath] returned
 	 * `Configured`; called alone it registers a switch the candidate never touched (born stale).
 	 *
-	 * @since Issue #1170 (extracted from `CandidateCommitter.configureAndRegisterSwitches`)
+	 * @since Issue #1170 (extracted from `DefaultPathReservationService.configureAndRegisterSwitches`)
 	 */
 	fun registerSwitches(
 		trainId: String,

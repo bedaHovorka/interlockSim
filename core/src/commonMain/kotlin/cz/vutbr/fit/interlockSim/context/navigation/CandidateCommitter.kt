@@ -28,15 +28,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 /**
- * Candidate commit, finalize and rollback (Issue #1211, SP12.10): Steps 2c-2i of
- * [DefaultPathReservationService.reservePath]'s candidate loop, i.e. everything that mutates
- * state for one screened candidate path and undoes exactly that candidate when a step fails.
+ * Candidate commit, finalize and rollback (Issue #1211, SP12.10): Steps 2c to 2i of
+ * [DefaultPathReservationService.reservePath]'s candidate loop (2c, 2d, 2e to 2g including 2e.5,
+ * 2h, 2i), i.e. everything that mutates state for one screened candidate path and undoes exactly
+ * that candidate when a step fails.
  *
  * In step order:
  * - **2c** [tryAtomicReservation]: reserve the candidate's forward blocks all-or-nothing.
  * - **2d** [registerAndFinalizeCandidate]: register the blocks with the registry, or roll the
  *   registry conflict back ([rollbackRegistryConflict]).
- * - **2e.5-2g** [prepareReservedCandidate]: build the PathInfo, reclaim orphan/stale switch
+ * - **2e-2g** [prepareReservedCandidate]: build the PathInfo, reclaim orphan/stale switch
  *   ownership, configure and register the switches ([configureAndRegisterSwitches]) and light
  *   the START signal; a failed switch or START configuration rolls the candidate back
  *   ([rollbackUnconfigurableCandidate], [rollbackFailedStartSignalCandidate]).
@@ -75,10 +76,10 @@ internal class CandidateCommitter(
 	private val screen: RouteCandidateScreen
 ) {
 	/**
-	 * Step 2d of [DefaultPathReservationService.reservePath]'s candidate loop: registers the atomically reserved candidate
-	 * with the registry and finalizes it, or rolls the registry conflict back. Extracted
-	 * (SonarCloud S3776, PR #1109) so both `when` arms' branching stay out of [DefaultPathReservationService.reservePath]'s
-	 * own cognitive complexity.
+	 * Step 2d of [DefaultPathReservationService.reservePath]'s candidate loop: registers the
+	 * atomically reserved candidate with the registry and finalizes it, or rolls the registry
+	 * conflict back. Extracted (SonarCloud S3776, PR #1109) so both `when` arms' branching stay out of
+	 * [DefaultPathReservationService.reservePath]'s own cognitive complexity.
 	 *
 	 * @return the updated [GeometricFailures] (a rejected candidate may record one) and the
 	 *   candidate's terminal result, or `null` when the candidate was rejected and the caller
@@ -259,7 +260,8 @@ internal class CandidateCommitter(
 	}
 
 	/**
-	 * Steps 2h/2i of [DefaultPathReservationService.reservePath]'s candidate loop: configures the intermediate semaphores,
+	 * Steps 2h/2i of [DefaultPathReservationService.reservePath]'s candidate loop: configures the
+	 * intermediate semaphores,
 	 * registers the forward-only PathInfo, emits the reservation events, and reports
 	 * [PathReservationService.ReservationResult.Success]. Extracted (SonarCloud S3776, PR
 	 * #1109) so this branching stays out of [DefaultPathReservationService.reservePath]'s own cognitive complexity.
@@ -650,7 +652,8 @@ internal class CandidateCommitter(
 	 *
 	 * - Cancels path setup and unregisters ONLY the freshly reserved [forwardBlocks], each through
 	 *   [RouteReleaser.rollbackBlock] (which also reclaims a switch lock left stale and publishes no release
-	 *   event, since every caller runs before [DefaultPathReservationService.reservePath] announces the blocks -- Issue #961)
+	 *   event, since every caller runs before [DefaultPathReservationService.reservePath] announces
+	 *   the blocks -- Issue #961)
 	 * - Unlocks AND unregisters ONLY this candidate's switches that are not part of the
 	 *   train's pre-existing registered switches (switches locked/registered by the train's
 	 *   earlier hops stay locked and registered). [PathReservationRegistry.unregisterSwitch]
@@ -688,7 +691,7 @@ internal class CandidateCommitter(
 
 /**
  * The per-candidate snapshots Step 2f takes before configuring anything (Issue #893 task
- * A5 / Issue #904 / Issue #1065): the candidate's [cz.vutbr.fit.interlockSim.objects.paths.PathInfo],
+ * A5 / Issue #904 / Issue #1065): the candidate's [PathInfo],
  * its switches, the switches the train already owned, and the semaphores already cleared.
  * Carried between [prepareReservedCandidate] and [finalizePreparedCandidate] (and into
  * [rollbackFailedStartSignalCandidate]) so neither helper exceeds the parameter-count
@@ -696,14 +699,14 @@ internal class CandidateCommitter(
  * so building it has no side effects.
  */
 private data class CandidatePreparation(
-	val pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo,
+	val pathInfo: PathInfo,
 	val candidateSwitches: List<DynamicRailSwitch>,
 	val priorSwitches: Set<DynamicRailSwitch>,
 	val clearedBeforeCandidate: Set<DynamicRailSemaphore>
 )
 
 /**
- * The per-candidate slice of one [reservePath] request: the values Step 2d's extracted
+ * The per-candidate slice of one [DefaultPathReservationService.reservePath] request: the values Step 2d's extracted
  * helpers need, unpacked once at each helper's head so the moved candidate-loop body can
  * stay verbatim. Built once per candidate iteration (no side effects) and carried so
  * [registerAndFinalizeCandidate], [prepareReservedCandidate] and [finalizePreparedCandidate]

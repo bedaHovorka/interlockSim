@@ -75,6 +75,8 @@
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetDiscovery" level="DEBUG"/>
 	<!-- Same rationale for the candidate geometry screening extracted from that service (Issue #1210, SP12.9). -->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteCandidateScreen" level="DEBUG"/>
+	<!-- Same rationale for the candidate commit, finalize and rollback extracted from that service (Issue #1211, SP12.10). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.CandidateCommitter" level="DEBUG"/>
 
 	<!--
 		ReservationResultMapping.kt logs one INFO "Route GRANTED/DENIED" line per kernel outcome.
