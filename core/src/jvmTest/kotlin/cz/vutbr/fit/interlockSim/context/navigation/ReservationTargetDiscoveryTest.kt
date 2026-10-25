@@ -25,6 +25,8 @@ import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorLabel
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
@@ -395,6 +397,75 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 			} finally {
 				loggerByName.level = savedLevel
 			}
+		}
+	}
+
+	/** Counts [TopologyNavigator.findAllSwitchConstrainedPaths] calls: one per availability evaluation. */
+	private class AvailabilityCountingNavigator(
+		private val real: TopologyNavigator
+	) : TopologyNavigator by real {
+		var evaluations = 0
+
+		override fun findAllSwitchConstrainedPaths(
+			start: PathSeparator,
+			target: PathSeparator,
+			maxDepth: Int
+		): List<List<TrackSection>> {
+			evaluations++
+			return real.findAllSwitchConstrainedPaths(start, target, maxDepth)
+		}
+	}
+
+	@Nested
+	@DisplayName("the shared next-target primitive (Issue #1208)")
+	inner class NextTargetPrimitive {
+		private lateinit var counting: AvailabilityCountingNavigator
+		private lateinit var discovery: ReservationTargetDiscovery
+
+		@BeforeEach
+		fun createCountingDiscovery() {
+			counting = AvailabilityCountingNavigator(simulationContext.scope.get())
+			discovery = ReservationTargetDiscovery(counting, simulationContext)
+		}
+
+		private fun zAForwardSection(): Pair<DynamicPathSeparator, TrackSection> =
+			discovery.resolveForwardSection(separator("zA") as OrientedPathSeparator, "test")!!
+
+		@Test
+		@DisplayName("the sequence evaluates availability lazily, one target per step")
+		fun sequenceIsLazy() {
+			val (start, next) = zAForwardSection()
+
+			val candidates = discovery.evaluateTargets(start, discovery.findNextSemaphoresVia(start, next), null)
+			assertThat(counting.evaluations, name = "evaluations before iterating").isEqualTo(0)
+
+			val first = candidates.first()
+			assertThat(separatorLabel(first.separator)).isEqualTo("doB1")
+			assertThat(counting.evaluations, name = "evaluations after the first element").isEqualTo(1)
+		}
+
+		@Test
+		@DisplayName("isAnyNextTargetAvailable stops at the first available of two targets")
+		fun anyAvailableStopsEarly() {
+			val (start, next) = zAForwardSection()
+			assertThat(discovery.findNextSemaphoresVia(start, next).map { separatorLabel(it) })
+				.containsExactly("doB1", "doB2")
+			counting.evaluations = 0
+
+			assertThat(discovery.isAnyNextTargetAvailable(start, next)).isTrue()
+
+			assertThat(counting.evaluations, name = "availability evaluations").isEqualTo(1)
+		}
+
+		@Test
+		@DisplayName("findReservationTargetCandidates evaluates every target of the same two")
+		fun candidatesEvaluateEveryTarget() {
+			counting.evaluations = 0
+
+			val candidates = discovery.findReservationTargetCandidates(separator("zA") as OrientedPathSeparator, null)
+
+			assertThat(candidates.map { separatorLabel(it.separator) }).containsExactly("doB1", "doB2")
+			assertThat(counting.evaluations, name = "availability evaluations").isEqualTo(2)
 		}
 	}
 

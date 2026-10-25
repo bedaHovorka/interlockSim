@@ -39,8 +39,9 @@ internal typealias TargetWithPaths = Pair<DynamicPathSeparator, Lazy<List<List<T
  * Two enumerations live here:
  * - **One section ahead** ([findNextSemaphoresVia]): the forward-facing semaphores and InOuts
  *   reachable through one given track section. It serves
- *   [PathReservationService.reservePathToAnyNextSemaphore], the read-only candidate query
- *   [findReservationTargetCandidates] (Issue #970) and [isAnyNextTargetAvailable].
+ *   [PathReservationService.reservePathToAnyNextSemaphore], and, with each target's availability
+ *   attached by the shared primitive [evaluateTargets] (Issue #1208), the read-only candidate
+ *   query [findReservationTargetCandidates] (Issue #970) and [isAnyNextTargetAvailable].
  * - **Whole network** ([reservePathToAnyTargets]): every InOut and semaphore except the start,
  *   in the priority order [PathReservationService.reservePathToAny] tries them.
  *
@@ -155,12 +156,10 @@ internal class ReservationTargetDiscovery(
 			return emptyList()
 		}
 		// Every candidate is evaluated (Issue #970 ruling: never report an unevaluated candidate
-		// as unavailable). isPathAvailableFor is read-only, so the extra evaluations past the
-		// first available target change no state and the pick stays byte-identical.
-		val candidates =
-			targets.map {
-				ReservationTargetCandidate(it, isPathAvailableFor(dynamicStart, it, DEFAULT_MAX_PATH_DEPTH, ownerTrainId))
-			}
+		// as unavailable), so the lazy sequence is materialised. isPathAvailableFor is read-only,
+		// so the extra evaluations past the first available target change no state and the pick
+		// stays byte-identical.
+		val candidates = evaluateTargets(dynamicStart, targets, ownerTrainId).toList()
 		logger.debug {
 			"findReservationTargetCandidates: ${targets.size} target(s) from $start via $next, " +
 				"available = ${candidates.filter { it.available }.map { it.separator }}"
@@ -196,14 +195,14 @@ internal class ReservationTargetDiscovery(
 				"checking availability: $semaphores"
 		}
 
-		// Check if ANY semaphore has an available path
-		for (semaphore in semaphores) {
-			if (isPathAvailableFor(start, semaphore, DEFAULT_MAX_PATH_DEPTH, ownerTrainId = null)) {
-				logger.debug {
-					"isPathToAnyNextSemaphoreAvailable: Path available to $semaphore"
-				}
-				return true
+		// Check if ANY semaphore has an available path: the sequence is lazy, so the targets after
+		// the first available one are never evaluated. The owner is not known on this probe path.
+		val available = evaluateTargets(start, semaphores, ownerTrainId = null).firstOrNull { it.available }
+		if (available != null) {
+			logger.debug {
+				"isPathToAnyNextSemaphoreAvailable: Path available to ${available.separator}"
 			}
+			return true
 		}
 
 		logger.debug {
@@ -211,6 +210,27 @@ internal class ReservationTargetDiscovery(
 		}
 		return false
 	}
+
+	/**
+	 * The shared section-level primitive behind [findReservationTargetCandidates] and
+	 * [isAnyNextTargetAvailable] (Issue #1208): pairs each of [targets] — the result of
+	 * [findNextSemaphoresVia] for [start] — with its availability from [isPathAvailableFor] under
+	 * [ownerTrainId].
+	 *
+	 * Takes the target list rather than the section so a caller enumerates once and can log what it
+	 * found before anything is evaluated. The sequence is lazy: a target's availability is
+	 * evaluated only when the sequence reaches it, in the order of [targets], once per iteration.
+	 * A caller that needs one answer stops early; a caller that needs them all materialises it.
+	 * It does not log, so each caller keeps its own vocabulary.
+	 */
+	fun evaluateTargets(
+		start: PathSeparator,
+		targets: List<DynamicPathSeparator>,
+		ownerTrainId: String?
+	): Sequence<ReservationTargetCandidate> =
+		targets.asSequence().map { target ->
+			ReservationTargetCandidate(target, isPathAvailableFor(start, target, DEFAULT_MAX_PATH_DEPTH, ownerTrainId))
+		}
 
 	/**
 	 * Whether a physically legal route from [start] to [target] exists whose blocks are all FREE —
