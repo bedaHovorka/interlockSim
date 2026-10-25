@@ -21,9 +21,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -33,9 +30,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.testutil.throwingSwitchUnlockListener
@@ -45,7 +40,6 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.koin.test.inject
 
 /**
  * Comprehensive test suite for PathReservationRegistry atomic operations.
@@ -53,26 +47,13 @@ import org.koin.test.inject
  * @since Issue #292 Phase 2 Enhancement (Plan Phase 2)
  */
 @Tag("integration-test")
-class PathReservationRegistryTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var registry: PathReservationRegistry
+class PathReservationRegistryTest : PathReservationServiceTestBase() {
 	private lateinit var blocks: List<DynamicTrackBlock>
-	private lateinit var simulationContext: DefaultSimulationContext
 
 	@BeforeEach
-	fun setUp() {
-		// Load vyhybna.xml to get real DynamicTrackBlock instances
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-
-		// Get registry from context's scope (Issue #296 Phase 8: now requires context)
-		registry = simulationContext.scope.get()
-
-		// Get all blocks from the graph using a navigator
+	fun setUpFixtures() {
+		// Get all real DynamicTrackBlock instances of vyhybna.xml from the graph using the navigator
 		val inOuts = simulationContext.getInOuts().toList()
-		val navigator: TopologyNavigator = simulationContext.scope.get()
 		val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
 
 		blocks =

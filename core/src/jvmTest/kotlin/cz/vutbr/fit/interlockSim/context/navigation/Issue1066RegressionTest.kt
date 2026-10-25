@@ -16,24 +16,17 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -57,14 +50,7 @@ import java.util.concurrent.TimeUnit
  * `vA - doA2(17,9) ... doB2(24,9)` on the branch leg. InOuts: `A(11,8)`, `B(30,8)`.
  */
 @DisplayName("Issue #1066 Regression: a candidate diverging from the held route is refused before any mutation")
-class Issue1066RegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
-
+class Issue1066RegressionTest : PathReservationServiceTestBase() {
 	private lateinit var zA: DynamicPathSeparator
 	private lateinit var doB2: DynamicPathSeparator
 	private lateinit var doB1: DynamicPathSeparator
@@ -73,21 +59,12 @@ class Issue1066RegressionTest : KoinTestBase() {
 	private val trainId = "train_1066"
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-		registry = simulationContext.scope.get()
-		service = simulationContext.getRoutingServices().getPathReservationService()
-
+	fun setUpFixtures() {
 		zA = simulationContext.separatorAt(14, 8)
 		doB2 = simulationContext.separatorAt(24, 9)
 		doB1 = simulationContext.separatorAt(25, 8)
 		switchVA = simulationContext.separatorAt(15, 8) as? DynamicRailSwitch
 			?: throw IllegalStateException("Switch 'vA' is not a DynamicRailSwitch")
-	}
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
 	}
 
 	/** Signal aspect of every semaphore on the two legs, keyed by grid position. */

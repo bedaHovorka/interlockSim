@@ -21,15 +21,12 @@ import assertk.assertions.isSameInstanceAs
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.RouteFinder
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.util.Point
@@ -38,7 +35,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
@@ -48,22 +44,12 @@ import java.util.concurrent.TimeUnit
  * second topological path enumeration per InOut target (Issue #966).
  */
 @DisplayName("reservePathToAny de-duplication")
-class ReservePathToAnyDedupTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var navigator: TopologyNavigator
-	private lateinit var registry: PathReservationRegistry
+class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 	private lateinit var pathInfoBuilder: PathInfoBuilder
 	private lateinit var routeFinder: RouteFinder
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-		navigator = simulationContext.scope.get()
-		registry = simulationContext.scope.get()
+	fun setUpFixtures() {
 		pathInfoBuilder = simulationContext.scope.get()
 		routeFinder = simulationContext.scope.get()
 	}
