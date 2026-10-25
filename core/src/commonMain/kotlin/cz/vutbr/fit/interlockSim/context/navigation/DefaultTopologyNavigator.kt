@@ -146,7 +146,8 @@ class DefaultTopologyNavigator(
 		// Step 3: Query graph for next block and return first section
 		val result = getNextTrackBlock(nodeCell, current?.getTrackBlock())?.getNextTrackSection(separator, null)
 		logger.trace {
-			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
+			"getNextTrackSection: navigating network from $separator, " +
+				"result: ${if (result != null) "found" else "not found"}"
 		}
 		return result
 	}
@@ -235,7 +236,8 @@ class DefaultTopologyNavigator(
 							// No incoming segment (starting point), explore all directions
 							allJoins
 						}
-					// Get first valid segment with forward-direction preference (maintains single-path navigation semantics)
+					// Get first valid segment with forward-direction preference
+					// (maintains single-path navigation semantics)
 					preferForwardSegment(staticNodeCell, segment, followingSegments)
 				}
 			} ?: return null

@@ -27,6 +27,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/** Message prefix of the `reservePathToAnyNextSemaphore` log lines that would not fit in 120 columns. */
+private const val ANY_NEXT_LOG = "reservePathToAnyNextSemaphore:"
+
 /**
  * Default implementation of path reservation service.
  *
@@ -473,10 +476,10 @@ class DefaultPathReservationService(
 	 * blocked-path outcome is routine "path busy, will retry" contention for the
 	 * collision-warning layer. The contention is recorded so [flushUnresolvedConflicts] can
 	 * surface it if it never resolves before the run ends (see
-	 * [ReservationContentionTracker]'s class KDoc). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted mid-run (it does not trigger an
-	 * automatic simulation pause, so it can be delivered without the false-positive-pause problem
-	 * that led to the Goal 3 restriction) -- but only the FIRST time a given (trainId, block)
-	 * contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
+	 * [ReservationContentionTracker]'s class KDoc). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted
+	 * mid-run (it does not trigger an automatic simulation pause, so it can be delivered without the
+	 * false-positive-pause problem that led to the Goal 3 restriction) -- but only the FIRST time a
+	 * given (trainId, block) contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
 	 */
 	private fun classifyExhaustedAttempt(
 		trainId: String,
@@ -595,7 +598,7 @@ class DefaultPathReservationService(
 		for (semaphore in semaphores) {
 			attemptCount++
 			logger.trace {
-				"reservePathToAnyNextSemaphore: Attempting reservation to $semaphore (attempt $attemptCount/${semaphores.size})"
+				"$ANY_NEXT_LOG Attempting reservation to $semaphore (attempt $attemptCount/${semaphores.size})"
 			}
 
 			// Capture the semaphores this train already has cleared before this attempt, so a
@@ -626,7 +629,7 @@ class DefaultPathReservationService(
 					// FIX: validate the reserved path goes through the required 'next' block
 					if (!result.reservedBlocks.contains(nextBlock)) {
 						logger.debug {
-							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"
+							"$ANY_NEXT_LOG Path to $semaphore rejected (doesn't use required next block)"
 						}
 						// reservePath already cleared this candidate's semaphores
 						// (configureStartSignal / configureIntermediateSemaphores). Releasing the
@@ -661,7 +664,7 @@ class DefaultPathReservationService(
 					signalConfigurator.configureBypassStartSignal(trainId, start, result.reservedBlocks)
 
 					logger.debug {
-						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore via required next block"
+						"$ANY_NEXT_LOG Successfully reserved path to $semaphore via required next block"
 					}
 					return result
 				}
@@ -757,10 +760,10 @@ class DefaultPathReservationService(
 	 * Release the blocks of a bypass-rollback candidate (the wrongly reserved path that did not
 	 * use the required next block). Each block goes through [rollbackBlock], like
 	 * [CandidateCommitter.rollbackUnconfigurableCandidate]'s: `cancelPathSetup` from the block's own
-	 * `reservedFrom` (not the caller's `start`) under a try, then the registry entry, the approach-lock deferral and any
-	 * stale switch lock. Unlike that rollback, each block that leaves the registry is then announced as
-	 * released, because the candidate's successful [reservePath] already announced it as reserved
-	 * (Issue #961).
+	 * `reservedFrom` (not the caller's `start`) under a try, then the registry entry, the approach-lock
+	 * deferral and any stale switch lock. Unlike that rollback, each block that leaves the registry
+	 * is then announced as released, because the candidate's successful [reservePath] already
+	 * announced it as reserved (Issue #961).
 	 *
 	 * Only the candidate's NEW blocks — those not in [blocksBefore] (the train's ownership
 	 * snapshot taken before this candidate's [reservePath]) — are released. A bypass candidate's
@@ -818,7 +821,10 @@ class DefaultPathReservationService(
 	override fun findNextReservationTarget(
 		start: OrientedPathSeparator,
 		ownerTrainId: String?
-	): DynamicPathSeparator? = findReservationTargetCandidates(start, ownerTrainId).firstOrNull { it.available }?.separator
+	): DynamicPathSeparator? {
+		val candidates = findReservationTargetCandidates(start, ownerTrainId)
+		return candidates.firstOrNull { it.available }?.separator
+	}
 
 	override fun findReservationTargetCandidates(
 		start: OrientedPathSeparator,

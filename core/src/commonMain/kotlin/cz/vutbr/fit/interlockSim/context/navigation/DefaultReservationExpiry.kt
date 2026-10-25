@@ -127,7 +127,9 @@ internal class DefaultReservationExpiry(
 				expiryRelease(trainId)
 			} catch (e: Exception) {
 				if (failedExpiryTrains.add(trainId)) {
-					logger.warn(e) { "Reservation expiry of '$trainId' failed; the holding is offered again (Issue #1174)" }
+					logger.warn(e) {
+						"Reservation expiry of '$trainId' failed; the holding is offered again (Issue #1174)"
+					}
 				} else {
 					logger.debug { "Reservation expiry of '$trainId' failed again: ${e.message} (Issue #1174)" }
 				}

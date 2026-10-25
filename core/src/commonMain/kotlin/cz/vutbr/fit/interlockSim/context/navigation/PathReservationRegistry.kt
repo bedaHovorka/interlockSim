@@ -380,7 +380,7 @@ class PathReservationRegistry(
 	 *   release failed and was contained
 	 * @since Issue #1065 (moved here from the service, Issue #1103)
 	 */
-	fun reclaimStaleSwitchOwnership(switch: DynamicRailSwitch): String? = switchTable.reclaimStaleSwitchOwnership(switch)
+	fun reclaimStaleSwitchOwnership(sw: DynamicRailSwitch): String? = switchTable.reclaimStaleSwitchOwnership(sw)
 
 	/** The train ID that owns [block], or `null` if no train has registered it. */
 	fun getOwner(block: DynamicTrackBlock): String? = blockTable.getOwner(block)
