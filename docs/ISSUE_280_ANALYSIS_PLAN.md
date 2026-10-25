@@ -20,7 +20,7 @@ After fixing train deadlock #275 (path reservation conflict), a NEW deadlock app
                    ↑ acceleration is ZERO!                               ↑ distance to semaphore is ZERO!
 ```
 
-**Root Cause Hypothesis:** `distanceToSemaphore()` returns 0, causing motor to stop accelerating (`Train`).
+**Root Cause Hypothesis:** `distanceToSemaphore()` returns 0, causing motor to stop accelerating (then `Train.Motor.derivatives`; `Engine.derivatives` since `96abea8e`, #1059).
 
 ## Timeline and Versions
 
@@ -81,7 +81,7 @@ This allows:
 3. **Analyze pathToNextSemaphore Implementation** (Task #5)
    - File: `src/main/kotlin/cz/vutbr/fit/interlockSim/context/DefaultSimulationContext.kt`
    - Check if wrapper identity changes affect path retrieval
-   - Verify semaphore cache (ShuntingLoop.kt:63) correctness
+   - Verify semaphore cache (the `semaphoreCache` field of `ShuntingLoop`, removed by the #280 fix `b6814546`) correctness
 
 4. **Verify Path Consumption Logic** (Task #3)
    - Why `removeFirst()` called twice? (`Train`, the `pathToSemaphore?.removeFirst()` calls)

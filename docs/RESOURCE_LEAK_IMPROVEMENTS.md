@@ -13,7 +13,7 @@ This document summarizes improvements made to address resource leak concerns in 
 If `worker.terminate()` threw an exception during simulation stop, subsequent workers and the main process wouldn't be terminated, causing resource leaks.
 
 ### Solution
-**File**: `DefaultSimulationContext` (`context/DefaultSimulationContext.kt`), the stop path that terminates the workers and the main process
+**File**: `DefaultSimulationContext.stop` (`context/DefaultSimulationContext.kt`), which terminates the workers and the main process
 
 Implemented comprehensive exception safety:
 - Wrapped each termination in try-catch blocks

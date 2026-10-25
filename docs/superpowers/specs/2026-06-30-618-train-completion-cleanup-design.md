@@ -183,7 +183,7 @@ The issue text originally showed inline dual-channel emission. We choose a singl
 
 ### 4.3 Test-debt note (do not fix here)
 
-The `service.releasePath` legacy-listener test (formerly in `PathReservationServiceTest`, since split into the `PathReservation*Test` groups by SP6.1) exercises `releasePath` (test-only) for the legacy listener. After this fix the production paths are covered by tests #4–#5. A separate future issue may retire the legacy channel and migrate that test to `onBlockEvent`.
+The `service.releasePath` legacy-listener test (formerly in `PathReservationServiceTest`, since moved by SP6.1 and #1177 to `PathReservationExternalObserverApiTest`, `environment addBlockOccupancyListener receives reserve and release events`) exercises `releasePath` (test-only) for the legacy listener. After this fix the production paths are covered by tests #4–#5. A separate future issue may retire the legacy channel and migrate that test to `onBlockEvent`.
 
 ---
 

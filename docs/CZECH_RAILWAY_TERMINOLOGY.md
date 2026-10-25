@@ -192,7 +192,8 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations (fictional examp
 
 Found **1 Czech comment** in source code:
 
-**Location:** `ShuntingLoop` (`sim/ShuntingLoop.kt`), the comment above the network load
+**Location:** `ShuntingLoop` (`sim/ShuntingLoop.kt`), the comment above the network load; the comment was
+removed in `4b2eca1a` (#1191), when `ShuntingLoop` started to derive its blocks and signals from a topology `Station`
 
 ```kotlin
 // Sit jiz musi byt nactena z vyhybna.xml !!!
