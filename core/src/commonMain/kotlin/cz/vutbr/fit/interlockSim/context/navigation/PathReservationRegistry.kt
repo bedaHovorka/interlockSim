@@ -361,7 +361,7 @@ class PathReservationRegistry(
 	}
 
 	/**
-	 * Release [switch]'s ownership if [isStaleSwitchOwnership] says it protects no live route, through
+	 * Release [sw]'s ownership if [isStaleSwitchOwnership] says it protects no live route, through
 	 * [unregisterSwitch], which keeps both ownership maps consistent and unlocks the switch.
 	 *
 	 * This is the mechanism that makes the SI-5 guard in `DynamicRailSwitch.setUpPath` livable
