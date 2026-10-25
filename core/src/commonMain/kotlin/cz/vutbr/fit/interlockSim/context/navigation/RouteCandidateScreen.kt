@@ -44,8 +44,9 @@ private val logger = KotlinLogging.logger {}
  *
  * Extracted from [DefaultPathReservationService] without behaviour change: the denial reasons and
  * log lines are byte-identical, and the service-level tests (`PathReservationContiguityTest`,
- * `PathReservationNonOrientedOriginTest`, `RouteEndDirectionTest`, `Issue1066RegressionTest`,
- * `PathReservationSwitchStartPathInfoRegressionTest`) still pin them through the public API.
+ * `PathReservationNonOrientedOriginTest`, `PathReservationNonOrientedEndTest`, `RouteEndDirectionTest`,
+ * `Issue1066RegressionTest`, `PathReservationSwitchStartPathInfoRegressionTest`) still pin them
+ * through the public API.
  *
  * **NOT thread-safe**, like its owner: single-threaded simulation access only.
  *
@@ -193,7 +194,7 @@ internal class RouteCandidateScreen(
 	/**
 	 * The END-side twin of [rejectNonOrientedStart] (Issue #1200, traffic-simulation-expert
 	 * ruling): a route endpoint, origin **or** end, must be an [OrientedPathSeparator] (a semaphore
-	 * or an InOut). A switch is interior track, never an endpoint — the same rule
+	 * or an InOut). A switch is interior track, never an endpoint — the same switch rule
 	 * [PathReservationRegistry.isValidPathInfoEnd] already applies to the end of a stored PathInfo
 	 * (Issue #938).
 	 *
@@ -311,10 +312,11 @@ internal class RouteCandidateScreen(
 	 * [path]'s last section enters the target, reversed, is the direction of travel there. A loop-
 	 * around candidate therefore arrives from the other side and is judged on its own.
 	 *
-	 * The `target !is OrientedPathSeparator` arm only narrows the type for [OrientedPathSeparator.direction]:
+	 * The `target !is OrientedPathSeparator` arm performs the smart cast for [OrientedPathSeparator.direction]:
 	 * it does not grant a switch end. Such an end is unreachable from
 	 * [DefaultPathReservationService.reservePath] after the Step 0 END guard
-	 * ([rejectNonOrientedEnd], Issue #1200), so the arm is a no-op.
+	 * ([rejectNonOrientedEnd], Issue #1200), so the arm no longer fires — but it must stay, because
+	 * the [OrientedPathSeparator.direction] call below compiles only through its smart cast.
 	 *
 	 * @return the English denial reason when [target] faces away from the train at the end of
 	 *   [path]; `null` when the end is usable — an InOut (bidirectional) or a signal facing the
