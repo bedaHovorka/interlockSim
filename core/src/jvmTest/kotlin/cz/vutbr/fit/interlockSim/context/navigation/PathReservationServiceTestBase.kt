@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -22,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -188,6 +190,17 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 
 		separatorNames.forEach { expectedName ->
 			assertThat(found, name = "separators bounding the reserved blocks").contains(expectedName)
+		}
+	}
+
+	/**
+	 * Assert that every block in [blocks] is FREE and unowned in the registry — the end state a
+	 * whole-route release must reach; three release pins share it.
+	 */
+	protected fun assertBlocksFreeAndUnowned(blocks: List<DynamicTrackBlock>) {
+		blocks.forEach { block ->
+			assertThat(block.getState(), "state of $block").isEqualTo(TrackFacility.State.FREE)
+			assertThat(registry.getOwner(block), "owner of $block").isNull()
 		}
 	}
 }
