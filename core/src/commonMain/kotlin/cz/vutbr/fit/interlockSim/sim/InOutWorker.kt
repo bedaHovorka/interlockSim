@@ -161,9 +161,9 @@ class InOutWorker(
 					}
 					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
 						// Issue #903, same reasoning as the NonContiguousStart branch above: this
-						// is a permanent impossibility (rear-facing START or unconfigurable
-						// switch), not ordinary contention, so `continue`-and-retry via
-						// waitUntil(pathFree) would spin without advancing simulation time -- the
+						// is a permanent impossibility (rear-facing START or END, unconfigurable
+						// switch, or non-oriented route origin or end), not ordinary contention, so
+						// `continue`-and-retry via waitUntil(pathFree) would spin without advancing simulation time -- the
 						// condition it waits on is path AVAILABILITY, which this failure mode
 						// leaves untouched.
 						val errorMsg =
