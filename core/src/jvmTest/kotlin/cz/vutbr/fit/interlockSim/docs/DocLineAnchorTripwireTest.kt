@@ -42,12 +42,13 @@ import java.io.File
  * ## What is checked
  *
  * 1. **The file exists.** The name is resolved over every `*.kt` file in the repository (build,
- *    `.git`, `.gradle`, `.kotlin`, `.idea` and `.worktrees` directories are not searched). A
- *    qualified anchor (`core/.../Foo.kt:12`) is resolved by its path suffix, where everything up
- *    to the last `...` is ignored. A name that matches several files is reported as ambiguous;
- *    qualify it with a path.
- * 2. **The file is long enough.** The highest line of the anchor (`Foo.kt:12-30` -> 30) must not
- *    exceed the file's line count.
+ *    `.git`, `.gradle`, `.kotlin`, `.idea`, `.worktrees` and `node_modules` directories are not
+ *    searched). A qualified anchor (`core/.../Foo.kt:12`) is resolved by its path suffix, where
+ *    everything up to the first `...` is ignored. A name that matches several files is reported as
+ *    ambiguous; qualify it with a path.
+ * 2. **The range is valid and the file is long enough.** Lines start at 1, a range must not run
+ *    backwards (`Foo.kt:30-12`), and the highest line of the anchor (`Foo.kt:12-30` -> 30) must
+ *    not exceed the file's line count.
  * 3. **The symbol is still near the anchor -- only where that is robust.** When a documentation
  *    line holds exactly ONE anchor and exactly ONE backticked identifier (a span of one plain
  *    identifier, optionally followed by `()`), that identifier must occur within three lines of the
@@ -99,6 +100,41 @@ class DocLineAnchorTripwireTest {
 		assertThat(rendered[1]).contains("page.md:3", "One.kt:4", "only 3 lines")
 		assertThat(rendered[2]).contains("page.md:4", "One.kt:2-9", "only 3 lines")
 		assertThat(rendered[3]).contains("page.md:5", "Twin.kt:1", "ambiguous", "a/Twin.kt", "b/Twin.kt")
+	}
+
+	@Test
+	fun `a line zero, a reversed range and an oversized number are invalid even in a long enough file`() {
+		write("a/One.kt", "line1\nline2\nline3\n")
+		write("docs/page.md", "zero `One.kt:0`\nreversed `One.kt:99-2`\nhuge `One.kt:99999999999`\nok `One.kt:2-2`\n")
+
+		val result = AnchorChecker(tmp).checkAll(listOf(File(tmp, "docs/page.md")))
+
+		assertThat(result.anchorCount).isEqualTo(4)
+		val rendered = result.violations.map { it.render() }
+		assertThat(rendered).hasSize(3)
+		assertThat(rendered[0]).contains("page.md:1", "One.kt:0", "invalid line range")
+		assertThat(rendered[1]).contains("page.md:2", "One.kt:99-2", "invalid line range")
+		assertThat(rendered[2]).contains("page.md:3", "One.kt:99999999999", "invalid line range")
+	}
+
+	@Test
+	fun `a platform-suffixed file name resolves as a whole and is not cut to its suffix`() {
+		write("core/src/jvmMain/util/Resources.jvm.kt", "a\nb\n")
+		write("core/src/nativeMain/util/Resources.native.kt", "a\nb\n")
+		write("other/jvm.kt", "a\n")
+		write(
+			"docs/page.md",
+			"`Resources.jvm.kt:2` and `Resources.native.kt:1`\n" +
+				"`core/.../util/Resources.jvm.kt:1`\n" +
+				"a dotted prefix `pkg.Resources.kt:1` is part of the name\n"
+		)
+
+		val result = AnchorChecker(tmp).checkAll(listOf(File(tmp, "docs/page.md")))
+
+		assertThat(result.anchorCount).isEqualTo(4)
+		val rendered = result.violations.map { it.render() }
+		assertThat(rendered).hasSize(1)
+		assertThat(rendered.single()).contains("page.md:3", "pkg.Resources.kt:1", "no such file")
 	}
 
 	@Test
@@ -215,7 +251,7 @@ class DocLineAnchorTripwireTest {
 			byName.mapValues { (_, paths) -> paths.sorted() }
 		}
 
-		private val lineCounts = mutableMapOf<String, List<String>>()
+		private val sourceLines = mutableMapOf<String, List<String>>()
 
 		fun checkAll(docs: List<File>): CheckResult {
 			var anchors = 0
@@ -244,8 +280,12 @@ class DocLineAnchorTripwireTest {
 			fun violation(reason: String) = Violation(doc, root, docLine, anchor, reason)
 
 			val qualifier = match.groupValues[1]
-			val first = match.groupValues[2].toInt()
-			val last = match.groups[3]?.value?.toInt() ?: first
+			val first = match.groupValues[2].toIntOrNull()
+			val lastText = match.groups[3]?.value
+			val last = if (lastText == null) first else lastText.toIntOrNull()
+			if (first == null || last == null || first < 1 || last < first) {
+				return violation("invalid line range (lines start at 1 and a range must not run backwards)")
+			}
 			val tail =
 				qualifier
 					.split('/')
@@ -270,7 +310,7 @@ class DocLineAnchorTripwireTest {
 				}
 
 				else -> {
-					val source = lineCounts.getOrPut(candidates.single()) { File(root, candidates.single()).readLines() }
+					val source = sourceLines.getOrPut(candidates.single()) { File(root, candidates.single()).readLines() }
 					when {
 						last > source.size -> {
 							violation("the file has only ${source.size} lines (retarget to a symbol)")
@@ -315,8 +355,16 @@ class DocLineAnchorTripwireTest {
 
 		val SKIPPED_DIRECTORIES = setOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", "node_modules")
 
-		/** `[path/]Name.kt:12` or `[path/]Name.kt:12-30`; group 1 = path and name, 2 = first line, 3 = last line. */
-		val ANCHOR = Regex("""((?:[A-Za-z0-9_.\-]+/)*[A-Za-z0-9_\-]+\.kt):(\d+)(?:[-–](\d+))?(?![0-9A-Za-z])""")
+		/**
+		 * `[path/]Name.kt:12` or `[path/]Name.kt:12-30`; group 1 = path and name, 2 = first line, 3 = last line.
+		 * The name may hold dots (`Resources.jvm.kt`), and a match never starts inside a token, so a
+		 * dotted prefix (`pkg.Foo.kt:1`) stays part of the name and is reported instead of being cut to `Foo.kt`.
+		 */
+		val ANCHOR =
+			Regex(
+				"""(?<![A-Za-z0-9_.\-/])((?:[A-Za-z0-9_.\-]+/)*[A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*\.kt):(\d+)""" +
+					"""(?:[-–](\d+))?(?![0-9A-Za-z])"""
+			)
 
 		/** A backticked span holding one plain identifier, optionally followed by `()`. */
 		val IDENTIFIER_SPAN = Regex("""`([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?`""")
