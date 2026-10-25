@@ -331,8 +331,7 @@ internal class CandidateCommitter(
 			return null
 		}
 		logger.debug {
-			"reservePath: Registered PathInfo for $trainId with " +
-				"${mergeCandidate.entryDirections.size} entry directions, " +
+			"reservePath: Registered PathInfo for $trainId with ${mergeCandidate.entryDirections.size} entry directions, " +
 				"reserved path has ${mergeCandidate.reservedPath.length()} elements"
 		}
 

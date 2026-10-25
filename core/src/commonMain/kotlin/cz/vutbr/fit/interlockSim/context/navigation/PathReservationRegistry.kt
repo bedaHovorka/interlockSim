@@ -361,7 +361,7 @@ class PathReservationRegistry(
 	}
 
 	/**
-	 * Release [sw]'s ownership if [isStaleSwitchOwnership] says it protects no live route, through
+	 * Release [switch]'s ownership if [isStaleSwitchOwnership] says it protects no live route, through
 	 * [unregisterSwitch], which keeps both ownership maps consistent and unlocks the switch.
 	 *
 	 * This is the mechanism that makes the SI-5 guard in `DynamicRailSwitch.setUpPath` livable
@@ -380,7 +380,7 @@ class PathReservationRegistry(
 	 *   release failed and was contained
 	 * @since Issue #1065 (moved here from the service, Issue #1103)
 	 */
-	fun reclaimStaleSwitchOwnership(sw: DynamicRailSwitch): String? = switchTable.reclaimStaleSwitchOwnership(sw)
+	fun reclaimStaleSwitchOwnership(switch: DynamicRailSwitch): String? = switchTable.reclaimStaleSwitchOwnership(switch)
 
 	/** The train ID that owns [block], or `null` if no train has registered it. */
 	fun getOwner(block: DynamicTrackBlock): String? = blockTable.getOwner(block)

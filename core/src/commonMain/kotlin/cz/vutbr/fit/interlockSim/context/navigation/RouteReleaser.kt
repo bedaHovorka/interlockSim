@@ -504,9 +504,7 @@ internal class RouteReleaser(
 		// behind the train's head — resetting there could drop a proceed aspect the train still
 		// needs and stall it.
 		val releasable =
-			registry.getOwner(block) == trainId &&
-				block.occupant == null &&
-				block.getState() == TrackFacility.State.FREE
+			registry.getOwner(block) == trainId && block.occupant == null && block.getState() == TrackFacility.State.FREE
 		if (!releasable) {
 			logger.debug {
 				"unregisterBlock: not releasing $block for '$trainId' (owner='${registry.getOwner(block)}', " +

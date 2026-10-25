@@ -146,8 +146,7 @@ class DefaultTopologyNavigator(
 		// Step 3: Query graph for next block and return first section
 		val result = getNextTrackBlock(nodeCell, current?.getTrackBlock())?.getNextTrackSection(separator, null)
 		logger.trace {
-			"getNextTrackSection: navigating network from $separator, " +
-				"result: ${if (result != null) "found" else "not found"}"
+			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
 		}
 		return result
 	}

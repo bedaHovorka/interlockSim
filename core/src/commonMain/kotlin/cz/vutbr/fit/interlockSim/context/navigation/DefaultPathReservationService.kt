@@ -27,9 +27,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
-/** Message prefix of the `reservePathToAnyNextSemaphore` log lines that would not fit in 120 columns. */
-private const val ANY_NEXT_LOG = "reservePathToAnyNextSemaphore:"
-
 /**
  * Default implementation of path reservation service.
  *
@@ -598,7 +595,7 @@ class DefaultPathReservationService(
 		for (semaphore in semaphores) {
 			attemptCount++
 			logger.trace {
-				"$ANY_NEXT_LOG Attempting reservation to $semaphore (attempt $attemptCount/${semaphores.size})"
+				"reservePathToAnyNextSemaphore: Attempting reservation to $semaphore (attempt $attemptCount/${semaphores.size})"
 			}
 
 			// Capture the semaphores this train already has cleared before this attempt, so a
@@ -629,7 +626,7 @@ class DefaultPathReservationService(
 					// FIX: validate the reserved path goes through the required 'next' block
 					if (!result.reservedBlocks.contains(nextBlock)) {
 						logger.debug {
-							"$ANY_NEXT_LOG Path to $semaphore rejected (doesn't use required next block)"
+							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"
 						}
 						// reservePath already cleared this candidate's semaphores
 						// (configureStartSignal / configureIntermediateSemaphores). Releasing the
@@ -664,7 +661,7 @@ class DefaultPathReservationService(
 					signalConfigurator.configureBypassStartSignal(trainId, start, result.reservedBlocks)
 
 					logger.debug {
-						"$ANY_NEXT_LOG Successfully reserved path to $semaphore via required next block"
+						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore via required next block"
 					}
 					return result
 				}
@@ -821,10 +818,7 @@ class DefaultPathReservationService(
 	override fun findNextReservationTarget(
 		start: OrientedPathSeparator,
 		ownerTrainId: String?
-	): DynamicPathSeparator? {
-		val candidates = findReservationTargetCandidates(start, ownerTrainId)
-		return candidates.firstOrNull { it.available }?.separator
-	}
+	): DynamicPathSeparator? = findReservationTargetCandidates(start, ownerTrainId).firstOrNull { it.available }?.separator
 
 	override fun findReservationTargetCandidates(
 		start: OrientedPathSeparator,

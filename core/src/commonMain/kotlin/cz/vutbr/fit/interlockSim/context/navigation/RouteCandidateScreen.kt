@@ -308,9 +308,7 @@ internal class RouteCandidateScreen(
 			if (reason == null) {
 				usable += candidate
 			} else {
-				logger.debug {
-					"reservePath: skipping candidate ${candidate.index} for $trainId before any mutation: $reason"
-				}
+				logger.debug { "reservePath: skipping candidate ${candidate.index} for $trainId before any mutation: $reason" }
 				failures = recordGeometricFailureOnce(failures, reason)
 			}
 		}
