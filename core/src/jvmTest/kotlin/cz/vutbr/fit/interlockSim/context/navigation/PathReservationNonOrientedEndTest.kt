@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -78,8 +79,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 		// Arrange - train1 holds zA to doB1; vB lies just past doB1 in the direction of travel
 		val zA = findSemaphoreByName("zA")
 		val doB1 = findSemaphoreByName("doB1")
-		assertThat(service.reservePath("train1", zA, doB1))
-			.isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertReservationSuccess(service.reservePath("train1", zA, doB1))
 		val blocksBefore = registry.getBlocks("train1").toSet()
 		val switchesHeldBefore = registry.getSwitches("train1").toSet()
 		val pathInfoBefore = registry.getPathInfo("train1")
@@ -111,7 +111,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 
 		val result = service.reservePath("train1", zA, inOutB)
 
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertReservationSuccess(result)
 		assertThat(registry.getPathInfo("train1")?.target, "stored PathInfo target").isEqualTo(inOutB)
 	}
 
@@ -122,7 +122,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 
 		val result = service.reservePath("train1", zA, doB1)
 
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertReservationSuccess(result)
 		assertThat(registry.getPathInfo("train1")?.target, "stored PathInfo target").isEqualTo(doB1)
 	}
 
@@ -134,7 +134,7 @@ class PathReservationNonOrientedEndTest : PathReservationServiceTestBase() {
 
 		val result = service.reservePath("train1", zA, findSemaphoreByName("doB1"))
 
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertReservationSuccess(result)
 	}
 
 	/** Every semaphore's aspect, by name. */
