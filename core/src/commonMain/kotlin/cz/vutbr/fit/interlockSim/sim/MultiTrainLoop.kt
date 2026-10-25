@@ -362,6 +362,7 @@ open class MultiTrainLoop(
 			maxConcurrentTrainsCount = approvedTrains.size
 		}
 		startApprovedTrains()
+		pathReservationService.expireStaleReservations() // Issue #1174
 		blockResources.releaseFreeResources()
 		hold(1.0)
 	}
