@@ -115,7 +115,7 @@ Dated summaries, retrospectives, decisions, and reports. Kept for context; do no
 - [INTEGRATION_TESTS_SUMMARY.md](INTEGRATION_TESTS_SUMMARY.md) - end-to-end integration test implementation summary (history).
 - [TEST_COVERAGE_SUMMARY.md](TEST_COVERAGE_SUMMARY.md) - context package coverage improvement summary (history).
 - [TEST_COVERAGE_POLISH.md](TEST_COVERAGE_POLISH.md) - coverage polish for cells, tracks, and xml packages (history).
-- [ISSUE_280_ANALYSIS_PLAN.md](ISSUE_280_ANALYSIS_PLAN.md) - analysis plan for the zero-acceleration train deadlock, issue #280 (history, 2026-01).
+- [issues/issue_280_analysis_plan.md](issues/issue_280_analysis_plan.md) - analysis plan for the zero-acceleration train deadlock, issue #280 (history, 2026-01).
 
 ### Planning and backlog analysis
 
@@ -140,4 +140,4 @@ Superseded: the Kalasim migration plan was dropped on 2026-08-24; kDisco is the 
 - `superpowers/plans/` - dated implementation plans, 2026-03 to 2026-06 (history).
 - `superpowers/specs/` - dated design specs that accompany those plans, 2026-03 to 2026-06 (history).
 - `election/` - the 2026-04-14 backlog election record (history, 2026-04).
-- `issues/` - write-ups of individual resolved or investigated issues (#80, #291, #311), with its own README (history, 2026-02 to 2026-03).
+- `issues/` - write-ups of individual resolved or investigated issues (#80, #280, #291, #311), with its own README (history, 2026-02 to 2026-03).
