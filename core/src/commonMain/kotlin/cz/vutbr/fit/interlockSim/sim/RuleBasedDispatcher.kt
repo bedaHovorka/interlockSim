@@ -31,7 +31,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    availability ([BlockInputObservation.candidateTargets]), through
  *    [ReservationTargetPolicy] (Issue #970) — destination-agnostic; see
  *    [BlockInputObservation.candidateTargets], the dispatcher's only target-selection input
- *    (Issue #1152).
+ *    (Issue #1152). A train awaiting a route extension is never offered the route it already
+ *    holds: when the pick is [BlockInputObservation.heldRouteEndName], no reservation is
+ *    requested, because the re-grant would only re-clear the signal the reservation expiry has
+ *    just put back to STOP (Issue #1244).
  *
  * The shell ([ShuntingLoop]) calls [decide] once per tick with a single
  * [DispatchObservation] whose fields are all populated together (SP0.11,
@@ -183,7 +186,8 @@ class RuleBasedDispatcher(
 	 *   [BlockInputObservation.candidateTargets], and that separator has not already been
 	 *   claimed this tick; `null` when the state requires no action (FREE, or occupied/reserved
 	 *   but not eligible toward this input, or already extended, or no available candidate one
-	 *   section ahead, or the chosen separator was already claimed by an earlier input this tick).
+	 *   section ahead, or an awaiting train's pick is the end of the route it already holds
+	 *   (Issue #1244), or the chosen separator was already claimed by an earlier input this tick).
 	 */
 	private fun checkInput(
 		input: BlockInputObservation,
@@ -237,6 +241,13 @@ class RuleBasedDispatcher(
 			logger.debug {
 				"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +
 					"deferring reservation"
+			}
+			return null
+		}
+		if (input.awaitingRouteExtension && target == input.heldRouteEndName) {
+			logger.debug {
+				"Train ${input.ownerTrainId} stands at ${input.towardSemaphoreName} awaiting an extension, but its " +
+					"route already ends at $target; not re-requesting the route it holds (Issue #1244)"
 			}
 			return null
 		}

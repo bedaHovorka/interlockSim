@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
@@ -187,7 +188,15 @@ data class BlockInputObservation(
 	val pathSetUpTowardThisInput: Boolean,
 	val pathAlreadyExtendedBeyond: Boolean,
 	val awaitingRouteExtension: Boolean = false,
-	val candidateTargets: List<CandidateTarget> = emptyList()
+	val candidateTargets: List<CandidateTarget> = emptyList(),
+	/**
+	 * The name of the separator at which [ownerTrainId]'s stored route currently ends, resolved only when
+	 * [awaitingRouteExtension] (Issue #1244); `null` otherwise, and `null` when the end has no route-endpoint
+	 * name. A [DispatchDecision.ReservePath] to this very name re-grants the route the train already holds:
+	 * the kernel changes no block and only re-clears the start signal, which fights the reservation expiry's
+	 * deferral (STOP) every tick. A dispatcher must not request it.
+	 */
+	val heldRouteEndName: String? = null
 )
 
 /**
@@ -246,4 +255,12 @@ internal fun ReservationTargetCandidate.toCandidateTarget(): CandidateTarget =
 				"Unknown reservation target separator type: ${separator::class.simpleName ?: "unknown"} — " +
 					"only DynamicInOut and DynamicRailSemaphore can be reported as candidate targets"
 			)
+	}
+
+/** The route-endpoint name of a separator, as [CandidateTarget.name] and [DispatchDecision.ReservePath] spell it. */
+internal fun DynamicPathSeparator.routeEndpointName(): String? =
+	when (this) {
+		is DynamicInOut -> name
+		is DynamicRailSemaphore -> name
+		else -> null
 	}

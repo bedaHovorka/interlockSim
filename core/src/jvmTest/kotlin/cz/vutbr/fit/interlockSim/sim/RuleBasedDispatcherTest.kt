@@ -83,6 +83,7 @@ class RuleBasedDispatcherTest {
 		pathSetUpTowardThisInput: Boolean = false,
 		pathAlreadyExtendedBeyond: Boolean = false,
 		awaitingRouteExtension: Boolean = false,
+		heldRouteEndName: String? = null,
 		blockId: String = "block"
 	): BlockInputObservation =
 		BlockInputObservation(
@@ -94,7 +95,8 @@ class RuleBasedDispatcherTest {
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
-			awaitingRouteExtension = awaitingRouteExtension
+			awaitingRouteExtension = awaitingRouteExtension,
+			heldRouteEndName = heldRouteEndName
 		)
 
 	// ── Admission ────────────────────────────────────────────────────────────
@@ -231,6 +233,99 @@ class RuleBasedDispatcherTest {
 		val decisions = dispatcher.decide(observed)
 
 		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "zB", "doA1"))
+	}
+
+	// ── Same-target re-request guard (Issue #1244) ──────────────────────────
+
+	/** An input of [trainId] standing at `zB` awaiting an extension, choosing between `doA1` and `doA2`. */
+	private fun awaitingInput(
+		trainId: String,
+		heldRouteEndName: String?,
+		blockId: String = "kB"
+	): BlockInputObservation =
+		input(
+			TrackFacility.State.OCCUPIED,
+			towardSemaphoreName = "zB",
+			candidateTargets = listOf(semaphoreCandidate("doA1", true), semaphoreCandidate("doA2", true)),
+			ownerTrainId = trainId,
+			isApproachingThisInput = true,
+			pathAlreadyExtendedBeyond = true,
+			awaitingRouteExtension = true,
+			heldRouteEndName = heldRouteEndName,
+			blockId = blockId
+		)
+
+	@Test
+	@DisplayName("awaiting input picking its held route end: no ReservePath; another input still reserves (#1244)")
+	fun awaitingInputDoesNotReRequestTheRouteItHolds() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				innerBlockInputs =
+					listOf(
+						awaitingInput("T1", heldRouteEndName = "doA1"),
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "za",
+							targetName = "zb",
+							ownerTrainId = "T2",
+							isApproachingThisInput = true,
+							blockId = "kA"
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "za", "zb"))
+	}
+
+	@Test
+	@DisplayName("awaiting input whose held route ends elsewhere: reserves the pick as before (#1244)")
+	fun awaitingInputWithADifferentHeldEndReserves() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed = observation(innerBlockInputs = listOf(awaitingInput("T1", heldRouteEndName = "doA2")))
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "zB", "doA1"))
+	}
+
+	@Test
+	@DisplayName("a held route end on a non-awaiting OCCUPIED or RESERVED input is ignored (#1244)")
+	fun heldRouteEndOnANonAwaitingInputIsIgnored() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				innerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "za",
+							targetName = "zb",
+							ownerTrainId = "T1",
+							isApproachingThisInput = true,
+							heldRouteEndName = "zb",
+							blockId = "kA"
+						),
+						input(
+							TrackFacility.State.RESERVED,
+							towardSemaphoreName = "zc",
+							targetName = "zd",
+							ownerTrainId = "T2",
+							pathSetUpTowardThisInput = true,
+							heldRouteEndName = "zd",
+							blockId = "kB"
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(
+			DispatchDecision.ReservePath("T1", "za", "zb"),
+			DispatchDecision.ReservePath("T2", "zc", "zd")
+		)
 	}
 
 	@Test

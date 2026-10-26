@@ -4,18 +4,25 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Locks in the sensor-port contract that keeps the forward-reservation graph search
@@ -194,6 +201,70 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		assertThat(listsCompared, "eligible inputs compared").isGreaterThan(0)
 		assertThat(violations.size, "violations: $violations").isEqualTo(0)
 	}
+
+	/**
+	 * [BlockInputObservation.heldRouteEndName] (Issue #1244) is resolved only in the awaiting state,
+	 * so the per-tick hot path reads nothing new: it is `null` for every input that is not awaiting
+	 * a route extension, and for an awaiting one it names the separator the owner's stored route
+	 * ends at. The awaiting state is produced as in `Issue943OwnershipConflictStallBoundTest`:
+	 * navigation answers an ownership conflict for the first train under way.
+	 */
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	fun `heldRouteEndName is resolved only for an awaiting input and names the stored route's end`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+		val registry = context.scope.get<PathReservationRegistry>()
+		val realNav = context.getRoutingServices().getTrainNavigationService()
+		val stalledTrainId = AtomicReference<String?>(null)
+		val stallingNav =
+			decoratingTrainNavigationService(realNav) { trainId, separator ->
+				if (separator !is DynamicInOut) stalledTrainId.compareAndSet(null, trainId)
+				if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
+					PathResult.OwnershipConflict
+				} else {
+					realNav.findReservedPathForTrain(trainId, separator)
+				}
+			}
+		val loop = prepareShuntingLoop(context, 150L, env = NavigationDecoratingContext(context, stallingNav))
+		val wired = loop.controlStepListener
+
+		var awaitingInputsSeen = 0
+		var otherInputsSeen = 0
+		val violations = mutableListOf<String>()
+		loop.controlStepListener =
+			ControlStepListener {
+				for (input in loop.getInnerBlockInputs() + loop.getOuterBlockInputs()) {
+					val expected =
+						if (input.awaitingRouteExtension) {
+							awaitingInputsSeen++
+							registry.getPathInfo(requireNotNull(input.ownerTrainId))?.target?.expectedEndpointName()
+						} else {
+							otherInputsSeen++
+							null
+						}
+					if (input.heldRouteEndName != expected) {
+						violations += "${input.blockId}->${input.towardSemaphoreName} " +
+							"awaiting=${input.awaitingRouteExtension}: ${input.heldRouteEndName} != $expected"
+					}
+				}
+				wired?.onControlStep()
+			}
+
+		context.run()
+
+		assertThat(awaitingInputsSeen, "awaiting inputs observed").isGreaterThan(0)
+		assertThat(otherInputsSeen, "non-awaiting inputs observed").isGreaterThan(0)
+		assertThat(violations.size, "violations: $violations").isEqualTo(0)
+	}
+
+	/** The route-endpoint name, computed independently of the production [routeEndpointName]. */
+	private fun DynamicPathSeparator.expectedEndpointName(): String? =
+		when (this) {
+			is DynamicInOut -> name
+			is DynamicRailSemaphore -> name
+			else -> null
+		}
 
 	/** The shell's gate for resolving a forward target (Issues #749 and #1060). */
 	private fun canReserveForward(input: BlockInputObservation): Boolean =
