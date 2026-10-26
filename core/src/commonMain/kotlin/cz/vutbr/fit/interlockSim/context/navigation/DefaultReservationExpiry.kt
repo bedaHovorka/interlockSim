@@ -38,10 +38,11 @@ import kotlin.math.round
  * train committed to it; the release then keeps that block, drops the signals to STOP and frees
  * the rest. The holding is offered again on the next call and freed once the booking window has
  * closed in simulation time. A completion is logged and counted once, on the call that frees the
- * last un-entered block; a deferral is logged at INFO once per train, later ones at DEBUG (ruling
- * D5): a tail whose PathInfo cannot be trimmed is deferred on every call while the train stands.
- * When even the blocks it stands on cannot end the PathInfo, the release refuses before any signal
- * reset, so those calls leave the train's aspects as they are (Issue #1242).
+ * last un-entered block; a deferral is logged at INFO once per stall episode of the train, later
+ * ones at DEBUG (ruling D5): a tail whose PathInfo cannot be trimmed is deferred on every call while
+ * the train stands. When even the blocks it stands on cannot end the PathInfo, the release refuses
+ * before any signal reset, so those calls leave the train's aspects as they are; the releaser logs
+ * that refusal at INFO once per train, not once per episode (Issue #1242).
  *
  * [expireStale] with no exempt train is the loop tick ([ReservationExpiry.expireStaleReservations]
  * on the service): the simulation loops call it once per control step, and it judges every train.

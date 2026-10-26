@@ -62,6 +62,14 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 		withLogOf(DefaultReservationExpiry::class.java.name, body)
 
 	/**
+	 * [withExpiryLog] and [withReleaserLog] at once, for a scenario that reads both: [body] gets the
+	 * expiry's appender first, then the releaser's.
+	 */
+	protected fun withExpiryAndReleaserLogs(
+		body: (expiryLog: ListAppender<ILoggingEvent>, releaserLog: ListAppender<ILoggingEvent>) -> Unit
+	) = withExpiryLog { expiryLog -> withReleaserLog { releaserLog -> body(expiryLog, releaserLog) } }
+
+	/**
 	 * Run each step at its absolute simulation time, in order, inside one kDisco process. A step
 	 * that throws fails the run, so assertions may sit inside the steps.
 	 */

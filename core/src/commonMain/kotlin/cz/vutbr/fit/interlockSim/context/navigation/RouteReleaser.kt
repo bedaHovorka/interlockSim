@@ -667,6 +667,7 @@ internal class RouteReleaser(
 		val unregistered = registry.unregisterBlock(trainId, block)
 		if (unregistered) {
 			approachLockDeferredUntil.remove(block)
+			// Unreachable for a refused train (#1242): rollbacks drop only FREE extension blocks; its head stays.
 			forgetUntrimmableIfUnregistered(trainId)
 		}
 		return unregistered

@@ -389,47 +389,58 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 
 	@Test
 	fun `a train whose PathInfo cannot be trimmed defers forever, logging INFO once and DEBUG afterwards`() {
-		withExpiryLog { appender ->
-			withReleaserLog { releaserLog ->
-				val zAvA = blockBetween("zA", "vA")
-				lateinit var held: List<DynamicTrackBlock>
-				lateinit var aspectsAfterGrant: Map<String, Signal>
-
-				runInOrder(
-					listOf(
-						0.0 to {
-							held =
-								assertReservationSuccess(service.reservePath(TRAIN, zA, findSemaphoreByName("doB1")))
-									.reservedBlocks
-							assertThat(held.first()).isSameInstanceAs(zAvA)
-							// The train stands on the block before switch vA: the PathInfo cannot end at a
-							// switch, so releasePathDetailed frees nothing however often it is asked (D4).
-							zAvA.enter(ProgressStub(TRAIN))
-							aspectsAfterGrant = semaphoreAspects()
-						}
-					),
-					ticks(0.0, TTL + 10 * TICK)
-				)
-
-				assertTailHeld(held.drop(1))
-				assertThat(registry.getBlocks(TRAIN)).containsExactly(*held.toTypedArray())
-				assertThat(tailLines(appender, DEFERRED, Level.INFO)).hasSize(1)
-				assertThat(tailLines(appender, DEFERRED, Level.DEBUG).size).isGreaterThan(5)
-				assertThat(tailLines(appender, EXPIRED, Level.INFO)).isEmpty()
-				assertThat(expiry.expiredTailCount).isEqualTo(0)
-				// Issue #1242: the releaser refuses BEFORE any signal reset, so the cleared aspects
-				// stand as granted, and its refusal is not a WARN on every call.
-				assertThat(aspectsAfterGrant.values.filter { it.isAllowing() }, "proceed aspects to keep")
-					.isNotEmpty()
-				assertThat(semaphoreAspects(), "every aspect after the deferred expiries").isEqualTo(aspectsAfterGrant)
-				assertThat(releaserLog.list.filter { it.level == Level.WARN }, "releaser WARN lines").isEmpty()
-				val releaserInfoLines =
-					releaserLog.list.filter { event ->
-						event.level == Level.INFO && event.formattedMessage.contains("cannot be trimmed")
-					}
-				assertThat(releaserInfoLines, "releaser INFO refusal lines").hasSize(1)
-			}
+		withExpiryAndReleaserLogs { expiryLog, releaserLog ->
+			lateinit var stand: GrantedStand
+			runInOrder(listOf(0.0 to { stand = grantAndStandBeforeSwitchVa() }), ticks(0.0, TTL + 10 * TICK))
+			assertTailDeferredForever(stand.held, expiryLog)
+			assertAspectsAsGranted(stand.aspectsAfterGrant)
+			assertReleaserRefusedOnce(releaserLog)
 		}
+	}
+
+	/** What [grantAndStandBeforeSwitchVa] leaves: the granted blocks and every aspect right after the grant. */
+	private data class GrantedStand(
+		val held: List<DynamicTrackBlock>,
+		val aspectsAfterGrant: Map<String, Signal>
+	)
+
+	/** Grants [TRAIN] the route zA -> doB1 and puts it on the route's first block, zA-vA. */
+	private fun grantAndStandBeforeSwitchVa(): GrantedStand {
+		val held = assertReservationSuccess(service.reservePath(TRAIN, zA, findSemaphoreByName("doB1"))).reservedBlocks
+		val zAvA = blockBetween("zA", "vA")
+		assertThat(held.first()).isSameInstanceAs(zAvA)
+		// The train stands on the block before switch vA: the PathInfo cannot end at a switch, so
+		// releasePathDetailed frees nothing however often it is asked (D4).
+		zAvA.enter(ProgressStub(TRAIN))
+		return GrantedStand(held, semaphoreAspects())
+	}
+
+	/** The expiry kept every block of [held]: deferred on each tick, INFO once then DEBUG, never expired. */
+	private fun assertTailDeferredForever(
+		held: List<DynamicTrackBlock>,
+		expiryLog: ListAppender<ILoggingEvent>
+	) {
+		assertTailHeld(held.drop(1))
+		assertThat(registry.getBlocks(TRAIN)).containsExactly(*held.toTypedArray())
+		assertThat(tailLines(expiryLog, DEFERRED, Level.INFO)).hasSize(1)
+		assertThat(tailLines(expiryLog, DEFERRED, Level.DEBUG).size).isGreaterThan(5)
+		assertThat(tailLines(expiryLog, EXPIRED, Level.INFO)).isEmpty()
+		assertThat(expiry.expiredTailCount).isEqualTo(0)
+	}
+
+	/** Every aspect still reads as right after the grant, which cleared at least one proceed aspect. */
+	private fun assertAspectsAsGranted(aspectsAfterGrant: Map<String, Signal>) {
+		// Issue #1242: the releaser refuses BEFORE any signal reset, so the cleared aspects stand as
+		// granted.
+		assertThat(aspectsAfterGrant.values.filter { it.isAllowing() }, "proceed aspects to keep").isNotEmpty()
+		assertThat(semaphoreAspects(), "every aspect after the deferred expiries").isEqualTo(aspectsAfterGrant)
+	}
+
+	/** Issue #1242: the releaser's refusal is one INFO line for [TRAIN], not a WARN on every call. */
+	private fun assertReleaserRefusedOnce(releaserLog: ListAppender<ILoggingEvent>) {
+		assertThat(releaserLog.list.filter { it.level == Level.WARN }, "releaser WARN lines").isEmpty()
+		assertThat(releaserLines(releaserLog, Level.INFO, RELEASER_REFUSED, TRAIN), "releaser INFO refusal lines")
+			.hasSize(1)
 	}
 
 	@Test

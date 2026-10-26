@@ -14,6 +14,7 @@ import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -248,4 +249,29 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	 */
 	protected fun withReleaserLog(body: (ListAppender<ILoggingEvent>) -> Unit) =
 		withLogOf(RouteReleaser::class.java.name, body)
+
+	/**
+	 * The [RouteReleaser]'s `cannot be trimmed` lines of one kind about [trainId] at [level] (Issue
+	 * #1242): [prefix] is [RELEASER_REFUSED] or [RELEASER_DEFERRED], so a refusal never counts as a
+	 * deferral or the other way round.
+	 */
+	protected fun releaserLines(
+		appender: ListAppender<ILoggingEvent>,
+		level: Level,
+		prefix: String,
+		trainId: String = "train1"
+	): List<ILoggingEvent> =
+		appender.list.filter {
+			it.level == level &&
+				it.formattedMessage.startsWith("$prefix'$trainId'") &&
+				it.formattedMessage.contains("cannot be trimmed")
+		}
+
+	protected companion object {
+		/** The releaser's refusal line (Issue #1242), up to the train name. */
+		const val RELEASER_REFUSED = "releasePath: refused for "
+
+		/** The releaser's approach-lock deferral line (Issue #1050, #1242), up to the train name. */
+		const val RELEASER_DEFERRED = "releasePath: approach lock for "
+	}
 }
