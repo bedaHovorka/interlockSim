@@ -9,10 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.testutil
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
+import assertk.assertions.isInstanceOf
+import assertk.assertions.messageContains
 import assertk.assertions.single
 import assertk.assertions.startsWith
 import ch.qos.logback.classic.Level
@@ -22,6 +25,7 @@ import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
@@ -115,6 +119,45 @@ class ExpiredRouteQuarantineTest {
 	}
 
 	@Test
+	fun `an expiry on a new footprint before the observation shows the move is a first strike`() {
+		val quarantine = ExpiredRouteQuarantine(innerReturning(reserveT))
+		quarantine.onReservationExpired(tailExpired(TRAIN, kA))
+		quarantine.onReservationExpired(tailExpired(TRAIN, kA))
+		// It moved to kB and expired there before any decide saw it move: a changed footprint lifts it.
+		quarantine.onReservationExpired(tailExpired(TRAIN, kB))
+
+		val onKb = observation(mapOf(TRAIN to setOf("kB")))
+		assertThat(quarantine.decide(onKb)).containsExactly(reserveT)
+		// One more expiry on kB is the second strike on that footprint.
+		quarantine.onReservationExpired(tailExpired(TRAIN, kB))
+		assertThat(quarantine.decide(onKb)).containsExactly(DispatchDecision.NoAction)
+	}
+
+	@Test
+	fun `a train standing on a platform and a switch block is compared on every block it occupies`() {
+		val quarantine = ExpiredRouteQuarantine(innerReturning(reserveT))
+		val switchBlock = namedBlock("sw")
+		quarantine.onReservationExpired(tailExpired(TRAIN, kA, switchBlock))
+		quarantine.onReservationExpired(tailExpired(TRAIN, kA, switchBlock))
+
+		// The loop publishes an input only for kA, but the snapshot reads both blocks as the train's.
+		val straddling =
+			observation(standing = mapOf(TRAIN to setOf("kA", "sw")), inputs = mapOf(TRAIN to setOf("kA")))
+		assertThat(quarantine.decide(straddling)).containsExactly(DispatchDecision.NoAction)
+	}
+
+	@Test
+	fun `an observation with trains and no block readings fails fast, naming the adapter issue`() {
+		val quarantine = ExpiredRouteQuarantine(innerReturning(reserveT))
+		val noBlocks = observation(mapOf(TRAIN to setOf("kA")))
+		val withoutBlocks = noBlocks.copy(snapshot = noBlocks.snapshot.copy(blocks = emptyList()))
+
+		assertFailure { quarantine.decide(withoutBlocks) }
+			.isInstanceOf<IllegalStateException>()
+			.messageContains("Issue #1249")
+	}
+
+	@Test
 	fun `a train that left the snapshot is forgotten`() {
 		val quarantine = ExpiredRouteQuarantine(innerReturning(reserveT))
 		quarantine.onReservationExpired(tailExpired(TRAIN, kA))
@@ -128,7 +171,7 @@ class ExpiredRouteQuarantineTest {
 	}
 
 	@Test
-	fun `two whole-holding expiries quarantine a present train with no OCCUPIED input until it leaves`() {
+	fun `two whole-holding expiries quarantine a present train with no OCCUPIED block until it leaves`() {
 		val quarantine = ExpiredRouteQuarantine(innerReturning(reserveT))
 		quarantine.onReservationExpired(wholeHoldingExpired(TRAIN))
 		quarantine.onReservationExpired(wholeHoldingExpired(TRAIN))
@@ -163,12 +206,12 @@ class ExpiredRouteQuarantineTest {
 
 	private fun tailExpired(
 		trainId: String,
-		standingOn: DynamicTrackBlock
+		vararg standingOn: DynamicTrackBlock
 	) = ReservationExpired(
 		trainId = trainId,
 		kind = ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL,
 		releasedBlocks = listOf(namedBlock("tail")),
-		keptBlocks = listOf(standingOn),
+		keptBlocks = standingOn.toList(),
 		stalledForSimSeconds = TTL,
 		ttlSimSeconds = TTL,
 		time = TTL
@@ -186,19 +229,22 @@ class ExpiredRouteQuarantineTest {
 		)
 
 	/**
-	 * An observation in which every train of [present] is in `snapshot.trainPositions` and each
-	 * train of [standing] owns an OCCUPIED inner input for each of its block ids.
+	 * An observation in which every train of [present] is in `snapshot.trainPositions`, each train of
+	 * [standing] owns an OCCUPIED `snapshot.blocks` reading for each of its block ids (next to one FREE
+	 * block, so the readings are never empty), and each train of [inputs] owns an OCCUPIED inner input
+	 * for each of its block ids, as the loop publishes them.
 	 */
 	private fun observation(
 		standing: Map<String, Set<String>>,
-		present: Set<String> = standing.keys
+		present: Set<String> = standing.keys,
+		inputs: Map<String, Set<String>> = standing
 	): DispatchObservation =
 		DispatchObservation(
 			snapshot =
 				SimulationSnapshot(
 					simTime = TTL,
 					semaphores = emptyList(),
-					blocks = emptyList(),
+					blocks = blockReadings(standing),
 					trainPositions =
 						present.map { trainId ->
 							TrainPositionReading(
@@ -213,10 +259,15 @@ class ExpiredRouteQuarantineTest {
 				),
 			unapprovedTrains = emptyList(),
 			innerBlockInputs =
-				standing.flatMap { (trainId, blockIds) ->
+				inputs.flatMap { (trainId, blockIds) ->
 					blockIds.map { blockId -> occupiedInput(blockId, trainId) }
 				}
 		)
+
+	private fun blockReadings(standing: Map<String, Set<String>>): List<BlockOccupancyReading> =
+		standing.flatMap { (trainId, blockIds) ->
+			blockIds.map { blockId -> BlockOccupancyReading(blockId, TrackFacility.State.OCCUPIED, trainId) }
+		} + BlockOccupancyReading("free", TrackFacility.State.FREE, null)
 
 	private fun occupiedInput(
 		blockId: String,
