@@ -191,10 +191,11 @@ data class BlockInputObservation(
 	val candidateTargets: List<CandidateTarget> = emptyList(),
 	/**
 	 * The name of the separator at which [ownerTrainId]'s stored route currently ends, resolved only when
-	 * [awaitingRouteExtension] (Issue #1244); `null` otherwise, and `null` when the end has no route-endpoint
-	 * name. A [DispatchDecision.ReservePath] to this very name re-grants the route the train already holds:
-	 * the kernel changes no block and only re-clears the start signal, which fights the reservation expiry's
-	 * deferral (STOP) every tick. A dispatcher must not request it.
+	 * [awaitingRouteExtension] (Issue #1244); `null` otherwise, `null` when [ownerTrainId] has no stored route
+	 * (no PathInfo), and `null` when the end has no route-endpoint name. A `null` never matches a pick, so the
+	 * guard it feeds stays silent. A [DispatchDecision.ReservePath] to this very name re-grants the route the
+	 * train already holds: the kernel changes no block and only re-clears the start signal, which fights the
+	 * reservation expiry's deferral (STOP) every tick. A dispatcher must not request it.
 	 */
 	val heldRouteEndName: String? = null
 )
