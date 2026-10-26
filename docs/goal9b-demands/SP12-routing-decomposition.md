@@ -362,6 +362,10 @@ more than 486 code lines, so no class can approach the 800 limit.
 36 files (the issue counted 18 when it was written). The package is no longer dominated by one
 4,280-line file: the largest class is 469 lines.
 
+Since that measurement, reservation expiry phase 2 (#1220) grew `DefaultReservationExpiry.kt` to 245
+physical lines and split the stall judgement into a 38th file, `TailStallTracker.kt` (159 physical
+lines), on the owner's review thread that the expiry class had grown too big.
+
 ## 5. Side finding: kotlin-logging swallows log-lambda exceptions
 
 Found in the SP12.9 fix round (the `logback-test.xml` DEBUG entry for `RouteCandidateScreen`, commit

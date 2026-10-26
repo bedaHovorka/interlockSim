@@ -186,15 +186,10 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 		body: (ListAppender<ILoggingEvent>, DefaultReservationExpiry) -> Unit
 	) = withExpiryLog { appender ->
 		val failing =
-			DefaultReservationExpiry(
-				registry = registry,
-				candidateScreen = (service as DefaultPathReservationService).candidateScreen,
-				ttlSimSeconds = TTL,
-				expiryRelease = { holding ->
-					check(holding != trainId) { "release of $trainId fails under test" }
-					service.releasePathDetailed(holding)
-				}
-			)
+			expiryWith { holding ->
+				check(holding != trainId) { "release of $trainId fails under test" }
+				service.releasePathDetailed(holding)
+			}
 		body(appender, failing)
 	}
 

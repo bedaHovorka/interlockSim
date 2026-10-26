@@ -50,7 +50,8 @@ import org.junit.jupiter.api.Test
  * Progress is the traffic-simulation-expert's snapshot (ruling D1/D2 on #1220): the occupied block
  * set, the RESERVED block set and the occupant's `distanceToSemaphore()` reading. The stall clock
  * restarts whenever any of them changes, the reading by more than 0.01 m. A [ProgressStub] stands in
- * for the train, so each scenario sets the reading by hand.
+ * for the train, so each scenario sets the reading by hand. The stall rule alone, without kDisco or a
+ * release, is pinned in [TailStallTrackerTest]; this class pins it through the release.
  *
  * The loop tick runs every 2.0 simulated seconds in `ShuntingLoop`, so [ticks] calls the expiry at
  * that cadence. No wall-clock time is involved anywhere.
@@ -146,21 +147,10 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 
 	/** A [DefaultReservationExpiry] over this test's registry whose release counts its calls. */
 	private fun countingExpiry(calls: MutableList<String>): DefaultReservationExpiry =
-		DefaultReservationExpiry(
-			registry = registry,
-			candidateScreen =
-				RouteCandidateScreen(
-					registry,
-					environment,
-					ReservationTargetDiscovery(navigator, environment),
-					pathInfoBuilder
-				),
-			ttlSimSeconds = TTL,
-			expiryRelease = { trainId ->
-				calls += trainId
-				service.releasePathDetailed(trainId)
-			}
-		)
+		expiryWith { trainId ->
+			calls += trainId
+			service.releasePathDetailed(trainId)
+		}
 
 	@Test
 	fun `a train moving inside one long block keeps its tail at three TTLs`() {
@@ -428,6 +418,38 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 	}
 
 	@Test
+	fun `a second deferral episode after a completed tail expiry logs INFO again`() {
+		withExpiryLog { appender ->
+			lateinit var secondLeg: List<DynamicTrackBlock>
+
+			runInOrder(
+				listOf(
+					0.0 to { reserveWholeRouteStandingOnKa(TRAIN, ProgressStub(TRAIN)) },
+					// The first tail is gone (approach-lock deferral, then completion, as in `a stopped
+					// train loses exactly its RESERVED tail after the TTL`); the stalled train is
+					// granted a new leg past the proceed aspect at zA, which stalls in turn.
+					(SECOND_LEG_AT - 1.0) to {
+						assertThat(expiry.expiredTailCount).isEqualTo(1)
+						secondLeg =
+							assertReservationSuccess(service.reservePath(TRAIN, zA, findSemaphoreByName("doB1")))
+								.reservedBlocks
+					}
+				),
+				ticks(0.0, SECOND_LEG_AT + TTL + 2 * TICK)
+			)
+
+			assertBlocksFreeAndUnowned(secondLeg)
+			assertStillStandingOnKa()
+			assertThat(expiry.expiredTailCount).isEqualTo(2)
+			// One INFO per episode. This pins the outcome: the completion clears the train's marker, and
+			// so does the next call that does not attempt the train, which a new stall needs anyway.
+			assertThat(tailLines(appender, DEFERRED, Level.INFO)).hasSize(2)
+			assertThat(tailLines(appender, DEFERRED, Level.DEBUG)).isEmpty()
+			assertThat(tailLines(appender, EXPIRED, Level.INFO)).hasSize(2)
+		}
+	}
+
+	@Test
 	fun `a train with no readable occupant of its own is not judged`() {
 		val releaseCalls = mutableListOf<String>()
 		val counting = countingExpiry(releaseCalls)
@@ -464,21 +486,10 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 			}
 		val releaseCalls = mutableListOf<Double>()
 		val recording =
-			DefaultReservationExpiry(
-				registry = registry,
-				candidateScreen =
-					RouteCandidateScreen(
-						registry,
-						environment,
-						ReservationTargetDiscovery(navigator, environment),
-						pathInfoBuilder
-					),
-				ttlSimSeconds = TTL,
-				expiryRelease = {
-					releaseCalls += currentSimulationTime()
-					PathRelease(emptyList(), emptyList())
-				}
-			)
+			expiryWith {
+				releaseCalls += currentSimulationTime()
+				PathRelease(emptyList(), emptyList())
+			}
 
 		runInOrder(
 			listOf(
@@ -580,6 +591,7 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 		const val OCCUPANT_AT = 3 * DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS
 		const val LEAVES_AT = 30.0
 		const val BACK_AT = 40.0
+		const val SECOND_LEG_AT = 2 * DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS
 
 		const val DEFERRED = "Reservation tail expiry deferred for"
 		const val EXPIRED = "Reservation tail expired for"

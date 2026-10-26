@@ -44,6 +44,19 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 		get() = (service as DefaultPathReservationService).expiry
 
 	/**
+	 * A [DefaultReservationExpiry] over this test's registry and the service's own candidate screen,
+	 * with the configured TTL, whose release is [release]: for a scenario that must count, fail or
+	 * stub the release the real wiring hands to [RouteReleaser.releasePathDetailed].
+	 */
+	internal fun expiryWith(release: (String) -> PathRelease): DefaultReservationExpiry =
+		DefaultReservationExpiry(
+			registry = registry,
+			candidateScreen = (service as DefaultPathReservationService).candidateScreen,
+			ttlSimSeconds = TTL,
+			expiryRelease = release
+		)
+
+	/**
 	 * Runs [body] with a Logback appender attached to the [DefaultReservationExpiry] logger, which
 	 * `logback-test.xml` keeps at DEBUG; the appender is detached in `finally`.
 	 */

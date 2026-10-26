@@ -26,7 +26,8 @@ import kotlin.math.abs
  * boundaries and stays constant while the train stands. The stall clock restarts whenever any of the
  * three changes, the reading by more than [PROGRESS_THRESHOLD_METERS] (an asymptotic approach,
  * Issue #797, creeps by less), so a new registration restarts it too. A train with no readable
- * occupant of its own is not judged on that call; a train with no tail (the #943 waiter at a STOP
+ * occupant of its own is not judged on that call and loses its clock, so its first readable call
+ * after the gap starts a fresh one; a train with no tail (the #943 waiter at a STOP
  * signal, which has consumed its leg) is not judged either and keeps no clock. The snapshot of a
  * train that leaves the set is dropped.
  *
@@ -133,8 +134,13 @@ internal class TailStallTracker(
 			progress.remove(trainId)
 			return null
 		}
-		// Not judged on this call (ruling D2): an OCCUPIED booking, or somebody else on its block.
-		val reading = readingOf(holding) ?: return null
+		// Not judged on this call (ruling D2): an OCCUPIED booking, or somebody else on its block. No
+		// clock either: an old snapshot kept across the gap would free the tail with no fresh TTL.
+		val reading =
+			readingOf(holding) ?: run {
+				progress.remove(trainId)
+				return null
+			}
 		val current = ProgressSnapshot(holding.occupied.toSet(), holding.reserved.toSet(), reading, now)
 		val last = progress[trainId]
 		if (last == null || last.isProgressIn(current)) {
