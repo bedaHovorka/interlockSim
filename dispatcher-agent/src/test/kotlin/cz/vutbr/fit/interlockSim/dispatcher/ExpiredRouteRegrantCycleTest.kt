@@ -106,16 +106,47 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 	fun `the plain rule-based dispatcher re-grants a standing train's expired tail in the same step`() {
 		val run = runStandingHold { RuleBasedDispatcher() }
 
+		val standing = assertStandsOnPlatformAlone(run)
+		assertSameStepRegrant(run, standing)
+		assertStarvedWithoutDiagnosis(run, standing)
+	}
+
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	fun `the quarantine stops re-granting a standing train after its second expiry`() {
+		val run = runStandingHold { context -> ExpiredRouteQuarantine(RuleBasedDispatcher()).alsoRegisteredOn(context) }
+
+		val standing = assertStandsOnPlatformAlone(run)
+		val quarantinedAt = assertNoRouteAfter(run, standing)
+		assertFreedTailReused(run, standing, quarantinedAt)
+		assertIssue943End(run, standing, quarantinedAt)
+	}
+
+	/** Register [this] quarantine for the kernel's [ReservationExpired] events before `run()`. */
+	private fun ExpiredRouteQuarantine.alsoRegisteredOn(context: DefaultSimulationContext): ExpiredRouteQuarantine =
+		also { context.onReservationExpired(it::onReservationExpired) }
+
+	/**
+	 * Both arms: a train was held, and it stands on the platform track alone and never passes the held
+	 * signal (a 40 m train, 100 m track) -- at each expiry and on every control step after the first.
+	 */
+	private fun assertStandsOnPlatformAlone(run: RunRecord): Hold {
 		val standing = checkNotNull(run.hold) { "no train was held on a platform track" }
-		val events = run.eventsOf(standing.trainId)
-		// It stands on the platform track alone and never passes the held signal (a 40 m train, 100 m track).
 		assertThat(
 			run.occupiedAtEvents,
 			"its occupied blocks at each expiry"
 		).each { it.isEqualTo(listOf(standing.trackName)) }
 		assertThat(run.occupiedAfterFirstExpiry, "its occupied blocks after the first expiry")
 			.each { it.isEqualTo(listOf(standing.trackName)) }
-		// The cycle exists: release -> same-step re-grant -> new stall clock, again and again.
+		return standing
+	}
+
+	/** Control arm: release -> same-step re-grant -> new stall clock, again and again. */
+	private fun assertSameStepRegrant(
+		run: RunRecord,
+		standing: Hold
+	) {
+		val events = run.eventsOf(standing.trainId)
 		assertThat(events.size).isGreaterThanOrEqualTo(MIN_CONTROL_EXPIRIES)
 		assertThat(events.map { it.kind }).each { it.isEqualTo(ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL) }
 		assertThat(events.map { event -> event.keptBlocks.map { it.name } })
@@ -133,32 +164,33 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 				.transform { times -> times.any { it == event.time } }
 				.isTrue()
 		}
-		// The harm: the run reaches its end without a diagnosis, and nothing leaves the station meanwhile.
+	}
+
+	/** Control arm, the harm: the run reaches its end without a diagnosis, and nothing leaves the station. */
+	private fun assertStarvedWithoutDiagnosis(
+		run: RunRecord,
+		standing: Hold
+	) {
+		val firstExpiryAt = run.eventsOf(standing.trainId).first().time
 		assertThat(run.errorStops, "errorStops").isEmpty()
 		assertThat(run.lastControlStepAt, "last control step").isGreaterThanOrEqualTo(END_TIME - TICK)
-		assertThat(run.exitTimes.filter { it > events.first().time }, "exits after the first expiry").isEmpty()
+		assertThat(run.exitTimes.filter { it > firstExpiryAt }, "exits after the first expiry").isEmpty()
 		assertThat(run.conflicts).isEmpty()
 		assertThat(run.uncaught).isEmpty()
 	}
 
-	@Test
-	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	fun `the quarantine stops re-granting a standing train after its second expiry`() {
-		val run = runStandingHold { context -> ExpiredRouteQuarantine(RuleBasedDispatcher()).alsoRegisteredOn(context) }
-
-		val standing = checkNotNull(run.hold) { "no train was held on a platform track" }
+	/**
+	 * Quarantine arm: forgiven once (re-granted), quarantined at the second expiry, so there is no third
+	 * one, no ReservePath for it at all, from any origin, and no block granted to it. Returns the sim
+	 * time of the quarantining expiry.
+	 */
+	private fun assertNoRouteAfter(
+		run: RunRecord,
+		standing: Hold
+	): Double {
 		val events = run.eventsOf(standing.trainId)
-		// It stands on the platform track alone and never passes the held signal (a 40 m train, 100 m track).
-		assertThat(
-			run.occupiedAtEvents,
-			"its occupied blocks at each expiry"
-		).each { it.isEqualTo(listOf(standing.trackName)) }
-		assertThat(run.occupiedAfterFirstExpiry, "its occupied blocks after the first expiry")
-			.each { it.isEqualTo(listOf(standing.trackName)) }
-		// Forgiven once (re-granted), quarantined at the second expiry: no third one.
 		assertThat(events.size).isEqualTo(2)
 		val quarantinedAt = events[1].time
-		// No ReservePath for it at all, from any origin, and no block granted to it.
 		assertThat(run.reservePathTimes(standing.trainId).filter { it >= quarantinedAt }, "ReservePaths after")
 			.isEmpty()
 		assertThat(run.reservedAt(standing.trainId).filter { it >= quarantinedAt }, "blocks reserved for it after")
@@ -166,14 +198,29 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 		assertThat(run.holdingsAfterQuarantine.filter { it != listOf(standing.trackName) }, "its holding after")
 			.isEmpty()
 		assertThat(run.holdingsAfterQuarantine, "control steps checked after").isNotEmpty()
-		// The freed tail goes to another train, and traffic flows on ...
-		assertThat(events[1].releasedBlocks).isNotEmpty()
-		assertThat(run.otherTrainsReserving(events[1].releasedBlocks, standing.trainId, after = quarantinedAt))
-			.isNotEmpty()
+		return quarantinedAt
+	}
+
+	/** Quarantine arm: the freed tail goes to another train, and traffic flows on. */
+	private fun assertFreedTailReused(
+		run: RunRecord,
+		standing: Hold,
+		quarantinedAt: Double
+	) {
+		val freedTail = run.eventsOf(standing.trainId)[1].releasedBlocks
+		assertThat(freedTail).isNotEmpty()
+		assertThat(run.otherTrainsReserving(freedTail, standing.trainId, after = quarantinedAt)).isNotEmpty()
 		assertThat(run.exitTimes.filter { it > quarantinedAt }, "exits after the quarantine").isNotEmpty()
 		assertThat(run.conflicts).isEmpty()
 		assertThat(run.uncaught).isEmpty()
-		// ... until the #943 bound diagnoses the quarantined train, which has no route: the expected end.
+	}
+
+	/** Quarantine arm: the #943 bound diagnoses the quarantined train, which has no route -- the expected end. */
+	private fun assertIssue943End(
+		run: RunRecord,
+		standing: Hold,
+		quarantinedAt: Double
+	) {
 		val diagnosis = assertThat(run.errorStops, "errorStops").single()
 		diagnosis.isInstanceOf<SimulationException>()
 		diagnosis.transform { it.message.orEmpty() }.all {
@@ -187,10 +234,6 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 			)
 	}
 
-	/** Register [this] quarantine for the kernel's [ReservationExpired] events before `run()`. */
-	private fun ExpiredRouteQuarantine.alsoRegisteredOn(context: DefaultSimulationContext): ExpiredRouteQuarantine =
-		also { context.onReservationExpired(it::onReservationExpired) }
-
 	/** The train the scenario holds, the platform track it stands on and the exit signal it is held at. */
 	private class Hold(
 		val trainId: String,
@@ -198,21 +241,21 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 		val signalName: String
 	)
 
-	/** What one run recorded; every field was written on the simulation thread. */
-	private class Run(
-		val hold: Hold?,
-		val events: List<ReservationExpired>,
-		val appliedReservePaths: List<Pair<Double, DispatchDecision.ReservePath>>,
-		val reservations: List<Reservation>,
-		val holdingsAfterQuarantine: List<List<String?>>,
-		val occupiedAtEvents: List<List<String?>>,
-		val occupiedAfterFirstExpiry: List<List<String?>>,
-		val exitTimes: List<Double>,
-		val conflicts: List<Any>,
-		val errorStops: List<Throwable>,
-		val uncaught: List<Throwable>,
-		val lastControlStepAt: Double
-	) {
+	/** What one run recorded; every list was written on the simulation thread. */
+	private class RunRecord {
+		var hold: Hold? = null
+		val events = mutableListOf<ReservationExpired>()
+		val appliedReservePaths = mutableListOf<Pair<Double, DispatchDecision.ReservePath>>()
+		val reservations = mutableListOf<Reservation>()
+		val holdingsAfterQuarantine = mutableListOf<List<String?>>()
+		val occupiedAtEvents = mutableListOf<List<String?>>()
+		val occupiedAfterFirstExpiry = mutableListOf<List<String?>>()
+		val exitTimes = mutableListOf<Double>()
+		val conflicts = mutableListOf<Any>()
+		val errorStops = mutableListOf<Throwable>()
+		var uncaught: List<Throwable> = emptyList()
+		var lastControlStepAt = Double.NaN
+
 		fun eventsOf(trainId: String): List<ReservationExpired> = events.filter { it.trainId == trainId }
 
 		/** Sim times at which a `ReservePath` of [trainId] was applied, from [fromSemaphoreName] or any origin. */
@@ -246,78 +289,135 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 		val block: DynamicTrackBlock
 	)
 
+	/** The simulation stack one run drives: the fixture context, its loop and the services the test reads. */
+	private class Stack(
+		val context: DefaultSimulationContext,
+		val loop: ShuntingLoop,
+		val service: DefaultPathReservationService,
+		val registry: PathReservationRegistry,
+		val exitSignals: Map<String, DynamicRailSemaphore>
+	) {
+		/** Carries the dispatcher's decisions from the control step to the [DispatchDecisionApplier]. */
+		val queue = ActuatorCommandQueue()
+	}
+
 	/**
 	 * Run [END_TIME] simulated seconds of the stack with the dispatcher [makeDispatcher] builds, the
 	 * [StandingHoldScenario] observing every control step.
 	 */
-	private fun runStandingHold(makeDispatcher: (DefaultSimulationContext) -> Dispatcher): Run {
+	private fun runStandingHold(makeDispatcher: (DefaultSimulationContext) -> Dispatcher): RunRecord {
+		val record = RunRecord()
+		val stack = newStack(record)
+		val dispatcher = makeDispatcher(stack.context)
+		val scenario = StandingHoldScenario(stack.loop, stack.registry, stack.exitSignals)
+		recordExpiries(stack, scenario, record)
+		val applier = newApplier(stack, record)
+		recordBlockEvents(stack.service, applier, record)
+		recordConflicts(stack.context, record)
+		installControlStep(stack, dispatcher, scenario, applier, record)
+		stack.context.setMainProcess(stack.loop)
+		record.uncaught = UncaughtSimulationExceptions.record { stack.context.run() }.uncaught
+		record.hold = scenario.hold
+		return record
+	}
+
+	/** The `vyhybna.xml` fixture, a [ShuntingLoop] over it, and the services this test reads. */
+	private fun newStack(record: RunRecord): Stack {
 		val context = TestFixtures.newShuntingSimulationContext().tracked()
 		// Creates the dynamic InOut wrappers ShuntingLoop's constructor needs; the list itself is not used.
 		context.getInOuts()
-		val errorStops = mutableListOf<Throwable>()
 		// The real navigation: the wrapper only reports every errorStop to this test.
 		val env =
 			NavigationDecoratingContext(context, context.getRoutingServices().getTrainNavigationService()) {
-				errorStops += it
+				record.errorStops += it
 			}
-		val loop = ShuntingLoop(env, END_TIME)
-		val service = context.getRoutingServices().getPathReservationService() as DefaultPathReservationService
-		val registry = context.scope.get<PathReservationRegistry>()
 		val semaphores = context.cellsOfType<DynamicRailSemaphore>().associateBy { it.name }
-		val exitSignals = PLATFORM_EXITS.mapValues { (_, signal) -> checkNotNull(semaphores[signal]) { signal } }
+		return Stack(
+			context = context,
+			loop = ShuntingLoop(env, END_TIME),
+			service = context.getRoutingServices().getPathReservationService() as DefaultPathReservationService,
+			registry = context.scope.get<PathReservationRegistry>(),
+			exitSignals = PLATFORM_EXITS.mapValues { (_, signal) -> checkNotNull(semaphores[signal]) { signal } }
+		)
+	}
 
-		val dispatcher = makeDispatcher(context)
-		val scenario = StandingHoldScenario(loop, registry, exitSignals)
-		val events = mutableListOf<ReservationExpired>()
+	/** Record every [ReservationExpired], and the held train's occupied blocks at each of its own. */
+	private fun recordExpiries(
+		stack: Stack,
+		scenario: StandingHoldScenario,
+		record: RunRecord
+	) {
 		// Records only: the registry read is a query, never a call back into a mutating seam.
-		val occupiedAtEvents = mutableListOf<List<String?>>()
-		context.onReservationExpired { event ->
-			events += event
+		stack.context.onReservationExpired { event ->
+			record.events += event
 			if (event.trainId == scenario.hold?.trainId) {
-				occupiedAtEvents += registry.getOccupiedBlocks(event.trainId).map { it.name }
+				record.occupiedAtEvents += stack.registry.getOccupiedBlocks(event.trainId).map { it.name }
 			}
 		}
+	}
 
-		val perceptionPort = DefaultNetworkPerceptionPort(env = context, activeTrains = loop::getApprovedTrains)
-		val actuatorPort = DefaultNetworkActuatorPort(env = context)
-		val queue = ActuatorCommandQueue()
-		val appliedReservePaths = mutableListOf<Pair<Double, DispatchDecision.ReservePath>>()
-		val applier =
-			DispatchDecisionApplier(
-				queue = queue,
-				networkActuator = actuatorPort,
-				onApproveTrain = loop::approveQueuedTrain,
-				onBlockTransition = loop::incrementBlockTransition,
-				onFailedReservation = loop::incrementFailedReservation,
-				onDecisionApplied = { decision ->
-					if (decision is DispatchDecision.ReservePath) {
-						appliedReservePaths += currentSimulationTime() to decision
-					}
+	/** The applier of the dispatcher's decisions over the real actuator, recording each applied `ReservePath`. */
+	private fun newApplier(
+		stack: Stack,
+		record: RunRecord
+	): DispatchDecisionApplier =
+		DispatchDecisionApplier(
+			queue = stack.queue,
+			networkActuator = DefaultNetworkActuatorPort(env = stack.context),
+			onApproveTrain = stack.loop::approveQueuedTrain,
+			onBlockTransition = stack.loop::incrementBlockTransition,
+			onFailedReservation = stack.loop::incrementFailedReservation,
+			onDecisionApplied = { decision ->
+				if (decision is DispatchDecision.ReservePath) {
+					record.appliedReservePaths += currentSimulationTime() to decision
 				}
-			)
-		val reservations = mutableListOf<Reservation>()
+			}
+		)
+
+	/** Record every block reservation, and evict the applier's duplicate guard on every release. */
+	private fun recordBlockEvents(
+		service: DefaultPathReservationService,
+		applier: DispatchDecisionApplier,
+		record: RunRecord
+	) {
 		service.addBlockOccupancyListener { event ->
 			when (event.type) {
 				// The duplicate-ReservePath guard, evicted as ExampleRegistry.wireDispatcherAgent evicts it.
 				BlockOccupancyEventType.BLOCK_RELEASED -> event.trainId?.let(applier::evictReservationsFor)
 				BlockOccupancyEventType.BLOCK_RESERVED ->
-					event.trainId?.let { reservations += Reservation(currentSimulationTime(), it, event.block) }
+					event.trainId?.let { record.reservations += Reservation(currentSimulationTime(), it, event.block) }
 				else -> Unit
 			}
 		}
-		val conflicts = mutableListOf<Any>()
-		context.onConflictDetectedEvent { conflicts += it }
-		context.getCollisionServices().onCollisionWarning { conflicts += it }
+	}
 
-		val holdingsAfterQuarantine = mutableListOf<List<String?>>()
-		val occupiedAfterFirstExpiry = mutableListOf<List<String?>>()
-		val exitTimes = mutableListOf<Double>()
-		var lastControlStepAt = Double.NaN
+	/** Record every detected conflict and collision warning. */
+	private fun recordConflicts(
+		context: DefaultSimulationContext,
+		record: RunRecord
+	) {
+		context.onConflictDetectedEvent { record.conflicts += it }
+		context.getCollisionServices().onCollisionWarning { record.conflicts += it }
+	}
+
+	/**
+	 * Each control step: record the exits, let [scenario] hold its train, run [dispatcher] on the step's
+	 * observation through the queue and [applier], hold again, and record the held train's blocks.
+	 */
+	private fun installControlStep(
+		stack: Stack,
+		dispatcher: Dispatcher,
+		scenario: StandingHoldScenario,
+		applier: DispatchDecisionApplier,
+		record: RunRecord
+	) {
+		val loop = stack.loop
+		val perceptionPort = DefaultNetworkPerceptionPort(env = stack.context, activeTrains = loop::getApprovedTrains)
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
 		loop.controlStepListener =
 			ControlStepListener {
-				lastControlStepAt = currentSimulationTime()
-				repeat(loop.getTrainsExited() - exitTimes.size) { exitTimes += lastControlStepAt }
+				record.lastControlStepAt = currentSimulationTime()
+				repeat(loop.getTrainsExited() - record.exitTimes.size) { record.exitTimes += record.lastControlStepAt }
 				scenario.observe()
 				val observation =
 					DispatchObservation(
@@ -326,35 +426,25 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 						loop.getInnerBlockInputs(),
 						loop.getOuterBlockInputs()
 					)
-				queue.postAll(dispatcher.decide(observation))
+				stack.queue.postAll(dispatcher.decide(observation))
 				applier.onControlStep()
 				scenario.holdAfterTheDispatcher()
-				val held = scenario.hold
-				val heldEvents = events.count { it.trainId == held?.trainId }
-				if (held != null && heldEvents >= 1) {
-					occupiedAfterFirstExpiry.add(registry.getOccupiedBlocks(held.trainId).map { it.name })
-				}
-				if (held != null && heldEvents >= 2) {
-					holdingsAfterQuarantine.add(registry.getBlocks(held.trainId).map { it.name })
-				}
+				recordHeldTrain(scenario.hold, stack.registry, record)
 			}
-		context.setMainProcess(loop)
-		val result = UncaughtSimulationExceptions.record { context.run() }
+	}
 
-		return Run(
-			hold = scenario.hold,
-			events = events,
-			appliedReservePaths = appliedReservePaths,
-			reservations = reservations,
-			holdingsAfterQuarantine = holdingsAfterQuarantine,
-			occupiedAtEvents = occupiedAtEvents,
-			occupiedAfterFirstExpiry = occupiedAfterFirstExpiry,
-			exitTimes = exitTimes,
-			conflicts = conflicts,
-			errorStops = errorStops,
-			uncaught = result.uncaught,
-			lastControlStepAt = lastControlStepAt
-		)
+	/** After one expiry of [held], its occupied blocks; after its second, its whole holding. */
+	private fun recordHeldTrain(
+		held: Hold?,
+		registry: PathReservationRegistry,
+		record: RunRecord
+	) {
+		if (held == null) return
+		val heldEvents = record.eventsOf(held.trainId).size
+		if (heldEvents >= 1) {
+			record.occupiedAfterFirstExpiry.add(registry.getOccupiedBlocks(held.trainId).map { it.name })
+		}
+		if (heldEvents >= 2) record.holdingsAfterQuarantine.add(registry.getBlocks(held.trainId).map { it.name })
 	}
 
 	/**
