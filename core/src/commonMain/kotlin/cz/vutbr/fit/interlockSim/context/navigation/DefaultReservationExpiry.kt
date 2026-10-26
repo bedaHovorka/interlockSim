@@ -21,7 +21,7 @@ import kotlin.math.round
  * `BlockReleased` per block. Only trains that occupy nothing qualify, which is the same whole-route
  * rule `OrphanReservationSweeper` applies before its `releaseRouteDetailed`. The registry's query
  * sees only the blocks it attributes to a train, so a train physically standing on any other block
- * ([RouteCandidateScreen.standsOnAnyBlock], the Issue #893 state) is dropped here too: a train on
+ * ([RouteCandidateScreen.standingTrainIds], the Issue #893 state) is dropped here too: a train on
  * the track is the occupying-train case, phase 2 (#1220).
  *
  * **Approach lock (Issue #1050).** A proceed aspect at the head of the holding may have a train
@@ -99,12 +99,14 @@ internal class DefaultReservationExpiry(
 		// remembered) must stop right at the query, before any chain or set is built.
 		val reported = registry.expiredHoldings(ttl = ttlSimSeconds)
 		if (reported.isEmpty() && failedExpiryTrains.isEmpty()) return 0
+		// One graph scan per call, not one per candidate (Issue #1229).
+		val standing = if (reported.isEmpty()) emptySet() else candidateScreen.standingTrainIds()
 		val stale =
 			reported
 				.filter { it.trainId != exceptTrainId }
 				// The registry judges occupancy only over the blocks it attributes to the train; a train
 				// standing on a block it holds no entry for (Issue #893) is on the track all the same.
-				.filterNot { candidateScreen.standsOnAnyBlock(it.trainId) }
+				.filterNot { it.trainId in standing }
 		// A train no longer in the candidate set gets a fresh WARN should its release throw again.
 		// The exempt requester's holding is not attempted here, so its old marker must survive
 		// the call: a failed self-request may not silence the next tick's WARN (Issue #1174).
