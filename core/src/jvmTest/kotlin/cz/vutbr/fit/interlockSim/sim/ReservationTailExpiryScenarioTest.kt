@@ -10,13 +10,16 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -31,6 +34,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 /**
  * Reservation expiry phase 2 (Issue #1220) in a whole rule-based `ShuntingLoop` run on `vyhybna.xml`:
@@ -46,6 +50,16 @@ import java.util.concurrent.TimeUnit
  * route RESERVED; the rule-based dispatcher sees a route already set past `zA` and does nothing.
  * After the TTL of standstill the kernel frees that tail; the dispatcher then sets a route from `zA`
  * again, and the train continues.
+ *
+ * "Exactly once" holds because the put-back is one-off, not because the rule allows a tail to expire
+ * only once: a train that never moves again cycles release, a same-tick re-grant by the dispatcher
+ * and a new stall clock every TTL (traffic-simulation-expert review of #1220, finding F2).
+ *
+ * The TTL is measured from the standstill, not from the put-back: the train brakes for a while after
+ * `zA` drops to STOP. The test follows the stopped train's `distanceToSemaphore()` on every control
+ * step with the kernel's own D2 rule (a move of more than 0.01 m from the reading the clock started
+ * at restarts it; the train stands on `kA` alone and its tail does not change meanwhile), and asserts
+ * that the tail goes exactly one TTL after the last control step that saw it move.
  *
  * Why not a forced navigation answer or a train-side brake: a train held at a separator by an
  * injected `OwnershipConflict` is the #1060 "awaiting extension" state, for which the dispatcher
@@ -92,11 +106,14 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 
 		context.run()
 
-		// Non-vacuous: a train was stopped, with a tail, and stood there for the TTL.
+		// Non-vacuous: a train was stopped, with a tail; it rolled on for a while after the put-back ...
 		val stalled = assertThat(scenario.stalledTrain).isNotNull()
 		assertThat(scenario.tail).isNotEmpty()
-		assertThat(checkNotNull(scenario.tailFreedAt) { "the stalled tail was never freed" } - scenario.stoppedAt)
-			.isGreaterThanOrEqualTo(DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS)
+		val tailFreedAt = checkNotNull(scenario.tailFreedAt) { "the stalled tail was never freed" }
+		assertThat(scenario.lastMovedAt).isGreaterThan(scenario.stoppedAt)
+		// ... and its tail went exactly one TTL after it stood still.
+		assertThat(tailFreedAt - scenario.lastMovedAt)
+			.isCloseTo(DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS, TIME_TOLERANCE)
 		// The tail went once, the block the train stood on stayed its own ...
 		assertThat(service.expiry.expiredTailCount).isEqualTo(1)
 		assertThat(scenario.tailFreeAtExpiry, "tail FREE and unowned on the expiry tick").isTrue()
@@ -119,6 +136,11 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 	) {
 		var stalledTrain: String? = null
 		var stoppedAt = Double.NaN
+
+		/** The last control step at which the stopped train had moved by the kernel's D2 rule. */
+		var lastMovedAt = Double.NaN
+		private var stopped: Train? = null
+		private var clockReading = Double.NaN
 		var tail: List<DynamicTrackBlock> = emptyList()
 		var tailFreedAt: Double? = null
 		var tailFreeAtExpiry = false
@@ -129,7 +151,9 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 			val stalled = stalledTrain
 			if (stalled == null) {
 				putBackSignalInFrontOfTheFirstEastboundTrain()
-			} else if (tailFreedAt == null && service.expiry.expiredTailCount > 0) {
+			} else if (tailFreedAt == null && service.expiry.expiredTailCount == 0) {
+				followStandstill()
+			} else if (tailFreedAt == null) {
 				tailFreedAt = currentSimulationTime()
 				tailFreeAtExpiry =
 					tail.all { it.getState() == TrackFacility.State.FREE && registry.getOwner(it) == null }
@@ -146,6 +170,16 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 			}
 		}
 
+		/** The kernel's D2 reading rule for the stopped train: a move above 0.01 m restarts the clock. */
+		private fun followStandstill() {
+			val reading = checkNotNull(stopped).distanceToSemaphore()
+			val moved = abs(reading - clockReading) > DefaultReservationExpiry.PROGRESS_THRESHOLD_METERS
+			if (clockReading.isNaN() || moved) {
+				clockReading = reading
+				lastMovedAt = currentSimulationTime()
+			}
+		}
+
 		private fun putBackSignalInFrontOfTheFirstEastboundTrain() {
 			if (!zA.signal.isAllowing()) return
 			val train =
@@ -158,6 +192,7 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 			if (held.isEmpty()) return
 			zA.signal = Signal.STOP
 			stalledTrain = train.name
+			stopped = train
 			stoppedAt = currentSimulationTime()
 			tail = held
 		}
@@ -171,5 +206,8 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 
 		/** The clean 400 s run lets most trains through; the stop costs at most a couple of journeys. */
 		const val MIN_EXITED = 5
+
+		/** Control steps fall on whole simulated seconds; this only absorbs floating-point noise. */
+		const val TIME_TOLERANCE = 1.0e-6
 	}
 }
