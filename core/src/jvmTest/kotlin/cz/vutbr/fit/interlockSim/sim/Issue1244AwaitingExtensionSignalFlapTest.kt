@@ -47,8 +47,9 @@ private val logger = KotlinLogging.logger {}
  * leg (`OwnershipConflict`), so the shell reports the input as awaiting a route extension. Per 2 s
  * tick the reservation expiry (phase 2) found the signal at proceed, kept the approach-locked block,
  * put the signal back to STOP and deferred; then the rule-based dispatcher picked the very separator
- * the route already ends at and re-requested it, and the kernel re-cleared the signal. The aspect
- * flipped on every step, and the expiry never completed.
+ * the route already ends at and re-requested it, and the kernel re-cleared the signal: after each
+ * STOP reset the next control step put the signal back to proceed (measured: on 60 of 90 control
+ * steps), and the expiry never completed.
  *
  * The fix: the shell reports where the held route ends ([BlockInputObservation.heldRouteEndName]),
  * and [RuleBasedDispatcher] does not request a route to that very separator for an awaiting train.
@@ -63,9 +64,13 @@ private val logger = KotlinLogging.logger {}
  * the dispatcher's pick is the held end — a same-target re-request. The stall lasts until the #943
  * `errorStop` horizon, which ends the run (recorded, not thrown).
  *
+ * A re-clear here is a control step whose start and end aspects differ (`stepsWithAspectFlip`). The
+ * expiry's STOP resets happen in the loop tick between two control steps, so they are not counted;
+ * they are tracked separately as deferrals (proceed at a step's end, STOP at the next step's start).
+ *
  * Measured on `vyhybna.xml` (90 control steps from the first stand to the errorStop): with the
- * guard, 2 aspect changes and 2 expiries (t = 74 s and 138 s); with the guard removed (mutation
- * check, not pinned), 60 aspect changes and no expiry at all.
+ * guard, 2 re-clears, 2 deferrals and 2 expiries (t = 74 s and 138 s); with the guard removed
+ * (mutation check, not pinned), 60 re-clears, 60 deferrals and no expiry at all.
  */
 @DisplayName("Issue #1244: an awaiting-extension train's signal does not flip STOP/proceed every tick")
 @Tag("integration-test")
