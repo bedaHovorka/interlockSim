@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -57,19 +58,34 @@ import java.util.stream.Stream
  *
  * ## Mutation checks run when this pin was written (each must make a case fail)
  *
- * - Step 2a.5 uses its own inline filter that also drops free blocks (not just the train's own).
- * - Step 1.6 skips the helper and uses every block of the candidate.
- * - One side tests ownership through the registry instead of `block.trainName`.
+ * - (a) Step 2a.5 uses its own inline filter that also drops free blocks (not just the train's own).
+ * - (b) Step 1.6 skips `excludingOwnedBy` and uses every block of the candidate.
+ * - (c) Step 2a.5 tests ownership through the registry instead of `block.trainName`.
+ * - (d) Step 1.6 tests ownership through the registry instead of `block.trainName`.
+ *
+ * A candidate with the train's own block strictly in the middle is deliberately not a case: Step 0
+ * (`rejectNonContiguousStart`) refuses such a request before Step 2a.5, so it could not tell the sides apart.
  *
  * @since Issue #1240
  */
 @DisplayName("Step 1.6 probe and Step 2a.5 early return select the same candidates (Issue #1240)")
 @Timeout(30, unit = TimeUnit.SECONDS)
 class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
-	/** Who owns what before the candidate is judged. */
-	enum class Ownership {
+	/**
+	 * Who owns what before the candidate is judged.
+	 *
+	 * @property candidateCount how many candidates the request's endpoints have
+	 * @property requestsTailLeg whether the request is `B -> zB` (single candidate) instead of `zA -> B`
+	 */
+	enum class Ownership(
+		val candidateCount: Int = 2,
+		val requestsTailLeg: Boolean = false
+	) {
 		/** The train holds the whole main leg `zA -> B`. */
 		TRAIN_HOLDS_MAIN_LEG,
+
+		/** The train holds the whole branch leg `zA -> B`; the main leg is free except for the shared blocks. */
+		TRAIN_HOLDS_BRANCH_LEG,
 
 		/** The train holds `zA -> doB1`; the rest is free. */
 		TRAIN_HOLDS_PREFIX_REST_FREE,
@@ -84,7 +100,7 @@ class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
 		ALL_FREE,
 
 		/** The train stands on block `B-zB` without a registry entry (Issue #893's state). */
-		TRAIN_STANDS_UNREGISTERED
+		TRAIN_STANDS_UNREGISTERED(candidateCount = 1, requestsTailLeg = true)
 	}
 
 	private val trainId = "train_1240"
@@ -98,14 +114,8 @@ class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
 
 	@BeforeEach
 	fun createFixtures() {
-		screen =
-			RouteCandidateScreen(
-				registry,
-				environment,
-				ReservationTargetDiscovery(navigator, environment),
-				pathInfoBuilder
-			)
 		defaultService = service as DefaultPathReservationService
+		screen = defaultService.candidateScreen
 		zA = findSemaphoreByName("zA")
 		inOutA = inOutNamed("A")
 		inOutB = inOutNamed("B")
@@ -122,7 +132,7 @@ class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
 		val (start, target) = endpointsOf(ownership)
 		givenOwnership(ownership)
 		val candidates = navigator.findAllTopologicalPaths(start, target)
-		assertThat(candidates, "candidates of $ownership").hasSize(candidateCount(ownership))
+		assertThat(candidates, "candidates of $ownership").hasSize(ownership.candidateCount)
 		val candidate = candidates[candidateIndex]
 
 		val probeCarvesOut = probeCarvesOut(start, target, candidateIndex, candidate)
@@ -132,19 +142,32 @@ class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
 		assertThat(earlyReturnTaken, "the early return takes the candidate").isEqualTo(expectedCarvedOut)
 	}
 
+	/** Boundary case: a candidate with no blocks at all is carved out by both sides, whatever the ownership. */
+	@Test
+	@DisplayName("a zero-block candidate is carved out by the probe and takes the early return")
+	fun zeroBlockCandidateIsCarvedOutByBoth() {
+		val candidate = emptyList<TrackSection>()
+
+		assertThat(probeCarvesOut(zA, inOutB, 0, candidate), "the probe carves the candidate out").isEqualTo(true)
+		assertThat(earlyReturnTaken(zA, inOutB, candidate), "the early return takes the candidate").isEqualTo(true)
+	}
+
 	private fun endpointsOf(ownership: Ownership): Pair<DynamicPathSeparator, DynamicPathSeparator> =
-		if (ownership == Ownership.TRAIN_STANDS_UNREGISTERED) {
+		if (ownership.requestsTailLeg) {
 			inOutB to findSemaphoreByName("zB")
 		} else {
 			zA to inOutB
 		}
 
-	private fun candidateCount(ownership: Ownership): Int = if (ownership == Ownership.TRAIN_STANDS_UNREGISTERED) 1 else 2
-
 	private fun givenOwnership(ownership: Ownership) {
 		val doB1 = findSemaphoreByName("doB1")
+		val doB2 = findSemaphoreByName("doB2")
 		when (ownership) {
 			Ownership.TRAIN_HOLDS_MAIN_LEG -> reserve(trainId, zA, inOutB)
+			Ownership.TRAIN_HOLDS_BRANCH_LEG -> {
+				reserve(trainId, zA, doB2)
+				reserve(trainId, doB2, inOutB)
+			}
 			Ownership.TRAIN_HOLDS_PREFIX_REST_FREE -> reserve(trainId, zA, doB1)
 			Ownership.TRAIN_HOLDS_PREFIX_OTHER_HOLDS_TAIL -> {
 				reserve(trainId, zA, doB1)
@@ -176,8 +199,8 @@ class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
 		candidate: List<TrackSection>
 	): Boolean {
 		registry.restorePathInfo(trainId, unreachableEndPathInfo())
-		val (failures, usable) =
-			screen.screenDivergentCandidates(trainId, start, target, listOf(IndexedValue(candidateIndex, candidate)))
+		val indexed = listOf(IndexedValue(candidateIndex, candidate))
+		val (failures, usable) = screen.screenDivergentCandidates(trainId, start, target, indexed)
 		assertThat(failures.count + usable.size, "the single candidate is either screened or kept").isEqualTo(1)
 		return usable.isNotEmpty()
 	}
@@ -197,8 +220,8 @@ class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
 	): Boolean {
 		registry.restorePathInfo(trainId, null)
 		val blocksBefore = registry.getBlocks(trainId).toSet()
-		val result =
-			defaultService.reservePath(trainId, start, target, DEFAULT_MAX_PATH_DEPTH, lazyOf(listOf(candidate)))
+		val candidates = lazyOf(listOf(candidate))
+		val result = defaultService.reservePath(trainId, start, target, DEFAULT_MAX_PATH_DEPTH, candidates)
 		return result is PathReservationService.ReservationResult.Success &&
 			registry.getBlocks(trainId).toSet() == blocksBefore
 	}
@@ -210,6 +233,8 @@ class ProbeEarlyReturnSelectionPinTest : PathReservationServiceTestBase() {
 			Stream.of(
 				Arguments.of(Ownership.TRAIN_HOLDS_MAIN_LEG, 0, true),
 				Arguments.of(Ownership.TRAIN_HOLDS_MAIN_LEG, 1, false),
+				Arguments.of(Ownership.TRAIN_HOLDS_BRANCH_LEG, 0, false),
+				Arguments.of(Ownership.TRAIN_HOLDS_BRANCH_LEG, 1, true),
 				Arguments.of(Ownership.TRAIN_HOLDS_PREFIX_REST_FREE, 0, false),
 				Arguments.of(Ownership.TRAIN_HOLDS_PREFIX_REST_FREE, 1, false),
 				Arguments.of(Ownership.TRAIN_HOLDS_PREFIX_OTHER_HOLDS_TAIL, 0, false),
