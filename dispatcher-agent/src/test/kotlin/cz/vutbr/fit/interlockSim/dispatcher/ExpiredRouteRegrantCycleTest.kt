@@ -58,7 +58,7 @@ import java.util.concurrent.TimeUnit
  * the second one on the same footprint, so the freed blocks are offered to the other trains (the
  * quarantine arm).
  *
- * ## Measured (base 13fab2be, `Random(0L)` generator)
+ * ## Measured (`Random(0L)` generator, Issue #1243 as first committed)
  *
  * The hold on `kA` clogs the station: `kA` is also the westbound exit to InOut `A`, so westbound
  * trains wait at `doA2` for a route out that cannot be set, and the second of them to reach its 180 s
@@ -117,7 +117,8 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 		// Forgiven once (re-granted), quarantined at the second expiry: no third one.
 		assertThat(events.size).isEqualTo(2)
 		val quarantinedAt = events[1].time
-		assertThat(run.appliedReservePathTimes(standing).filter { it >= quarantinedAt }, "ReservePaths after")
+		// No ReservePath for it at all, from any origin.
+		assertThat(run.appliedReservePathTimes(standing, fromSemaphoreName = null).filter { it >= quarantinedAt })
 			.isEmpty()
 		assertThat(run.reservedAt(standing).filter { it >= quarantinedAt }, "blocks reserved for it after")
 			.isEmpty()
@@ -152,11 +153,16 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 	) {
 		fun eventsOf(trainId: String?): List<ReservationExpired> = events.filter { it.trainId == trainId }
 
-		/** Sim times at which a `ReservePath` of [trainId] from `zA` was applied. */
-		fun appliedReservePathTimes(trainId: String?): List<Double> =
+		/** Sim times at which a `ReservePath` of [trainId] was applied, from [fromSemaphoreName] or any origin. */
+		fun appliedReservePathTimes(
+			trainId: String?,
+			fromSemaphoreName: String? = "zA"
+		): List<Double> =
 			appliedReservePaths
-				.filter { (_, decision) -> decision.trainId == trainId && decision.fromSemaphoreName == "zA" }
-				.map { it.first }
+				.filter { (_, decision) ->
+					decision.trainId == trainId &&
+						(fromSemaphoreName == null || decision.fromSemaphoreName == fromSemaphoreName)
+				}.map { it.first }
 
 		/** Sim times at which a block was reserved for [trainId]. */
 		fun reservedAt(trainId: String?): List<Double> = reservations.filter { it.trainId == trainId }.map { it.time }
@@ -173,6 +179,7 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 	 */
 	private fun runStandingHold(makeDispatcher: (DefaultSimulationContext) -> Dispatcher): Run {
 		val context = TestFixtures.newShuntingSimulationContext().tracked()
+		// Creates the dynamic InOut wrappers ShuntingLoop's constructor needs; the list itself is not used.
 		context.getInOuts()
 		val loop = ShuntingLoop(context, END_TIME)
 		val service = context.getRoutingServices().getPathReservationService() as DefaultPathReservationService
@@ -196,7 +203,9 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 				onBlockTransition = loop::incrementBlockTransition,
 				onFailedReservation = loop::incrementFailedReservation,
 				onDecisionApplied = { decision ->
-					if (decision is DispatchDecision.ReservePath) appliedReservePaths += currentSimulationTime() to decision
+					if (decision is DispatchDecision.ReservePath) {
+						appliedReservePaths += currentSimulationTime() to decision
+					}
 				}
 			)
 		val reservations = mutableListOf<Reservation>()

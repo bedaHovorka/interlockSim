@@ -109,7 +109,7 @@ by the SP12 follow-up #1243).
 | Per-candidate cost, structured unavailability reason, multi-hop horizon | SP12.5 (SP5 D1, D3, D4) | `findReservationTargetCandidates`, `isPathAvailableFor`, a new enumeration beside `findNextSemaphoresVia` |
 | A new registry query for *why* a switch is held (flank or running) or *when* a holding became stale | SP12.6 | `PathReservationRegistry` facade |
 | A `ReservationExpired` event (train, age, TTL), naming the phase 2 stalled RESERVED tail case | SP12.8, #1220 | addressed by #1243: `ReservationExpired`, kind `WHOLE_HOLDING` / `OCCUPYING_TRAIN_TAIL`; the production consumer is a Goal 9B follow-up |
-| Per-train or per-route-class TTL | SP12.8 | the expiry seam; a physical-progress signal |
+| Per-train or per-route-class TTL | SP12.8 | the expiry seam |
 | Machine-readable denial instead of the English reason string | SP12.9 | `rearFacingEndReason`, `GeometricFailures.reason` |
 | Commit-time precondition (a dispatcher-supplied hold re-checked before registration); structured rejection instead of `null` | SP12.10 | `registerAndFinalizeCandidate` |
 | A stricter origin policy (origin must bound the train's front block) | SP12.9 | a new guard beside `rejectNonContiguousStart` |

@@ -102,7 +102,9 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 			assertBlocksFreeAndUnowned(blocks)
 			// ... and the listener's failure was logged at WARN.
 			val undelivered =
-				appender.list.filter { it.level == Level.WARN && it.formattedMessage.contains("could not be delivered") }
+				appender.list.filter { event ->
+					event.level == Level.WARN && event.formattedMessage.contains("could not be delivered")
+				}
 			assertThat(undelivered.size).isEqualTo(1)
 		}
 	}
