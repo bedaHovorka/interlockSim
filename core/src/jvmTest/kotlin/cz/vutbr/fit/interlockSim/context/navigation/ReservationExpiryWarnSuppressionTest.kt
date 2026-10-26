@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotInstanceOf
@@ -64,6 +65,45 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 			train1Blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
 			// ... and the failure was logged at WARN once, not on every call.
 			assertThat(expiringWarnings(appender, "train1").size).isEqualTo(1)
+			// The throwing release announces nothing; train2's completed expiry is announced (Issue #1243).
+			assertThat(expiredEvents().map { it.trainId }).containsExactly("train2")
+		}
+	}
+
+	@Test
+	fun `a throwing ReservationExpired listener is contained and cannot undo the expiry`() {
+		withExpiryLog { appender ->
+			val zA = findSemaphoreByName("zA")
+			val throwingListener =
+				DefaultReservationExpiry(
+					registry = registry,
+					candidateScreen = (service as DefaultPathReservationService).candidateScreen,
+					ttlSimSeconds = TTL,
+					expiryRelease = service::releasePathDetailed,
+					emitExpired = { throw IllegalStateException("listener") }
+				)
+			lateinit var blocks: List<DynamicTrackBlock>
+			val returned = mutableListOf<Int>()
+
+			atSimTimes(
+				0.0 to {
+					blocks =
+						assertReservationSuccess(service.reservePath("train1", zA, findSemaphoreByName("doB1")))
+							.reservedBlocks
+					// No proceed aspect at the head, so one call frees the whole holding.
+					zA.signal = Signal.STOP
+				},
+				TTL to { returned += throwingListener.expireStale(null) }
+			)
+
+			// The expiry completed all the same: counted, and the blocks are free ...
+			assertThat(returned.single()).isEqualTo(1)
+			assertThat(throwingListener.expiredHoldingCount).isEqualTo(1)
+			assertBlocksFreeAndUnowned(blocks)
+			// ... and the listener's failure was logged at WARN.
+			val undelivered =
+				appender.list.filter { it.level == Level.WARN && it.formattedMessage.contains("could not be delivered") }
+			assertThat(undelivered.size).isEqualTo(1)
 		}
 	}
 

@@ -10,18 +10,23 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
+import assertk.assertions.each
 import assertk.assertions.isCloseTo
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isIn
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
 import cz.vutbr.fit.interlockSim.context.navigation.TailStallTracker
+import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -81,6 +86,7 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 		assertTailFreedOneTtlAfterStandstill(run)
 		assertHeadKeptAndTailRegranted(run)
 		assertRunClean(run)
+		assertExpiryAnnounced(run)
 	}
 
 	/** One finished run of the scenario and everything the test recorded during it. */
@@ -90,7 +96,8 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 		val loop: ShuntingLoop,
 		val scenario: StopOnceScenario,
 		val conflicts: List<Any>,
-		val errorStops: List<Throwable>
+		val errorStops: List<Throwable>,
+		val expired: List<ReservationExpired>
 	)
 
 	/** Load `vyhybna.xml`, wire the rule-based loop with the [StopOnceScenario], and run it to the end. */
@@ -114,8 +121,10 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 			if (event.type == BlockOccupancyEventType.BLOCK_RESERVED) scenario.reserved(event.block, event.trainId)
 		}
 		val conflicts = collectConflicts(context)
+		val expired = mutableListOf<ReservationExpired>()
+		context.onReservationExpired { expired += it }
 		context.run()
-		return ScenarioRun(service, registry, loop, scenario, conflicts, errorStops)
+		return ScenarioRun(service, registry, loop, scenario, conflicts, errorStops, expired)
 	}
 
 	/** Runs [scenario] on every control step after the kernel expiry tick and before the dispatcher. */
@@ -167,6 +176,21 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 	private fun assertRunClean(run: ScenarioRun) {
 		assertThat(run.conflicts).isEmpty()
 		assertThat(run.errorStops).isEmpty()
+	}
+
+	/** The real event bus announced the one tail expiry, on the tick the counter moved (Issue #1243). */
+	private fun assertExpiryAnnounced(run: ScenarioRun) {
+		val scenario = run.scenario
+		val observation = checkNotNull(scenario.observation) { "the stalled tail was never freed" }
+		val event = run.expired.single()
+		assertThat(event.trainId).isEqualTo(scenario.stalledTrain)
+		assertThat(event.kind).isEqualTo(ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL)
+		assertThat(event.keptBlocks.map { it.name }).containsExactly("kA")
+		assertThat(event.releasedBlocks).isNotEmpty()
+		assertThat(event.releasedBlocks).each { it.isIn(*scenario.putBack.tail.toTypedArray()) }
+		assertThat(event.time).isCloseTo(observation.at, TIME_TOLERANCE)
+		assertThat(event.stalledForSimSeconds)
+			.isCloseTo(observation.at - scenario.clock.lastMovedAt, TIME_TOLERANCE)
 	}
 
 	/** What the expiry tick left behind, read on the first control step after it. */

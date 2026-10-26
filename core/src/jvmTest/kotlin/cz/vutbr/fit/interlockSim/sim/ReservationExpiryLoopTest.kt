@@ -16,6 +16,8 @@ import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
+import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
@@ -33,7 +35,7 @@ import java.util.concurrent.TimeUnit
  * Plus the clean-baseline tripwires: rule-based runs on `vyhybna.xml`, where every granted route is
  * entered and no train stalls inside its route, expire nothing -- neither a whole holding (Issue
  * #1174) nor the tail of a train on the track (Issue #1220). A non-zero count there means a live
- * train lost its route.
+ * train lost its route; nor is a [ReservationExpired] event announced (Issue #1243).
  */
 @Tag("integration-test")
 class ReservationExpiryLoopTest : KoinTestBase() {
@@ -89,6 +91,8 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 		val loop = ShuntingLoop(context, endTime = 600L)
 		wireSynchronousDispatcher(context, loop)
 		context.setMainProcess(loop)
+		val events = mutableListOf<ReservationExpired>()
+		context.onReservationExpired { events += it }
 
 		context.run()
 
@@ -98,6 +102,8 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 		// No train on the track lost its tail either (Issue #1220): every train that stood still
 		// waited at a STOP signal holding only the blocks it stands on.
 		assertThat(expiryOf(context).expiredTailCount).isEqualTo(0)
+		// ... so no ReservationExpired event either (Issue #1243): the event's clean-baseline tripwire.
+		assertThat(events).isEmpty()
 	}
 
 	@Test
@@ -114,12 +120,15 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 					}
 			)
 		context.setMainProcess(loop)
+		val events = mutableListOf<ReservationExpired>()
+		context.onReservationExpired { events += it }
 
 		context.run()
 
 		assertThat(loop.getTrainsExited()).isEqualTo(3)
 		assertThat(expiryOf(context).expiredHoldingCount).isEqualTo(0)
 		assertThat(expiryOf(context).expiredTailCount).isEqualTo(0)
+		assertThat(events).isEmpty()
 	}
 
 	private companion object {

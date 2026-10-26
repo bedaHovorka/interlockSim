@@ -13,9 +13,11 @@ import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.each
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotInstanceOf
@@ -32,6 +34,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import org.junit.jupiter.api.Test
 
 /**
@@ -60,6 +63,7 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 			if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) releasedEvents += event.block
 		}
 		val returned = mutableListOf<Int>()
+		val completedAt = mutableListOf<Double>()
 
 		atSimTimes(
 			0.0 to {
@@ -69,12 +73,13 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 				switches = registry.getSwitches("train1")
 			},
 			BELOW_TTL to {
-				// Below the TTL nothing happens.
+				// Below the TTL nothing happens, and nothing is announced.
 				returned += service.expireStaleReservations()
 				assertStillHeld(blocks, entry)
+				assertThat(expiredEvents()).isEmpty()
 			},
-			TTL to { returned += service.expireStaleReservations() },
-			PAST_TTL to { returned += service.expireStaleReservations() }
+			TTL to { completingCallAt(service.expireStaleReservations(), returned, completedAt) },
+			PAST_TTL to { completingCallAt(service.expireStaleReservations(), returned, completedAt) }
 		)
 
 		// The precondition the release checks would be vacuous without these.
@@ -85,6 +90,32 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 		assertThat(releasedEvents.sortedBy { blocks.indexOf(it) }).containsExactly(*blocks.toTypedArray())
 		assertThat(returned.sum()).isEqualTo(1)
 		assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+		// The completed expiry is announced once, as a whole holding (Issue #1243) ...
+		val completed = completedAt.single()
+		val event = expiredEvents().single()
+		assertThat(event.trainId).isEqualTo("train1")
+		assertThat(event.kind).isEqualTo(ReservationExpired.Kind.WHOLE_HOLDING)
+		// ... by the call that completed it: the TTL call deferred on the proceed aspect at the head,
+		// so the completing call freed only the head the deferral kept (the rest went out as
+		// BlockReleased already). The no-deferral case is pinned below.
+		assertThat(completed).isEqualTo(PAST_TTL)
+		assertThat(event.releasedBlocks).containsExactly(blocks.first())
+		assertThat(event.keptBlocks).isEmpty()
+		assertThat(event.stalledForSimSeconds).isGreaterThanOrEqualTo(TTL)
+		// Granted at t = 0, never claimed again: the age is the sim time of the completing call.
+		assertThat(event.stalledForSimSeconds).isCloseTo(completed, EVENT_TOLERANCE)
+		assertThat(event.ttlSimSeconds).isEqualTo(TTL)
+		assertThat(event.time).isEqualTo(completed)
+	}
+
+	/** Record [count], and the sim time of the call when it completed an expiry. */
+	private fun completingCallAt(
+		count: Int,
+		returned: MutableList<Int>,
+		completedAt: MutableList<Double>
+	) {
+		returned += count
+		if (count > 0) completedAt += currentSimulationTime()
 	}
 
 	/** Below the TTL the holding is untouched: blocks RESERVED and owned, the entry still proceeding. */
@@ -142,6 +173,8 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 				// A second call at the same instant is still inside the booking window.
 				assertThat(service.expireStaleReservations()).isEqualTo(0)
 				assertThat(registry.getOwner(blocks.first())).isEqualTo("train1")
+				// A deferral announces nothing (Issue #1243).
+				assertThat(expiredEvents()).isEmpty()
 			},
 			(TTL + 0.5) to {
 				// The committed train books the head inside the window: it now occupies track ...
@@ -155,6 +188,37 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 		)
 
 		assertThat(expiry.expiredHoldingCount).isEqualTo(0)
+		assertThat(expiredEvents()).isEmpty()
+	}
+
+	@Test
+	fun `a holding with no approach lock is announced whole, in release order`() {
+		lateinit var blocks: List<DynamicTrackBlock>
+		val releasedEvents = mutableListOf<DynamicTrackBlock>()
+		service.addBlockOccupancyListener { event ->
+			if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) releasedEvents += event.block
+		}
+
+		atSimTimes(
+			0.0 to {
+				blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+				// No proceed aspect at the head, so nothing is approach-locked: one call frees it all.
+				entrySemaphoreOf(blocks).signal = Signal.STOP
+			},
+			BELOW_TTL to { assertThat(service.expireStaleReservations()).isEqualTo(0) },
+			TTL to { assertThat(service.expireStaleReservations()).isEqualTo(1) }
+		)
+
+		val event = expiredEvents().single()
+		assertThat(event.trainId).isEqualTo("train1")
+		assertThat(event.kind).isEqualTo(ReservationExpired.Kind.WHOLE_HOLDING)
+		// The whole holding, in the order the release announced it block by block.
+		assertThat(releasedEvents.sortedBy { blocks.indexOf(it) }).containsExactly(*blocks.toTypedArray())
+		assertThat(event.releasedBlocks).isEqualTo(releasedEvents)
+		assertThat(event.keptBlocks).isEmpty()
+		assertThat(event.stalledForSimSeconds).isCloseTo(TTL, EVENT_TOLERANCE)
+		assertThat(event.ttlSimSeconds).isEqualTo(TTL)
+		assertThat(event.time).isEqualTo(TTL)
 	}
 
 	@Test
@@ -408,5 +472,10 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 		assertFailure {
 			DefaultPathReservationService(navigator, environment, registry, pathInfoBuilder, routeFinder, 0.0)
 		}.isInstanceOf<IllegalArgumentException>()
+	}
+
+	private companion object {
+		/** The event carries the unrounded age; this only absorbs floating-point noise. */
+		const val EVENT_TOLERANCE = 1.0e-6
 	}
 }
