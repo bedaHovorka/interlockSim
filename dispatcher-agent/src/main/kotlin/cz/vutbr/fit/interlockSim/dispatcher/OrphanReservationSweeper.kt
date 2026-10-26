@@ -58,11 +58,17 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Since Issue #1220 the kernel also frees the RESERVED tail of a train that stands on part of its
  * route, once the train has made no physical progress for the same TTL: its stall clock restarts on
  * any change of the occupied blocks, the RESERVED blocks or the occupant's `distanceToSemaphore()`
- * reading (by more than 1 cm), so a train moving slowly inside one long block keeps its tail. For a
- * truly stopped train it acts on the same tick as, or before, this sweeper's partial release, so
- * [partialReleaseCount] falls too. What remains this sweeper's alone is the tail of a train whose
- * held set is unchanged but which is still moving: this sweeper has no progress reading and reclaims
- * that tail after [staleAfterSimSeconds], the kernel does not. A tail whose PathInfo cannot be trimmed
+ * reading (by more than 1 cm), so a train moving slowly inside one long block keeps its tail. Its
+ * clock restarts on everything that restarts this sweeper's tail clock (a changed RESERVED tail) and
+ * on more, so it never starts earlier: the kernel acts **no earlier** than this sweeper. It acts on
+ * the same tick only when the train stood still, on the same blocks, from the moment its tail last
+ * changed -- and then first, because its loop tick runs before the control step that calls [sweep].
+ * A real train brakes to a stand after its last block entry, so its reading keeps changing after
+ * this sweeper's clock has started, and with this sweeper wired the sweeper usually still reclaims a
+ * stopped train's tail first; [partialReleaseCount] does not fall in general. Phase 2 is the
+ * guarantee for the runs without this sweeper (`:fast-sim`, `multiTrainLoop`, the rule-based loops).
+ * This sweeper alone also reclaims the tail of a train whose held set is unchanged but which is still
+ * moving (it has no progress reading); the kernel does not. A tail whose PathInfo cannot be trimmed
  * after the occupied head (a switch right after it) is kept by both.
  *
  * `MultiTrainLoop` runs `BlockResourceRegistry.releaseFreeResources()` once per iteration as its
