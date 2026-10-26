@@ -59,6 +59,13 @@ internal class ReservationContentionTracker(
 	private val registry: PathReservationRegistry,
 	private val emitConflict: (ConflictDetectedEvent) -> Unit = { emitCustom(it) }
 ) {
+	/**
+	 * The open contentions, keyed by (train, blocked block), valued by the simulation time the contention was first
+	 * observed. Nothing reads the time yet; it is kept on purpose as the source of the "since" column of the Goal 9B
+	 * demand for a read-only snapshot of open contentions (train, block, owner, since), see section 2.3 of
+	 * `docs/goal9b-demands/SP12-routing-decomposition.md` (Issue #1221). The same value stamps the one-shot
+	 * [ConflictDetectedEvent] in [recordContentionAndEmitIfNew].
+	 */
 	private val blockedSince: MutableMap<Pair<String, DynamicTrackBlock>, Double> = mutableMapOf()
 
 	/**
@@ -74,6 +81,8 @@ internal class ReservationContentionTracker(
 	 * 1.0), so without this dedup guard the same still-blocked contention would re-emit the
 	 * event once per tick for the entire wait instead of once per contention.
 	 *
+	 * The simulation clock is read once: the value stored in [blockedSince] and the event's `time` are the same.
+	 *
 	 * Extracted from [DefaultPathReservationService.reservePath] to keep that method within the
 	 * cyclomatic-complexity budget.
 	 */
@@ -84,8 +93,8 @@ internal class ReservationContentionTracker(
 	) {
 		val key = trainId to blockedBlock
 		if (blockedSince.containsKey(key)) return
-		blockedSince[key] = currentSimulationTime()
 		val simTime = currentSimulationTime()
+		blockedSince[key] = simTime
 		emitConflict(
 			ConflictDetectedEvent(
 				block = blockedBlock,
