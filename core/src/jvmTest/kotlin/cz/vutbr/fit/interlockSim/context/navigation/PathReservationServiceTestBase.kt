@@ -14,6 +14,9 @@ import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.RouteFinder
@@ -22,6 +25,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -32,6 +36,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import org.junit.jupiter.api.BeforeEach
 import org.koin.test.inject
+import org.slf4j.LoggerFactory
 
 /**
  * Shared fixture for the PathReservationService test suite.
@@ -214,4 +219,33 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 			assertThat(registry.getOwner(block), "owner of $block").isNull()
 		}
 	}
+
+	/** The aspect of every semaphore of the network, by name. */
+	protected fun semaphoreAspects(): Map<String, Signal> =
+		simulationContext.cellsOfType<DynamicRailSemaphore>().associate { it.name to it.signal }
+
+	/**
+	 * Runs [body] with a Logback appender attached to the logger named [loggerName]; the appender is
+	 * detached in `finally`. `logback-test.xml` must keep that logger at the level the test reads.
+	 */
+	protected fun withLogOf(
+		loggerName: String,
+		body: (ListAppender<ILoggingEvent>) -> Unit
+	) {
+		val logger = LoggerFactory.getLogger(loggerName) as Logger
+		val appender = ListAppender<ILoggingEvent>().also { it.start() }
+		logger.addAppender(appender)
+		try {
+			body(appender)
+		} finally {
+			logger.detachAppender(appender)
+		}
+	}
+
+	/**
+	 * Runs [body] with an appender on the [RouteReleaser] logger, which `logback-test.xml` keeps at
+	 * DEBUG (Issue #1242: its refused-release line is INFO once per train, then DEBUG).
+	 */
+	protected fun withReleaserLog(body: (ListAppender<ILoggingEvent>) -> Unit) =
+		withLogOf(RouteReleaser::class.java.name, body)
 }

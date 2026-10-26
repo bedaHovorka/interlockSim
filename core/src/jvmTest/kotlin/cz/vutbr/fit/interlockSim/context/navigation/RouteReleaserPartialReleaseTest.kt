@@ -11,11 +11,18 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNull
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -42,6 +49,11 @@ import org.junit.jupiter.api.Test
  * `two-switch-line.xml` fixture places one switch inside each direction; the straight line and
  * the uniform 24.0 m/s keep the expected lock states manually traceable. Both pins run through
  * the production entry (`service.releasePathDetailed`, the `NetworkActuatorPort` release).
+ *
+ * The same fixture pins the refused release (Issue #1242): a kept head that ends at `swX` cannot
+ * be the end of a PathInfo, so the release must refuse BEFORE it touches any signal -- every aspect,
+ * block, switch and the PathInfo stay as they were, and the refusal is logged at INFO once per
+ * train, then at DEBUG, never at WARN.
  */
 class RouteReleaserPartialReleaseTest : PathReservationServiceTestBase() {
 	override fun loadTestContext(): DefaultSimulationContext =
@@ -86,6 +98,111 @@ class RouteReleaserPartialReleaseTest : PathReservationServiceTestBase() {
 		assertThat(failedBlock.getState(), "state of the block whose event threw")
 			.isEqualTo(TrackFacility.State.FREE)
 		assertThat(registry.getOwner(failedBlock), "the registry cleanup still ran").isNull()
+	}
+
+	@Test
+	fun `a release refused because the PathInfo cannot be trimmed changes no signal and nothing else`() {
+		withReleaserLog { appender ->
+			val blocks = reserveWithUntrimmableHead()
+			val aspectsBefore = semaphoreAspects()
+			assertThat(aspectsBefore.values.filter { it.isAllowing() }, "proceed aspects to keep").isNotEmpty()
+			val pathInfoBefore = registry.getPathInfo("train1")
+			val switchesBefore = registry.getSwitches("train1")
+
+			val first = service.releasePathDetailed("train1")
+			val retry = service.releasePathDetailed("train1")
+
+			listOf(first, retry).forEach { release ->
+				assertThat(release.released, "freed by a refused release").isEmpty()
+				assertThat(release.deferred, "reported as deferred").isEqualTo(blocks)
+			}
+			assertThat(semaphoreAspects(), "every aspect after the refused releases").isEqualTo(aspectsBefore)
+			assertThat(service.hasClearedSignals("train1"), "cleared-signal bookkeeping kept").isTrue()
+			assertThat(registry.getPathInfo("train1"), "the PathInfo").isSameInstanceAs(pathInfoBefore)
+			assertThat(registry.getSwitches("train1"), "owned switches").isEqualTo(switchesBefore)
+			assertThat(findSwitchByName("swX").locked, "swX").isTrue()
+			assertThat(findSwitchByName("swY").locked, "swY").isTrue()
+			assertThat(registry.getBlocks("train1")).containsExactly(*blocks.toTypedArray())
+			blocks.take(2).forEach { assertThat(it.getState(), "state of $it").isEqualTo(TrackFacility.State.OCCUPIED) }
+			blocks.drop(2).forEach { assertThat(it.getState(), "state of $it").isEqualTo(TrackFacility.State.RESERVED) }
+			assertThat(appender.list.filter { it.level == Level.WARN }, "releaser WARN lines").isEmpty()
+			assertThat(refusalLines(appender, Level.INFO), "INFO refusal lines").hasSize(1)
+			assertThat(refusalLines(appender, Level.DEBUG), "DEBUG refusal lines").hasSize(1)
+		}
+	}
+
+	@Test
+	fun `an approach-locked head that blocks the cut still resets its signal and logs no WARN (the #1060 shape)`() {
+		withReleaserLog { appender ->
+			val blocks =
+				assertReservationSuccess(service.reservePath("train1", inOutNamed("A"), inOutNamed("B")))
+					.reservedBlocks
+			blocks.first().enter(FakeTrackOccupant("train1"))
+			val s1 = findSemaphoreByName("s1")
+			// k2 is entered across s1 at proceed, so approach locking keeps it, and the cut after it
+			// falls on the switch swX. The cut after k1 alone (at s1) is valid, so the reset is the
+			// step that lets a call past k2's booking window free k2..k6: it is not refused.
+			assertThat(s1.signal.isAllowing(), "s1 after the reservation").isTrue()
+
+			val first = service.releasePathDetailed("train1")
+			val retry = service.releasePathDetailed("train1")
+
+			listOf(first, retry).forEach { release ->
+				assertThat(release.released, "freed inside the booking window").isEmpty()
+				assertThat(release.deferred, "reported as deferred").isEqualTo(blocks)
+			}
+			assertThat(s1.signal, "s1 after the deferred release").isEqualTo(Signal.STOP)
+			assertThat(registry.getBlocks("train1")).containsExactly(*blocks.toTypedArray())
+			assertThat(appender.list.filter { it.level == Level.WARN }, "releaser WARN lines").isEmpty()
+			assertThat(refusalLines(appender, Level.INFO), "INFO deferral lines").hasSize(1)
+			assertThat(refusalLines(appender, Level.DEBUG), "DEBUG deferral lines").hasSize(1)
+		}
+	}
+
+	@Test
+	fun `the refused-release line is INFO again once the train has left the registry`() {
+		withReleaserLog { appender ->
+			val occupant = FakeTrackOccupant("train1")
+			val blocks = reserveWithUntrimmableHead(occupant)
+			service.releasePathDetailed("train1")
+			service.releasePathDetailed("train1")
+			blocks.take(2).forEach { it.leave(occupant) }
+			service.unregister("train1")
+			assertThat(registry.getBlocks("train1"), "train1 left the registry").isEmpty()
+
+			reserveWithUntrimmableHead()
+			service.releasePathDetailed("train1")
+
+			assertThat(refusalLines(appender, Level.INFO), "INFO refusal lines").hasSize(2)
+			assertThat(refusalLines(appender, Level.DEBUG), "DEBUG refusal lines").hasSize(1)
+		}
+	}
+
+	/** The releaser's refused-release lines about train1 at [level]. */
+	private fun refusalLines(
+		appender: ListAppender<ILoggingEvent>,
+		level: Level
+	): List<ILoggingEvent> =
+		appender.list.filter {
+			it.level == level &&
+				it.formattedMessage.contains("'train1'") &&
+				it.formattedMessage.contains("cannot be trimmed")
+		}
+
+	/**
+	 * Reserves the route A→B and makes train1 span k1 and k2: the kept head ends at the switch swX,
+	 * which is never a valid PathInfo end, so every detailed release is refused. k3 is entered
+	 * across swX, so approach locking keeps nothing beyond the occupied head.
+	 */
+	private fun reserveWithUntrimmableHead(
+		occupant: FakeTrackOccupant = FakeTrackOccupant("train1")
+	): List<DynamicTrackBlock> {
+		val blocks =
+			assertReservationSuccess(service.reservePath("train1", inOutNamed("A"), inOutNamed("B")))
+				.reservedBlocks
+		assertThat(blocks, "the two-switch line's route").hasSize(6)
+		blocks.take(2).forEach { it.enter(occupant) }
+		return blocks
 	}
 
 	/**

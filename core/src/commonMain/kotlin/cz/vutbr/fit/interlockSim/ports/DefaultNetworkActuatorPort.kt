@@ -255,7 +255,10 @@ class DefaultNetworkActuatorPort(
 		// dispatcher as a distinct NO_RESERVATION outcome (AppliedOutcomeChannel) -- collapsing it
 		// into the same `true` as a genuine release would erase that diagnostic signal for no gain,
 		// since OrphanReservationSweeper never calls this method for a train with zero footprint.
-		// A deferred block keeps its reservation but its signal was reset: the state did change.
+		// A deferred block keeps its reservation; its signal was reset, so the state did change --
+		// except when the release was refused because the PathInfo cannot be trimmed past the
+		// blocks the train stands on (Issue #1242): then nothing changed, and `true` still reports
+		// the deferral, as before, so the caller retries.
 		return RouteRelease(
 			anyReleased = release.released.isNotEmpty() || release.deferred.isNotEmpty() || hadClearedSignals,
 			deferredBlockIds = release.deferred.map { BlockIdentity.stableBlockId(it) }

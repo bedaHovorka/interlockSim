@@ -390,30 +390,44 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 	@Test
 	fun `a train whose PathInfo cannot be trimmed defers forever, logging INFO once and DEBUG afterwards`() {
 		withExpiryLog { appender ->
-			val zAvA = blockBetween("zA", "vA")
-			lateinit var held: List<DynamicTrackBlock>
+			withReleaserLog { releaserLog ->
+				val zAvA = blockBetween("zA", "vA")
+				lateinit var held: List<DynamicTrackBlock>
+				lateinit var aspectsAfterGrant: Map<String, Signal>
 
-			runInOrder(
-				listOf(
-					0.0 to {
-						held =
-							assertReservationSuccess(service.reservePath(TRAIN, zA, findSemaphoreByName("doB1")))
-								.reservedBlocks
-						assertThat(held.first()).isSameInstanceAs(zAvA)
-						// The train stands on the block before switch vA: the PathInfo cannot end at a
-						// switch, so releasePathDetailed frees nothing however often it is asked (D4).
-						zAvA.enter(ProgressStub(TRAIN))
-					}
-				),
-				ticks(0.0, TTL + 10 * TICK)
-			)
+				runInOrder(
+					listOf(
+						0.0 to {
+							held =
+								assertReservationSuccess(service.reservePath(TRAIN, zA, findSemaphoreByName("doB1")))
+									.reservedBlocks
+							assertThat(held.first()).isSameInstanceAs(zAvA)
+							// The train stands on the block before switch vA: the PathInfo cannot end at a
+							// switch, so releasePathDetailed frees nothing however often it is asked (D4).
+							zAvA.enter(ProgressStub(TRAIN))
+							aspectsAfterGrant = semaphoreAspects()
+						}
+					),
+					ticks(0.0, TTL + 10 * TICK)
+				)
 
-			assertTailHeld(held.drop(1))
-			assertThat(registry.getBlocks(TRAIN)).containsExactly(*held.toTypedArray())
-			assertThat(tailLines(appender, DEFERRED, Level.INFO)).hasSize(1)
-			assertThat(tailLines(appender, DEFERRED, Level.DEBUG).size).isGreaterThan(5)
-			assertThat(tailLines(appender, EXPIRED, Level.INFO)).isEmpty()
-			assertThat(expiry.expiredTailCount).isEqualTo(0)
+				assertTailHeld(held.drop(1))
+				assertThat(registry.getBlocks(TRAIN)).containsExactly(*held.toTypedArray())
+				assertThat(tailLines(appender, DEFERRED, Level.INFO)).hasSize(1)
+				assertThat(tailLines(appender, DEFERRED, Level.DEBUG).size).isGreaterThan(5)
+				assertThat(tailLines(appender, EXPIRED, Level.INFO)).isEmpty()
+				assertThat(expiry.expiredTailCount).isEqualTo(0)
+				// Issue #1242: the releaser refuses BEFORE any signal reset, so the cleared aspects
+				// stand as granted, and its refusal is not a WARN on every call.
+				assertThat(aspectsAfterGrant.values.filter { it.isAllowing() }, "proceed aspects to keep")
+					.isNotEmpty()
+				assertThat(semaphoreAspects(), "every aspect after the deferred expiries").isEqualTo(aspectsAfterGrant)
+				assertThat(releaserLog.list.filter { it.level == Level.WARN }, "releaser WARN lines").isEmpty()
+				assertThat(
+					releaserLog.list.filter { it.level == Level.INFO && it.formattedMessage.contains("cannot be trimmed") },
+					"releaser INFO refusal lines"
+				).hasSize(1)
+			}
 		}
 	}
 
