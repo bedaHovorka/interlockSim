@@ -230,6 +230,7 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		val wired = loop.controlStepListener
 
 		var awaitingInputsSeen = 0
+		var awaitingInputsWithNamedEnd = 0
 		var otherInputsSeen = 0
 		val violations = mutableListOf<String>()
 		loop.controlStepListener =
@@ -238,7 +239,11 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 					val expected =
 						if (input.awaitingRouteExtension) {
 							awaitingInputsSeen++
-							registry.getPathInfo(requireNotNull(input.ownerTrainId))?.target?.expectedEndpointName()
+							registry
+								.getPathInfo(requireNotNull(input.ownerTrainId))
+								?.target
+								?.expectedEndpointName()
+								?.also { awaitingInputsWithNamedEnd++ }
 						} else {
 							otherInputsSeen++
 							null
@@ -254,6 +259,8 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		context.run()
 
 		assertThat(awaitingInputsSeen, "awaiting inputs observed").isGreaterThan(0)
+		assertThat(awaitingInputsWithNamedEnd, "awaiting inputs whose stored route ends at a named endpoint")
+			.isGreaterThan(0)
 		assertThat(otherInputsSeen, "non-awaiting inputs observed").isGreaterThan(0)
 		assertThat(violations.size, "violations: $violations").isEqualTo(0)
 	}
