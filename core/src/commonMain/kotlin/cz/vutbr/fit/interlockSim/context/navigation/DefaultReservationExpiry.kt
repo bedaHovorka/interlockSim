@@ -97,8 +97,10 @@ internal class DefaultReservationExpiry(
 	}
 
 	/**
-	 * What phase 2 last saw of one occupying train (Issue #1220, ruling D1): the blocks it stands on,
-	 * its un-entered RESERVED tail and its progress reading, unchanged since [sinceSimTime].
+	 * One occupying train as phase 2 saw it when its stall clock last started (Issue #1220, ruling
+	 * D1): the blocks it stands on, its un-entered RESERVED tail and its progress reading, read at
+	 * [sinceSimTime]. Later calls compare against this snapshot, not against the previous call's, so
+	 * the reading threshold is cumulative.
 	 */
 	private data class ProgressSnapshot(
 		val occupied: Set<DynamicTrackBlock>,
@@ -106,7 +108,10 @@ internal class DefaultReservationExpiry(
 		val reading: Double,
 		val sinceSimTime: Double
 	) {
-		/** Whether [current] shows progress over this snapshot: any set changed, or the reading moved. */
+		/**
+		 * Whether [current] shows progress over this snapshot: either block set changed, or the
+		 * reading moved by more than [PROGRESS_THRESHOLD_METERS] from this snapshot's reading.
+		 */
 		fun isProgressIn(current: ProgressSnapshot): Boolean =
 			occupied != current.occupied ||
 				reserved != current.reserved ||
@@ -138,8 +143,9 @@ internal class DefaultReservationExpiry(
 
 	/**
 	 * Trains whose expiry release threw and was logged at WARN; later failures log at DEBUG
-	 * (Issue #1174). An entry clears when the train leaves the candidate set (occupancy caught it,
-	 * a new claim restarted its clock, or its release completed) or on an expiry that did not
+	 * (Issue #1174). An entry clears when the train leaves both phases' candidate sets (a new claim
+	 * or progress restarted its clock, its holding stopped being a phase-1 candidate, or its release
+	 * completed) or on an expiry that did not
 	 * attempt its holding at all -- except the exempt requester of the current call, whose entry
 	 * survives: its stale holding is still there, unchanged.
 	 */
@@ -151,7 +157,12 @@ internal class DefaultReservationExpiry(
 	 */
 	private val deferralLoggedTrains = mutableSetOf<String>()
 
-	/** Phase 2's last snapshot per occupying train with a tail (Issue #1220, ruling D3). */
+	/**
+	 * Per occupying train with a tail, the snapshot its stall clock started at (Issue #1220, ruling
+	 * D3): replaced only when a call sees progress against it (or, after this expiry's own partial
+	 * release, by the same snapshot with the remaining tail and the same clock), never refreshed on a
+	 * call without progress.
+	 */
 	private val progress = mutableMapOf<String, ProgressSnapshot>()
 
 	/**
