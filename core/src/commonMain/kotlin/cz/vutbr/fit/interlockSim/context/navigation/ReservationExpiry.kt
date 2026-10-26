@@ -12,7 +12,8 @@ package cz.vutbr.fit.interlockSim.context.navigation
 /**
  * Kernel-side reservation expiry (Issue #1174, absorbs #975): a route granted to a train that never
  * enters it does not outlive its train, whoever reserved it and whether or not the dispatcher's
- * `OrphanReservationSweeper` runs.
+ * `OrphanReservationSweeper` runs; nor does the tail of a route its train has stopped advancing
+ * along (phase 2, Issue #1220).
  *
  * The rule, the TTL and the release are [DefaultReservationExpiry]'s; this interface is only the
  * trigger. It is a superinterface of [PathReservationService], split out the way
@@ -33,13 +34,15 @@ fun interface ReservationExpiry {
 	/**
 	 * Release every stale holding: a train whose held blocks are all RESERVED and none of them
 	 * entered, and whose newest block registration is at least the TTL old in simulation time.
-	 * A train that occupies any block never expires. The release honours approach locking, so a
-	 * holding may take two calls to disappear (the first resets its signals to STOP and frees what
-	 * is safe, a later one frees the rest).
+	 * Since Issue #1220 also the stalled tail of a train on the track: a train that stands on part
+	 * of its holding and has made no progress for the TTL loses its un-entered RESERVED blocks. The
+	 * blocks a train stands on never expire. The release honours approach locking, so a holding may
+	 * take two calls to disappear (the first resets its signals to STOP and frees what is safe, a
+	 * later one frees the rest).
 	 *
 	 * Runs on the simulation thread, like every other reservation call.
 	 *
-	 * @return the number of holdings this call released completely; a holding whose release
+	 * @return the number of holdings and tails this call released completely; one whose release
 	 *   approach locking deferred counts once, on the call that completes it
 	 */
 	fun expireStaleReservations(): Int

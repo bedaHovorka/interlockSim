@@ -1002,10 +1002,11 @@ class DefaultPathReservationService(
 		recordAttemptResult(current, PathReservationService.ReservationResult.AllPathsBlocked(attemptCount))
 
 	/**
-	 * Kernel-side reservation expiry (Issue #1174, absorbs #975): the loop tick, judging every
-	 * train. The policy and the containment live in [DefaultReservationExpiry]; the release goes
-	 * only through [RouteReleaser.releasePathDetailed] -- never [releasePath] or a raw registry
-	 * removal -- and nothing that occupies track is ever released.
+	 * Kernel-side reservation expiry (Issue #1174, absorbs #975; the stalled tail of a train on the
+	 * track, Issue #1220): the loop tick, judging every train. The policy, the phase-2 progress state
+	 * and the containment live in [DefaultReservationExpiry]; the release goes only through
+	 * [RouteReleaser.releasePathDetailed] -- never [releasePath] or a raw registry removal -- and no
+	 * block a train stands on is ever released.
 	 */
 	override fun expireStaleReservations(): Int = expiry.expireStale(exceptTrainId = null)
 

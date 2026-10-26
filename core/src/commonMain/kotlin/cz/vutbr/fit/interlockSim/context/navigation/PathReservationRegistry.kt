@@ -405,7 +405,8 @@ class PathReservationRegistry(
 	 * A train that stands on any block of its holding is never reported, however old: entering a
 	 * reserved block is not a registry write, so registration age says nothing about the progress
 	 * of a train on the track (the reason `OrphanReservationSweeper` does not judge by it either).
-	 * The stalled RESERVED tail of such a train is phase 2 (#1220). A held block in any other state
+	 * The stalled RESERVED tail of such a train is phase 2 (#1220), judged by physical progress over
+	 * [occupyingHoldings]. A held block in any other state
 	 * (a FREE block the registry still attributes to the train, the Issue #1025 divergence) also
 	 * keeps the train out: that is not an un-entered route.
 	 *

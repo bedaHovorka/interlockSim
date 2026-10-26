@@ -275,12 +275,9 @@ internal class BlockOwnershipTable(
 	fun occupyingHoldings(): List<OccupyingHolding> =
 		trainToBlocks.mapNotNull { (trainId, blocks: List<DynamicTrackBlock>) ->
 			val occupied = blocks.filter(::isTrainOnBlock)
-			if (occupied.isEmpty()) null else OccupyingHolding(trainId, occupied, blocks.filter(::isUnenteredReservation))
+			if (occupied.isEmpty()) return@mapNotNull null
+			OccupyingHolding(trainId, occupied, reserved = blocks.filter(::isUnenteredReservation))
 		}
-
-	/** RESERVED and nobody on it: a block of a route its train has not entered. */
-	private fun isUnenteredReservation(block: DynamicTrackBlock): Boolean =
-		block.getState() == TrackFacility.State.RESERVED && !isTrainOnBlock(block)
 
 	/** Drop every owner, held block and timestamp. */
 	fun clear() {

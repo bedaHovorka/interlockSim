@@ -20,3 +20,11 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  */
 internal fun isTrainOnBlock(block: DynamicTrackBlock): Boolean =
 	block.occupant != null || block.getState() == TrackFacility.State.OCCUPIED
+
+/**
+ * Whether [block] is RESERVED with nobody on it: a block of a route its train has not entered. The
+ * one "un-entered" notion of the whole-route expiry ([PathReservationRegistry.expiredHoldings]) and
+ * of the tail of an occupying train ([PathReservationRegistry.occupyingHoldings], Issue #1220).
+ */
+internal fun isUnenteredReservation(block: DynamicTrackBlock): Boolean =
+	block.getState() == TrackFacility.State.RESERVED && !isTrainOnBlock(block)

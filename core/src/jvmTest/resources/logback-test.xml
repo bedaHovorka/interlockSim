@@ -64,6 +64,11 @@
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService" level="DEBUG"/>
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteReleaser" level="DEBUG"/>
+	<!--
+		The kernel reservation expiry (Issues #1174, #1220): same rationale, and its tests capture
+		the INFO-once-then-DEBUG deferral lines, which they can only see with the logger at DEBUG.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry" level="DEBUG"/>
 	<!-- Its signal bookkeeping and signal configuration moved out of the service (Issue #1169). -->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.ClearedSignalLedger" level="DEBUG"/>
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteSignalConfigurator" level="DEBUG"/>
