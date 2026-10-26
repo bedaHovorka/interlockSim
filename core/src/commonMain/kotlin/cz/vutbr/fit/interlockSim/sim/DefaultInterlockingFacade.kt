@@ -238,6 +238,12 @@ class DefaultInterlockingFacade(
 		)
 	}
 
+	/**
+	 * See [InterlockingFacade.releaseRoute]. After a release the kernel refused (Issue #1242: the
+	 * route cannot be cut after the blocks the train stands on), this facade still sets its own
+	 * tracked entry signal to STOP. That is safe: a refusal needs an occupying train, so the entry
+	 * signal is behind it and authorises nothing.
+	 */
 	override fun releaseRoute(
 		trainId: String,
 		exitSignal: SignalId

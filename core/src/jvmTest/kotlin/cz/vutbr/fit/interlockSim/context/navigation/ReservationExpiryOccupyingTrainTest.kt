@@ -423,10 +423,11 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 					.isNotEmpty()
 				assertThat(semaphoreAspects(), "every aspect after the deferred expiries").isEqualTo(aspectsAfterGrant)
 				assertThat(releaserLog.list.filter { it.level == Level.WARN }, "releaser WARN lines").isEmpty()
-				assertThat(
-					releaserLog.list.filter { it.level == Level.INFO && it.formattedMessage.contains("cannot be trimmed") },
-					"releaser INFO refusal lines"
-				).hasSize(1)
+				val releaserInfoLines =
+					releaserLog.list.filter { event ->
+						event.level == Level.INFO && event.formattedMessage.contains("cannot be trimmed")
+					}
+				assertThat(releaserInfoLines, "releaser INFO refusal lines").hasSize(1)
 			}
 		}
 	}
