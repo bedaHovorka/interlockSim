@@ -264,7 +264,8 @@ from outside the registry, a stale claim, a facade path with no `SwitchConfigura
   train standing on a block the registry does not attribute to it (the Issue #893 stall at t=17); the
   registry reads are blind to that state. Kept.
 - "A train stands on this block" has one definition, `isTrainOnBlock` (`TrainOnBlock.kt`), shared by the
-  route release and the kernel expiry (`PathReservationRegistry.expiredHoldings`) so they cannot disagree.
+  route release and the kernel expiry (`PathReservationRegistry.expiredHoldings`, and since #1220
+  `PathReservationRegistry.occupyingHoldings`) so they cannot disagree.
 - `ReservationTargetDiscovery.allSemaphores` (Issue #965) and `DefaultNetworkPerceptionPort`'s cache scan
   the same grid and keep the same list. Kept (SP12.3 D2): the kernel must not depend on a port and the port
   must not reach into the kernel.
