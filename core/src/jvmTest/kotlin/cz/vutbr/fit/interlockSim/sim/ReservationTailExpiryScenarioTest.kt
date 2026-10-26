@@ -19,8 +19,8 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.TailStallTracker
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -173,7 +173,7 @@ class ReservationTailExpiryScenarioTest : KoinTestBase() {
 		/** The kernel's D2 reading rule for the stopped train: a move above 0.01 m restarts the clock. */
 		private fun followStandstill() {
 			val reading = checkNotNull(stopped).distanceToSemaphore()
-			val moved = abs(reading - clockReading) > DefaultReservationExpiry.PROGRESS_THRESHOLD_METERS
+			val moved = abs(reading - clockReading) > TailStallTracker.PROGRESS_THRESHOLD_METERS
 			if (clockReading.isNaN() || moved) {
 				clockReading = reading
 				lastMovedAt = currentSimulationTime()

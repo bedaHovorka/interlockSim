@@ -9,10 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlin.math.abs
 import kotlin.math.round
 
 /**
@@ -29,19 +26,13 @@ import kotlin.math.round
  * block ([RouteCandidateScreen.standingTrainIds], the Issue #893 state) is dropped here too.
  *
  * **Phase 2: the stalled tail of a train on the track** (traffic-simulation-expert ruling D1–D9 on
- * #1220). For every train [PathReservationRegistry.occupyingHoldings] reports, this class keeps a
- * [ProgressSnapshot]: the blocks it stands on, its un-entered RESERVED tail and the occupant's
- * [cz.vutbr.fit.interlockSim.objects.core.TrackOccupant.distanceToSemaphore] reading. The reading is
- * a change detector, not a distance: it moves while the train moves inside a block, jumps at block
- * boundaries and stays constant while the train stands. The stall clock restarts whenever any of the
- * three changes, the reading by more than [PROGRESS_THRESHOLD_METERS] (an asymptotic approach,
- * Issue #797, creeps by less), so a new registration restarts it too. A train stalled for the TTL
+ * #1220). [TailStallTracker] judges which trains standing on part of their holding have made no
+ * progress for the TTL (the snapshot, the stall rule and its clock). A train stalled for the TTL
  * hands its tail to the same release: it keeps the occupied and approach-locked blocks and frees
  * the rest, or frees nothing when the PathInfo cannot be trimmed to the kept blocks. A train with no
- * readable occupant of its own is not judged on that call; a train with no tail (the #943 waiter at
- * a STOP signal, which has consumed its leg) is skipped silently. This expiry's own release is not
- * progress: the snapshot is taken again afterwards and keeps its clock, so a deferred head is
- * retried on the next call. The snapshot of a train that leaves the set is dropped.
+ * tail (the #943 waiter at a STOP signal, which has consumed its leg) is skipped silently. This
+ * expiry's own release is not progress: the tracker keeps the clock with the remaining tail
+ * ([TailStallTracker.keepClock]), so a deferred head is retried on the next call.
  *
  * **Approach lock (Issue #1050).** A proceed aspect at the head of the released blocks may have a
  * train committed to it; the release then keeps that block, drops the signals to STOP and frees
@@ -63,8 +54,8 @@ import kotlin.math.round
  *
  * Extracted from [DefaultPathReservationService] in the SP12 decomposition (the service stays the
  * single facade; the owner thread on the PR body of #1226): the public class delegates the trigger
- * here and keeps no expiry state of its own. The phase-2 progress state lives here too, never in
- * the registry (ruling D3).
+ * here and keeps no expiry state of its own. The phase-2 progress state lives in this class's
+ * [TailStallTracker], never in the registry (ruling D3).
  *
  * **Thread safety: none, like [DefaultPathReservationService]** — runs on the simulation thread,
  * like every other reservation call.
@@ -88,42 +79,7 @@ internal class DefaultReservationExpiry(
 	companion object {
 		/** Rounding factor of the logged expiry age (one decimal). */
 		private const val TENTHS: Double = 10.0
-
-		/**
-		 * A change of the progress reading above this many metres is progress (Issue #1220, ruling
-		 * D2): a train that advances less than 1 cm within the TTL has stopped advancing.
-		 */
-		internal const val PROGRESS_THRESHOLD_METERS: Double = 0.01
 	}
-
-	/**
-	 * One occupying train as phase 2 saw it when its stall clock last started (Issue #1220, ruling
-	 * D1): the blocks it stands on, its un-entered RESERVED tail and its progress reading, read at
-	 * [sinceSimTime]. Later calls compare against this snapshot, not against the previous call's, so
-	 * the reading threshold is cumulative.
-	 */
-	private data class ProgressSnapshot(
-		val occupied: Set<DynamicTrackBlock>,
-		val reserved: Set<DynamicTrackBlock>,
-		val reading: Double,
-		val sinceSimTime: Double
-	) {
-		/**
-		 * Whether [current] shows progress over this snapshot: either block set changed, or the
-		 * reading moved by more than [PROGRESS_THRESHOLD_METERS] from this snapshot's reading.
-		 */
-		fun isProgressIn(current: ProgressSnapshot): Boolean =
-			occupied != current.occupied ||
-				reserved != current.reserved ||
-				abs(current.reading - reading) > PROGRESS_THRESHOLD_METERS
-	}
-
-	/** A train phase 2 has found stalled for at least the TTL. */
-	private class StalledTail(
-		val holding: OccupyingHolding,
-		val snapshot: ProgressSnapshot,
-		val stalledForSimSeconds: Double
-	)
 
 	private val logger = KotlinLogging.logger {}
 
@@ -157,13 +113,8 @@ internal class DefaultReservationExpiry(
 	 */
 	private val deferralLoggedTrains = mutableSetOf<String>()
 
-	/**
-	 * Per occupying train with a tail, the snapshot its stall clock started at (Issue #1220, ruling
-	 * D3): replaced only when a call sees progress against it (or, after this expiry's own partial
-	 * release, by the same snapshot with the remaining tail and the same clock), never refreshed on a
-	 * call without progress.
-	 */
-	private val progress = mutableMapOf<String, ProgressSnapshot>()
+	/** Phase 2's stall judgement (Issue #1220): which occupying trains have stalled for the TTL. */
+	private val stallTracker = TailStallTracker(registry, ttlSimSeconds)
 
 	/**
 	 * Release every stale holding and every stalled tail, and return how many of them it released
@@ -176,7 +127,7 @@ internal class DefaultReservationExpiry(
 	 */
 	internal fun expireStale(exceptTrainId: String?): Int {
 		val stale = staleHoldings(exceptTrainId)
-		val stalled = stalledTails(exceptTrainId)
+		val stalled = stallTracker.stalled(exceptTrainId)
 		if (stale.isEmpty() && stalled.isEmpty() && failedExpiryTrains.isEmpty() && deferralLoggedTrains.isEmpty()) {
 			return 0
 		}
@@ -206,51 +157,6 @@ internal class DefaultReservationExpiry(
 			.filterNot { it.trainId in standing }
 	}
 
-	/**
-	 * Phase 2's candidates (Issue #1220): take every occupying train's snapshot, restart the clock
-	 * of each that progressed, and return those stalled for at least the TTL.
-	 */
-	private fun stalledTails(exceptTrainId: String?): List<StalledTail> {
-		val holdings = registry.occupyingHoldings()
-		// Pruned to the trains still on the track with a holding: a train that left the registry, or
-		// stopped standing on what it holds, starts a fresh clock should it ever be back.
-		progress.keys.retainAll(holdings.mapTo(HashSet()) { it.trainId })
-		if (holdings.isEmpty()) return emptyList()
-		val now = currentSimulationTime()
-		return holdings
-			.filter { it.trainId != exceptTrainId }
-			.mapNotNull { judge(it, now) }
-	}
-
-	/** One occupying train's stall verdict at [now]; updates its snapshot. */
-	private fun judge(
-		holding: OccupyingHolding,
-		now: Double
-	): StalledTail? {
-		val trainId = holding.trainId
-		if (holding.reserved.isEmpty()) {
-			// Nothing to free (ruling D5): no clock either -- a new tail starts one of its own.
-			progress.remove(trainId)
-			return null
-		}
-		// Not judged on this call (ruling D2): an OCCUPIED booking, or somebody else on its block.
-		val reading = readingOf(holding) ?: return null
-		val current = ProgressSnapshot(holding.occupied.toSet(), holding.reserved.toSet(), reading, now)
-		val last = progress[trainId]
-		if (last == null || last.isProgressIn(current)) {
-			progress[trainId] = current
-			return null
-		}
-		val stalledFor = now - last.sinceSimTime
-		return if (stalledFor >= ttlSimSeconds) StalledTail(holding, last, stalledFor) else null
-	}
-
-	/** The progress reading of [holding]'s own occupant, or `null` when none of its blocks has one. */
-	private fun readingOf(holding: OccupyingHolding): Double? =
-		holding.occupied
-			.firstNotNullOfOrNull { block -> block.occupant?.takeIf { it.name == holding.trainId } }
-			?.distanceToSemaphore()
-
 	/** Release one stale [holding]; `true` when nothing of it is left. */
 	private fun expireHolding(holding: ExpiredHolding): Boolean {
 		val trainId = holding.trainId
@@ -277,14 +183,14 @@ internal class DefaultReservationExpiry(
 	 * Release the un-entered tail of one [stalled] train (Issue #1220); `true` when none of its
 	 * tail is left. The blocks it stands on stay: the release keeps them.
 	 */
-	private fun expireTail(stalled: StalledTail): Boolean {
+	private fun expireTail(stalled: TailStallTracker.StalledTail): Boolean {
 		val trainId = stalled.holding.trainId
 		val age = roundedToTenth(stalled.stalledForSimSeconds)
 		val release = releaseContained(trainId) ?: return false
 		val remaining = registry.getBlocks(trainId).filter(::isUnenteredReservation)
 		if (remaining.isNotEmpty()) {
 			// This expiry's own release is not progress: keep the clock, so the rest is retried.
-			progress[trainId] = stalled.snapshot.copy(reserved = remaining.toSet())
+			stallTracker.keepClock(stalled, remaining.toSet())
 			logDeferral(trainId) {
 				"Reservation tail expiry deferred for '$trainId': no progress for ${age}s of simulated time " +
 					"(TTL ${ttlSimSeconds}s), but ${remaining.size} un-entered block(s) stay reserved -- " +
@@ -293,7 +199,7 @@ internal class DefaultReservationExpiry(
 			}
 			return false
 		}
-		progress.remove(trainId)
+		stallTracker.forget(trainId)
 		deferralLoggedTrains.remove(trainId)
 		logger.info {
 			"Reservation tail expired for '$trainId': no progress for ${age}s of simulated time " +
