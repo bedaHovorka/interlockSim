@@ -68,7 +68,7 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 	}
 
 	@Test
-	fun `a failed self-request preserves the failed-expiry WARN suppression`() {
+	fun `an exempt-requester expiry call preserves the failed-expiry WARN suppression`() {
 		withFailingRelease("train1") { appender, failing ->
 			val zA = findSemaphoreByName("zA")
 			val doB1 = findSemaphoreByName("doB1")
@@ -164,13 +164,7 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 		val failing =
 			DefaultReservationExpiry(
 				registry = registry,
-				candidateScreen =
-					RouteCandidateScreen(
-						registry,
-						environment,
-						ReservationTargetDiscovery(navigator, environment),
-						pathInfoBuilder
-					),
+				candidateScreen = (service as DefaultPathReservationService).candidateScreen,
 				ttlSimSeconds = TTL,
 				expiryRelease = { holding ->
 					check(holding != trainId) { "release of $trainId fails under test" }

@@ -18,7 +18,8 @@ import kotlinx.coroutines.runBlocking
  * Shared fixture of the kernel-side reservation expiry tests (Issue #1174): the TTL and the
  * simulation times the scenarios sit on, the real wiring's [expiry], and [atSimTimes], which runs
  * a scenario inside a kDisco simulation. Split out when the WARN-suppression pins moved to
- * [ReservationExpiryWarnSuppressionTest] (Issue #1229), so neither class copies the setup.
+ * [ReservationExpiryWarnSuppressionTest] (Issue #1229), so neither class copies the TTL or the
+ * simulation-time runner ([expiry] is used by [ReservationExpiryTest] only).
  *
  * No wall-clock time is involved anywhere: the TTL is read against the simulation clock.
  */
