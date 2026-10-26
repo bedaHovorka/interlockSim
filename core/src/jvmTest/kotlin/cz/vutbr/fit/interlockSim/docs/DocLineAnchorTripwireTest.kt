@@ -84,7 +84,12 @@ class DocLineAnchorTripwireTest {
 	@Test
 	fun `the skipped directories equal the excludes of the Gradle task inputs`() {
 		val declared = System.getProperty(SKIPPED_DIRECTORIES_PROPERTY)
-		assumeTrue(declared != null, "not run by :core:docLineAnchorCheck (IDE run): no excludes to compare")
+		val inGradleWorker = System.getProperty("org.gradle.test.worker") != null
+		check(declared != null || !inGradleWorker) {
+			"System property $SKIPPED_DIRECTORIES_PROPERTY is missing in a Gradle test worker: " +
+				"core/build.gradle.kts must pass it to :core:docLineAnchorCheck via systemProperty(...)"
+		}
+		assumeTrue(declared != null, "not run by Gradle (IDE run): no excludes to compare")
 
 		assertThat(declared!!.split(',').filter { it.isNotEmpty() }.toSet()).isEqualTo(SKIPPED_DIRECTORIES)
 	}
