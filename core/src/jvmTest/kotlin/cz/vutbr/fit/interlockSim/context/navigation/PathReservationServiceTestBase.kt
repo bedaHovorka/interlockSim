@@ -141,7 +141,7 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	 * (`toDynamic` caches one wrapper per static separator), but this is the form the suite
 	 * carried and the one that cannot depend on grid order.
 	 */
-	protected fun inOutNamed(name: String): DynamicPathSeparator =
+	protected fun inOutNamed(name: String): DynamicInOut =
 		simulationContext
 			.getInOuts()
 			.map { simulationContext.toDynamic(it) }

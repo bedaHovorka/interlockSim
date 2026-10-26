@@ -15,7 +15,6 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -79,7 +78,7 @@ class RouteSignalConfiguratorTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `configureStartSignal clears an InOut START's inSemaphore`() {
-		val inOutA = inOutNamed("A") as DynamicInOut
+		val inOutA = inOutNamed("A")
 
 		val result = configurator.configureStartSignal("t1", inOutA, aToB, aToB.first())
 
@@ -150,7 +149,7 @@ class RouteSignalConfiguratorTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `configureAlreadyOwnedStartSignal clears an InOut START's inSemaphore`() {
-		val inOutA = inOutNamed("A") as DynamicInOut
+		val inOutA = inOutNamed("A")
 
 		configurator.configureAlreadyOwnedStartSignal("t1", inOutA, aToB)
 
@@ -165,7 +164,7 @@ class RouteSignalConfiguratorTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `configureStartSignal reports ConfigFailed when an InOut START's write throws mid-flight`() {
-		val inOutA = inOutNamed("A") as DynamicInOut
+		val inOutA = inOutNamed("A")
 		inOutA.inSemaphore.addPropertyChangeListener {
 			throw IllegalStateException("injected signal-write listener failure")
 		}

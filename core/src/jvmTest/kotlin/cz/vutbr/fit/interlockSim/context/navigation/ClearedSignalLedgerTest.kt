@@ -15,7 +15,6 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
@@ -112,7 +111,7 @@ class ClearedSignalLedgerTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `resetUnrecordedStartSignal resets an InOut START's inSemaphore`() {
-		val inOutA = inOutNamed("A") as DynamicInOut
+		val inOutA = inOutNamed("A")
 		inOutA.inSemaphore.signal = Signal.S80
 
 		ledger.resetUnrecordedStartSignal("t1", inOutA, clearedBeforeStart = emptySet())
