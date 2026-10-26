@@ -267,6 +267,17 @@ internal class BlockOwnershipTable(
 		return newest?.let { now - it }
 	}
 
+	/**
+	 * The holdings [PathReservationRegistry.occupyingHoldings] reports, in train-claim order: every
+	 * train standing on at least one block it holds ([isTrainOnBlock], read live), with those blocks
+	 * and its un-entered RESERVED ones, each in registration order.
+	 */
+	fun occupyingHoldings(): List<OccupyingHolding> =
+		trainToBlocks.mapNotNull { (trainId, blocks: List<DynamicTrackBlock>) ->
+			val occupied = blocks.filter(::isTrainOnBlock)
+			if (occupied.isEmpty()) null else OccupyingHolding(trainId, occupied, blocks.filter(::isUnenteredReservation))
+		}
+
 	/** RESERVED and nobody on it: a block of a route its train has not entered. */
 	private fun isUnenteredReservation(block: DynamicTrackBlock): Boolean =
 		block.getState() == TrackFacility.State.RESERVED && !isTrainOnBlock(block)
@@ -288,4 +299,18 @@ internal class BlockOwnershipTable(
 internal data class ExpiredHolding(
 	val trainId: String,
 	val ageSimSeconds: Double
+)
+
+/**
+ * A holding of a train that stands on part of it, found by [PathReservationRegistry.occupyingHoldings]
+ * (Issue #1220).
+ *
+ * @property trainId The train that holds the blocks
+ * @property occupied The held blocks a train stands on, in registration order
+ * @property reserved The held blocks that are RESERVED with nobody on them -- the un-entered tail
+ */
+internal data class OccupyingHolding(
+	val trainId: String,
+	val occupied: List<DynamicTrackBlock>,
+	val reserved: List<DynamicTrackBlock>
 )

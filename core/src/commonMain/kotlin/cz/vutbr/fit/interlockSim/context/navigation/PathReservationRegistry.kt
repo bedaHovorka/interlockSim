@@ -422,6 +422,19 @@ class PathReservationRegistry(
 	): List<ExpiredHolding> = blockTable.expiredHoldings(ttl = ttl, now = now)
 
 	/**
+	 * Every train that stands on at least one block it holds, with those blocks and its un-entered
+	 * RESERVED tail (Issue #1220, ruling D3): pure query, changes nothing. A block counts as stood on
+	 * by the release's own [isTrainOnBlock] notion, read live, so the two can never disagree; a held
+	 * block in any other state (a FREE block the registry still attributes to the train, the Issue
+	 * #1025 divergence) is in neither list. Trains that stand on nothing they hold are
+	 * [expiredHoldings]' business.
+	 *
+	 * The registry judges nothing here: whether such a train has stopped advancing, and when its
+	 * tail may go, is [DefaultReservationExpiry]'s rule and state.
+	 */
+	internal fun occupyingHoldings(): List<OccupyingHolding> = blockTable.occupyingHoldings()
+
+	/**
 	 * Check whether a block is available for a new reservation: its dynamic state is
 	 * [TrackFacility.State.FREE], it has no registry owner and no physical occupant.
 	 *
