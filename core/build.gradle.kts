@@ -554,7 +554,8 @@ tasks.named("jvmTest") {
 // The excludes mirror the test's SKIPPED_DIRECTORIES; keep the two lists in step.
 //
 // jvmTest is finalizedBy this task: every build that runs :core:jvmTest (root `test`, `build`,
-// `sonar`, jacocoAggregatedReport) runs the tripwire too, and `check` depends on it explicitly.
+// a non-re-use `sonar`, jacocoAggregatedReport) runs the tripwire too, and `check` depends on
+// it explicitly.
 // The working directory stays the default (the project directory): the test finds the repository
 // root by walking up from there.
 
