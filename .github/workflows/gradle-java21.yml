@@ -197,6 +197,7 @@ jobs:
         path: |
           core/build/test-results/jvmTest/
           core/build/test-results/integrationTest/
+          core/build/test-results/docLineAnchorCheck/
           dispatcher-agent/build/test-results/test/
           dispatcher-agent/build/test-results/integrationTest/
           desktop-ui/build/test-results/

@@ -551,13 +551,17 @@ tasks.named("jvmTest") {
 // none of which is an input of :core:jvmTest, so a docs-only change or a .kt edit in another
 // module could reuse an UP-TO-DATE or FROM-CACHE jvmTest result and skip the tripwire. The test
 // therefore runs on its own task that declares both trees as inputs, and jvmTest leaves it out.
-// The excludes mirror the test's SKIPPED_DIRECTORIES; keep the two lists in step.
+// The directories neither side looks into are ONE list (anchorSkippedDirectories): it builds the
+// excludes below and is handed to the test as the system property anchorSkippedDirectories, where
+// DocLineAnchorTripwireTest compares it with its own SKIPPED_DIRECTORIES and fails on any difference.
 //
 // jvmTest is finalizedBy this task: every build that runs :core:jvmTest (root `test`, `build`,
 // a non-re-use `sonar`, jacocoAggregatedReport) runs the tripwire too, and `check` depends on
 // it explicitly.
 // The working directory stays the default (the project directory): the test finds the repository
 // root by walking up from there.
+
+val anchorSkippedDirectories = listOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", "node_modules")
 
 val docLineAnchorCheck by tasks.registering(Test::class) {
     group = "verification"
@@ -584,11 +588,12 @@ val docLineAnchorCheck by tasks.registering(Test::class) {
         .files(
             fileTree(rootDir) {
                 include("**/*.kt")
-                exclude("**/build/**", "**/.git/**", "**/.gradle/**", "**/.kotlin/**", "**/.idea/**")
-                exclude("**/.worktrees/**", "**/node_modules/**")
+                exclude(anchorSkippedDirectories.map { "**/$it/**" })
             },
         ).withPropertyName("anchorSources")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    systemProperty("anchorSkippedDirectories", anchorSkippedDirectories.joinToString(","))
 
     // Its coverage adds nothing; a separate .exec would only sit next to the jvmTest and
     // integrationTest data the JaCoCo reports read.
