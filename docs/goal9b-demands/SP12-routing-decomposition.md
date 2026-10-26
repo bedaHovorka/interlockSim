@@ -6,7 +6,7 @@ SP12.10, the SP12.5 follow-ups #1207–#1209, #1173 (SP12.7), #1174 (SP12.8), #1
 
 **SP12 is still open.** This is an interim status report, not the close-out: #1159 has nine open sub-issues
 (#1218, #1220, #1224, #1228, #1229, #1240, #1242, #1243, #1244, see [section 6](#6-open-follow-ups)), and the
-page is updated as they land. Eight of the nine are closed by an open draft PR (see section 1); #1244 has
+page is updated as they land. Eight of the nine are to be closed by an open draft PR (#1234 #1235 #1236 #1237 #1246 #1247 #1248 #1251; see section 1); #1244 has
 part 1 in a draft PR that does not close it, and its part 2 waits for a Goal 10 measurement round. This refresh is part of #1159 and closes nothing.
 
 SP12 cut `context/navigation/` into small units behind one facade-style entry, found the duplicate
@@ -73,7 +73,7 @@ service, so a second door cannot appear silently.
 | `ReservationTargetQuery.findReservationTargetCandidates(start, ownerTrainId)` | Call. *The* target-selection seam: every settable next separator one section ahead with an evaluated availability; choose through `ReservationTargetPolicy.pick`. | SP12.5 |
 | `PathReservationService.isPathToAnyNextSemaphoreAvailable` | The shell's (`InOutWorker`) "may a train enter" probe. A dispatcher does not need it; the candidate list answers the same per target. | SP12.5 |
 | `PathReservationService.reservePath` / `reservePathToAnyNextSemaphore` / `reservePathToAny` | Call. A dispatcher asks for a route, never for an aspect: signals are cleared as the last step of an atomic grant. | SP12.3, SP12.8 |
-| `PathReservationService.releasePathDetailed` (via `NetworkActuatorPort.releaseRouteDetailed`) | Call. The release a dispatcher means by "cancel this route": signals to STOP first, approach lock honoured, the caller retries while `RouteRelease.deferredBlockIds` is non-empty (as `ToolDrivenDecisions` and `OrphanReservationSweeper` do). Do not drive a retry from `releaseRoute`: its Boolean is `true` for a deferred release too. | SP12.2 |
+| `PathReservationService.releasePathDetailed` (via `NetworkActuatorPort.releaseRouteDetailed`) | Call. The release a dispatcher means by "cancel this route": approach lock honoured, the caller retries while `RouteRelease.deferredBlockIds` is non-empty (as `ToolDrivenDecisions` and `OrphanReservationSweeper` do). A release whose kept (occupied) blocks cannot end the route is refused before any change: signals keep their aspect and every block is reported deferred (#1242). Only an approach-lock-only cut resets the signals to STOP, then defers. Do not drive a retry from `releaseRoute`: its Boolean is `true` for a deferred release too. | SP12.2 |
 | `PathReservationService.releaseBlock` (after `resetSemaphoresForReleasedBlocks`), `dropFreedBlock` | Only through `RegistryPartialRouteReleaser`; refuse a block another train owns / a block not FREE. | SP12.2 |
 | `PathReservationService.hasClearedSignals(trainId)` | Read. Exact, cheap "is any proceed aspect still lit for this train". | SP12.3 |
 | `PathReservationService.recordExternalClearedSemaphore` | Call only when the dispatcher itself writes an aspect outside a reservation, as `DefaultInterlockingFacade` and `DefaultNetworkActuatorPort` do. | SP12.3 |
@@ -475,8 +475,9 @@ axes: example: ["shuntingLoop"]`, other axes at their defaults. Railway outcomes
 
 Every sweep: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Base == head on every column.
 The same identity held at every leaf head in between (SP12.9, SP12.10, the SP12.5 follow-ups, #1173,
-#1200, #1174); each PR records its own row. For #1220 the arm logs also show no "cannot be trimmed" WARN, and
-the WARN sets are identical (40 each).
+#1200, #1174); each PR records its own row. For #1220 the after arm's WARN lines are the same set as the
+before arm's (40 each).
+
 
 ### heavyTest
 
