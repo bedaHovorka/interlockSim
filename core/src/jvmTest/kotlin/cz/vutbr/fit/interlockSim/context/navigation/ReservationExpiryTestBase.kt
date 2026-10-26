@@ -48,6 +48,12 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 	 */
 	protected fun expiredEvents(): List<ReservationExpired> = customPayloads.filterIsInstance<ReservationExpired>()
 
+	/**
+	 * Extra subscribers [atSimTimes] registers on the real kDisco bus, in this order and before its own
+	 * capture: for a scenario that pins how the bus delivers one event to several subscribers (Issue #1243).
+	 */
+	protected val busListeners = mutableListOf<(SimulationEvent) -> Unit>()
+
 	/** The expiry of the real service wiring: the one the service's own calls trigger. */
 	internal val expiry: DefaultReservationExpiry
 		get() = (service as DefaultPathReservationService).expiry
@@ -83,7 +89,7 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 	/**
 	 * Run each step at its absolute simulation time, in order, inside one kDisco process. A step
 	 * that throws fails the run, so assertions may sit inside the steps. Every Custom event the run
-	 * delivers is captured for [expiredEvents].
+	 * delivers is captured for [expiredEvents], after [busListeners] have seen it.
 	 */
 	protected fun atSimTimes(vararg steps: Pair<Double, () -> Unit>) =
 		runBlocking {
@@ -106,6 +112,7 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 						}
 					)
 				}
+			busListeners.forEach { simulation.onEvent(it) }
 			simulation.onEvent { event ->
 				if (event is SimulationEvent.Custom) customPayloads += event.payload
 			}

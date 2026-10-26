@@ -75,7 +75,7 @@ import kotlin.math.round
  *   expiry over the same registry and candidate screen
  * @param emitExpired Delivers the [ReservationExpired] event of each completed expiry (Issue #1243);
  *   the kDisco [emitCustom] by default (a no-op outside a running simulation). A constructor seam, not
- *   a writable hook, like [expiryRelease]; a throwing delivery is contained by [announce]
+ *   a writable hook, like [expiryRelease]; a throwing delivery is contained by [countAndAnnounce]
  * @since Issue #1174
  */
 internal class DefaultReservationExpiry(
@@ -146,11 +146,8 @@ internal class DefaultReservationExpiry(
 		val attempted = stale.map { it.trainId } + stalled.map { it.holding.trainId } + listOfNotNull(exceptTrainId)
 		failedExpiryTrains.retainAll(attempted.toSet())
 		deferralLoggedTrains.retainAll(attempted.toSet())
-		val completedHoldings = stale.count { expireHolding(it) }
-		val completedTails = stalled.count { expireTail(it) }
-		expiredHoldingCount += completedHoldings
-		expiredTailCount += completedTails
-		return completedHoldings + completedTails
+		// Each completed expiry is counted by [countAndAnnounce], before its event is delivered.
+		return stale.count { expireHolding(it) } + stalled.count { expireTail(it) }
 	}
 
 	/** Phase 1's candidates: stale whole-route holdings of trains that stand on nothing. */
@@ -180,7 +177,7 @@ internal class DefaultReservationExpiry(
 			return false
 		}
 		deferralLoggedTrains.remove(trainId)
-		announce(
+		countAndAnnounce(
 			ReservationExpired(
 				trainId,
 				ReservationExpired.Kind.WHOLE_HOLDING,
@@ -221,7 +218,7 @@ internal class DefaultReservationExpiry(
 		}
 		stallTracker.forget(trainId)
 		deferralLoggedTrains.remove(trainId)
-		announce(
+		countAndAnnounce(
 			ReservationExpired(
 				trainId,
 				ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL,
@@ -271,8 +268,18 @@ internal class DefaultReservationExpiry(
 		if (deferralLoggedTrains.add(trainId)) logger.info(message) else logger.debug(message)
 	}
 
-	/** Deliver [event] through [emitExpired]; a throwing listener is logged and cannot undo the completed expiry. */
-	private fun announce(event: ReservationExpired) {
+	/**
+	 * Count the completed expiry [event] reports, then deliver it through [emitExpired], so a listener
+	 * reading [expiredHoldingCount] or [expiredTailCount] sees it included (Issue #1243). A throwing
+	 * delivery is logged and cannot undo the completed expiry: this guard catches a raw kDisco
+	 * subscriber, which ends delivery to the subscribers after it; an `onReservationExpired`
+	 * subscriber is isolated by that function already.
+	 */
+	private fun countAndAnnounce(event: ReservationExpired) {
+		when (event.kind) {
+			ReservationExpired.Kind.WHOLE_HOLDING -> expiredHoldingCount++
+			ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL -> expiredTailCount++
+		}
 		try {
 			emitExpired(event)
 		} catch (e: Exception) {

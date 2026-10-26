@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * The reservation kernel withdrew a holding its train did not use (Issue #1243; the Goal 9B demand
@@ -22,7 +23,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  * Delivered as a kDisco `SimulationEvent.Custom` payload on the simulation thread, synchronously
  * inside the expiry call (the loop tick, or the top of another train's `reservePath`); subscribe
  * through [onReservationExpired] before `run()`. A listener must only record: it runs inside the
- * reservation service and must not call back into a mutating seam.
+ * reservation service and must not call back into a mutating seam. The expiry is counted
+ * (`expiredHoldingCount` / `expiredTailCount`) before it is delivered, so a listener reading the
+ * counters sees it included.
  *
  * All fields are read at emission time on the simulation thread.
  */
@@ -39,8 +42,11 @@ data class ReservationExpired(
 	val releasedBlocks: List<DynamicTrackBlock>,
 	/**
 	 * The blocks the train stands on, which the release kept. Empty for [Kind.WHOLE_HOLDING]. A
-	 * consumer that sees two expiries of one train with the same [keptBlocks] knows the train was
-	 * granted a route in between and still did not reach a new block.
+	 * consumer that sees two [Kind.OCCUPYING_TRAIN_TAIL] expiries of one train with the same
+	 * [keptBlocks] knows the train was granted a route in between and still did not reach a new block.
+	 * Two empty lists compare equal too, so a consumer keying on this footprint reads two
+	 * [Kind.WHOLE_HOLDING] expiries as no movement: the dispatcher's test-source quarantine keeps a
+	 * present train standing on nothing quarantined until it leaves the snapshot, on purpose.
 	 */
 	val keptBlocks: List<DynamicTrackBlock>,
 	/**
@@ -63,12 +69,26 @@ data class ReservationExpired(
 	}
 }
 
+private val logger = KotlinLogging.logger {}
+
 /**
  * Subscribe to [ReservationExpired] (Issue #1243). Sugar over [SimulationEnvironment.onSimulationEvent],
  * with its contract: register before `run()`, delivered synchronously on the simulation thread.
+ *
+ * Each subscriber registered here is isolated: a [listener] that throws is logged at WARN and the
+ * event still reaches the subscribers after it. kDisco's bus walks its listeners with no guard of its
+ * own, so only subscribers registered through this function are isolated; a raw
+ * [SimulationEnvironment.onSimulationEvent] subscriber that throws ends delivery to the ones after
+ * it, and [DefaultReservationExpiry] then only contains the failure so the completed expiry stands.
  */
 fun SimulationEnvironment.onReservationExpired(listener: (ReservationExpired) -> Unit) =
 	onSimulationEvent { event ->
 		val payload = (event as? SimulationEvent.Custom)?.payload
-		if (payload is ReservationExpired) listener(payload)
+		if (payload is ReservationExpired) {
+			try {
+				listener(payload)
+			} catch (e: Exception) {
+				logger.warn(e) { "A ReservationExpired listener failed for '${payload.trainId}' (Issue #1243)" }
+			}
+		}
 	}
