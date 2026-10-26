@@ -51,9 +51,19 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * runs at the top of every `reservePath` and once per loop tick, before the control step that calls
  * [sweep], and its clock starts at the registration rather than at the first sweep that saw the
  * holding, so it fires no later than this sweeper would. [staleReleaseCount] therefore falls toward
- * zero in AI runs; phantom owners and the occupying-train tail stay this sweeper's. A sweep that
- * finds a holding the kernel has half-released (approach lock deferral) releases the remainder through
- * the same idempotent call, so the two never conflict -- they only share the work.
+ * zero in AI runs; phantom owners stay this sweeper's. A sweep that finds a holding the kernel has
+ * half-released (approach lock deferral) releases the remainder through the same idempotent call, so
+ * the two never conflict -- they only share the work.
+ *
+ * Since Issue #1220 the kernel also frees the RESERVED tail of a train that stands on part of its
+ * route, once the train has made no physical progress for the same TTL: its stall clock restarts on
+ * any change of the occupied blocks, the RESERVED blocks or the occupant's `distanceToSemaphore()`
+ * reading (by more than 1 cm), so a train moving slowly inside one long block keeps its tail. For a
+ * truly stopped train it acts on the same tick as, or before, this sweeper's partial release, so
+ * [partialReleaseCount] falls too. What remains this sweeper's alone is the tail of a train whose
+ * held set is unchanged but which is still moving: this sweeper has no progress reading and reclaims
+ * that tail after [staleAfterSimSeconds], the kernel does not. A tail whose PathInfo cannot be trimmed
+ * after the occupied head (a switch right after it) is kept by both.
  *
  * `MultiTrainLoop` runs `BlockResourceRegistry.releaseFreeResources()` once per iteration as its
  * safety net. `ShuntingLoop` — the loop `shuntingLoopAI` runs — has none, and could not use that
