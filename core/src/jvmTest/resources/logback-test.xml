@@ -47,8 +47,9 @@
 		PathCommandTranslator emits its skip/diagnostic messages at DEBUG. Enabling DEBUG here
 		makes the lambda bodies actually evaluate during tests, so a broken string interpolation
 		in a log statement is exercised instead of hiding behind a disabled log level. It does
-		not fail a test: kotlin-logging's toStringSafe catches the exception and logs it as an
-		error line, so assert on the captured log output where a test must fail on it.
+		not fail a test: kotlin-logging's toStringSafe catches the exception and logs the text
+		"Log message invocation failed: <exception>" at the statement's own level, so assert on
+		the captured log output where a test must fail on it.
 		The class is only exercised by PathCommandTranslatorTest, so this adds no test noise.
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.sim.PathCommandTranslator" level="DEBUG"/>

@@ -89,7 +89,8 @@ through `releasePathDetailed` only.
 | `ReservationTargetDiscovery`: `findNextSemaphoresVia`, `reservePathToAnyTargets`, `isPathAvailableFor`, `resolveForwardSection`, `allSemaphores`, `evaluateTargets` | the service | The raw enumeration is a second opinion about which route to set (what SP5 removed); `reservePathToAnyTargets` is the interlocking's own fallback order; availability reaches a dispatcher only as `CandidateTarget.available`. |
 | `RouteCandidateScreen`: `rejectNonOrientedStart`, `rejectNonOrientedEnd`, `rejectNonContiguousStart`, `screenRearFacingEnds`, `screenDivergentCandidates`, `forwardOnlyPathInfo`, `footprintOf`, `standsOnAnyBlock` | `reservePath` | Request-level guards and screens of one `reservePath` call; their verdicts reach a dispatcher as the typed denials above. |
 | `CandidateCommitter`: `tryAtomicReservation`, `registerAndFinalizeCandidate`, `rollbackUnconfigurableCandidate` | `reservePath` | Steps of one transaction; the rollback is correct only with the `priorSwitches` snapshot taken for the same candidate. |
-| `PathReservationRegistry.expiredHoldings` and `PathReservationRegistry.wouldBeStaleClaim` (both internal), `isTrainOnBlock` (a top-level internal function in `TrainOnBlock.kt`), the reservation TTL | `DefaultReservationExpiry`, `RouteReleaser` | A query that only makes sense together with the release policy that acts on it (`DefaultReservationExpiry` is the only caller of `expiredHoldings`); the TTL is a behavioural constant. |
+| `PathReservationRegistry.expiredHoldings` (internal), `isTrainOnBlock` (a top-level internal function in `TrainOnBlock.kt`), the reservation TTL | `DefaultReservationExpiry`, `RouteReleaser` | A query that only makes sense together with the release policy that acts on it (`DefaultReservationExpiry` is the only caller of `expiredHoldings`); the TTL is a behavioural constant. |
+| `PathReservationRegistry.wouldBeStaleClaim` (internal; delegates to `SwitchOwnershipTable.wouldBeStaleClaim`) | `CandidateCommitter` | Its only caller is `SwitchConfigurator.registerSwitches`, the Issue #1173 born-stale filter inside Step 2f, reached through `CandidateCommitter`; it answers for a claim not made yet, so asked alone it describes a switch claim no transaction is about to make. |
 | Every mutating registry operation: `registerAtomic`, `registerSwitches`, `registerFlankSwitches`, `registerPathInfo`, `unregister*`, `reclaimStaleSwitchOwnership`, `restorePathInfo`, `trimPathInfoTo*`, `clear` | reservation transactions | Called alone each can leave blocks, switches, signals and PathInfo disagreeing. |
 | `BlockOwnershipTable`, `SwitchOwnershipTable`, `PathInfoStore`, `PathInfoMerger`, `getSwitchClaim` | `internal` to `:core` | A dispatcher module cannot see them; Goal 9B should not ask for them to be widened. What it needs is a query on the registry facade. |
 
@@ -323,7 +324,7 @@ more than 486 code lines, so no class can approach the 800 limit.
 | `DefaultPathReservationService.kt` | 1072 | 486 | `DefaultPathReservationService` | 469 |
 | `DefaultTopologyNavigator.kt` | 871 | 353 | `DefaultTopologyNavigator` | 338 |
 | `CandidateCommitter.kt` | 747 | 333 | `CandidateCommitter` | 301 |
-| `RouteReleaser.kt` | 626 | 313 | `RouteReleaser` | 299 |
+| `RouteReleaser.kt` | 617 | 313 | `RouteReleaser` | 299 |
 | `DefaultTrainNavigationService.kt` | 521 | 286 | `DefaultTrainNavigationService` | 274 |
 | `ReservationTargetDiscovery.kt` | 610 | 275 | `ReservationTargetDiscovery` | 245 |
 | `SwitchConfigurator.kt` | 551 | 225 | `SwitchConfigurator` | 201 |

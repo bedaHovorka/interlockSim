@@ -1014,8 +1014,8 @@ class DefaultPathReservationService(
 	 * [reservePathToAny] call this at their top; if the request fails, the next loop tick expires
 	 * the holding. The expiry runs before the Step 0 guards, so a request that is then refused
 	 * (`GeometricallyImpossible`, `NonContiguousStart`) can still expire other trains' stale
-	 * holdings -- correct, as a stale holding is stale regardless and the loop tick would do the
-	 * same about a second later.
+	 * holdings -- correct, as a stale holding is stale regardless and the loop would expire it
+	 * within one control tick (2 simulated seconds) anyway.
 	 */
 	internal fun expireStaleReservations(exceptTrainId: String): Int = expiry.expireStale(exceptTrainId)
 
