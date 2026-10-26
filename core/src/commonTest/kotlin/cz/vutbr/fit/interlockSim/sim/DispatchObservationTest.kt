@@ -99,7 +99,7 @@ class DispatchObservationTest {
 	}
 
 	@Test
-	fun `routeEndpointName is null for a switch, which is never a route endpoint`() {
+	fun `routeEndpointName is null for a switch because a switch is never a route endpoint`() {
 		val switch = DynamicRailSwitch(RailSwitch("vA", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE))
 
 		assertThat(switch.routeEndpointName()).isNull()
