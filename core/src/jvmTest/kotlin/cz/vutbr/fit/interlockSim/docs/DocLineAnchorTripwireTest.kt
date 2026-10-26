@@ -82,6 +82,14 @@ class DocLineAnchorTripwireTest {
 	}
 
 	@Test
+	fun `the skipped directories equal the excludes of the Gradle task inputs`() {
+		val declared = System.getProperty(SKIPPED_DIRECTORIES_PROPERTY)
+		assumeTrue(declared != null, "not run by :core:docLineAnchorCheck (IDE run): no excludes to compare")
+
+		assertThat(declared!!.split(',').filter { it.isNotEmpty() }.toSet()).isEqualTo(SKIPPED_DIRECTORIES)
+	}
+
+	@Test
 	fun `a missing file, a short file and an ambiguous name are all reported`() {
 		write("a/One.kt", "line1\nline2\nline3\n")
 		write("a/Twin.kt", "x\n")
@@ -352,6 +360,9 @@ class DocLineAnchorTripwireTest {
 
 		/** Lines either side of an anchored range in which its symbol must still occur. */
 		const val CONTEXT_LINES = 3
+
+		/** System property by which `core/build.gradle.kts` passes its `anchorSkippedDirectories` list (Issue #1239). */
+		const val SKIPPED_DIRECTORIES_PROPERTY = "anchorSkippedDirectories"
 
 		val SKIPPED_DIRECTORIES = setOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", "node_modules")
 
