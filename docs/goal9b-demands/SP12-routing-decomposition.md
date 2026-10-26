@@ -61,6 +61,7 @@ service, so a second door cannot appear silently.
 | `PathReservationService.resetSemaphoresForReleasedBlocks` | Call only inside its documented scope (suffix/rearmost releases on a non-revisiting route); it does no route-position validation. | SP12.3 |
 | `ConflictDetectedEvent` (kDisco custom event) | Subscribe. Emitted once per contention by the `AllPathsBlocked` arm, once per detected race by the atomic-registry-race arm; de-duplicate by (train, block). | SP12.1 |
 | `ReservationExpiry.expireStaleReservations()` via `RoutingServices.getReservationExpiry()` | Idempotent, rule-bound. Not needed by a dispatcher: the loops and every `reservePath` already call it. | SP12.8 |
+| `ReservationExpired` (kDisco custom event) via `SimulationEnvironment.onReservationExpired` (an extension over `onSimulationEvent`) | Subscribe before `run()`; record only. Emitted once per completed kernel expiry, never on a deferral; `kind` tells a whole holding from an occupying train's tail. It may fire inside another train's `reservePath`, so a listener must not call back into a mutating seam. | SP12.8, #1243 |
 | Read-only registry queries: `getOwner`, `getBlocks`, `isRegistered`, `isBlockAvailable`, `getOccupant*`, `getOccupiedBlocks`, `trainCount`, `blockCount`, `getRegisteredAtSimTime`, `getSwitches`, `getSwitchOwner`, `isFlankProtected`, `isOwnedByOtherTrain`, `isStaleSwitchOwnership`, `getPathInfo`, `isPathExtendedBeyond`, `nonContinuingCandidateReason`, `pathInfoEndAfter`, `isValidPathInfoEnd`, `canTrimPathInfoTo`; `addBlockOccupancyListener` / `removeBlockOccupancyListener`; `createBlockAvailableCondition` (for a kDisco process that waits, never for polling) | Read. Synchronous on the simulation thread; a listener must not call back into a mutating seam. | SP12.6 |
 
 The result types a dispatcher sees are unchanged by SP12: `ReservationResult.Success`, `Conflict`,
@@ -96,7 +97,8 @@ through `releasePathDetailed` only.
 
 ### 2.3 Goal 9B demands collected from the leaves
 
-None of these is addressed by SP12; each names where the change would land.
+None of these is addressed by SP12 itself; each names where the change would land (one is addressed
+by the SP12 follow-up #1243).
 
 | Demand | Leaf | Where it would land |
 | --- | --- | --- |
@@ -106,7 +108,8 @@ None of these is addressed by SP12; each names where the change would land.
 | Carry `switch`, `holder`, `held`, `required` of `SwitchConfigOutcome.Locked` through the reservation result | SP12.4 (SP5 D3) | the result type; today `Locked` is folded into `AllPathsBlocked` |
 | Per-candidate cost, structured unavailability reason, multi-hop horizon | SP12.5 (SP5 D1, D3, D4) | `findReservationTargetCandidates`, `isPathAvailableFor`, a new enumeration beside `findNextSemaphoresVia` |
 | A new registry query for *why* a switch is held (flank or running) or *when* a holding became stale | SP12.6 | `PathReservationRegistry` facade |
-| A `ReservationExpired` event (train, age, TTL); per-train or per-route-class TTL; phase 2 stalled RESERVED tail | SP12.8, #1220 | the expiry seam; a physical-progress signal |
+| A `ReservationExpired` event (train, age, TTL), naming the phase 2 stalled RESERVED tail case | SP12.8, #1220 | addressed by #1243: `ReservationExpired`, kind `WHOLE_HOLDING` / `OCCUPYING_TRAIN_TAIL`; the production consumer is a Goal 9B follow-up |
+| Per-train or per-route-class TTL | SP12.8 | the expiry seam; a physical-progress signal |
 | Machine-readable denial instead of the English reason string | SP12.9 | `rearFacingEndReason`, `GeometricFailures.reason` |
 | Commit-time precondition (a dispatcher-supplied hold re-checked before registration); structured rejection instead of `null` | SP12.10 | `registerAndFinalizeCandidate` |
 | A stricter origin policy (origin must bound the train's front block) | SP12.9 | a new guard beside `rejectNonContiguousStart` |
