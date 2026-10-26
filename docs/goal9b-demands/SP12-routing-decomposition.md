@@ -327,7 +327,7 @@ documented non-pinnable coverage leftover (SP12.4 page).
 | After SP12.9 | 1,621 | 752 |
 | After SP12.10 | 979 | 441 |
 | `goal-1B` after #1226 (adds #1173, #1200 and the #1174 kernel expiry; measured on #1227) | 1,072 | 469 |
-| Follow-up stack head (`252f24ab`, #1244 part 1; adds #1218, #1220, #1224, #1242, #1243; measured 2026-10-26) | 1,074 | 466 |
+| Follow-up stack head (#1252 (#1244 part 1) head; adds #1218, #1220, #1224, #1242, #1243; measured 2026-10-26) | 1,074 | 466 |
 
 `@Suppress("LargeClass")` and `@Suppress("LongMethod")` on `reservePath` are gone from the service;
 `:core:detekt` is green without them. The only `@Suppress` left in `context/navigation/` is
@@ -343,7 +343,7 @@ trimmability preflight of #1242 grew `RouteReleaser` (299 to 349) instead, so th
 
 Every file in the package, measured with a script (strip `/* … */`, drop blank and `//` lines, brace-match
 each top-level class). The script's figures reproduce the recorded 916 and 752 exactly (441 vs 442 at the
-SP12.10 head; the one-line difference is detekt's own counting). Re-measured on 2026-10-26 on `252f24ab` with
+SP12.10 head; the one-line difference is detekt's own counting). Re-measured on 2026-10-26 on the #1252 (#1244 part 1) head with
 `python3 -I measure.py core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/context/navigation` (the same
 method over every `*.kt` directly in `context/navigation/`; the script is a throw-away and is not committed).
 Files the follow-up wave did not touch reproduce the 2026-10-25 numbers. No file has more than 483 code
@@ -468,10 +468,10 @@ axes: example: ["shuntingLoop"]`, other axes at their defaults. Railway outcomes
 | base `e3fade0f` (before SP12.9) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | SP12 stack head before the #1226 review round (`f2d25ab9` build) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | #1226 after its review round (`2982c3e7`, the `DefaultReservationExpiry` extraction) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
-| #1220 before (`31b0da8f`) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
-| #1220 after (`27753d18`, phase 2 expiry; before the rebase onto the later stack) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
-| #1243 head, before #1244 part 1 (`03fc881a`) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
-| #1244 part 1 (`076e5cbe`; the later `252f24ab` adds only tests, KDoc and docs) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| #1220 before (the stack head under #1246) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| #1220 after (#1246 (#1220) phase-2 code; run before the later rebase of the stack) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| #1251 (#1243) head, before #1244 part 1 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| #1252 (#1244 part 1) code (its later commits add only tests, KDoc and docs) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 
 Every sweep: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Base == head on every column.
 The same identity held at every leaf head in between (SP12.9, SP12.10, the SP12.5 follow-ups, #1173,
@@ -498,14 +498,14 @@ Follow-up PRs that change routing code re-ran `heavyTest` on their own heads, so
 
 | PR (issue) | Head | `:core` | `:dispatcher-agent` |
 | --- | --- | --- | --- |
-| #1246 (#1220) | `27753d18` | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
-| #1247 (#1242) | `8fabd50f` | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
-| #1251 (#1243) | `03fc881a` | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
-| #1252 (#1244 part 1) | `076e5cbe` | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
+| #1246 (#1220) | phase-2 code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
+| #1247 (#1242) | code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
+| #1251 (#1243) | head | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
+| #1252 (#1244 part 1) | code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 
-`:desktop-ui` has no heavy-test tagged tests (the task ran, 0 tests). The heads are the ones the runs were done
-on; later rebases of the stack changed the SHAs but not the code. #1252's last commits (`252f24ab`) change only
-tests, KDoc and docs, so its heavy run stays valid. The later #1247 head `a13d8f54` ran the normal gate
+`:desktop-ui` has no heavy-test tagged tests (the task ran, 0 tests). The runs were done on the heads of these PRs;
+later rebases of the stack changed the SHAs but not the code. #1252's last commits change only
+tests, KDoc and docs, so its heavy run stays valid. The later #1247 head ran the normal gate
 (7,192 tests, 0 failures, 0 errors).
 
 ### PR #1227 and the tripwire task
