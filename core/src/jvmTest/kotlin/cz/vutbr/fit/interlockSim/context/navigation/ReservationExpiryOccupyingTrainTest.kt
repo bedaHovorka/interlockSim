@@ -36,6 +36,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -448,6 +451,55 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 	}
 
 	@Test
+	fun `a train with only an OCCUPIED booking and no occupant is not judged`() {
+		// The literal D2 case: the train is booked onto a block (OCCUPIED) but no occupant stands on
+		// it yet, so there is no reading of its progress. The public block API sets the occupant and
+		// the OCCUPIED state together, so the booking is a stand-in block holding exactly that state.
+		var bookedOccupant: TrackOccupant? = null
+		val booked =
+			mockk<DynamicTrackBlock>(relaxed = true) {
+				every { getState() } returns TrackFacility.State.OCCUPIED
+				every { occupant } answers { bookedOccupant }
+				every { trainName } returns TRAIN
+			}
+		val releaseCalls = mutableListOf<Double>()
+		val recording =
+			DefaultReservationExpiry(
+				registry = registry,
+				candidateScreen =
+					RouteCandidateScreen(
+						registry,
+						environment,
+						ReservationTargetDiscovery(navigator, environment),
+						pathInfoBuilder
+					),
+				ttlSimSeconds = TTL,
+				expiryRelease = {
+					releaseCalls += currentSimulationTime()
+					PathRelease(emptyList(), emptyList())
+				}
+			)
+
+		runInOrder(
+			listOf(
+				0.0 to {
+					assertReservationSuccess(service.reservePath(TRAIN, zA, findSemaphoreByName("doB1")))
+					assertThat(registry.registerAtomic(TRAIN, listOf(booked)))
+						.isEqualTo(PathReservationRegistry.RegistrationResult.Success)
+				},
+				// Its occupant is on the block only after three TTLs of booking.
+				(OCCUPANT_AT - 1.0) to { bookedOccupant = ProgressStub(TRAIN) }
+			),
+			ticks(0.0, OCCUPANT_AT + TTL + TICK, tick = { recording.expireStale(null) })
+		)
+
+		// Never judged while only booked -- no release call, and no snapshot taken then: the first
+		// call that can read the occupant starts the clock, so the release comes a TTL after it.
+		assertThat(releaseCalls).isNotEmpty()
+		assertThat(releaseCalls.first()).isEqualTo(OCCUPANT_AT + TTL)
+	}
+
+	@Test
 	fun `a train that stops standing on its holding starts a fresh clock when it is back`() {
 		val occupant = ProgressStub(TRAIN)
 		lateinit var tail: List<DynamicTrackBlock>
@@ -525,6 +577,7 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 
 		const val EXTENSION_AT = 50.0
 		const val CLEARS_AT = 40.0
+		const val OCCUPANT_AT = 3 * DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS
 		const val LEAVES_AT = 30.0
 		const val BACK_AT = 40.0
 
