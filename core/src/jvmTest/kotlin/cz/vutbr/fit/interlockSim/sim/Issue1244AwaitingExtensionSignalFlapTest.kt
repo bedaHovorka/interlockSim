@@ -22,9 +22,9 @@ import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.testutil.FirstTrainOwnershipConflict
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
-import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -58,7 +58,7 @@ private val logger = KotlinLogging.logger {}
  *
  * ## How the shape is produced
  *
- * As in [Issue943OwnershipConflictStallBoundTest]: a [decoratingTrainNavigationService] answers
+ * As in [Issue943OwnershipConflictStallBoundTest]: a [FirstTrainOwnershipConflict] answers
  * [PathResult.OwnershipConflict] for the first train that queries from a non-[DynamicInOut]
  * separator, from then on. That train's route already ends at a facing signal one section ahead, so
  * the dispatcher's pick is the held end — a same-target re-request. The stall lasts until the #943
@@ -93,27 +93,16 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 		context.getInOuts()
 		val realNav = context.getRoutingServices().getTrainNavigationService()
 
-		val stalledTrainId = AtomicReference<String?>(null)
-		val stallingNav =
-			decoratingTrainNavigationService(realNav) { trainId, separator ->
-				if (separator !is DynamicInOut) {
-					stalledTrainId.compareAndSet(null, trainId)
-				}
-				if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
-					PathResult.OwnershipConflict
-				} else {
-					realNav.findReservedPathForTrain(trainId, separator)
-				}
-			}
+		val stall = FirstTrainOwnershipConflict(realNav)
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
-		val stallingContext = NavigationDecoratingContext(context, stallingNav) { capturedErrors.add(it) }
+		val conflictEnv = NavigationDecoratingContext(context, stall.navigation) { capturedErrors.add(it) }
 
 		val expired = CopyOnWriteArrayList<ReservationExpired>()
-		context.onReservationExpired { event -> if (event.trainId == stalledTrainId.get()) expired += event }
+		context.onReservationExpired { event -> if (event.trainId == stall.heldTrainId.get()) expired += event }
 
-		val loop = prepareShuntingLoop(context, END_TIME, env = stallingContext)
+		val loop = prepareShuntingLoop(context, END_TIME, env = conflictEnv)
 		val wired = loop.controlStepListener
-		val probe = FlapProbe(loop, stalledTrainId, expired)
+		val probe = FlapProbe(loop, stall.heldTrainId, expired)
 		loop.controlStepListener =
 			ControlStepListener {
 				probe.beforeStep()
@@ -134,7 +123,7 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 		// Non-vacuity: the train stood, the guard's condition was reached, several expiry cycles ran,
 		// and the stand lasted the whole #943 window (the run ended in its errorStop naming the train).
 		// assertAll reports every failed assertion, so a regression shows the flip count, too.
-		val trainId = requireNotNull(stalledTrainId.get()) { "no train was stalled [$run]" }
+		val trainId = requireNotNull(stall.heldTrainId.get()) { "no train was stalled [$run]" }
 		assertAll {
 			assertThat(probe.keptSignal, name = "signal the stalled train stood at [$run]").isNotNull()
 			assertThat(probe.guardConditionSteps, name = "steps awaiting with the pick == held route end [$run]")
@@ -160,7 +149,7 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 	 */
 	private class FlapProbe(
 		private val loop: ShuntingLoop,
-		private val stalledTrainId: AtomicReference<String?>,
+		private val heldTrainId: AtomicReference<String?>,
 		private val expired: List<ReservationExpired>
 	) {
 		var keptSignal: DynamicRailSemaphore? = null
@@ -176,7 +165,7 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 		private var deferredSinceLastExpiry = false
 
 		fun beforeStep() {
-			val trainId = stalledTrainId.get() ?: return
+			val trainId = heldTrainId.get() ?: return
 			if (keptSignal == null) {
 				val train = loop.getApprovedTrains().firstOrNull { it.name == trainId } ?: return
 				if (train.distanceToSignalAhead() > STANDING_AT_SIGNAL_TOLERANCE) return

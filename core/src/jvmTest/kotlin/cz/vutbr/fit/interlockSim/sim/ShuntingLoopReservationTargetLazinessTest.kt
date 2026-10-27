@@ -5,24 +5,22 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
-import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.testutil.FirstTrainOwnershipConflict
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
-import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Locks in the sensor-port contract that keeps the forward-reservation graph search
@@ -216,17 +214,9 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		context.getInOuts()
 		val registry = context.scope.get<PathReservationRegistry>()
 		val realNav = context.getRoutingServices().getTrainNavigationService()
-		val stalledTrainId = AtomicReference<String?>(null)
-		val stallingNav =
-			decoratingTrainNavigationService(realNav) { trainId, separator ->
-				if (separator !is DynamicInOut) stalledTrainId.compareAndSet(null, trainId)
-				if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
-					PathResult.OwnershipConflict
-				} else {
-					realNav.findReservedPathForTrain(trainId, separator)
-				}
-			}
-		val loop = prepareShuntingLoop(context, 150L, env = NavigationDecoratingContext(context, stallingNav))
+		val stall = FirstTrainOwnershipConflict(realNav)
+		val conflictEnv = NavigationDecoratingContext(context, stall.navigation)
+		val loop = prepareShuntingLoop(context, 150L, env = conflictEnv)
 		val wired = loop.controlStepListener
 
 		var awaitingInputsSeen = 0
