@@ -162,7 +162,14 @@ object NextHopResolver {
 	private fun isEligible(input: BlockInputObservation): Boolean =
 		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
 			(input.isApproachingThisInput || input.pathSetUpTowardThisInput) &&
-			input.chosenTargetName() != null
+			// Issue #1244: an awaiting train whose pick is the end of the route it already holds has
+			// nothing to extend toward; RuleBasedDispatcher skips it the same way. The pick is bound
+			// once: chosenTargetName() re-picks (a fresh sorted list) per call, and the core's own
+			// reserveOrDefer binds it the same way.
+			input.chosenTargetName().let { chosen ->
+				chosen != null &&
+					!(input.awaitingRouteExtension && chosen == input.heldRouteEndName)
+			}
 
 	/** The first (list-order) input owned by [trainId] and qualifying per [isEligible], or `null`. */
 	private fun firstEligibleInput(
@@ -217,6 +224,9 @@ sealed interface NextHopOutcome {
 	 * This is never evidence that the track ahead is occupied or blocked — see
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets]'s own contract — so
 	 * rendered wording for this outcome must not use either word.
+	 *
+	 * It is also the outcome for a train awaiting a route extension whose pick is the end of the
+	 * route it already holds — see the precondition rule in this object's KDoc (Issue #1244).
 	 */
 	data object NoSectionReservable : NextHopOutcome
 

@@ -333,11 +333,13 @@ sealed interface AppliedOutcome {
 	 * `cancel_route` completed; [anyReleased] is `true` if at least one block was released.
 	 *
 	 * [deferredBlockIds] lists blocks approach locking kept reserved because a proceed aspect stood
-	 * at them and a train may be committed (Issue #1050); non-empty means the release is partial
-	 * and `cancel_route` should be repeated. It also lists the whole route when the kernel refused
-	 * the release because the route cannot be cut after the blocks the train stands on (Issue #1242):
-	 * then no signal changed, and a repeat frees something only once the head reaches a block the route
-	 * can be cut after.
+	 * at them and a train may be committed (Issue #1050); non-empty means the release is partial: every
+	 * block not listed was freed. It also lists the whole route when the kernel refused
+	 * the release because the route cannot be cut after the blocks the train stands on (Issue #1242),
+	 * and the apply result cannot tell these cases apart. The rendered text therefore says only that the
+	 * listed blocks stay reserved because the train stands on them or may still enter them, that a
+	 * repeated `cancel_route` frees a kept block only after the train has left it or its booking window
+	 * has closed, and that extending the route is how to move the train on (Issue #1244).
 	 */
 	data class Released(
 		val trainId: String,

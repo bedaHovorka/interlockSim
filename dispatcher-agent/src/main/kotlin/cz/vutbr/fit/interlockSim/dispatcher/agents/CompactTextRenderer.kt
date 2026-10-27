@@ -240,7 +240,8 @@ class CompactTextRenderer : ObservationRenderer {
 				val status =
 					when {
 						outcome.deferredBlockIds.isNotEmpty() ->
-							"PARTIAL (kept: ${outcome.deferredBlockIds.joinToString(", ")}; repeat cancel_route)"
+							"KEPT (${outcome.deferredBlockIds.joinToString(", ")}; train on or entering them — " +
+								"extend the route, a repeat frees them only after the train moves)"
 						outcome.anyReleased -> "RELEASED"
 						else -> "NO_RESERVATION"
 					}

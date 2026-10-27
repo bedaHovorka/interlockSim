@@ -320,11 +320,11 @@ class KoogDispatchAgentImplPromptTest {
 
 	/**
 	 * Issue #1050: a `cancel_route` that approach locking kept partly applied must tell the model
-	 * WHICH blocks stayed reserved and that repeating the command is the way to finish it --
-	 * otherwise the model reads "applied" and never retries the kept blocks.
+	 * WHICH blocks stayed reserved and why, and that repeating the command only helps once the train has
+	 * moved on (Issue #1244: otherwise the model repeats it while the train stands on the kept blocks).
 	 */
 	@Test
-	@DisplayName("a Released outcome with deferred blocks reports a partial apply and names the retry (Issue #1050)")
+	@DisplayName("a Released outcome with deferred blocks reports a partial apply and explains the kept blocks (#1244)")
 	fun releasedOutcomeWithDeferredBlocksReportsPartialApply() {
 		val channel = AppliedOutcomeChannel()
 		channel.publish(
@@ -343,7 +343,9 @@ class KoogDispatchAgentImplPromptTest {
 		assertThat(prompts).hasSize(1)
 		assertThat(prompts[0]).contains("cancel_route for \"T-rel\": partly applied")
 		assertThat(prompts[0]).contains("k1")
-		assertThat(prompts[0]).contains("repeat cancel_route to release them")
+		assertThat(prompts[0]).contains("every other block was freed")
+		assertThat(prompts[0]).contains("extend its route instead")
+		assertThat(prompts[0]).contains("after the train has left")
 	}
 
 	// ── AC7: DivergesFromHeldRoute names the held target and the two ways out (Issue #1066,
