@@ -85,17 +85,23 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 	}
 
 	@Test
-	fun `the released line counts an undropped block and is not called complete (Issue 1254)`() {
+	fun `the released line counts an undropped block, alone and next to a kept lock (Issue 1254)`() {
 		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
 		blocks.first().enter(FakeTrackOccupant("train1"))
 		val releaser = recordingReleaser()
 
 		val dropped = releaser.releasedLine("train1", 1, 2, listOf(blocks.first()), emptyList())
+		val combined = releaser.releasedLine("train1", 1, 2, listOf(blocks.first()), listOf(blocks.first()))
 		val allFreed = releaser.releasedLine("train1", 2, 2, listOf(blocks.first()), emptyList())
 
 		assertThat(dropped).contains("freed 1 block(s)")
 		assertThat(dropped).contains("1 block(s) could not be freed (see WARN)")
 		assertThat(dropped).doesNotContain("the release is complete")
+		// The failure mention survives a kept lock or window: the outcome never hides the count.
+		assertThat(combined).contains("1 block(s) could not be freed (see WARN)")
+		assertThat(combined).contains("approach-locked [")
+		assertThat(combined).contains("later call")
+		assertThat(combined).doesNotContain("the release is complete")
 		assertThat(allFreed).contains("the release is complete")
 		assertThat(allFreed).doesNotContain("could not be freed")
 	}

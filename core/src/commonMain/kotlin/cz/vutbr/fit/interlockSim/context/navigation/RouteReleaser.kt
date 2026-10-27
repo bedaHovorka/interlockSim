@@ -160,7 +160,7 @@ internal class RouteReleaser(
 			return PathRelease(emptyList(), emptyList())
 		}
 		if (kept.isNotEmpty()) {
-			return releaseAllBut(trainId, blocks, kept, approachLocked, now)
+			return releaseAllBut(trainId, blocks, kept, approachLocked)
 		}
 		return PathRelease(releaseAllBlocks(trainId, blocks), emptyList())
 	}
@@ -350,18 +350,19 @@ internal class RouteReleaser(
 	 * are not unlocked wholesale: [dropFreedBlock] reclaims exactly those no held block still needs.
 	 *
 	 * Logs one INFO line per call (Issue #1254) that partitions [kept] by reason, first match wins:
-	 * approach-locked ([approachLocked]), occupied, booking window still open at [now]. The release is
-	 * complete -- the kept blocks leave with the train -- when none is approach-locked or in a window;
-	 * only then is the line free of any promise that a later call frees something. A block of the
-	 * release that could not be dropped (its WARN is logged) is counted in the line, never reported
-	 * as freed. Log-only: it changes no signal, block or [PathRelease].
+	 * approach-locked ([approachLocked]), occupied, booking window. The release is complete -- the
+	 * kept blocks leave with the train -- when none is approach-locked or in a window; only then is
+	 * the line free of any promise that a later call frees something. A block of the release that
+	 * could not be dropped (its WARN is logged) is counted in the line, never reported as freed --
+	 * and conversely, a block whose release announcement threw (Issue #1202) is already FREE and
+	 * unowned: the line counts it as freed, [PathRelease] does not. Log-only: it changes no signal,
+	 * block or [PathRelease].
 	 */
 	private fun releaseAllBut(
 		trainId: String,
 		blocks: List<DynamicTrackBlock>,
 		kept: List<DynamicTrackBlock>,
-		approachLocked: List<DynamicTrackBlock>,
-		now: Double
+		approachLocked: List<DynamicTrackBlock>
 	): PathRelease {
 		val toRelease = blocks.filter { it !in kept }
 		toRelease.forEach { cancelBlock(it) }
@@ -378,7 +379,13 @@ internal class RouteReleaser(
 		// preflight in release() already validated this cut is possible, so a refusal here is a bug
 		// in that validation -- logged loudly by the registry rather than silently ignored.
 		registry.trimPathInfoToHeldBlocks(trainId)
-		logger.info { releasedLine(trainId, released.size, toRelease.size, kept, approachLocked) }
+		// Freed here = the block no longer has an owner: a clean drop unregisters it, and a drop
+		// whose announcement threw (Issue #1202) unregisters before its announce, so the line counts
+		// it as freed while the PathRelease above keeps it out. The expiry's own line counts that
+		// PathRelease list (DefaultReservationExpiry), so the two adjacent lines may legitimately
+		// differ on an announce throw.
+		val freedForLog = toRelease.count { registry.getOwner(it) == null }
+		logger.info { releasedLine(trainId, freedForLog, toRelease.size, kept, approachLocked) }
 		return PathRelease(released, kept)
 	}
 
@@ -399,18 +406,23 @@ internal class RouteReleaser(
 				.joinToString("; ") { (reason, group) ->
 					"$reason [${group.joinToString(", ") { BlockIdentity.stableBlockId(it) }}]"
 				}
+		val incomplete = freedCount < toReleaseCount
+		val failure =
+			if (incomplete) {
+				"${toReleaseCount - freedCount} block(s) could not be freed (see WARN); "
+			} else {
+				""
+			}
 		val outcome =
 			when {
 				locked.isNotEmpty() || windowed.isNotEmpty() ->
 					"signals are at STOP; a later call frees the block(s) still in their booking window once it " +
 						"closes, unless the train books them first (then they stay occupied and leave with the train)"
-				freedCount < toReleaseCount ->
-					"${toReleaseCount - freedCount} block(s) could not be freed (see WARN), the kept block(s) " +
-						"leave with the train"
+				incomplete -> "the kept block(s) leave with the train"
 				else -> "the release is complete, the kept block(s) leave with the train"
 			}
 		return "releasePath: released for '$trainId' -- freed $freedCount block(s), kept ${kept.size}: " +
-			"$groups; $outcome (Issue #1050, #1254)"
+			"$groups; $failure$outcome (Issue #1050, #1254)"
 	}
 
 	private fun cancelBlock(block: DynamicTrackBlock) {

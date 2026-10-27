@@ -202,6 +202,7 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 			assertThat(expiry.expiredTailCount).isEqualTo(1)
 			val line = releasedLines(appender).single()
 			assertThat(line).contains("occupied [${BlockIdentity.stableBlockId(kA)}]")
+			assertThat(line).contains("the release is complete")
 			assertThat(line).contains("leave with the train")
 			assertThat(line).contains("#1254")
 			listOf("proceed aspect", "deferred", "approach-locked", "booking window", "later call").forEach {
