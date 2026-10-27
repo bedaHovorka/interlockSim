@@ -131,20 +131,33 @@ class PathReservationApproachLockedReleaseTest : PathReservationServiceTestBase(
 									hold(0.5)
 									service.releasePathDetailed("train1")
 									lines += releasedLines(appender)
+									appender.list.clear()
+									hold(0.1)
+									// The train books the head inside its window: occupied wins over the window.
+									blocks.first().enter(FakeTrackOccupant("train1"))
+									service.releasePathDetailed("train1")
+									lines += releasedLines(appender)
 								}
 							}
 						)
 					}.run(10.0)
 
-				assertThat(lines, "one released line per call").hasSize(2)
+				assertThat(lines, "one released line per call").hasSize(3)
 				// t=0.0: a proceed aspect stood at the head, so it is approach-locked and waits.
 				assertThat(lines[0]).contains("approach-locked [$headId]")
+				assertThat(lines[0]).doesNotContain("booking window [")
 				assertThat(lines[0]).contains("later call")
+				assertThat(lines[0]).contains("unless the train books them first")
 				assertThat(lines[0]).contains("#1254")
 				// t=0.5: the signal reads STOP already, but the booking window is still open.
 				assertThat(lines[1]).contains("booking window [$headId]")
 				assertThat(lines[1]).doesNotContain("approach-locked")
 				assertThat(lines[1]).contains("later call")
+				// t=0.6: the train booked the head inside its window: it is occupied, not windowed.
+				assertThat(lines[2]).contains("occupied [$headId]")
+				assertThat(lines[2]).doesNotContain("booking window [")
+				assertThat(lines[2]).contains("leave with the train")
+				assertThat(lines[2]).doesNotContain("later call")
 				lines.forEach { assertThat(it).doesNotContain("proceed aspect") }
 			}
 		}

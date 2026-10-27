@@ -352,8 +352,9 @@ internal class RouteReleaser(
 	 * Logs one INFO line per call (Issue #1254) that partitions [kept] by reason, first match wins:
 	 * approach-locked ([approachLocked]), occupied, booking window still open at [now]. The release is
 	 * complete -- the kept blocks leave with the train -- when none is approach-locked or in a window;
-	 * only then is the line free of any promise that a later call frees something. Log-only: it
-	 * changes no signal, block or [PathRelease].
+	 * only then is the line free of any promise that a later call frees something. A block of the
+	 * release that could not be dropped (its WARN is logged) is counted in the line, never reported
+	 * as freed. Log-only: it changes no signal, block or [PathRelease].
 	 */
 	private fun releaseAllBut(
 		trainId: String,
@@ -377,14 +378,15 @@ internal class RouteReleaser(
 		// preflight in release() already validated this cut is possible, so a refusal here is a bug
 		// in that validation -- logged loudly by the registry rather than silently ignored.
 		registry.trimPathInfoToHeldBlocks(trainId)
-		logger.info { releasedLine(trainId, released.size, kept, approachLocked) }
+		logger.info { releasedLine(trainId, released.size, toRelease.size, kept, approachLocked) }
 		return PathRelease(released, kept)
 	}
 
 	/** The INFO line of [releaseAllBut] (Issue #1050, #1254): see there for the partition of [kept]. */
-	private fun releasedLine(
+	internal fun releasedLine(
 		trainId: String,
 		freedCount: Int,
+		toReleaseCount: Int,
 		kept: List<DynamicTrackBlock>,
 		approachLocked: List<DynamicTrackBlock>
 	): String {
@@ -398,11 +400,14 @@ internal class RouteReleaser(
 					"$reason [${group.joinToString(", ") { BlockIdentity.stableBlockId(it) }}]"
 				}
 		val outcome =
-			if (locked.isEmpty() && windowed.isEmpty()) {
-				"the release is complete, the kept block(s) leave with the train"
-			} else {
-				"signals are at STOP; the block(s) still waiting for their booking window to close " +
-					"are freed by a later call"
+			when {
+				locked.isNotEmpty() || windowed.isNotEmpty() ->
+					"signals are at STOP; a later call frees the block(s) still in their booking window once it " +
+						"closes, unless the train books them first (then they stay occupied and leave with the train)"
+				freedCount < toReleaseCount ->
+					"${toReleaseCount - freedCount} block(s) could not be freed (see WARN), the kept block(s) " +
+						"leave with the train"
+				else -> "the release is complete, the kept block(s) leave with the train"
 			}
 		return "releasePath: released for '$trainId' -- freed $freedCount block(s), kept ${kept.size}: " +
 			"$groups; $outcome (Issue #1050, #1254)"

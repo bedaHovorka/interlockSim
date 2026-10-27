@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -80,6 +82,22 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		assertThat(service.hasClearedSignals("train1")).isFalse()
 		assertThat(releasedEvents(listener).map { it.block }).isEqualTo(blocks)
 		releasedEvents(listener).forEach { event -> assertThat(event.trainId).isEqualTo("train1") }
+	}
+
+	@Test
+	fun `the released line counts an undropped block and is not called complete (Issue 1254)`() {
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		blocks.first().enter(FakeTrackOccupant("train1"))
+		val releaser = recordingReleaser()
+
+		val dropped = releaser.releasedLine("train1", 1, 2, listOf(blocks.first()), emptyList())
+		val allFreed = releaser.releasedLine("train1", 2, 2, listOf(blocks.first()), emptyList())
+
+		assertThat(dropped).contains("freed 1 block(s)")
+		assertThat(dropped).contains("1 block(s) could not be freed (see WARN)")
+		assertThat(dropped).doesNotContain("the release is complete")
+		assertThat(allFreed).contains("the release is complete")
+		assertThat(allFreed).doesNotContain("could not be freed")
 	}
 
 	@Test
