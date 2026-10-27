@@ -133,8 +133,11 @@ class DefaultPathReservationService(
 	/** Reservation target discovery (Issue #1171): what a route can be set to, and in which order. */
 	private val targetDiscovery = ReservationTargetDiscovery(navigator, environment)
 
-	/** Read-only candidate geometry screening: origin guards, rear-facing and divergent candidates (Issue #1210). */
-	private val candidateScreen = RouteCandidateScreen(registry, environment, targetDiscovery, pathInfoBuilder)
+	/**
+	 * Read-only candidate geometry screening: origin guards, rear-facing and divergent candidates (Issue #1210).
+	 * `internal`, like its sibling collaborators, so tests can build an expiry over the service's own screen.
+	 */
+	internal val candidateScreen = RouteCandidateScreen(registry, environment, targetDiscovery, pathInfoBuilder)
 
 	// Route release and rollback, including the approach-lock deferral window (Issue #1168).
 	private val releaser =
@@ -150,14 +153,14 @@ class DefaultPathReservationService(
 	 * release policy live in [DefaultReservationExpiry]; the service stays the single facade and
 	 * exposes the trigger through [ReservationExpiry] (the #1152 allow-list keeps `ShuntingLoop`
 	 * free of any reservation-service handle). `internal`, like its sibling collaborators: tests
-	 * reach the release seam and the counter through it, the real wiring included.
+	 * reach the counter through it, the real wiring included.
 	 */
 	internal val expiry =
 		DefaultReservationExpiry(
 			registry = registry,
 			candidateScreen = candidateScreen,
 			ttlSimSeconds = reservationTtlSimSeconds,
-			initialRelease = releaser::releasePathDetailed
+			expiryRelease = releaser::releasePathDetailed
 		)
 
 	/**

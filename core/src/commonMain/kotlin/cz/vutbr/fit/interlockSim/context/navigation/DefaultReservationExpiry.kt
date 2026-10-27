@@ -51,14 +51,17 @@ import kotlin.math.round
  * @param ttlSimSeconds The configured reservation TTL, in simulated seconds: the service
  *   constructor's `reservationTtlSimSeconds`, which defaults to
  *   [DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS]
- * @param initialRelease The production release handoff, [RouteReleaser.releasePathDetailed]
+ * @param expiryRelease The release [expireStale] hands a stale holding to: always
+ *   [RouteReleaser.releasePathDetailed] in production. A constructor parameter rather than a writable
+ *   hook, so a test that must pin that a throwing release is contained (Issue #1174) builds its own
+ *   expiry over the same registry and candidate screen
  * @since Issue #1174
  */
 internal class DefaultReservationExpiry(
 	private val registry: PathReservationRegistry,
 	private val candidateScreen: RouteCandidateScreen,
 	private val ttlSimSeconds: Double,
-	initialRelease: (String) -> PathRelease
+	private val expiryRelease: (String) -> PathRelease
 ) {
 	companion object {
 		/** Rounding factor of the logged expiry age (one decimal). */
@@ -66,13 +69,6 @@ internal class DefaultReservationExpiry(
 	}
 
 	private val logger = KotlinLogging.logger {}
-
-	/**
-	 * The release [expireStale] hands a stale holding to: always
-	 * [RouteReleaser.releasePathDetailed] in production. Replaced only by tests, to pin that a
-	 * throwing release is contained (Issue #1174).
-	 */
-	internal var expiryRelease: (String) -> PathRelease = initialRelease
 
 	/**
 	 * Holdings [expireStale] has released completely since this expiry was built
