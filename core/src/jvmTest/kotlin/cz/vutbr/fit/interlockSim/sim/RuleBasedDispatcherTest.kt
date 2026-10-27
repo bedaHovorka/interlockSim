@@ -255,29 +255,41 @@ class RuleBasedDispatcherTest {
 			blockId = blockId
 		)
 
+	/** [awaitingInput] of `T1` holding a route that ends at `doA1`, then a `T2` input at `za` picking [t2Target]. */
+	private fun awaitingT1HoldingDoA1ThenT2Picking(t2Target: String): DispatchObservation =
+		observation(
+			innerBlockInputs =
+				listOf(
+					awaitingInput("T1", heldRouteEndName = "doA1"),
+					input(
+						TrackFacility.State.OCCUPIED,
+						towardSemaphoreName = "za",
+						targetName = t2Target,
+						ownerTrainId = "T2",
+						isApproachingThisInput = true,
+						blockId = "kA"
+					)
+				)
+		)
+
 	@Test
 	@DisplayName("awaiting input picking its held route end: no ReservePath; another input still reserves (#1244)")
 	fun awaitingInputDoesNotReRequestTheRouteItHolds() {
-		val dispatcher = RuleBasedDispatcher()
-		val observed =
-			observation(
-				innerBlockInputs =
-					listOf(
-						awaitingInput("T1", heldRouteEndName = "doA1"),
-						input(
-							TrackFacility.State.OCCUPIED,
-							towardSemaphoreName = "za",
-							targetName = "zb",
-							ownerTrainId = "T2",
-							isApproachingThisInput = true,
-							blockId = "kA"
-						)
-					)
-			)
-
-		val decisions = dispatcher.decide(observed)
+		val decisions = RuleBasedDispatcher().decide(awaitingT1HoldingDoA1ThenT2Picking("zb"))
 
 		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "za", "zb"))
+	}
+
+	/**
+	 * Pins the guard's place before the same-tick claim: the skipped awaiting input must not claim
+	 * its held end, or a later input picking that separator would be deferred for nothing.
+	 */
+	@Test
+	@DisplayName("an awaiting T1 holding doA1 plus a T2 input picking doA1: T2 still gets its ReservePath (#1244)")
+	fun skippedAwaitingInputDoesNotClaimItsHeldEnd() {
+		val decisions = RuleBasedDispatcher().decide(awaitingT1HoldingDoA1ThenT2Picking("doA1"))
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "za", "doA1"))
 	}
 
 	@Test

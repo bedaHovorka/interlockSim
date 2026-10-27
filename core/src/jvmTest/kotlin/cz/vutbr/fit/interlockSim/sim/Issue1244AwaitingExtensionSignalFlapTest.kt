@@ -16,6 +16,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
 import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
@@ -91,56 +92,79 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 	fun `the kept signal changes aspect at most once per completed expiry`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
-		val realNav = context.getRoutingServices().getTrainNavigationService()
-
-		val stall = FirstTrainOwnershipConflict(realNav)
-		val capturedErrors = CopyOnWriteArrayList<Throwable>()
-		val conflictEnv = NavigationDecoratingContext(context, stall.navigation) { capturedErrors.add(it) }
-
-		val expired = CopyOnWriteArrayList<ReservationExpired>()
-		context.onReservationExpired { event -> if (event.trainId == stall.heldTrainId.get()) expired += event }
-
+		val stall = FirstTrainOwnershipConflict(context.getRoutingServices().getTrainNavigationService())
+		val errors = CopyOnWriteArrayList<Throwable>()
+		val conflictEnv = NavigationDecoratingContext(context, stall.navigation) { errors.add(it) }
+		val expired = collectExpiries(context, stall.heldTrainId)
 		val loop = prepareShuntingLoop(context, END_TIME, env = conflictEnv)
-		val wired = loop.controlStepListener
-		val probe = FlapProbe(loop, stall.heldTrainId, expired)
-		loop.controlStepListener =
-			ControlStepListener {
-				probe.beforeStep()
-				wired?.onControlStep()
-				probe.afterStep()
-			}
+		val probe = FlapProbe(loop, stall.heldTrainId, expired).also { it.wrapWiredListener() }
 
 		context.run()
 
-		// Every assertion names the measured numbers, so a failure shows the whole run.
-		val run =
-			"keptSignal=${probe.keptSignal?.name}, steps=${probe.stepsObserved}, " +
-				"flips=${probe.stepsWithAspectFlip}, deferrals=${probe.deferrals}, " +
-				"guardReachedSteps=${probe.guardConditionSteps}, expired=${expired.map { it.time }}, " +
-				"errorStops=${capturedErrors.map { it.message }}"
-		logger.info { "Issue1244 flap test: $run" }
-
-		// Non-vacuity: the train stood, the guard's condition was reached, several expiry cycles ran,
-		// and the stand lasted the whole #943 window (the run ended in its errorStop naming the train).
-		// assertAll reports every failed assertion, so a regression shows the flip count, too.
+		val run = runSummary(probe, expired, errors).also { logger.info { "Issue1244 flap test: $it" } }
 		val trainId = requireNotNull(stall.heldTrainId.get()) { "no train was stalled [$run]" }
+		// One assertAll reports every failed assertion, so a regression shows the flip count, too.
 		assertAll {
-			assertThat(probe.keptSignal, name = "signal the stalled train stood at [$run]").isNotNull()
-			assertThat(probe.guardConditionSteps, name = "steps awaiting with the pick == held route end [$run]")
-				.isGreaterThanOrEqualTo(1)
-			assertThat(expired.size, name = "ReservationExpired events of $trainId [$run]").isGreaterThanOrEqualTo(2)
-			assertThat(
-				capturedErrors.mapNotNull { it.message }.any { ROUTE_EXTENSION_FRAGMENT in it && trainId in it },
-				name = "a #943 errorStop naming $trainId [$run]"
-			).isTrue()
-
-			// The acceptance: one legitimate flip per completed expiry (the fresh grant), not one per
-			// tick, and the aspect holds STOP between a deferral and the expiry that completes it.
-			assertThat(probe.stepsWithAspectFlip, name = "control steps whose start and end aspects differ [$run]")
-				.isLessThanOrEqualTo(expired.size + 1)
-			assertThat(probe.proceedBeforeExpiryViolations, name = "proceed at a step start after a deferral [$run]")
-				.isEmpty()
+			assertRunNotVacuous(trainId, probe, expired, errors, run)
+			assertNoPerTickFlap(probe, expired, run)
 		}
+	}
+
+	/** Collects the [ReservationExpired] events of the held train, whichever train that turns out to be. */
+	private fun collectExpiries(
+		context: SimulationEnvironment,
+		heldTrainId: AtomicReference<String?>
+	): List<ReservationExpired> {
+		val expired = CopyOnWriteArrayList<ReservationExpired>()
+		context.onReservationExpired { event -> if (event.trainId == heldTrainId.get()) expired += event }
+		return expired
+	}
+
+	/** Every measured number of the run, so a failing assertion shows the whole run. */
+	private fun runSummary(
+		probe: FlapProbe,
+		expired: List<ReservationExpired>,
+		errors: List<Throwable>
+	): String =
+		"keptSignal=${probe.keptSignal?.name}, steps=${probe.stepsObserved}, " +
+			"flips=${probe.stepsWithAspectFlip}, deferrals=${probe.deferrals}, " +
+			"guardReachedSteps=${probe.guardConditionSteps}, expired=${expired.map { it.time }}, " +
+			"errorStops=${errors.map { it.message }}"
+
+	/**
+	 * Non-vacuity: the train stood, the guard's condition was reached, several expiry cycles ran,
+	 * and the stand lasted the whole #943 window (the run ended in its errorStop naming the train).
+	 */
+	private fun assertRunNotVacuous(
+		trainId: String,
+		probe: FlapProbe,
+		expired: List<ReservationExpired>,
+		errors: List<Throwable>,
+		run: String
+	) {
+		assertThat(probe.keptSignal, name = "signal the stalled train stood at [$run]").isNotNull()
+		assertThat(probe.guardConditionSteps, name = "steps awaiting with the pick == held route end [$run]")
+			.isGreaterThanOrEqualTo(1)
+		assertThat(expired.size, name = "ReservationExpired events of $trainId [$run]").isGreaterThanOrEqualTo(2)
+		assertThat(
+			errors.mapNotNull { it.message }.any { ROUTE_EXTENSION_FRAGMENT in it && trainId in it },
+			name = "a #943 errorStop naming $trainId [$run]"
+		).isTrue()
+	}
+
+	/**
+	 * The acceptance: one legitimate flip per completed expiry (the fresh grant), not one per tick,
+	 * and the aspect holds STOP between a deferral and the expiry that completes it.
+	 */
+	private fun assertNoPerTickFlap(
+		probe: FlapProbe,
+		expired: List<ReservationExpired>,
+		run: String
+	) {
+		assertThat(probe.stepsWithAspectFlip, name = "control steps whose start and end aspects differ [$run]")
+			.isLessThanOrEqualTo(expired.size + 1)
+		assertThat(probe.proceedBeforeExpiryViolations, name = "proceed at a step start after a deferral [$run]")
+			.isEmpty()
 	}
 
 	/**
@@ -164,16 +188,50 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 		private var expiredSeen = 0
 		private var deferredSinceLastExpiry = false
 
-		fun beforeStep() {
+		/** Installs this probe around the listener the loop was wired with. */
+		fun wrapWiredListener() {
+			val wired = loop.controlStepListener
+			loop.controlStepListener =
+				ControlStepListener {
+					beforeStep()
+					wired?.onControlStep()
+					afterStep()
+				}
+		}
+
+		private fun beforeStep() {
 			val trainId = heldTrainId.get() ?: return
-			if (keptSignal == null) {
-				val train = loop.getApprovedTrains().firstOrNull { it.name == trainId } ?: return
-				if (train.distanceToSignalAhead() > STANDING_AT_SIGNAL_TOLERANCE) return
-				keptSignal = train.nextSemaphore() as? DynamicRailSemaphore ?: return
-			}
-			val signal = requireNotNull(keptSignal)
+			val signal = lockOnKeptSignal(trainId) ?: return
 			stepsObserved++
 			val start = signal.signal
+			recordDeferral(start)
+			countGuardStep(trainId)
+			startAspect = start
+		}
+
+		private fun afterStep() {
+			val start = startAspect ?: return
+			val end = requireNotNull(keptSignal).signal
+			if (end != start) stepsWithAspectFlip++
+			previousEndAspect = end
+			startAspect = null
+		}
+
+		/** The signal [trainId] stands at, fixed on the first step it stands there; `null` before. */
+		private fun lockOnKeptSignal(trainId: String): DynamicRailSemaphore? {
+			if (keptSignal == null) {
+				val train = loop.getApprovedTrains().firstOrNull { it.name == trainId } ?: return null
+				if (train.distanceToSignalAhead() > STANDING_AT_SIGNAL_TOLERANCE) return null
+				keptSignal = train.nextSemaphore() as? DynamicRailSemaphore
+			}
+			return keptSignal
+		}
+
+		/**
+		 * Counts a deferral (proceed at the previous step's end, STOP at this step's start) and
+		 * records a proceed [start] that no expiry has completed since the last deferral.
+		 */
+		private fun recordDeferral(start: Signal) {
 			if (expired.size > expiredSeen) {
 				expiredSeen = expired.size
 				deferredSinceLastExpiry = false
@@ -186,24 +244,20 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 				deferrals++
 				deferredSinceLastExpiry = true
 			}
+		}
+
+		/** Counts a step on which an input of [trainId] meets the #1244 guard's condition. */
+		private fun countGuardStep(trainId: String) {
 			if ((loop.getInnerBlockInputs() + loop.getOuterBlockInputs()).any { it.reachesTheGuard(trainId) }) {
 				guardConditionSteps++
 			}
-			startAspect = start
 		}
 
-		fun afterStep() {
-			val start = startAspect ?: return
-			val end = requireNotNull(keptSignal).signal
-			if (end != start) stepsWithAspectFlip++
-			previousEndAspect = end
-			startAspect = null
-		}
-
+		/** The guard's condition, with the pick taken through production's [chosenTargetName]. */
 		private fun BlockInputObservation.reachesTheGuard(trainId: String): Boolean =
 			ownerTrainId == trainId &&
 				awaitingRouteExtension &&
 				heldRouteEndName != null &&
-				ReservationTargetPolicy.pick(candidateTargets)?.name == heldRouteEndName
+				chosenTargetName() == heldRouteEndName
 	}
 }

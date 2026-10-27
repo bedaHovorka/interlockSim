@@ -480,7 +480,7 @@ class ShuntingLoop(
 		// Issue #1244: resolved only in the awaiting state, so the per-tick hot path reads nothing new.
 		val heldRouteEndName =
 			if (awaitingRouteExtension) {
-				registry.getPathInfo(requireNotNull(ownerTrainId))?.target?.routeEndpointName()
+				registry.getPathInfo(requireSimulationNotNull(ownerTrainId))?.target?.routeEndpointName()
 			} else {
 				null
 			}
