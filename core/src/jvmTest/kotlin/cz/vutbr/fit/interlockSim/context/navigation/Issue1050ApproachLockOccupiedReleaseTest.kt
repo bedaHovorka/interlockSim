@@ -38,8 +38,7 @@ import org.junit.jupiter.api.Test
  * approach-lock predicate no longer lists it. A repeat release that then falls through to the
  * wholesale [PathReservationService.releasePath] unregisters the still-occupied block and
  * emits `BlockReleased` for it -- the exact registry-vs-physical divergence the release exists
- * to prevent, on the very path its own outcome messages instruct the dispatcher to take
- * ("repeat cancel_route").
+ * to prevent, on the path a repeated cancel_route takes.
  *
  * The `A —100 m— Sem —100 m— B` network of [TestTopologies.linearPathWithSemaphoreNetwork] is
  * used instead of vyhybna because its boundary past the first block is a semaphore, a valid

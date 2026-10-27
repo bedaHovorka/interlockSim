@@ -240,8 +240,10 @@ class CompactTextRenderer : ObservationRenderer {
 				val status =
 					when {
 						outcome.deferredBlockIds.isNotEmpty() ->
-							"KEPT (${outcome.deferredBlockIds.joinToString(", ")}; train on or entering them — " +
-								"extend the route, a repeat frees them only after the train moves)"
+							"KEPT (${outcome.deferredBlockIds.joinToString(", ")}; the train stands on or may " +
+								"still enter some of them, or the release cannot yet cut the route past them — " +
+								"extend the route; a repeat frees kept blocks only once the train has moved on " +
+								"or their booking windows close)"
 						outcome.anyReleased -> "RELEASED"
 						else -> "NO_RESERVATION"
 					}

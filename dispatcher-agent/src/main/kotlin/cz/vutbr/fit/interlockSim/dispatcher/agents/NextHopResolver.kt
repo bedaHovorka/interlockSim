@@ -26,7 +26,9 @@ import cz.vutbr.fit.interlockSim.sim.chosenTargetName
  * ([DispatchObservation.innerBlockInputs] then [DispatchObservation.outerBlockInputs]), owned by
  * the train, not already extended beyond, either approached by or reserved toward that train, and
  * having an available forward candidate — [chosenTargetName] non-null over
- * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] (Issue #1152).
+ * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] (Issue #1152) — and, for a
+ * train awaiting a route extension, a pick other than the end of the route it already holds
+ * ([cz.vutbr.fit.interlockSim.sim.BlockInputObservation.heldRouteEndName], Issue #1244).
  *
  * ## Same-tick same-target dedup lives in [resolveAll], not [resolve] (Issue #834, SP2c.11, task 8)
  *

@@ -319,7 +319,7 @@ class KoogDispatchAgentImplPromptTest {
 	}
 
 	/**
-	 * Issue #1050: a `cancel_route` that approach locking kept partly applied must tell the model
+	 * Issue #1050: a `cancel_route` that approach locking kept (or, per #1242, refused) must tell the model
 	 * WHICH blocks stayed reserved and why, and that repeating the command only helps once the train has
 	 * moved on (Issue #1244: otherwise the model repeats it while the train stands on the kept blocks).
 	 */
@@ -341,11 +341,13 @@ class KoogDispatchAgentImplPromptTest {
 		runBlocking { agent.decideAsync(emptyObservation()) }
 
 		assertThat(prompts).hasSize(1)
-		assertThat(prompts[0]).contains("cancel_route for \"T-rel\": partly applied")
-		assertThat(prompts[0]).contains("k1")
+		assertThat(prompts[0]).contains("cancel_route for \"T-rel\": not fully applied")
+		assertThat(prompts[0]).contains("(k1)")
 		assertThat(prompts[0]).contains("every other block was freed")
+		assertThat(prompts[0]).contains("stands on or may still enter some of them")
+		assertThat(prompts[0]).contains("cannot yet cut the route past them")
+		assertThat(prompts[0]).contains("booking windows (1 s) have closed")
 		assertThat(prompts[0]).contains("extend its route instead")
-		assertThat(prompts[0]).contains("after the train has left")
 	}
 
 	// ── AC7: DivergesFromHeldRoute names the held target and the two ways out (Issue #1066,

@@ -820,13 +820,14 @@ class KoogAgentPlanAdapter(
 	 * conditions of `RuleBasedDispatcher.checkInput` (it does not model the same-tick separator
 	 * claim, a missing next separator, or the Issue #1244 guard that skips an awaiting input whose
 	 * pick is the end of the route it already holds, so it may say `true` where the dispatcher
-	 * would defer, which only keeps the fallback and is therefore safe). `NextHopResolver` applies the
-	 * same held-end guard, so the model is not offered that hop either; this predicate still may say
-	 * `true` there, which is safe because it only keeps the fallback running:
+	 * would defer, which only keeps the fallback and is therefore safe):
 	 * - OCCUPIED: the train approaches this input and either the path is not yet extended beyond it
 	 *   or the route extension is awaited;
 	 * - RESERVED: a path is set up toward this input and is not yet extended beyond it;
 	 * - FREE: never.
+	 *
+	 * `NextHopResolver` does apply the same held-end guard, so the model is not offered that hop
+	 * either.
 	 */
 	private fun needsPathExtension(input: BlockInputObservation): Boolean =
 		when (input.state) {
