@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.ksimulantenbande.kdisco.emitCustom
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.math.round
 
@@ -71,13 +73,17 @@ import kotlin.math.round
  *   [RouteReleaser.releasePathDetailed] in production. A constructor parameter rather than a writable
  *   hook, so a test that must pin that a throwing release is contained (Issue #1174) builds its own
  *   expiry over the same registry and candidate screen
+ * @param emitExpired Delivers the [ReservationExpired] event of each completed expiry (Issue #1243);
+ *   the kDisco [emitCustom] by default (a no-op outside a running simulation). A constructor seam, not
+ *   a writable hook, like [expiryRelease]; a throwing delivery is contained by [countAndAnnounce]
  * @since Issue #1174
  */
 internal class DefaultReservationExpiry(
 	private val registry: PathReservationRegistry,
 	private val candidateScreen: RouteCandidateScreen,
 	private val ttlSimSeconds: Double,
-	private val expiryRelease: (String) -> PathRelease
+	private val expiryRelease: (String) -> PathRelease,
+	private val emitExpired: (ReservationExpired) -> Unit = { emitCustom(it) }
 ) {
 	companion object {
 		/** Rounding factor of the logged expiry age (one decimal). */
@@ -140,11 +146,8 @@ internal class DefaultReservationExpiry(
 		val attempted = stale.map { it.trainId } + stalled.map { it.holding.trainId } + listOfNotNull(exceptTrainId)
 		failedExpiryTrains.retainAll(attempted.toSet())
 		deferralLoggedTrains.retainAll(attempted.toSet())
-		val completedHoldings = stale.count { expireHolding(it) }
-		val completedTails = stalled.count { expireTail(it) }
-		expiredHoldingCount += completedHoldings
-		expiredTailCount += completedTails
-		return completedHoldings + completedTails
+		// Each completed expiry is counted by [countAndAnnounce], before its event is delivered.
+		return stale.count { expireHolding(it) } + stalled.count { expireTail(it) }
 	}
 
 	/** Phase 1's candidates: stale whole-route holdings of trains that stand on nothing. */
@@ -174,6 +177,17 @@ internal class DefaultReservationExpiry(
 			return false
 		}
 		deferralLoggedTrains.remove(trainId)
+		countAndAnnounce(
+			ReservationExpired(
+				trainId,
+				ReservationExpired.Kind.WHOLE_HOLDING,
+				release.released,
+				emptyList(),
+				holding.ageSimSeconds,
+				ttlSimSeconds,
+				currentSimulationTime()
+			)
+		)
 		logger.info {
 			"Reservation expired for '$trainId': no new claim for ${age}s of simulated time " +
 				"(TTL ${ttlSimSeconds}s); released the remaining ${release.released.size} un-entered " +
@@ -204,6 +218,17 @@ internal class DefaultReservationExpiry(
 		}
 		stallTracker.forget(trainId)
 		deferralLoggedTrains.remove(trainId)
+		countAndAnnounce(
+			ReservationExpired(
+				trainId,
+				ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL,
+				release.released,
+				stalled.holding.occupied,
+				stalled.stalledForSimSeconds,
+				ttlSimSeconds,
+				currentSimulationTime()
+			)
+		)
 		logger.info {
 			"Reservation tail expired for '$trainId': no progress for ${age}s of simulated time " +
 				"(TTL ${ttlSimSeconds}s); released ${release.released.size} un-entered block(s) through " +
@@ -241,6 +266,25 @@ internal class DefaultReservationExpiry(
 		message: () -> String
 	) {
 		if (deferralLoggedTrains.add(trainId)) logger.info(message) else logger.debug(message)
+	}
+
+	/**
+	 * Count the completed expiry [event] reports, then deliver it through [emitExpired], so a listener
+	 * reading [expiredHoldingCount] or [expiredTailCount] sees it included (Issue #1243). A throwing
+	 * delivery is logged and cannot undo the completed expiry: this guard catches a raw kDisco
+	 * subscriber, which ends delivery to the subscribers after it; an `onReservationExpired`
+	 * subscriber is isolated by that function already.
+	 */
+	private fun countAndAnnounce(event: ReservationExpired) {
+		when (event.kind) {
+			ReservationExpired.Kind.WHOLE_HOLDING -> expiredHoldingCount++
+			ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL -> expiredTailCount++
+		}
+		try {
+			emitExpired(event)
+		} catch (e: Exception) {
+			logger.warn(e) { "ReservationExpired for '${event.trainId}' could not be delivered (Issue #1243)" }
+		}
 	}
 
 	/** [value] rounded to one decimal, so the expiry log lines stay stable to grep. */

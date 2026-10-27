@@ -28,6 +28,9 @@ package cz.vutbr.fit.interlockSim.context.navigation
  * reservation service (Issue #1152); a method on the accessor-only [RoutingServices] would sit away
  * from [PathReservationService], where the expiry state and the release live (Issue #1229).
  *
+ * Every completed expiry is announced as a [ReservationExpired] custom event (Issue #1243); deferrals
+ * announce nothing.
+ *
  * @since Issue #1174
  */
 fun interface ReservationExpiry {

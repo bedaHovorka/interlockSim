@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.each
 import assertk.assertions.hasSize
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
@@ -181,6 +182,7 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 	@Test
 	fun `a stopped train loses exactly its RESERVED tail after the TTL`() {
 		lateinit var tail: List<DynamicTrackBlock>
+		lateinit var freedBeforeCompletion: List<DynamicTrackBlock>
 		val returned = mutableListOf<Int>()
 
 		runInOrder(
@@ -195,17 +197,34 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 				},
 				// At the TTL the release drops the signals and keeps the approach-locked block behind
 				// the proceed aspect at zA; past its booking window the rest goes.
-				TTL to {
-					returned += service.expireStaleReservations()
-					// Stalled for exactly the TTL: the release has run (its first step resets the signals).
-					assertThat(zA.signal).isEqualTo(Signal.STOP)
-				},
+				TTL to { freedBeforeCompletion = expireAtTtlDeferred(returned) },
 				PAST_TTL to { returned += service.expireStaleReservations() },
 				// Nothing is left to release: later ticks change nothing and count nothing.
 				(PAST_TTL + TICK) to { returned += service.expireStaleReservations() }
 			)
 		)
 
+		assertOnlyTailFreedKaKept(tail, returned)
+		assertTailExpiryAnnounced(freedBefore = freedBeforeCompletion.size)
+	}
+
+	/**
+	 * The loop tick at the TTL, for a train stalled for exactly the TTL: the release has run (its first
+	 * step resets the signals) but deferred on the approach lock, so nothing is announced yet (Issue
+	 * #1243). Returns the blocks released so far.
+	 */
+	private fun expireAtTtlDeferred(returned: MutableList<Int>): List<DynamicTrackBlock> {
+		returned += service.expireStaleReservations()
+		assertThat(zA.signal).isEqualTo(Signal.STOP)
+		assertThat(expiredEvents()).isEmpty()
+		return releasedEvents.toList()
+	}
+
+	/** Only [tail] went, once, by one counted expiry; the train keeps kA, its PathInfo cut back to it. */
+	private fun assertOnlyTailFreedKaKept(
+		tail: List<DynamicTrackBlock>,
+		returned: List<Int>
+	) {
 		// The occupied head stays, with its PathInfo cut back to the block the train stands on ...
 		assertStillStandingOnKa()
 		assertThat(registry.getBlocks(TRAIN)).containsExactly(kA)
@@ -217,6 +236,25 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 		assertThat(expiry.expiredTailCount).isEqualTo(1)
 		// ... and the signal at the head of the freed tail reads STOP.
 		assertThat(zA.signal).isEqualTo(Signal.STOP)
+	}
+
+	/**
+	 * The completed tail expiry is announced once, at PAST_TTL, naming the tail case (Issue #1243): one
+	 * event, one count. [freedBefore] blocks went out before the completing call.
+	 */
+	private fun assertTailExpiryAnnounced(freedBefore: Int) {
+		val event = expiredEvents().single()
+		assertThat(event.trainId).isEqualTo(TRAIN)
+		assertThat(event.kind).isEqualTo(ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL)
+		assertThat(event.keptBlocks).containsExactly(kA)
+		// Only what the completing PAST_TTL call freed, in release order: the TTL call's blocks (if any)
+		// went out as BlockReleased already.
+		assertThat(event.releasedBlocks).isNotEmpty()
+		assertThat(event.releasedBlocks).isEqualTo(releasedEvents.drop(freedBefore))
+		assertThat(event.stalledForSimSeconds).isCloseTo(PAST_TTL, EVENT_TOLERANCE)
+		assertThat(event.ttlSimSeconds).isEqualTo(TTL)
+		assertThat(event.time).isEqualTo(PAST_TTL)
+		assertThat(expiredEvents().size).isEqualTo(expiry.expiredTailCount)
 	}
 
 	@Test
@@ -341,6 +379,8 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 			assertThat(releaseCalls).isEmpty()
 			assertThat(appender.list.filter { it.formattedMessage.contains("'$TRAIN'") }).isEmpty()
 			assertThat(counting.expiredTailCount).isEqualTo(0)
+			// ... and no event (Issue #1243).
+			assertThat(expiredEvents()).isEmpty()
 		}
 	}
 
@@ -426,6 +466,9 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 		assertThat(tailLines(expiryLog, DEFERRED, Level.DEBUG).size).isGreaterThan(5)
 		assertThat(tailLines(expiryLog, EXPIRED, Level.INFO)).isEmpty()
 		assertThat(expiry.expiredTailCount).isEqualTo(0)
+		// A refused release is a deferral for the expiry: no event over the whole run, so no
+		// 2 s event storm on the #1060 shape (Issue #1243).
+		assertThat(expiredEvents()).isEmpty()
 	}
 
 	/** Every aspect still reads as right after the grant, which cleared at least one proceed aspect. */
@@ -618,6 +661,9 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 		const val LEAVES_AT = 30.0
 		const val BACK_AT = 40.0
 		const val SECOND_LEG_AT = 2 * DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS
+
+		/** The event carries the unrounded standstill; this only absorbs floating-point noise. */
+		const val EVENT_TOLERANCE = 1.0e-6
 
 		const val DEFERRED = "Reservation tail expiry deferred for"
 		const val EXPIRED = "Reservation tail expired for"

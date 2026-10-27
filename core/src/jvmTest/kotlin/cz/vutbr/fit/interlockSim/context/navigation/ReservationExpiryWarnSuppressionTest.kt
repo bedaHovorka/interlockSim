@@ -10,16 +10,22 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotInstanceOf
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
+import io.mockk.Runs
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
 import org.junit.jupiter.api.Test
 
 /**
@@ -64,6 +70,89 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 			train1Blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
 			// ... and the failure was logged at WARN once, not on every call.
 			assertThat(expiringWarnings(appender, "train1").size).isEqualTo(1)
+			// The throwing release announces nothing; train2's completed expiry is announced (Issue #1243).
+			assertThat(expiredEvents().map { it.trainId }).containsExactly("train2")
+		}
+	}
+
+	@Test
+	fun `a throwing ReservationExpired listener is contained and cannot undo the expiry`() {
+		withExpiryLog { appender ->
+			val zA = findSemaphoreByName("zA")
+			val throwingListener =
+				DefaultReservationExpiry(
+					registry = registry,
+					candidateScreen = (service as DefaultPathReservationService).candidateScreen,
+					ttlSimSeconds = TTL,
+					expiryRelease = service::releasePathDetailed,
+					emitExpired = { throw IllegalStateException("listener") }
+				)
+			lateinit var blocks: List<DynamicTrackBlock>
+			val returned = mutableListOf<Int>()
+
+			atSimTimes(
+				0.0 to {
+					blocks =
+						assertReservationSuccess(service.reservePath("train1", zA, findSemaphoreByName("doB1")))
+							.reservedBlocks
+					// No proceed aspect at the head, so one call frees the whole holding.
+					zA.signal = Signal.STOP
+				},
+				TTL to { returned += throwingListener.expireStale(null) }
+			)
+
+			// The expiry completed all the same: counted, and the blocks are free ...
+			assertThat(returned.single()).isEqualTo(1)
+			assertThat(throwingListener.expiredHoldingCount).isEqualTo(1)
+			assertBlocksFreeAndUnowned(blocks)
+			// ... and the listener's failure was logged at WARN.
+			val undelivered =
+				appender.list.filter { event ->
+					event.level == Level.WARN && event.formattedMessage.contains("could not be delivered")
+				}
+			assertThat(undelivered.size).isEqualTo(1)
+		}
+	}
+
+	@Test
+	fun `a throwing onReservationExpired subscriber cannot starve the next one on the real bus`() {
+		// Subscribe through the real extension; the environment hands each wrapper to the kDisco bus.
+		val env = mockk<SimulationEnvironment>()
+		every { env.onSimulationEvent(capture(busListeners)) } just Runs
+		val received = mutableListOf<ReservationExpired>()
+		val countsAtDelivery = mutableListOf<Int>()
+		env.onReservationExpired { throw IllegalStateException("first subscriber") }
+		env.onReservationExpired {
+			received += it
+			countsAtDelivery += expiry.expiredHoldingCount
+		}
+		withLogOf(ReservationExpired::class.java.name) { appender ->
+			val zA = findSemaphoreByName("zA")
+			lateinit var blocks: List<DynamicTrackBlock>
+
+			atSimTimes(
+				0.0 to {
+					blocks =
+						assertReservationSuccess(service.reservePath("train1", zA, findSemaphoreByName("doB1")))
+							.reservedBlocks
+					// No proceed aspect at the head, so one call frees the whole holding.
+					zA.signal = Signal.STOP
+				},
+				TTL to { assertThat(service.expireStaleReservations()).isEqualTo(1) }
+			)
+
+			// The second subscriber got the event although the first threw ...
+			assertThat(received.map { it.trainId }).containsExactly("train1")
+			// ... the expiry completed and was counted, already before the delivery ...
+			assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+			assertThat(countsAtDelivery).containsExactly(1)
+			assertBlocksFreeAndUnowned(blocks)
+			// ... and the first subscriber's failure was logged at WARN once.
+			val failed =
+				appender.list.filter { event ->
+					event.level == Level.WARN && event.formattedMessage.contains("listener failed")
+				}
+			assertThat(failed.size).isEqualTo(1)
 		}
 	}
 

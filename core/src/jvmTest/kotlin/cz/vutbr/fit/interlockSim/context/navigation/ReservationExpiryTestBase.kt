@@ -13,13 +13,15 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import kotlinx.coroutines.runBlocking
 
 /**
  * Shared fixture of the kernel-side reservation expiry tests (Issue #1174): the TTL and the
  * simulation times the scenarios sit on, the real wiring's [expiry], [atSimTimes], which runs
- * a scenario inside a kDisco simulation, and [withExpiryLog], which captures the expiry's log lines.
+ * a scenario inside a kDisco simulation and captures its [ReservationExpired] events ([expiredEvents]),
+ * and [withExpiryLog], which captures the expiry's log lines.
  * Split out when the WARN-suppression pins moved to [ReservationExpiryWarnSuppressionTest]
  * (Issue #1229), so no class copies the setup; [ReservationExpiryOccupyingTrainTest] (Issue #1220)
  * shares it too.
@@ -36,6 +38,21 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 		val TWO_TTLS = 2 * TTL
 		val PAST_TWO_TTLS = 2 * TTL + 1.5
 	}
+
+	/** Every `SimulationEvent.Custom` payload the last [atSimTimes] run delivered, in emission order. */
+	private val customPayloads = mutableListOf<Any?>()
+
+	/**
+	 * The [ReservationExpired] events the last [atSimTimes] run delivered through the real kDisco
+	 * event bus (Issue #1243), in emission order -- the production `emitCustom` path, not a seam.
+	 */
+	protected fun expiredEvents(): List<ReservationExpired> = customPayloads.filterIsInstance<ReservationExpired>()
+
+	/**
+	 * Extra subscribers [atSimTimes] registers on the real kDisco bus, in this order and before its own
+	 * capture: for a scenario that pins how the bus delivers one event to several subscribers (Issue #1243).
+	 */
+	protected val busListeners = mutableListOf<(SimulationEvent) -> Unit>()
 
 	/** The expiry of the real service wiring: the one the service's own calls trigger. */
 	internal val expiry: DefaultReservationExpiry
@@ -71,13 +88,15 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 
 	/**
 	 * Run each step at its absolute simulation time, in order, inside one kDisco process. A step
-	 * that throws fails the run, so assertions may sit inside the steps.
+	 * that throws fails the run, so assertions may sit inside the steps. Every Custom event the run
+	 * delivers is captured for [expiredEvents], after [busListeners] have seen it.
 	 */
 	protected fun atSimTimes(vararg steps: Pair<Double, () -> Unit>) =
 		runBlocking {
 			var failure: Throwable? = null
-			Simulation
-				.create {
+			customPayloads.clear()
+			val simulation =
+				Simulation.create {
 					Process.activate(
 						object : Process() {
 							override suspend fun actions() {
@@ -92,7 +111,12 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 							}
 						}
 					)
-				}.run(steps.last().first + 10.0)
+				}
+			busListeners.forEach { simulation.onEvent(it) }
+			simulation.onEvent { event ->
+				if (event is SimulationEvent.Custom) customPayloads += event.payload
+			}
+			simulation.run(steps.last().first + 10.0)
 			failure?.let { throw it }
 		}
 }
