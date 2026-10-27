@@ -1,13 +1,15 @@
 # SP12 — Routing decomposition: status report for Goal 9B
 
-**Issue:** bedaHovorka/interlockSim#1159 (Goal 1B, SP12) · **Status on:** 2026-10-26 · **Reports on:** SP12.1 …
+**Issue:** bedaHovorka/interlockSim#1159 (Goal 1B, SP12) · **Status on:** 2026-10-27 · **Reports on:** SP12.1 …
 SP12.10, the SP12.5 follow-ups #1207–#1209, #1173 (SP12.7), #1174 (SP12.8), #1200 and the follow-up wave
-#1218–#1244 (section 6)
+#1218–#1256 (section 6)
 
-**SP12 is still open.** This is an interim status report, not the close-out: #1159 has nine open sub-issues
-(#1218, #1220, #1224, #1228, #1229, #1240, #1242, #1243, #1244, see [section 6](#6-open-follow-ups)), and the
-page is updated as they land. Eight of the nine are to be closed by an open draft PR (#1234 #1235 #1236 #1237 #1246 #1247 #1248 #1251; see section 1); #1244 has
-part 1 in a draft PR that does not close it, and its part 2 waits for a Goal 10 measurement round. This refresh is part of #1159 and closes nothing.
+**SP12 is still open.** This is an interim status report, not the close-out: #1159 has eleven open sub-issues
+(#1220, #1224, #1228, #1229, #1240, #1242, #1243, #1244, #1254, #1255, #1256, see [section 6](#6-open-follow-ups)),
+and the page is updated as they land. Nine are to be closed by an open draft PR (#1235 #1236 #1237 #1246 #1247
+#1248 #1251 #1252 #1253; see section 1). #1254 (the false "proceed aspect stood" INFO line) and #1255 (#1244
+part 2: the Koog `cancel_route` prompt and the `NextHopResolver` hint, for a Goal 10 measurement round) have no
+PR yet. This refresh (PR #1253) closes #1256 and does not close #1159.
 
 SP12 cut `context/navigation/` into small units behind one facade-style entry, found the duplicate
 routing checks, and kept extraction (pure moves) apart from behaviour fixes. This page collects the
@@ -21,7 +23,7 @@ Contents: [1. Cross-reference](#1-cross-reference) · [2. Goal 9B seam list](#2-
 
 ## 1. Cross-reference
 
-| Slice | Issue | New unit(s) / change | Leaf page | PR | State on 2026-10-26 |
+| Slice | Issue | New unit(s) / change | Leaf page | PR | State on 2026-10-27 |
 | --- | --- | --- | --- | --- | --- |
 | SP12.1 | #1167 | `ReservationContentionTracker` | [SP12.1](SP12.1-contention-tracking.md) | #1186 | merged |
 | SP12.2 | #1168 | `RouteReleaser` | [SP12.2](SP12.2-release-rollback.md) | #1194 | merged |
@@ -41,7 +43,7 @@ Contents: [1. Cross-reference](#1-cross-reference) · [2. Goal 9B seam list](#2-
 | Follow-up wave | #1221 | `ReservationContentionTracker` reads the clock once per contention; `blockedSince` kept for Goal 9B | n/a | #1231 | merged |
 | Follow-up wave | #1222 | `inOutNamed` narrowed to `DynamicInOut`; five test casts removed | n/a | #1232 | merged |
 | Follow-up wave | #1230 | the doc line-anchor tripwire runs on its own task, `:core:docLineAnchorCheck`, with the scanned trees as inputs | n/a | #1233 | merged |
-| Follow-up wave | #1218 | facade rollback demotes a flank-promoted switch claim | [SP12.4](SP12.4-switch-configuration.md) | #1234 | open, draft |
+| Follow-up wave | #1218 | facade rollback demotes a flank-promoted switch claim | [SP12.4](SP12.4-switch-configuration.md) | #1234 | merged |
 | Follow-up wave | #1224 | one shared `excludingOwnedBy` form of the forward-block exclusion (3.7) | this page (3.7) | #1235 | open, draft |
 | Follow-up wave | #1228 | minor follow-ups of the final stack review | n/a | #1236 | open, draft |
 | Follow-up wave | #1229 | `DefaultReservationExpiry` seams and test cleanups | [SP12.8](SP12.8-reservation-expiry.md) | #1237 | open, draft |
@@ -51,11 +53,12 @@ Contents: [1. Cross-reference](#1-cross-reference) · [2. Goal 9B seam list](#2-
 | Follow-up wave | #1242 | `RouteReleaser` checks trimmability before any signal reset; logs the refusal once | [SP12.2](SP12.2-release-rollback.md) | #1247 | open, draft |
 | Follow-up wave | #1240 | pin that the Step 1.6 probe and the already-owned early return select the same candidates | n/a | #1248 | open, draft |
 | Follow-up wave | #1243 | `ReservationExpired` event (sections 2.1 and 2.3) | [SP12.8](SP12.8-reservation-expiry.md) | #1251 | open, draft |
-| Follow-up wave | #1244 part 1 | the dispatcher does not re-request the route an awaiting train already holds; does not close #1244 | n/a | #1252 | open, draft |
+| Follow-up wave | #1244 part 1 | the dispatcher does not re-request the route an awaiting train already holds; closes #1244 (part 2 moved to #1255) | n/a | #1252 | open, draft |
+| Status report refresh | #1256 (part of #1159) | this page brought up to the follow-up wave | this page | #1253 | open, draft |
 
 Every leaf PR (SP12.1 to SP12.10) is merged into `goal-1B`; the last one, #1226, landed as `f72d09f2`.
-The follow-up wave is stacked: #1234 to #1237 and #1246 to #1252 are open drafts (the owner merges), the
-rest are merged. Goal 9B follow-ups filed outside #1159: #1249 (a production consumer of `ReservationExpired`)
+The follow-up wave is stacked: #1235, #1236, #1237, #1246, #1247, #1248, #1251, #1252 and #1253 are open drafts
+(the owner merges), the rest are merged (#1234 into `goal-1B` as `e12947c1`). Goal 9B follow-ups filed outside #1159: #1249 (a production consumer of `ReservationExpired`)
 and #1250 (promote `onReservationExpired` to a `SimulationEnvironment` facade method).
 
 ## 2. Goal 9B seam list
@@ -73,7 +76,7 @@ service, so a second door cannot appear silently.
 | `ReservationTargetQuery.findReservationTargetCandidates(start, ownerTrainId)` | Call. *The* target-selection seam: every settable next separator one section ahead with an evaluated availability; choose through `ReservationTargetPolicy.pick`. | SP12.5 |
 | `PathReservationService.isPathToAnyNextSemaphoreAvailable` | The shell's (`InOutWorker`) "may a train enter" probe. A dispatcher does not need it; the candidate list answers the same per target. | SP12.5 |
 | `PathReservationService.reservePath` / `reservePathToAnyNextSemaphore` / `reservePathToAny` | Call. A dispatcher asks for a route, never for an aspect: signals are cleared as the last step of an atomic grant. | SP12.3, SP12.8 |
-| `PathReservationService.releasePathDetailed` (via `NetworkActuatorPort.releaseRouteDetailed`) | Call. The release a dispatcher means by "cancel this route": approach lock honoured, the caller retries while `RouteRelease.deferredBlockIds` is non-empty (as `ToolDrivenDecisions` and `OrphanReservationSweeper` do). A release whose kept (occupied) blocks cannot end the route is refused before any change: signals keep their aspect and every block is reported deferred (#1242). Only an approach-lock-only cut resets the signals to STOP, then defers. Do not drive a retry from `releaseRoute`: its Boolean is `true` for a deferred release too. | SP12.2 |
+| `PathReservationService.releasePathDetailed` (via `NetworkActuatorPort.releaseRouteDetailed`) | Call. The release a dispatcher means by "cancel this route": approach lock honoured, the caller retries while `RouteRelease.deferredBlockIds` is non-empty (as `ToolDrivenDecisions` and `OrphanReservationSweeper` do). Every release that goes ahead resets the train's signals to STOP first; a release whose kept (occupied) blocks cannot end the route is refused before any change (aspects kept, every block reported deferred, #1242); an approach-lock-only untrimmable cut resets to STOP, frees nothing and defers. Do not drive a retry from `releaseRoute`: its Boolean is `true` for a deferred release too. | SP12.2 |
 | `PathReservationService.releaseBlock` (after `resetSemaphoresForReleasedBlocks`), `dropFreedBlock` | Only through `RegistryPartialRouteReleaser`; refuse a block another train owns / a block not FREE. | SP12.2 |
 | `PathReservationService.hasClearedSignals(trainId)` | Read. Exact, cheap "is any proceed aspect still lit for this train". | SP12.3 |
 | `PathReservationService.recordExternalClearedSemaphore` | Call only when the dispatcher itself writes an aspect outside a reservation, as `DefaultInterlockingFacade` and `DefaultNetworkActuatorPort` do. | SP12.3 |
@@ -147,7 +150,7 @@ routing logic: "kept" means kept with a reason, "removed" names the change that 
 | 3.4 | Orientation-free sort arm of `reservePathToAnyTargets` | **removed** (#1207) |
 | 3.5 | Availability predicates | kept (deliberate, #1060) |
 | 3.6 | Contiguity, two different checks | kept; shared predicate already single-sourced |
-| 3.7 | "Forward blocks = not owned by this train" filter | **single-sourced** (#1224, PR #1235 open) |
+| 3.7 | "Forward blocks = not owned by this train" filter | **single-sourced** (#1224, PR #1235, open draft) |
 | 3.8 | Oriented start / end guards | kept (deliberate, #1188 / #1200) |
 | 3.9 | Switch-ownership layering | kept (defence in depth) |
 | 3.10 | Owned-blocks / occupancy scans, semaphore caches | kept (#893) |
@@ -327,52 +330,56 @@ documented non-pinnable coverage leftover (SP12.4 page).
 | After SP12.9 | 1,621 | 752 |
 | After SP12.10 | 979 | 441 |
 | `goal-1B` after #1226 (adds #1173, #1200 and the #1174 kernel expiry; measured on #1227) | 1,072 | 469 |
-| Follow-up stack head (#1252 (#1244 part 1) head; adds #1218, #1220, #1224, #1242, #1243; measured 2026-10-26) | 1,074 | 466 |
+| Follow-up stack head (#1252 (#1244 part 1) head; adds #1218, #1220, #1224, #1242, #1243; measured 2026-10-27) | 1,077 | 466 |
 
 `@Suppress("LargeClass")` and `@Suppress("LongMethod")` on `reservePath` are gone from the service;
 `:core:detekt` is green without them. The only `@Suppress` left in `context/navigation/` is
 `@Suppress("TooManyFunctions")` on `PathReservationRegistry`, which predates SP12 and which the split kept.
-`PathReservationRegistry.kt` went from 1,758 to 797 physical lines (160 class-body code lines).
+`PathReservationRegistry.kt` went from 1,758 to 797 physical lines (160 class-body code lines) by the #1226 merge;
+it is 827 / 165 now, on the follow-up stack head.
 
 The 441 → 469 growth is the #1174 expiry orchestration that stays in the service (the `ReservationExpiry`
 seam and the top-of-request expiry call; the expiry policy itself lives in `DefaultReservationExpiry`) and
 the #1200 END guard; both are routing behaviour, not decomposition debt, and 469 is 59 % of the limit.
 On the follow-up stack head the service class body is 466 (58 % of the limit). The phase-2 expiry (#1220) and
-the `ReservationExpired` event (#1243) grew `DefaultReservationExpiry` (58 to 189 class body code lines) and the
+the `ReservationExpired` event (#1243) grew `DefaultReservationExpiry` (58 to 140 class body code lines, after the stall judgement moved into the
+71-line `TailStallTracker`) and the
 trimmability preflight of #1242 grew `RouteReleaser` (299 to 349) instead, so the service is still the largest class.
 
 Every file in the package, measured with a script (strip `/* … */`, drop blank and `//` lines, brace-match
 each top-level class). The script's figures reproduce the recorded 916 and 752 exactly (441 vs 442 at the
-SP12.10 head; the one-line difference is detekt's own counting). Re-measured on 2026-10-26 on the #1252 (#1244 part 1) head with
+SP12.10 head; the one-line difference is detekt's own counting). Re-measured on 2026-10-27 on the #1252 (#1244 part 1) head with
 `python3 -I measure.py core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/context/navigation` (the same
 method over every `*.kt` directly in `context/navigation/`; the script is a throw-away and is not committed).
-Files the follow-up wave did not touch reproduce the 2026-10-25 numbers. No file has more than 483 code
-lines, so no class can approach the 800 limit.
+Files the follow-up wave did not touch reproduce the 2026-10-25 numbers; the wave also touched
+`SwitchOwnershipTable.kt` (#1218), whose row is re-measured too. No file has more than 483 code lines, so no
+class can approach the 800 limit.
 
 | File | Physical lines | Code lines (file) | Largest class | Class body code lines |
 | --- | --- | --- | --- | --- |
-| `DefaultPathReservationService.kt` | 1074 | 483 | `DefaultPathReservationService` | 466 |
-| `RouteReleaser.kt` | 707 | 361 | `RouteReleaser` | 349 |
+| `DefaultPathReservationService.kt` | 1077 | 483 | `DefaultPathReservationService` | 466 |
+| `RouteReleaser.kt` | 708 | 361 | `RouteReleaser` | 349 |
 | `DefaultTopologyNavigator.kt` | 872 | 353 | `DefaultTopologyNavigator` | 338 |
 | `CandidateCommitter.kt` | 747 | 333 | `CandidateCommitter` | 301 |
 | `DefaultTrainNavigationService.kt` | 521 | 286 | `DefaultTrainNavigationService` | 274 |
 | `ReservationTargetDiscovery.kt` | 610 | 275 | `ReservationTargetDiscovery` | 245 |
 | `SwitchConfigurator.kt` | 551 | 225 | `SwitchConfigurator` | 201 |
-| `DefaultReservationExpiry.kt` | 377 | 196 | `DefaultReservationExpiry` | 189 |
 | `RouteSignalConfigurator.kt` | 463 | 194 | `RouteSignalConfigurator` | 180 |
 | `PathInfoStore.kt` | 519 | 227 | `PathInfoStore` | 175 |
 | `RouteCandidateScreen.kt` | 422 | 188 | `RouteCandidateScreen` | 173 |
-| `PathReservationRegistry.kt` | 811 | 179 | `PathReservationRegistry` | 161 |
+| `PathReservationRegistry.kt` | 827 | 183 | `PathReservationRegistry` | 165 |
 | `BlockOwnershipTable.kt` | 313 | 170 | `BlockOwnershipTable` | 154 |
 | `ClearedSignalLedger.kt` | 340 | 159 | `ClearedSignalLedger` | 151 |
-| `SwitchOwnershipTable.kt` | 229 | 133 | `SwitchOwnershipTable` | 128 |
+| `DefaultReservationExpiry.kt` | 292 | 145 | `DefaultReservationExpiry` | 140 |
+| `SwitchOwnershipTable.kt` | 251 | 143 | `SwitchOwnershipTable` | 138 |
 | `PathInfoMerger.kt` | 376 | 136 | `PathInfoMerger` | 126 |
 | `PathReservationService.kt` | 847 | 95 | `PathReservationService` | 86 |
+| `TailStallTracker.kt` | 159 | 75 | `TailStallTracker` | 71 |
 | `ReservationContentionTracker.kt` | 193 | 57 | `ReservationContentionTracker` | 51 |
 | `TopologyNavigator.kt` | 280 | 38 | `TopologyNavigator` | 33 |
 | `BlockEvent.kt` | 86 | 32 | `BlockEvent` | 29 |
 | `TrainNavigationService.kt` | 213 | 18 | `TrainNavigationService` | 15 |
-| `ReservationExpired.kt` | 74 | 23 | `ReservationExpired` | 14 |
+| `ReservationExpired.kt` | 94 | 31 | `ReservationExpired` | 14 |
 | `RouteSearch.kt` | 52 | 16 | `RouteSearch` | 13 |
 | `PathResult.kt` | 118 | 9 | `PathResult` | 7 |
 | `RoutingServices.kt` | 115 | 8 | `RoutingServices` | 7 |
@@ -390,13 +397,11 @@ lines, so no class can approach the 800 limit.
 | `TrainOnBlock.kt` | 31 | 7 | (top-level functions only) | - |
 | `UniqueBlocks.kt` | 68 | 23 | (top-level functions only) | - |
 
-38 files (the issue counted 18 when it was written; the two added since the first measurement are the
-phase-2 event `ReservationExpired.kt` and the helper file `TrainOnBlock.kt`). The package is no longer
-dominated by one 4,280-line file: the largest class is 466 lines.
-
-Since that measurement, reservation expiry phase 2 (#1220) grew `DefaultReservationExpiry.kt` to 245
-physical lines and split the stall judgement into a 38th file, `TailStallTracker.kt` (159 physical
-lines), on the owner's review thread that the expiry class had grown too big.
+39 files (the issue counted 18 when it was written; the three added since the first measurement are
+`ReservationExpired.kt` (the #1243 event), `TrainOnBlock.kt` (a helper file) and `TailStallTracker.kt` (the
+phase-2 stall judgement, split out of `DefaultReservationExpiry` on the owner's review thread that the expiry
+class had grown too big)). The package is no longer dominated by one 4,280-line file: the largest class is 466
+lines.
 
 ## 5. Side finding: kotlin-logging swallows log-lambda exceptions
 
@@ -411,17 +416,19 @@ message is caught and logged as an error, and the test does not fail. The DEBUG 
 lambdas **run** (so a broken interpolation is exercised and shows up as an error line), but they do not by
 themselves **fail** a test on one. Anyone relying on them as an
 exception tripwire should assert on the captured log output instead. The comments in `logback-test.xml`
-were not changed in PR #1227 (test resource, no behaviour); no new issue was opened for it.
+were not changed in PR #1227 (test resource, no behaviour); no new issue was opened for it. The open draft PR
+#1236 (#1228) has since rewritten the `PathCommandTranslator` comment to say that the lambdas run but a broken
+interpolation does not fail a test.
 
 ## 6. Open follow-ups
 
-State of the 32 sub-issues of #1159 on 2026-10-26 (`gh api repos/bedaHovorka/interlockSim/issues/1159/sub_issues`):
-23 closed, 9 open. Every open one has a draft PR, none is merged; only #1244 stays open after its PR (part 2).
-The owner merges the drafts.
+State of the 35 sub-issues of #1159 on 2026-10-27 (`gh api repos/bedaHovorka/interlockSim/issues/1159/sub_issues`):
+24 closed, 11 open. Every open one except #1254 and #1255 has an open draft PR that closes it; #1244's part 2
+moved to #1255. The owner merges the drafts.
 
 | Issue | What | State |
 | --- | --- | --- |
-| #1218 | Facade rollback does not demote a plain switch claim that a failed route promoted to flank (safe direction, follow-up of #1173) | open, PR #1234 (draft) |
+| #1218 | Facade rollback does not demote a plain switch claim that a failed route promoted to flank (safe direction, follow-up of #1173) | closed, PR #1234 (merged into `goal-1B` as `e12947c1`) |
 | #1220 | Reservation expiry phase 2: expire the stalled RESERVED tail of a train that occupies part of its route (a `[sim]` change, ruled in the issue) | open, PR #1246 (draft) |
 | #1224 | Host one shared form of the forward-block exclusion (3.7) | open, PR #1235 (draft) |
 | #1228 | Minor follow-ups from the final review of the SP12 stack | open, PR #1236 (draft) |
@@ -429,7 +436,10 @@ The owner merges the drafts.
 | #1240 | Pin that the Step 1.6 probe and the already-owned early return select the same candidates | open, PR #1248 (draft) |
 | #1242 | `RouteReleaser`: check trimmability before any signal reset; log the refusal once instead of a WARN per call | open, PR #1247 (draft) |
 | #1243 | `ReservationExpired` event that names the tail case, so a dispatcher can stop re-granting a train that does not move | open, PR #1251 (draft) |
-| #1244 | Stop the STOP/proceed flip of an approach-locked signal in the #1060 awaiting-extension shape | open; part 1 (the dispatcher does not re-request a route the awaiting train already holds) in PR #1252 (draft, does not close it); part 2 (the Koog `cancel_route` prompt text) stays open for a Goal 10 measurement round |
+| #1244 | Stop the STOP/proceed flip of an approach-locked signal in the #1060 awaiting-extension shape | open, PR #1252 (draft, closes it: the dispatcher does not re-request a route the awaiting train already holds); part 2 moved to #1255 |
+| #1254 | `RouteReleaser.releaseAllBut` logs a false "proceed aspect stood ... deferred" INFO line on a completed tail expiry | open, no PR yet |
+| #1255 | #1244 part 2: align the Koog `cancel_route` prompt text (and the `NextHopResolver.isEligible` hint that still offers the held end) with the #1242 refusal contract, for a Goal 10 measurement round | open, no PR yet |
+| #1256 | Refresh the SP12 status report for the follow-up wave (this page) | open, PR #1253 (draft) |
 | #1221 | `ReservationContentionTracker.blockedSince` is a set masquerading as a map | closed, PR #1231 (the clock is read once; the map is kept as the Goal 9B "since" source) |
 | #1222 | Narrow `PathReservationServiceTestBase.inOutNamed` to `DynamicInOut` | closed, PR #1232 |
 | #1230 | Declare the docs and `.kt` files that `DocLineAnchorTripwireTest` scans as task inputs | closed, PR #1233 (the tripwire runs as `:core:docLineAnchorCheck`) |
@@ -443,7 +453,7 @@ the `findAllPaths` perf tripwire) is closed too but is not a sub-issue of #1159.
 
 ## 7. Evidence so far
 
-### Acceptance criteria of #1159 — status on 2026-10-26
+### Acceptance criteria of #1159 — status on 2026-10-27
 
 #1159 stays open until its open sub-issues (section 6) are done; the rows below say where each criterion
 stands now, not that SP12 is finished.
@@ -455,7 +465,7 @@ stands now, not that SP12 is finished.
 | `PathReservationServiceTest` groups (SP6.1) and `TargetSelectionSingleEntryTest` pass at every leaf's merge | each leaf page, "Acceptance evidence"; to be repeated for the open sub-issues |
 | `reservationExpiryFollowsProgress` passes | `ReservationExpiryTest` (SP12.8 page) |
 | Duplicate-check report | section 3 |
-| `heavyTest` run on the final state | Green on `f72d09f2` and on every follow-up PR head that changes routing code (#1220, #1242, #1243, #1244 part 1); see "heavyTest" below. Re-run on the merged stack when the open sub-issues land. |
+| `heavyTest` run on the final state | Green on `f72d09f2` and on the follow-up PRs listed under "heavyTest" below. Re-run on the merged stack when the open sub-issues land. |
 | #895 re-baseline recorded before and after | Base == head on every column so far, including the follow-up PRs; see "#895 re-baseline" below. Per-leaf control-arm tables are on the leaf pages. |
 
 ### #895 re-baseline — rule-based control arm
@@ -495,10 +505,15 @@ with the same totals (2,003 / 0 and 3,020 / 0). `fac13c69`, the #1226 head that 
 
 Gate (`build detekt ktlintCheck test integrationTest`) on `fac13c69`: 7,155 tests, 0 failures, 0 errors.
 
-Follow-up PRs that change routing code re-ran `heavyTest` on their own heads, solo, with the same totals:
+Follow-up PRs that re-ran `heavyTest` on their own heads, solo, with the same totals (as recorded in each PR body;
+a dash means the module was not run). #1236 (#1228) and #1248 (#1240) record no heavy run:
 
 | PR (issue) | Head | `:core` | `:dispatcher-agent` |
 | --- | --- | --- | --- |
+| #1231 (#1221) | head | 2,003 / 0 | — |
+| #1234 (#1218) | head | 2,003 / 0 | 3,020 / 0 |
+| #1235 (#1224) | head | 2,003 / 0 | — |
+| #1237 (#1229) | head | 2,003 / 0 | — |
 | #1246 (#1220) | phase-2 code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 | #1247 (#1242) | code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 | #1251 (#1243) | head | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
