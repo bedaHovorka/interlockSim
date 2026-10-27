@@ -267,7 +267,22 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 				it.formattedMessage.contains("cannot be trimmed")
 		}
 
+	/**
+	 * The [RouteReleaser]'s INFO lines of a detailed release that went ahead for [trainId] (Issue
+	 * #1254), in emission order: the [RELEASER_RELEASED] lines only, never a refusal or a deferral.
+	 */
+	protected fun releasedLines(
+		appender: ListAppender<ILoggingEvent>,
+		trainId: String = "train1"
+	): List<String> =
+		appender.list
+			.filter { it.level == Level.INFO && it.formattedMessage.startsWith("$RELEASER_RELEASED'$trainId'") }
+			.map { it.formattedMessage }
+
 	protected companion object {
+		/** The line of a release that freed blocks and kept others (Issue #1254), up to the train name. */
+		const val RELEASER_RELEASED = "releasePath: released for "
+
 		/** The releaser's refusal line (Issue #1242), up to the train name. */
 		const val RELEASER_REFUSED = "releasePath: refused for "
 

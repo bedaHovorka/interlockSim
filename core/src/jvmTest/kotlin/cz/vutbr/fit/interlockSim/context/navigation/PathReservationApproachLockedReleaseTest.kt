@@ -10,6 +10,9 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.doesNotContain
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
@@ -20,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
+import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -106,6 +110,45 @@ class PathReservationApproachLockedReleaseTest : PathReservationServiceTestBase(
 			}
 			assertThat(service.getReservedBlocks("train1")).isEmpty()
 		}
+
+	@Test
+	fun `the release INFO line tells an approach lock from an open booking window (Issue 1254)`() {
+		withReleaserLog { appender ->
+			runBlocking {
+				val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+				(blocks.first().reservedFrom as DynamicInOut).inSemaphore.signal = Signal.FREE
+				val headId = BlockIdentity.stableBlockId(blocks.first())
+				val lines = mutableListOf<String>()
+
+				Simulation
+					.create {
+						Process.activate(
+							object : Process() {
+								override suspend fun actions() {
+									service.releasePathDetailed("train1")
+									lines += releasedLines(appender)
+									appender.list.clear()
+									hold(0.5)
+									service.releasePathDetailed("train1")
+									lines += releasedLines(appender)
+								}
+							}
+						)
+					}.run(10.0)
+
+				assertThat(lines, "one released line per call").hasSize(2)
+				// t=0.0: a proceed aspect stood at the head, so it is approach-locked and waits.
+				assertThat(lines[0]).contains("approach-locked [$headId]")
+				assertThat(lines[0]).contains("later call")
+				assertThat(lines[0]).contains("#1254")
+				// t=0.5: the signal reads STOP already, but the booking window is still open.
+				assertThat(lines[1]).contains("booking window [$headId]")
+				assertThat(lines[1]).doesNotContain("approach-locked")
+				assertThat(lines[1]).contains("later call")
+				lines.forEach { assertThat(it).doesNotContain("proceed aspect") }
+			}
+		}
+	}
 
 	@Test
 	fun `releasePath frees everything when no proceed aspect stands at a reserved block`() {
