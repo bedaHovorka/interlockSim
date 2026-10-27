@@ -238,6 +238,12 @@ class DefaultInterlockingFacade(
 		)
 	}
 
+	/**
+	 * See [InterlockingFacade.releaseRoute]. After a release the kernel refused (Issue #1242: the
+	 * route cannot be cut after the blocks the train stands on), this facade still sets its own
+	 * tracked entry signal to STOP. That is safe: a refusal needs an occupying train, so the entry
+	 * signal is behind it and authorises nothing.
+	 */
 	override fun releaseRoute(
 		trainId: String,
 		exitSignal: SignalId
@@ -247,9 +253,13 @@ class DefaultInterlockingFacade(
 		// Whole-route release through the approach lock (Issue #974): the same release the port's
 		// releaseRouteDetailed performs. A block the train occupies (it stays OCCUPIED), a block that
 		// is approach-locked and a block inside the hold(1.0) deferral window (both stay RESERVED) stay
-		// registered and are reported as deferred; every other block and switch of the train is freed. Idempotent: an unknown
-		// trainId yields an empty result and touches nothing. Production releases through the port
-		// (NetworkActuatorPort.releaseRouteDetailed); this facade method has no production caller.
+		// registered and are reported as deferred; every other block and switch of the train is freed
+		// when the route can be cut right after the kept blocks. When it cannot, nothing is freed and
+		// every block is reported as deferred; if not even the blocks the train stands on can end the
+		// route, the release is refused and leaves every signal as it was too (Issue #1050, #1242).
+		// Idempotent: an unknown trainId yields an empty result and touches nothing. Production
+		// releases through the port (NetworkActuatorPort.releaseRouteDetailed); this facade method has
+		// no production caller.
 		val release = env.getRoutingServices().getPathReservationService().releasePathDetailed(trainId)
 		logger.info {
 			"Released ${release.released.size} blocks for trainId=$trainId; " +

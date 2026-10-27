@@ -9,14 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import kotlinx.coroutines.runBlocking
-import org.slf4j.LoggerFactory
 
 /**
  * Shared fixture of the kernel-side reservation expiry tests (Issue #1174): the TTL and the
@@ -60,16 +58,16 @@ abstract class ReservationExpiryTestBase : PathReservationServiceTestBase() {
 	 * Runs [body] with a Logback appender attached to the [DefaultReservationExpiry] logger, which
 	 * `logback-test.xml` keeps at DEBUG; the appender is detached in `finally`.
 	 */
-	protected fun withExpiryLog(body: (ListAppender<ILoggingEvent>) -> Unit) {
-		val expiryLogger = LoggerFactory.getLogger(DefaultReservationExpiry::class.java.name) as Logger
-		val appender = ListAppender<ILoggingEvent>().also { it.start() }
-		expiryLogger.addAppender(appender)
-		try {
-			body(appender)
-		} finally {
-			expiryLogger.detachAppender(appender)
-		}
-	}
+	protected fun withExpiryLog(body: (ListAppender<ILoggingEvent>) -> Unit) =
+		withLogOf(DefaultReservationExpiry::class.java.name, body)
+
+	/**
+	 * [withExpiryLog] and [withReleaserLog] at once, for a scenario that reads both: [body] gets the
+	 * expiry's appender first, then the releaser's.
+	 */
+	protected fun withExpiryAndReleaserLogs(
+		body: (expiryLog: ListAppender<ILoggingEvent>, releaserLog: ListAppender<ILoggingEvent>) -> Unit
+	) = withExpiryLog { expiryLog -> withReleaserLog { releaserLog -> body(expiryLog, releaserLog) } }
 
 	/**
 	 * Run each step at its absolute simulation time, in order, inside one kDisco process. A step

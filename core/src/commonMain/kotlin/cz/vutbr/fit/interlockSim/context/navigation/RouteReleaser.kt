@@ -67,6 +67,14 @@ internal class RouteReleaser(
 	// wholesale (releasePath), so the map stays bounded to deferred-and-still-held blocks.
 	private val approachLockDeferredUntil: MutableMap<DynamicTrackBlock, Double> = mutableMapOf()
 
+	// Trains whose untrimmable-PathInfo refusal, respectively approach-lock deferral, was already
+	// logged at INFO (Issue #1242); repeats of the same line log at DEBUG. Each line keeps its own
+	// set, so a refusal after a deferral still gets its INFO line. Both are pruned when a release of
+	// the train goes ahead or the train leaves the registry (unregister, or its last block dropped
+	// through dropFreedBlock/rollbackBlock).
+	private val refusalLogged: MutableSet<String> = mutableSetOf()
+	private val deferralLogged: MutableSet<String> = mutableSetOf()
+
 	/**
 	 * The booking window [Train.Front] spends between reading a proceed aspect and booking the
 	 * next block (`hold(1.0)` in its `semaphoreAction`). An approach-locked block stays deferred
@@ -98,9 +106,11 @@ internal class RouteReleaser(
 	 * block once [APPROACH_LOCK_DEFER_SECONDS] of simulated time have passed since the deferral
 	 * (by then the train has either booked it -- it stays as an occupied block until the train
 	 * leaves -- or lost interest, the signal reading STOP). A kept tail whose PathInfo cannot be
-	 * trimmed (a switch or rear-facing semaphore boundary) keeps the whole route. This is the
-	 * release the production callers use (`NetworkActuatorPort.releaseRoute`: `cancel_route` and
-	 * the orphan sweeper); plain [releasePath] stays unconditional for teardown and tests.
+	 * trimmed (a switch or rear-facing semaphore boundary) keeps the whole route; when even the
+	 * blocks the train stands on cannot be cut after, the release refuses before any signal reset and
+	 * changes nothing (Issue #1242). This is the release the production callers use
+	 * (`NetworkActuatorPort.releaseRoute`: `cancel_route` and the orphan sweeper); plain
+	 * [releasePath] stays unconditional for teardown and tests.
 	 */
 	fun releasePathDetailed(trainId: String): PathRelease = release(trainId, approachLock = true)
 
@@ -108,8 +118,24 @@ internal class RouteReleaser(
 		trainId: String,
 		approachLock: Boolean
 	): PathRelease {
+		val blocks = registry.getBlocks(trainId)
 		// Read BEFORE the signal reset below, which would erase the evidence.
-		val approachLocked = if (approachLock) approachLockedBlocks(registry.getBlocks(trainId)) else emptyList()
+		val approachLocked = if (approachLock) approachLockedBlocks(blocks) else emptyList()
+		val now = currentSimulationTime()
+		val kept = if (approachLock) keptBlocks(blocks, approachLocked, now) else emptyList()
+		// Preflight (Issue #1050 review round): free nothing unless the PathInfo tail beyond the
+		// kept blocks can be trimmed off. A freed tail that survives in the stored PathInfo because
+		// trimPathInfoToHeldBlocks refuses the cut (a switch or rear-facing semaphore boundary)
+		// later stalls the train with OwnershipConflict -- the failure this release must not
+		// create. The whole route is reported as deferred, so the sweeper keeps its clock and the
+		// caller retries; the topology can become trimmable once the train moves on.
+		val trimmable = kept.isEmpty() || registry.canTrimPathInfoTo(trainId, kept)
+		// Issue #1242: when even the blocks the train stands on cannot be the PathInfo's end, no
+		// signal reset can make a later call free anything, so refuse BEFORE any signal or block
+		// change, as RegistryPartialRouteReleaser does: the release then changes nothing at all.
+		if (!trimmable && !occupiedHeadTrimmable(trainId, blocks)) {
+			return refuseUntrimmable(trainId, blocks, kept)
+		}
 		// Signals first, blocks second: a block must never become available to another train
 		// while the semaphore that authorises entry to it still shows proceed. Runs before the
 		// early return below because a train can hold cleared signals without holding blocks
@@ -117,25 +143,94 @@ internal class RouteReleaser(
 		// covers a governing signal of a kept block that this ledger never recorded.
 		resetSemaphoresForReleasedBlocks(trainId, approachLocked)
 		resetClearedSemaphores(trainId)
-
-		val blocks = registry.getBlocks(trainId)
+		// Arm the deferral window for exactly the blocks a proceed aspect stood at until the reset
+		// above: the latest moment a train can have read that aspect is this call, so the booking it
+		// may still perform lands at now + APPROACH_LOCK_DEFER_SECONDS. A retry that finds the
+		// signal already at STOP must NOT re-arm the window -- the train's booking deadline is the
+		// FIRST reset, not the last retry.
+		approachLocked.forEach { block -> approachLockDeferredUntil[block] = now + APPROACH_LOCK_DEFER_SECONDS }
+		if (!trimmable) {
+			// Only the approach-locked blocks stop the cut: the reset above is what lets a later
+			// call, past their booking window, cut after the occupied head and free the rest.
+			return deferUntrimmable(trainId, blocks, kept)
+		}
+		forgetUntrimmable(trainId)
 		if (blocks.isEmpty()) {
 			return PathRelease(emptyList(), emptyList())
 		}
-		if (approachLock) {
-			// Arm the deferral window for exactly the blocks a proceed aspect stands at NOW:
-			// the latest moment a train can have read that aspect is this call, so the booking
-			// it may still perform lands at now + APPROACH_LOCK_DEFER_SECONDS. A retry that
-			// finds the signal already at STOP must NOT re-arm the window -- the train's
-			// booking deadline is the FIRST reset, not the last retry.
-			val now = currentSimulationTime()
-			approachLocked.forEach { block -> approachLockDeferredUntil[block] = now + APPROACH_LOCK_DEFER_SECONDS }
-			val kept = keptBlocks(blocks, approachLocked, now)
-			if (kept.isNotEmpty()) {
-				return releaseAllBut(trainId, blocks, kept)
-			}
+		if (kept.isNotEmpty()) {
+			return releaseAllBut(trainId, blocks, kept)
 		}
 		return PathRelease(releaseAllBlocks(trainId, blocks), emptyList())
+	}
+
+	/**
+	 * `true` when the release could cut [trainId]'s PathInfo right after the blocks of [blocks] it
+	 * stands on (or it stands on none, so the cut would drop the whole route) -- the kept set once
+	 * every approach lock and booking window is gone. `false` means no signal reset helps (Issue #1242).
+	 */
+	private fun occupiedHeadTrimmable(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>
+	): Boolean {
+		val occupied = blocks.filter(::isTrainOnBlock)
+		return occupied.isEmpty() || registry.canTrimPathInfoTo(trainId, occupied)
+	}
+
+	/**
+	 * The refused detailed release (Issue #1242): the PathInfo cannot be trimmed past the blocks the
+	 * train stands on, so nothing changes -- no signal reset, no booking window, no block or PathInfo
+	 * change -- and the whole route is reported as deferred.
+	 */
+	private fun refuseUntrimmable(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>,
+		kept: List<DynamicTrackBlock>
+	): PathRelease {
+		logOncePerTrain(refusalLogged, trainId) {
+			"releasePath: refused for '$trainId' -- the PathInfo cannot be trimmed past the block(s) " +
+				"the train stands on (${kept.size} kept), so nothing was freed, no signal was reset and the " +
+				"whole route stays reserved (Issue #1050, #1242)"
+		}
+		return PathRelease(emptyList(), blocks)
+	}
+
+	/**
+	 * The detailed release that cannot cut yet (Issue #1050 review round): the cut after the kept
+	 * blocks falls on a boundary no PathInfo ends at only because approach-locked blocks are kept.
+	 * The signals are already at STOP; nothing is freed until their booking window closes.
+	 */
+	private fun deferUntrimmable(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>,
+		kept: List<DynamicTrackBlock>
+	): PathRelease {
+		logOncePerTrain(deferralLogged, trainId) {
+			"releasePath: approach lock for '$trainId' -- the PathInfo cannot be trimmed past " +
+				"${kept.size} kept block(s) while an approach lock holds, so nothing was freed; signals set " +
+				"to STOP and the whole route stays reserved until the booking window closes (Issue #1050, #1242)"
+		}
+		return PathRelease(emptyList(), blocks)
+	}
+
+	/**
+	 * [message] at INFO the first time per train in [logged], then at DEBUG (Issue #1242): the expiry
+	 * (every tick) and the sweeper retry a standing train for as long as it stands, so a WARN per call
+	 * flooded the run log. The train is forgotten once one of its releases goes ahead or it leaves
+	 * the registry ([forgetUntrimmable]).
+	 */
+	private fun logOncePerTrain(
+		logged: MutableSet<String>,
+		trainId: String,
+		message: () -> Any?
+	) {
+		if (logged.add(trainId)) logger.info(message) else logger.debug(message)
+	}
+
+	/** Forgets [trainId]'s logged refusal and deferral lines (Issue #1242). */
+	private fun forgetUntrimmable(trainId: String) {
+		refusalLogged.remove(trainId)
+		deferralLogged.remove(trainId)
 	}
 
 	/**
@@ -259,21 +354,6 @@ internal class RouteReleaser(
 		kept: List<DynamicTrackBlock>
 	): PathRelease {
 		val toRelease = blocks.filter { it !in kept }
-		// Preflight (Issue #1050 review round): free nothing unless the PathInfo tail beyond
-		// the kept blocks can be trimmed off. A freed tail that survives in the stored
-		// PathInfo because trimPathInfoToHeldBlocks refuses the cut (a switch or rear-facing
-		// semaphore boundary) later stalls the train with OwnershipConflict -- the failure
-		// this release must not create. The whole route stays intact and is reported as
-		// deferred, so the sweeper keeps its clock and the caller retries; the topology can
-		// become trimmable once the train moves on.
-		if (!registry.canTrimPathInfoTo(trainId, kept)) {
-			logger.warn {
-				"releasePath: approach lock for '$trainId' -- the PathInfo cannot be trimmed past " +
-					"${kept.size} kept block(s), so nothing was freed and the whole route stays " +
-					"reserved (Issue #1050)"
-			}
-			return PathRelease(emptyList(), blocks)
-		}
 		toRelease.forEach { cancelBlock(it) }
 		val released =
 			toRelease.filter { block ->
@@ -285,7 +365,7 @@ internal class RouteReleaser(
 				}
 			}
 		// The PathInfo still describes the freed blocks; cut it to what the train holds. The
-		// preflight above already validated this cut is possible, so a refusal here is a bug
+		// preflight in release() already validated this cut is possible, so a refusal here is a bug
 		// in that validation -- logged loudly by the registry rather than silently ignored.
 		registry.trimPathInfoToHeldBlocks(trainId)
 		logger.info {
@@ -428,6 +508,7 @@ internal class RouteReleaser(
 
 		val releasedBlocks = registry.unregister(trainId)
 		registry.unregisterSwitches(trainId)
+		forgetUntrimmable(trainId)
 		// Whatever deferral window was still open for these blocks is over: the train's whole
 		// footprint is gone (Issue #1050 review round; unregister() is the other wholesale-release
 		// path releaseAllBlocks already covers).
@@ -529,6 +610,7 @@ internal class RouteReleaser(
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
 			approachLockDeferredUntil.remove(block)
+			forgetUntrimmableIfUnregistered(trainId)
 			// Issue #1065, #1103: the registry reclaimed every now-stale switch claim at the block's
 			// ends inside unregisterBlock, BEFORE this event, so a throwing release listener cannot
 			// skip it (PR #1115 review) and no release path -- this funnel, rollbackBlock, or a direct
@@ -585,8 +667,17 @@ internal class RouteReleaser(
 		val unregistered = registry.unregisterBlock(trainId, block)
 		if (unregistered) {
 			approachLockDeferredUntil.remove(block)
+			// Unreachable for a refused train (#1242): rollbacks drop only FREE extension blocks; its head stays.
+			forgetUntrimmableIfUnregistered(trainId)
 		}
 		return unregistered
+	}
+
+	/** Drops [trainId]'s logged untrimmable lines (Issue #1242) once the train holds no block any more. */
+	private fun forgetUntrimmableIfUnregistered(trainId: String) {
+		if ((trainId in refusalLogged || trainId in deferralLogged) && registry.getBlocks(trainId).isEmpty()) {
+			forgetUntrimmable(trainId)
+		}
 	}
 
 	/**

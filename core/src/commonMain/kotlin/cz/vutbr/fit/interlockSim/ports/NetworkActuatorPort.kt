@@ -169,6 +169,11 @@ interface NetworkActuatorPort {
 	 * The caller should retry: the next call finds the signal at STOP and frees the block, unless
 	 * the train booked it meanwhile, in which case it is occupied and stays.
 	 *
+	 * A release is **refused** instead when the route cannot be cut even right after the blocks the
+	 * train stands on (a switch or rear-facing signal there, Issue #1242): then no signal changes and
+	 * nothing is freed, every block is listed as deferred, and a retry is refused the same way until
+	 * the head reaches a block the route can be cut after.
+	 *
 	 * The default delegates to [releaseRoute] and reports nothing deferred.
 	 *
 	 * @throws IllegalArgumentException if [trainName] is blank.
