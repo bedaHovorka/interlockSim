@@ -14,19 +14,19 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotInstanceOf
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import org.junit.jupiter.api.Test
-import org.slf4j.LoggerFactory
 
 /**
  * The WARN suppression of the kernel-side reservation expiry, Issue #1174 (SP12.8): a release that
  * throws is contained and logged at WARN once per failure episode, later failures of the same train
- * at DEBUG. Split out of [ReservationExpiryTest] in Issue #1229.
+ * at DEBUG. Split out of [ReservationExpiryTest] in Issue #1229; the same containment covers the
+ * stalled tail of an occupying train (Issue #1220).
  *
  * Each scenario drives its own [DefaultReservationExpiry] whose release throws for one train and
  * hands every other train to the service's real [PathReservationService.releasePathDetailed]; the
@@ -149,33 +149,48 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 		}
 	}
 
+	@Test
+	fun `a throwing release of a stalled tail is contained and logged once`() {
+		withFailingRelease("train1") { appender, failing ->
+			lateinit var blocks: List<DynamicTrackBlock>
+
+			atSimTimes(
+				0.0 to {
+					blocks =
+						assertReservationSuccess(service.reservePath("train1", inOutNamed("A"), inOutNamed("B")))
+							.reservedBlocks
+					// train1 stands on its first block and never moves: its tail is phase 2's (Issue #1220).
+					blocks.first().enter(FakeTrackOccupant("train1"))
+					failing.expireStale(null)
+				},
+				TTL to { failing.expireStale(null) },
+				PAST_TTL to { failing.expireStale(null) },
+				(TTL + 3.5) to { failing.expireStale(null) }
+			)
+
+			// No crash; the tail is kept for the next call, nothing counted ...
+			blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
+			assertThat(failing.expiredTailCount).isEqualTo(0)
+			// ... and the failure was logged at WARN once over three failing calls.
+			assertThat(expiringWarnings(appender, "train1").size).isEqualTo(1)
+		}
+	}
+
 	/**
-	 * Runs [body] with a Logback appender attached to the expiry class and an expiry built over this
+	 * Runs [body] with the expiry's log captured ([withExpiryLog]) and an expiry built over this
 	 * test's registry whose release throws for [trainId] and is the service's real release for every
-	 * other train; the appender is detached in `finally`.
+	 * other train.
 	 */
 	private fun withFailingRelease(
 		trainId: String,
 		body: (ListAppender<ILoggingEvent>, DefaultReservationExpiry) -> Unit
-	) {
-		val expiryLogger = LoggerFactory.getLogger(DefaultReservationExpiry::class.java.name) as Logger
-		val appender = ListAppender<ILoggingEvent>().also { it.start() }
-		expiryLogger.addAppender(appender)
+	) = withExpiryLog { appender ->
 		val failing =
-			DefaultReservationExpiry(
-				registry = registry,
-				candidateScreen = (service as DefaultPathReservationService).candidateScreen,
-				ttlSimSeconds = TTL,
-				expiryRelease = { holding ->
-					check(holding != trainId) { "release of $trainId fails under test" }
-					service.releasePathDetailed(holding)
-				}
-			)
-		try {
-			body(appender, failing)
-		} finally {
-			expiryLogger.detachAppender(appender)
-		}
+			expiryWith { holding ->
+				check(holding != trainId) { "release of $trainId fails under test" }
+				service.releasePathDetailed(holding)
+			}
+		body(appender, failing)
 	}
 
 	/** This run's failures of [trainId]'s expiry release, logged at WARN. */

@@ -405,7 +405,8 @@ class PathReservationRegistry(
 	 * A train that stands on any block of its holding is never reported, however old: entering a
 	 * reserved block is not a registry write, so registration age says nothing about the progress
 	 * of a train on the track (the reason `OrphanReservationSweeper` does not judge by it either).
-	 * The stalled RESERVED tail of such a train is phase 2 (#1220). A held block in any other state
+	 * The stalled RESERVED tail of such a train is phase 2 (#1220), judged by physical progress over
+	 * [occupyingHoldings]. A held block in any other state
 	 * (a FREE block the registry still attributes to the train, the Issue #1025 divergence) also
 	 * keeps the train out: that is not an un-entered route.
 	 *
@@ -420,6 +421,19 @@ class PathReservationRegistry(
 		ttl: Double,
 		now: Double = simTimeSource()
 	): List<ExpiredHolding> = blockTable.expiredHoldings(ttl = ttl, now = now)
+
+	/**
+	 * Every train that stands on at least one block it holds, with those blocks and its un-entered
+	 * RESERVED tail (Issue #1220, ruling D3): pure query, changes nothing. A block counts as stood on
+	 * by the release's own [isTrainOnBlock] notion, read live, so the two can never disagree; a held
+	 * block in any other state (a FREE block the registry still attributes to the train, the Issue
+	 * #1025 divergence) is in neither list. Trains that stand on nothing they hold are
+	 * [expiredHoldings]' business.
+	 *
+	 * The registry judges nothing here: whether such a train has stopped advancing, and when its
+	 * tail may go, is [DefaultReservationExpiry]'s rule and state.
+	 */
+	internal fun occupyingHoldings(): List<OccupyingHolding> = blockTable.occupyingHoldings()
 
 	/**
 	 * Check whether a block is available for a new reservation: its dynamic state is

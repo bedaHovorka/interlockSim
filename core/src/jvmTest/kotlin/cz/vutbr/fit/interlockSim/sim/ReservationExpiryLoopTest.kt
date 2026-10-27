@@ -31,7 +31,9 @@ import java.util.concurrent.TimeUnit
  * `:fast-sim`, `multiTrainLoop` and every run without the dispatcher's `OrphanReservationSweeper`.
  *
  * Plus the clean-baseline tripwires: rule-based runs on `vyhybna.xml`, where every granted route is
- * entered, expire nothing. A non-zero count there means a live train lost its route.
+ * entered and no train stalls inside its route, expire nothing -- neither a whole holding (Issue
+ * #1174) nor the tail of a train on the track (Issue #1220). A non-zero count there means a live
+ * train lost its route.
  */
 @Tag("integration-test")
 class ReservationExpiryLoopTest : KoinTestBase() {
@@ -93,6 +95,9 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 		// Non-vacuous: trains really travelled and left.
 		assertThat(loop.getTrainsExited()).isGreaterThan(0)
 		assertThat(expiryOf(context).expiredHoldingCount).isEqualTo(0)
+		// No train on the track lost its tail either (Issue #1220): every train that stood still
+		// waited at a STOP signal holding only the blocks it stands on.
+		assertThat(expiryOf(context).expiredTailCount).isEqualTo(0)
 	}
 
 	@Test
@@ -114,6 +119,7 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 
 		assertThat(loop.getTrainsExited()).isEqualTo(3)
 		assertThat(expiryOf(context).expiredHoldingCount).isEqualTo(0)
+		assertThat(expiryOf(context).expiredTailCount).isEqualTo(0)
 	}
 
 	private companion object {

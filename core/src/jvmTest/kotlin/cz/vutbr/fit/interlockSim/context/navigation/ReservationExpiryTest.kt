@@ -37,8 +37,8 @@ import org.junit.jupiter.api.Test
 /**
  * Kernel-side reservation expiry, Issue #1174 (SP12.8, absorbs #975): a holding of un-entered
  * blocks that has seen no new block registration for the TTL is released through
- * [RouteReleaser.releasePathDetailed]; a train that occupies any block never expires (the stalled
- * tail of an occupying train is phase 2, #1220).
+ * [RouteReleaser.releasePathDetailed]; the blocks a train occupies never expire (the stalled
+ * tail of an occupying train is phase 2, #1220, pinned by [ReservationExpiryOccupyingTrainTest]).
  *
  * Every scenario runs inside a kDisco simulation: the TTL is read against the simulation clock the
  * registry stamps its registrations with, and the approach-lock booking window the release honours
@@ -175,7 +175,8 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 			100.0 to {
 				// The registry-relative query does condemn the holding ...
 				assertThat(registry.expiredHoldings(ttl = TTL).map { it.trainId }).containsExactly("train1")
-				// ... but a train on the track is the occupying-train case, phase 2 (#1220): kept.
+				// ... but a train on the track is not an un-entered route. Phase 2 (#1220) judges only the
+				// blocks the registry attributes to a train, so this holding is kept by both phases.
 				assertThat(service.expireStaleReservations()).isEqualTo(0)
 			}
 		)
@@ -189,21 +190,31 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 	}
 
 	@Test
-	fun `a train occupying one block of its route never expires at any age`() {
+	fun `the block a train occupies never expires at any age`() {
 		lateinit var blocks: List<DynamicTrackBlock>
 
 		atSimTimes(
 			0.0 to {
 				blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
 			},
-			1.0 to { blocks.first().enter(FakeTrackOccupant("train1")) },
-			100_000.0 to { assertThat(service.expireStaleReservations()).isEqualTo(0) }
+			1.0 to {
+				blocks.first().enter(FakeTrackOccupant("train1"))
+				// The tick that first sees the train on the track starts its phase-2 stall clock.
+				service.expireStaleReservations()
+			},
+			100_000.0 to { service.expireStaleReservations() },
+			// Past the approach-lock booking window of the first call.
+			100_002.0 to { service.expireStaleReservations() }
 		)
 
-		// Out of phase 1's scope: the stalled RESERVED tail of an occupying train is #1220.
-		blocks.forEach { assertThat(registry.getOwner(it)).isEqualTo("train1") }
-		assertThat(blocks.drop(1).map { it.getState() }).each { it.isEqualTo(TrackFacility.State.RESERVED) }
+		// The train stands on its first block: that block is never released, whatever its age ...
+		assertThat(registry.getOwner(blocks.first())).isEqualTo("train1")
+		assertThat(blocks.first().getState()).isEqualTo(TrackFacility.State.OCCUPIED)
 		assertThat(expiry.expiredHoldingCount).isEqualTo(0)
+		// ... while its stalled RESERVED tail goes, through phase 2 (#1220; pinned in detail by
+		// ReservationExpiryOccupyingTrainTest).
+		assertBlocksFreeAndUnowned(blocks.drop(1))
+		assertThat(expiry.expiredTailCount).isEqualTo(1)
 	}
 
 	@Test

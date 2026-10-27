@@ -87,9 +87,9 @@ through `releasePathDetailed` only.
 | `RouteSignalConfigurator.configure*`, the `ClearedSignalLedger` reset helpers, `facesDirectionOfTravel`, `startFacesTravelDirection` | `CandidateCommitter` / the service | Signal clearing is correct only after blocks and switches (the order *switches before signals* is a safety property of `reservePath`); each reset encodes one rollback situation and needs the caller's snapshot. Facing information comes from perception, not the kernel. |
 | `SwitchConfigurator`: `configureSwitchesInPath`, `registerSwitches`, `releaseOrphanSwitchLocks`, `reclaimStaleForeignSwitchOwnership`, `releaseCandidateSwitches` | `CandidateCommitter` | Correct only inside Step 2f after the blocks are reserved and after Step 2e.5; calling them alone makes an orphan lock, or is a back door around interlocking (SI-5). |
 | `ReservationTargetDiscovery`: `findNextSemaphoresVia`, `reservePathToAnyTargets`, `isPathAvailableFor`, `resolveForwardSection`, `allSemaphores`, `evaluateTargets` | the service | The raw enumeration is a second opinion about which route to set (what SP5 removed); `reservePathToAnyTargets` is the interlocking's own fallback order; availability reaches a dispatcher only as `CandidateTarget.available`. |
-| `RouteCandidateScreen`: `rejectNonOrientedStart`, `rejectNonOrientedEnd`, `rejectNonContiguousStart`, `screenRearFacingEnds`, `screenDivergentCandidates`, `forwardOnlyPathInfo`, `footprintOf`, `standsOnAnyBlock` | `reservePath` | Request-level guards and screens of one `reservePath` call; their verdicts reach a dispatcher as the typed denials above. |
+| `RouteCandidateScreen`: `rejectNonOrientedStart`, `rejectNonOrientedEnd`, `rejectNonContiguousStart`, `screenRearFacingEnds`, `screenDivergentCandidates`, `forwardOnlyPathInfo`, `footprintOf`, `standingTrainIds` | `reservePath`, `DefaultReservationExpiry` | Request-level guards and screens of one `reservePath` call; their verdicts reach a dispatcher as the typed denials above. |
 | `CandidateCommitter`: `tryAtomicReservation`, `registerAndFinalizeCandidate`, `rollbackUnconfigurableCandidate` | `reservePath` | Steps of one transaction; the rollback is correct only with the `priorSwitches` snapshot taken for the same candidate. |
-| `PathReservationRegistry.expiredHoldings` (internal), `isTrainOnBlock` (a top-level internal function in `TrainOnBlock.kt`), the reservation TTL | `DefaultReservationExpiry`, `RouteReleaser` | A query that only makes sense together with the release policy that acts on it (`DefaultReservationExpiry` is the only caller of `expiredHoldings`); the TTL is a behavioural constant. |
+| `PathReservationRegistry.expiredHoldings` and `PathReservationRegistry.occupyingHoldings` (both internal), `isTrainOnBlock` and `isUnenteredReservation` (top-level internal functions in `TrainOnBlock.kt`), the reservation TTL | `DefaultReservationExpiry`, `TailStallTracker`, `RouteReleaser` | A query that only makes sense together with the release policy that acts on it (`DefaultReservationExpiry` is the only caller of `expiredHoldings`; its own `TailStallTracker`, which keeps the phase-2 progress state and judges the stall, is the only caller of `occupyingHoldings`, #1220); the TTL is a behavioural constant. |
 | `PathReservationRegistry.wouldBeStaleClaim` (internal; delegates to `SwitchOwnershipTable.wouldBeStaleClaim`) | `CandidateCommitter` | Its only caller is `SwitchConfigurator.registerSwitches`, the Issue #1173 born-stale filter inside Step 2f, reached through `CandidateCommitter`; it answers for a claim not made yet, so asked alone it describes a switch claim no transaction is about to make. |
 | Every mutating registry operation: `registerAtomic`, `registerSwitches`, `registerFlankSwitches`, `registerPathInfo`, `unregister*`, `reclaimStaleSwitchOwnership`, `restorePathInfo`, `trimPathInfoTo*`, `clear` | reservation transactions | Called alone each can leave blocks, switches, signals and PathInfo disagreeing. |
 | `BlockOwnershipTable`, `SwitchOwnershipTable`, `PathInfoStore`, `PathInfoMerger`, `getSwitchClaim` | `internal` to `:core` | A dispatcher module cannot see them; Goal 9B should not ask for them to be widened. What it needs is a query on the registry facade. |
@@ -259,12 +259,13 @@ from outside the registry, a stale claim, a facade path with no `SwitchConfigura
 
 ### 3.10 Owned-blocks / occupancy scans and semaphore caches — kept
 
-- `RouteCandidateScreen.footprintOf` / `standsOnAnyBlock` scan the **graph** for the train's occupancy,
+- `RouteCandidateScreen.footprintOf` / `standingTrainIds` scan the **graph** for the train's occupancy,
   next to the registry's O(1) `getBlocks` / `getOccupiedBlocks`. The scan is the only one that sees a
   train standing on a block the registry does not attribute to it (the Issue #893 stall at t=17); the
   registry reads are blind to that state. Kept.
 - "A train stands on this block" has one definition, `isTrainOnBlock` (`TrainOnBlock.kt`), shared by the
-  route release and the kernel expiry (`PathReservationRegistry.expiredHoldings`) so they cannot disagree.
+  route release and the kernel expiry (`PathReservationRegistry.expiredHoldings`, and since #1220
+  `PathReservationRegistry.occupyingHoldings`) so they cannot disagree.
 - `ReservationTargetDiscovery.allSemaphores` (Issue #965) and `DefaultNetworkPerceptionPort`'s cache scan
   the same grid and keep the same list. Kept (SP12.3 D2): the kernel must not depend on a port and the port
   must not reach into the kernel.
@@ -360,6 +361,10 @@ more than 486 code lines, so no class can approach the 800 limit.
 
 36 files (the issue counted 18 when it was written). The package is no longer dominated by one
 4,280-line file: the largest class is 469 lines.
+
+Since that measurement, reservation expiry phase 2 (#1220) grew `DefaultReservationExpiry.kt` to 245
+physical lines and split the stall judgement into a 38th file, `TailStallTracker.kt` (159 physical
+lines), on the owner's review thread that the expiry class had grown too big.
 
 ## 5. Side finding: kotlin-logging swallows log-lambda exceptions
 

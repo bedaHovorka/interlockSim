@@ -99,13 +99,13 @@ internal class RouteCandidateScreen(
 			allBlocksCache.filter { physicallyOccupies(it, trainId) }
 
 	/**
-	 * Whether [trainId] physically stands on any block of the network — the occupancy arm of
-	 * [footprintOf], by one shared predicate over the cached block list, so it also sees a block
-	 * the registry does not attribute to the train (Issue #893). The kernel reservation expiry
-	 * exempts such a train (Issue #1174): a train on the track is the occupying-train case,
-	 * phase 2 (#1220).
+	 * The names of every train that physically stands on a block of the network — the occupancy arm
+	 * of [footprintOf] for all trains at once, in one pass over the cached block list, so it also sees
+	 * a block the registry does not attribute to its train (Issue #893). The kernel reservation
+	 * expiry exempts such a train from the whole-route expiry (Issue #1174) and reads this set once
+	 * per call rather than scanning once per candidate (Issue #1229).
 	 */
-	internal fun standsOnAnyBlock(trainId: String): Boolean = allBlocksCache.any { physicallyOccupies(it, trainId) }
+	internal fun standingTrainIds(): Set<String> = allBlocksCache.mapNotNullTo(HashSet()) { it.occupant?.name }
 
 	/** [block]'s physical occupant is [trainId]: the un-attributed occupancy notion of the scan. */
 	private fun physicallyOccupies(
