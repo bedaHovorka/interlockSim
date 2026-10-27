@@ -473,10 +473,10 @@ class DefaultPathReservationService(
 	 * blocked-path outcome is routine "path busy, will retry" contention for the
 	 * collision-warning layer. The contention is recorded so [flushUnresolvedConflicts] can
 	 * surface it if it never resolves before the run ends (see
-	 * [ReservationContentionTracker]'s class KDoc). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted mid-run (it does not trigger an
-	 * automatic simulation pause, so it can be delivered without the false-positive-pause problem
-	 * that led to the Goal 3 restriction) -- but only the FIRST time a given (trainId, block)
-	 * contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
+	 * [ReservationContentionTracker]'s class KDoc). [ConflictDetectedEvent] (Goal 9 SP1) IS emitted
+	 * mid-run (it does not trigger an automatic simulation pause, so it can be delivered without the
+	 * false-positive-pause problem that led to the Goal 3 restriction) -- but only the FIRST time a
+	 * given (trainId, block) contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
 	 */
 	private fun classifyExhaustedAttempt(
 		trainId: String,
@@ -757,10 +757,10 @@ class DefaultPathReservationService(
 	 * Release the blocks of a bypass-rollback candidate (the wrongly reserved path that did not
 	 * use the required next block). Each block goes through [rollbackBlock], like
 	 * [CandidateCommitter.rollbackUnconfigurableCandidate]'s: `cancelPathSetup` from the block's own
-	 * `reservedFrom` (not the caller's `start`) under a try, then the registry entry, the approach-lock deferral and any
-	 * stale switch lock. Unlike that rollback, each block that leaves the registry is then announced as
-	 * released, because the candidate's successful [reservePath] already announced it as reserved
-	 * (Issue #961).
+	 * `reservedFrom` (not the caller's `start`) under a try, then the registry entry, the approach-lock
+	 * deferral and any stale switch lock. Unlike that rollback, each block that leaves the registry
+	 * is then announced as released, because the candidate's successful [reservePath] already
+	 * announced it as reserved (Issue #961).
 	 *
 	 * Only the candidate's NEW blocks — those not in [blocksBefore] (the train's ownership
 	 * snapshot taken before this candidate's [reservePath]) — are released. A bypass candidate's
@@ -1012,7 +1012,10 @@ class DefaultPathReservationService(
 	 * it first would empty its footprint, so `rejectNonContiguousStart` would pass vacuously and a
 	 * mid-station extension would be granted as an orphan route. [reservePath] and
 	 * [reservePathToAny] call this at their top; if the request fails, the next loop tick expires
-	 * the holding.
+	 * the holding. The expiry runs before the Step 0 guards, so a request that is then refused
+	 * (`GeometricallyImpossible`, `NonContiguousStart`) can still expire other trains' stale
+	 * holdings -- correct, as a stale holding is stale regardless and the loop would expire it
+	 * within one control tick (2 simulated seconds) anyway.
 	 */
 	internal fun expireStaleReservations(exceptTrainId: String): Int = expiry.expireStale(exceptTrainId)
 

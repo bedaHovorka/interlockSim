@@ -235,7 +235,8 @@ class DefaultTopologyNavigator(
 							// No incoming segment (starting point), explore all directions
 							allJoins
 						}
-					// Get first valid segment with forward-direction preference (maintains single-path navigation semantics)
+					// Get first valid segment with forward-direction preference
+					// (maintains single-path navigation semantics)
 					preferForwardSegment(staticNodeCell, segment, followingSegments)
 				}
 			} ?: return null

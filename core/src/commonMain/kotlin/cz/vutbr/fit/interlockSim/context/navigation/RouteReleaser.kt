@@ -23,15 +23,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 /**
- * Whether a train stands on [block]: it has an occupant or is already booked as OCCUPIED. The one
- * "occupied" notion of the route release ([RouteReleaser]'s kept blocks and approach locking) and of
- * the kernel reservation expiry ([PathReservationRegistry.expiredHoldings], Issue #1174), so the two
- * can never disagree about which train is on the track.
- */
-internal fun isTrainOnBlock(block: DynamicTrackBlock): Boolean =
-	block.occupant != null || block.getState() == TrackFacility.State.OCCUPIED
-
-/**
  * Route release and rollback of [DefaultPathReservationService] (Issue #1168, SP12.2): the
  * whole-route releases ([releasePath], [releasePathDetailed], [unregister]), the per-block release
  * funnel ([unregisterBlock], [dropFreedBlock], [releaseBlock]), the rollback steps ([rollbackBlock],

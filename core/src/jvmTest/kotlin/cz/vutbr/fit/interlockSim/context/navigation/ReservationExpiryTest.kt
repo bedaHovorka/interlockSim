@@ -380,6 +380,26 @@ class ReservationExpiryTest : PathReservationServiceTestBase() {
 	}
 
 	@Test
+	fun `a request refused by a Step 0 guard still expires another train's stale holding`() {
+		lateinit var blocks: List<DynamicTrackBlock>
+		lateinit var refused: PathReservationService.ReservationResult
+
+		atSimTimes(
+			0.0 to {
+				blocks = assertReservationSuccess(service.reservePath("train2", inOut1, inOut2)).reservedBlocks
+				entrySemaphoreOf(blocks).signal = Signal.STOP
+			},
+			// vA is a switch, i.e. a non-oriented end: refused before any candidate discovery.
+			TTL to { refused = service.reservePath("train1", findSemaphoreByName("zA"), findSwitchByName("vA")) }
+		)
+
+		assertThat(refused).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		assertThat(service.getReservedBlocks("train2")).isEmpty()
+		blocks.forEach { assertThat(registry.getOwner(it)).isNull() }
+		assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+	}
+
+	@Test
 	fun `reservePathToAny expires a stale holding at its top before it reserves`() {
 		lateinit var blocks: List<DynamicTrackBlock>
 		val results = mutableListOf<PathReservationService.ReservationResult>()
