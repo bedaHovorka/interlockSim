@@ -4,13 +4,17 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetCandidate
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.testutil.FirstTrainOwnershipConflict
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -48,6 +52,11 @@ import java.util.concurrent.TimeUnit
 @DisplayName("ShuntingLoop forward-reservation-target laziness contract")
 @Tag("integration-test")
 class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
+	private companion object {
+		/** Long enough for the first train under way to stand awaiting the extension navigation refuses. */
+		const val HELD_END_END_TIME: Long = 150L
+	}
+
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `candidateTargets is empty for every input that cannot take a forward reservation`() {
@@ -195,6 +204,34 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 		assertThat(violations.size, "violations: $violations").isEqualTo(0)
 	}
 
+	/**
+	 * [BlockInputObservation.heldRouteEndName] (Issue #1244) is resolved only in the awaiting state,
+	 * so the per-tick hot path reads nothing new: it is `null` for every input that is not awaiting
+	 * a route extension, and for an awaiting one it names the separator the owner's stored route
+	 * ends at. The awaiting state is produced as in `Issue943OwnershipConflictStallBoundTest`:
+	 * navigation answers an ownership conflict for the first train under way.
+	 */
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	fun `heldRouteEndName is resolved only for an awaiting input and names the stored route's end`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+		val stall = FirstTrainOwnershipConflict(context.getRoutingServices().getTrainNavigationService())
+		val conflictEnv = NavigationDecoratingContext(context, stall.navigation)
+		val loop = prepareShuntingLoop(context, HELD_END_END_TIME, env = conflictEnv)
+		val audit = HeldRouteEndAudit(context.scope.get<PathReservationRegistry>())
+		val wired = loop.controlStepListener
+		loop.controlStepListener =
+			ControlStepListener {
+				audit.check(loop.getInnerBlockInputs() + loop.getOuterBlockInputs())
+				wired?.onControlStep()
+			}
+
+		context.run()
+
+		audit.assertCoveredAndClean()
+	}
+
 	/** The shell's gate for resolving a forward target (Issues #749 and #1060). */
 	private fun canReserveForward(input: BlockInputObservation): Boolean =
 		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
@@ -211,4 +248,53 @@ class ShuntingLoopReservationTargetLazinessTest : KoinTestBase() {
 			is DynamicRailSemaphore -> CandidateTarget(sep.name, SeparatorKind.SEMAPHORE, available)
 			else -> throw IllegalStateException("Unexpected separator kind: $sep")
 		}
+
+	/**
+	 * Checks every block input of a control step against the owner's stored route: an awaiting
+	 * input must report the route's end ([routeEndpointName], pinned by `DispatchObservationTest`),
+	 * every other input `null`. Counts what it saw so the run cannot pass vacuously.
+	 */
+	private class HeldRouteEndAudit(
+		private val registry: PathReservationRegistry
+	) {
+		private var awaitingSeen = 0
+		private var namedEndSeen = 0
+		private var otherSeen = 0
+		private val violations = mutableListOf<String>()
+
+		fun check(inputs: List<BlockInputObservation>) {
+			for (input in inputs) {
+				val expected = expectedEnd(input)
+				if (input.heldRouteEndName != expected) violations += describe(input, expected)
+			}
+		}
+
+		fun assertCoveredAndClean() {
+			assertThat(awaitingSeen, "awaiting inputs observed").isGreaterThan(0)
+			assertThat(namedEndSeen, "awaiting inputs whose stored route ends at a named endpoint")
+				.isGreaterThan(0)
+			assertThat(otherSeen, "non-awaiting inputs observed").isGreaterThan(0)
+			assertThat(violations.size, "violations: $violations").isEqualTo(0)
+		}
+
+		private fun expectedEnd(input: BlockInputObservation): String? {
+			if (!input.awaitingRouteExtension) {
+				otherSeen++
+				return null
+			}
+			awaitingSeen++
+			return registry
+				.getPathInfo(requireNotNull(input.ownerTrainId))
+				?.target
+				?.routeEndpointName()
+				?.also { namedEndSeen++ }
+		}
+
+		private fun describe(
+			input: BlockInputObservation,
+			expected: String?
+		): String =
+			"${input.blockId}->${input.towardSemaphoreName} awaiting=${input.awaitingRouteExtension}: " +
+				"${input.heldRouteEndName} != $expected"
+	}
 }

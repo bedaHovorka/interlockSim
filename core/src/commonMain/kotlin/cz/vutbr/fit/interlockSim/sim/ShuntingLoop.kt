@@ -477,6 +477,13 @@ class ShuntingLoop(
 			pathAlreadyExtendedBeyond &&
 				isApproachingThisInput &&
 				isStandingAwaitingExtension(requireSimulationNotNull(block.getTrackOccupant()), to)
+		// Issue #1244: resolved only in the awaiting state, so the per-tick hot path reads nothing new.
+		val heldRouteEndName =
+			if (awaitingRouteExtension) {
+				registry.getPathInfo(requireSimulationNotNull(ownerTrainId))?.target?.routeEndpointName()
+			} else {
+				null
+			}
 		val candidateTargets =
 			findForwardReservationCandidates(
 				to,
@@ -495,7 +502,8 @@ class ShuntingLoop(
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
-			awaitingRouteExtension = awaitingRouteExtension
+			awaitingRouteExtension = awaitingRouteExtension,
+			heldRouteEndName = heldRouteEndName
 		)
 	}
 

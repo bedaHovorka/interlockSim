@@ -28,7 +28,8 @@ tripwire of Issue #1011 (see Contents).
   `ContextTracker`, `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
-  `NavigationDecoratingContext`, `ShuntingLoopLookups`,
+  `NavigationDecoratingContext`, `FirstTrainOwnershipConflict` (holds one train in an
+  ownership-conflict wait, Issues #943/#1244), `ShuntingLoopLookups`,
   `TrainKinematicSampler`/`TrainKinematicSample` and `AspectFlipOnce`
   (Issue #989 sampling/aspect-flip helpers; cadence pinned by
   `:core` jvmTest `TrainKinematicSamplerContractTest`), and `RepeatedTestCapExtension`
