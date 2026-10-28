@@ -4,9 +4,10 @@
 SP12.10, the SP12.5 follow-ups #1207–#1209, #1173 (SP12.7), #1174 (SP12.8), #1200 and the follow-up wave
 #1218–#1256 (section 6)
 
-**SP12 is still open.** Not because work is missing: the last two sub-issues of #1159, #1255 and #1256, are closed
-by #1260 (the Koog `cancel_route` text and the `NextHopResolver` hint) and by the PR that carries this page, and
-both PRs are still open drafts. Once both merge, every #1159 sub-issue is closed, every criterion in
+**SP12 is still open.** The last two sub-issues of #1159, #1255 and #1256, are closed by #1260 (the Koog
+`cancel_route` text and the `NextHopResolver` hint) and by the PR that carries this page; both PRs are still open
+drafts. #1260 still owes the Goal 10 before/after LLM measurement of #1255 (its acceptance item 3), so it is not
+ready to merge until that row is in `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`. Once both PRs merge, every #1159 sub-issue is closed, every criterion in
 [section 7](#7-evidence-so-far) is met and #1159 is ready for the owner to close. This page, and the PR that
 carries it, do not close #1159.
 
@@ -491,11 +492,12 @@ axes: example: ["shuntingLoop"]`, other axes at their defaults. Railway outcomes
 | #1220 after (#1246 (#1220) phase-2 code; run before the later rebase of the stack) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | #1251 (#1243) head, before #1244 part 1 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | #1252 (#1244 part 1) code (its later commits add only tests, KDoc and docs) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| Final state: the #1260 (#1255) head on `goal-1B` `5ec4d34e` (holds #1259), 2026-10-28; this PR adds only docs and KDoc | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 
 Every sweep: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Base == head on every column.
 The same identity held at every leaf head in between (SP12.9, SP12.10, the SP12.5 follow-ups, #1173,
 #1200, #1174); each PR records its own row. For #1220 the after arm's WARN lines are the same set as the
-before arm's: the WARN sets were compared as sets of message texts per arm, 40 each. The sweep keeps
+before arm's: the WARN sets were compared as sets of message texts per arm, 40 each. The final-state arm (2026-10-28) has the same 40 WARN lines as the arm of the #1226 review round: 20 `SwitchConfigurator` SI-5 transient contention lines and 20 `ReservePath: all paths blocked` lines. The sweep keeps
 `context.navigation` at WARN (`logback-sweep.xml`), so INFO lines (`Reservation expired`, `Reservation tail expired`,
 the `releasePath: released for ...` line of #1254) are absent from these logs by configuration, not by behaviour; the
 absence of an INFO line is no evidence. The counter-based tripwire `ReservationExpiryLoopTest` carries the
@@ -531,11 +533,18 @@ a dash means the module was not run). #1236 (#1228) and #1248 (#1240) record no 
 | #1247 (#1242) | code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 | #1251 (#1243) | head | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 | #1252 (#1244 part 1) | code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
+| #1259 (#1254) | head | 2,003 / 0 / 0 | — |
+| #1260 (#1255) | head | — | 3,020 / 0 / 0 |
+| **Final state**: the #1260 head on `goal-1B` `5ec4d34e`, 2026-10-28 | head | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 
 `:desktop-ui` has no heavy-test tagged tests (the task ran, 0 tests). The runs were done on the heads of these PRs;
 later rebases of the stack changed the SHAs but not the code. #1252's last commits change only
 tests, KDoc and docs, so its heavy run stays valid. The later #1247 head ran the normal gate
 (7,192 tests, 0 failures, 0 errors).
+
+The final-state run (2026-10-28) ran all three modules solo in one Gradle call: `BUILD SUCCESSFUL in 12m 45s`;
+`:desktop-ui` ran 0 tests. It holds every #1159 PR: #1259 is merged, #1260 is its head, and this PR changes only
+docs and KDoc over it.
 
 ### PR #1227 and the tripwire task
 
