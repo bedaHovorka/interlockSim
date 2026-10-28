@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -82,20 +83,28 @@ class RouteReleaserPartialReleaseTest : PathReservationServiceTestBase() {
 
 	@Test
 	fun `a partial release survives one block's failed release event and frees the rest of the tail`() {
-		val blocks = reserveWithSpannedHead()
-		// The funnel emits one BlockReleased per freed block; the first listener throw aborts
-		// only its own dropFreedBlock (caught per block, after that block's registry cleanup),
-		// so the block is freed physically but dropped from the release's result, while the
-		// release continues with the rest of the tail.
-		environment.addBlockOccupancyListener(ThrowingOnceReleaseListener())
+		withReleaserLog { appender ->
+			val blocks = reserveWithSpannedHead()
+			// The funnel emits one BlockReleased per freed block; the first listener throw aborts
+			// only its own dropFreedBlock (caught per block, after that block's registry cleanup),
+			// so the block is freed physically but dropped from the release's result, while the
+			// release continues with the rest of the tail (Issue #1202).
+			environment.addBlockOccupancyListener(ThrowingOnceReleaseListener())
 
-		val release = service.releasePathDetailed("train1")
+			val release = service.releasePathDetailed("train1")
 
-		val failedBlock = blocks[3]
-		assertThat(release.released, "the blocks freed after the throw").isEqualTo(blocks.drop(4))
-		assertThat(failedBlock.getState(), "state of the block whose event threw")
-			.isEqualTo(TrackFacility.State.FREE)
-		assertThat(registry.getOwner(failedBlock), "the registry cleanup still ran").isNull()
+			val failedBlock = blocks[3]
+			assertThat(release.released, "the blocks freed after the throw").isEqualTo(blocks.drop(4))
+			assertThat(failedBlock.getState(), "state of the block whose event threw")
+				.isEqualTo(TrackFacility.State.FREE)
+			assertThat(registry.getOwner(failedBlock), "the registry cleanup still ran").isNull()
+			// ... but the INFO line (Issue #1254) still tells the truth: the block is FREE and
+			// unowned, so the line counts it as freed and does not report a failed drop.
+			val line = releasedLines(appender).single()
+			assertThat(line).contains("freed 3 block(s)")
+			assertThat(line).contains("the release is complete")
+			assertThat(line).doesNotContain("could not be freed")
+		}
 	}
 
 	@Test

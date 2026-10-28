@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -159,7 +160,7 @@ internal class RouteReleaser(
 			return PathRelease(emptyList(), emptyList())
 		}
 		if (kept.isNotEmpty()) {
-			return releaseAllBut(trainId, blocks, kept)
+			return releaseAllBut(trainId, blocks, kept, approachLocked)
 		}
 		return PathRelease(releaseAllBlocks(trainId, blocks), emptyList())
 	}
@@ -347,11 +348,21 @@ internal class RouteReleaser(
 	 * `registry.unregister(trainId)`, which would drop the kept entries too and leave the registry
 	 * saying "free" for a block that is physically reserved (the Issue #1051 divergence). Switches
 	 * are not unlocked wholesale: [dropFreedBlock] reclaims exactly those no held block still needs.
+	 *
+	 * Logs one INFO line per call (Issue #1254) that partitions [kept] by reason, first match wins:
+	 * approach-locked ([approachLocked]), occupied, booking window. The release is complete -- the
+	 * kept blocks leave with the train -- when none is approach-locked or in a window; only then is
+	 * the line free of any promise that a later call frees something. A block of the release that
+	 * could not be dropped (its WARN is logged) is counted in the line, never reported as freed --
+	 * and conversely, a block whose release announcement threw (Issue #1202) is already FREE and
+	 * unowned: the line counts it as freed, [PathRelease] does not. Log-only: it changes no signal,
+	 * block or [PathRelease].
 	 */
 	private fun releaseAllBut(
 		trainId: String,
 		blocks: List<DynamicTrackBlock>,
-		kept: List<DynamicTrackBlock>
+		kept: List<DynamicTrackBlock>,
+		approachLocked: List<DynamicTrackBlock>
 	): PathRelease {
 		val toRelease = blocks.filter { it !in kept }
 		toRelease.forEach { cancelBlock(it) }
@@ -368,12 +379,50 @@ internal class RouteReleaser(
 		// preflight in release() already validated this cut is possible, so a refusal here is a bug
 		// in that validation -- logged loudly by the registry rather than silently ignored.
 		registry.trimPathInfoToHeldBlocks(trainId)
-		logger.info {
-			"releasePath: approach lock for '$trainId' -- a proceed aspect stood at " +
-				"${kept.size} reserved block(s); signals set to STOP, physical release of them deferred " +
-				"to the next call (Issue #1050)"
-		}
+		// Freed here = the block no longer has an owner: a clean drop unregisters it, and a drop
+		// whose announcement threw (Issue #1202) unregisters before its announce, so the line counts
+		// it as freed while the PathRelease above keeps it out. The expiry's own line counts that
+		// PathRelease list (DefaultReservationExpiry), so the two adjacent lines may legitimately
+		// differ on an announce throw.
+		val freedForLog = toRelease.count { registry.getOwner(it) == null }
+		logger.info { releasedLine(trainId, freedForLog, toRelease.size, kept, approachLocked) }
 		return PathRelease(released, kept)
+	}
+
+	/** The INFO line of [releaseAllBut] (Issue #1050, #1254): see there for the partition of [kept]. */
+	internal fun releasedLine(
+		trainId: String,
+		freedCount: Int,
+		toReleaseCount: Int,
+		kept: List<DynamicTrackBlock>,
+		approachLocked: List<DynamicTrackBlock>
+	): String {
+		val locked = kept.filter { it in approachLocked }
+		val occupied = kept.filter { it !in locked && isTrainOnBlock(it) }
+		val windowed = kept.filter { it !in locked && it !in occupied }
+		val groups =
+			listOf("approach-locked" to locked, "occupied" to occupied, "booking window" to windowed)
+				.filter { it.second.isNotEmpty() }
+				.joinToString("; ") { (reason, group) ->
+					"$reason [${group.joinToString(", ") { BlockIdentity.stableBlockId(it) }}]"
+				}
+		val incomplete = freedCount < toReleaseCount
+		val failure =
+			if (incomplete) {
+				"${toReleaseCount - freedCount} block(s) could not be freed (see WARN); "
+			} else {
+				""
+			}
+		val outcome =
+			when {
+				locked.isNotEmpty() || windowed.isNotEmpty() ->
+					"signals are at STOP; a later call frees the block(s) still in their booking window once it " +
+						"closes, unless the train books them first (then they stay occupied and leave with the train)"
+				incomplete -> "the kept block(s) leave with the train"
+				else -> "the release is complete, the kept block(s) leave with the train"
+			}
+		return "releasePath: released for '$trainId' -- freed $freedCount block(s), kept ${kept.size}: " +
+			"$groups; $failure$outcome (Issue #1050, #1254)"
 	}
 
 	private fun cancelBlock(block: DynamicTrackBlock) {

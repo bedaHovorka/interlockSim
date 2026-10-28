@@ -10,7 +10,9 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.doesNotContain
 import assertk.assertions.each
 import assertk.assertions.hasSize
 import assertk.assertions.isCloseTo
@@ -37,6 +39,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.mockk.every
 import io.mockk.mockk
@@ -177,6 +180,35 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 		assertThat(proceeding.map { it.signal.isAllowing() }).each { it.isTrue() }
 		assertThat(releasedEvents).isEmpty()
 		assertThat(expiry.expiredTailCount).isEqualTo(0)
+	}
+
+	@Test
+	fun `a completed tail expiry logs a release that is complete, not a deferral (Issue 1254)`() {
+		withReleaserLog { appender ->
+			runInOrder(
+				listOf(0.0 to { reserveWholeRouteStandingOnKa(TRAIN, ProgressStub(TRAIN)) }),
+				listOf(
+					0.0 to { service.expireStaleReservations() },
+					// The TTL call defers on the approach lock and the signals drop to STOP ...
+					TTL to { service.expireStaleReservations() },
+					// ... and past the booking window the tail expiry completes; only the occupied kA stays.
+					PAST_TTL to {
+						appender.list.clear()
+						service.expireStaleReservations()
+					}
+				)
+			)
+
+			assertThat(expiry.expiredTailCount).isEqualTo(1)
+			val line = releasedLines(appender).single()
+			assertThat(line).contains("occupied [${BlockIdentity.stableBlockId(kA)}]")
+			assertThat(line).contains("the release is complete")
+			assertThat(line).contains("leave with the train")
+			assertThat(line).contains("#1254")
+			listOf("proceed aspect", "deferred", "approach-locked", "booking window", "later call").forEach {
+				assertThat(line).doesNotContain(it)
+			}
+		}
 	}
 
 	@Test
