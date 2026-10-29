@@ -1,6 +1,6 @@
 # CLAUDE.md — :core
 
-**Last Updated:** 2026-08-27
+**Last Updated:** 2026-10-29
 
 Guidance for Claude Code when working in the `:core` subproject. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the
@@ -18,11 +18,15 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
 ./gradlew :core:integrationTest             # @Tag("integration-test"), single fork
 ./gradlew :core:heavyTest                   # Manual only — see root CLAUDE.md testing policy
 ./gradlew :core:checkCoreCommonMainPurity   # commonMain purity gate (part of check)
+./gradlew :core:docLineAnchorCheck          # doc line-anchor tripwire (docs/**/*.md)
 ```
 
 - **Purity gate:** `checkCoreCommonMainPurity` fails the build if
   `src/commonMain/kotlin` references `java.*`, `javax.*`, `android.*`, or
   `System.*`. Move such usages to `jvmMain` actuals.
+- **Doc line anchors are forbidden:** `docLineAnchorCheck` runs `DocLineAnchorTripwireTest`
+  (`jvmTest/.../docs/`), which scans `docs/**/*.md` and fails on any `Name.kt:123` anchor.
+  Reference code by symbol instead.
 - **`linuxX64Test` JUnit XML reports are disabled** in `core/build.gradle.kts` — a
   workaround for a Gradle × Kotlin/Native race
   ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990), KT-69896)
@@ -65,8 +69,9 @@ version comes from `kdiscoVersion` in `gradle.properties`). See the root CLAUDE.
 "Simulation Engine" section for the engine policy and the kDisco repository link.
 
 **Context system:**
-- `Context<out C : Cell>` — base abstraction for a railway network configuration
-- `EditingContext : Context<NodeCell>` and `SimulationContext : Context<Cell>, SimulationEnvironment`
+- `Context<out C : Cell, T : TrackBlock>` — base abstraction for a railway network configuration
+- `EditingContext : Context<AbstractCell, TrackBlock>, NetworkState` and
+  `SimulationContext : Context<Cell, DynamicTrackBlock>, SimulationEnvironment`
 - `BaseContext` — shared infrastructure; `DefaultEditingContext` /
   `DefaultSimulationContext` extend it independently
 - `ContextTransformer` — factory for the editing→simulation transformation
@@ -74,11 +79,22 @@ version comes from `kdiscoVersion` in `gradle.properties`). See the root CLAUDE.
 - History (Issues #98, #153, #94): [../docs/CONTEXT_REFACTORING_DESIGN.md](../docs/CONTEXT_REFACTORING_DESIGN.md),
   [../docs/ISSUE_153_RETROSPECTIVE.md](../docs/ISSUE_153_RETROSPECTIVE.md)
 
-**Navigation services** (replaced the removed `pathToNextSemaphore()` API):
+**Navigation services** (`context/navigation`; replaced the removed `pathToNextSemaphore()` API),
+reached through the `RoutingServices` facade (`SimulationEnvironment.getRoutingServices()`),
+which has five getters:
 - `TopologyNavigator` — static topology navigation (pure graph traversal)
 - `PathReservationService` — dispatcher logic: find FREE paths, reserve atomically
+- `ReservationTargetQuery` — read-only next-target candidate query
+- `ReservationExpiry` — kernel-side reservation expiry trigger
 - `TrainNavigationService` — train-side navigation: follow RESERVED paths only
-- `PathReservationRegistry` — O(1) train↔block ownership tracking, one per context
+
+`DefaultPathReservationService` is composed of internal SP12 units (`RouteReleaser`,
+`SwitchConfigurator`, `RouteSignalConfigurator`, `ReservationTargetDiscovery`,
+`RouteCandidateScreen`, `CandidateCommitter`, `DefaultReservationExpiry`, and others); the seam list
+and sizes are in [../docs/goal9b-demands/SP12-routing-decomposition.md](../docs/goal9b-demands/SP12-routing-decomposition.md).
+`PathReservationRegistry` (O(1) train↔block ownership, one per context) is a facade over
+`BlockOwnershipTable`, `SwitchOwnershipTable`, `PathInfoStore` and `PathInfoMerger`.
+Target selection policy lives in `sim/ReservationTargetPolicy`; the station abstraction in `sim/Station`.
 
 Details and Koin wiring: [../docs/KOTLIN_STYLE_GUIDE.md](../docs/KOTLIN_STYLE_GUIDE.md)
 ("Project Architecture Context"),
@@ -103,14 +119,14 @@ core/src/
 │   ├── exceptions/    - Domain exceptions
 │   ├── lang/          - Dispatcher vocabulary (lang/vocab)
 │   ├── objects/       - Domain model (tracks, cells, paths)
-│   ├── pathfinding/   - Route search
+│   ├── pathfinding/   - Automatic path finding (`DefaultRouteFinder`, path cost); `RouteSearch` is in context/navigation
 │   ├── ports/         - Ports for the dispatcher seam
 │   ├── sim/           - Simulation engine and scenarios (+ collision, conflict, events, metrics)
 │   ├── util/          - Utilities
 │   └── xml/           - XML model (expect declarations)
 ├── commonTest/kotlin/ - Multiplatform tests
 ├── jvmMain/kotlin/    - JVM actuals: context/, util/, xml/ (parsing, factories)
-├── jvmTest/kotlin/    - JVM-only tests, incl. testutil/
+├── jvmTest/kotlin/    - JVM-only tests, incl. testutil/ and docs/ (line-anchor tripwire)
 └── nativeMain/, nativeInterop/ - linuxX64 actuals and libxml2 interop
 ```
 
@@ -139,13 +155,10 @@ core/src/
 
 ## Known Issues
 
-- **SIM-004:** `ShuntingLoop` is the `vyhybna.xml` scenario by design, but it
-  hardcodes that topology. The planned fix is to generalize `ShuntingLoop` into
-  a `Station` abstraction (and clean up the hardcoded assumptions on the way) —
-  Goal 1B scope, see `LONG_TERM_GOALS.md` and #591.
+- **SIM-004:** ✅ resolved by SP2 (#1149): the `Station` abstraction replaced the hardcoded
+  `vyhybna.xml` topology. `ShuntingLoop.compatibilityIssues` still limits the scenario to
+  vyhybna-like stations until SP3 (#1150).
   Minor simulation issues SIM-001 to SIM-006 are documented in code comments.
-- **DEFERRED-001:** the XMLContextFactory parse tests (split out of the former
-  XMLContextFactoryTest) are missing exception type predicates.
 - Train-physics passivation fix (Issue #291) is documented in
   [../docs/TRAIN_PASSIVATION_FIX.md](../docs/TRAIN_PASSIVATION_FIX.md) — a
   `sim/` change must not regress it.
