@@ -1,13 +1,14 @@
 # SP12 — Routing decomposition: status report for Goal 9B
 
-**Issue:** bedaHovorka/interlockSim#1159 (Goal 1B, SP12) · **Status on:** 2026-10-28 · **Reports on:** SP12.1 …
+**Issue:** bedaHovorka/interlockSim#1159 (Goal 1B, SP12) · **Status on:** 2026-10-29 · **Reports on:** SP12.1 …
 SP12.10, the SP12.5 follow-ups #1207–#1209, #1173 (SP12.7), #1174 (SP12.8), #1200 and the follow-up wave
 #1218–#1256 (section 6)
 
-**SP12 is still open.** The last two sub-issues of #1159, #1255 and #1256, are closed by #1260 (the Koog
-`cancel_route` text and the `NextHopResolver` hint) and by the PR that carries this page; both PRs are still open
-drafts. #1260 still owes the Goal 10 before/after LLM measurement of #1255 (its acceptance item 3), so it is not
-ready to merge until that row is in `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`. Once both PRs merge, every #1159 sub-issue is closed, every criterion in
+**SP12 is closing.** #1260 (#1255, the Koog `cancel_route` text and the `NextHopResolver` hint) merged on 2026-10-29
+as `20a5cdda`. The last open sub-issue of #1159 is #1256, closed by the PR that carries this page; that PR is still an
+open draft. One debt stays: the Goal 10 before/after LLM measurement of the prompt change — #1255's acceptance
+item 3 — did not land before #1260 merged, and `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` has no row for it;
+section 6 carries the only note of that debt. When this PR merges, every #1159 sub-issue is closed, every criterion in
 [section 7](#7-evidence-so-far) is met and #1159 is ready for the owner to close. This page, and the PR that
 carries it, do not close #1159.
 
@@ -23,7 +24,7 @@ Contents: [1. Cross-reference](#1-cross-reference) · [2. Goal 9B seam list](#2-
 
 ## 1. Cross-reference
 
-| Slice | Issue | New unit(s) / change | Leaf page | PR | State on 2026-10-28 |
+| Slice | Issue | New unit(s) / change | Leaf page | PR | State on 2026-10-29 |
 | --- | --- | --- | --- | --- | --- |
 | SP12.1 | #1167 | `ReservationContentionTracker` | [SP12.1](SP12.1-contention-tracking.md) | #1186 | merged |
 | SP12.2 | #1168 | `RouteReleaser` | [SP12.2](SP12.2-release-rollback.md) | #1194 | merged |
@@ -56,12 +57,12 @@ Contents: [1. Cross-reference](#1-cross-reference) · [2. Goal 9B seam list](#2-
 | Follow-up wave | #1244 part 1 | the dispatcher does not re-request the route an awaiting train already holds; closes #1244 (part 2 moved to #1255) | n/a | #1252 | merged (`236b57e6`) |
 | Status report refresh | part of #1159 | this page brought up to the follow-up wave | this page | #1253 | merged (`4a990e97`); #1256 stayed open after it |
 | Follow-up wave | #1254 | `RouteReleaser.releaseAllBut` logs one INFO line per release: what was freed and why each kept block stays (log text only) | [SP12.8](SP12.8-reservation-expiry.md) | #1259 | merged (`5ec4d34e`) |
-| Follow-up wave | #1255 (#1244 part 2) | the Koog `cancel_route` text is true for a refusal too; `NextHopResolver.isEligible` skips the held route end of an awaiting train | n/a | #1260 | open, draft |
-| Status report close-out | #1256 (part of #1159) | merged SHAs, final sizes, the release KDoc made true for all outcomes | this page | this PR | open, draft (stacked on #1260) |
+| Follow-up wave | #1255 (#1244 part 2) | the Koog `cancel_route` text is true for a refusal too; `NextHopResolver.isEligible` skips the held route end of an awaiting train | n/a | #1260 | merged (`20a5cdda`) |
+| Status report close-out | #1256 (part of #1159) | merged SHAs, final sizes, the release KDoc made true for all outcomes | this page | this PR | open, draft |
 
 Every leaf PR (SP12.1 to SP12.10) is merged into `goal-1B`; the last one, #1226, landed as `f72d09f2`.
-Every follow-up PR of the wave is merged too, up to #1259 (`5ec4d34e`, the current `goal-1B` tip when this page was
-written); the two still open are #1260 (#1255) and this PR (#1256), the latter stacked on the former. #1234 landed as
+Every follow-up PR of the wave is merged too, up to #1260 (#1255, merged as `20a5cdda` on 2026-10-29;
+`5ec4d34e` was the `goal-1B` tip when the measurements of section 7 were taken); only this PR (#1256) is open. #1234 landed as
 `e12947c1`. Goal 9B follow-ups filed outside #1159: #1249 (a production consumer of `ReservationExpired`), #1250
 (promote `onReservationExpired` to a `SimulationEnvironment` facade method) and #1258 (the `refused` flag carried from
 `PathRelease` through `RouteRelease` into `Released`).
@@ -432,8 +433,8 @@ interpolation does not fail a test.
 
 ## 6. Follow-ups
 
-State of the 35 sub-issues of #1159 on 2026-10-28 (`gh api repos/bedaHovorka/interlockSim/issues/1159/sub_issues`):
-33 closed, 2 open: #1255 (closed by the open draft PR #1260) and #1256 (closed by the PR that carries this page).
+State of the 35 sub-issues of #1159 on 2026-10-29 (`gh api repos/bedaHovorka/interlockSim/issues/1159/sub_issues`):
+34 closed, 1 open: #1256, closed by the PR that carries this page.
 Every other follow-up is merged into `goal-1B`. The owner merges the drafts.
 
 | Issue | What | State |
@@ -448,8 +449,8 @@ Every other follow-up is merged into `goal-1B`. The owner merges the drafts.
 | #1243 | `ReservationExpired` event that names the tail case, so a dispatcher can stop re-granting a train that does not move | closed, PR #1251 (merged as `e8c56223`) |
 | #1244 | Stop the STOP/proceed flip of an approach-locked signal in the #1060 awaiting-extension shape | closed by PR #1252 (merged as `236b57e6`; the dispatcher does not re-request a route the awaiting train already holds). #1252 was stacked, so GitHub shows a comment on the issue and no development link; part 2 moved to #1255 |
 | #1254 | `RouteReleaser.releaseAllBut` logged a false "proceed aspect stood ... deferred" INFO line on a completed tail expiry; it now logs one `releasePath: released for ...` line that says what was freed and why each kept block stays (log text only) | closed, PR #1259 (merged as `5ec4d34e`) |
-| #1255 | #1244 part 2: the Koog `cancel_route` text is true for a refusal too, and `NextHopResolver.isEligible` skips the route end an awaiting train already holds, for a Goal 10 measurement round | open, closed by PR #1260 (draft) |
-| #1256 | Refresh and close out the SP12 status report (this page) | open, closed by this PR (draft, stacked on #1260); the first refresh, PR #1253 (merged as `4a990e97`), left it open |
+| #1255 | #1244 part 2: the Koog `cancel_route` text is true for a refusal too, and `NextHopResolver.isEligible` skips the route end an awaiting train already holds, for a Goal 10 measurement round | closed, PR #1260 (merged as `20a5cdda` on 2026-10-29, without acceptance item 3) |
+| #1256 | Refresh and close out the SP12 status report (this page) | open, closed by this PR (draft); the first refresh, PR #1253 (merged as `4a990e97`), left it open |
 | #1221 | `ReservationContentionTracker.blockedSince` is a set masquerading as a map | closed, PR #1231 (the clock is read once; the map is kept as the Goal 9B "since" source) |
 | #1222 | Narrow `PathReservationServiceTestBase.inOutNamed` to `DynamicInOut` | closed, PR #1232 |
 | #1230 | Declare the docs and `.kt` files that `DocLineAnchorTripwireTest` scans as task inputs | closed, PR #1233 (the tripwire runs as `:core:docLineAnchorCheck`) |
@@ -457,16 +458,22 @@ Every other follow-up is merged into `goal-1B`. The owner merges the drafts.
 | #1205 | the doc-anchor tripwire | closed, PR #1227 |
 | Goal 9B demands | section 2.3 | recorded; one addressed by #1243 (PR #1251); the production consumer is #1249, the facade method #1250, and the `refused` flag on the release result is #1258 (all filed outside #1159; #1258 under #821) |
 
+#1255 closed without its acceptance item 3, the one open debt of the wave: the Goal 10 `aiSweep` before/after
+measurement of the prompt change has no recorded result — no row in `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`,
+no numbers on #1255 or PR #1260. The #1260 body plans the row as a later commit. This page is the debt's only
+note; no issue tracks it.
+
 Closed along the way: #1202 (PR #1206), #1204 (PR #1213), #1203 (PR #1214), #1188 (PR #1189); the leaves
 #1167–#1174, #1200, #1210, #1211 and the SP12.5 follow-ups #1207–#1209 with the PRs in section 1. #1199 (PR #1241,
 the `findAllPaths` perf tripwire) is closed too but is not a sub-issue of #1159.
 
 ## 7. Evidence so far
 
-### Acceptance criteria of #1159 — status on 2026-10-28
+### Acceptance criteria of #1159 — status on 2026-10-29
 
-#1159 stays open until #1260 and the PR that carries this page merge (section 6); with them every criterion below is
-met and the owner can close it. The rows say where each criterion stands.
+#1159 stays open until the PR that carries this page merges (section 6); then every criterion below is
+met and the owner can close it. The rows say where each criterion stands. The #1255 measurement debt (section 6)
+is a Goal 10 item, not a criterion of this list.
 
 | Criterion | Where |
 | --- | --- |
@@ -492,7 +499,7 @@ axes: example: ["shuntingLoop"]`, other axes at their defaults. Railway outcomes
 | #1220 after (#1246 (#1220) phase-2 code; run before the later rebase of the stack) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | #1251 (#1243) head, before #1244 part 1 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | #1252 (#1244 part 1) code (its later commits add only tests, KDoc and docs) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
-| Final state: the #1260 (#1255) head on `goal-1B` `5ec4d34e` (holds #1259), 2026-10-28; this PR adds only docs and KDoc | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| Final state: the #1260 (#1255) head on `goal-1B` `5ec4d34e` (holds #1259), 2026-10-28 (merged as `20a5cdda`); this PR adds only docs and KDoc | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 
 Every sweep: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Base == head on every column.
 The same identity held at every leaf head in between (SP12.9, SP12.10, the SP12.5 follow-ups, #1173,
@@ -535,7 +542,7 @@ a dash means the module was not run). #1236 (#1228) and #1248 (#1240) record no 
 | #1252 (#1244 part 1) | code | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 | #1259 (#1254) | head | 2,003 / 0 / 0 | — |
 | #1260 (#1255) | head | — | 3,020 / 0 / 0 |
-| **Final state**: the #1260 head on `goal-1B` `5ec4d34e`, 2026-10-28 | head | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
+| **Final state**: the #1260 head on `goal-1B` `5ec4d34e`, 2026-10-28 (merged as `20a5cdda`) | head | 2,003 / 0 / 0 | 3,020 / 0 / 0 |
 
 `:desktop-ui` has no heavy-test tagged tests (the task ran, 0 tests). The runs were done on the heads of these PRs;
 later rebases of the stack changed the SHAs but not the code. #1252's last commits change only
@@ -543,8 +550,8 @@ tests, KDoc and docs, so its heavy run stays valid. The later #1247 head ran the
 (7,192 tests, 0 failures, 0 errors).
 
 The final-state run (2026-10-28) ran all three modules solo in one Gradle call: `BUILD SUCCESSFUL in 12m 45s`;
-`:desktop-ui` ran 0 tests. It holds every #1159 PR: #1259 is merged, #1260 is its head, and this PR changes only
-docs and KDoc over it.
+`:desktop-ui` ran 0 tests. It holds every #1159 PR: #1259 and #1260 are merged (`5ec4d34e`, `20a5cdda`), and this PR changes only
+docs and KDoc over them.
 
 ### PR #1227 and the tripwire task
 
