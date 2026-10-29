@@ -25,8 +25,8 @@ The three prose leads named in the issue were read and **all three are history, 
 | Lead | Verdict |
 | --- | --- |
 | `TEST_HANG_INVESTIGATION.md` (kdisco repo root) | 2026-02-08, jDisco-wrapper era. It reports continuous-simulation tests that hang; the root cause was never found, and its thread-deadlock theory is unverified. The wrapper no longer exists, so it is history. "History" here is an inference, not a documented fix. **F1** (unbounded `RESTART` retry) is a plausible but unconfirmed candidate cause. Do not re-file. |
-| `JDISCO_OBSERVED_ISSUES.md:50-56` | Same era (jDisco 1.2.0 wrapper). It records only that each process ran in its own thread and that `Head` and `Link` were not thread-safe. It says nothing about exceptions, so kdisco#83 is a newer, independent finding. |
-| `KDOC_EXPERT_REVIEW_REPORT.md:149-165` and `:169-185` | Finding 7 (thread model undocumented) and finding 8 (`@Volatile` stop-flag race). Both describe the jDisco thread-per-process model. They are folded into **F4**/**F5** below rather than re-filed. |
+| `JDISCO_OBSERVED_ISSUES.md` (lines 50-56, kdisco repo root) | Same era (jDisco 1.2.0 wrapper). It records only that each process ran in its own thread and that `Head` and `Link` were not thread-safe. It says nothing about exceptions, so kdisco#83 is a newer, independent finding. |
+| `KDOC_EXPERT_REVIEW_REPORT.md` (lines 149-165 and 169-185, kdisco repo root) | Finding 7 (thread model undocumented) and finding 8 (`@Volatile` stop-flag race). Both describe the jDisco thread-per-process model. They are folded into **F4**/**F5** below rather than re-filed. |
 
 Nothing in this review was reproduced under a race detector — see section 5 for why none is installed
 today, and what to install.
@@ -131,7 +131,7 @@ politely" path would be relying on an unpublished write.
 
 `Variable.state` is a plain `Double`; discrete fields are plain fields. Reading any of them from a UI
 or metrics thread is a stale-or-torn read with no documented guarantees, and the KDoc says nothing
-about it (the gap `KDOC_EXPERT_REVIEW_REPORT.md:149-165`, finding 7, noticed for the old
+about it (the gap in `KDOC_EXPERT_REVIEW_REPORT.md` (lines 149-165, kdisco repo root), finding 7, noticed for the old
 thread-per-process model).
 
 - **Home:** kdisco (documentation, then possibly API) · **Severity:** medium
@@ -175,16 +175,16 @@ No interlockSim code does this today.
 
 ### F9 — `MultiTrainLoop.getTrainSnapshot` composes a torn pair (the race named in the issue)
 
-`getTrainSnapshot` (`MultiTrainLoop.kt:726-735`) reads `train.getVelocity()` (which is the live
+`MultiTrainLoop.getTrainSnapshot` reads `train.getVelocity()` (which is the live
 `Variable.state`, continuously integrated by the engine) and `train.totalDistance` in two separate
 reads. If a caller runs on a thread other than the simulation thread, the two halves can come from
 different engine steps, producing a snapshot that was never a real state of the train.
 `approvedTrains` itself is safe: it is copy-on-write with a documented contract
-(`MultiTrainLoop.kt:236-253`).
+(the "Threading contract" KDoc of `MultiTrainLoop.approvedTrains`).
 
 **Who calls it today.** In production the only caller is
 `DefaultCollisionDetectionService.evaluatePredictiveTtc`, through the provider that `ExampleRegistry`
-registers. It runs in the collision-event path, which the KDoc at `MultiTrainLoop.kt:246` describes
+registers. It runs in the collision-event path, which the `MultiTrainLoop.approvedTrains` KDoc describes
 as the simulation thread. We did not trace the full event-bus call chain, so the thread is not proved.
 The GUI and the metrics path do **not** call it. The only deliberate off-thread caller is
 `MultiTrainLoopSnapshotRaceTest`, and it passes an absent train id, so it never exercises the pair.
@@ -338,11 +338,11 @@ bedaHovorka/interlockSim#1147 once they exist (acceptance criterion 5).
 
 > **Repository:** bedaHovorka/interlockSim · **prerequisite-of-1B: no**
 >
-> `MultiTrainLoop.getTrainSnapshot` (`MultiTrainLoop.kt:726-735`) reads `train.getVelocity()` (the
+> `MultiTrainLoop.getTrainSnapshot` reads `train.getVelocity()` (the
 > live `Variable.state`) and `train.totalDistance` as two independent reads. If a caller runs on a
 > thread other than the simulation thread, the two values can originate in different engine steps,
 > so the snapshot describes a state the train never had. `approvedTrains` is not affected; it is
-> copy-on-write with a documented contract (`MultiTrainLoop.kt:236-253`).
+> copy-on-write with a documented contract (the "Threading contract" KDoc of `MultiTrainLoop.approvedTrains`).
 >
 > This is a latent hazard, not an active defect. The only production caller is
 > `DefaultCollisionDetectionService.evaluatePredictiveTtc`, which runs in the collision-event path on
@@ -438,7 +438,8 @@ bedaHovorka/interlockSim#1147 once they exist (acceptance criterion 5).
   unconfirmed candidate.
 - **No scanner was installed.** SP9 is a review; section 5 records what to install and in what order,
   and that work belongs to the kdisco repository.
-- **Filing is still open.** Acceptance criteria 3 and 5 of #1156 need the six issues, the three
-  classification comments and the #1147 summary to be posted. They are public posts, so they are not
-  done by this change. Sections 4 and 7 hold the exact texts; replace them with links and issue
-  numbers once the issues exist, before this PR leaves draft.
+- 🆕 **Filing is still open (checked 2026-10-29).** PR #1176 merged and #1156 was closed on 2026-10-10
+  without the six kDisco issues, the three classification comments or the #1147 summary: no kDisco issue
+  filed after 2026-10-10 exists, and none of kdisco#83, #1112 or #1128 carries an SP9 comment. Acceptance
+  criteria 3 and 5 of #1156 therefore remain unmet. Sections 4 and 7 hold the exact texts; replace them with
+  links and issue numbers once the issues exist.

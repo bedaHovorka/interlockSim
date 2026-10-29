@@ -4,13 +4,12 @@
 SP12.10, the SP12.5 follow-ups #1207–#1209, #1173 (SP12.7), #1174 (SP12.8), #1200 and the follow-up wave
 #1218–#1256 (section 6)
 
-**SP12 is closing.** #1260 (#1255, the Koog `cancel_route` text and the `NextHopResolver` hint) merged on 2026-10-29
-as `20a5cdda`. The last open sub-issue of #1159 is #1256, closed by the PR that carries this page; that PR is still an
-open draft. One debt stays: the Goal 10 before/after LLM measurement of the prompt change — #1255's acceptance
-item 3 — did not land before #1260 merged, and `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` has no row for it;
-section 6 carries the only note of that debt. When this PR merges, every #1159 sub-issue is closed, every criterion in
-[section 7](#7-evidence-so-far) is met and #1159 is ready for the owner to close. This page, and the PR that
-carries it, do not close #1159.
+**SP12 is closed.** #1260 (#1255, the Koog `cancel_route` text and the `NextHopResolver` hint) merged on 2026-10-29
+as `20a5cdda`; #1261 (#1256, this page) merged the same day as `a3be195e`. #1256 and #1159 were closed on 2026-10-29
+and all 35 sub-issues of #1159 are closed. One debt stays: the Goal 10 before/after LLM measurement of the prompt
+change — #1255's acceptance item 3 — did not land before #1260 merged, and
+`docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` has no row for it; section 6 carries the only note of that debt. Every
+criterion in [section 7](#7-evidence-so-far) is met.
 
 SP12 cut `context/navigation/` into small units behind one facade-style entry, found the duplicate
 routing checks, and kept extraction (pure moves) apart from behaviour fixes. This page collects the
@@ -58,11 +57,11 @@ Contents: [1. Cross-reference](#1-cross-reference) · [2. Goal 9B seam list](#2-
 | Status report refresh | part of #1159 | this page brought up to the follow-up wave | this page | #1253 | merged (`4a990e97`); #1256 stayed open after it |
 | Follow-up wave | #1254 | `RouteReleaser.releaseAllBut` logs one INFO line per release: what was freed and why each kept block stays (log text only) | [SP12.8](SP12.8-reservation-expiry.md) | #1259 | merged (`5ec4d34e`) |
 | Follow-up wave | #1255 (#1244 part 2) | the Koog `cancel_route` text is true for a refusal too; `NextHopResolver.isEligible` skips the held route end of an awaiting train | n/a | #1260 | merged (`20a5cdda`) |
-| Status report close-out | #1256 (part of #1159) | merged SHAs, final sizes, the release KDoc made true for all outcomes | this page | this PR | open, draft |
+| Status report close-out | #1256 (part of #1159) | merged SHAs, final sizes, the release KDoc made true for all outcomes | this page | #1261 | merged (`a3be195e`) |
 
 Every leaf PR (SP12.1 to SP12.10) is merged into `goal-1B`; the last one, #1226, landed as `f72d09f2`.
 Every follow-up PR of the wave is merged too, up to #1260 (#1255, merged as `20a5cdda` on 2026-10-29;
-`5ec4d34e` was the `goal-1B` tip when the measurements of section 7 were taken); only this PR (#1256) is open. #1234 landed as
+`5ec4d34e` was the `goal-1B` tip when the measurements of section 7 were taken); #1261 (#1256, merged as `a3be195e`) was the last PR of the wave, and #1159 closed with it. #1234 landed as
 `e12947c1`. Goal 9B follow-ups filed outside #1159: #1249 (a production consumer of `ReservationExpired`), #1250
 (promote `onReservationExpired` to a `SimulationEnvironment` facade method) and #1258 (the `refused` flag carried from
 `PathRelease` through `RouteRelease` into `Released`).
@@ -82,7 +81,7 @@ service, so a second door cannot appear silently.
 | `ReservationTargetQuery.findReservationTargetCandidates(start, ownerTrainId)` | Call. *The* target-selection seam: every settable next separator one section ahead with an evaluated availability; choose through `ReservationTargetPolicy.pick`. | SP12.5 |
 | `PathReservationService.isPathToAnyNextSemaphoreAvailable` | The shell's (`InOutWorker`) "may a train enter" probe. A dispatcher does not need it; the candidate list answers the same per target. | SP12.5 |
 | `PathReservationService.reservePath` / `reservePathToAnyNextSemaphore` / `reservePathToAny` | Call. A dispatcher asks for a route, never for an aspect: signals are cleared as the last step of an atomic grant. | SP12.3, SP12.8 |
-| `PathReservationService.releasePathDetailed` (via `NetworkActuatorPort.releaseRouteDetailed`) | Call. The release a dispatcher means by "cancel this route": approach lock honoured, the caller retries while `RouteRelease.deferredBlockIds` is non-empty (as `ToolDrivenDecisions` and `OrphanReservationSweeper` do). Every release that goes ahead resets the train's signals to STOP first; a release whose kept (occupied) blocks cannot end the route is refused before any change (aspects kept, every block reported deferred, #1242); an approach-lock-only untrimmable cut resets to STOP, frees nothing and defers; any other release frees what it can and reports the kept blocks. A repeat frees a kept block only after the train has left it or its booking window (1 s) has closed, and since #1255 the Koog `cancel_route` text tells the model so. Do not drive a retry from `releaseRoute`: its Boolean is `true` for a deferred release too. | SP12.2 |
+| `PathReservationService.releasePathDetailed` (via `NetworkActuatorPort.releaseRouteDetailed`) | Call. The release a dispatcher means by "cancel this route": approach lock honoured, the caller retries while `RouteRelease.deferredBlockIds` is non-empty (as `ToolDrivenDecisions` and `OrphanReservationSweeper` do). Do not drive a retry from `releaseRoute`: its Boolean is `true` for a deferred release too. The outcome rules (STOP reset first, the #1242 refusal, kept blocks, the repeat rule, the #1255 `cancel_route` text) are in [SP12.2](SP12.2-release-rollback.md). | SP12.2 |
 | `PathReservationService.releaseBlock` (after `resetSemaphoresForReleasedBlocks`), `dropFreedBlock` | Only through `RegistryPartialRouteReleaser`; refuse a block another train owns / a block not FREE. | SP12.2 |
 | `PathReservationService.hasClearedSignals(trainId)` | Read. Exact, cheap "is any proceed aspect still lit for this train". | SP12.3 |
 | `PathReservationService.recordExternalClearedSemaphore` | Call only when the dispatcher itself writes an aspect outside a reservation, as `DefaultInterlockingFacade` and `DefaultNetworkActuatorPort` do. | SP12.3 |
@@ -208,19 +207,16 @@ boundary.
 
 ### 3.3 Next-target loops — removed (#1208, PR #1219)
 
-`findReservationTargetCandidates` and `isAnyNextTargetAvailable` were the same `findNextSemaphoresVia`
-plus per-target `isPathAvailableFor` composition at two entry levels. Both now enumerate once and
-evaluate on `ReservationTargetDiscovery.evaluateTargets`, which returns a lazy `Sequence`; the candidate
-query materialises it, the probe short-circuits on the first available target. The early stop is pinned
-by counting `findAllSwitchConstrainedPaths` calls (`ReservationTargetDiscoveryTest.NextTargetPrimitive`).
-The `#966` call-count pins stayed green.
+`findReservationTargetCandidates` and `isAnyNextTargetAvailable` were the same enumeration plus per-target
+`isPathAvailableFor` composition at two entry levels; both now evaluate on one primitive,
+`ReservationTargetDiscovery.evaluateTargets` (a lazy `Sequence`). Details, the early-stop pin and the unchanged
+`#966` call-count pins: [SP12.5](SP12.5-target-discovery.md), "Follow-ups #1207-#1209".
 
 ### 3.4 Orientation-free sort arm — removed (#1207, PR #1219)
 
-`reservePathToAnyTargets` took any `DynamicPathSeparator` and sorted InOuts by distance only for a
-non-oriented start, a case `reservePathToAny` already refuses up front (Issue #1188). It now takes an
-`OrientedPathSeparator` and the arm is gone. The sibling `TargetWithPaths` pair (a `Lazy?` that was `null`
-for a semaphore) became the sealed `TargetAttempt` (#1209).
+`reservePathToAnyTargets` now takes an `OrientedPathSeparator`; the arm that sorted InOuts by distance for a
+non-oriented start (a case `reservePathToAny` refuses up front, Issue #1188) is gone, and the `TargetWithPaths` pair
+became the sealed `TargetAttempt` (#1209). Details: [SP12.5](SP12.5-target-discovery.md), "Follow-ups #1207-#1209".
 
 ### 3.5 Availability predicates — kept (deliberate, #1060)
 
@@ -321,6 +317,8 @@ documented non-pinnable coverage leftover (SP12.4 page).
   `maxDepth` defaults, so the enumeration bound and the defaults cannot drift (SP12.5).
 - The service's one-line `rollbackReservation` forwarder is gone; `CandidateCommitter` calls `RouteReleaser`
   directly (SP12.10).
+- `forwardOnlyPathInfo` was not hoisted out of `RouteCandidateScreen` during SP12.10 (the SP12.9 close-out note
+  proposed it): `CandidateCommitter` reaches it through the screen.
 - Nine stale class-qualified KDoc links and many `(:913)`-style anchors were retargeted to symbols
   (SP12.2, SP12.3); the remainder were retargeted in PR #1227 and are now guarded by `DocLineAnchorTripwireTest`.
 
@@ -337,12 +335,13 @@ documented non-pinnable coverage leftover (SP12.4 page).
 | After SP12.10 | 979 | 441 |
 | `goal-1B` after #1226 (adds #1173, #1200 and the #1174 kernel expiry; measured on #1227) | 1,072 | 469 |
 | `goal-1B` `5ec4d34e` (adds #1218, #1220, #1224, #1242, #1243, #1244 part 1, #1254; measured 2026-10-28) | 1,077 | 466 |
+| after the comment-only KDoc commit of #1263 (2026-10-29) | 1,068 | 466 |
 
 `@Suppress("LargeClass")` and `@Suppress("LongMethod")` on `reservePath` are gone from the service;
 `:core:detekt` is green without them. The only `@Suppress` left in `context/navigation/` is
 `@Suppress("TooManyFunctions")` on `PathReservationRegistry`, which predates SP12 and which the split kept.
 `PathReservationRegistry.kt` went from 1,758 to 797 physical lines (160 class-body code lines) by the #1226 merge;
-it is 827 / 165 now, on `goal-1B` `5ec4d34e`.
+it is 829 / 165 now (code lines as measured on `goal-1B` `5ec4d34e`, physical lines after #1263).
 
 The 441 → 469 growth is the #1174 expiry orchestration that stays in the service (the `ReservationExpiry`
 seam and the top-of-request expiry call; the expiry policy itself lives in `DefaultReservationExpiry`) and
@@ -362,47 +361,49 @@ SP12.10 head; the one-line difference is detekt's own counting). Re-measured on 
 `python3 -I measure.py core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/context/navigation` (the same
 method over every `*.kt` directly in `context/navigation/`; the script is a throw-away and is not committed).
 Files the follow-up wave did not touch reproduce the 2026-10-25 numbers; the wave also touched
-`SwitchOwnershipTable.kt` (#1218), whose row was re-measured too, and since 2026-10-27 only `RouteReleaser.kt`
-changed (#1259: 708 to 757 physical lines, 349 to 381 class body code lines). No file has more than 483 code lines, so
-no class can approach the 800 limit.
+`SwitchOwnershipTable.kt` (#1218), whose row was re-measured too, and since 2026-10-27 `RouteReleaser.kt` changed
+(#1259: 708 to 757 physical lines, 349 to 381 class body code lines). The comment-only KDoc commit of #1263
+(2026-10-29) then changed the physical line counts of 24 files; the physical-lines column below was re-counted
+after it, and the code-line columns are unchanged (checked: stripping comments and blank lines leaves every
+changed file identical). No file has more than 483 code lines, so no class can approach the 800 limit.
 
 | File | Physical lines | Code lines (file) | Largest class | Class body code lines |
 | --- | --- | --- | --- | --- |
-| `DefaultPathReservationService.kt` | 1077 | 483 | `DefaultPathReservationService` | 466 |
-| `RouteReleaser.kt` | 757 | 394 | `RouteReleaser` | 381 |
-| `DefaultTopologyNavigator.kt` | 872 | 353 | `DefaultTopologyNavigator` | 338 |
-| `CandidateCommitter.kt` | 747 | 333 | `CandidateCommitter` | 301 |
-| `DefaultTrainNavigationService.kt` | 521 | 286 | `DefaultTrainNavigationService` | 274 |
+| `DefaultPathReservationService.kt` | 1068 | 483 | `DefaultPathReservationService` | 466 |
+| `RouteReleaser.kt` | 756 | 394 | `RouteReleaser` | 381 |
+| `DefaultTopologyNavigator.kt` | 878 | 353 | `DefaultTopologyNavigator` | 338 |
+| `CandidateCommitter.kt` | 760 | 333 | `CandidateCommitter` | 301 |
+| `DefaultTrainNavigationService.kt` | 520 | 286 | `DefaultTrainNavigationService` | 274 |
 | `ReservationTargetDiscovery.kt` | 610 | 275 | `ReservationTargetDiscovery` | 245 |
-| `SwitchConfigurator.kt` | 551 | 225 | `SwitchConfigurator` | 201 |
-| `RouteSignalConfigurator.kt` | 463 | 194 | `RouteSignalConfigurator` | 180 |
+| `SwitchConfigurator.kt` | 552 | 225 | `SwitchConfigurator` | 201 |
+| `RouteSignalConfigurator.kt` | 461 | 194 | `RouteSignalConfigurator` | 180 |
 | `PathInfoStore.kt` | 519 | 227 | `PathInfoStore` | 175 |
 | `RouteCandidateScreen.kt` | 422 | 188 | `RouteCandidateScreen` | 173 |
-| `PathReservationRegistry.kt` | 827 | 183 | `PathReservationRegistry` | 165 |
-| `BlockOwnershipTable.kt` | 313 | 170 | `BlockOwnershipTable` | 154 |
-| `ClearedSignalLedger.kt` | 340 | 159 | `ClearedSignalLedger` | 151 |
+| `PathReservationRegistry.kt` | 829 | 183 | `PathReservationRegistry` | 165 |
+| `BlockOwnershipTable.kt` | 314 | 170 | `BlockOwnershipTable` | 154 |
+| `ClearedSignalLedger.kt` | 350 | 159 | `ClearedSignalLedger` | 151 |
 | `DefaultReservationExpiry.kt` | 292 | 145 | `DefaultReservationExpiry` | 140 |
 | `SwitchOwnershipTable.kt` | 251 | 143 | `SwitchOwnershipTable` | 138 |
-| `PathInfoMerger.kt` | 376 | 136 | `PathInfoMerger` | 126 |
-| `PathReservationService.kt` | 847 | 95 | `PathReservationService` | 86 |
+| `PathInfoMerger.kt` | 359 | 136 | `PathInfoMerger` | 126 |
+| `PathReservationService.kt` | 850 | 95 | `PathReservationService` | 86 |
 | `TailStallTracker.kt` | 159 | 75 | `TailStallTracker` | 71 |
-| `ReservationContentionTracker.kt` | 193 | 57 | `ReservationContentionTracker` | 51 |
-| `TopologyNavigator.kt` | 280 | 38 | `TopologyNavigator` | 33 |
-| `BlockEvent.kt` | 86 | 32 | `BlockEvent` | 29 |
-| `TrainNavigationService.kt` | 213 | 18 | `TrainNavigationService` | 15 |
+| `ReservationContentionTracker.kt` | 190 | 57 | `ReservationContentionTracker` | 51 |
+| `TopologyNavigator.kt` | 277 | 38 | `TopologyNavigator` | 33 |
+| `BlockEvent.kt` | 90 | 32 | `BlockEvent` | 29 |
+| `TrainNavigationService.kt` | 197 | 18 | `TrainNavigationService` | 15 |
 | `ReservationExpired.kt` | 94 | 31 | `ReservationExpired` | 14 |
 | `RouteSearch.kt` | 52 | 16 | `RouteSearch` | 13 |
 | `PathResult.kt` | 118 | 9 | `PathResult` | 7 |
 | `RoutingServices.kt` | 115 | 8 | `RoutingServices` | 7 |
 | `BlockReleaseSteps.kt` | 58 | 8 | `BlockReleaseSteps` | 6 |
-| `BlockRollbackStep.kt` | 47 | 8 | `BlockRollbackStep` | 6 |
+| `BlockRollbackStep.kt` | 48 | 8 | `BlockRollbackStep` | 6 |
 | `BoundedShortestDistance.kt` | 67 | 41 | `Arrival` | 6 |
 | `ReservationTargetQuery.kt` | 77 | 13 | `ReservationTargetQuery` | 6 |
 | `PathCandidate.kt` | 61 | 7 | `PathCandidate` | 5 |
-| `ApproachLockedPathRelease.kt` | 106 | 10 | `PathRelease` | 4 |
-| `GeometricFailures.kt` | 43 | 9 | `GeometricFailures` | 4 |
+| `ApproachLockedPathRelease.kt` | 111 | 10 | `PathRelease` | 4 |
+| `GeometricFailures.kt` | 46 | 9 | `GeometricFailures` | 4 |
 | `SwitchClaim.kt` | 26 | 5 | `SwitchClaim` | 4 |
-| `ReservationExpiry.kt` | 52 | 4 | `ReservationExpiry` | 3 |
+| `ReservationExpiry.kt` | 51 | 4 | `ReservationExpiry` | 3 |
 | `SemaphoreFacing.kt` | 40 | 12 | (top-level functions only) | - |
 | `SeparatorLabel.kt` | 29 | 12 | (top-level functions only) | - |
 | `TrainOnBlock.kt` | 31 | 7 | (top-level functions only) | - |
@@ -434,28 +435,17 @@ interpolation does not fail a test.
 ## 6. Follow-ups
 
 State of the 35 sub-issues of #1159 on 2026-10-29 (`gh api repos/bedaHovorka/interlockSim/issues/1159/sub_issues`):
-34 closed, 1 open: #1256, closed by the PR that carries this page.
-Every other follow-up is merged into `goal-1B`. The owner merges the drafts.
+35 closed. Every follow-up is merged into `goal-1B`; #1159 itself was closed on 2026-10-29.
+
+The other follow-ups (#1205, #1218, #1220-#1222, #1224, #1228-#1230, #1239, #1240, #1242, #1243) are closed; their PR and
+merge SHA are in the [section 1](#1-cross-reference) table. The rows below add a fact that table does not carry.
 
 | Issue | What | State |
 | --- | --- | --- |
-| #1218 | Facade rollback does not demote a plain switch claim that a failed route promoted to flank (safe direction, follow-up of #1173) | closed, PR #1234 (merged as `e12947c1`) |
-| #1220 | Reservation expiry phase 2: expire the stalled RESERVED tail of a train that occupies part of its route (a `[sim]` change, ruled in the issue) | closed, PR #1246 (merged as `35859c4d`) |
-| #1224 | Host one shared form of the forward-block exclusion (3.7) | closed, PR #1235 (merged as `59cff203`) |
-| #1228 | Minor follow-ups from the final review of the SP12 stack | closed, PR #1236 (merged as `d8de0eff`) |
-| #1229 | SP12.8 follow-ups: expiry trigger shape, seams and test cleanups (from the #1226 review round) | closed, PR #1237 (merged as `083b11ce`) |
-| #1240 | Pin that the Step 1.6 probe and the already-owned early return select the same candidates | closed, PR #1248 (merged as `bed0b4a6`) |
-| #1242 | `RouteReleaser`: check trimmability before any signal reset; log the refusal once instead of a WARN per call | closed, PR #1247 (merged as `91b005cb`) |
-| #1243 | `ReservationExpired` event that names the tail case, so a dispatcher can stop re-granting a train that does not move | closed, PR #1251 (merged as `e8c56223`) |
 | #1244 | Stop the STOP/proceed flip of an approach-locked signal in the #1060 awaiting-extension shape | closed by PR #1252 (merged as `236b57e6`; the dispatcher does not re-request a route the awaiting train already holds). #1252 was stacked, so GitHub shows a comment on the issue and no development link; part 2 moved to #1255 |
 | #1254 | `RouteReleaser.releaseAllBut` logged a false "proceed aspect stood ... deferred" INFO line on a completed tail expiry; it now logs one `releasePath: released for ...` line that says what was freed and why each kept block stays (log text only) | closed, PR #1259 (merged as `5ec4d34e`) |
 | #1255 | #1244 part 2: the Koog `cancel_route` text is true for a refusal too, and `NextHopResolver.isEligible` skips the route end an awaiting train already holds, for a Goal 10 measurement round | closed, PR #1260 (merged as `20a5cdda` on 2026-10-29, without acceptance item 3) |
-| #1256 | Refresh and close out the SP12 status report (this page) | open, closed by this PR (draft); the first refresh, PR #1253 (merged as `4a990e97`), left it open |
-| #1221 | `ReservationContentionTracker.blockedSince` is a set masquerading as a map | closed, PR #1231 (the clock is read once; the map is kept as the Goal 9B "since" source) |
-| #1222 | Narrow `PathReservationServiceTestBase.inOutNamed` to `DynamicInOut` | closed, PR #1232 |
-| #1230 | Declare the docs and `.kt` files that `DocLineAnchorTripwireTest` scans as task inputs | closed, PR #1233 (the tripwire runs as `:core:docLineAnchorCheck`) |
-| #1239 | CI upload and exclude-list tripwire for `:core:docLineAnchorCheck` | closed, PR #1245 |
-| #1205 | the doc-anchor tripwire | closed, PR #1227 |
+| #1256 | Refresh and close out the SP12 status report (this page) | closed, PR #1261 (merged as `a3be195e`); the first refresh, PR #1253 (merged as `4a990e97`), left it open |
 | Goal 9B demands | section 2.3 | recorded; one addressed by #1243 (PR #1251); the production consumer is #1249, the facade method #1250, and the `refused` flag on the release result is #1258 (all filed outside #1159; #1258 under #821) |
 
 #1255 closed without its acceptance item 3, the one open debt of the wave: the Goal 10 `aiSweep` before/after
@@ -471,8 +461,8 @@ the `findAllPaths` perf tripwire) is closed too but is not a sub-issue of #1159.
 
 ### Acceptance criteria of #1159 — status on 2026-10-29
 
-#1159 stays open until the PR that carries this page merges (section 6); then every criterion below is
-met and the owner can close it. The rows say where each criterion stands. The #1255 measurement debt (section 6)
+#1159 was closed on 2026-10-29 with #1261 (section 6); every criterion below is met. The rows say where each
+criterion stood. The #1255 measurement debt (section 6)
 is a Goal 10 item, not a criterion of this list.
 
 | Criterion | Where |
@@ -499,7 +489,7 @@ axes: example: ["shuntingLoop"]`, other axes at their defaults. Railway outcomes
 | #1220 after (#1246 (#1220) phase-2 code; run before the later rebase of the stack) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | #1251 (#1243) head, before #1244 part 1 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 | #1252 (#1244 part 1) code (its later commits add only tests, KDoc and docs) | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
-| Final state: the #1260 (#1255) head on `goal-1B` `5ec4d34e` (holds #1259), 2026-10-28 (merged as `20a5cdda`); this PR adds only docs and KDoc | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| Final state: the #1260 (#1255) head on `goal-1B` `5ec4d34e` (holds #1259), 2026-10-28 (merged as `20a5cdda`); #1261 added only docs and KDoc | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
 
 Every sweep: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Base == head on every column.
 The same identity held at every leaf head in between (SP12.9, SP12.10, the SP12.5 follow-ups, #1173,
@@ -550,7 +540,7 @@ tests, KDoc and docs, so its heavy run stays valid. The later #1247 head ran the
 (7,192 tests, 0 failures, 0 errors).
 
 The final-state run (2026-10-28) ran all three modules solo in one Gradle call: `BUILD SUCCESSFUL in 12m 45s`;
-`:desktop-ui` ran 0 tests. It holds every #1159 PR: #1259 and #1260 are merged (`5ec4d34e`, `20a5cdda`), and this PR changes only
+`:desktop-ui` ran 0 tests. It holds every #1159 PR: #1259 and #1260 are merged (`5ec4d34e`, `20a5cdda`), and #1261 changed only
 docs and KDoc over them.
 
 ### PR #1227 and the tripwire task
