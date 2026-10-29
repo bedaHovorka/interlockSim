@@ -32,8 +32,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
 
 /**
- * Příklad fungování modelu
- * Ovlada sest navestidel a 2 InOuty pomoci dynamicky nalezených cest
+ * Example of how the model works: controls six semaphores and 2 InOuts using dynamically
+ * discovered paths.
  *
  * ## SP0.11 thin-shell refactor (Issue #733 — Goal 10)
  *
@@ -54,21 +54,16 @@ import org.koin.core.component.KoinComponent
  * - queued-train approval callback entry point
  * - test-observability counters tied directly to simulation state
  *
- * **Previous changes (Issue #296):**
- * - Eliminated manual path construction (~100 lines removed)
- * - Integrated TopologyNavigator for dynamic path finding
- * - Uses PathReservationService architecture (Phases 1-3)
- *
  * **Previous changes (Issue #280/#284):**
  * - Migrated from static cells to dynamic wrappers (DynamicInOut, DynamicRailSemaphore, DynamicRailSwitch)
  *
  * **Architecture:**
- * - Uses TopologyNavigator (Phase 1) for static path finding
+ * - Derives its layout and capacity from [Station]; the candidates the dispatcher chooses from come
+ *   through [ReservationTargetQuery]
  * - Koin DI integration for service injection
  * - Optional [ControlStepListener] seam for sim-thread command draining
  *
  * @see ControlStepListener
- * @see TopologyNavigator
  * @see docs/PATH_RESERVATION_ARCHITECTURE.md
  */
 class ShuntingLoop(
@@ -190,7 +185,7 @@ class ShuntingLoop(
 		private const val SHUNTING_LOOP_IN_OUTS = 2
 	}
 
-	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
+	// Queue of not-yet-approved trains - otherwise the list the dispatcher picks from
 	private val unapprowedTrains: ArrayDeque<Train> = ArrayDeque()
 
 	/**
@@ -239,8 +234,10 @@ class ShuntingLoop(
 	var controlStepListener: ControlStepListener? = null
 
 	/**
-	 * SP0.11: Hook called every [iteration] to publish a fresh [SimulationSnapshot] for the
-	 * off-kernel driver thread. Set this to [NetworkPerceptionPort.captureSnapshot] of the
+	 * SP0.11: Hook called every [iteration] to publish a fresh
+	 * [SimulationSnapshot][cz.vutbr.fit.interlockSim.ports.SimulationSnapshot] for the off-kernel
+	 * driver thread. Set this to
+	 * [captureSnapshot][cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot] of the
 	 * externally-created perception port (wired in ExampleRegistry or Frame) before
 	 * `context.run()`.
 	 *
@@ -297,8 +294,8 @@ class ShuntingLoop(
 
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
-	// sites (placeTrain, iteration, tryReservePath) serialize naturally. If a future
-	// dispatcher becomes concurrent, these need atomicfu.
+	// sites (placeTrain, iteration, incrementBlockTransition, incrementFailedReservation)
+	// serialize naturally. If a future dispatcher becomes concurrent, these need atomicfu.
 	private var trainsEnteredCount: Int = 0
 	private var trainsExitedCount: Int = 0
 	private var maxConcurrentTrainsCount: Int = 0
@@ -371,11 +368,9 @@ class ShuntingLoop(
 		}
 		val signalledEntryExitBlocks = station.entryExitBlocks.filter { it.signals.isNotEmpty() }
 
-		// Issue #296: Removed manual path construction (~100 lines)
-		// Paths are now discovered dynamically using TopologyNavigator when needed
 		innerTrackBlocks.addAll(station.platformTracks.map { it.block })
 		for (entryExit in signalledEntryExitBlocks) {
-			// single() stays a loud failure: SP3 (issue #1192) direction-aware signals may add a
+			// single() stays a loud failure: direction-aware signals (Issue #1192) may add a
 			// second entry/exit signal, and then this must be decided, not silently picked.
 			outerTrackblocks[entryExit.block] = entryExit.signals.single()
 		}
@@ -605,7 +600,8 @@ class ShuntingLoop(
 	/**
 	 * Returns a snapshot of the currently approved (active) trains. Used by the external
 	 * [DefaultNetworkPerceptionPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]
-	 * to build [SimulationSnapshot.trainPositions].
+	 * to build
+	 * [SimulationSnapshot.trainPositions][cz.vutbr.fit.interlockSim.ports.SimulationSnapshot.trainPositions].
 	 *
 	 * Safe to call from any thread: the returned list is the immutable copy-on-write snapshot
 	 * described on [approwedTrains], so it never changes under the caller. It may already be stale
@@ -652,7 +648,7 @@ class ShuntingLoop(
 	 * [DispatchObservation.unapprovedTrains] in queue order.
 	 *
 	 * **Idempotency (SP0.11):** if no unapproved train named [trainId] exists (e.g. the
-	 * async driver posted a duplicate [ApproveTrain] decision), the call is silently
+	 * async driver posted a duplicate [DispatchDecision.ApproveTrain] decision), the call is silently
 	 * ignored. The train was already approved by an earlier decision in the same drain.
 	 *
 	 * Must be called on the kDisco simulation thread (typically from
@@ -690,7 +686,8 @@ class ShuntingLoop(
 	 * Increments the block-transition counter for [trainId].
 	 *
 	 * Called by [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
-	 * on every successful path reservation; the counter previously lived inside [tryReservePath].
+	 * on every successful path reservation; the counter previously lived inside `tryReservePath`
+	 * (removed by Issue #733).
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
@@ -702,7 +699,8 @@ class ShuntingLoop(
 	 * Increments the failed-reservation counter.
 	 *
 	 * Called by [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
-	 * on every rejected reservation; the counter previously lived inside [tryReservePath].
+	 * on every rejected reservation; the counter previously lived inside `tryReservePath`
+	 * (removed by Issue #733).
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
@@ -758,8 +756,8 @@ class ShuntingLoop(
 	 * scenario override, else the topology value). With the default topology value the cap is
 	 * the physical parallel-track count (2 for `vyhybna.xml`: k1, k2), and a dispatcher letting
 	 * a 3rd train in concurrently would leave it no physical track to occupy — an unresolvable
-	 * state, not a recoverable "wait and retry" condition. A scenario override above the
-	 * topology value is warned about at init; the scenario that sets it owns that risk.
+	 * state, not a recoverable "wait and retry" condition. An override above the topology value
+	 * is the scenario's risk (see the constructor parameter `maxConcurrentTrains`).
 	 */
 	fun getMaxConcurrentTrains(): Int = maxConcurrentTrainsCount
 

@@ -1003,7 +1003,7 @@ class Train :
 				fireStop()
 				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
-				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+				// freePath(separator, next); // (the train sets up the path to the next semaphore itself on stopping)
 				waitUntil(allowingSignal(semaphore, separator))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
@@ -1070,7 +1070,7 @@ class Train :
 			semaphore.signal = Signal.STOP
 		}
 
-		// pro ucely ladeni - moznost ze si vlak sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+		// For debugging: lets a train set up the path to the next semaphore itself when it stops at one.
 // 		private Unit freePath(final PathSeparator separator, final TrackSection next) {
 // 			if (separator instanceof InOut) return;
 // 			try {
@@ -1666,8 +1666,8 @@ class Train :
 	 * - Prevents runtime simulation errors from track being too short
 	 *
 	 * **Implementation:**
-	 * - Uses [cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator.findShortestTopologicalDistance] for the shortest route length
-	 *   (a shortest-path search since Issue #1148, not a listing of every path)
+	 * - Uses [cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator.findShortestTopologicalDistance]
+	 *   for the shortest route length (a shortest-path search, not a listing of every path)
 	 * - Validates train length against shortest available path
 	 * - Gracefully handles test mocks by catching exceptions
 	 *
@@ -1695,8 +1695,7 @@ class Train :
 		try {
 			val topologyNavigator = env.getRoutingServices().getTopologyNavigator()
 
-			// Shortest topological route length between the InOuts. Issue #1148: computed by a
-			// shortest-path search instead of listing every path (912 paths for one Praha pair).
+			// Shortest topological route length between the InOuts (a shortest-path search, Issue #1148).
 			val shortestPathDistance =
 				requireSimulationNotNull(
 					topologyNavigator.findShortestTopologicalDistance(

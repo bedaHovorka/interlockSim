@@ -967,8 +967,8 @@ class DispatchDecisionApplier(
 	 * LongMethod budget).
 	 *
 	 * Publishes [AppliedOutcome.GeometricallyImpossible] so the agent learns the requested route
-	 * is permanently impossible (rear-facing START or END, unconfigurable switch, or non-oriented
-	 * route origin or end), not merely busy.
+	 * is permanently impossible, not merely busy (classes:
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible]).
 	 *
 	 * @since Issue #903
 	 */

@@ -97,7 +97,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @param maxConcurrentTrains Maximum number of simultaneously approved trains.
  *   Defaults to [DEFAULT_MAX_CONCURRENT_TRAINS] which matches the physical capacity
- *   of the `vyhybna.xml` shunting loop (2 parallel tracks).
+ *   of the `vyhybna.xml` shunting loop (2 parallel tracks). [wireSynchronousDispatcher] passes
+ *   [ShuntingLoop.stationCapacity] instead, so other stations get their own track count
+ *   (Issue #1162).
  *
  * @see Dispatcher
  * @see ShuntingLoop

@@ -74,7 +74,8 @@ private val logger = KotlinLogging.logger {}
  * @param interlockingFacade SP3.5 (Issue #573): when non-null, [DefaultNetworkActuatorPort.requestRoute]
  *   is routed through the interlocking safety kernel as the single chokepoint.
  *   Pass `null` (default) for `:fast-sim` native binary and legacy test wiring that runs
- *   without Koin DI; those callers fall back to the direct [PathReservationService] path.
+ *   without Koin DI; those callers fall back to the direct
+ *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService] path.
  * @param trainDecisionPolicy SP4.3 (Issue #565): per-train reactive acceleration policy,
  *   applied once per approved train after dispatcher decisions.  Defaults to
  *   [AlgorithmicTrainDecisionPolicy].  Pass a custom implementation to spy on or

@@ -46,7 +46,7 @@ import cz.vutbr.fit.interlockSim.sim.chosenTargetName
  * cells on — and burns part of the per-tick action budget on a request guaranteed to fail.
  *
  * [resolveAll] is the cycle-scoped entry point added to close that gap: it applies
- * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs]'s own `claimedSeparators`
+ * `RuleBasedDispatcher.checkAllInputs`'s own `claimedSeparators`
  * dedup — the same fixed evaluation order over
  * [DispatchObservation.innerBlockInputs]`+`[DispatchObservation.outerBlockInputs]. The two arms
  * agree about which train gets a given separator this tick **on real data**, where at most one
@@ -105,7 +105,7 @@ object NextHopResolver {
 	 * applying the same-tick same-target dedup [resolve] alone cannot provide (see this object's
 	 * KDoc). A separator that would qualify as more than one requested train's [NextHopOutcome.Hop]
 	 * target is granted to exactly one of them — the winner determined by
-	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs]'s own fixed evaluation
+	 * `RuleBasedDispatcher.checkAllInputs`'s own fixed evaluation
 	 * order over [DispatchObservation.innerBlockInputs]`+`[DispatchObservation.outerBlockInputs].
 	 *
 	 * The per-train short-circuit (a train is *decided* by its first eligible input — see
@@ -237,7 +237,7 @@ sealed interface NextHopOutcome {
 	 * [toTargetName], qualified exactly like a [Hop] would, but another active train's
 	 * eligible input claimed the same separator earlier in this same cycle's fixed evaluation
 	 * order (same-tick same-target dedup, mirroring
-	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs]'s `claimedSeparators`).
+	 * `RuleBasedDispatcher.checkAllInputs`'s `claimedSeparators`).
 	 * [resolve] alone can never produce this outcome — it has no visibility into other trains.
 	 *
 	 * Because [NextHopResolver.resolveAll] decides a train at its *first* eligible input, this
