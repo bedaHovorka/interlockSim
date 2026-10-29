@@ -156,8 +156,9 @@ core/src/
 ## Known Issues
 
 - **SIM-004:** ✅ resolved by SP2 (#1149): the `Station` abstraction replaced the hardcoded
-  `vyhybna.xml` topology. `ShuntingLoop.compatibilityIssues` still limits the scenario to
-  vyhybna-like stations until SP3 (#1150).
+  `vyhybna.xml` topology. `ShuntingLoop.compatibilityIssues` limits the scenario to stations with
+  InOuts of both orientations, a platform track and home signals; Červený Újezd runs since SP3
+  (#1150), Praha does not (see `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`).
   Minor simulation issues SIM-001 to SIM-006 are documented in code comments.
 - Train-physics passivation fix (Issue #291) is documented in
   [../docs/TRAIN_PASSIVATION_FIX.md](../docs/TRAIN_PASSIVATION_FIX.md) — a
