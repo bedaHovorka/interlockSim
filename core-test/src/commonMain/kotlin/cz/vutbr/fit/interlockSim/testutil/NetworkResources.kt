@@ -62,4 +62,15 @@ object NetworkResources {
 
 	/** Červený Újezd station network. */
 	val CERVENY_UJEZD_XML: String by lazy { fixture("cerveny_ujezd.xml") }
+
+	/**
+	 * Vyhybna with an automatic block section on the open line (signals facing the same way) and a
+	 * two-block-deep throat; only its two real station tracks count (Issue #1192).
+	 */
+	val STATION_THROAT_AND_AUTOMATIC_BLOCK_XML: String by lazy {
+		fixture("station-throat-and-automatic-block.xml")
+	}
+
+	/** Vyhybna whose signal next to InOut A faces away from an incoming train (Issue #1192). */
+	val STATION_HOME_SIGNAL_FACING_AWAY_XML: String by lazy { fixture("station-home-signal-facing-away.xml") }
 }

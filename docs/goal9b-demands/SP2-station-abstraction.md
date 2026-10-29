@@ -17,7 +17,7 @@ signal nor a platform-track end (the dispatcher only reads block inputs at those
 Praha (11 InOuts, 6 without a home signal, 14 unattached signals) are therefore rejected with an
 English message — `fast-sim sim <file>` exits with code 2 — until SP3 (#1150) adds the first
 runnable Červený Újezd scenario. The rule is structural only: track lengths, connectivity and
-signal direction are not checked (signal direction: D4, #1192). A vyhybna-shaped network whose
+signal direction are not checked (`Station` checks signal direction since #1192, `ShuntingLoop` does not). A vyhybna-shaped network whose
 shortest InOut-to-InOut distance is shorter than a train still passes it and aborts at run time
 (found in the SP2 review; it predates SP2 — the old coordinate validator accepted it too).
 
@@ -97,21 +97,24 @@ the track count.
 **Demand:** a per-track reachability (which entry lines can reach which station tracks) and
 usable length, so capacity can be stated per line and per train, not per station.
 
-### D4 — Signal direction in the station-track rule
+### D4 — Signal direction in the station-track rule (resolved by #1192)
 
-The platform-track rule ignores which way the end signals face, and it recognises throat blocks
-only one block deep (the block next to a home signal). It would therefore count an automatic
-block section between two same-facing signals, or a signal-bounded throat block two blocks in,
-as a station track. On the fixtures it happens to be right: Praha's excluded `(4,20)-(8,20)` has
-same-facing signals, and all 15 real station tracks of the three fixtures have opposite-facing
-end signals. The rule is deliberately unchanged in SP2.
+SP2 shipped a platform-track rule that ignored which way the end signals face, and recognised
+throat blocks only one block deep (the block next to a home signal). It would have counted an
+automatic block section between two same-facing signals, or a signal-bounded throat block two
+blocks in, as a station track. The fixtures happened to be right: Praha's excluded
+`(4,20)-(8,20)` has same-facing signals, and all 15 real station tracks of the three fixtures have
+opposite-facing end signals.
 
-**Demand (fix proposal):** a station track is a block whose two end signals face away from each
-other (each protects the track against the other direction); drop the home-adjacency special
-case; the home-signal rule should check facing too (the home signal faces the InOut's incoming
-trains).
-
-**Follow-up:** #1192 (sub-issue of SP3 #1150) owns this fix; SP2 changes no code for it.
+**Resolved in #1192** (`Station`, "Signal direction" in its KDoc): a station track is a block whose
+two end signals both face away from the block (a departure signal at each end, so the signals face
+away from each other); the home-adjacency special case is gone; the home signal of an entry/exit
+block must face away from that block too, that is towards the station, so it faces the train
+entering from the InOut. "Faces away from the block" is read from the signal's travel direction
+(`orientation` false = `F`/`H`, true = `A`/`C`) against the graph edge attached at that segment, so it
+holds for any block shape. `StationSignalDirectionTest` pins it on two new `:core-test` fixtures
+(`station-throat-and-automatic-block.xml`, `station-home-signal-facing-away.xml`); the capacities
+stay 2 / 4 / 9.
 
 ## Acceptance runs (2026-10-11)
 

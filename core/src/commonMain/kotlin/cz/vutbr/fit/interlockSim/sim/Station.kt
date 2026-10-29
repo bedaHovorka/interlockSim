@@ -29,15 +29,28 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * rather than graph nodes.
  *
  * **Derivation rules**
+ * - **Signal direction.** A [DynamicRailSemaphore] has a travel direction ([DynamicRailSemaphore.direction]):
+ *   the cell segment it lets a train leave through. Its `orientation` picks which of the two line
+ *   segments of its spatial type that is: `false` is the first (`HORIZONTAL`: `F`, towards +x;
+ *   `VERTICAL`: `H`, towards +y), `true` the second (`HORIZONTAL`: `A`, towards -x; `VERTICAL`: `C`,
+ *   towards -y). A semaphore at the end of a block **faces away from the block** when that segment
+ *   is not the one the block is attached to, that is when a train passing the signal in its travel
+ *   direction leaves the block. Said along a horizontal block: the signal at the west end has
+ *   `orientation = true` and the signal at the east end `orientation = false`. A signal that faces
+ *   away from a block is a departure signal for it, and an incoming train at the other end
+ *   meets it as an entry signal.
  * - An **entry/exit block** is the block at an InOut. Its signal is the home signal: the
- *   [DynamicRailSemaphore] at the other end of that block, when there is one. Entry/exit
+ *   [DynamicRailSemaphore] at the other end of that block when there is one and it faces away from
+ *   the block, that is towards the station, so it faces the train entering from the InOut. Entry/exit
  *   blocks keep the order of [SimulationEnvironment.getInOuts] (the document order of the
  *   network XML). Corners: an InOut node may host more than one block (each block is still one
  *   entry/exit block), two InOuts joined by a single block produce one entry/exit block naming
  *   both, and an InOut with no grid location is skipped with a warning.
- * - A **platform track** is a block bounded by a [DynamicRailSemaphore] at both ends where
- *   neither end is a home signal. A signal-bounded block next to a home signal belongs to the
- *   station throat, not to the station tracks. Platform tracks are ordered row by row (grid
+ * - A **platform track** is a block bounded by a [DynamicRailSemaphore] at both ends where both
+ *   semaphores face away from the block (a departure signal at each end, so the two signals face
+ *   away from each other). Signal-bounded blocks whose signals face the same way, such as an
+ *   automatic block section on open line or a throat block, are not station tracks, however deep
+ *   they lie. Platform tracks are ordered row by row (grid
  *   `y`, then `x` of their first end), and their signals are both end semaphores in the same
  *   order.
  * - The **switches** are every [DynamicRailSwitch] at a graph node, in the same row order.
@@ -135,6 +148,16 @@ class Station private constructor(
 
 			// One entry/exit block per block at an InOut: a block joining two InOuts (a plain
 			// linear track) is one block naming both, so ids stay unique.
+			// The semaphores at the ends of [block] that face away from it (see "Signal direction").
+			fun semaphoresFacingAway(
+				ends: List<Point>,
+				block: DynamicTrackBlock
+			): List<DynamicRailSemaphore> =
+				ends.mapNotNull { end ->
+					val signal = grid[end] as? DynamicRailSemaphore
+					signal?.takeIf { graph.assignedEdges(end)[it.direction()] !== block }
+				}
+
 			val inOuts = context.getInOuts().toList()
 			val inOutLabels = inOuts.mapIndexed { index, inOut -> inOut.name.ifBlank { "InOut${index + 1}" } }
 			val inOutsByBlock: Map<DynamicTrackBlock, List<Int>> =
@@ -152,18 +175,17 @@ class Station private constructor(
 			val entryExitBlocks =
 				inOutsByBlock.map { (block, indices) ->
 					val ends = endpoints[block].orEmpty()
-					val homeSignal = ends.map { grid[it] }.filterIsInstance<DynamicRailSemaphore>().singleOrNull()
+					val homeSignal = semaphoresFacingAway(ends, block).singleOrNull()
 					val name = BLOCK_PREFIX + indices.joinToString("/") { inOutLabels[it] }
 					val blockInOuts = indices.map { inOuts[it] }
 					StationBlock(idOf(ends), name, block, listOfNotNull(homeSignal), blockInOuts)
 				}
 
-			val homeSignals = entryExitBlocks.flatMap { it.signals }.toSet()
 			val platformTracks =
 				endpoints
 					.mapNotNull { (block, ends) ->
-						val signals = ends.map { grid[it] }.filterIsInstance<DynamicRailSemaphore>()
-						val isStationTrack = ends.size == 2 && signals.size == 2 && signals.none { it in homeSignals }
+						val signals = semaphoresFacingAway(ends, block)
+						val isStationTrack = ends.size == 2 && signals.size == 2
 						if (isStationTrack) block to signals else null
 					}.mapIndexed { index, (block, signals) ->
 						val name = BLOCK_PREFIX + (index + 1)
