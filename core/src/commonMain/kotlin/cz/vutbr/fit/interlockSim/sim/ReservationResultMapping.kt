@@ -112,8 +112,8 @@ internal fun PathReservationService.ReservationResult.toRouteResponse(
 			)
 		}
 		is PathReservationService.ReservationResult.GeometricallyImpossible -> {
-			// Issue #903: a permanent impossibility (rear-facing START or END, unconfigurable
-			// switch, or non-oriented route origin or end), not ordinary contention. The
+			// Issue #903: a permanent impossibility, not ordinary contention (classes: see
+			// ReservationResult.GeometricallyImpossible). The
 			// GeometricallyImpossible cause lets DefaultNetworkActuatorPort map this denial to its own
 			// RouteRequestResult.GeometricallyImpossible, excluded from the contention bucket.
 			logger.info {

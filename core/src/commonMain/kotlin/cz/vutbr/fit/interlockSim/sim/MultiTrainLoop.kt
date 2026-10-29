@@ -28,9 +28,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * First slice of Goal 1: Multi-Train Simulation.
  *
  * This interlocking process demonstrates multiple trains running on a shared
- * railway network. Unlike [ShuntingLoop], which caps concurrency to the number
- * of parallel tracks in `vyhybna.xml`, [MultiTrainLoop] accepts deterministic
- * train specifications and uses kDisco's [Resource] primitive during path setup.
+ * railway network. Unlike [ShuntingLoop], which caps concurrency at
+ * [ShuntingLoop.stationCapacity] (derived from the topology, Issue #1162), [MultiTrainLoop]
+ * accepts deterministic train specifications and uses kDisco's [Resource] primitive during
+ * path setup.
  *
  * ## kDisco `Resource` mapping
  *
@@ -447,15 +448,10 @@ open class MultiTrainLoop(
 	 *
 	 * The attempt makes **at most one** [PathReservationService.reservePath] call. Its result
 	 * does not depend on any dispatcher-side candidate path, because `reservePath` runs its own
-	 * candidate search; calling it once per topological candidate (the pre-#1148 loop) repeated
-	 * the identical, expensive search up to several hundred times inside one kDisco event and
-	 * froze the simulation clock.
+	 * candidate search.
 	 *
-	 * Before the call the [BlockResourceRegistry] gate is consulted: the capacity-1 resource of
-	 * every block of the candidate routes is checked non-blocking (`isAvailable`) and acquired
-	 * only when all of them can be. Resources are released immediately afterwards, before the
-	 * train starts; the journey-time exclusivity is enforced by [PathReservationService]. The
-	 * gate is inert today (see [BlockResourceRegistry]).
+	 * The call goes through the [BlockResourceRegistry] gate (see [reserveThroughGate]), which is
+	 * inert today; journey-time exclusivity is enforced by [PathReservationService].
 	 *
 	 * @return [EntryAttemptOutcome.Reserved] on success; [EntryAttemptOutcome.Retry] when this
 	 *   attempt failed on a retryable result and attempts remain; [EntryAttemptOutcome.Failed]
@@ -582,10 +578,10 @@ open class MultiTrainLoop(
 				}
 			}
 			is PathReservationService.ReservationResult.GeometricallyImpossible -> {
-				// Issue #903: a permanent impossibility (rear-facing START or END, or unconfigurable
-				// switch; both endpoints are InOuts, so the non-oriented endpoint refusals cannot
-				// arise here), not ordinary contention. Logged at WARN; the
-				// entry fails at once with GEOMETRICALLY_IMPOSSIBLE and is not retried.
+				// Issue #903: a permanent impossibility, not ordinary contention (classes: see
+				// ReservationResult.GeometricallyImpossible; the non-oriented endpoint classes cannot
+				// arise here, both endpoints are InOuts). Logged at WARN; the entry fails at once with
+				// GEOMETRICALLY_IMPOSSIBLE and is not retried.
 				logger.warn {
 					"MultiTrainLoop: geometrically impossible route for ${train.name}: ${result.reason}"
 				}

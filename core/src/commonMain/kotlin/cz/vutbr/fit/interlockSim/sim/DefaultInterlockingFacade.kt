@@ -49,8 +49,9 @@ private val logger = KotlinLogging.logger {}
  *   anywhere in the requested route is treated as a denial (fail closed), not as "assumed free".
  *
  * - **Whole-route release:** [releaseRoute] releases the entire route in one call through the
- *   approach lock (Issue #974); approach-locked, occupied and deferral-window blocks are kept
- *   reserved. There is no progressive, block-by-block release in this facade.
+ *   approach lock (Issue #974); the blocks it keeps are defined at
+ *   [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed].
+ *   There is no progressive, block-by-block release in this facade.
  *
  * - **Switch position mapping:** [SwitchPosition] (PLUS/MINUS, route-spec layer) and
  *   [RailSwitch.Conf] (MAIN/BRANCH, domain object layer) are disjoint in the codebase;
@@ -251,12 +252,8 @@ class DefaultInterlockingFacade(
 		logger.debug { "releaseRoute: trainId=$trainId, exitSignal=${exitSignal.name} (audit only)" }
 
 		// Whole-route release through the approach lock (Issue #974): the same release the port's
-		// releaseRouteDetailed performs. A block the train occupies (it stays OCCUPIED), a block that
-		// is approach-locked and a block inside the hold(1.0) deferral window (both stay RESERVED) stay
-		// registered and are reported as deferred; every other block and switch of the train is freed
-		// when the route can be cut right after the kept blocks. When it cannot, nothing is freed and
-		// every block is reported as deferred; if not even the blocks the train stands on can end the
-		// route, the release is refused and leaves every signal as it was too (Issue #1050, #1242).
+		// releaseRouteDetailed performs; its KDoc defines the kept blocks, the deferral and the
+		// refused release (Issue #1050, #1242), which apply here unchanged.
 		// Idempotent: an unknown trainId yields an empty result and touches nothing. Production
 		// releases through the port (NetworkActuatorPort.releaseRouteDetailed); this facade method has
 		// no production caller.

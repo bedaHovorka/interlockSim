@@ -258,7 +258,7 @@ class DefaultNetworkActuatorPort(
 		// A deferred block keeps its reservation; its signal was reset, so the state did change --
 		// except when the release was refused because the PathInfo cannot be trimmed past the
 		// blocks the train stands on (Issue #1242): then nothing changed, and `true` still reports
-		// the deferral, as before, so the caller retries.
+		// the deferral, as before; a repeat is refused the same way until the head has moved on.
 		return RouteRelease(
 			anyReleased = release.released.isNotEmpty() || release.deferred.isNotEmpty() || hadClearedSignals,
 			deferredBlockIds = release.deferred.map { BlockIdentity.stableBlockId(it) }

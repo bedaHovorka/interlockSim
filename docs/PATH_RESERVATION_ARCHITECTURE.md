@@ -1,7 +1,7 @@
 # Path Reservation Architecture
 
-**Document Version:** 1.2
-**Last Updated:** 2026-08-09
+**Document Version:** 1.3
+**Last Updated:** 2026-10-29
 **Related Issues:** #292 Phase 2 Enhancement; #893 (signal-clearing invariants + contiguity); #896/#899 (route-release fixes)
 
 ## Table of Contents
@@ -25,10 +25,19 @@ The path reservation system enables trains to atomically reserve sequences of tr
 
 ### Key Components
 
-- **PathReservationService** - Orchestration and atomic guarantees
-- **PathReservationRegistry** - Ownership tracking (bidirectional mapping)
-- **TopologyNavigator** - Static path finding (BFS traversal)
-- **DynamicTrackBlock** - State machine and transitions
+- **DefaultPathReservationService** - thin orchestrator behind `PathReservationService`; owns the candidate loop of `reservePath`, no state of its own
+- **RouteCandidateScreen** - read-only screening: origin and end guards, rear-facing and divergent candidates
+- **CandidateCommitter** - everything that mutates state for one candidate (Steps 2c-2i) and its scoped rollback
+- **RouteReleaser** - every release and rollback path, including the approach-lock deferral window
+- **ClearedSignalLedger** - which semaphore is lit for which train, and every reset back to STOP
+- **RouteSignalConfigurator** - clears the START and intermediate semaphores of a reserved route
+- **SwitchConfigurator** - sets, locks, registers and releases a candidate's switches
+- **ReservationTargetDiscovery** - what a route can be set to, and in which order
+- **ReservationContentionTracker** - blocked-request tracking and the one-shot conflict events
+- **DefaultReservationExpiry** (with `TailStallTracker`) - kernel-side expiry of holdings that are not used
+- **PathReservationRegistry** - ownership facade over `BlockOwnershipTable`, `SwitchOwnershipTable` and `PathInfoStore` / `PathInfoMerger`
+- **TopologyNavigator** - static path finding
+- **DynamicTrackBlock** - state machine and transitions
 
 ### Design Goals
 
@@ -61,11 +70,11 @@ Train requests path → Navigator finds routes → Service validates blocks
 
 **Key Methods:**
 - `reservePath()` - Find and reserve free path
-- `releasePath()` - Free all blocks for a train
+- `releasePath()` / `releasePathDetailed()` - Free the blocks of a train (the latter with approach locking)
 - `isPathAvailable()` - Check availability (read-only)
 - `getReservedBlocks()` - Query train ownership
 
-**Design Principle:** Stateless coordinator (no internal state except dependencies)
+**Design Principle:** Thin orchestrator. It wires the units listed under [Key Components](#key-components) and runs the candidate loop; the state lives in `ClearedSignalLedger`, `ReservationContentionTracker`, `RouteReleaser` (approach-lock deferral window) and `DefaultReservationExpiry`, plus the registry's tables.
 
 ### PathReservationRegistry
 
@@ -75,21 +84,24 @@ Train requests path → Navigator finds routes → Service validates blocks
 - Track bidirectional mapping: train ↔ blocks
 - Detect conflicts (block already owned by different train)
 - Provide atomic registration with all-or-nothing semantics
+- Hold switch claims and the merged `PathInfo` per train
 
-**Key Data Structures:**
-```kotlin
-trainToBlocks: Map<String, MutableList<DynamicTrackBlock>>  // Train → Blocks
-blockToTrain: Map<DynamicTrackBlock, String>                // Block → Train
-```
+**Delegates:** the registry is a facade over three units, each owning its own maps.
+- `BlockOwnershipTable` - the train ↔ block mapping (`trainToBlocks` / `blockToTrain`) and the registration times the expiry reads
+- `SwitchOwnershipTable` - switch claims (`SwitchClaim`, including the flank marker) and stale-claim reclamation
+- `PathInfoStore` with `PathInfoMerger` - the per-train `PathInfo`, merged on every extension
 
 **Key Methods:**
-- `registerAtomic()` - Atomic registration with conflict detection (NEW)
-- `unregister()` - Remove all mappings for a train
+- `registerAtomic()` - Atomic registration with conflict detection
+- `unregister()` / `unregisterBlock()` - Remove all mappings for a train, or release one FREE block (reclaiming stale switch claims at its ends)
 - `getOwner()` / `getBlocks()` - Query mappings
+- `registerSwitches()` / `registerFlankSwitches()` / `reclaimStaleSwitchOwnership()` - Switch claims
+- `registerPathInfo()` / `restorePathInfo()` / `trimPathInfoToHeldBlocks()` / `canTrimPathInfoTo()` - PathInfo merge, snapshot restore and tail trimming
+- `expiredHoldings()` - Un-entered holdings older than the TTL, read by `DefaultReservationExpiry`
 
 **Why Bidirectional?**
-- O(1) conflict detection via `blockToTrain`
-- O(1) block release via `trainToBlocks`
+- O(1) conflict detection via the block → train map
+- O(1) block release via the train → blocks map
 - Memory overhead negligible for typical simulations
 
 ### TopologyNavigator
@@ -126,58 +138,38 @@ FREE ----setUpPath()----> RESERVED ----enter()----> OCCUPIED
 ```
 
 **Key Properties:**
-- `trainId: String?` - Reservation ownership (set during RESERVED and OCCUPIED)
+- `trainName: String?` - Reservation ownership, the owning train's id (set during RESERVED and OCCUPIED)
 - `occupant: TrackOccupant?` - Physical presence (only during OCCUPIED)
 - `reservedFrom: PathSeparator?` - Reservation direction
 
-**Why String-based trainId?** See [Design Decisions](#design-decisions)
+**Why a String-based train id?** See [Design Decisions](#design-decisions)
 
 ---
 
 ## 3. Reservation Algorithm
 
-### High-Level Algorithm
+### Step Overview
 
-```kotlin
-fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): ReservationResult {
-    // Step 1: Find all topological paths
-    val candidatePaths = navigator.findAllTopologicalPaths(start, target, maxDepth)
-    if (candidatePaths.isEmpty()) return NoPathExists
+`DefaultPathReservationService.reservePath` is a thin loop; the KDoc of `reservePath` stays the detailed source. In order:
 
-    // Step 2: Try each candidate path
-    for (path in candidatePaths) {
-        // 2a: Extract unique blocks
-        val blocks = extractUniqueBlocks(path)
-
-        // 2b: Validate all blocks FREE
-        if (!blocks.areAllFree()) continue
-
-        // 2c: Attempt atomic reservation (with rollback)
-        val reservationResult = tryAtomicReservation(trainId, start, blocks)
-        if (reservationResult != null) continue  // Failed, try next path
-
-        // 2d: Register ownership (atomic operation)
-        when (val result = registry.registerAtomic(trainId, blocks)) {
-            is Success -> return Success(blocks)
-            is Conflict -> {
-                rollbackReservation(start, blocks)
-                return Conflict(result.conflictingBlock, result.existingOwner)
-            }
-        }
-    }
-
-    // All paths blocked
-    return AllPathsBlocked(candidatePaths.size)
-}
-```
+1. **Expiry at entry (Issue #1174).** The public overload first releases the stale holdings of *other* trains (`expireStaleReservations`). The internal overload that the `reservePathToAny` attempt loops call runs no expiry, so no expiry can move the snapshots their bypass rollback relies on.
+2. **Step 0, three guards** (`RouteCandidateScreen`): a non-oriented start, a non-oriented target, and a start that is not contiguous with the train's footprint. Each rejects before anything is touched.
+3. **Step 1, candidate discovery** (`findCandidatePaths`). No candidates means `NoPathExists`.
+4. **Step 1.5, rear-facing ends (G8, Issue #1064)** and **Step 1.6, divergent candidates (Issue #1066)** are screened out before the loop and recorded as failures.
+5. **Step 2, one pass per remaining candidate:**
+   - 2a extract the unique blocks; 2a.5 drop the blocks this train already owns (`forwardBlocks`); a candidate that owns every block takes `reserveAlreadyOwnedPath`
+   - 2b check that the forward blocks are FREE or owned by this train; otherwise remember the first blocked (block, owner) pair and try the next candidate
+   - 2c reserve the forward blocks all-or-nothing (`CandidateCommitter.tryAtomicReservation`)
+   - 2d to 2i hand the candidate to `CandidateCommitter.registerAndFinalizeCandidate`: register ownership, build the PathInfo, reclaim switch ownership, configure switches and the START signal, light the intermediate signals, merge the PathInfo
+6. **After the loop**, `classifyExhaustedAttempt` turns the recorded failures into a result: `DivergesFromHeldRoute` or `GeometricallyImpossible` when every candidate failed permanently, otherwise `AllPathsBlocked(candidates)` with the contention recorded.
 
 ### Detailed Steps
 
-#### Step 0: Endpoint Precondition (Issue #1188)
+#### Step 0: Endpoint Preconditions (Issues #1188, #1200)
 
-**Method:** `rejectNonOrientedStart(trainId, start, entryPoint)` (`RouteCandidateScreen.kt`)
+**Methods:** `rejectNonOrientedStart(trainId, start, entryPoint)` and its END-side twin `rejectNonOrientedEnd(trainId, target, entryPoint)` (`RouteCandidateScreen`)
 
-**Purpose:** Routes run signal-to-signal, so `start` must be an `OrientedPathSeparator` (a semaphore or an InOut). A switch is interior track, never an endpoint — the same invariant Issue #938 pinned for `PathInfo.start`. A non-oriented origin is rejected with `GeometricallyImpossible` **before** anything is touched, and `reservePathToAny` repeats the guard up front so the rejection is not re-derived once per candidate target.
+**Purpose:** Routes run signal-to-signal, so `start` must be an `OrientedPathSeparator` (a semaphore or an InOut). A switch is interior track, never an endpoint — the same invariant Issue #938 pinned for `PathInfo.start`. A non-oriented origin is rejected with `GeometricallyImpossible` **before** anything is touched, and `reservePathToAny` repeats the guard up front so the rejection is not re-derived once per candidate target. The twin applies the same rule to the target (Issue #1200): a route can only end at a semaphore or an InOut, because a train that held a route ending at a switch could never leave it (every extension from a switch is refused by the start guard).
 
 **Why it must precede everything:** without it, a switch start passed Step 2c/2d (blocks reserved AND registered to the train) and only then threw `SimulationException[FATAL]` ("PathSeparator must be OrientedPathSeparator") out of `configureSwitchesInPath` → `DefaultSimulationContext.getSegment`, past every rollback path. The blocks stayed registered to a route that was never granted, so a later request from a separator that does not bound them was refused as `NonContiguousStart`. Pinned by `PathReservationNonOrientedOriginTest`.
 
@@ -193,23 +185,17 @@ fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): R
 
 **Why distinct from `AllPathsBlocked`:** `AllPathsBlocked` is ordinary contention — a caller should retry next tick. `NonContiguousStart` will never succeed while the train stays where it is; the caller (or the LLM dispatcher behind it) must ask for a different origin. Collapsing the two hides a dispatcher-output defect inside a routine-traffic counter.
 
-#### Step 1: Path Discovery (TopologyNavigator)
+#### Step 1: Path Discovery
 
-**Method:** `findAllTopologicalPaths()`
-**Algorithm:** Breadth-First Search (BFS)
+**Method:** `findCandidatePaths(...)` in `DefaultPathReservationService`
 
-**Input:**
-- Start separator (e.g., InOut entry point)
-- Target separator (e.g., InOut exit point)
-- Max depth limit (default: 100)
+**Sources, in order of precedence:**
+- **InOut to InOut:** `RouteFinder.findRoutes`, cost-sorted, so the cheapest route is tried first.
+- **Any other pair:** `TopologyNavigator.findAllTopologicalPaths(start, target, maxDepth)`, or the list the caller already enumerated (Issue #966), which the `reservePathToAny` attempt loop passes in so the paths are not enumerated twice.
 
-**Output:**
-- List of paths (each path = list of TrackSections)
-- Empty list if no topological route exists
+**Output:** a list of paths (each path = list of TrackSections); empty if no topological route exists.
 
-**Ordering:**
-- BFS guarantees shortest path first
-- Multiple paths possible via switches/junctions
+**Cost control:** the switch-constrained enumeration behind target discovery and `isPathAvailable` is bounded by a node budget and cached per navigator (`RouteSearch`, Issue #1151); it depends on the static topology only, never on block state.
 
 #### Step 2a: Block Extraction
 
@@ -233,59 +219,56 @@ return path.mapNotNull { section ->
 }
 ```
 
+#### Step 2a.5: Owned-Block Filtering (Issue #296)
+
+**Method:** `blocks.excludingOwnedBy(trainId)` yields `forwardBlocks`, the blocks this call must newly reserve.
+
+**Why:** blocks the train already owns (OCCUPIED behind it, or RESERVED from an earlier separator) must not be re-reserved; doing so raised TOCTOU conflicts on route extensions. The same form is shared with the Step 1.6 probe.
+
+**Already-owned candidate:** when `forwardBlocks` is empty the candidate takes `reserveAlreadyOwnedPath`. It only (re-)configures the START signal and registers or merges the PathInfo, and a redundant re-request for the route the train already holds is a no-op that still reports `Success` (Issues #296, #904).
+
 #### Step 2b: Availability Check
 
-**Method:** `blocks.areAllFree()`  (extension function)
+**Method:** `forwardBlocks.areAllFreeOrOwnedBy(trainId)` (extension function)
 
-**Checks:** All blocks in FREE state
+**Checks:** every forward block is FREE or already owned by this train.
 
 **Why Check Before Reserve?**
 - Early rejection of blocked paths
 - Avoids unnecessary rollback overhead
 - Clear separation of validation and modification
 
+**On failure:** the first blocked (block, owner) pair is remembered for the contention record, and the loop tries the next candidate.
+
 **Trade-off:** TOCTOU window exists (see [TOCTOU Analysis](#toctou-trade-off-analysis))
 
 #### Step 2c: Atomic Reservation
 
-**Method:** `tryAtomicReservation(trainId, separator, blocks)`
+**Method:** `CandidateCommitter.tryAtomicReservation(trainId, separator, blocks)`
 
 **Algorithm:**
 ```kotlin
 val reservedSoFar = mutableListOf<DynamicTrackBlock>()
 try {
     for (block in blocks) {
-        block.setUpPathWithTrainId(separator, trainId)
+        block.setUpPath(separator, trainId)
         reservedSoFar.add(block)
     }
     return null  // Success
-} catch (e: TrackReservationException) {
-    // Rollback partial reservation
-    rollbackReservation(separator, reservedSoFar)
-    return classifyError(e)
+} catch (e: Exception) {
+    return rollbackAndClassifyReservationFailure(separator, trainId, reservedSoFar, e)
 }
 ```
 
 **Atomicity Guarantee:**
 - Either all blocks reserved, or none
-- Partial failures trigger automatic rollback
+- Any failure rolls the partial reservation back through `RouteReleaser.rollbackReservation`, which cancels a block only if it was reserved from this separator (`reservedFrom === separator`)
 
-**Rollback Strategy:**
-```kotlin
-for (block in reservedSoFar) {
-    if (block.reservedFrom === separator) {
-        block.cancelPathSetup(separator)
-    }
-}
-```
-
-**Error Handling:**
-- `AlreadyReservedConflict` → Try next path (TOCTOU race)
-- `InvalidStateTransition` → Log error, try next path (unexpected)
+**Error Handling:** `rollbackAndClassifyReservationFailure` logs by exception type (`AlreadyReservedConflict` as a TOCTOU race, `InvalidStateTransition` as a state-machine violation, anything else as unexpected) and reports `AllPathsBlocked(1)` for the candidate, so `reservePath` tries the next one.
 
 #### Step 2d: Ownership Registration
 
-**Method:** `registry.registerAtomic(trainId, blocks)`
+**Method:** `registry.registerAtomic(trainId, forwardBlocks)`, called from `CandidateCommitter.registerAndFinalizeCandidate`
 
 **Purpose:** Track train ownership in registry
 
@@ -293,20 +276,26 @@ for (block in reservedSoFar) {
 - Either all blocks registered, or none
 - Conflict detection before registration
 
-**Result Handling:**
-```kotlin
-when (val result = registry.registerAtomic(trainId, blocks)) {
-    is Success -> return Success(blocks)
-    is Conflict -> {
-        rollbackReservation(separator, blocks)
-        return Conflict(result.conflictingBlock, result.existingOwner)
-    }
-}
-```
+**Result Handling:** `Success` continues with Steps 2e-2i. `Conflict` rolls back only the forward blocks this call reserved, never the blocks the train already held (Issue #1025), emits the two conflict events and returns `Conflict(conflictingBlock, existingOwner)`, which ends the whole request.
 
 **Why After Block Reservation?**
 - Block state changes must precede registry updates
 - Registry is metadata tracking, not primary state
+
+#### Steps 2e-2i: Candidate Finalization (`CandidateCommitter`)
+
+`registerAndFinalizeCandidate` runs these steps for a candidate that registered successfully. Every rollback is scoped to THIS candidate: the snapshots it needs (`priorSwitches`, `clearedBeforeCandidate`) are taken before the first mutation they guard, so the train's earlier hops (blocks, switches, signals, PathInfo) always survive.
+
+| Step | Unit of work | On failure |
+|---|---|---|
+| 2e | Build the candidate's `PathInfo` with entry directions (`buildCandidatePathInfo`). | n/a |
+| 2e.5 | Reclaim switch ownership (`reclaimCandidateSwitchOwnership`): release ORPHAN locks (a stray `setUpPath` that never reached `registerSwitches`, Issue #1065) and STALE foreign ownership (Issue #1076) among the candidate's switches, before they are configured. | n/a |
+| 2f | Configure and register the candidate's switches (`configureAndRegisterSwitches`). Runs before the signals so the switches are in the right position. | `rollbackUnconfigurableCandidate`. `Unconfigurable` (Issue #742) is recorded as a permanent geometric failure; `Locked` (Issue #1065, SI-5) is transient contention (`AllPathsBlocked`). Try the next candidate. |
+| 2g | Configure the START signal (`configureCandidateStartSignal`); an InOut START is driven by the forward blocks, a semaphore START by `blocks.first()`. | `rollbackFailedStartSignalCandidate`: record a G4 rejection as geometric, reset the candidate's cleared signals through `ClearedSignalLedger`, then `rollbackUnconfigurableCandidate`. Try the next candidate. |
+| 2h | Light the intermediate semaphores along the path (`configureIntermediateSemaphores`); on a route extension only boundaries that lead into a new block. | n/a |
+| 2i | Merge the forward-only PathInfo into the registry (`registerPathInfo`). Registration comes last, so no rollback path can leave a PathInfo for an unusable route behind. | `rollbackIfMergeAborted`: reset the candidate's signals and roll the candidate back (Issue #904). Try the next candidate. |
+
+After 2i the committer emits `BlockReserved` only for the forward blocks (Issue #1081), clears the train's blocked-contention record and returns `Success(blocks)`.
 
 ---
 
@@ -334,6 +323,8 @@ TrackReservationException (sealed class)
 | **RegistrationResult.Conflict** | Registry detects ownership conflict | Rollback blocks, return Conflict | Medium |
 | **NoPathExists** | No topological route (disconnected network) | Report to caller | High |
 | **NonContiguousStart** | Start separator bounds none of the train's blocks (Issue #893, A-R1); will never succeed while the train stays where it is | Caller must request a different origin; do NOT retry the same start | High |
+| **GeometricallyImpossible** | The request can never succeed as asked: non-oriented start or end, or EVERY candidate failed geometrically (rear-facing START or END, unconfigurable switch; Issues #903, #937, #1188, #1200) | Caller must not retry the same request; a mix with a merely busy candidate stays `AllPathsBlocked` | High |
+| **DivergesFromHeldRoute** | Every candidate leaves the route the train already holds (Issue #1066) | Extend from the held target or cancel the route first | Medium |
 
 ### Handling Guidelines
 
@@ -342,7 +333,7 @@ TrackReservationException (sealed class)
 **Scenario:**
 ```kotlin
 // Block was FREE during check, but became RESERVED before reservation
-if (blocks.areAllFree()) {  // Check: all FREE
+if (forwardBlocks.areAllFreeOrOwnedBy(trainId)) {  // Check: all FREE
     // ... Time passes ...
     block.setUpPath(separator)  // Reserve: throws AlreadyReservedConflict!
 }
@@ -410,13 +401,13 @@ when (val result = registry.registerAtomic(trainId, blocks)) {
 |---|-----------|------|--------|
 | G1 | A partial (tail) route release must reset the governing semaphores of every released block through the ownership-aware `resetSemaphoresForReleasedBlocks`, not just `reservedFrom as? DynamicRailSemaphore`. | A3 | `PathReservationService.resetSemaphoresForReleasedBlocks`; impl `ClearedSignalLedger.resetSemaphoresForReleasedBlocks` |
 | G2 | `unregisterBlock` (per-block tail-clearance) must return the released block's governing semaphores to STOP, not just update the registry. | A4 | impl `RouteReleaser.unregisterBlock` (the semaphore reset runs before `registry.unregisterBlock`, and `emitBlockReleased` comes last) |
-| G3 | A signal-config failure in `reservePath` Step 2g must undo any PARTIAL aspect write (START may be physically lit though `recordClearedSemaphore` never ran) via `resetSemaphoreSet` + `resetUnrecordedStartSignal`. | A5 | `DefaultPathReservationService.reservePath` Step 2g; resets in `ClearedSignalLedger.resetSemaphoreSet` / `resetUnrecordedStartSignal` |
+| G3 | A signal-config failure in `reservePath` Step 2g must undo any PARTIAL aspect write (START may be physically lit though `recordClearedSemaphore` never ran) via `resetSemaphoreSet` + `resetUnrecordedStartSignal`. | A5 | `CandidateCommitter.configureCandidateStartSignal`, undo in `CandidateCommitter.rollbackFailedStartSignalCandidate` (through `ClearedSignalLedger.resetCandidateSignals`); resets in `ClearedSignalLedger.resetSemaphoreSet` / `resetUnrecordedStartSignal` |
 | G4 | A route whose START semaphore faces AWAY from the requested direction must be rejected outright (a rear-facing START grants no proceed authority — a #566-class stall). | A1 | `RouteSignalConfigurator.configureStartSignal` (the G4 guard, `StartSignalResult.RejectedG4`) |
-| G5 | `DispatchDecision.SetSignalAspect` carries an optional `trainName`; `DefaultNetworkActuatorPort.setSignalAspect` has an attributed 3-arg overload recording through the same single ledger — closing the tracking-contract hole for any future caller. (Attribution-only; no live behaviour change.) | A6 | commit `e8f5460e` |
+| G5 | `DispatchDecision.SetSignalAspect` carries an optional `trainName`; `DefaultNetworkActuatorPort.setSignalAspect` has an attributed 3-arg overload recording through the same single ledger — closing the tracking-contract hole for any future caller. (Attribution-only; no live behaviour change.) | A6 | PR #899 (squash `8082f900`) |
 | G6 | Every cleared signal — including ones written by external paths (`DefaultInterlockingFacade.clearSignal`, the facade's block-list `requestRoute`) — must be folded into the single service ledger (`recordExternalClearedSemaphore`) so a later `releasePath`/sweeper reset can find and drop it. | A6 | `PathReservationService.recordExternalClearedSemaphore`; impl `DefaultPathReservationService.recordExternalClearedSemaphore` (delegates to `ClearedSignalLedger`) |
 | G7 | `releasePath` must reset a train's cleared signals BEFORE its `blocks.isEmpty()` early return, and `releaseRoute` must report truthfully (via `hasClearedSignals`) when a train holds cleared signals but zero blocks — a signals-only reclaim counts as work done. | A7 | impl `RouteReleaser.release` (the signal reset runs before the empty-blocks early return), `PathReservationService.hasClearedSignals` |
 | G8 | A route whose END semaphore faces AWAY from the direction of travel at arrival must be rejected before any block, switch or signal is touched (a rear-facing end leaves the train standing at its last facing signal, holding track it cannot use — the #1031/#1060 stall). InOut ends are exempt; the direction is judged per candidate at the target's own cell. Recorded as a geometric failure, so a request whose every candidate ends rear-facing is `GeometricallyImpossible`. | #1064 | `RouteCandidateScreen.rearFacingEndReason` (`reservePath` Step 1.5) |
-| G9 | Safety property SI-5: `DynamicRailSwitch.setUpPath` must never move a switch that is locked in a DIFFERENT position — a live route's own switch lock is authoritative, the same way `changeConf` already honours it. A candidate that needs the other position throws `SwitchLockedException`, caught before configuration touches `conf` or `locked`. Unlike G4/G8, this is TRANSIENT contention (`AllPathsBlocked`), never `GeometricallyImpossible` — the switch frees once its holder's route releases it, and misclassifying it would make `InOutWorker` throw instead of letting the train wait (the #1031 stall's root cause: `configureSwitchesInPath` silently re-threw a live route's switch, corrupting it before the Step 2i merge-abort rollback ever ran). A companion reclamation (`PathReservationRegistry.unregisterBlock` → `reclaimStaleSwitchOwnership`, since #1103; before that `DefaultPathReservationService.dropFreedBlock` → `reclaimStaleSwitchLocks`) releases a switch lock once its owner holds no block adjacent to it, so a train that has merely PASSED a switch does not block every other train forever. | #1065 | `DynamicRailSwitch.kt` `setUpPath`; `SwitchConfigurator.kt` `configureSwitchesInPath`/`SwitchConfigOutcome`; `PathReservationRegistry.kt` `unregisterBlock`/`reclaimStaleSwitchOwnership` |
+| G9 | Safety property SI-5: `DynamicRailSwitch.setUpPath` must never move a switch that is locked in a DIFFERENT position — a live route's own switch lock is authoritative, the same way `changeConf` already honours it. A candidate that needs the other position throws `SwitchLockedException`, caught before configuration touches `conf` or `locked`. Unlike G4/G8, this is TRANSIENT contention (`AllPathsBlocked`), never `GeometricallyImpossible` — the switch frees once its holder's route releases it, and misclassifying it would make `InOutWorker` throw instead of letting the train wait (the #1031 stall's root cause: `configureSwitchesInPath` silently re-threw a live route's switch, corrupting it before the Step 2i merge-abort rollback ever ran). A companion reclamation (`PathReservationRegistry.unregisterBlock` → `SwitchOwnershipTable.reclaimStaleSwitchOwnership`, since #1103) releases a switch lock once its owner holds no block adjacent to it, with a reclaim failure contained there, so a train that has merely PASSED a switch does not block every other train forever. | #1065 | `DynamicRailSwitch.kt` `setUpPath`; `SwitchConfigurator.kt` `configureSwitchesInPath`/`SwitchConfigOutcome`; `PathReservationRegistry.kt` `unregisterBlock`/`reclaimStaleSwitchOwnership` |
 | G10 | Switch ownership is never overwritten: `PathReservationRegistry.registerSwitches` rejects a switch registered to a DIFFERENT train atomically (pre-scan before any mutation), so `switchToTrain` and `trainToSwitches` can never disagree about the owner. A candidate that needs such a switch even in the SAME position is refused as transient `Locked` contention (`AllPathsBlocked`) — but only when the required configuration is known, so a #742 geometric impossibility still classifies as `Unconfigurable`. STALE foreign ownership (owner holds no adjacent block) cannot survive a block release: `PathReservationRegistry.unregisterBlock` reclaims it at the freed block's ends on every release path, including a direct registry call (#1103 item 1). The only way a stale claim can still arise is the public `registerSwitches` taken with no adjacent block held; `reservePath` Step 2e.5 reclaims that one before the candidate takes the switch. Facade flank grants (`registerFlankSwitches`) are never stale, since a flank switch protects a route it is not adjacent to (see `INTERLOCKING_SCOPE_LIMITATIONS.md` §B2). | #1076, #1103 | `PathReservationRegistry.registerSwitches`/`isStaleSwitchOwnership`/`unregisterBlock`/`reclaimStaleSwitchOwnership`; `SwitchConfigurator.kt` `switchOwnershipPreCheck`/`reclaimStaleForeignSwitchOwnership` |
 
 **Malformation class note:** G4 (rear-facing START rejection), G8 (rear-facing END rejection) and the contiguity precondition (A-R1, [Step 0](#step-0-contiguity-precondition-issue-893-task-a-r1)) are the same malformation class — a route the train cannot actually use (`PathReservationStartDirectionTest`). G9 is explicitly NOT in that class: a G9 refusal is ordinary, resolving contention over a shared switch, not a route the train can never use.
@@ -469,20 +460,23 @@ A semaphore that has since been re-cleared for a DIFFERENT train is left alone b
 
 > **Scope note (*storno* vs *uvolnění*):** real railways distinguish *storno* (cancel before occupancy: dispatcher command, signal→Stop, then a mandatory time-release timer before the *závěr* frees) from *uvolnění* (release after occupancy: automatic/progressive behind the train). The simulator conflates both into the single release path below and has no approach-locking timer — acceptable because entry is gated on reservation, not signal-sighting (see [INTERLOCKING_SCOPE_LIMITATIONS.md](INTERLOCKING_SCOPE_LIMITATIONS.md) §B1 for the full safety argument).
 
-There are six release call sites:
+There are nine release paths:
 
 | # | Call site | Location | Role | Signals-first? |
 |---|-----------|----------|------|----------------|
 | 1 | `releasePath` | `RouteReleaser` (extracted SP12.2, PR #1194; the service delegates) | Full-route release. Signals reset (the `resetSemaphoresForReleasedBlocks` and `resetClearedSemaphores` callbacks) before the empty-blocks early return and before the per-block `cancelBlock` loop; `registry.unregister` in the `finally`. | Yes (self-enforced) |
-| 2 | `unregister` | `RouteReleaser` (same extraction) | Production train-completion path (`Train → releaseTrainReservations`). Reset first, then the per-block `cancelPathSetup` loop, switch unlock AFTER block cancellation (matching the release order — a switch is unlocked only once nothing it protects is still RESERVED), `registry.unregister` last. **F1 fix (commit `d99862bc`):** the per-block `cancelPathSetup` loop was ADDED so a journey completing with RESERVED-but-never-entered blocks (bidirectional reversal / abandoned extension) no longer leaves orphan RESERVED blocks. Previously `registry.unregister` only removed ownership maps and `emitBlockReleased` hardcoded `newState=FREE`, masking the state/event divergence. Mirrors the `cancelBlock` loop of `releaseAllBlocks`. | Yes (self-enforced) |
-| 3 | `unregisterBlock` | `RouteReleaser` (same extraction) | Production per-block tail-clearance (`Train.Tail.separatorAction`). `resetSemaphoresForReleasedBlocks(trainId, listOf(block))` runs BEFORE `registry.unregisterBlock` and `emitBlockReleased` (**F2 fix**, commit `d99862bc`; PR #901 review strengthen: the reset precedes the registry removal itself — there is no instant where a block is owner-less-and-FREE while its authorising signal still shows proceed; on the `released == false` path the extra reset is fail-safe by last-writer-wins — its comment matches `release`'s "Signals first, blocks second" step). | Yes (self-enforced) |
+| 2 | `unregister` | `RouteReleaser` (same extraction) | Production train-completion path (`Train → releaseTrainReservations`). Reset first, then the per-block `cancelPathSetup` loop, switch unlock AFTER block cancellation (matching the release order — a switch is unlocked only once nothing it protects is still RESERVED), `registry.unregister` last. **F1 fix (PR #901, squash `0d348f2b`):** the per-block `cancelPathSetup` loop was ADDED so a journey completing with RESERVED-but-never-entered blocks (bidirectional reversal / abandoned extension) no longer leaves orphan RESERVED blocks. Previously `registry.unregister` only removed ownership maps and `emitBlockReleased` hardcoded `newState=FREE`, masking the state/event divergence. Mirrors the `cancelBlock` loop of `releaseAllBlocks`. | Yes (self-enforced) |
+| 3 | `unregisterBlock` | `RouteReleaser` (same extraction) | Production per-block tail-clearance (`Train.Tail.separatorAction`). **F2 fix (PR #901, squash `0d348f2b`):** the release preconditions (block owned by this train, unoccupied, FREE) are checked FIRST (PR #1068 review); a block that fails them is not released and no signal is touched, since its boundaries are not known to be behind the train's head. Only then does `resetSemaphoresForReleasedBlocks(trainId, listOf(block))` run, BEFORE `registry.unregisterBlock` and `emitBlockReleased`, so there is no instant where a block is owner-less-and-FREE while its authorising signal still shows proceed. | Yes (self-enforced) |
 | 4 | bypass-rollback | `DefaultPathReservationService.releaseBypassRollbackBlocks` (private helper; call site `reservePathToAnyNextSemaphore`) | Releases the wrongly-reserved path when the reserved path doesn't use the required `next` block. Per-block `cancelPathSetup` with `registry.unregisterBlock` in `finally` (**F3 fix**: `finally` so a `cancelPathSetup` throw no longer leaks a registered block; uses `block.reservedFrom`). Signals reset done by the caller in `reservePathToAnyNextSemaphore` before the helper. **PR #901 review — transactional completion:** the same reject branch also undoes the candidate's switch registrations/locks (registry delta vs the pre-attempt snapshot, released via `SwitchConfigurator.releaseCandidateSwitches`) and restores its merged `PathInfo` to the pre-attempt snapshot via `PathReservationRegistry.restorePathInfo`, so a rejected alternative no longer leaves track locked or navigation metadata pointing through a released route. | Caller-enforced |
-| 5 | `rollbackUnconfigurableCandidate` | `CandidateCommitter` (extracted SP12.10, `internal`) | Rolls back a candidate whose switches (Step 2f) or START signal (Step 2g) couldn't be configured -- now two switch-configuration causes, Unconfigurable (#742) and Locked (#1065, SI-5), sharing this one rollback. Scoped to the candidate's own mutations (no `registry.unregister(trainId)`); candidate-only switch release delegated to `SwitchConfigurator.releaseCandidateSwitches` (which releases only switches owned by this train or by NO train -- a switch registered to another train keeps both its lock and its registry entry, Issue #1065 review); per-block `cancelPathSetup` with `registry.unregisterBlock` in `finally` (**F3 fix**). Signal-config-failure (G3) reset done by the caller in Step 2g. Neither `releaseCandidateSwitches` nor any other rollback path restores a released switch's *position* (only its lock) -- sound since Issue #1065's G9 guard means the position was never wrongly written in the first place; a rolled-back candidate's own newly-locked-then-unlocked switches carry no authority once unlocked, so their leftover position is harmless. | Caller-enforced |
-| 6 | `releaseUntravelledTail` | `PartialRouteReleaser` (interface, `dispatcher-agent`), impl `RegistryPartialRouteReleaser` | Releases the un-travelled tail of a stalled reservation while leaving the occupied block registered. `resetSemaphoresForReleasedBlocks(trainId, eligible)` in `RegistryPartialRouteReleaser.releaseUntravelledTail` BEFORE any `cancelPathSetup` / `unregisterBlock`. Caller `OrphanReservationSweeper` (the stalled-tail sweep). | Yes (self-enforced) |
+| 5 | `rollbackUnconfigurableCandidate` | `CandidateCommitter` (extracted SP12.10, `internal`) | Rolls back a candidate whose switches (Step 2f) or START signal (Step 2g) couldn't be configured -- now two switch-configuration causes, Unconfigurable (#742) and Locked (#1065, SI-5), sharing this one rollback. Scoped to the candidate's own mutations (no `registry.unregister(trainId)`); candidate-only switch release delegated to `SwitchConfigurator.releaseCandidateSwitches` (which releases only switches owned by this train or by NO train -- a switch registered to another train keeps both its lock and its registry entry, Issue #1065 review); each fresh block goes through `RouteReleaser.rollbackBlock` (cancel, then `registry.unregisterBlock`, Issue #961). Signal-config-failure (G3) reset done by the caller in Step 2g. Neither `releaseCandidateSwitches` nor any other rollback path restores a released switch's *position* (only its lock) -- sound since Issue #1065's G9 guard means the position was never wrongly written in the first place; a rolled-back candidate's own newly-locked-then-unlocked switches carry no authority once unlocked, so their leftover position is harmless. | Caller-enforced |
+| 6 | `releaseUntravelledTail` | `PartialRouteReleaser` (interface, `dispatcher-agent`), impl `RegistryPartialRouteReleaser` | Releases the un-travelled tail of a stalled reservation while leaving the occupied block registered. Resets first: `resetSemaphoresForReleasedBlocks(trainId, eligible)` BEFORE any release, and an approach-locked tail (a proceed aspect stood between head and tail) is only reset and deferred to the next sweep. Then each block goes through `PathReservationService.releaseBlock` (Issue #961); `registry.unregisterBlock` runs only as the last-resort fallback for a FREE block the service did not finish unregistering. Caller `OrphanReservationSweeper` (the stalled-tail sweep). | Yes (self-enforced) |
+| 7 | `releasePathDetailed` → `releaseAllBut` | `RouteReleaser` | Approach-locked whole-route release (Issues #1050, #1242; the production `cancel_route` and sweeper path). Resets all the train's signals first, then frees every block except the kept ones (approach-locked, occupied, or inside the deferral window), each through `dropFreedBlock`, never `registry.unregister`; the kept blocks stay RESERVED and registered, the PathInfo is trimmed to what the train holds, and the call returns `PathRelease(released, deferred)`. A release whose PathInfo cannot be trimmed is refused before any signal or block changes. | Yes (self-enforced) |
+| 8 | `releaseBlock` / `rollbackBlock` | `RouteReleaser` (`BlockReleaseSteps`, `BlockRollbackStep`, Issue #961) | The single-block steps for callers outside the registry: ownership check first, then `cancelPathSetup`, then `registry.unregisterBlock` and the release event. `releaseBlock` goes through `unregisterBlock` (and so resets the governing signal); `rollbackBlock` is the never-announced rollback of a candidate's fresh block and resets nothing, its callers run before any signal is lit. | `releaseBlock`: yes; `rollbackBlock`: caller-enforced |
+| 9 | `DefaultReservationExpiry.expireStale` | `DefaultReservationExpiry` (Issue #1174), triggered at the entry of `reservePath` / `reservePathToAny` and by the loop tick (`ReservationExpiry`) | Kernel-side expiry of a holding that is not being used: a stale whole-route holding (all blocks RESERVED, none entered, older than the TTL) and the stalled tail of a train on the track. Both release through `releasePathDetailed`, so row 7's approach locking applies and a deferral is retried on the next call. | Yes (via row 7) |
 
-**Summary:** `releasePath`, `unregister`, `unregisterBlock`, and `releaseUntravelledTail` enforce signals-first-blocks-second themselves; the two rollback helpers handle a never-granted candidate and rely on their caller (Step 2g / the bypass path) to reset signals.
+**Summary:** `releasePath`, `unregister`, `unregisterBlock`, `releasePathDetailed`, `releaseBlock`, `releaseUntravelledTail` and the expiry (through `releasePathDetailed`) enforce signals-first-blocks-second themselves; the rollback helpers (rows 4, 5 and `rollbackBlock`) handle a never-granted candidate and rely on their caller (Step 2g / the bypass path) to reset signals.
 
-**Switches-last addendum (Issue #1065, moved into the registry by Issue #1103):** `PathReservationRegistry.unregisterBlock` -- the single funnel for **per-block** releases (the service's `dropFreedBlock` and `rollbackBlock`, and `RegistryPartialRouteReleaser`'s last-resort direct fallback, all end here; the whole-route rows 1-2 above are the exception: `releasePath` and `unregister` go through `registry.unregister(trainId)`, which releases the train's held switch claims wholesale itself (its callers' `unregisterSwitches(trainId)` pairs then no-op idempotently)) -- reclaims a stale switch claim once its owner holds no block adjacent to it (`reclaimStaleSwitchOwnership`), so the invariant "no stale switch ownership" holds after every per-block release and after a whole-route teardown too; a reclaim failure is contained there too (logged, `null` returned, the stale claim stays healable -- a retry finds the switch already unlocked and cleans the maps). That catch is defense-in-depth: the primary containment for a throwing `DynamicRailSwitch` property listener lives in the cell itself (`DynamicRailSwitch.notifyListeners` -- logged there, later listeners still notified, the lock state change still completes), so the release funnel only rarely sees a throw at all (the PR #1144 review's ruling C). This keeps a G9 refusal (above) from turning a train that has merely PASSED a switch into a permanent block for every other train: without it, a switch stayed locked from reservation until the owner's FULL journey completion (`unregister`'s unconditional unlock), confirmed to happen on every repetition of the vyhybna shunting loop. Since Issue #1076 the staleness rule lives in one place (`PathReservationRegistry.isStaleSwitchOwnership`, which also exempts flank-protected switches), shared by this release-time reclamation and the reservation-time `reclaimStaleForeignSwitchOwnership` (Step 2e.5, G10), which since #1103 only has to catch a claim made through the public `registerSwitches` with no adjacent block held.
+**Switches-last addendum (Issue #1065, moved into the registry by Issue #1103):** `PathReservationRegistry.unregisterBlock` -- the single funnel for **per-block** releases (`RouteReleaser.dropFreedBlock` and `rollbackBlock`, and `RegistryPartialRouteReleaser`'s last-resort direct fallback, all end here; the whole-route rows 1-2 above are the exception: `releasePath` and `unregister` go through `registry.unregister(trainId)`, which releases the train's held switch claims wholesale itself (its callers' `unregisterSwitches(trainId)` pairs then no-op idempotently)) -- reclaims a stale switch claim once its owner holds no block adjacent to it (`reclaimStaleSwitchOwnership`), so the invariant "no stale switch ownership" holds after every per-block release and after a whole-route teardown too; a reclaim failure is contained there too (logged, `null` returned, the stale claim stays healable -- a retry finds the switch already unlocked and cleans the maps). That catch is defense-in-depth: the primary containment for a throwing `DynamicRailSwitch` property listener lives in the cell itself (`DynamicRailSwitch.notifyListeners` -- logged there, later listeners still notified, the lock state change still completes), so the release funnel only rarely sees a throw at all (the PR #1144 review's ruling C). This keeps a G9 refusal (above) from turning a train that has merely PASSED a switch into a permanent block for every other train: without it, a switch stayed locked from reservation until the owner's FULL journey completion (`unregister`'s unconditional unlock), confirmed to happen on every repetition of the vyhybna shunting loop. Since Issue #1076 the staleness rule lives in one place (`PathReservationRegistry.isStaleSwitchOwnership`, which also exempts flank-protected switches), shared by this release-time reclamation and the reservation-time `reclaimStaleForeignSwitchOwnership` (Step 2e.5, G10), which since #1103 only has to catch a claim made through the public `registerSwitches` with no adjacent block held.
 
 ---
 
@@ -562,7 +556,7 @@ If simulation engine is migrated to multi-threaded execution, synchronization re
 
 ```kotlin
 synchronized(blocks) {
-    if (blocks.areAllFree()) {
+    if (forwardBlocks.areAllFreeOrOwnedBy(trainId)) {
         tryAtomicReservation(blocks, trainId, separator)
     }
 }
@@ -713,67 +707,16 @@ blocks.forEach { block -> block.cancelPathSetup(...) }
 
 **Verdict:** Negligible for modern JVM (typical heap: 512 MB - 2 GB).
 
-### Factory Scope for Services
+### Scoped Services (Koin)
 
-**Decision:** Use Koin `factory` scope for navigator and service (not `single` singleton).
+**Decision:** Scope the navigator, registry and reservation service to their context (`scope<DefaultSimulationContext> { scoped<...> }` in `navigationModule`), neither `single` nor a bare `factory`.
 
-**Code:**
-```kotlin
-val navigationModule = module {
-    factory<TopologyNavigator> { (context: Context<Cell>) ->
-        DefaultTopologyNavigator(context)
-    }
+**Rationale:** one instance per simulation context, shared by every service in that scope, and released with the context.
+- **No state pollution:** a singleton would carry the registry of simulation A into simulation B.
+- **One consistent view:** the services of a context share ONE registry, so ownership is never answered from two places.
+- **Lifecycle for free:** closing the context drops the scope and all its instances; there is no manual disposal.
 
-    factory<PathReservationService> { (navigator: TopologyNavigator, environment: SimulationEnvironment) ->
-        DefaultPathReservationService(navigator, environment)
-    }
-}
-```
-
-**Rationale:**
-
-#### 1. Prevents State Pollution
-
-**Problem:** Singleton shares state across simulation runs.
-
-**Example:**
-```kotlin
-// Run 1: Simulation A reserves blocks
-val service = get<PathReservationService>()  // Singleton
-service.reservePath("Train-1", ...)
-
-// Run 2: Simulation B starts
-val service = get<PathReservationService>()  // SAME INSTANCE!
-// Registry still contains blocks from Simulation A → incorrect state
-```
-
-**Solution:** Factory creates fresh instance per injection.
-
-#### 2. Clear Lifecycle Management
-
-**Factory Pattern:** Each context gets its own navigator and service.
-
-**Lifecycle:**
-```kotlin
-// Simulation start
-val context = SimulationContextFactory.create(...)
-val navigator = getKoin().get { parametersOf(context) }  // New instance
-val service = getKoin().get { parametersOf(navigator, context) }  // New instance
-
-// Simulation end
-context.dispose()  // All services garbage-collected
-```
-
-#### 3. Parameter Passing
-
-**Factory enables constructor parameter injection:**
-```kotlin
-factory<TopologyNavigator> { (context: Context<Cell>) ->
-    DefaultTopologyNavigator(context)  // Context passed from callsite
-}
-```
-
-**Alternative (rejected):** Singleton with mutable context → thread-safety nightmare.
+The editing context has its own scope with a navigator, `AutomaticPathFindingService` and `RouteFinder`, and no registry or reservation service.
 
 ### trainId Preservation Across States
 
@@ -849,10 +792,10 @@ sequenceDiagram
 
     loop For each path
         Service->>Service: extractUniqueBlocks(path1)
-        Service->>Service: blocks.areAllFree()?
+        Service->>Service: forwardBlocks.areAllFreeOrOwnedBy("Train-1")?
         alt All blocks FREE
             loop For each block
-                Service->>Block: setUpPathWithTrainId(separator, "Train-1")
+                Service->>Block: setUpPath(separator, "Train-1")
                 Block-->>Service: SUCCESS
             end
             Service->>Registry: registerAtomic("Train-1", blocks)
@@ -880,12 +823,12 @@ sequenceDiagram
     Navigator-->>Service: [path1]
 
     Service->>Service: extractUniqueBlocks(path1)
-    Service->>Service: blocks.areAllFree() → true
+    Service->>Service: forwardBlocks.areAllFreeOrOwnedBy("Train-1") → true
 
-    Service->>Block1: setUpPathWithTrainId(sep, "Train-1")
+    Service->>Block1: setUpPath(sep, "Train-1")
     Block1-->>Service: SUCCESS
 
-    Service->>Block2: setUpPathWithTrainId(sep, "Train-1")
+    Service->>Block2: setUpPath(sep, "Train-1")
     Block2-->>Service: AlreadyReservedConflict!
 
     Service->>Service: Catch exception
@@ -952,32 +895,33 @@ sequenceDiagram
     participant Applier as DispatchDecisionApplier
     participant Port as NetworkActuatorPort
     participant Service as PathReservationService
+    participant Releaser as RouteReleaser
     participant Registry
 
     LLM->>Applier: DispatchDecision.ReleaseRoute(trainName)
-    Applier->>Port: releaseRoute(trainName)
+    Applier->>Port: releaseRouteDetailed(trainName)
 
-    Note over Port,Service: G7: read hasClearedSignals BEFORE releasePath<br/>purges the bookkeeping this reads
+    Note over Port,Service: G7: read hasClearedSignals BEFORE releasePathDetailed<br/>purges the bookkeeping this reads
     Port->>Service: hasClearedSignals(trainName)
     Service-->>Port: true / false
 
-    Port->>Service: releasePath(trainName)
-    Note over Service: Signals-first: resetClearedSemaphores(trainName)<br/>BEFORE blocks become FREE
-    Service->>Service: resetClearedSemaphores(trainName)
-    Service->>Registry: getBlocks(trainName)
-    Registry-->>Service: blocks (may be empty)
+    Port->>Service: releasePathDetailed(trainName)
+    Service->>Releaser: releasePathDetailed(trainName)
+    Note over Releaser: Signals-first: reset the governing and cleared semaphores<br/>BEFORE any block becomes FREE
+    Releaser->>Registry: getBlocks(trainName)
+    Registry-->>Releaser: blocks (may be empty)
 
-    alt blocks non-empty
-        loop For each block
-            Service->>Service: cancelPathSetup(reservedFrom)
-        end
+    alt some blocks kept (approach-locked, occupied, booking window)
+        Note over Releaser: releaseAllBut: free the rest through dropFreedBlock,<br/>trim the PathInfo to the kept blocks
+        Releaser-->>Service: PathRelease(released, deferred = kept)
+    else nothing kept
+        Note over Releaser,Registry: releaseAllBlocks: cancelPathSetup per block,<br/>registry.unregister in finally<br/>(guaranteed even if a cancel throws)
+        Releaser-->>Service: PathRelease(released, deferred = empty)
     end
-    Note over Service,Registry: registry.unregister in finally<br/>(guaranteed even if cancelPathSetup throws)
-    Service->>Registry: unregister(trainName)
-    Service-->>Port: released blocks
+    Service-->>Port: PathRelease
 
-    Note over Port: return releasedBlocks.isNotEmpty() || hadClearedSignals<br/>(truthful: signals-only reclaim = work done)
-    Port-->>Applier: true / false
+    Note over Port: RouteRelease.anyReleased = released or deferred non-empty<br/>or hadClearedSignals (signals-only reclaim = work done)
+    Port-->>Applier: RouteRelease(anyReleased, deferredBlockIds)
     Applier-->>LLM: outcome
 ```
 
@@ -989,34 +933,7 @@ sequenceDiagram
 
 ### Multi-Threading Support
 
-**Trigger:** Migration from kDisco to a future multi-threaded simulation engine. Any replacement
-must stay Kotlin/Multiplatform-compatible — `:fast-sim` targets linuxX64, so JVM-only engines are
-out of scope.
-
-**Required Changes:**
-
-1. **Add synchronization around block state checks and transitions**
-   ```kotlin
-   synchronized(blocks) {
-       if (blocks.areAllFree()) {
-           tryAtomicReservation(blocks, trainId, separator)
-       }
-   }
-   ```
-
-2. **Consider lock-free data structures for registry**
-   ```kotlin
-   private val blockToTrain = ConcurrentHashMap<DynamicTrackBlock, String>()
-   private val trainToBlocks = ConcurrentHashMap<String, CopyOnWriteArrayList<DynamicTrackBlock>>()
-   ```
-
-3. **Profile lock contention impact**
-   - Measure reservation throughput with 10, 50, 100 concurrent trains
-   - Identify bottlenecks (global lock vs. fine-grained locking)
-
-**Trade-off:** Lock overhead vs. TOCTOU elimination.
-
-**Recommendation:** Profile first, optimize second (current TOCTOU model may be acceptable even with multi-threading).
+See [TOCTOU Trade-Off Analysis](#toctou-trade-off-analysis) (§7), which already lists the locking options and the decision to keep the single-threaded model. Any future multi-threaded engine must stay Kotlin/Multiplatform-compatible: `:fast-sim` targets linuxX64, so JVM-only engines are out of scope.
 
 ### Deadlock Detection
 
@@ -1102,22 +1019,7 @@ if (conflict && requestPriority > existingPriority) {
 
 #### Caching Path Finding Results
 
-**Observation:** Paths between InOut pairs are static (topology doesn't change during simulation).
-
-**Optimization:**
-```kotlin
-private val pathCache = ConcurrentHashMap<Pair<PathSeparator, PathSeparator>, List<List<TrackSection>>>()
-
-fun findAllTopologicalPaths(start: PathSeparator, target: PathSeparator): List<List<TrackSection>> {
-    return pathCache.getOrPut(start to target) {
-        computePaths(start, target)  // Expensive BFS
-    }
-}
-```
-
-**Benefit:** O(1) path lookup after first call.
-
-**Invalidation:** Clear cache on topology changes (switches, track closures).
+✅ **COMPLETE** (SP4, Issue #1151): the switch-constrained route enumeration is budgeted and cached per simulation navigator (`RouteSearch`). The cache holds topology only, never block state, and an editing context is never cached.
 
 #### Indexing Registry by Track Sections
 
@@ -1155,33 +1057,6 @@ fun reserveSection(trainId: String, section: TrackSection) {
 
 **Tool:** JMH (Java Microbenchmark Harness) for accurate profiling.
 
-### Alternative Simulation Engines
-
-**Context:** Path reservation system designed to be simulation-engine-agnostic.
-
-**Current:** kDisco (discrete event simulation, single-threaded, Kotlin/Multiplatform)
-
-**Future Options:** any replacement engine must be multiplatform-capable (Kotlin/Multiplatform) —
-`:fast-sim` targets linuxX64, so JVM-only simulation engines are out of scope for this project.
-
-#### Migration Strategy
-
-**Abstraction Layer:** `SimulationEnvironment` interface enables adapter pattern.
-
-**Steps:**
-1. Implement a `SimulationEnvironment` adapter for the new engine
-2. Replace kDisco Process with the new engine's event scheduling
-3. Update simulation loop (while maintaining single-threaded model initially)
-4. Run integration tests with both engines in parallel (A/B validation)
-5. Profile performance
-
-**Risk Mitigation:**
-- PathReservationService code unchanged (depends only on SimulationEnvironment interface)
-- Test suite validates behavior identical between engines
-- Gradual rollout (one simulation scenario at a time)
-
-**Expected Effort:** Medium (2-4 weeks for full migration and validation)
-
 ---
 
 ## Appendix A: Related Documentation
@@ -1193,33 +1068,43 @@ fun reserveSection(trainId: String, section: TrackSection) {
 
 ## Appendix B: Code References
 
-**Key Files:**
+**Key Files** (all under `context/navigation/` in `:core` `commonMain`, except as noted):
 - `PathReservationService.kt` - Interface definition
-- `DefaultPathReservationService.kt` - Implementation
-- `PathReservationRegistry.kt` - Ownership tracking
-- `TopologyNavigator.kt` - Path finding interface
-- `DynamicTrackBlock.kt` - Block state machine
-- `TrackReservationException.kt` - Exception hierarchy
-- `DynamicTrackBlockExtensions.kt` - Kotlin extension functions
+- `DefaultPathReservationService.kt` - Orchestrator (candidate loop of `reservePath`)
+- `RouteCandidateScreen.kt` - Origin and end guards, rear-facing and divergent candidates
+- `CandidateCommitter.kt` - Steps 2c-2i and their scoped rollback
+- `RouteReleaser.kt` - Every release and rollback path, approach-lock deferral window
+- `ClearedSignalLedger.kt` - Cleared-signal bookkeeping and STOP resets
+- `RouteSignalConfigurator.kt` - START and intermediate signal clearing
+- `SwitchConfigurator.kt` - Candidate switch configuration, locking and release
+- `ReservationTargetDiscovery.kt` / `ReservationTargetQuery.kt` - Target discovery
+- `ReservationContentionTracker.kt` - Blocked-request tracking
+- `DefaultReservationExpiry.kt` / `TailStallTracker.kt` / `ReservationExpiry.kt` - Reservation expiry
+- `PathReservationRegistry.kt` - Ownership facade
+- `BlockOwnershipTable.kt`, `SwitchOwnershipTable.kt` (`SwitchClaim.kt`), `PathInfoStore.kt`, `PathInfoMerger.kt` - The registry's delegates
+- `BlockReleaseSteps.kt` / `BlockRollbackStep.kt` / `ApproachLockedPathRelease.kt` - Release interfaces split out of the service
+- `TopologyNavigator.kt` / `DefaultTopologyNavigator.kt` / `RouteSearch.kt` - Path finding
+- `DynamicTrackBlock.kt` (`objects/tracks`) - Block state machine
+- `TrackReservationException.kt` (`objects/tracks`) - Exception hierarchy
+- `DynamicTrackBlockExtensions.kt` (`objects/tracks`) - Kotlin extension functions
 
-> **Note:** These files grow over the life of the project. Specific line counts rot quickly and are intentionally omitted — consult the current source for sizes. (At the time of v1.2, `PathReservationService.kt` is ~728 lines and `DefaultPathReservationService.kt` is ~2983 lines.)
+> **Note:** These files grow over the life of the project. Specific line counts rot quickly and are intentionally omitted — consult the current source for sizes.
 
 **Test Files:**
-- `PathReservationServiceTestBase.kt` + one `PathReservation<Group>Test.kt` per group (split out of the monolithic `PathReservationServiceTest.kt` per Issue #1165; in v1.2 the monolith had 15 test cases and 382 lines)
-- `PathReservationRegistryTest.kt` - 16 test cases (NEW)
+- `PathReservationServiceTestBase.kt` + one `PathReservation<Group>Test.kt` per group (split out of the monolithic `PathReservationServiceTest.kt` per Issue #1165)
+- `PathReservationRegistryTest.kt` and `PathReservationRegistryMergingTest.kt` - Registry
+- One test class per extracted unit (`CandidateCommitterTest`, `RouteReleaserTest`, `RouteCandidateScreenTest`, `ClearedSignalLedgerTest`, `SwitchConfiguratorTest`, and so on)
 
-**Total Test Coverage:**
-- PathReservationService: 90%+
-- PathReservationRegistry: 95%+
-- DynamicTrackBlock (reservation paths): 85%+
+For coverage numbers run `./gradlew test jacocoTestReport` or read the CI coverage artifact.
 
 ## Appendix C: Version History
 
 | Version | Date | Author | Changes |
 |---|---|---|---|
 | 1.0 | 2026-01-26 | Claude Code | Initial comprehensive documentation |
-| 1.1 | 2026-08-09 | Claude Code | Issue #893: add G1–G7 signal-clearing invariants, ownership-aware reset APIs (`resetSemaphoresForReleasedBlocks`/`hasClearedSignals`/`recordExternalClearedSemaphore`) with proven-safe-scope and last-writer-wins caveats, `NonContiguousStart` + contiguity precondition (Step 0), Cancel/Release Paths Taxonomy of the six release call sites (signals-first-blocks-second + the `unregister` asymmetry fixed by F1 in `d99862bc`), and a cancel-route sequence diagram. Fix stale Appendix B line counts. |
+| 1.1 | 2026-08-09 | Claude Code | Issue #893: add G1–G7 signal-clearing invariants, ownership-aware reset APIs (`resetSemaphoresForReleasedBlocks`/`hasClearedSignals`/`recordExternalClearedSemaphore`) with proven-safe-scope and last-writer-wins caveats, `NonContiguousStart` + contiguity precondition (Step 0), Cancel/Release Paths Taxonomy of the six release call sites (signals-first-blocks-second + the `unregister` asymmetry fixed by F1 in PR #901, squash `0d348f2b`), and a cancel-route sequence diagram. Fix stale Appendix B line counts. |
 | 1.2 | 2026-08-09 | Claude Code | PR #901 review: document the transactionally completed bypass rollback (candidate-only switch release + `PathReservationRegistry.restorePathInfo` snapshot restore), the reordered `unregister` (blocks before switches, matching `releasePath`) and `unregisterBlock` (reset before registry removal), and refresh all `DefaultPathReservationService.kt`/`PathReservationService.kt` line references after those code moves. Remove DSOL/Kalasim from the future-engine discussion (JVM-only, not KMP-compatible). |
+| 1.3 | 2026-10-29 | Claude Code | Goal 1B SP12 layout, 2026-10-29: describe the extracted units (Key Components, registry delegates, `CandidateCommitter` Steps 2e-2i), replace the algorithm sketch with a step list, nine release paths, scoped Koin services, current cancel-route flow; drop stale line counts, coverage figures and engine-migration text. |
 
 ---
 

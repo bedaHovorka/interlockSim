@@ -26,7 +26,7 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Outcome of [SwitchConfigurator.configureSwitchesInPath] /
- * [CandidateCommitter.configureAndRegisterSwitches], distinguishing a permanent
+ * `CandidateCommitter.configureAndRegisterSwitches`, distinguishing a permanent
  * geometric impossibility (Issue #742: no [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf]
  * joins the route's segments) from a transient SI-5 refusal (Issue #1065: the switch is
  * locked in a different position by a live route) so the caller records only the former as
@@ -65,8 +65,9 @@ internal sealed interface SwitchConfigOutcome {
 /**
  * Switch configuration for a reserved route candidate (Issue #1170, SP12.4): set and lock the
  * switches a candidate traverses, register them to the train, and release them again when the
- * candidate is rolled back. Extracted verbatim from [DefaultPathReservationService], which owns
- * the orchestration (Step 2e.5 clean-up, Step 2f configure-and-register, scoped rollback).
+ * candidate is rolled back. Extracted verbatim from [DefaultPathReservationService]; the
+ * orchestration (Step 2e.5 clean-up, Step 2f configure-and-register, scoped rollback) is
+ * [CandidateCommitter]'s.
  *
  * **NOT thread-safe**, like its owner: single-threaded simulation access only.
  *

@@ -26,8 +26,10 @@ private val logger = KotlinLogging.logger {}
  * Extracted from [DefaultPathReservationService] by Issue #1169 (SP12.3) as a pure move: the
  * bookkeeping, its ownership semantics and the order of every reset are unchanged. The service
  * owns exactly one instance per simulation context, and its writes come only from inside the
- * kernel: the service itself, the [RouteReleaser] release/rollback callbacks the service binds
- * to it, and [RouteSignalConfigurator], which records the aspects it clears here.
+ * kernel: the service itself (the bypass rollback, the already-owned merge-abort reset and
+ * `recordExternalClearedSemaphore`), [CandidateCommitter] (the candidate rollbacks), the
+ * [RouteReleaser] release/rollback callbacks the service binds to it, and [RouteSignalConfigurator],
+ * which records the aspects it clears here.
  *
  * **NOT thread-safe**, like the service it belongs to.
  *
@@ -36,7 +38,7 @@ private val logger = KotlinLogging.logger {}
 internal class ClearedSignalLedger {
 	// ── Cleared-signal ownership, so a proceed aspect cannot outlive its route ──
 	//
-	// reservePath() clears the START separator (configureStartSignal) and every semaphore
+	// A reservation clears the START separator (configureStartSignal) and every semaphore
 	// between two consecutive reserved blocks (configureIntermediateSemaphores). Nothing used
 	// to undo that: releasePath()/unregister() cancelled blocks and unlocked switches but never
 	// touched a semaphore, so an aspect cleared for a route that was later released stayed lit
@@ -48,16 +50,21 @@ internal class ClearedSignalLedger {
 	// Only the SUCCESS path records here. Two kinds of rollback need to reach a semaphore
 	// nonetheless:
 	// - `rollbackReservation` and the switch-config-failure call to `rollbackUnconfigurableCandidate`
-	//   (from `configureAndRegisterSwitches`) run strictly BEFORE step 2g signal configuration --
-	//   a candidate rolled back for either reason has cleared nothing and needs no reset.
-	// - The signal-config-failure call to `rollbackUnconfigurableCandidate` (step 2g's own `!signalConfigured` branch)
-	//   runs AFTER `configureStartSignal` was attempted, and a PARTIAL aspect write is possible: the underlying config
-	//   call can set the physical aspect and still throw before `recordClearedSemaphore` runs (Issue #893, task A5).
-	//   That branch resets the before/after delta of this map via `resetSemaphoreSet` (for any semaphore that WAS
-	//   recorded) and separately drives the candidate START itself back to STOP when it is left showing proceed with no
-	//   recorded owner -- see [DefaultPathReservationService.reservePath] step 2g and the reset helper it calls for the
-	//   unrecorded case.
-	// A third case, the bypass-rollback in `reservePathToAnyNextSemaphore`, runs AFTER a fully
+	//   (both in CandidateCommitter, the latter from `configureAndRegisterSwitches`) run strictly
+	//   BEFORE Step 2g signal configuration -- a candidate rolled back for either reason has cleared
+	//   nothing and needs no reset.
+	// - The failed-START-signal rollback (`rollbackFailedStartSignalCandidate`, Step 2g's own
+	//   `signalResult != Configured` branch) runs AFTER `configureStartSignal` was attempted, and a
+	//   PARTIAL aspect write is possible: the underlying config call can set the physical aspect and
+	//   still throw before `recordClearedSemaphore` runs (Issue #893, task A5). It resets the
+	//   before/after delta of this map via `resetSemaphoreSet` (for any semaphore that WAS recorded)
+	//   and separately drives the candidate START itself back to STOP when it is left showing proceed
+	//   with no recorded owner (`resetCandidateSignals`).
+	// - The Step 2i merge-abort rollback (`rollbackIfMergeAborted`, Issue #904) runs AFTER Steps
+	//   2g/2h lit the candidate's signals and resets them the same way, through `resetCandidateSignals`.
+	//   The service's already-owned early return does the same for the one signal it re-cleared
+	//   (`resetSignalsIfMergeAborted`).
+	// A further case, the bypass-rollback in `reservePathToAnyNextSemaphore`, runs AFTER a fully
 	// successful `reservePath` has already configured the candidate's signals; it resets exactly
 	// the semaphores that candidate cleared (the before/after delta of this map) via
 	// `resetSemaphoreSet`, never the whole per-train set, so a pre-existing reservation's signals
@@ -126,12 +133,13 @@ internal class ClearedSignalLedger {
 	 * Return only the semaphores in [toReset] still owned by [trainId] to [Signal.STOP] and forget
 	 * them, leaving every other semaphore the train still holds cleared untouched.
 	 *
-	 * Subset analogue of [resetClearedSemaphores]. Used by the bypass-rollback in
-	 * [DefaultPathReservationService.reservePathToAnyNextSemaphore]: that rollback runs *after* a successful
-	 * [DefaultPathReservationService.reservePath] has already cleared the candidate's semaphores, so resetting the
-	 * whole per-train set would also drop signals the train still needs for a live reservation. The caller passes the
-	 * before/after delta of [clearedSemaphores] -- exactly what this candidate cleared -- so a pre-existing
-	 * reservation's signals are preserved.
+	 * Subset analogue of [resetClearedSemaphores]. Its three users are the bypass-rollback in
+	 * [DefaultPathReservationService.reservePathToAnyNextSemaphore], [resetCandidateSignals] (the candidate
+	 * rollbacks of [CandidateCommitter]) and [resetSemaphoresForReleasedBlocks]. The first two run *after*
+	 * a reservation has already cleared the candidate's semaphores, so resetting the whole per-train set would
+	 * also drop signals the train still needs for a live reservation. The caller passes the before/after delta
+	 * of [clearedSemaphores] -- exactly what this candidate cleared -- so a pre-existing reservation's signals
+	 * are preserved.
 	 *
 	 * Same ownership semantics as [resetClearedSemaphores]: a semaphore since re-cleared for another
 	 * train is skipped (see [semaphoreClearedFor]).
@@ -252,8 +260,8 @@ internal class ClearedSignalLedger {
 
 	/**
 	 * `clearedSemaphores[trainId]`, defaulting to an empty set. Extracted so every snapshot call site in
-	 * [DefaultPathReservationService.reservePath] stays branch-free (a bare elvis `?:` at the call site would otherwise
-	 * count against that method's own cyclomatic complexity).
+	 * [CandidateCommitter] and [DefaultPathReservationService] stays branch-free (a bare elvis `?:` at the call
+	 * site would otherwise count against that method's own cyclomatic complexity).
 	 */
 	fun snapshotClearedSemaphores(trainId: String): Set<DynamicRailSemaphore> =
 		clearedSemaphores[trainId]?.toSet() ?: emptySet()
@@ -262,7 +270,7 @@ internal class ClearedSignalLedger {
 	 * Reset exactly the semaphores THIS candidate cleared since [clearedBeforeCandidate] (Issue #893 task A5 / Issue
 	 * #904): the before/after delta of [clearedSemaphores] (covers anything recorded), then [start] itself for the
 	 * unrecorded partial-write case [resetSemaphoreSet]'s delta cannot see. Extracted so every rollback call site in
-	 * [DefaultPathReservationService.reservePath] stays a single line.
+	 * [CandidateCommitter] stays a single line.
 	 */
 	fun resetCandidateSignals(
 		trainId: String,
@@ -277,8 +285,8 @@ internal class ClearedSignalLedger {
 	 * The already-owned early-return branch's merge-abort handling (Issue #904, traffic-simulation-expert ruling Q2):
 	 * this branch acquires no new blocks or switches, so an abort has nothing to roll back on that side. The only
 	 * discrepancy is a signal this call may have just (re-)cleared for a merge that never happened; reset it back to
-	 * STOP (G1) if the merge aborted, otherwise do nothing. Extracted so the call site in
-	 * [DefaultPathReservationService.reservePath] stays branch-free.
+	 * STOP (G1) if the merge aborted, otherwise do nothing. Extracted so the call site in the service's
+	 * already-owned early return (`reserveAlreadyOwnedPath`) stays branch-free.
 	 */
 	fun resetSignalsIfMergeAborted(
 		mergeOutcome: PathReservationRegistry.MergeOutcome,
@@ -299,19 +307,21 @@ internal class ClearedSignalLedger {
 	fun hasClearedSignals(trainId: String): Boolean = clearedSemaphores.containsKey(trainId)
 
 	/**
-	 * Reset every semaphore this service recorded as cleared for [trainId] that governs one of
-	 * [blocks]. See the interface KDoc for why candidates come from both `ends()` and
-	 * `reservedFrom` -- the two sources cover, respectively, an INTERMEDIATE boundary between two
-	 * blocks of the same reservation, and the route's START (including its InOut form), neither of
-	 * which the other source can recover on its own for a multi-block route.
+	 * Reset every semaphore this ledger recorded as cleared for [trainId] that governs one of
+	 * [blocks]. See [PathReservationService.resetSemaphoresForReleasedBlocks] for why candidates
+	 * come from both `ends()` and `reservedFrom` -- the two sources cover, respectively, an
+	 * INTERMEDIATE boundary between two blocks of the same reservation, and the route's START
+	 * (including its InOut form), neither of which the other source can recover on its own for a
+	 * multi-block route.
 	 *
 	 * Delegates the actual reset to [resetSemaphoreSet], so ownership (last-writer-wins) is identical to
 	 * [DefaultPathReservationService.releasePath]/[DefaultPathReservationService.unregister]: a semaphore since
 	 * re-cleared for another train is left alone.
 	 *
-	 * See the interface KDoc for this call's proven-safe scope (suffix/rearmost releases on a
-	 * non-revisiting route) -- this method performs no route-position validation of its own, so a
-	 * caller outside that scope is responsible for the risk described there.
+	 * See [PathReservationService.resetSemaphoresForReleasedBlocks] for this call's proven-safe
+	 * scope (suffix/rearmost releases on a non-revisiting route) -- this method performs no
+	 * route-position validation of its own, so a caller outside that scope is responsible for the
+	 * risk described there.
 	 *
 	 * @since Issue #893 (phase alpha, task A3)
 	 */

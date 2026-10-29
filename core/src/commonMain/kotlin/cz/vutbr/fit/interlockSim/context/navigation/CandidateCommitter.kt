@@ -50,13 +50,26 @@ private val logger = KotlinLogging.logger {}
  * `clearedBeforeCandidate`) are taken in [prepareReservedCandidate] before the first mutation they
  * guard, so the train's earlier hops (blocks, switches, signals, PathInfo) always survive.
  *
+ * **Merge abort (Issue #904), the single home of this mechanism.** [PathInfoMerger.merge] never
+ * throws; it returns [PathReservationRegistry.MergeOutcome.Aborted] for its four fail-safe aborts
+ * (non-contiguous new start, duplicated new start, the direction-reversal guard of Issue #944, the
+ * 3rd-occurrence cycle guard). At Step 2i [rollbackIfMergeAborted] then releases exactly what this
+ * candidate acquired -- blocks, switches and the cleared signals driven back to STOP (G1) -- by the
+ * same scoped rollback as Step 2g, so no exit from the candidate loop leaves an orphaned RESERVED
+ * tail (the PR #901 standard). It holds in every host, `:fast-sim` and bare-`:core` included, which
+ * do not wire `OrphanReservationSweeper`; the sweeper keeps its independent job (a route held
+ * un-travelled past its staleness threshold, phantom-owner routes). The service's already-owned
+ * early return (`reserveAlreadyOwnedPath`) acquires nothing new, so its abort only resets the signal
+ * that call re-cleared ([ClearedSignalLedger.resetSignalsIfMergeAborted]) and still reports Success.
+ *
  * Extracted from [DefaultPathReservationService] without behaviour change: every side effect keeps
  * its order, and the log lines and denial reasons are byte-identical. It is wired by the service
  * to the service's own collaborators, so the service-level rollback tests exercise the real wiring.
  *
  * **NOT thread-safe**, like its owner: single-threaded simulation access only.
  *
- * @property registry Ownership registry; block, switch and PathInfo registration
+ * @property registry Ownership registry; block and PathInfo registration (switches are registered
+ *   through [switchConfigurator])
  * @property pathInfoBuilder Builder for the candidate's PathInfo
  * @property switchConfigurator Sets, locks, registers and releases a candidate's switches
  * @property signalConfigurator Clears the START and intermediate semaphores of a reserved route
@@ -716,10 +729,10 @@ internal class CandidateCommitter(
  * The per-candidate snapshots Step 2f takes before configuring anything (Issue #893 task
  * A5 / Issue #904 / Issue #1065): the candidate's [PathInfo],
  * its switches, the switches the train already owned, and the semaphores already cleared.
- * Carried between [prepareReservedCandidate], [finalizePreparedCandidate],
- * [configureAndRegisterSwitches], [rollbackIfMergeAborted] and [rollbackFailedStartSignalCandidate]
+ * Carried between `prepareReservedCandidate`, `finalizePreparedCandidate`,
+ * `configureAndRegisterSwitches`, `rollbackIfMergeAborted` and `rollbackFailedStartSignalCandidate`
  * so no helper exceeds the parameter-count threshold. Built only from values that exist before
- * [configureAndRegisterSwitches] runs, so building it has no side effects.
+ * `configureAndRegisterSwitches` runs, so building it has no side effects.
  */
 private data class CandidatePreparation(
 	val pathInfo: PathInfo,
@@ -732,9 +745,9 @@ private data class CandidatePreparation(
  * The per-candidate slice of one [DefaultPathReservationService.reservePath] request: the values Step 2d's extracted
  * helpers need, unpacked once at each helper's head so the moved candidate-loop body can
  * stay verbatim. Built once per candidate iteration (no side effects) and carried so
- * [registerAndFinalizeCandidate], [prepareReservedCandidate], [finalizePreparedCandidate] and
- * the rollback helpers they hand the whole [candidate] to stay under the parameter-count
- * threshold (SonarCloud S3776, PR #1109).
+ * [CandidateCommitter.registerAndFinalizeCandidate], `prepareReservedCandidate`,
+ * `finalizePreparedCandidate` and the rollback helpers they hand the whole [candidate] to stay under the
+ * parameter-count threshold (SonarCloud S3776, PR #1109).
  */
 internal data class CandidateRequest(
 	val trainId: String,

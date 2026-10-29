@@ -1410,230 +1410,12 @@ cat -A <file>.kt | grep '^	'  # Should show leading tabs
 
 ## Test Fixtures and Utilities
 
-### Overview
-
-The `testutil` package provides centralized test fixtures and utilities to reduce duplication and improve test maintainability. **Always use these fixtures instead of creating inline test data.**
-
-### TestFixtures: XML Configuration Loading
-
-`TestFixtures` provides standardized loading of XML configuration files.
-
-**Usage Pattern:**
-
-```kotlin
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-
-@Test
-fun testWithShuntingLoop() {
-    TestFixtures.loadShuntingXml().use { stream ->
-        val context = factory.createContext(stream)
-        // Test with context
-    }
-}
-```
-
-**Available Fixtures:**
-
-- `loadShuntingXml()` - Main shunting loop (vyhybna.xml)
-- `loadLinearTrackXml()` - Simple A→B track
-- `loadMinimalNetworkXml()` - Minimal valid network
-- `loadSwitchBasicXml()` - Basic switch topology
-- `loadSemaphoreBasicXml()` - Basic semaphore configuration
-- Plus 10+ other fixtures (see TestFixtures.kt)
-
-**Benefits:**
-- ✅ Consistent resource paths (no hardcoded strings)
-- ✅ Proper resource management (returns InputStream)
-- ✅ Clear error messages when fixtures missing
-- ✅ Single source of truth for fixture locations
-
-### TestTopologies: Programmatic Network Creation
-
-`TestTopologies` provides reusable network topologies for tests that don't need XML.
-
-**Context Type Variants:**
-
-Each topology has two variants:
-- **EditingContext** - For editor/topology tests (e.g., `simpleLinearPath()`)
-- **SimulationContext** - For simulation/train tests (e.g., `simpleLinearPathSimulation()`)
-
-**Example: EditingContext Variant**
-
-```kotlin
-import cz.vutbr.fit.interlockSim.testutil.TestTopologies
-
-@Test
-fun testTopologyNavigation() {
-    TestTopologies.simpleLinearPath().use { context ->
-        val navigator = context.getTopologyNavigator()
-        // Test navigation logic
-    }
-}
-```
-
-**Example: SimulationContext Variant**
-
-```kotlin
-@Test
-fun testTrainMovement() {
-    TestTopologies.simpleLinearPathSimulation().use { context ->
-        val trainService = context.getTrainNavigationService()
-        // Test train navigation
-    }
-}
-```
-
-**Available Topologies:**
-
-| Topology | EditingContext | SimulationContext | Description |
-|----------|----------------|-------------------|-------------|
-| Simple Linear (A→B) | `simpleLinearPath()` | `simpleLinearPathSimulation()` | 100m track, 80 m/s |
-| Linear with Semaphore | `linearPathWithSemaphore(allowing)` | `linearPathWithSemaphoreSimulation(allowing)` | A→[S]→B with signal |
-| Dead-End | `deadEndSingleInOut()` | `deadEndSingleInOutSimulation()` | Single InOut, no connections |
-
-**When to Use Which:**
-- **XML Fixtures** - For complex real-world topologies (vyhybna.xml, switches with multiple branches)
-- **TestTopologies** - For simple, focused test scenarios (linear paths, single signals)
-- **TestContextBuilder** - Only when you need custom coordinates or unique configurations
-
-### Resource Management with .use {}
-
-**All contexts implement `AutoCloseable` - always use `.use {}`:**
-
-**Pattern 1: Single Context**
-
-```kotlin
-@Test
-fun testSingleContext() {
-    TestTopologies.simpleLinearPath().use { context ->
-        // Context auto-closes at end of block
-    }
-}
-```
-
-**Pattern 2: Nested Contexts (XML → Editing → Simulation)**
-
-```kotlin
-@Test
-fun testWithXmlContext() {
-    TestFixtures.loadShuntingXml().use { xmlStream ->
-        editingFactory.createContext(xmlStream).use { editingCtx ->
-            simulationFactory.createContext(editingCtx).use { simCtx ->
-                // All 3 resources auto-close in reverse order
-            }
-        }
-    }
-}
-```
-
-**Pattern 3: Shared Context (setUp/tearDown)**
-
-When context is shared across multiple tests:
-
-```kotlin
-class MyTestSuite {
-    private lateinit var context: SimulationContext
-
-    @BeforeEach
-    fun setUp() {
-        context = TestTopologies.simpleLinearPathSimulation()
-    }
-
-    @AfterEach
-    fun tearDown() {
-        context.close()  // Manual close in tearDown
-    }
-
-    @Test
-    fun test1() {
-        // Use shared context
-    }
-
-    @Test
-    fun test2() {
-        // Use shared context
-    }
-}
-```
-
-### Anti-Patterns to Avoid
-
-❌ **Don't hardcode XML paths:**
-```kotlin
-// BAD
-val file = File("src/main/resources/.../vyhybna.xml")
-val stream = javaClass.getResourceAsStream("/cz/.../vyhybna.xml")
-
-// GOOD
-val stream = TestFixtures.loadShuntingXml()
-```
-
-❌ **Don't create duplicate topologies:**
-```kotlin
-// BAD - duplicated 15 times across tests
-val context = TestContextBuilder()
-    .withInOut("A", 1, 1, true)
-    .withInOut("B", 5, 5, false)
-    .withConnection(1, 1, 5, 5, 100.0, 80.0)
-    .buildEditingContext()
-
-// GOOD - reusable fixture
-val context = TestTopologies.simpleLinearPath()
-```
-
-❌ **Don't forget to close contexts:**
-```kotlin
-// BAD - resource leak
-val context = factory.createContext(stream)
-// ... test code ...
-// context never closed!
-
-// GOOD - auto-closes
-factory.createContext(stream).use { context ->
-    // ... test code ...
-}
-```
-
-❌ **Don't mix context types:**
-```kotlin
-// BAD - simulation test using EditingContext
-val context = TestTopologies.simpleLinearPath()  // Returns EditingContext
-context.getTrainNavigationService()  // Won't work!
-
-// GOOD - use simulation variant
-val context = TestTopologies.simpleLinearPathSimulation()
-context.getTrainNavigationService()  // Works!
-```
-
-### TestContextBuilder: Custom Topologies
-
-Use `TestContextBuilder` only when TestTopologies doesn't fit:
-
-```kotlin
-// When you need custom coordinates or unique topology
-val context = TestContextBuilder()
-    .withInOut("Entry", 2, 3, true)     // Custom position
-    .withInOut("Exit", 8, 9, false)
-    .withConnection(2, 3, 8, 9, 150.0, 100.0)  // Custom length/speed
-    .buildEditingContext()
-```
-
-### Summary: Decision Tree
-
-```
-Need test network?
-├─ Is it vyhybna.xml or other real-world config?
-│  └─ Use: TestFixtures.loadShuntingXml()
-│
-├─ Is it simple A→B, A→[S]→B, or dead-end?
-│  ├─ For editor/topology tests?
-│  │  └─ Use: TestTopologies.simpleLinearPath()
-│  └─ For simulation/train tests?
-│     └─ Use: TestTopologies.simpleLinearPathSimulation()
-│
-└─ Need custom coordinates or unique topology?
-   └─ Use: TestContextBuilder()
-```
+Always use the shared fixtures instead of inline test data: `TestFixtures` (XML loaders, in
+`:core-test` jvmMain), `TestTopologies` and `TestContextBuilder` (`:core-test` commonMain). The
+canonical guide - loading XML, pre-built topologies, `.use {}` resource management,
+anti-patterns, and the decision tree for choosing a fixture - is the
+[test utilities README](../desktop-ui/src/test/kotlin/cz/vutbr/fit/interlockSim/testutil/README.md).
+The fixture module itself is described in [core-test/CLAUDE.md](../core-test/CLAUDE.md).
 
 ## Test Timeouts (`@Timeout`)
 
@@ -1966,42 +1748,11 @@ and is not verified by this file.
 
 ### Gradle Build Commands
 
-**Clean and build (includes tests and uber JAR):**
-```bash
-./gradlew clean build
-```
+The everyday commands (`clean build`, `test`, `integrationTest`) are in the
+[root CLAUDE.md](../CLAUDE.md); the run and package tasks (`runSim`, `runEditor`,
+`runExampleGui`, `shadowJar`, and others) are in [desktop-ui/CLAUDE.md](../desktop-ui/CLAUDE.md).
+To inspect the dependency tree:
 
-**Build only (compiles, tests, creates JAR):**
-```bash
-./gradlew build
-```
-
-**Run tests:**
-```bash
-./gradlew test                    # Unit tests only
-./gradlew integrationTest         # Integration tests only
-./gradlew test integrationTest    # All tests
-```
-
-**Create uber JAR (all dependencies included):**
-```bash
-./gradlew shadowJar
-```
-
-**Run application:**
-```bash
-./gradlew runSim                  # Pre-configured shunting loop example
-./gradlew runEditor               # Launch editor GUI
-./gradlew runExampleGui           # Animated GUI simulation (NEW)
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=1024  # Custom example
-```
-
-**Generate JavaDoc documentation:**
-```bash
-./gradlew javadoc
-```
-
-**Show dependency tree:**
 ```bash
 ./gradlew dependencies
 ```
@@ -2105,32 +1856,15 @@ Multi-stage Dockerfile: Builder stage (Temurin 21 JDK, compiles, tests, creates 
 
 ### Local Ollama for dispatcher-agent Tests
 
-`dispatcher-agent`'s `OllamaExecutorConfigTest` has one real proof-of-connection test
-(`@Tag("ollama-test")`, Issue #548 / SP1.3) that hits a live local Ollama instance via Koog's
-`OllamaClient` and checks that the configured model (`qwen2.5:7b-instruct`) is pulled and
-reports tool-calling support. `dispatcher-agent`'s `integrationTest` Gradle task decides
-whether this tag is even included by probing `localhost:11434` when it actually runs — no
-manual flag needed, just have Ollama reachable before invoking Gradle:
+The `ollama-test`-tagged tests of `:dispatcher-agent` need a live Ollama; how it is started
+(native or the compose `ollama` profile), what `integrationTest` does when it is unreachable, and
+the CI behaviour are described in [dispatcher-agent/CLAUDE.md](../dispatcher-agent/CLAUDE.md)
+("Ollama Setup"). Pull the model once:
 
-- **Native install** (if you already have Ollama, e.g. `ollama serve` running as a background
-  service): nothing to configure — the probe finds it on the default port.
-- **No native install:** `docker compose --profile ollama up -d --wait ollama` brings up an Ollama server on the same
-  port (11434) as an alternative — don't run both at once, they'd conflict on the port.
-
-Either way, pull the model once:
 ```bash
-ollama pull qwen2.5:7b-instruct                        # native
+ollama pull qwen2.5:7b-instruct                              # native
 docker compose exec ollama ollama pull qwen2.5:7b-instruct   # containerized
 ```
-
-**Behavior asymmetry (intentional, Issue #548):**
-- **Locally**, `integrationTest` **fails the build outright** if Ollama isn't reachable — no
-  silent skip. You must have it running (native or `docker compose --profile ollama up -d --wait ollama`) before the
-  `ollama-test`-tagged test can pass.
-- **In CI** (`CI`/`GITHUB_ACTIONS` env var set), an unreachable Ollama instead logs a `WARN`
-  and excludes `ollama-test` for that run. GitHub Actions is intentionally kept Ollama-free —
-  real LLM-output benchmarking against a live model is SP3.5/SP2b.9's job (see
-  `docs/GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` §7), not SP1.3's config/connectivity scope.
 
 **X11 Forwarding Troubleshooting:**
 
@@ -2487,45 +2221,23 @@ dynamicInOut.lastTrain = train  // Mutable operation (OK in simulation)
 
 ### Navigation Services Architecture
 
-Three specialized services handle path finding and reservation using **scope-per-context** pattern:
+The five services behind the `RoutingServices` facade (`SimulationEnvironment.getRoutingServices()`),
+the internal SP12 units of `DefaultPathReservationService`, and the ownership registry are listed
+in [core/CLAUDE.md](../core/CLAUDE.md) ("Navigation services"); the SP12 seam list is in
+[SP12-routing-decomposition.md](goal9b-demands/SP12-routing-decomposition.md). Only the
+DI-relevant facts are kept here:
 
-**1. TopologyNavigator** - Static topology navigation (pure graph traversal, no state dependencies)
-- Interface: `context/navigation/TopologyNavigator`
-- Implementation: `context/navigation/DefaultTopologyNavigator`
-- **Use Case**: Editor validation, network analysis without dynamic state
-- **Access**: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getRoutingServices().getTopologyNavigator()`
-- **Methods**: `findPath()`, `getNextTrackSection()`, `findPathToNextSemaphore()`
-
-**2. PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
-- Interface: `context/navigation/PathReservationService`
-- Implementation: `context/navigation/DefaultPathReservationService`
-- **Use Case**: Dispatcher finding available routes, interlocking path setup
-- **Access**: `SimulationEnvironment.getRoutingServices().getPathReservationService()`
-- **Features**: Atomic reservation, all-or-nothing semantics, TOCTOU race condition fix
-- **Methods**: `reservePath()`, `releasePath()`, `findReservablePaths()`, `reservePathToAnyNextSemaphore()`
-
-**3. TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
-- Interface: `context/navigation/TrainNavigationService`
-- Implementation: `context/navigation/DefaultTrainNavigationService`
-- **Use Case**: Train requesting next track section (only through owned blocks)
-- **Access**: `SimulationEnvironment.getRoutingServices().getTrainNavigationService()`
-- **Features**: Explicit ownership validation, null = "not reserved for THIS train"
-- **Methods**: `findReservedPathForTrain()`, `isPathReservedForTrain()`, `getReservedBlocks()`
-
-**4. PathReservationRegistry** - Bidirectional train↔block ownership tracking
-- Class: `context/navigation/PathReservationRegistry`
-- **Features**: O(1) queries, scoped lifetime (one per context), shared by all services
-- **Methods**: `register()`, `unregister()`, `getBlocks()`, `getOwner()`, `isOwnedBy()`
-
-**Koin DI Integration:**
-- Scope-per-context pattern (one registry per context, isolated between contexts)
-- Services share ONE registry within context (consistent ownership view)
-- Automatic cleanup via `Context.close()` (AutoCloseable pattern)
+- All of them live in `context/navigation` and are bound `scoped` in `navigationModule`
+  (`core/.../di/CoreModule.kt`): one registry per context, isolated between contexts.
+- `PathReservationService` and `TrainNavigationService` share ONE `PathReservationRegistry` within a
+  context (consistent ownership view). The registry is a facade over four units (`BlockOwnershipTable`,
+  `SwitchOwnershipTable`, `PathInfoStore`, `PathInfoMerger`); the SP12 units are private to the service.
+- Cleanup is automatic via `Context.close()` (`AutoCloseable`).
 
 **Documentation:**
-- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases (808 lines)
-- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with before/after examples (547 lines)
-- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Original reservation service design (1069 lines)
+- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases
+- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with before/after examples
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Reservation service design
 
 ### Advanced Koin Patterns
 
@@ -2552,20 +2264,22 @@ val scope = GlobalContext.get().createScope(
 No redundant `parametersOf(context)` - context is the scope source:
 
 ```kotlin
-// In InterlockSimModule.kt:
+// In navigationModule (core/.../di/CoreModule.kt), abridged:
 scope<DefaultSimulationContext> {
     scoped<TopologyNavigator> {
-        val context = getSource<DefaultSimulationContext>()
-        DefaultTopologyNavigator(context)
+        DefaultTopologyNavigator(getSource<DefaultSimulationContext>())
     }
 
-    scoped<PathReservationRegistry> { PathReservationRegistry() }
+    scoped<PathReservationRegistry> {
+        PathReservationRegistry(getSource<DefaultSimulationContext>())
+    }
 
     scoped<PathReservationService> {
-        val context = getSource<DefaultSimulationContext>()
-        val navigator: TopologyNavigator = get()  // Shared within scope
-        val registry: PathReservationRegistry = get()  // Shared within scope
-        DefaultPathReservationService(navigator, context, registry)
+        // Shared within scope: navigator, registry, pathInfoBuilder, routeFinder
+        DefaultPathReservationService(
+            get<TopologyNavigator>(), getSource<DefaultSimulationContext>(),
+            get<PathReservationRegistry>(), get<PathInfoBuilder>(), get<RouteFinder>()
+        )
     }
 }
 ```
@@ -2573,14 +2287,15 @@ scope<DefaultSimulationContext> {
 **Usage Patterns:**
 
 ```kotlin
-// Production code - services accessed via context API
+// Production code - services accessed via the RoutingServices facade
 val context = buildSimulationContext()
-val pathService = context.getPathReservationService()
-val trainService = context.getTrainNavigationService()
+val routing = context.getRoutingServices()
+val pathService = routing.getPathReservationService()
+val trainService = routing.getTrainNavigationService()
 
 // Both services share the same registry within this context
 pathService.reservePath("train1", start, end)
-val blocks = trainService.getReservedBlocks("train1") // Sees the same reservation
+val blocks = pathService.getReservedBlocks("train1")  // the train service sees the same reservation
 
 // Test code - direct scope access when needed
 val navigator = context.scope.get<TopologyNavigator>()  // No parameters!
@@ -2660,4 +2375,4 @@ class DefaultSimulationContext(
 
 This style guide should be updated as the migration progresses and patterns emerge. After Phase 3 conversion is complete, we may gradually introduce more Kotlin idioms in Phase 4+.
 
-**Last Updated**: 2026-02-05 (Major update: Added Build & Development Environment, Logging Configuration, Code Quality Enforcement, Code Modification Guidelines, Project Architecture Context sections. Expanded from 1634 to ~2400 lines as part of CLAUDE.md compaction effort.)
+**Last Updated**: 2026-10-29 (Navigation Services, Test Fixtures, Gradle Build Commands and Local Ollama sections reduced to pointers to the canonical guides; Koin snippet matches `navigationModule`)

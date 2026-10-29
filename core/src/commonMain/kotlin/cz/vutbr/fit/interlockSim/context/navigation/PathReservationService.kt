@@ -26,12 +26,13 @@ internal const val DEFAULT_MAX_PATH_DEPTH = 100
  * ## Purpose
  *
  * Provides dispatcher logic for path reservation with atomic all-or-nothing semantics:
- * - Find candidate paths using TopologyNavigator
+ * - Find candidate paths (`RouteFinder` or `TopologyNavigator`)
  * - Filter by block availability (must be FREE)
  * - Reserve blocks atomically (rollback on partial failure)
  * - Track train ownership of blocks
  *
- * This is Phase 2 of the Path Discovery Restructuring (Issue #292).
+ * This is the reservation half of the Path Discovery Restructuring (Issue #292); the implementation is
+ * [DefaultPathReservationService], a facade over the SP12 reservation units listed in its class KDoc.
  *
  * ## Atomic Reservation Guarantee
  *
@@ -42,9 +43,10 @@ internal const val DEFAULT_MAX_PATH_DEPTH = 100
  *
  * ## Design Principles
  *
- * - **Stateless operations**: Each method is independent, no internal state
+ * - **State lives in collaborators**: the implementation keeps a `ClearedSignalLedger`, a
+ *   `ReservationContentionTracker` and a `DefaultReservationExpiry` across calls, besides the registry
  * - **Registry separation**: Ownership tracking delegated to PathReservationRegistry
- * - **Navigator delegation**: Path finding delegated to TopologyNavigator
+ * - **Navigator delegation**: Path finding delegated to `RouteFinder` and TopologyNavigator
  * - **Transaction semantics**: Either all blocks reserved or none
  *
  * ## Use Cases
@@ -58,7 +60,7 @@ internal const val DEFAULT_MAX_PATH_DEPTH = 100
  *
  * This interface is intentionally separated from:
  * - **Static topology** - Path finding (handled by TopologyNavigator)
- * - **Train navigation** - Following reserved paths (handled by TrainNavigationService in Phase 3)
+ * - **Train navigation** - Following reserved paths (handled by [TrainNavigationService])
  * - **Simulation execution** - Runtime state management (handled by SimulationContext)
  *
  * ## Thread Safety
@@ -92,6 +94,11 @@ interface PathReservationService :
 	 * - **AllPathsBlocked**: Route(s) exist but all are occupied/reserved
 	 * - **Conflict**: Attempted to reserve block already owned by different train
 	 * - **NonContiguousStart**: The start separator is nowhere near the requesting train
+	 * - **GeometricallyImpossible**: The request can never succeed as asked (Issue #903)
+	 * - **DivergesFromHeldRoute**: Every candidate leaves the route the train already holds (Issue #1066)
+	 *
+	 * [NoPathExists] means no candidate path (or, for `reservePathToAny`, no target) existed; once targets
+	 * were tried, the last failure is reported instead.
 	 */
 	sealed class ReservationResult {
 		/**
@@ -180,12 +187,17 @@ interface PathReservationService :
 		) : ReservationResult()
 
 		/**
-		 * The request was **permanently** impossible, not merely busy. Two shapes: at the request
-		 * level -- the origin or the end is not an [OrientedPathSeparator] (a switch), refused
-		 * before any candidate is discovered (Issues #1188, #1200) -- and at the candidate level:
-		 * the candidate that came closest failed permanently because its START or END semaphore
-		 * faced away from the requested direction of travel (G4, and its END-side twin G8 from
-		 * Issue #1064), or a switch along it could not be set to the position the route required.
+		 * The request was **permanently** impossible, not merely busy. This KDoc is the single home of
+		 * the impossibility classes; other KDoc links here instead of repeating them.
+		 *
+		 * The classes, by where they are detected:
+		 * - **Request level**, refused before any candidate is discovered: a non-oriented route origin
+		 *   (Issue #1188) or a non-oriented route end (Issue #1200) -- the endpoint is not an
+		 *   [OrientedPathSeparator], i.e. it is a switch.
+		 * - **Candidate level**: a rear-facing START semaphore (G4, Issue #903), a rear-facing END
+		 *   semaphore (G8, Issue #1064) -- the semaphore faces away from the requested direction of
+		 *   travel -- or an unconfigurable switch, one that cannot be set to the position the route
+		 *   requires.
 		 *
 		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention (a block
 		 * occupied/reserved by another train) and clears on its own, so a caller should simply
@@ -197,21 +209,17 @@ interface PathReservationService :
 		 * (`PATH_RESERVATION_ARCHITECTURE.md` §5: G4 and the contiguity precondition are "the
 		 * same malformation class -- a route the train cannot actually use").
 		 *
-		 * For the per-candidate classes (rear-facing START, rear-facing END, unconfigurable
-		 * switch), one route request returns it only when **every** attempted candidate hits one of
-		 * them (Issue #937): a mix with a merely blocked candidate stays [AllPathsBlocked], because
-		 * that candidate can still succeed on a retry. Across the targets of
-		 * [reservePathToAnyNextSemaphore], a target's [GeometricallyImpossible] wins over the
-		 * contention results of later targets (Issue #903, first-hit-wins; the
-		 * traffic-simulation-expert ruling: the fact one target is permanently impossible is real
-		 * information regardless of what other targets did).
-		 * A non-oriented route origin or end (Issues #1188, #1200) is a request-level refusal
-		 * instead: it fires before any candidate is discovered.
+		 * One route request returns it for the candidate-level classes only when **every** attempted
+		 * candidate hits one of them (the Issue #937 permanence gate, documented at
+		 * `DefaultPathReservationService.classifyExhaustedAttempt`): a mix with a merely blocked
+		 * candidate stays [AllPathsBlocked]. Across the targets of [reservePathToAnyNextSemaphore],
+		 * a target's [GeometricallyImpossible] wins over the contention results of later targets
+		 * (Issue #903, first-hit-wins; traffic-simulation-expert ruling: that one target is
+		 * permanently impossible is real information regardless of what other targets did).
 		 *
-		 * @property reason English explanation of which permanent-impossibility class fired. For
-		 *   a rear-facing START, a rear-facing END or an unconfigurable switch it names the
-		 *   candidate that hit it; for a non-oriented route origin or end (Issues #1188, #1200) it
-		 *   names the offending endpoint, because no candidate exists yet.
+		 * @property reason English explanation of which impossibility class fired. For a candidate-level
+		 *   class it names the candidate that hit it; for a non-oriented route origin or end it names the
+		 *   offending endpoint, because no candidate exists yet.
 		 * @since Issue #903
 		 */
 		data class GeometricallyImpossible(
@@ -237,9 +245,9 @@ interface PathReservationService :
 		 * property of the train's *current route* and clears once that route is completed or
 		 * cancelled.
 		 *
-		 * Reported only when **every** candidate failed this way or geometrically; a candidate that
-		 * was merely busy keeps the attempt ordinary contention, exactly as for
-		 * [GeometricallyImpossible] (Issue #937).
+		 * Reported only under the Issue #937 permanence gate
+		 * (`DefaultPathReservationService.classifyExhaustedAttempt`): a merely busy candidate keeps the
+		 * attempt ordinary contention, exactly as for [GeometricallyImpossible].
 		 *
 		 * @property heldTarget Name of the stored route's target separator (e.g. `doB2`).
 		 * @property reason English explanation naming the held target and the candidate start.
@@ -272,7 +280,8 @@ interface PathReservationService :
 	 *
 	 * ## Algorithm
 	 *
-	 * 1. Use TopologyNavigator to find all possible paths
+	 * 1. Find the candidate paths: `RouteFinder` (cost-sorted) for an InOut-to-InOut request (Issue #597),
+	 *    TopologyNavigator otherwise
 	 * 2. For each path, extract the sequence of track blocks
 	 * 3. Check if all blocks in path are FREE
 	 * 4. If found, atomically reserve all blocks for the train
@@ -291,8 +300,9 @@ interface PathReservationService :
 	 * ## Multiple Paths
 	 *
 	 * If multiple paths exist (via switches), this method tries them in order
-	 * until a free path is found. The order is determined by TopologyNavigator's
-	 * BFS traversal (typically shortest path first).
+	 * until a free path is found. For an InOut-to-InOut request the order is `RouteFinder`'s
+	 * cost order (cheapest first, Issue #597); otherwise it is TopologyNavigator's traversal order
+	 * (typically shortest path first).
 	 *
 	 * @param trainId Unique identifier for the train (typically Train.toString())
 	 * @param start Starting path separator (typically InOut or semaphore)
@@ -471,7 +481,7 @@ interface PathReservationService :
 	 *
 	 * If the railway network has switches creating multiple routes to different semaphores,
 	 * this method will try each route in order. The first free path is reserved, using the
-	 * same multi-path fallback logic as `reservePath()` (BFS = shortest first).
+	 * same multi-path fallback logic and candidate order as `reservePath()`.
 	 *
 	 * @param trainId Unique identifier for the train
 	 * @param start Starting path separator (typically InOut)
@@ -563,7 +573,7 @@ interface PathReservationService :
 	 * reservation). For networks with backward alternative routes that bypass the
 	 * forward section, the reserving overload may still reject a candidate this
 	 * method returns — acceptable for the `vyhybna.xml` shunting loop (no such
-	 * routes) and the determinism gate; general networks are deferred to SP0.8+.
+	 * routes) and the determinism gate; general networks are not covered by this read-only twin.
 	 *
 	 * The owner-aware [findNextReservationTarget] with two parameters may return a target
 	 * whose path includes blocks the reserving train already owns; this overload keeps the
@@ -651,7 +661,7 @@ interface PathReservationService :
 	 * 1. Discover all potential targets (InOuts and semaphores) from the context
 	 * 2. For each target, attempt `reservePath(trainId, start, target)`
 	 * 3. Return Success with first available path
-	 * 4. If all targets fail, return NoPath (all blocked or no targets exist)
+	 * 4. If all targets fail, return `NoPathExists` when there was no target at all, else the last failure
 	 *
 	 * ## Use Case: Dispatcher Logic (ShuntingLoop)
 	 *
@@ -660,7 +670,7 @@ interface PathReservationService :
 	 * val result = service.reservePathToAny("train1", semaphore)
 	 * when (result) {
 	 *     is Success -> // Train can proceed, path reserved
-	 *     is NoPath -> // No available targets
+	 *     is NoPathExists -> // No available targets
 	 *     is AllPathsBlocked -> // Targets exist but all blocked
 	 *     is Conflict -> // Reservation conflict (should not happen)
 	 * }
@@ -668,16 +678,9 @@ interface PathReservationService :
 	 *
 	 * ## Target Discovery
 	 *
-	 * Targets are discovered automatically from the context:
-	 * - All InOut elements except the start
-	 * - All oriented semaphores (RailSemaphore) except the start
-	 *
-	 * ## Advantages Over Manual Iteration
-	 *
-	 * - No hardcoded grid dimensions (50×20)
-	 * - No type casting to SimulationContext
-	 * - Single responsibility (all target discovery in service layer)
-	 * - Automatic semaphore signal configuration
+	 * Targets are discovered automatically: every InOut and every oriented semaphore except the start,
+	 * in the priority order given by `ReservationTargetDiscovery.reservePathToAnyTargets`, whose KDoc
+	 * carries the ordering rationale.
 	 *
 	 * ## Endpoint precondition (Issue #1188)
 	 *
@@ -733,8 +736,8 @@ interface PathReservationService :
 	 * governing it back to [cz.vutbr.fit.interlockSim.objects.cells.Signal.STOP]. This is the
 	 * bookkeeping safety net for the tail-clearance path: head passage
 	 * ([cz.vutbr.fit.interlockSim.sim.Train]'s `semaphoreAction`) already drops the aspect a train
-	 * physically read on the way through, but does not purge this service's `clearedSemaphores` /
-	 * `semaphoreClearedFor` bookkeeping, and cannot reach a governing semaphore the front never
+	 * physically read on the way through, but does not purge the `ClearedSignalLedger`
+	 * bookkeeping, and cannot reach a governing semaphore the front never
 	 * read. Safe by construction for this per-block call site: every boundary of a released block
 	 * is behind the train's head by definition, so the reset can never drop a signal the train
 	 * still needs ahead of it. A refused release (block not owned by [trainId], or not FREE) returns

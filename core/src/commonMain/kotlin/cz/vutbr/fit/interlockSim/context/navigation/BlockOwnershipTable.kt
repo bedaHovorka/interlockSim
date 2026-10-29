@@ -196,8 +196,9 @@ internal class BlockOwnershipTable(
 			"unregisterBlock: Released block $block for '$trainId', $remainingBlocks blocks remaining"
 		}
 
-		// If no blocks remain, remove train entry from trainToBlocks
-		// BUT keep PathInfo for navigation queries (Issue #301 - deadlock fix)
+		// If no blocks remain, remove train entry from trainToBlocks. This table never touches PathInfo:
+		// PathInfoStore keeps it for navigation queries (Issue #301 - deadlock fix). The log text below
+		// still mentions it, unchanged, because the log-capturing tests key on that text.
 		if (trainToBlocks[trainId]?.isEmpty() == true) {
 			trainToBlocks.remove(trainId)
 			logger.debug {

@@ -191,9 +191,9 @@ internal class PathInfoStore(
 	 * Read-only probe of [PathInfoMerger.merge]'s Step 0a precondition (Issue #1066): would [candidate]
 	 * CONTINUE the route [trainId] currently holds?
 	 *
-	 * Lets `DefaultPathReservationService.reservePath` refuse a divergent candidate BEFORE it
+	 * Lets `RouteCandidateScreen.screenDivergentCandidates` refuse a divergent candidate BEFORE it
 	 * reserves blocks, throws switches or clears signals, instead of discovering the same
-	 * condition at Step 2i and rolling everything back. Changes no state.
+	 * condition at `CandidateCommitter`'s Step 2i and rolling everything back. Changes no state.
 	 *
 	 * @return `null` when [candidate] continues the stored path, or when the train has no stored
 	 *   PathInfo yet (a first registration is always accepted); otherwise an English reason naming
@@ -283,7 +283,7 @@ internal class PathInfoStore(
 	 * at one would make every later extension fail the merge. It is likewise refused when [boundary]
 	 * is a semaphore facing away from the train's direction of travel (Issue #1067 gap 2): the
 	 * trimmed PathInfo's end is about to become the START of the train's next route request, and G4
-	 * ([RouteSignalConfigurator.startFacesTravelDirection]) refuses every route starting at a
+	 * (`RouteSignalConfigurator.configureStartSignal`'s `RejectedG4`) refuses every route starting at a
 	 * rear-facing signal, which would strand the train exactly like the untrimmed PathInfo did.
 	 *
 	 * @param trainId The train identifier
@@ -397,7 +397,7 @@ internal class PathInfoStore(
 	 *
 	 * ## Why (Issue #1067 gap 1)
 	 *
-	 * [RegistryPartialRouteReleaser] used to derive the boundary from the ends shared by the
+	 * `RegistryPartialRouteReleaser` (in `:dispatcher-agent`) used to derive the boundary from the ends shared by the
 	 * occupied head and the blocks it released **in that one call**. A tail released over two
 	 * sweeps — one block refused or throwing on the first sweep, freed on a later retry — then
 	 * finds no boundary on the sweep that finally frees it: that block is no longer adjacent to
@@ -432,7 +432,7 @@ internal class PathInfoStore(
 	 * `true` when no trim is needed (no PathInfo, or [kept] reaches the path's end so nothing
 	 * beyond it can go stale) or when the trim [trimPathInfoTo] would perform will follow --
 	 * the boundary past the last kept block passes [isValidPathInfoEnd]. A caller that must
-	 * not change anything unless the trim will follow ([DefaultPathReservationService]'s
+	 * not change anything unless the trim will follow ([RouteReleaser.releasePathDetailed]'s
 	 * approach-locked release) checks this BEFORE freeing any block: a freed tail that
 	 * survives in the PathInfo because the trim is refused later stalls the train with
 	 * `OwnershipConflict` (Issue #1050 review round).

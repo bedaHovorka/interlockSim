@@ -163,7 +163,7 @@ class KoogDispatchAgentImpl(
 	 * `applyFailuresByCode` in proportion to how many trains were concurrently active, contaminating
 	 * exactly the measurement #834's sweep exists to take. [NextHopResolver.resolveAll] applies the
 	 * same same-tick `claimedSeparators` dedup
-	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs] applies, so this prompt and
+	 * `RuleBasedDispatcher.checkAllInputs` applies, so this prompt and
 	 * the rule-based arm agree about which train gets a given separator this tick on real data
 	 * (where a train owns at most one eligible input per tick — see [NextHopResolver]'s KDoc for
 	 * that domain invariant and the accepted synthetic-data divergence).
@@ -244,8 +244,8 @@ class KoogDispatchAgentImpl(
 	 *
 	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toTargetName] come from
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName] and the
-	 * `ReservationTargetPolicy` pick over
-	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] (Issue #970) —
+	 * target `NextHopResolver` takes from `chosenTargetName()` (the `ReservationTargetPolicy` pick over
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets], Issue #970) —
 	 * signal or InOut names, both legal `request_route` endpoints — never
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.blockId]. See this class's
 	 * [buildUserPrompt] KDoc ("Never render a name the model cannot use as an argument") for why
@@ -388,9 +388,8 @@ class KoogDispatchAgentImpl(
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — ${outcome.reason}"
 
-			// Issue #903: a permanent impossibility (rear-facing START or END, unconfigurable switch,
-			// non-oriented origin or end), not ordinary contention. The kernel's reason is carried through
-			// verbatim.
+			// Issue #903: a permanent impossibility, not ordinary contention (classes: see
+			// ReservationResult.GeometricallyImpossible). The kernel's reason is carried through verbatim.
 			is AppliedOutcome.GeometricallyImpossible ->
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — geometrically impossible, this origin can never reach that target: ${outcome.reason}"

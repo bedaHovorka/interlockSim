@@ -282,7 +282,7 @@ private fun runSim(
 		for (issue in issues) {
 			eprintln("    - $issue")
 		}
-		eprintln("  Canonical example: core/src/jvmMain/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		eprintln("  Canonical example: core/src/commonMain/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 		return 2
 	}
 	val reporter = TextReporter(verbosity)

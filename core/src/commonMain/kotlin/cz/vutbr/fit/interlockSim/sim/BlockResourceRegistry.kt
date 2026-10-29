@@ -70,7 +70,8 @@ internal class BlockResourceRegistry(
 	/**
 	 * Releases resources that are still held by the dispatcher for blocks that have
 	 * become FREE and unowned. This is a safety net; the dispatcher normally releases
-	 * resources immediately after successful path reservation.
+	 * its resources in a `finally` after every reservation attempt, successful or not
+	 * (`MultiTrainLoop.reserveThroughGate`).
 	 */
 	fun releaseFreeResources() {
 		for ((block, resource) in resources) {

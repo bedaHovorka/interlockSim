@@ -36,10 +36,10 @@ import kotlin.math.round
  * expiry's own release is not progress: the tracker keeps the clock with the remaining tail
  * ([TailStallTracker.keepClock]), so a deferred head is retried on the next call.
  *
- * **Approach lock (Issue #1050).** A proceed aspect at the head of the released blocks may have a
- * train committed to it; the release then keeps that block, drops the signals to STOP and frees
- * the rest. The holding is offered again on the next call and freed once the booking window has
- * closed in simulation time. A completion is logged and counted once, on the call that frees the
+ * **Approach lock (Issue #1050).** The release keeps a block a train may be committed to, drops
+ * the signals to STOP and frees the rest (contract: [ApproachLockedPathRelease.releasePathDetailed];
+ * booking window: `RouteReleaser.approachLockDeferredUntil`). The holding is offered again on the
+ * next call. A completion is logged and counted once, on the call that frees the
  * last un-entered block; a deferral is logged at INFO once per stall episode of the train, later
  * ones at DEBUG (ruling D5): a tail whose PathInfo cannot be trimmed is deferred on every call while
  * the train stands. When even the blocks it stands on cannot end the PathInfo, the release refuses
