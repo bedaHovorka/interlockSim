@@ -56,6 +56,7 @@ class NextHopResolverTest {
 		pathSetUpTowardThisInput: Boolean = false,
 		pathAlreadyExtendedBeyond: Boolean = false,
 		awaitingRouteExtension: Boolean = false,
+		heldRouteEndName: String? = null,
 		blockId: String = "block"
 	): BlockInputObservation =
 		BlockInputObservation(
@@ -67,7 +68,8 @@ class NextHopResolverTest {
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
-			awaitingRouteExtension = awaitingRouteExtension
+			awaitingRouteExtension = awaitingRouteExtension,
+			heldRouteEndName = heldRouteEndName
 		)
 
 	// ── Hop selection ────────────────────────────────────────────────────────
@@ -200,6 +202,62 @@ class NextHopResolverTest {
 	}
 
 	@Test
+	@DisplayName("an awaiting input whose pick is the held route end is not offered as a hop (Issue #1244)")
+	fun awaitingInputPickingHeldRouteEndYieldsNoSectionReservable() {
+		val standing =
+			input(
+				towardSemaphoreName = "zB",
+				isApproachingThisInput = true,
+				targetName = "doA1",
+				pathAlreadyExtendedBeyond = true,
+				awaitingRouteExtension = true,
+				heldRouteEndName = "doA1"
+			)
+
+		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(standing)))
+
+		assertThat(outcome).isEqualTo(NextHopOutcome.NoSectionReservable)
+	}
+
+	@Test
+	@DisplayName("an awaiting input whose pick differs from the held route end still yields the Hop (Issue #1244)")
+	fun awaitingInputPickingOtherTargetStillYieldsHop() {
+		val standing =
+			input(
+				towardSemaphoreName = "zB",
+				isApproachingThisInput = true,
+				targetName = "doA2",
+				pathAlreadyExtendedBeyond = true,
+				awaitingRouteExtension = true,
+				heldRouteEndName = "doA1"
+			)
+
+		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(standing)))
+
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "zB", toTargetName = "doA2"))
+	}
+
+	// The shell never produces heldRouteEndName without awaitingRouteExtension (the field's contract,
+	// see BlockInputObservation) — this test exists as the mutation pin for the guard's
+	// awaitingRouteExtension half: removing that conjunct must flip this test.
+	@Test
+	@DisplayName("a non-awaiting input whose pick equals the held route end is unchanged: still a Hop (Issue #1244)")
+	fun nonAwaitingInputPickingHeldRouteEndIsUnchanged() {
+		val approaching =
+			input(
+				towardSemaphoreName = "zB",
+				isApproachingThisInput = true,
+				targetName = "doA1",
+				awaitingRouteExtension = false,
+				heldRouteEndName = "doA1"
+			)
+
+		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(approaching)))
+
+		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "zB", toTargetName = "doA1"))
+	}
+
+	@Test
 	@DisplayName("a mix of an extended and a qualifying owned input yields the qualifying input's Hop")
 	fun mixedExtendedAndQualifyingYieldsHopNotRouteAlreadySet() {
 		val extended =
@@ -284,6 +342,41 @@ class NextHopResolverTest {
 
 			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doB1", toTargetName = "sharedSep"))
 			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.ClaimedByAnotherTrain(toTargetName = "sharedSep"))
+		}
+
+		@Test
+		@DisplayName(
+			"an awaiting-held-end input is denied by the guard without claiming its separator, which another train then hops to (Issue #1244)"
+		)
+		fun guardedAwaitingHeldEndInputDoesNotClaimItsSeparator() {
+			// The guard lives in isEligible, shared by resolve and resolveAll; every other #1244 pin
+			// goes through resolve only. This one proves the shared seam: T1's guard-failing input is
+			// skipped before the separator claim (the same order as
+			// RuleBasedDispatcher.reserveOrDefer), so T1 keeps its awaiting outcome rather than
+			// ClaimedByAnotherTrain, and T2 may still hop to the held end.
+			val t1AwaitingHeldEnd =
+				input(
+					towardSemaphoreName = "doB1",
+					targetName = "sharedSep",
+					ownerTrainId = "T1",
+					isApproachingThisInput = true,
+					pathAlreadyExtendedBeyond = true,
+					awaitingRouteExtension = true,
+					heldRouteEndName = "sharedSep"
+				)
+			val t2Input =
+				input(
+					towardSemaphoreName = "doC1",
+					targetName = "sharedSep",
+					ownerTrainId = "T2",
+					isApproachingThisInput = true
+				)
+			val obs = observation(innerBlockInputs = listOf(t1AwaitingHeldEnd, t2Input))
+
+			val outcomes = NextHopResolver.resolveAll(listOf("T1", "T2"), obs)
+
+			assertThat(outcomes["T1"]).isEqualTo(NextHopOutcome.NoSectionReservable)
+			assertThat(outcomes["T2"]).isEqualTo(NextHopOutcome.Hop(fromSignalName = "doC1", toTargetName = "sharedSep"))
 		}
 
 		@Test

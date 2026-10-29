@@ -825,6 +825,9 @@ class KoogAgentPlanAdapter(
 	 *   or the route extension is awaited;
 	 * - RESERVED: a path is set up toward this input and is not yet extended beyond it;
 	 * - FREE: never.
+	 *
+	 * `NextHopResolver` does apply the same held-end guard, so the model is not offered that hop
+	 * either.
 	 */
 	private fun needsPathExtension(input: BlockInputObservation): Boolean =
 		when (input.state) {

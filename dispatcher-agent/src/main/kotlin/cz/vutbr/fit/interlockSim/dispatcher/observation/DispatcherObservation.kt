@@ -332,12 +332,20 @@ sealed interface AppliedOutcome {
 	/**
 	 * `cancel_route` completed; [anyReleased] is `true` if at least one block was released.
 	 *
-	 * [deferredBlockIds] lists blocks approach locking kept reserved because a proceed aspect stood
-	 * at them and a train may be committed (Issue #1050); non-empty means the release is partial
-	 * and `cancel_route` should be repeated. It also lists the whole route when the kernel refused
-	 * the release because the route cannot be cut after the blocks the train stands on (Issue #1242):
-	 * then no signal changed, and a repeat frees something only once the head reaches a block the route
-	 * can be cut after.
+	 * [deferredBlockIds] non-empty (Issue #1050) means the release is not complete: every block not
+	 * listed was freed, and the listed blocks were kept. The apply result cannot tell the reachable
+	 * cases apart, so the rendered text states only route-level truths (Issue #1244):
+	 *
+	 * - the kept blocks satisfy one of: the train stands on them, the train may still enter them
+	 *   (approach locking, Issue #1050), or the release cannot yet cut the route past them (the
+	 *   whole route is listed this way — Issue #1242);
+	 * - a repeated `cancel_route` frees nothing more until the train has moved on or the kept
+	 *   blocks' booking windows have closed;
+	 * - extending the route is how to move the train on.
+	 *
+	 * Residual: a kept block whose own release failed (a WARN'd internal failure of the
+	 * `releaseAllBut` drop) lands in neither list, so "every other block was freed" does not
+	 * account for it.
 	 */
 	data class Released(
 		val trainId: String,

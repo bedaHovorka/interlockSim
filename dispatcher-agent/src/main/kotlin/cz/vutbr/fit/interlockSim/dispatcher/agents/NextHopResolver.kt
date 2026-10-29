@@ -26,7 +26,9 @@ import cz.vutbr.fit.interlockSim.sim.chosenTargetName
  * ([DispatchObservation.innerBlockInputs] then [DispatchObservation.outerBlockInputs]), owned by
  * the train, not already extended beyond, either approached by or reserved toward that train, and
  * having an available forward candidate — [chosenTargetName] non-null over
- * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] (Issue #1152).
+ * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] (Issue #1152) — and, for a
+ * train awaiting a route extension, a pick other than the end of the route it already holds
+ * ([cz.vutbr.fit.interlockSim.sim.BlockInputObservation.heldRouteEndName], Issue #1244).
  *
  * ## Same-tick same-target dedup lives in [resolveAll], not [resolve] (Issue #834, SP2c.11, task 8)
  *
@@ -162,7 +164,14 @@ object NextHopResolver {
 	private fun isEligible(input: BlockInputObservation): Boolean =
 		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
 			(input.isApproachingThisInput || input.pathSetUpTowardThisInput) &&
-			input.chosenTargetName() != null
+			// Issue #1244: an awaiting train whose pick is the end of the route it already holds has
+			// nothing to extend toward; RuleBasedDispatcher skips it the same way. The pick is bound
+			// once: chosenTargetName() re-picks (a fresh sorted list) per call, and the core's own
+			// reserveOrDefer binds it the same way.
+			input.chosenTargetName().let { chosen ->
+				chosen != null &&
+					!(input.awaitingRouteExtension && chosen == input.heldRouteEndName)
+			}
 
 	/** The first (list-order) input owned by [trainId] and qualifying per [isEligible], or `null`. */
 	private fun firstEligibleInput(
@@ -217,6 +226,9 @@ sealed interface NextHopOutcome {
 	 * This is never evidence that the track ahead is occupied or blocked — see
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets]'s own contract — so
 	 * rendered wording for this outcome must not use either word.
+	 *
+	 * It is also the outcome for a train awaiting a route extension whose pick is the end of the
+	 * route it already holds — see the precondition rule in this object's KDoc (Issue #1244).
 	 */
 	data object NoSectionReservable : NextHopOutcome
 
