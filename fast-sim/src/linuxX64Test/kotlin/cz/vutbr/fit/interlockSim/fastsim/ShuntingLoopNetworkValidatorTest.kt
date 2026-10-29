@@ -49,11 +49,11 @@ class ShuntingLoopNetworkValidatorTest {
 	}
 
 	@Test
-	fun `validateShuntingLoopCompatible rejects the Cerveny Ujezd station`() {
+	fun `validateShuntingLoopCompatible accepts the Cerveny Ujezd station`() {
 		factory.createFromXml(NetworkResources.CERVENY_UJEZD_XML).use { ctx ->
+			// Four InOuts, two per side: the generator pairs opposite sides (SP3.1, Issue #1163).
 			val issues = ShuntingLoopNetworkValidator.validateShuntingLoopCompatible(ctx)
-			// Four InOuts: the ShuntingLoop train generator would pair same-side exits (SP3 owns it).
-			assertTrue(issues.any { it.contains("exactly 2 InOuts") }, "expected an InOut-count issue; got: $issues")
+			assertEquals(emptyList(), issues, "cerveny_ujezd.xml must be ShuntingLoop-compatible")
 		}
 	}
 

@@ -16,7 +16,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
@@ -88,6 +87,23 @@ class StationCapacityTest : CommonKoinTestBase() {
 		assertFailure { ShuntingLoop(ctx, endTime = 10L, maxConcurrentTrains = -1) }
 			.isInstanceOf<IllegalArgumentException>()
 			.hasMessage("maxConcurrentTrains must be positive, got: -1")
+	}
+
+	/**
+	 * `maxTrains` has no separate validator: it is forwarded to [Generator]'s constructor, whose
+	 * `require` surfaces through [ShuntingLoop]'s super-call — checked for real here (PR #1267
+	 * review round, Copilot thread; `LoopProcess.actions()` runs `iteration()` before the cap).
+	 */
+	@Test
+	fun nonPositiveGeneratorLimitIsRejected() {
+		val ctx = load(NetworkResources.VYHYBNA_XML)
+
+		assertFailure { ShuntingLoop(ctx, endTime = 10L, maxTrains = 0) }
+			.isInstanceOf<IllegalArgumentException>()
+			.hasMessage("maxTrains must be positive, got: 0")
+		assertFailure { ShuntingLoop(ctx, endTime = 10L, maxTrains = -1) }
+			.isInstanceOf<IllegalArgumentException>()
+			.hasMessage("maxTrains must be positive, got: -1")
 	}
 
 	@Test
@@ -162,21 +178,25 @@ class StationCapacityTest : CommonKoinTestBase() {
 	}
 
 	@Test
-	fun shuntingLoopRejectsCervenyUjezdUntilItHasItsOwnScenario() {
+	fun shuntingLoopAcceptsCervenyUjezdWithItsFourInOuts() {
 		val ctx = load(NetworkResources.CERVENY_UJEZD_XML)
-		val issues = ShuntingLoop.compatibilityIssues(Station.from(ctx))
 
-		// The train generator pairs random InOuts, so four InOuts send trains between same-side
-		// exits that ShuntingLoop cannot run (SP3, Issue #1150, owns that scenario).
-		assertThat(issues.any { "exactly 2 InOuts" in it }).isEqualTo(true)
-		assertFailure { ShuntingLoop(ctx, endTime = 10L) }.isInstanceOf<SimulationException>()
+		// Two InOuts per side: the generator pairs opposite sides (SP3.1, Issue #1163).
+		assertThat(ShuntingLoop.compatibilityIssues(Station.from(ctx))).isEmpty()
+		assertThat(ShuntingLoop(ctx, endTime = 10L).stationCapacity).isEqualTo(4)
+	}
+
+	@Test
+	fun shuntingLoopRejectsAStationWithInOutsOnOneSideOnly() {
+		val issues = ShuntingLoop.compatibilityIssues(Station.from(load(NetworkResources.SINGLE_INOUT_XML)))
+
+		assertThat(issues.any { "both sides" in it }).isEqualTo(true)
 	}
 
 	@Test
 	fun shuntingLoopRejectsPrahaHlavniNadrazi() {
 		val issues = ShuntingLoop.compatibilityIssues(Station.from(load(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML)))
 
-		assertThat(issues.any { "exactly 2 InOuts" in it }).isEqualTo(true)
 		assertThat(issues.any { "no home signal" in it }).isEqualTo(true)
 		assertThat(issues.any { "neither a home signal nor a platform-track end" in it }).isEqualTo(true)
 	}
