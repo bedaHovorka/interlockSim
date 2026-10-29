@@ -28,7 +28,14 @@ import kotlin.test.Test
  *
  * Driven with a counting fake that always answers one fixed result, so every attempt fails.
  * Before Issue #1148 the loop called `reservePath` once per topological candidate in every
- * attempt and retried forever. A retryable result
+ * attempt and retried forever.
+ *
+ * **Meaning of an attempt since Issue #1154:** the first attempt is made when the dispatcher
+ * first sees the train; every further attempt is made only when a reservation is released
+ * ([cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired] or a block release), no
+ * longer once per dispatcher tick. These tests therefore script the releases with
+ * [ReleasingMultiTrainLoop]; without a release a blocked train is not retried (see
+ * `blockedTrainIsNotPolledWithoutAReleaseEvent`). A retryable result
  * ([PathReservationService.ReservationResult.AllPathsBlocked]) uses up the cap; a permanent one
  * ([PathReservationService.ReservationResult.NoPathExists],
  * [PathReservationService.ReservationResult.GeometricallyImpossible]) fails on the first attempt.
@@ -39,11 +46,13 @@ class MultiTrainLoopBoundedEntryTest : CommonKoinTestBase() {
 		const val MAX_ATTEMPTS: Int = 5
 
 		/**
-		 * Long enough for every capped attempt of two trains (one attempt per two-second
-		 * dispatcher cycle), and far longer than [MAX_ATTEMPTS] cycles, so an uncapped loop
-		 * would make many more calls.
+		 * Long enough for every capped attempt of two trains, and far longer than needed for
+		 * [MAX_ATTEMPTS] attempts, so an uncapped loop would make many more calls.
 		 */
 		const val END_TIME: Long = 60L
+
+		/** Seconds between the scripted release announcements. */
+		const val RELEASE_PERIOD: Double = 5.0
 
 		const val TRAIN_LENGTH: Double = 20.0
 
@@ -85,12 +94,13 @@ class MultiTrainLoopBoundedEntryTest : CommonKoinTestBase() {
 		ctx.getInOuts()
 		val counting = CountingBlockedReservationService(ctx.getRoutingServices().getPathReservationService(), refusal)
 		val loop =
-			MultiTrainLoop(
+			ReleasingMultiTrainLoop(
 				ctx,
 				endTime = END_TIME,
 				trainSpecs = listOf(spec(inTime = 0.0)),
 				pathReservationService = counting,
-				maxEntryAttempts = MAX_ATTEMPTS
+				maxEntryAttempts = MAX_ATTEMPTS,
+				releaseTimes = ReleasingMultiTrainLoop.every(RELEASE_PERIOD, END_TIME)
 			)
 		ctx.setMainProcess(loop)
 		ctx.run()
@@ -117,7 +127,7 @@ class MultiTrainLoopBoundedEntryTest : CommonKoinTestBase() {
 	}
 
 	@Test
-	fun refusedTrainFreesItsConcurrencySlot() {
+	fun blockedTrainIsNotPolledWithoutAReleaseEvent() {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked()
 		ctx.getInOuts()
 		val counting = CountingBlockedReservationService(ctx.getRoutingServices().getPathReservationService())
@@ -125,10 +135,38 @@ class MultiTrainLoopBoundedEntryTest : CommonKoinTestBase() {
 			MultiTrainLoop(
 				ctx,
 				endTime = END_TIME,
+				trainSpecs = listOf(spec(inTime = 0.0)),
+				pathReservationService = counting,
+				maxEntryAttempts = MAX_ATTEMPTS
+			)
+		ctx.setMainProcess(loop)
+
+		ctx.run()
+
+		assertThat(counting.reservePathCalls, name = "reservePath calls (first attempt only, no polling)")
+			.isEqualTo(1)
+		assertThat(loop.getEntryFailures(), name = "entry failures (the cap counts attempts, not time)").isEmpty()
+		assertThat(loop.getApprovedTrains().size, name = "blocked train still waiting").isEqualTo(1)
+		// The no-release camp is diagnosable at run end (Issue #1154 review round): the residue
+		// names the never-admitted train even though no entry failure was recorded.
+		assertThat(loop.getWaitingTrainNames(), name = "run-end residue names the waiting train")
+			.containsExactly(loop.getApprovedTrains().single().name)
+	}
+
+	@Test
+	fun refusedTrainFreesItsConcurrencySlot() {
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked()
+		ctx.getInOuts()
+		val counting = CountingBlockedReservationService(ctx.getRoutingServices().getPathReservationService())
+		val loop =
+			ReleasingMultiTrainLoop(
+				ctx,
+				endTime = END_TIME,
 				trainSpecs = listOf(spec(inTime = 0.0), spec(inTime = 1.0)),
 				maxConcurrentTrains = 1,
 				pathReservationService = counting,
-				maxEntryAttempts = MAX_ATTEMPTS
+				maxEntryAttempts = MAX_ATTEMPTS,
+				releaseTimes = ReleasingMultiTrainLoop.every(RELEASE_PERIOD, END_TIME)
 			)
 		ctx.setMainProcess(loop)
 

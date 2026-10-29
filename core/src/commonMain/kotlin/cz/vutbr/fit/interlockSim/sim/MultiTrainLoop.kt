@@ -15,8 +15,11 @@ import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.extractUniqueBlocks
+import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
+import cz.vutbr.fit.interlockSim.exceptions.SimulationStalled
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.collision.TrainSnapshot
@@ -59,10 +62,38 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Each entry attempt makes **at most one** [PathReservationService.reservePath] call: the
  * result of that call does not depend on any dispatcher-side candidate path, because
  * `reservePath` runs its own candidate search. A train gets at most [maxEntryAttempts]
- * attempts (one per dispatcher tick); when they are used up, or when the entry is
- * permanently impossible (no route, a geometrically impossible route, an unknown InOut
- * name), the train is retired from the approved list (or never created) and an
- * [EntryFailure] is recorded (see [getEntryFailures]) instead of retrying forever.
+ * attempts; when they are used up, or when the entry is permanently impossible (no route, a
+ * geometrically impossible route, an unknown InOut name), the train is retired from the approved
+ * list (or never created) and an [EntryFailure] is recorded (see [getEntryFailures]) instead of
+ * retrying forever.
+ *
+ * ## Event-driven retry (Issue #1154)
+ *
+ * The first attempt is made on the dispatcher tick that first sees the train. A train refused on
+ * a retryable result waits in a FIFO queue and is **not** polled: it is attempted again only when
+ * a reservation is released -- a [BlockEvent.BlockReleased] or a
+ * [cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired]. Waiters are attempted
+ * before the fresh trains of the same tick: every release feeds one admission policy -- the
+ * pending wake drains synchronously at the top of the tick, before [startApprovedTrains].
+ * Every release wakes the queue; no relevance model sits between a release and the wake, and
+ * releases that queue before the wake are coalesced (a release arriving after the wake
+ * re-wakes the retry at the same instant, counted once per instant). A release caused by an
+ * attempt's own rollback is ignored, otherwise a refused attempt would wake itself.
+ *
+ * Consequently an attempt is no longer "one per dispatcher tick": [maxEntryAttempts] counts the
+ * first attempt plus the retries that releases trigger. A blocked train that no release ever
+ * wakes (no release at all, or releases of blocks outside its candidate routes) stays queued
+ * until the run ends: it is not retried, retired, or recorded as an entry failure, and its
+ * concurrency slot stays held; [reportRunEndResidue] names such trains in the run-end log. That
+ * case is deliberately *not* the deadlock watchdog's.
+ *
+ * ## Deadlock watchdog (Issue #1154)
+ *
+ * On each tick the loop builds a wait-for graph (a waiting train points at the trains that hold a
+ * block of its candidate routes) and aborts the run with [SimulationStalled] when the wait-for
+ * cycle persists while the clock advances: the same cycle for [stallPersistTicks] ticks, or any
+ * cycle for ten times [stallPersistTicks] ticks (the churn bound). A frozen clock never reaches
+ * a tick, so it is bounded by the route-search node budget instead (Issue #1151).
  *
  * ## Determinism
  *
@@ -91,7 +122,8 @@ open class MultiTrainLoop(
 	initialSpeedMultiplier: Double = 1.0,
 	private val maxConcurrentTrains: Int = DEFAULT_MAX_CONCURRENT_TRAINS,
 	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService(),
-	private val maxEntryAttempts: Int = DEFAULT_MAX_ENTRY_ATTEMPTS
+	private val maxEntryAttempts: Int = DEFAULT_MAX_ENTRY_ATTEMPTS,
+	private val stallPersistTicks: Int = DEFAULT_STALL_PERSIST_TICKS
 ) : Interlocking(context),
 	SpeedControllable,
 	ApprovesTrains {
@@ -102,12 +134,19 @@ open class MultiTrainLoop(
 		internal const val DEFAULT_MAX_CONCURRENT_TRAINS: Int = 10
 
 		/**
-		 * Default cap on entry-reservation attempts per train (Issue #1148). One attempt is
-		 * made per dispatcher cycle (two simulated seconds: the `hold(1.0)` ending [iteration]
-		 * plus the one in [interLoopSleep]), so the default lets a train wait two simulated
-		 * hours for its entry route — longer than any existing scenario runs.
+		 * Default cap on entry-reservation attempts per train (Issue #1148): the first attempt plus
+		 * the retries that releases trigger (Issue #1154; before it, one attempt per dispatcher
+		 * cycle). A release frees at most a handful of blocks, so 3600 attempts outlast any
+		 * existing scenario.
 		 */
 		internal const val DEFAULT_MAX_ENTRY_ATTEMPTS: Int = 3600
+
+		/**
+		 * Default number of successive dispatcher ticks (two simulated seconds each) a wait-for
+		 * cycle must persist before the watchdog aborts the run (Issue #1154): ten seconds, far
+		 * longer than any transient state of the atomic full-path reservation.
+		 */
+		internal const val DEFAULT_STALL_PERSIST_TICKS: Int = 5
 
 		/** Report types enabled by the multi-train scenario. */
 		internal val ENABLED_REPORT_TYPES =
@@ -226,6 +265,9 @@ open class MultiTrainLoop(
 		require(maxEntryAttempts > 0) {
 			"maxEntryAttempts must be positive, got: $maxEntryAttempts"
 		}
+		require(stallPersistTicks > 0) {
+			"stallPersistTicks must be positive, got: $stallPersistTicks"
+		}
 	}
 
 	private val blockResources: BlockResourceRegistry = BlockResourceRegistry(context)
@@ -266,10 +308,65 @@ open class MultiTrainLoop(
 
 	private val entryFailures: MutableList<EntryFailure> = mutableListOf()
 
+	/**
+	 * Trains refused on a retryable result, in the order of their refusal (FIFO). A train waits here
+	 * until a release wakes the [retryProcess]; the loop's own deque is used on purpose, not a kDisco
+	 * `Resource` queue, whose re-entry puts a waiter at the tail (SP9 finding F8).
+	 */
+	private val waitingTrains: ArrayDeque<Train> = ArrayDeque()
+
+	private val retryProcess: RetryProcess = RetryProcess()
+
+	/** `true` while [retryProcess] is passivated and can be reactivated. */
+	private var retryParked: Boolean = false
+
+	/** A release arrived that the [retryProcess] has not answered yet. */
+	private var retryRequested: Boolean = false
+
+	/** Name of the train whose entry attempt is running, so that its own rollback is not a release. */
+	private var attemptingTrainName: String? = null
+
+	private val retryActivationTimes: MutableList<Double> = mutableListOf()
+
+	private val watchdog: DeadlockWatchdog = DeadlockWatchdog(stallPersistTicks)
+
+	/**
+	 * The report of the run aborted by the deadlock watchdog, or `null` (Issue #1154). Written only
+	 * by the tick that raised the report.
+	 */
+	var stall: SimulationStalled? = null
+		private set
+
+	init {
+		context.onBlockEvent { event ->
+			if (event is BlockEvent.BlockReleased) {
+				onReleaseSignal(event.trainId)
+			}
+		}
+		context.onReservationExpired { onReleaseSignal(it.trainId) }
+	}
+
 	// Test-observability counters (#365 pattern).
 	private var trainsEnteredCount: Int = 0
 	private var trainsExitedCount: Int = 0
 	private var maxConcurrentTrainsCount: Int = 0
+
+	/**
+	 * Answers releases: sleeps until [onReleaseSignal] reactivates it, then attempts the waiting
+	 * trains once in queue order (Issue #1154).
+	 */
+	private inner class RetryProcess : Process() {
+		override suspend fun actions() {
+			while (true) {
+				while (!retryRequested) {
+					retryParked = true
+					passivate()
+				}
+				retryParked = false
+				drainWaitingTrains()
+			}
+		}
+	}
 
 	private inner class RealTimeSynch : LoopProcess() {
 		private var beginTime: Long = 0
@@ -354,6 +451,7 @@ open class MultiTrainLoop(
 			activate(RealTimeSynch())
 		}
 		Process.activate(generator)
+		Process.activate(retryProcess)
 	}
 
 	override suspend fun iteration() {
@@ -362,8 +460,15 @@ open class MultiTrainLoop(
 		if (approvedTrains.size > maxConcurrentTrainsCount) {
 			maxConcurrentTrainsCount = approvedTrains.size
 		}
-		startApprovedTrains()
+		// One admission policy (Issue #1154): the loop-level expiry releases stale holdings at the
+		// top of the tick, so no entry attempt can release-and-take them mid-attempt ahead of an
+		// older waiter; and the pending wake drains synchronously before fresh trains, so a release
+		// that queued before this tick cannot outrun the waiters either. startApprovedTrains then
+		// attempts only fresh trains.
 		pathReservationService.expireStaleReservations() // Issue #1174
+		drainWaitingTrains()
+		startApprovedTrains()
+		checkForStall()
 		blockResources.releaseFreeResources()
 		hold(1.0)
 	}
@@ -404,20 +509,141 @@ open class MultiTrainLoop(
 		// Iterate the published snapshot: the body suspends (reserveEntryPath, Process.activate),
 		// and approvedTrains may be replaced across those suspension points.
 		for (train in approvedTrains) {
-			if (train in startedTrains || trainHasActivePath(train)) {
+			if (train in startedTrains || train in waitingTrains || trainHasActivePath(train)) {
 				continue
 			}
 			val entry = trainEntries[train] ?: continue
-			when (val outcome = reserveEntryPath(train, entry)) {
-				EntryAttemptOutcome.Reserved -> {
-					startedTrains.add(train)
-					logger.info { "MultiTrainLoop: starting ${train.name}" }
-					Process.activate(train)
-				}
-				EntryAttemptOutcome.Retry -> Unit
-				is EntryAttemptOutcome.Failed -> retireRefusedTrain(train, outcome.failure)
+			attemptEntry(train, entry)
+		}
+	}
+
+	/**
+	 * One entry attempt for [train], and what follows from it: start the train, queue it behind the
+	 * trains already waiting (a retryable refusal keeps a waiting train at its place), or retire it.
+	 */
+	private suspend fun attemptEntry(
+		train: Train,
+		entry: TrainEntry
+	) {
+		attemptingTrainName = train.name
+		val outcome =
+			try {
+				reserveEntryPath(train, entry)
+			} finally {
+				attemptingTrainName = null
+			}
+		when (outcome) {
+			EntryAttemptOutcome.Reserved -> {
+				waitingTrains.remove(train)
+				startedTrains.add(train)
+				logger.info { "MultiTrainLoop: starting ${train.name}" }
+				Process.activate(train)
+			}
+			EntryAttemptOutcome.Retry -> if (train !in waitingTrains) waitingTrains.addLast(train)
+			is EntryAttemptOutcome.Failed -> {
+				waitingTrains.remove(train)
+				retireRefusedTrain(train, outcome.failure)
 			}
 		}
+	}
+
+	/**
+	 * Called synchronously from inside the release (a block event or a reservation expiry), so it
+	 * only records and schedules. A release by the train whose attempt is running is that attempt's
+	 * own rollback and is ignored; **every other release wakes the retry**. No relevance model sits
+	 * between a release and the wake: the state change a waiter waits for can ride on the release of
+	 * a block outside every waiter's candidate gate, because the releasing train's switch position
+	 * and occupancy free together with its last blocks -- a gate-block filter drops exactly that
+	 * wake and the waiter stays queued forever (proven by the two-trains-on-the-y-junction
+	 * regression of `MultiTrainLoopTest` in the Issue #1154 review round). A wake is one cheap pass
+	 * over the queue; irrelevant wakes burn attempts the [maxEntryAttempts] cap already absorbs.
+	 */
+	private fun onReleaseSignal(releasingTrainName: String?) {
+		if (releasingTrainName != null && releasingTrainName == attemptingTrainName) {
+			return
+		}
+		if (waitingTrains.isEmpty()) {
+			return
+		}
+		retryRequested = true
+		if (retryParked) {
+			retryParked = false
+			Process.reactivate(retryProcess)
+		}
+	}
+
+	/**
+	 * Answers a pending wake: attempts every waiting train once, in queue order, and repeats when a
+	 * release arrived meanwhile. This is the one admission policy shared by both wake drivers (the
+	 * reactive [RetryProcess] and the tick's synchronous pass), so a fresh train can never outrun
+	 * the waiters of its tick. The wake is recorded once per instant, and one failing attempt
+	 * neither stops future retries nor starves the waiters behind it.
+	 */
+	private suspend fun drainWaitingTrains() {
+		if (!retryRequested) {
+			// Without a pending wake the drain must not run: that would be polling (Issue #1154).
+			return
+		}
+		val now = time()
+		if (now != retryActivationTimes.lastOrNull()) {
+			retryActivationTimes.add(now)
+		}
+		do {
+			retryRequested = false
+			for (train in waitingTrains.toList()) {
+				val entry = trainEntries[train]
+				if (entry == null || train in startedTrains || trainHasActivePath(train)) {
+					continue
+				}
+				try {
+					attemptEntry(train, entry)
+				} catch (e: Exception) {
+					// A service failure inside one attempt must not kill the retry process silently
+					// (kDisco's supervisor would leave it dead forever) nor starve the waiters
+					// behind the failing one, whose throw would recur deterministically.
+					logger.error(e) {
+						"MultiTrainLoop: an entry attempt failed inside the retry drain; remaining " +
+							"waiters stay attempted and later releases still wake the retry"
+					}
+				}
+			}
+		} while (retryRequested)
+	}
+
+	/**
+	 * Watchdog tick (Issue #1154): builds the wait-for graph and aborts the run when its cycle has
+	 * persisted. A train waits for every other train that holds a block of its candidate routes.
+	 * Only two or more unstarted trains can form a cycle, and a started train waits for nobody
+	 * here: its whole path was reserved before it started.
+	 */
+	private fun checkForStall() {
+		if (stall != null) {
+			return
+		}
+		val waiters = approvedTrains.filter { it !in startedTrains && trainEntries[it] != null }
+		val cycle = if (waiters.size < 2) null else buildWaitForGraph(waiters).findCycle()
+		val persisted = watchdog.observe(time(), cycle) ?: return
+		val report = SimulationStalled(persisted, watchdog.reportedTicks(), time())
+		stall = report
+		logger.error { "MultiTrainLoop: ${report.message}" }
+		env.errorStop(report)
+	}
+
+	private fun buildWaitForGraph(waiters: List<Train>): WaitForGraph {
+		val holderOf: MutableMap<DynamicTrackBlock, String> = mutableMapOf()
+		for (train in approvedTrains) {
+			for (block in pathReservationService.getReservedBlocks(train.name)) {
+				holderOf.getOrPut(block) { train.name }
+			}
+		}
+		val graph = WaitForGraph()
+		for (waiter in waiters) {
+			val entry = trainEntries[waiter] ?: continue
+			for (block in gateBlocksFor(entry)) {
+				holderOf[block]?.let { graph.addEdge(waiter.name, it) }
+			}
+		}
+		return graph
 	}
 
 	/**
@@ -430,6 +656,7 @@ open class MultiTrainLoop(
 	) {
 		// Copy-on-write, as everywhere else approvedTrains is replaced (Issue #994).
 		approvedTrains = approvedTrains.filterNot { it === train }
+		waitingTrains.remove(train)
 		trainEntries.remove(train)
 		entryAttempts.remove(train)
 		entryFailures.add(failure)
@@ -648,11 +875,28 @@ open class MultiTrainLoop(
 
 	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
+			reportRunEndResidue()
 			generator.terminate()
 			env.stop()
 			return
 		}
 		hold(1.0)
+	}
+
+	/**
+	 * Run-end residue (Issue #1154): a train that no release ever wakes keeps its place in the queue
+	 * to the end of the run, with no entry failure recorded and no watchdog report -- the run ends
+	 * normally at [endTime]. The residue is logged here and exposed through [getWaitingTrainNames],
+	 * so a run with such trains stays diagnosable.
+	 */
+	private fun reportRunEndResidue() {
+		if (waitingTrains.isEmpty()) {
+			return
+		}
+		logger.warn {
+			"MultiTrainLoop: ${waitingTrains.size} train(s) still wait for a release at run end and " +
+				"have no entry failure recorded: ${getWaitingTrainNames().joinToString()}"
+		}
 	}
 
 	/** Test-observability: number of trains that entered the pending queue. */
@@ -663,6 +907,15 @@ open class MultiTrainLoop(
 
 	/** Test-observability: peak number of concurrently approved trains. */
 	fun getMaxConcurrentTrains(): Int = maxConcurrentTrainsCount
+
+	/**
+	 * Test-observability: simulation times at which a pending wake was answered by the retry drain
+	 * (the reactive process or the tick's synchronous pass), once per instant (Issue #1154).
+	 */
+	fun getRetryActivationTimes(): List<Double> = retryActivationTimes.toList()
+
+	/** Test-observability: names of the trains still queued for a release (Issue #1154). */
+	fun getWaitingTrainNames(): List<String> = waitingTrains.map { it.name }
 
 	/** Test-observability: number of block resources currently occupied. */
 	fun getOccupiedResourceCount(): Int = blockResources.occupiedCount()
