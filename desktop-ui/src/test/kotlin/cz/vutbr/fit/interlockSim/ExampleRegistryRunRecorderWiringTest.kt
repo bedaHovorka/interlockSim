@@ -66,7 +66,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	 * and a real model, so the per-run JSON is not mislabeled (#847 / #928).
 	 */
 	private fun assertRecordsUnderLlmArm(factoryMethod: String) {
-		val context = createExample(factoryMethod, "shuntingLoopAI")
+		val context = createExample(factoryMethod, ExampleNames.SHUNTING_LOOP_AI)
 		val recorder = checkNotNull(context.scope.getOrNull<DispatcherRunRecorder>())
 
 		val snapshot = recorder.snapshot()
@@ -79,7 +79,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a snapshot store is resolvable, so a finished run has somewhere to be written")
 	fun snapshotStoreIsBound() {
-		val context = createExample("createShuntingLoopAIExample", "shuntingLoopAI")
+		val context = createExample("createShuntingLoopAIExample", ExampleNames.SHUNTING_LOOP_AI)
 
 		assertThat(context.scope.getOrNull<RunSnapshotStore>()).isNotNull()
 	}
@@ -104,7 +104,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	@DisplayName("the rule-based example still records under the rule-based arm")
 	fun ruleBasedExampleRecordsUnderTheRuleBasedArm() {
-		val context = createExample("createShuntingLoopExample", "shuntingLoop")
+		val context = createExample("createShuntingLoopExample", ExampleNames.SHUNTING_LOOP)
 		val recorder = checkNotNull(context.scope.getOrNull<DispatcherRunRecorder>())
 
 		assertThat(recorder.snapshot().arm, "recorded arm").isEqualTo(DispatcherArm.RULE_BASED)
@@ -119,9 +119,13 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 	@DisplayName("each context gets its own recorder with its own run id")
 	fun recordersAreIndependentPerContext() {
 		val first =
-			checkNotNull(createExample("createShuntingLoopAIExample", "shuntingLoopAI").scope.getOrNull<DispatcherRunRecorder>())
+			checkNotNull(
+				createExample("createShuntingLoopAIExample", ExampleNames.SHUNTING_LOOP_AI).scope.getOrNull<DispatcherRunRecorder>()
+			)
 		val second =
-			checkNotNull(createExample("createShuntingLoopAIExample", "shuntingLoopAI").scope.getOrNull<DispatcherRunRecorder>())
+			checkNotNull(
+				createExample("createShuntingLoopAIExample", ExampleNames.SHUNTING_LOOP_AI).scope.getOrNull<DispatcherRunRecorder>()
+			)
 
 		assertThat(first.runId == second.runId, "two contexts share a runId").isEqualTo(false)
 	}

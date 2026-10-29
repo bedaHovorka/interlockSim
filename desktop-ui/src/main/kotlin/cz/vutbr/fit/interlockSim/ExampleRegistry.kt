@@ -126,15 +126,17 @@ class ExampleRegistry {
 	 * step every example needs before it can build its simulation process.
 	 *
 	 * @param factory The simulation context factory to parse the XML with
+	 * @param xmlPath Classpath location of the network XML; vyhybna by default
 	 * @param block Wiring applied to the fresh context; its receiver is the context
 	 * @return The wired context, ready to run
 	 * @throws ContextCreationException if the resource or the XML is invalid
 	 */
 	private inline fun withExampleContext(
 		factory: SimulationContextFactory,
+		xmlPath: String = BuiltinNetworks.VYHYBNA_XML_PATH,
 		block: DefaultSimulationContext.() -> Unit
 	): SimulationContext =
-		readExampleXml()
+		readExampleXml(xmlPath)
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -155,11 +157,12 @@ class ExampleRegistry {
 	 */
 	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopExample,
-			"shuntingLoopAI" to ::createShuntingLoopAIExample,
-			"shuntingLoopSync" to ::createShuntingLoopSyncExample,
-			"multiTrainLoop" to ::createMultiTrainLoopExample,
-			"threeTrainLoop" to ::createThreeTrainLoopExample
+			ExampleNames.SHUNTING_LOOP to ::createShuntingLoopExample,
+			ExampleNames.SHUNTING_LOOP_AI to ::createShuntingLoopAIExample,
+			ExampleNames.SHUNTING_LOOP_SYNC to ::createShuntingLoopSyncExample,
+			ExampleNames.CERVENY_UJEZD to ::createCervenyUjezdExample,
+			ExampleNames.MULTI_TRAIN_LOOP to ::createMultiTrainLoopExample,
+			ExampleNames.THREE_TRAIN_LOOP to ::createThreeTrainLoopExample
 		)
 
 	/**
@@ -170,10 +173,11 @@ class ExampleRegistry {
 	 */
 	val guiExamples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopGuiExample,
-			"shuntingLoopAI" to ::createShuntingLoopAIGuiExample,
-			"multiTrainLoop" to ::createMultiTrainLoopGuiExample,
-			"threeTrainLoop" to ::createThreeTrainLoopGuiExample
+			ExampleNames.SHUNTING_LOOP to ::createShuntingLoopGuiExample,
+			ExampleNames.SHUNTING_LOOP_AI to ::createShuntingLoopAIGuiExample,
+			ExampleNames.CERVENY_UJEZD to ::createCervenyUjezdGuiExample,
+			ExampleNames.MULTI_TRAIN_LOOP to ::createMultiTrainLoopGuiExample,
+			ExampleNames.THREE_TRAIN_LOOP to ::createThreeTrainLoopGuiExample
 		)
 
 	/**
@@ -182,7 +186,7 @@ class ExampleRegistry {
 	 * The registry owns this fact because it is the registry that wires the LLM planner.
 	 * Callers must not re-derive it from the name (Issue #839).
 	 */
-	private val llmExamples: Set<String> = setOf("shuntingLoopAI")
+	private val llmExamples: Set<String> = setOf(ExampleNames.SHUNTING_LOOP_AI)
 
 	/**
 	 * Returns `true` if the example named [name] is driven by the LLM dispatcher.
@@ -225,6 +229,46 @@ class ExampleRegistry {
 	}
 
 	/**
+	 * Shared body of the console synchronous shunting-loop examples; they differ only in the
+	 * network XML (the same shape the native registry solved with one `createShuntingLoop`).
+	 * The named factories below keep their own 2-arg signatures — the tests pin them by
+	 * reflection (`ExampleLoadingTest`).
+	 */
+	private fun syncShuntingLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		xmlPath: String
+	): SimulationContext {
+		val endTime = requireEndTimeArg(args)
+		return withExampleContext(factory, xmlPath) {
+			val loop = ShuntingLoop(this, endTime)
+			wireSynchronousDispatcher(this, loop)
+			setMainProcess(loop)
+		}
+	}
+
+	/**
+	 * Shared body of the GUI shunting-loop examples; they differ only in the network XML.
+	 */
+	private fun guiShuntingLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		xmlPath: String
+	): SimulationContext {
+		val endTime = requireEndTimeArg(args)
+		return withExampleContext(factory, xmlPath) {
+			// Enable real-time synchronization for GUI mode with 1x speed multiplier
+			val loop = ShuntingLoop(this, endTime, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
+			// SP4.2 (Issue #564): pace the agent loop with the GUI's real-time sync.
+			// The scoped DelegatingSimulationController is handed to the driver here;
+			// gui.SimulationController attaches the live SimulationRunner as its
+			// delegate when the run starts (and detaches it on stop).
+			wireDispatcherAgent(this, loop, scope.get<DelegatingSimulationController>())
+			setMainProcess(loop)
+		}
+	}
+
+	/**
 	 * Creates a shunting loop example wired with the plain [wireSynchronousDispatcher],
 	 * mirroring the native `fast-sim` CLI's `shuntingLoop` construction exactly.
 	 *
@@ -244,14 +288,39 @@ class ExampleRegistry {
 	private fun createShuntingLoopSyncExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val endTime = requireEndTimeArg(args)
-		return withExampleContext(factory) {
-			val loop = ShuntingLoop(this, endTime)
-			wireSynchronousDispatcher(this, loop)
-			setMainProcess(loop)
-		}
-	}
+	): SimulationContext = syncShuntingLoopExample(factory, args, BuiltinNetworks.VYHYBNA_XML_PATH)
+
+	/**
+	 * Creates the Cerveny Ujezd station example for console mode (Goal 1B SP3.2, Issue #1164).
+	 *
+	 * Wired with the plain [wireSynchronousDispatcher], like `shuntingLoopSync` and the native
+	 * `fast-sim` binary: rule-based, deterministic, no LLM and no dispatcher-agent threads. The loop
+	 * derives its blocks and its capacity (4) from the topology of `cerveny_ujezd.xml`.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext = syncShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
+
+	/**
+	 * Creates the Cerveny Ujezd station example for the animated GUI (Issue #1164): the same
+	 * network and loop as [createCervenyUjezdExample] with real-time synchronization, and the rule-based
+	 * dispatcher-agent stack paced by the GUI like [createShuntingLoopGuiExample].
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run in GUI
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdGuiExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext = guiShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
 
 	/**
 	 * Builds the [RunParameters] recorded for an LLM-arm run from the settings that run actually
@@ -429,19 +498,7 @@ class ExampleRegistry {
 	private fun createShuntingLoopGuiExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val endTime = requireEndTimeArg(args)
-		return withExampleContext(factory) {
-			// Enable real-time synchronization for GUI mode with 1x speed multiplier
-			val loop = ShuntingLoop(this, endTime, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
-			// SP4.2 (Issue #564): pace the agent loop with the GUI's real-time sync.
-			// The scoped DelegatingSimulationController is handed to the driver here;
-			// gui.SimulationController attaches the live SimulationRunner as its
-			// delegate when the run starts (and detaches it on stop).
-			wireDispatcherAgent(this, loop, scope.get<DelegatingSimulationController>())
-			setMainProcess(loop)
-		}
-	}
+	): SimulationContext = guiShuntingLoopExample(factory, args, BuiltinNetworks.VYHYBNA_XML_PATH)
 
 	/**
 	 * Creates a shunting loop AI simulation example for GUI mode (SP2b.9, Issue #566).

@@ -29,4 +29,16 @@ object BuiltinNetworks {
 	val VYHYBNA_XML: String by lazy {
 		Resources.read(VYHYBNA_XML_PATH)
 	}
+
+	/** Classpath location of the built-in Cerveny Ujezd station network (Goal 1B SP3.2, Issue #1164). */
+	const val CERVENY_UJEZD_XML_PATH = "cz/vutbr/fit/interlockSim/resource/cerveny_ujezd.xml"
+
+	/**
+	 * Cerveny Ujezd station (4 InOuts, 12 switches, 12 signals). Used by the `cervenyUjezd` example of the
+	 * desktop CLI and GUI and of the `:fast-sim` native binary. `:core-test` keeps its own copy of the file as the
+	 * `NetworkResources.CERVENY_UJEZD_XML` fixture; a test pins the two copies to the same content.
+	 */
+	val CERVENY_UJEZD_XML: String by lazy {
+		Resources.read(CERVENY_UJEZD_XML_PATH)
+	}
 }

@@ -113,7 +113,7 @@ class ExampleRegistryLlmRunParametersTest {
 	fun agreesWithLiveLlmPath() {
 		val cell =
 			SweepCell(
-				example = "shuntingLoopAI",
+				example = ExampleNames.SHUNTING_LOOP_AI,
 				model = "qwen2.5:7b-instruct",
 				temperature = 0.5,
 				tickPeriodMs = 250L,
@@ -156,7 +156,7 @@ class ExampleRegistryLlmRunParametersTest {
 	fun agreesWithLiveLlmPathForAllAxesOmitted() {
 		val cell =
 			SweepCell(
-				example = "shuntingLoopAI",
+				example = ExampleNames.SHUNTING_LOOP_AI,
 				model = null,
 				temperature = null,
 				tickPeriodMs = 250L,
