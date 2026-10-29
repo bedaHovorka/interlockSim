@@ -54,7 +54,7 @@ internal class PathInfoMerger(
 	 * reached only two occurrences, so the merge was accepted and logged as a "LEGITIMATE
 	 * CIRCULAR ROUTE", storing an out-and-back path that retraces section `k2` in the opposite
 	 * direction. Nothing can follow such a path:
-	 * [DefaultTrainNavigationService.buildPathWithDirection] walks the reservation, revisits a
+	 * `DefaultTrainNavigationService.buildPathWithDirection` walks the reservation, revisits a
 	 * `(separator, previous)` pair, finds the cycle exit rear-facing and returns `null` — surfaced
 	 * as [PathResult.OwnershipConflict], on which the train waits while holding its blocks. That
 	 * wait is now bounded (Issue #943: one WARN after
@@ -136,32 +136,19 @@ internal class PathInfoMerger(
 	 * ([reversalAbortReason], Issue #944), and the 3rd-occurrence cycle guard — and they all
 	 * behave identically from the caller's point of view.
 	 *
-	 * This is not stylistic. `registerPathInfo` is called from
-	 * [DefaultPathReservationService.reservePath] Step 2i and from its already-owned early return,
+	 * This is not stylistic. `registerPathInfo` is called from [CandidateCommitter]'s Step 2i and
+	 * from the service's already-owned early return (`reserveAlreadyOwnedPath`),
 	 * in both cases **after** blocks are reserved, switches locked and a START signal cleared, on
 	 * the kDisco simulation thread, with no rollback and nothing catching a throw
 	 * (`DispatchDecisionApplier.onControlStep` catches only `IllegalArgumentException`). An
 	 * exception here therefore did not fail a run loudly — it killed the simulation thread while
 	 * the run still wrote a well-formed result file, i.e. it fabricated a measurement.
 	 *
-	 * **Transactional completion at abort time (Issue #904).** An abort here no longer leaves an
-	 * orphaned RESERVED tail: [DefaultPathReservationService.reservePath] inspects the returned
-	 * [MergeOutcome] at both of its call sites (Step 2i, and the already-owned early return) and,
-	 * on [MergeOutcome.Aborted], releases exactly what *that* `reservePath` invocation acquired
-	 * for the rejected candidate — blocks, switch locks, and the signal it cleared, driven back
-	 * to STOP (G1) — using the same scoped-rollback helpers Step 2g's own signal-failure rollback
-	 * already uses. This applies the PR #901 standard (no exit from `reservePath` leaves resources
-	 * unreleased without rollback) to the one exit that previously didn't meet it, and it holds in
-	 * every host — `:fast-sim` and bare-`:core` included — because it no longer depends on
-	 * anything outside this call.
-	 *
-	 * **`OrphanReservationSweeper`'s role is narrower now, not gone.** Before this fix, the sweeper
-	 * (in `dispatcher-agent`, wired only in `desktop-ui`/`dispatcher-agent` via `ExampleRegistry`)
-	 * was the *only* mechanism that ever reclaimed a merge-abort's orphaned tail — and only in the
-	 * hosts that wire it; `:fast-sim` and bare-`:core` never reclaimed it at all. The sweeper still
-	 * has an independent, legitimate job: reclaiming a route held un-travelled past its staleness
-	 * threshold and phantom-owner routes (a train that exited without releasing). It is simply no
-	 * longer relied on for *this* residue, because there is none left to reclaim.
+	 * **Transactional completion at abort time (Issue #904).** An abort here leaves no orphaned
+	 * RESERVED tail: the caller inspects the returned [MergeOutcome] and, on [MergeOutcome.Aborted],
+	 * releases exactly what it acquired for the rejected candidate. The mechanism is documented once,
+	 * in the [CandidateCommitter] class KDoc; `OrphanReservationSweeper` is no longer relied on for
+	 * this residue.
 	 *
 	 * ## Algorithm
 	 *
@@ -220,28 +207,24 @@ internal class PathInfoMerger(
 	 * ## Resource Safety
 	 *
 	 * `merge()` itself is still a **pure data-structure operation** — it does not acquire
-	 * or release track blocks or switches. All resource locking happens in
-	 * `DefaultPathReservationService.reservePath()` via `registerAtomic()` and
-	 * `registerSwitches()`, which use their own tracking maps (`trainToBlocks` /
-	 * `trainToSwitches`), independent of PathInfo.
+	 * or release track blocks or switches. All resource locking happens in [CandidateCommitter]
+	 * (Steps 2c-2f) via `registerAtomic()` and `SwitchConfigurator.registerSwitches()`, whose
+	 * ownership lives in [BlockOwnershipTable] and [SwitchOwnershipTable], independent of PathInfo.
 	 *
 	 * **PathInfo / block divergence — resolved by the caller (Issue #904):** When this method
-	 * returns [MergeOutcome.Aborted], the train's `trainToBlocks` entry momentarily contains the
-	 * newly reserved blocks (step 2d in `reservePath()`) while `trainToPathInfo` still holds the
-	 * pre-merge value — but `reservePath` itself resolves that divergence before returning to its
-	 * own caller: it inspects the [MergeOutcome], sees the abort, and releases exactly those newly
-	 * reserved blocks (and any switches locked, and any signal cleared) for the rejected candidate.
-	 * The divergence therefore never outlives the `reservePath` call that created it — there is no
-	 * window in which `trainToBlocks` and `trainToPathInfo` disagree from any other caller's point
-	 * of view, and nothing is left for a later sweep to reclaim.
+	 * returns [MergeOutcome.Aborted], the block ownership table momentarily holds the newly reserved
+	 * blocks while [PathInfoStore] still holds the pre-merge value — but the caller rolls the
+	 * candidate back before returning to its own caller, so the divergence never outlives the
+	 * `reservePath` call that created it and nothing is left for a later sweep to reclaim.
 	 *
 	 * @param trainId Owner of the PathInfo being merged (used in the abort WARNs)
 	 * @param old Previous PathInfo (Tail may still be navigating through this)
 	 * @param new New PathInfo (Front just reserved this)
 	 * @return [MergeOutcome.Merged] wrapping the merged PathInfo, or [MergeOutcome.Aborted]
 	 *         wrapping [old] unchanged if the merge was aborted: [new] does not start at
-	 *         `old.target`, `new.start` is duplicated inside [new], or the merge would create a
-	 *         third occurrence of a separator (cycle guard). Never throws.
+	 *         `old.target`, `new.start` is duplicated inside [new], [new] reverses the train over the
+	 *         section it just travelled (Issue #944), or the merge would create a third occurrence of
+	 *         a separator (cycle guard). Never throws.
 	 * @since Issue #296 Phase 8; never-throw abort semantics from Issue #834 (SP2c.11); return
 	 *   type widened from `PathInfo` to [MergeOutcome] by Issue #904.
 	 */

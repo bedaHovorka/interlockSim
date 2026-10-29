@@ -54,6 +54,7 @@ internal class RouteReleaser(
 ) {
 	// ── Approach-lock deferral window (Issue #1050 review round) ──
 	//
+	// The time window of the contract at ApproachLockedPathRelease.releasePathDetailed.
 	// A block deferred by releasePathDetailed is safe to free only once the booking window it
 	// was deferred for has certainly closed. Train.Front reads a proceed aspect, holds
 	// APPROACH_LOCK_DEFER_SECONDS, and only then books the block, so a train that read the
@@ -77,9 +78,10 @@ internal class RouteReleaser(
 	private val deferralLogged: MutableSet<String> = mutableSetOf()
 
 	/**
-	 * The booking window [Train.Front] spends between reading a proceed aspect and booking the
-	 * next block (`hold(1.0)` in its `semaphoreAction`). An approach-locked block stays deferred
-	 * for this long after its deferral, so no caller cadence can free it mid-booking.
+	 * The booking window `Train.Front` (in [cz.vutbr.fit.interlockSim.sim.Train]) spends between
+	 * reading a proceed aspect and booking the next block (`hold(1.0)` in its `semaphoreAction`). An
+	 * approach-locked block stays deferred for this long after its deferral, so no caller cadence can
+	 * free it mid-booking.
 	 */
 	private companion object {
 		const val APPROACH_LOCK_DEFER_SECONDS: Double = 1.0
@@ -101,17 +103,14 @@ internal class RouteReleaser(
 
 	/**
 	 * Issue #1050: [releasePath] with approach locking, the counterpart of the rule
-	 * `RegistryPartialRouteReleaser` applies to a tail (Issue #1025). A RESERVED, unoccupied block
-	 * the train may be entering across a proceed aspect -- `Train.Front` books the block only after
-	 * `hold(1.0)` -- is kept reserved and registered, and the caller retries. The retry frees the
-	 * block once [APPROACH_LOCK_DEFER_SECONDS] of simulated time have passed since the deferral
-	 * (by then the train has either booked it -- it stays as an occupied block until the train
-	 * leaves -- or lost interest, the signal reading STOP). A kept tail whose PathInfo cannot be
+	 * `RegistryPartialRouteReleaser` applies to a tail (Issue #1025). The contract is at
+	 * [ApproachLockedPathRelease.releasePathDetailed]; the deferral window is [approachLockDeferredUntil]
+	 * ([APPROACH_LOCK_DEFER_SECONDS] of simulated time). A kept tail whose PathInfo cannot be
 	 * trimmed (a switch or rear-facing semaphore boundary) keeps the whole route; when even the
 	 * blocks the train stands on cannot be cut after, the release refuses before any signal reset and
 	 * changes nothing (Issue #1242). This is the release the production callers use
 	 * (`NetworkActuatorPort.releaseRoute`: `cancel_route` and the orphan sweeper); plain
-	 * [releasePath] stays unconditional for teardown and tests.
+	 * [releasePath] is unconditional and used by tests only (a train's teardown is [unregister]).
 	 */
 	fun releasePathDetailed(trainId: String): PathRelease = release(trainId, approachLock = true)
 
@@ -510,8 +509,8 @@ internal class RouteReleaser(
 	 *
 	 * This is a full route release, not just registry removal: the train's cleared signals return
 	 * to STOP first, blocks still RESERVED but never entered are cancelled back to FREE, and the
-	 * route's switches are unlocked only after their blocks are free — see the interface KDoc for
-	 * the contract.
+	 * route's switches are unlocked only after their blocks are free — see
+	 * [PathReservationService.unregister] for the contract.
 	 *
 	 * @param trainId The train identifier to unregister
 	 * @return List of blocks that were released
@@ -608,9 +607,9 @@ internal class RouteReleaser(
 	 * Called by Train's Tail process after leaving a block.
 	 *
 	 * On success, also resets the released block's governing semaphores via
-	 * [resetSemaphoresForReleasedBlocks] -- see the interface KDoc for why this is safe on this
-	 * per-block tail-clearance call site (every boundary of a released block is behind the train's
-	 * head).
+	 * [resetSemaphoresForReleasedBlocks] -- see [PathReservationService.resetSemaphoresForReleasedBlocks]
+	 * for why this is safe on this per-block tail-clearance call site (every boundary of a released
+	 * block is behind the train's head).
 	 *
 	 * On the production `Train.Tail.separatorAction` call site, [block]'s `reservedFrom` is always
 	 * null by the time this runs: a block can only be left after

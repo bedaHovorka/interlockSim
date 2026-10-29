@@ -28,36 +28,36 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 /**
- * Default implementation of path reservation service.
+ * Default implementation of path reservation service: the facade of the reservation kernel.
  *
  * ## Architecture
  *
- * This service coordinates three components:
- * - **TopologyNavigator**: Finds all possible paths (static topology)
- * - **SimulationEnvironment**: Accesses dynamic block state (FREE/RESERVED/OCCUPIED)
- * - **PathReservationRegistry**: Tracks train ownership of blocks
+ * The service owns the public entry points and the candidate loop of [reservePath]; every concern
+ * behind them lives in one unit constructed here over the same registry and environment (SP12):
+ * - **[RouteCandidateScreen]**: read-only candidate screening -- origin guards, rear-facing ends and
+ *   divergent candidates (Steps 0, 1.5, 1.6)
+ * - **[ReservationTargetDiscovery]**: which separators a route can be set to, and in which order
+ * - **[CandidateCommitter]**: Steps 2c to 2i, everything that mutates state for one screened candidate
+ *   and the rollback of exactly that candidate, working through [SwitchConfigurator] (switches),
+ *   [RouteSignalConfigurator] (START and intermediate semaphores) and [ClearedSignalLedger] (which
+ *   semaphore is lit for which train, and every reset to STOP)
+ * - **[RouteReleaser]**: whole-route and per-block release, rollback and the approach-lock deferral window
+ * - **[ReservationContentionTracker]**: blocked-path contention, reported only if it is still
+ *   unresolved when the run ends
+ * - **[DefaultReservationExpiry]**: the reservation TTL and the release of stale holdings
+ * - **[PathReservationRegistry]**: ownership of blocks, switches and PathInfo
  *
- * ## Atomic Reservation Algorithm
+ * Candidate paths come from [TopologyNavigator] (static topology) and, for InOut-to-InOut requests,
+ * [RouteFinder]; dynamic block state (FREE/RESERVED/OCCUPIED) comes from [SimulationEnvironment].
  *
- * For each candidate path:
- * 1. Extract unique blocks from track sections
- * 2. Check all blocks are FREE (validation phase)
- * 3. Reserve all blocks via setUpPath() (reservation phase)
- * 4. Register ownership in registry (tracking phase)
- * 5. If any step fails, rollback all changes
+ * ## Atomic Reservation and Rollback
  *
- * ## Rollback Strategy
- *
- * When partial reservation fails:
- * ```kotlin
- * try {
- *     blocks.forEach { it.setUpPath(start) }
- * } catch (e: Exception) {
- *     // Rollback: release all blocks reserved so far
- *     blocks.forEach { it.cancelPathSetup(start) }
- *     throw e
- * }
- * ```
+ * A candidate is reserved all-or-nothing, and a failed candidate is undone completely without touching
+ * the train's earlier hops. The candidate steps are listed at [reservePath]; the mutating ones, their
+ * rollback rules and the merge-abort rollback (Issue #904) are documented at [CandidateCommitter].
+ * Only a registry conflict ends the request with
+ * [PathReservationService.ReservationResult.Conflict]; any other failure of a candidate -- a
+ * TOCTOU `AlreadyReservedConflict` included -- rolls that candidate back and the loop tries the next.
  *
  * ## Thread Safety
  *
@@ -216,14 +216,19 @@ class DefaultPathReservationService(
 	 *    [RouteCandidateScreen.rejectNonOrientedStart]), a non-oriented [target] (Issue #1200, see
 	 *    [RouteCandidateScreen.rejectNonOrientedEnd]) and a [start] that is not contiguous with
 	 *    the train's own footprint (Issue #893) — see [RouteCandidateScreen.rejectNonContiguousStart]
-	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise)
-	 * 2. For each path in priority order (cheapest cost first for InOut routes):
-	 *    a. Extract unique DynamicTrackBlocks from TrackSections
-	 *    b. Validate all blocks are FREE
-	 *    c. Atomically reserve all blocks with rollback on failure
-	 *    d. Register ownership in registry
-	 *    e. Return Success if all steps succeed
-	 * 3. If all paths fail, return appropriate failure result
+	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise), then screen
+	 *    out rear-facing ends (1.5, Issue #1064) and candidates that diverge from the held route (1.6,
+	 *    Issue #1066) -- both before anything is reserved
+	 * 2. For each remaining path in priority order (cheapest cost first for InOut routes):
+	 *    a. Extract unique DynamicTrackBlocks from TrackSections and exclude those the train already
+	 *       owns (2a.5; a path of only owned blocks is `reserveAlreadyOwnedPath`)
+	 *    b. Check the remaining forward blocks are FREE or owned by the train
+	 *    c. Atomically reserve the forward blocks with rollback on failure ([CandidateCommitter], 2c)
+	 *    d. Register ownership in the registry (2d)
+	 *    e-i. Configure switches and the START signal, light the intermediate semaphores, merge the
+	 *       PathInfo and announce the reserved blocks ([CandidateCommitter], 2e to 2i)
+	 *    Return Success if all steps succeed
+	 * 3. If all paths fail, return appropriate failure result ([classifyExhaustedAttempt])
 	 *
 	 * ## Error Handling
 	 *
@@ -290,14 +295,13 @@ class DefaultPathReservationService(
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
-		// Tracks the first blocked (block, owningTrain) pair across all candidate paths.
-		// Used to emit ReservationConflictDetected when AllPathsBlocked is about to be returned.
+		// Tracks the first blocked (block, owningTrain) pair across all candidate paths, so
+		// classifyExhaustedAttempt can record the contention when AllPathsBlocked is returned.
 		var firstBlockedConflict: Pair<DynamicTrackBlock, String>? = null
 
-		// Issue #903/#937: the permanent per-candidate geometric impossibilities (rear-facing START or
-		// END, or unconfigurable switch) seen across candidates — first reason kept for reporting, count
-		// kept so classifyExhaustedAttempt can tell "every candidate is impossible" (permanent)
-		// from "one is, another is merely busy" (retryable).
+		// Issue #903/#937: the permanent per-candidate impossibilities seen across candidates (classes at
+		// GeometricallyImpossible): first reason and count, for the permanence gate of
+		// classifyExhaustedAttempt.
 		//
 		// Step 1.5 (Issue #1064, G8): a route must END at a signal facing the train. Screened before
 		// the loop — so before the already-owned early return and before any block, switch or signal
@@ -309,7 +313,7 @@ class DefaultPathReservationService(
 
 		// Step 1.6 (Issue #1066): a candidate that does not continue the route the train already
 		// holds can never merge, so it is skipped here -- before anything is reserved, thrown or
-		// cleared -- instead of at Step 2i after all of that (same first-reason / count shape as
+		// cleared -- instead of at CandidateCommitter's Step 2i after all of that (same first-reason / count shape as
 		// geometricFailures).
 		val (divergentFailures, usableCandidates) =
 			candidateScreen.screenDivergentCandidates(trainId, start, target, rearFacingUsable)
@@ -339,7 +343,7 @@ class DefaultPathReservationService(
 				continue
 			}
 
-			// TOCTOU Note: Small window between areAllBlocksFree() check and
+			// TOCTOU Note: Small window between the areAllFreeOrOwnedBy() check and
 			// candidateCommitter.tryAtomicReservation() use.
 			// This is acceptable because:
 			// - Single-threaded access to simulation state (documented in class KDoc)
@@ -369,13 +373,9 @@ class DefaultPathReservationService(
 			candidateOutcome?.let { return it }
 		}
 
-		// All paths tried, all were blocked or impossible.
-		// Issue #903/#937: a permanent geometric impossibility on EVERY candidate takes priority
-		// over AllPathsBlocked — the permanence gate is an AND over candidates, not an OR (a single
-		// impossible candidate alongside a merely-busy one is contention, not a dead end). Issue
-		// #903's first-hit-wins still governs *which* reason is reported, not whether the request is
-		// unsatisfiable. Extracted into [classifyExhaustedAttempt] so this branching stays out of
-		// reservePath's own cyclomatic complexity count.
+		// All paths tried, all were blocked or impossible: classifyExhaustedAttempt applies the
+		// Issue #937 permanence gate. Extracted so this branching stays out of reservePath's own
+		// cyclomatic complexity count.
 		return classifyExhaustedAttempt(
 			trainId,
 			geometricFailures,
@@ -406,7 +406,7 @@ class DefaultPathReservationService(
 		// configureSemaphoreSignal is idempotent, safe to call multiple times
 		// Issue #904: snapshot BEFORE configureAlreadyOwnedStartSignal so a merge abort
 		// below can reset exactly what THIS call cleared, not a pre-existing reservation's
-		// signal (mirrors Step 2g/2i's own clearedBeforeStart snapshots).
+		// signal (mirrors CandidateCommitter's own Step 2g/2i snapshots).
 		val clearedBeforeStart = signalLedger.snapshotClearedSemaphores(trainId)
 		if (blocks.isNotEmpty()) {
 			signalConfigurator.configureAlreadyOwnedStartSignal(trainId, start, blocks)
@@ -446,7 +446,8 @@ class DefaultPathReservationService(
 	/**
 	 * Classifies the outcome of [reservePath] once every candidate path has been tried and none
 	 * succeeded. Extracted so this branching stays out of [reservePath]'s own cyclomatic
-	 * complexity count (Issue #903 review follow-up).
+	 * complexity count (Issue #903 review follow-up). This KDoc is the single home of the Issue #937
+	 * permanence gate; the other copies of the rule link here.
 	 *
 	 * Reports `GeometricallyImpossible` only when **every** candidate failed geometrically
 	 * (Issue #937). Permanence is a property of the whole request, not of one candidate: if any
@@ -460,7 +461,7 @@ class DefaultPathReservationService(
 	 * Issue #903's first-hit-wins still governs *which reason is reported* — the earliest geometric
 	 * reason is the most informative. What changed is the permanence gate, which is an AND over
 	 * candidates rather than an OR. Candidates that fail for other reasons (atomic-reservation
-	 * failure, a merge abort past Step 0a) record nothing, so the `count == attemptedPaths` equality
+	 * failure, a merge abort past PathInfoMerger's Step 0a) record nothing, so the `count == attemptedPaths` equality
 	 * treats them as non-geometric, which is the safe direction: an unproven candidate must not
 	 * contribute to a verdict of permanent impossibility.
 	 *
@@ -468,7 +469,7 @@ class DefaultPathReservationService(
 	 * train holds is counted in [divergentFailures] and contributes to the same permanence gate.
 	 * When every candidate is geometric-or-divergent, the result is `DivergesFromHeldRoute` (the
 	 * actionable one: the divergent candidate may work once the held route is extended or
-	 * cancelled). Before this, that precondition failed only at Step 2i (after the candidate had
+	 * cancelled). Before this, that precondition failed only at CandidateCommitter's Step 2i (after the candidate had
 	 * reserved and thrown things), recorded nothing here, and the outcome collapsed to
 	 * `AllPathsBlocked` -- "track busy" -- although no block was busy.
 	 *
@@ -529,8 +530,9 @@ class DefaultPathReservationService(
 	/**
 	 * See [PathReservationService.recordExternalClearedSemaphore]. Delegates directly to the
 	 * same [ClearedSignalLedger.recordClearedSemaphore] used internally by [reservePath], so an external caller's
-	 * write is folded into the single ledger this service already maintains -- see the interface
-	 * KDoc for why this is the fix for Issue #893's task A6 (G6 single signal ledger).
+	 * write is folded into the single ledger this service already maintains -- see
+	 * [PathReservationService.recordExternalClearedSemaphore] for why this is the fix for Issue #893's
+	 * task A6 (G6 single signal ledger).
 	 */
 	override fun recordExternalClearedSemaphore(
 		trainId: String,
@@ -544,7 +546,7 @@ class DefaultPathReservationService(
 	 *
 	 * ## Implementation
 	 *
-	 * 1. Find all topological paths
+	 * 1. Find all switch-constrained paths (`findAllSwitchConstrainedPaths`)
 	 * 2. For each path, check if all blocks are FREE
 	 * 3. Return true if at least one free path exists
 	 *
@@ -605,20 +607,14 @@ class DefaultPathReservationService(
 			// bypass-rollback can reset only what THIS candidate cleared (the before/after delta)
 			// and not a pre-existing reservation's signals.
 			val clearedBefore = signalLedger.snapshotClearedSemaphores(trainId)
-			// Capture the blocks this train already owns before this attempt, for the same reason
-			// on the block side: a bypass candidate's alternative route may reuse blocks the train
-			// already holds from a live reservation, so result.reservedBlocks can overlap that
-			// reservation. Releasing all of it would unregister the live reservation. The rollback
-			// must release only the candidate's NEW blocks (the before/after ownership delta),
-			// mirroring the semaphore delta above. registerAtomic is idempotent for already-owned
-			// blocks (it only updates ownership maps), so the snapshot is stable across the attempt.
+			// Same before/after delta for the blocks the train already owns (rationale at
+			// releaseBypassRollbackBlocks): registerAtomic is idempotent for already-owned blocks, so
+			// the snapshot is stable across the attempt.
 			val blocksBefore = registry.getBlocks(trainId).toSet()
 			// Same reason on the switch and PathInfo sides (PR #901 review): a successful bypass
-			// candidate has already locked/registered its switches (CandidateCommitter's
-			// configureAndRegisterSwitches, inside reservePath's Step 2f) and merged its PathInfo
-			// (Step 2i) before the bypass check below can reject it. The snapshots let the
-			// rollback undo exactly what THIS candidate added on those two sides too, mirroring
-			// the semaphore/block deltas above.
+			// candidate has already locked/registered its switches (CandidateCommitter's Step 2f)
+			// and merged its PathInfo (Step 2i) before the bypass check below can reject it. The
+			// snapshots let the rollback undo exactly what THIS candidate added on those two sides.
 			val switchesBefore = registry.getSwitches(trainId).toSet()
 			val pathInfoBefore = registry.getPathInfo(trainId)
 
@@ -640,10 +636,8 @@ class DefaultPathReservationService(
 						val clearedByThisCandidate =
 							signalLedger.snapshotClearedSemaphores(trainId) - clearedBefore
 						signalLedger.resetSemaphoreSet(trainId, clearedByThisCandidate)
-						// Release the wrongly reserved path — only the blocks THIS candidate newly
-						// reserved (the ownership delta vs [blocksBefore]); blocks the train already
-						// held from a live reservation must stay registered, or the rollback would
-						// strand a mid-journey train.
+						// Release the wrongly reserved path -- only the blocks THIS candidate newly
+						// reserved (see releaseBypassRollbackBlocks).
 						releaseBypassRollbackBlocks(trainId, result.reservedBlocks, blocksBefore)
 						// The transaction must also be complete on the switch and PathInfo sides
 						// (PR #901 review): a successful bypass candidate locked/registered its
@@ -964,9 +958,9 @@ class DefaultPathReservationService(
 	/**
 	 * Single write path for [reservePathToAnyNextSemaphore]'s `lastResult` tracker (Issue #903).
 	 *
-	 * `GeometricallyImpossible` is a PERMANENT impossibility (rear-facing START or END, unconfigurable
-	 * switch, or a non-oriented route origin; every target here is a semaphore, so a non-oriented
-	 * end cannot arise), not ordinary contention: once seen for one
+	 * `GeometricallyImpossible` is a PERMANENT impossibility (classes listed at
+	 * [PathReservationService.ReservationResult.GeometricallyImpossible]; every target here is a
+	 * semaphore, so a non-oriented end cannot arise), not ordinary contention: once seen for one
 	 * candidate semaphore, it must win over any later contention result (`AllPathsBlocked`,
 	 * `NoPathExists`, or the bypass-rollback branch's `AllPathsBlocked`) so the caller --
 	 * [cz.vutbr.fit.interlockSim.sim.InOutWorker] on the train-navigation path -- throws
@@ -1011,15 +1005,12 @@ class DefaultPathReservationService(
 	override fun expireStaleReservations(): Int = expiry.expireStale(exceptTrainId = null)
 
 	/**
-	 * [expireStaleReservations] at the top of a request by [exceptTrainId], which is exempt (Issue
-	 * #1174 ruling D8): its new claim restarts its clock, as it restarts the #847 sweeper's. Expiring
-	 * it first would empty its footprint, so `rejectNonContiguousStart` would pass vacuously and a
-	 * mid-station extension would be granted as an orphan route. [reservePath] and
-	 * [reservePathToAny] call this at their top; if the request fails, the next loop tick expires
-	 * the holding. The expiry runs before the Step 0 guards, so a request that is then refused
-	 * (`GeometricallyImpossible`, `NonContiguousStart`) can still expire other trains' stale
-	 * holdings -- correct, as a stale holding is stale regardless and the loop would expire it
-	 * within one control tick (2 simulated seconds) anyway.
+	 * [expireStaleReservations] at the top of a request by [exceptTrainId], which is exempt (the
+	 * Issue #1174 ruling D8 rationale is at [DefaultReservationExpiry.expireStale]). [reservePath] and
+	 * [reservePathToAny] call this at their top. The expiry runs before the Step 0 guards, so a request
+	 * that is then refused (`GeometricallyImpossible`, `NonContiguousStart`) can still expire other
+	 * trains' stale holdings -- correct, as a stale holding is stale regardless and the loop would
+	 * expire it within one control tick (2 simulated seconds) anyway.
 	 */
 	internal fun expireStaleReservations(exceptTrainId: String): Int = expiry.expireStale(exceptTrainId)
 

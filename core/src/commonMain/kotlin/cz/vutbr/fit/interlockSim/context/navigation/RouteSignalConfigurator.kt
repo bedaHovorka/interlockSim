@@ -46,11 +46,8 @@ internal enum class StartSignalResult {
  *
  * Extracted from [DefaultPathReservationService] by Issue #1169 (SP12.3) as a pure move: which
  * semaphores are cleared, the direction guards, and the order of every signal write are
- * unchanged. The service stays the only caller.
- *
- * **Review round (2026-10-24):** [configureStartSignal]'s two when-case bodies moved verbatim
- * into [configureSemaphoreStartSignal] and [configureInOutStartSignal] so the when stays a
- * dispatch table. Write order and log messages are unchanged.
+ * unchanged. Its callers are the service (the already-owned and bypass START re-lights) and
+ * [CandidateCommitter] (Steps 2g and 2h: the fresh candidate's START and intermediate semaphores).
  *
  * **NOT thread-safe**, like the service it belongs to.
  *
@@ -348,9 +345,10 @@ internal class RouteSignalConfigurator(
 	 * [facesDirectionOfTravel], tolerant of a [nextBlock] that cannot be resolved (Issue #893
 	 * task A1, Issue #1062).
 	 *
-	 * Both START-signal call sites ([configureStartSignal] and the already-owned early-return branch of
-	 * [DefaultPathReservationService.reservePath]) hand this the FIRST block of the whole requested path, which is the
-	 * block next to [semaphore]. That holds on a route **extension** too: the extension re-invokes `reservePath` with
+	 * Both START-signal call sites ([configureStartSignal] and [configureAlreadyOwnedStartSignal], the
+	 * already-owned early-return branch of [DefaultPathReservationService.reservePath]) hand this the
+	 * FIRST block of the whole requested path, which is the block next to [semaphore]. That holds on a
+	 * route **extension** too: the extension re-invokes `reservePath` with
 	 * the ORIGINAL start separator and every block next to it is already owned, but the path's first block is still the
 	 * one the separator bounds. So the direction check runs on extensions and a rear-facing START is rejected there
 	 * (G4), like on a fresh route. (Before Issue #1062 the call sites passed the first *forward* block, which is not
@@ -413,7 +411,7 @@ internal class RouteSignalConfigurator(
 	 *                [ClearedSignalLedger.resetClearedSemaphores] can return them to STOP when the route is released.
 	 * @param blocks Ordered list of [DynamicTrackBlock] objects from path start to target.
 	 *               Must be in traversal order (the order produced by
-	 *               [DefaultPathReservationService.extractUniqueBlocks] from a BFS/DFS path).
+	 *               [extractUniqueBlocks] from a BFS/DFS path).
 	 * @param forwardBlocks The subset of [blocks] not already owned by [trainId] (the newly
 	 *                      reserved portion of the route). A boundary is only configured when
 	 *                      the block it leads into is a member of this set.

@@ -157,7 +157,7 @@ class PathReservationRegistry(
 	 * abort so the caller can react to the abort instead of assuming the stored [PathInfo] now
 	 * reflects what it just registered.
 	 *
-	 * Precedent: [StartSignalResult][RouteSignalConfigurator] (Issue #903) is the same
+	 * Precedent: [StartSignalResult] (Issue #903) is the same
 	 * "a call that used to silently swallow its failure now needs to report why" shape.
 	 *
 	 * @since Issue #904
@@ -173,7 +173,8 @@ class PathReservationRegistry(
 
 		/**
 		 * The merge was aborted (Issue #834's fail-safe: non-contiguous new start, duplicated new
-		 * start, or the 3rd-occurrence cycle guard). The stored [PathInfo] is unchanged and equals
+		 * start, the direction reversal guard of Issue #944, or the 3rd-occurrence cycle guard).
+		 * The stored [PathInfo] is unchanged and equals
 		 * [pathInfo] — the pre-merge value — by reference.
 		 *
 		 * @property reason English explanation of which abort condition fired, forwarded from
@@ -331,7 +332,7 @@ class PathReservationRegistry(
 	 *
 	 * PathInfo represents the train's **intended path** and is separate from its **current
 	 * reservations**: a train needs it for navigation even after all its blocks are unregistered.
-	 * PathInfo is only deleted by `releaseTrainReservations()`, [unregister] and [clear].
+	 * PathInfo is only deleted by [unregister], [clear] and [restorePathInfo] with a `null` snapshot.
 	 *
 	 * This method never shortens the PathInfo. A caller that releases the un-travelled tail of a
 	 * route in front of a train must call [trimPathInfoToHeldBlocks] afterwards (Issue #1063,
@@ -368,8 +369,8 @@ class PathReservationRegistry(
 	 * (Issue #1065): without it, a train that has passed a switch keeps it locked until its FULL
 	 * journey completes, and the next train needing the other position would be refused forever
 	 * instead of merely waiting. [unregisterBlock] runs it for the freed block's ends;
-	 * `DefaultPathReservationService` runs it for a candidate's switches before taking them
-	 * (reservePath Step 2e.5, Issue #1076).
+	 * `SwitchConfigurator.reclaimStaleForeignSwitchOwnership` runs it for a candidate's switches
+	 * before taking them (Step 2e.5 of `CandidateCommitter`, Issue #1076).
 	 *
 	 * Listener containment: `unregisterSwitch` -> `DynamicRailSwitch.unlock()` invokes property
 	 * listeners synchronously. A throwing listener is contained by the cell itself; the try/catch in
@@ -582,7 +583,8 @@ class PathReservationRegistry(
 	 * Whether a plain claim of [switch] by [trainId] would be stale the moment it is made: [trainId]
 	 * holds no block bounded by it, the [isStaleSwitchOwnership] rule applied to the would-be claim.
 	 * Independent of the switch's current owner. [registerSwitches] does not consult it (it accepts
-	 * such a claim); the reservation path skips a switch it is `true` for instead of registering it.
+	 * such a claim); `SwitchConfigurator.registerSwitches` skips a switch it is `true` for instead of
+	 * registering it.
 	 *
 	 * @since Issue #1173
 	 */
@@ -689,7 +691,7 @@ class PathReservationRegistry(
 	 * Read-only probe of the merge's Step 0a precondition (Issue #1066): would [candidate]
 	 * CONTINUE the route [trainId] currently holds?
 	 *
-	 * Lets `DefaultPathReservationService.reservePath` refuse a divergent candidate BEFORE it
+	 * Lets `RouteCandidateScreen.screenDivergentCandidates` refuse a divergent candidate BEFORE it
 	 * reserves blocks, throws switches or clears signals. Changes no state.
 	 *
 	 * @return `null` when [candidate] continues the stored path, or when the train has no stored

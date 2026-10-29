@@ -40,7 +40,7 @@ private val logger = KotlinLogging.logger {}
  *   candidates as [GeometricFailures], with the survivors keeping their original index.
  *
  * [forwardOnlyPathInfo] is the shared PathInfo trimming rule: the divergence screen uses it to
- * build the probe, and the candidate commit in the service uses it to build the merge candidate.
+ * build the probe, and [CandidateCommitter] uses it at Step 2i to build the merge candidate.
  *
  * Extracted from [DefaultPathReservationService] without behaviour change: the denial reasons and
  * log lines are byte-identical, and the service-level tests (`PathReservationContiguityTest`,
@@ -385,8 +385,8 @@ internal class RouteCandidateScreen(
 	 * actually begin makes `new.start` agree with `old.target` naturally, so the merge succeeds
 	 * and properly extends PathInfo instead of aborting -- leaving
 	 * the merge-abort rollback of [CandidateCommitter] (its private `rollbackIfMergeAborted`) to
-	 * fire only for genuinely pathological aborts (duplicated new-start, the 3rd-occurrence cycle
-	 * guard), not for this routine extension shape.
+	 * fire only for genuinely pathological aborts (duplicated new-start, the direction reversal
+	 * guard of Issue #944, the 3rd-occurrence cycle guard), not for this routine extension shape.
 	 *
 	 * @param path The FULL candidate path (including any already-owned prefix).
 	 * @param forwardBlocks The blocks this candidate newly reserves (excludes any already-owned

@@ -31,7 +31,7 @@ private val logger = KotlinLogging.logger {}
  * ## Architecture
  *
  * This implementation provides static graph traversal logic, separating topology
- * navigation from block state validation (Issue #292 Phase 1).
+ * navigation from block state validation (Issue #292).
  *
  * ## Design Principles
  *
@@ -45,6 +45,12 @@ private val logger = KotlinLogging.logger {}
  * **NOT thread-safe.** Assumes single-threaded access to the Context.
  *
  * @property context The railway network context (EditingContext or SimulationContext)
+ * @property cacheRoutes Whether switch-constrained route searches are cached per `(start, target, maxDepth)`
+ *   (Issue #1151); on by default for a simulation context, whose topology never changes, never for an
+ *   editing context
+ * @property routeNodeBudget Most search nodes one switch-constrained route enumeration expands before it
+ *   gives up and [findAllSwitchConstrainedPaths] answers an empty list (Issue #1151); defaults to
+ *   [ROUTE_SEARCH_NODE_BUDGET]
  * @since Issue #293 (Phase 1 of Issue #292)
  */
 class DefaultTopologyNavigator(
@@ -102,7 +108,7 @@ class DefaultTopologyNavigator(
 	/**
 	 * Get the next track section following a path separator, using pure topology traversal.
 	 *
-	 * This implementation provides static topology navigation without state validation (Issue #292 Phase 1).
+	 * This implementation provides static topology navigation without state validation (Issue #292).
 	 *
 	 * ## Navigation Logic
 	 *
@@ -113,13 +119,13 @@ class DefaultTopologyNavigator(
 	 *
 	 * ## Critical Difference from Simulation Version
 	 *
-	 * **REMOVED (lines 614-632):**
+	 * **Not done here** (compared with a state-aware version):
 	 * - Block state validation (FREE/RESERVED/OCCUPIED)
 	 * - Reservation ownership checks (reservedFrom comparison)
 	 * - Navigation blocking for unreserved blocks
 	 *
 	 * This method provides ONLY topological navigation. State-aware navigation
-	 * will be handled by PathReservationService (Phase 2) and TrainNavigationService (Phase 3).
+	 * is handled by PathReservationService and TrainNavigationService.
 	 */
 	override fun getNextTrackSection(
 		separator: PathSeparator,
@@ -154,8 +160,8 @@ class DefaultTopologyNavigator(
 	/**
 	 * Get the next track block following a node cell, using pure topology traversal.
 	 *
-	 * This implementation corresponds to DefaultSimulationContext.getNextTrackBlock()
-	 * (lines 520-545), but operates on static TrackBlock references instead of
+	 * This implementation corresponds to DefaultSimulationContext.getNextTrackBlock(),
+	 * but operates on static TrackBlock references instead of
 	 * DynamicTrackBlock wrappers.
 	 *
 	 * ## Graph Query Logic (Extracted from DefaultSimulationContext)
@@ -190,14 +196,14 @@ class DefaultTopologyNavigator(
 		current: TrackBlock?
 	): TrackBlock? {
 		// Extract static NodeCell if it's a Dynamic wrapper
-		// (Extracted from DefaultSimulationContext line 525)
+		// (Extracted from DefaultSimulationContext.getNextTrackBlock)
 		val staticNodeCell = CellUtilities.assertNodeCell(nodeCell)
 
-		// Get location and segment (lines 526-527)
+		// Get location and segment
 		val location = context.getRailWayNetGrid().getLocation(staticNodeCell) ?: return null
 		val segment = getSegment(location, current)
 
-		// Determine following segment based on NodeCell type (lines 529-540)
+		// Determine following segment based on NodeCell type
 		// Kotlin idiom: Use when expression with smart casts
 		// NOTE: Uses same logic as getAllNextTrackBlocks() for consistency (Issue #291)
 		// Performance optimization: Return segment directly for oriented cells (avoids Set allocation)
@@ -241,7 +247,7 @@ class DefaultTopologyNavigator(
 				}
 			} ?: return null
 
-		// Query graph for edge assigned to following segment (lines 543-544)
+		// Query graph for edge assigned to following segment
 		return context.getGraph().assignedEdges(location)[followingSegment]
 	}
 

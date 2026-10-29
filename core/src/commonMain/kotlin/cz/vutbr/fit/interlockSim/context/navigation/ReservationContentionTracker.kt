@@ -34,20 +34,18 @@ import cz.vutbr.fit.interlockSim.util.currentSimulationTime
  * were tried and all misfired at high-traffic chokepoints -- see issue #612).
  * Genuine conflicts are therefore surfaced by exactly two mechanisms, neither
  * based on AllPathsBlocked timing:
- * 1. Live, mid-run: the atomic registry race ([PathReservationRegistry.RegistrationResult.Conflict]
- *    in [DefaultPathReservationService.reservePath]) -- a real double-booking detected at reservation time.
+ * 1. Live, mid-run: the atomic registry race ([PathReservationRegistry.RegistrationResult.Conflict],
+ *    handled by `CandidateCommitter.rollbackRegistryConflict`) -- a real double-booking detected at
+ *    reservation time.
  * 2. End-of-run: [flushUnresolvedConflicts] -- blocked-path contention that never
  *    resolved before the run ended (deadlock/starvation indicator). Deliberately
  *    NOT a live/running-clock threshold; "unresolved when the run ends" is the
  *    actual signal, checked exactly once after the run has stopped.
  *
  * The map is cleared per-train on a reservation attempt that ends with Success, and by the
- * whole-route release ([DefaultPathReservationService.releaseAllBlocks]). NOT every
- * [DefaultPathReservationService.releasePath] call clears it: a release that holds no block
- * (or keeps blocks via approach locking) returns without clearing, so a contention can
- * outlive such a release -- pinned behavior (`PathReservationContentionTrackingTest`), not
- * an accident. Entries therefore stay bounded to trains that are or may still be contending,
- * not merely to currently-active trains.
+ * whole-route release ([RouteReleaser.releasePath]'s `releaseAllBlocks`); [clearBlockedTracking]
+ * says which releases do NOT clear it. Entries therefore stay bounded to trains that are or may
+ * still be contending, not merely to currently-active trains.
  *
  * **NOT thread-safe**, like the service that owns it.
  *
@@ -113,9 +111,7 @@ internal class ReservationContentionTracker(
 	 * (e.g. an actual deadlock) is still surfaced -- but routine "train waits its turn,
 	 * then proceeds" contention, however long it takes mid-run, is never reported this
 	 * way, because it resolves ([DefaultPathReservationService.reservePath] Success, or a
-	 * whole-route release that actually cancels held blocks) before the run ends. A release
-	 * call that holds no block does NOT resolve the contention that way -- it survives here
-	 * by design-as-pinned (`PathReservationContentionTrackingTest`).
+	 * whole-route release that actually cancels held blocks) before the run ends.
 	 *
 	 * Deliberately does **not** call [emitCustom] -- that top-level function is a no-op
 	 * once the simulation's event loop has stopped (`Process.activeContext == null`),
@@ -147,10 +143,11 @@ internal class ReservationContentionTracker(
 	 * Forget any in-progress blocked-path contention tracked for [trainId].
 	 *
 	 * Called when [trainId]'s reservation attempt resolves with Success, and by the
-	 * whole-route release ([DefaultPathReservationService.releaseAllBlocks]). A release
-	 * call that holds no block (or keeps blocks via approach locking) does NOT call this,
-	 * so contention survives it -- pinned behavior (`PathReservationContentionTrackingTest`);
-	 * the whole-route release is the only release-path clear. This keeps [blockedSince] from
+	 * whole-route release ([RouteReleaser.releasePath]'s `releaseAllBlocks`). NOT every release
+	 * clears it: a release that holds no block (or keeps blocks via approach locking) returns
+	 * without calling this, so contention survives it -- pinned behavior
+	 * (`PathReservationContentionTrackingTest`), not an accident; the whole-route release is the
+	 * only release-path clear. This keeps [blockedSince] from
 	 * conflating a stale, already-resolved contention with a fresh one on the same block
 	 * later, and keeps [flushUnresolvedConflicts] from reporting contention that actually
 	 * resolved.

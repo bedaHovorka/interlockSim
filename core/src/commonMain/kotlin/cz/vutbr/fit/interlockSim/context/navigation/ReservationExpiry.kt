@@ -23,10 +23,9 @@ package cz.vutbr.fit.interlockSim.context.navigation
  * [DefaultPathReservationService] stays the one facade: it implements this interface by delegating
  * to the internal [DefaultReservationExpiry] it constructs.
  *
- * It stays an interface of its own, rather than a method on [RoutingServices], because
- * `ShuntingLoop` reaches the tick through [RoutingServices.getReservationExpiry] and holds no
- * reservation service (Issue #1152); a method on the accessor-only [RoutingServices] would sit away
- * from [PathReservationService], where the expiry state and the release live (Issue #1229).
+ * It stays an interface of its own, rather than a method on the accessor-only [RoutingServices],
+ * which would sit away from [PathReservationService], where the expiry state and the release live
+ * (Issue #1229).
  *
  * Every completed expiry is announced as a [ReservationExpired] custom event (Issue #1243); deferrals
  * announce nothing.
