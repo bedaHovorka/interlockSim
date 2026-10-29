@@ -166,8 +166,9 @@ interface NetworkActuatorPort {
 	 * When a governing signal of a reserved, unoccupied block shows a proceed aspect, a train may be
 	 * committed to that block (it books it a second after reading the aspect). The release drops the
 	 * signal to STOP but keeps the block reserved, and lists it in [RouteRelease.deferredBlockIds].
-	 * The caller should retry: the next call finds the signal at STOP and frees the block, unless
-	 * the train booked it meanwhile, in which case it is occupied and stays.
+	 * A retry frees such a block only once its booking window has closed: the next call finds the
+	 * signal at STOP and frees the block, unless the train booked it meanwhile, in which case it is
+	 * occupied and stays until the train has left it.
 	 *
 	 * A release is **refused** instead when the route cannot be cut even right after the blocks the
 	 * train stands on (a switch or rear-facing signal there, Issue #1242): then no signal changes and
@@ -261,15 +262,20 @@ interface NetworkActuatorPort {
  * Result of a [NetworkActuatorPort.releaseRouteDetailed] call.
  *
  * @property anyReleased same meaning as the [NetworkActuatorPort.releaseRoute] return value
- * @property deferredBlockIds stable ids of blocks approach locking kept reserved; non-empty means
- *   the release is partial and the caller should retry
+ * @property deferredBlockIds stable ids of blocks kept reserved; non-empty means the release is
+ *   not complete: a refused release (Issue #1242) lists the whole route, an approach-lock deferral
+ *   or a partial release lists the blocks it kept. A repeated call frees a kept block only after
+ *   the train has left it or its booking window has closed
  * @since Issue #1050
  */
 data class RouteRelease(
 	val anyReleased: Boolean,
 	val deferredBlockIds: List<String>
 ) {
-	/** `true` when part of the route was kept back and a retry is needed. */
+	/**
+	 * `true` when part of the route was kept back. A repeated call frees a kept block only after the
+	 * train has left it or its booking window has closed.
+	 */
 	val deferred: Boolean get() = deferredBlockIds.isNotEmpty()
 }
 

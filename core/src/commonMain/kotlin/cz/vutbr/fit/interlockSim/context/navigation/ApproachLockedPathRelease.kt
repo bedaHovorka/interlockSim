@@ -21,7 +21,10 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  *   reports every block of the route, successes and failures alike.
  * @property deferred blocks kept RESERVED and registered -- by approach locking, because the
  *   train occupies them, or because the deferral window is still open; non-empty means the
- *   release is partial and must be retried
+ *   release is not complete: a refused release (Issue #1242) lists the whole route, an
+ *   approach-lock deferral lists the blocks it kept, a partial release lists the blocks it kept
+ *   back. A repeated call frees a kept block only after the train has left it or its booking
+ *   window has closed, so retrying while the train stands on it changes nothing
  * @since Issue #1050
  */
 data class PathRelease(
