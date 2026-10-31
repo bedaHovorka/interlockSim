@@ -236,7 +236,7 @@ Users can automatically collect key performance indicators during simulation inc
 - Configurable metrics selection
 - Data export capability for external analysis
 
-**Dependencies:** None for the framework itself. Scheduling (replan 2026-10-31): runs in parallel with Goal 1B on branch `goal-6`, stacked on `goal-1B` (PR #1180), and must finish before the first Goal 9B sub-issue starts. SP6 additionally waits for PR #1289 and the Goal 1B stack #1284 -> #1292 -> #1294.
+**Dependencies:** None for the framework itself. Scheduling (replan 2026-10-31): runs in parallel with Goal 1B on branch `goal-6`, stacked on `goal-1B` (PR #1180), and must finish before the first Goal 9B sub-issue starts. SP6 additionally waits for PR #1289 and the Goal 1B stack #1284 -> #1292 -> #1294; SP5 (#676) additionally waits for PR #1289.
 
 **Implementation Notes:**
 - Build statistics collection framework
@@ -254,7 +254,7 @@ Users can automatically collect key performance indicators during simulation inc
 | 1 | #674 SP4 | Metric groups, measured overhead | - |
 | 2 | #1304 SP6 | Run-end accounting, end-cause classification | SP2; Goal 1B PR #1289 + stack #1284 -> #1292 -> #1294 |
 | 2 | #676 SP5 | Run-record contract for every harness | SP2, SP6, PR #1289 |
-| 3 | #1305 SP7 | Per-train wait and delay KPIs, capacity pressure | SP6 |
+| 3 | #1305 SP7 | Per-train wait and delay KPIs, capacity pressure | SP6 (#1269 optional) |
 | 3 | #1306 SP8 | Performance row, sweep aggregation, native print | SP5 |
 | 4 | #675 SP3 | Swing dashboard (may trail Goal 9B's start) | SP2, SP6 |
 
