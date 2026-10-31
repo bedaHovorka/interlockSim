@@ -120,6 +120,7 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		val snap = service.getSnapshot()
 
 		assertThat(snap.conflictCount).isZero()
+		assertThat(snap.unresolvedAtRunEndCount).isZero()
 		assertThat(snap.completedTrains).isZero()
 		assertThat(snap.throughput).isZero()
 		assertThat(snap.totalWaitSeconds).isZero()
@@ -146,6 +147,47 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 			BlockEvent.ReservationConflictDetected(block, "T1", "T3", time = 10.0)
 		)
 		assertThat(service.getSnapshot().conflictCount).isEqualTo(2)
+		// Issue #1280: a mid-run conflict is never counted as an end-of-run unresolved contention.
+		assertThat(service.getSnapshot().unresolvedAtRunEndCount).isZero()
+	}
+
+	/**
+	 * Issue #1280: the end-of-run flush turns every contention still open at the cutoff into a
+	 * [BlockEvent.ReservationConflictDetected] marked [BlockEvent.ReservationConflictDetected.atRunEnd].
+	 * Those are queueing that the end time interrupted, not double-bookings, so they are counted
+	 * apart from [MetricsSnapshot.conflictCount] — the red-for-green pin of the cervenyUjezd run that
+	 * reported `conflicts=2` although nothing double-booked.
+	 */
+	@Test
+	fun `contentions flushed at run end count as unresolved and not as conflicts`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(
+			BlockEvent.ReservationConflictDetected(blockOne, "T19", "T18", time = 601.0, atRunEnd = true)
+		)
+		service.handleBlockEvent(
+			BlockEvent.ReservationConflictDetected(blockTwo, "T19", "T18", time = 601.0, atRunEnd = true)
+		)
+
+		val snap = service.getSnapshot()
+		assertThat(snap.conflictCount).isZero()
+		assertThat(snap.unresolvedAtRunEndCount).isEqualTo(2)
+	}
+
+	@Test
+	fun `a mid-run conflict and a run-end flush are counted each in its own figure`() {
+		val service = DefaultMetricsCollectionService()
+		val (blockOne, blockTwo) = realBlockPair()
+
+		service.handleBlockEvent(BlockEvent.ReservationConflictDetected(blockOne, "T1", "T2", time = 5.0))
+		service.handleBlockEvent(
+			BlockEvent.ReservationConflictDetected(blockTwo, "T3", "T2", time = 600.0, atRunEnd = true)
+		)
+
+		val snap = service.getSnapshot()
+		assertThat(snap.conflictCount).isEqualTo(1)
+		assertThat(snap.unresolvedAtRunEndCount).isEqualTo(1)
 	}
 
 	// ── Leaked reservations (Issue #936) ──────────────────────────────────────

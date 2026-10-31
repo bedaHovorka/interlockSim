@@ -204,6 +204,8 @@ class DefaultDispatcherRunRecorder(
 				"blockTransitions=${formatFigure(railway.blockTransitions)} " +
 				"conflicts=${formatFigure(railway.conflicts)} " +
 				"failedReservations=${formatFigure(railway.failedReservations)} " +
+				// Issue #1280: contentions still open at run end, apart from the mid-run `conflicts`.
+				"unresolvedAtRunEnd=${formatFigure(railway.unresolvedAtRunEnd)} " +
 				// Issue #1074: the breaker figures, so one run is readable without opening the
 				// JSON — same reasoning as the railway figures above (#834).
 				"circuitBreakerState=${snap.circuitBreakerState ?: "n/a"} " +

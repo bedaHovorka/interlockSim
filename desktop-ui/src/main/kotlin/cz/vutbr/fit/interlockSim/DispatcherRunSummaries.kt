@@ -282,7 +282,10 @@ object DispatcherRunSummaries {
 			// #847 sweep had to scrape from logs to tell a working railway from a busy dispatcher.
 			blockTransitions = loop?.getAllBlockTransitions()?.values?.sumOf { it.toLong() },
 			conflicts = metrics?.conflictCount?.toLong(),
-			failedReservations = loop?.getFailedReservations()?.toLong()
+			failedReservations = loop?.getFailedReservations()?.toLong(),
+			// Issue #1280: contentions still open at run end, kept out of `conflicts` — an end-time
+			// cutoff with trains still queued is not a double-booking.
+			unresolvedAtRunEnd = metrics?.unresolvedAtRunEndCount?.toLong()
 		)
 	}
 
