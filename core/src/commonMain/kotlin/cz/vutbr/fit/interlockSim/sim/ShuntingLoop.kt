@@ -349,6 +349,10 @@ class ShuntingLoop(
 			unapprowedTrains.addLast(train)
 			trainsEnteredCount++
 			blockTransitionsByTrain[train.name] = 0
+			// Goal 6 SP2 (Issue #673): the train waits at its entry InOut from here; record only.
+			emitTrainJourneyEvent(
+				TrainJourneyEvent.Queued(train.name, train.timetableOriginName, train.timetableDestinationName, time())
+			)
 		}
 	}
 
