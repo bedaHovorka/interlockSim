@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.sim.Station
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -114,7 +115,14 @@ class KoogAgentFactory(
 	 * `-D` system property > committed `dispatcher-defaults.properties` > code constant like every
 	 * other run knob; nothing here introduces a second configuration channel.
 	 */
-	private val promptVariant: PromptVariant = PromptVariant.DEFAULT
+	private val promptVariant: PromptVariant = PromptVariant.DEFAULT,
+	/**
+	 * The running loop's admission cap, when the wiring layer declared one (Issue #1155; see
+	 * [StationCapacity]). Resolved lazily in [createAgent], like [runRecorderProvider], because the
+	 * wiring layer declares it after this factory is resolved. `null` (the default, and every agent
+	 * built outside a run) falls back to the topology value — see [stationCapacityOf].
+	 */
+	private val stationCapacityProvider: () -> StationCapacity? = { null }
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -134,10 +142,12 @@ class KoogAgentFactory(
 		 * [cz.vutbr.fit.interlockSim.dispatcher.di.DispatcherAgentModule]'s existing scoped
 		 * wiring, so this threads the real per-run value with no new DI path. That property is
 		 * variant-independent by construction: every variant interpolates the same [maxActions]
-		 * argument, never a literal. `cap` (the concurrent-train admission ceiling) is a distinct
-		 * constant, [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] — the non-LLM dispatcher's
-		 * own policy — kept exactly as before so the LLM and rule-based arms never disagree about
-		 * station capacity.
+		 * argument, never a literal. [stationCapacity] (the concurrent-train admission ceiling) is
+		 * interpolated the same way: [createAgent] passes the value of the station the agent runs on
+		 * ([stationCapacityOf]), the same value the loop's own admission gate enforces, so the LLM and
+		 * rule-based arms never disagree about it. Until Issue #1155 every variant read vyhybna's
+		 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2) here, on every station; on vyhybna
+		 * the station value is still 2, so both variants' text there is byte-identical to before.
 		 *
 		 * ## No-menu compliance
 		 *
@@ -154,12 +164,38 @@ class KoogAgentFactory(
 		 */
 		internal fun buildSystemPrompt(
 			maxActions: Int,
-			variant: PromptVariant
+			variant: PromptVariant,
+			stationCapacity: Int
 		): String =
 			when (variant) {
-				PromptVariant.BASELINE -> buildBaselineSystemPrompt(maxActions)
-				PromptVariant.REVISED -> buildRevisedSystemPrompt(maxActions)
+				PromptVariant.BASELINE -> buildBaselineSystemPrompt(maxActions, stationCapacity)
+				PromptVariant.REVISED -> buildRevisedSystemPrompt(maxActions, stationCapacity)
 			}
+
+		/**
+		 * The admission cap of the station [context] runs (Issue #1155).
+		 *
+		 * The running loop's own gate wins ([loopCapacity], declared by the wiring layer as a
+		 * [StationCapacity]; it already honours a scenario override), so the prompt states exactly the
+		 * cap the simulation enforces. Without a declared value — Praha, which needs the SP10 loop, and
+		 * every agent built outside a run — the topology value [Station.capacity] is used. A network
+		 * with no station track has no topology capacity at all (`0`); it falls back to
+		 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] with a warning rather than telling the
+		 * model that no train may ever be admitted.
+		 */
+		internal fun stationCapacityOf(
+			context: DefaultSimulationContext,
+			loopCapacity: Int?
+		): Int {
+			if (loopCapacity != null) return loopCapacity
+			val topologyCapacity = Station.from(context).capacity()
+			if (topologyCapacity > 0) return topologyCapacity
+			logger.warn {
+				"KoogAgentFactory: the network has no station track, so no topology capacity; the " +
+					"dispatcher prompt states the default cap ${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS}"
+			}
+			return RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+		}
 
 		/**
 		 * The prompt exactly as PR #896 shipped it — the measurement's control arm.
@@ -168,9 +204,11 @@ class KoogAgentFactory(
 		 * compared against; changing it silently moves that zero point and invalidates every
 		 * comparison already recorded. A new idea belongs in a new variant, not in this function.
 		 */
-		private fun buildBaselineSystemPrompt(maxActions: Int): String {
-			val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
-			return buildString {
+		private fun buildBaselineSystemPrompt(
+			maxActions: Int,
+			cap: Int
+		): String =
+			buildString {
 				appendLine(
 					"You are a railway dispatcher. Every call you receive is one tick: read the " +
 						"cycle message, decide, act through your tools, and stop — nothing carries " +
@@ -229,7 +267,6 @@ class KoogAgentFactory(
 				appendLine("- Otherwise, call no_op with a brief reason.")
 				appendBaselineNonNegotiableRules(maxActions)
 			}.trimEnd('\n')
-		}
 
 		/**
 		 * Appends the "Rules that never bend:" section to [buildBaselineSystemPrompt]'s
@@ -378,9 +415,11 @@ class KoogAgentFactory(
 		 * the sweep result must read it as "this bundle vs. #896's prompt", and isolating the three
 		 * would need three more variants and three more arms.
 		 */
-		private fun buildRevisedSystemPrompt(maxActions: Int): String {
-			val cap = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
-			return buildString {
+		private fun buildRevisedSystemPrompt(
+			maxActions: Int,
+			cap: Int
+		): String =
+			buildString {
 				appendLine(
 					"You are a railway dispatcher. Every call you receive is one tick: read the " +
 						"cycle message, act through your tools, then end the tick with one short " +
@@ -436,7 +475,6 @@ class KoogAgentFactory(
 				)
 				appendRevisedNonNegotiableRules()
 			}.trimEnd('\n')
-		}
 
 		/**
 		 * Appends [buildRevisedSystemPrompt]'s "Rules that never bend:" section.
@@ -520,6 +558,8 @@ class KoogAgentFactory(
 			// The InOut/Signal names double as the valid-endpoint set request_route validates against.
 			val topology = StationTopologySerializer.describe(context)
 			val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
+			// The station's own admission cap, stated in the system prompt and in every cycle message.
+			val stationCapacity = stationCapacityOf(context, stationCapacityProvider()?.value)
 
 			// Install the queue-posting wrapper on the per-context SinkHolder. Every DispatchAction
 			// emitted by an actuator tool is converted to a DispatchDecision and posted to
@@ -572,7 +612,8 @@ class KoogAgentFactory(
 			// buildSystemPrompt's KDoc for why that is safe. The topology half is variant-independent
 			// on purpose (#834 AC: StationTopologySerializer is untouched by the prompt rebuild), so
 			// only the instruction half varies between A/B arms.
-			val systemPrompt = "${buildSystemPrompt(sinkHolder.maxActionsPerTick, promptVariant)}\n\n$topologyPrompt"
+			val systemPrompt =
+				"${buildSystemPrompt(sinkHolder.maxActionsPerTick, promptVariant, stationCapacity)}\n\n$topologyPrompt"
 
 			// Join the warm-up before building the agent: this is the documented synchronization
 			// point — both warm-up (network I/O) and the local assembly above are finished before
@@ -587,7 +628,8 @@ class KoogAgentFactory(
 					tools = instrumentedTools,
 					systemPrompt = systemPrompt,
 					cycleHistory = cycleHistory,
-					outcomeFeed = outcomeFeed
+					outcomeFeed = outcomeFeed,
+					stationCapacity = stationCapacity
 				)
 
 			logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }

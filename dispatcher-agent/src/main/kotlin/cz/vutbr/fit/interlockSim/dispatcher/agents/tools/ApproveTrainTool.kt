@@ -24,7 +24,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * rewired to [SinkHolder] in SP2c.6, Issue #829).
  *
  * Approves a queued train by name, admitting it from the pending-admission queue into the
- * active ShuntingLoop simulation.
+ * active simulation (the description named `ShuntingLoop` until Issue #1155; it names no loop class now).
  *
  * ## Threading contract (SP2c.6, Issue #829)
  *
@@ -92,7 +92,7 @@ class ApproveTrainTool(
 	override val name: String = "approve_train"
 
 	override val description: String =
-		"Approve a queued train by id, admitting it from the pending queue into the active ShuntingLoop " +
+		"Approve a queued train by id, admitting it from the pending queue into the active " +
 			"simulation. Pass an id exactly as listed under the queued trains in this cycle's message. " +
 			"Fire-and-forget: returns once the request is emitted; the train shows up among the active " +
 			"trains in the next cycle's message, after the sim-thread applier processes it."

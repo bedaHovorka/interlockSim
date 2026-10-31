@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -122,6 +123,18 @@ class RequestRouteTool(
 
 	override val name: String = "request_route"
 
+	/**
+	 * The `, such as "<block>"` clause of the two endpoint descriptions, naming one of this network's
+	 * own Block IDs — the one [StationTopologySerializer.confusableBlockExample] picks for the STATION
+	 * TOPOLOGY warning, so both name the same block. Empty when [blockIds] is empty. Before Issue #1155
+	 * both descriptions carried vyhybna's literal `"kA"` on every station.
+	 */
+	private val blockIdExample: String =
+		StationTopologySerializer
+			.confusableBlockExample(inOutNames, blockIds, validEndpointNames)
+			?.let { ", such as \"${it.block}\"" }
+			.orEmpty()
+
 	override val description: String =
 		"Request the interlocking to find and atomically reserve a free path for a named train, between " +
 			"any two endpoints from the InOuts or Signals lists. Reserve ONE section at a time: at least " +
@@ -151,7 +164,7 @@ class RequestRouteTool(
 						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
 						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
 						"there, do not call this tool. Do NOT pass a Block ID (e.g. a name from the " +
-						"Blocks list, such as \"kA\") — a Block ID names a piece of track, not an endpoint.",
+						"Blocks list$blockIdExample) — a Block ID names a piece of track, not an endpoint.",
 				type = DomainToolParameterType.String,
 				required = true
 			),
@@ -167,7 +180,7 @@ class RequestRouteTool(
 						"the train itself. Exact name, copied verbatim from the InOuts or Signals list in " +
 						"the STATION TOPOLOGY section of your system prompt. Do not abbreviate, translate, " +
 						"or invent a name — if the name you want isn't listed there, do not call this " +
-						"tool. Do NOT pass a Block ID (e.g. a name from the Blocks list, such as \"kA\") — " +
+						"tool. Do NOT pass a Block ID (e.g. a name from the Blocks list$blockIdExample) — " +
 						"a Block ID names a piece of track, not an endpoint.",
 				type = DomainToolParameterType.String,
 				required = true

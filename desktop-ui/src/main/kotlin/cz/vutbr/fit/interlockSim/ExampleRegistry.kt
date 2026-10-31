@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.RegistryPartialRouteReleaser
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
 import cz.vutbr.fit.interlockSim.dispatcher.planner.CompositeActionOutcomeSink
@@ -819,6 +820,9 @@ class ExampleRegistry {
 				// .size on it on the sim thread (inside onControlStep) is safe and gives the live
 				// count after any earlier approvals in the same drained batch.
 				activeTrainCountProvider = { loop.getApprovedTrains().size },
+				// Issue #1155: the station's own cap (4 on Červený Újezd), not vyhybna's default 2;
+				// declared below for the agent's prompt too.
+				maxConcurrentTrains = loop.stationCapacity,
 				onBlockTransition = loop::incrementBlockTransition,
 				onFailedReservation = loop::incrementFailedReservation,
 				onDecisionApplied = decisionListener,
@@ -850,6 +854,9 @@ class ExampleRegistry {
 		// number is the whole of round 3's unreconciled "301 control ticks vs 20-29 planner cycles".
 		val driverSignal = DefaultSnapshotSignal()
 		context.scope.declare(driverSignal)
+		// Issue #1155: KoogAgentFactory reads this when it builds the agent, so the prompt and the
+		// cycle message state the cap this loop enforces (the applier above uses the same value).
+		context.scope.declare(StationCapacity(loop.stationCapacity))
 
 		val driver =
 			AgentLoopDriver(

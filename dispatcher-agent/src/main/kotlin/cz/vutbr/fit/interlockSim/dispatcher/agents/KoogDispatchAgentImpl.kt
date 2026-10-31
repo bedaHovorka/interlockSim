@@ -45,11 +45,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   ACTIONS" block. `null` (the default) renders no block at all. Before this feed existed, the
  *   channel it wraps had no production drainer at all: 173 `ALL_PATHS_BLOCKED` apply failures
  *   were invisible to the model, which kept re-emitting the same refused route.
+ * @param stationCapacity Admission cap of the station this agent dispatches, stated on the
+ *   "Active (approved) trains right now: n / cap" line of every cycle message. Issue #1155: it was
+ *   vyhybna's [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] on every station; production now
+ *   passes the station's own value through [AgentService.createDispatchAgent], and the default
+ *   remains only for agents built outside a run.
  */
 class KoogDispatchAgentImpl(
 	private val aiAgent: AIAgent<String, String>,
 	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-	private val outcomeFeed: AppliedOutcomeFeed? = null
+	private val outcomeFeed: AppliedOutcomeFeed? = null,
+	private val stationCapacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 ) : KoogDispatchAgent {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -184,8 +190,7 @@ class KoogDispatchAgentImpl(
 			// State the active count/cap directly so the admission precondition can be evaluated
 			// in one shot — this stateless cycle has no memory of the same check from last time.
 			appendLine(
-				"Active (approved) trains right now: ${observation.approvedTrainCount} / " +
-					"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS}"
+				"Active (approved) trains right now: ${observation.approvedTrainCount} / $stationCapacity"
 			)
 			// Resolved once for every active train together so the same-tick same-target dedup
 			// applies across the whole cycle message — see this method's "NEXT SECTION facts" KDoc.

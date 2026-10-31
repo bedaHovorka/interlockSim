@@ -68,13 +68,17 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 	}
 
 	/**
-	 * Pins the dispatcher cap at the vyhybna-derived constant of
+	 * Pins the planner-side dispatcher fallback cap at the vyhybna-derived constant of
 	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2), while this station's loop capacity
 	 * is 4 — on both agent-stack arm wirings of this station: this GUI example and, since
-	 * Issue #1276 (PR #1282 review), the console control arm too. SP3 documents the synchronous
-	 * native run at capacity 4 as demand D5 in `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`;
-	 * SP8 owns raising the cap (Issue #1155). Until then the agent-stack examples may approve at
-	 * most 2 trains in this scenario.
+	 * Issue #1276 (PR #1282 review), the console control arm too. Since Issue #1155 the chain is
+	 * split: the apply-time admission gate takes the station's own capacity (`ExampleRegistry`
+	 * wires the applier's `maxConcurrentTrains = loop.stationCapacity`, 4 here), while the
+	 * planner-side `Dispatcher` fallback — a default-built `RuleBasedDispatcher`, the LLM
+	 * planner's fallback dispatcher — stays at 2, which is what this test pins. SP3 documents the
+	 * synchronous native run at capacity 4 as demand D5 in
+	 * `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`; raising the planner cap is tracked by
+	 * follow-up Issue #1303.
 	 */
 	@Test
 	fun `agent-stack arm wirings keep the dispatcher cap at the vyhybna constant while the station could take four`() {
