@@ -92,7 +92,11 @@ class ShuntingLoop(
 	 *   the single chokepoint that owns the true count, so the gate lives here. Topology-derived
 	 *   default since Goal 1B SP2.2 (Issue #1162).
 	 */
-	maxConcurrentTrains: Int? = null
+	maxConcurrentTrains: Int? = null,
+	/** Seed of the train generator's random stream; 0 is the historical value (Issue #1163). */
+	seed: Long = 0L,
+	/** Generate only this many trains; `null` generates until the end of the run (Issue #1163). */
+	maxTrains: Int? = null
 ) : Interlocking(context),
 	SpeedControllable,
 	KoinComponent,
@@ -150,8 +154,9 @@ class ShuntingLoop(
 		 * What keeps [station] from carrying a ShuntingLoop run; empty when it can. ShuntingLoop is
 		 * the vyhybna scenario, generalised only as far as it really runs (Issue #1162):
 		 * - at least one platform track;
-		 * - exactly 2 InOuts — its train generator pairs random InOuts, so with more it would send
-		 *   trains between same-side exits (the first runnable Červený Újezd scenario is SP3, #1150);
+		 * - InOuts of both orientations — its train generator pairs an InOut with one of the other
+		 *   side, so Červený Újezd (two InOuts per side) runs and trains never go between same-side
+		 *   exits (Issue #1163);
 		 * - every entry/exit block ends at a home signal — the dispatcher only moves trains from
 		 *   outer blocks toward a home signal;
 		 * - every RailSemaphore is a home signal or a platform-track end — the dispatcher only
@@ -165,10 +170,11 @@ class ShuntingLoop(
 				if (station.platformTracks.isEmpty()) {
 					add("no platform track: no block has a RailSemaphore at both ends away from the home signals")
 				}
-				if (station.inOuts.size != SHUNTING_LOOP_IN_OUTS) {
+				val orientations = station.inOuts.map { it.getOrientation() }.toSet()
+				if (orientations.size < 2) {
 					add(
-						"ShuntingLoop needs exactly $SHUNTING_LOOP_IN_OUTS InOuts (its train generator pairs " +
-							"them), found ${station.inOuts.size}"
+						"ShuntingLoop needs InOuts on both sides (one of each orientation: its train generator " +
+							"pairs opposite sides), found ${station.inOuts.size} InOut(s) on one side"
 					)
 				}
 				station.entryExitBlocks.filter { it.signals.isEmpty() }.forEach { entryExit ->
@@ -180,9 +186,6 @@ class ShuntingLoop(
 					add("$unattached RailSemaphore(s) are neither a home signal nor a platform-track end")
 				}
 			}
-
-		/** InOuts the ShuntingLoop train generator needs (see [compatibilityIssues]). */
-		private const val SHUNTING_LOOP_IN_OUTS = 2
 	}
 
 	// Queue of not-yet-approved trains - otherwise the list the dispatcher picks from
@@ -209,7 +212,7 @@ class ShuntingLoop(
 	 */
 	@kotlin.concurrent.Volatile
 	private var approwedTrains: List<Train> = emptyList()
-	private val generator: InnerGenerator = InnerGenerator(context)
+	private val generator: InnerGenerator = InnerGenerator(context, seed, maxTrains)
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 
 	/**
@@ -328,8 +331,10 @@ class ShuntingLoop(
 	}
 
 	private inner class InnerGenerator(
-		context: SimulationEnvironment
-	) : Generator(context) {
+		context: SimulationEnvironment,
+		seed: Long,
+		maxTrains: Int?
+	) : Generator(context, seed = seed, maxTrains = maxTrains) {
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.addLast(train)
 			trainsEnteredCount++

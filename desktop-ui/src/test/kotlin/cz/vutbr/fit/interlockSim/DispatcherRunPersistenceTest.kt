@@ -65,7 +65,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
 
 	private fun createAiContext(): DefaultSimulationContext =
-		createExample("createShuntingLoopAIExample", "shuntingLoopAI")
+		createExample("createShuntingLoopAIExample", ExampleNames.SHUNTING_LOOP_AI)
 
 	private fun createExample(
 		factoryMethod: String,
@@ -172,7 +172,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 				registry,
 				get<SimulationContextFactory>(),
 				"createShuntingLoopSyncExample",
-				"shuntingLoopSync",
+				ExampleNames.SHUNTING_LOOP_SYNC,
 				"60"
 			)
 		// Point the store at the temp root regardless, so a regression here can never write into the
@@ -230,7 +230,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("an example that is not a ShuntingLoop reports its loop figures as absent, not zero")
 	fun nonShuntingLoopExampleReportsLoopFiguresAsAbsent() {
-		val context = createExample("createMultiTrainLoopExample", "multiTrainLoop")
+		val context = createExample("createMultiTrainLoopExample", ExampleNames.MULTI_TRAIN_LOOP)
 
 		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
 

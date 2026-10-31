@@ -56,7 +56,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 			registry,
 			get<SimulationContextFactory>(),
 			"createShuntingLoopAIExample",
-			"shuntingLoopAI",
+			ExampleNames.SHUNTING_LOOP_AI,
 			"60"
 		)
 	}
