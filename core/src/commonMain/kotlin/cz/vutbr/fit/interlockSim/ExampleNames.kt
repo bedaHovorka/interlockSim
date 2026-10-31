@@ -28,4 +28,13 @@ object ExampleNames {
 	const val MULTI_TRAIN_LOOP = "multiTrainLoop"
 	const val THREE_TRAIN_LOOP = "threeTrainLoop"
 	const val CERVENY_UJEZD = "cervenyUjezd"
+
+	/** The LLM arm on the Cerveny Ujezd station (Goal 1B SP10.1, Issue #1276); JVM only. */
+	const val CERVENY_UJEZD_AI = "cervenyUjezdAI"
+
+	/**
+	 * The rule-based control arm of [CERVENY_UJEZD_AI] on the same dispatcher-agent stack (Issue #1276);
+	 * JVM only. [CERVENY_UJEZD] stays the synchronous, native-parity wiring and records no sweep run.
+	 */
+	const val CERVENY_UJEZD_RULE_BASED = "cervenyUjezdRuleBased"
 }
