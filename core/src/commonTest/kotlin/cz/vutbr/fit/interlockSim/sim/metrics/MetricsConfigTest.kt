@@ -23,7 +23,7 @@ import kotlin.test.Test
  */
 class MetricsConfigTest {
 	@Test
-	fun `default config enables every group including the four KPI types in CORE`() {
+	fun `default config enables every metric group`() {
 		MetricGroup.entries.forEach { group ->
 			assertThat(MetricsConfig.ALL.isEnabled(group)).isTrue()
 		}
