@@ -27,8 +27,10 @@ package cz.vutbr.fit.interlockSim.sim
  * own exit is reachable from here take it rather than the nearest one (Červený Újezd has two
  * exits per side; on `vyhybna.xml`, one exit per side, the pick is the same either way). It does
  * not steer a train through the station toward its exit — the signal a train is routed to inside
- * the station is still the first available one, which can lead to a track whose only exit is the
- * other one; then the fallback takes that exit. A full destination-aware router remains Goal 19.
+ * the station is still the first available one — and it does not wait for the own exit: when that
+ * exit is a candidate but not available (another train's route holds the throat), the fallback
+ * takes the next available exit and the train still leaves by the wrong one. A full
+ * destination-aware router remains Goal 19.
  *
  * A separate object rather than a [RuleBasedDispatcher] member because every dispatcher —
  * including `:dispatcher-agent`'s `NextHopResolver`, which tells an LLM which hop the

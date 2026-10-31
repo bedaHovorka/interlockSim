@@ -200,9 +200,9 @@ data class BlockInputObservation(
 	val heldRouteEndName: String? = null,
 	/**
 	 * The timetable's `out` InOut of [ownerTrainId] — the station exit the train is scheduled to
-	 * leave by — resolved only when [candidateTargets] is (Issue #1278); `null` otherwise and when
-	 * the owner is not a [Train]. [ReservationTargetPolicy.pick] prefers it among the available
-	 * station-exit candidates; with `null` the pick keeps the plain order.
+	 * leave by — resolved only when [candidateTargets] is non-empty (Issue #1278); `null` otherwise,
+	 * and `null` when the owner is not one of the shell's approved trains. [ReservationTargetPolicy.pick]
+	 * prefers it among the available station-exit candidates; with `null` the pick keeps the plain order.
 	 */
 	val destinationName: String? = null
 )
