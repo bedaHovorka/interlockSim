@@ -42,9 +42,10 @@ import java.io.File
  * ## What is checked
  *
  * 1. **The file exists.** The name is resolved over every `*.kt` file in the repository (build,
- *    `.git`, `.gradle`, `.kotlin`, `.idea`, `.worktrees` and `node_modules` directories are not
- *    searched). A qualified anchor (`core/.../Foo.kt:12`) is resolved by its path suffix, where
- *    everything up to the first `...` is ignored. A name that matches several files is reported as
+ *    `.git`, `.gradle`, `.kotlin`, `.idea`, `.worktrees`, `.claude` and `node_modules` directories
+ *    are not searched; `.claude/worktrees/` holds full agent checkouts). A qualified anchor
+ *    (`core/.../Foo.kt:12`) is resolved by its path suffix, where everything up to the first `...`
+ *    is ignored. A name that matches several files is reported as
  *    ambiguous; qualify it with a path.
  * 2. **The range is valid and the file is long enough.** Lines start at 1, a range must not run
  *    backwards (`Foo.kt:30-12`), and the highest line of the anchor (`Foo.kt:12-30` -> 30) must
@@ -369,7 +370,8 @@ class DocLineAnchorTripwireTest {
 		/** System property by which `core/build.gradle.kts` passes its `anchorSkippedDirectories` list (Issue #1239). */
 		const val SKIPPED_DIRECTORIES_PROPERTY = "anchorSkippedDirectories"
 
-		val SKIPPED_DIRECTORIES = setOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", "node_modules")
+		val SKIPPED_DIRECTORIES =
+			setOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", ".claude", "node_modules")
 
 		/**
 		 * `[path/]Name.kt:12` or `[path/]Name.kt:12-30`; group 1 = path and name, 2 = first line, 3 = last line.

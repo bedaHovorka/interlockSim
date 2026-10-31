@@ -561,7 +561,8 @@ tasks.named("jvmTest") {
 // The working directory stays the default (the project directory): the test finds the repository
 // root by walking up from there.
 
-val anchorSkippedDirectories = listOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", "node_modules")
+val anchorSkippedDirectories =
+    listOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", ".claude", "node_modules")
 
 val docLineAnchorCheck by tasks.registering(Test::class) {
     group = "verification"
