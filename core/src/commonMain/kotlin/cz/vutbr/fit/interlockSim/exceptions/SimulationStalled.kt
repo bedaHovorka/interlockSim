@@ -22,15 +22,20 @@ package cz.vutbr.fit.interlockSim.exceptions
  * @property persistedTicks Number of consecutive dispatcher ticks, with an advancing clock, behind
  *   the report: the ticks of the same cycle, or of any cycle at the churn-bound tick count.
  * @property simTime Simulation time at which the cycle was reported.
+ * @property knot Names of all deadlocked trains (Issue #1270): all deadlocked waiters (possibly
+ *   several disjoint knots), also the trains that only wait for one; [cycle] is one cycle among
+ *   them. Every candidate route of each of them is blocked by one of them. Defaults to the
+ *   cycle's trains.
  */
 class SimulationStalled(
 	val cycle: List<String>,
 	val persistedTicks: Int,
-	val simTime: Double
+	val simTime: Double,
+	val knot: Set<String> = cycle.toSet()
 ) : SimulationException(
 		Severity.FATAL,
 		"Simulation stalled at t=$simTime: wait-for cycle ${cycle.joinToString(" -> ")} -> ${cycle.first()} " +
-			"persisted for $persistedTicks dispatcher ticks.",
+			"persisted for $persistedTicks dispatcher ticks; deadlocked trains: ${knot.joinToString(", ")}.",
 		null,
 		cycle
 	)
