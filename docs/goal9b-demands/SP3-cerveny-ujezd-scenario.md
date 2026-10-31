@@ -109,6 +109,27 @@ owned by SP8 (#1155). Signal direction in the station-track rule (SP2 demand D4)
 A loaded network with unnamed signals cannot be dispatched (see the finding above). The XML loader and the
 editor should give every semaphore a stable name, or the dispatcher should address signals by position.
 
+#### Decision 2026-10-31 (#1273): the loader names unnamed semaphores by grid position
+
+Ruling (local gemma4, option c of three: auto-name, clear load error, auto-name plus a WARN):
+
+- `XmlContextReader` gives a `RailSemaphore` without a `name` attribute the name `S_<X>_<Y>` of its grid
+  position (`GeneratedSemaphoreName`), for example `S_15_10`. The name is a pure function of the
+  position: stable across loads, independent of document order, and not taken from the editor's global
+  `AutoNameGenerator` (whose `S1`, `S2`, ... never take this form).
+- One WARN line per load reports how many semaphores were named this way.
+- Explicit names are untouched. A generated name that is also the explicit name of another element fails
+  the load with an `IllegalArgumentException` naming both positions.
+- `XmlContextWriter` writes a semaphore name only when it differs from the generated name of the
+  semaphore's own position, so saving a loaded network adds no names the user never wrote; the next
+  load regenerates them. A semaphore the user renames in the editor is saved with its new name.
+- Switches are not auto-named; their names are written by hand (#1279).
+
+Effect: all 37 Praha signals are addressable by name (19 explicit, 18 generated), so the rule-based
+`ReservePath` and the LLM topology prompt can use every one of them. No fixture changed, and the golden
+outputs (fully named `vyhybna.xml`) are unchanged. Pinned by `XmlContextReaderSemaphoreAutoNameTest` and
+`UnnamedSemaphoreRoutingTest`.
+
 ## Evidence
 
 ### Run timing

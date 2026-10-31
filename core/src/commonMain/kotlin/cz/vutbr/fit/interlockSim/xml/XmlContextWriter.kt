@@ -3,6 +3,7 @@ package cz.vutbr.fit.interlockSim.xml
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -16,6 +17,10 @@ import cz.vutbr.fit.interlockSim.util.Point
  *
  * Produces railway network XML conforming to data.xsd, identically
  * to the existing JVM serializer.
+ *
+ * A semaphore whose name is the [GeneratedSemaphoreName] of its own position is written without
+ * a `name` attribute, so a loaded network saves back without names the user never wrote
+ * (Issue #1273); the next load regenerates the same name.
  *
  * @since 2026-03 (KMP Task 2d)
  */
@@ -141,7 +146,8 @@ class XmlContextWriter {
 			appendEnumAttribute(builder, "Type", cell.type)
 		}
 		val name = cell.getName()
-		if (name.isNotEmpty()) {
+		val generated = cell is RailSemaphore && name == GeneratedSemaphoreName.at(point)
+		if (name.isNotEmpty() && !generated) {
 			appendAttribute(builder, NAME, name)
 		}
 		builder.append("/>\n")

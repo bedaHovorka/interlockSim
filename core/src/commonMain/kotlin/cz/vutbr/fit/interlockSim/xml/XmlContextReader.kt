@@ -1,6 +1,7 @@
 package cz.vutbr.fit.interlockSim.xml
 
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -11,9 +12,12 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.readTextFile
+import io.github.oshai.kotlinlogging.KotlinLogging
 import nl.adaptivity.xmlutil.EventType
 import nl.adaptivity.xmlutil.XmlReader
 import nl.adaptivity.xmlutil.xmlStreaming
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * KMP XML parser that replicates [XMLContextFactory] SAX handler logic using
@@ -21,6 +25,10 @@ import nl.adaptivity.xmlutil.xmlStreaming
  *
  * Parses railway network XML (conforming to data.xsd) into a [DefaultEditingContext],
  * identically to the existing JVM SAX parser.
+ *
+ * A `RailSemaphore` without a `name` attribute gets the [GeneratedSemaphoreName] of its grid
+ * position, so a dispatcher can address it (Issue #1273); one WARN line per load reports how
+ * many semaphores were named this way.
  *
  * @since 2026-03 (KMP Task 2c)
  */
@@ -76,6 +84,7 @@ class XmlContextReader {
 		val reader = xmlStreaming.newReader(xmlContent)
 		var editingContext: DefaultEditingContext? = null
 		var netElementDepth = 0
+		val generatedNames = mutableMapOf<Point, String>()
 
 		try {
 			while (reader.hasNext()) {
@@ -84,7 +93,7 @@ class XmlContextReader {
 						val localName = reader.localName
 						val attrs = readAttributes(reader)
 
-						val pair = processStartElement(localName, netElementDepth, attrs, editingContext)
+						val pair = processStartElement(localName, netElementDepth, attrs, editingContext, generatedNames)
 						editingContext = pair.first
 						netElementDepth = pair.second
 					}
@@ -109,6 +118,19 @@ class XmlContextReader {
 
 		val ctx = checkNotNull(editingContext) { "Context not initialized — no <net> element found" }
 
+		try {
+			requireGeneratedNamesUnique(ctx, generatedNames)
+		} catch (e: IllegalArgumentException) {
+			ctx.close()
+			throw e
+		}
+		if (generatedNames.isNotEmpty()) {
+			logger.warn {
+				"Auto-named ${generatedNames.size} unnamed RailSemaphore element(s) by grid position " +
+					"(${GeneratedSemaphoreName.PATTERN}); add a name attribute in the XML to choose the name"
+			}
+		}
+
 		if (!skipStructuralValidation) {
 			val inOutsCount = ctx.getInOuts().size
 			if (inOutsCount < MIN_INOUT_ELEMENTS) {
@@ -127,7 +149,8 @@ class XmlContextReader {
 		localName: String,
 		netElementDepth: Int,
 		attrs: Map<String, String>,
-		editingContext: DefaultEditingContext?
+		editingContext: DefaultEditingContext?,
+		generatedNames: MutableMap<Point, String>
 	): Pair<DefaultEditingContext?, Int> {
 		var netElementDepth1 = netElementDepth
 		var editingContext1 = editingContext
@@ -153,7 +176,8 @@ class XmlContextReader {
 
 			"RailSemaphore" -> {
 				val ctx = requireContext(editingContext1)
-				putNodeCell(ctx, attrs, parseRailSemaphore(attrs))
+				val position = parsePoint(attrs, prefix = null)
+				ctx.putCell(position, parseRailSemaphore(attrs, position, generatedNames))
 			}
 
 			"RailSwitch" -> {
@@ -193,16 +217,49 @@ class XmlContextReader {
 		return InOut(name, orientation, spatialType)
 	}
 
-	private fun parseRailSemaphore(attrs: Map<String, String>): RailSemaphore {
+	/**
+	 * A semaphore without a `name` attribute is named [GeneratedSemaphoreName.at] its [position]
+	 * and recorded in [generatedNames] for the clash check and the load's WARN line (Issue #1273).
+	 */
+	private fun parseRailSemaphore(
+		attrs: Map<String, String>,
+		position: Point,
+		generatedNames: MutableMap<Point, String>
+	): RailSemaphore {
 		val spatialType = requireEnum<SpatialType>(attrs, "SpatialType")
 		val orientation = attrs[ATR_ORIENT_NAME]?.toBoolean() ?: false
-		val name = parseOptionalName(attrs)
-		return if (name != null) {
-			RailSemaphore(name, orientation, spatialType)
-		} else {
-			RailSemaphore(orientation, spatialType)
-		}
+		val name =
+			parseOptionalName(attrs)
+				?: GeneratedSemaphoreName.at(position).also { generatedNames[position] = it }
+		return RailSemaphore(name, orientation, spatialType)
 	}
+
+	/**
+	 * Fails the load when a generated semaphore name is also the explicit name of another
+	 * element: a dispatcher could not tell the two apart. The message names both positions.
+	 */
+	private fun requireGeneratedNamesUnique(
+		ctx: DefaultEditingContext,
+		generatedNames: Map<Point, String>
+	) {
+		if (generatedNames.isEmpty()) return
+		val positionByGeneratedName = generatedNames.entries.associate { (position, name) -> name to position }
+		// The editing grid also holds TrackBlockPart cells despite its NodeCell type argument.
+		val grid: RailwayNetGrid<*> = ctx.getRailWayNetGrid()
+		val clash =
+			grid.firstOrNull { (position, cell) ->
+				position !in generatedNames && cell is NodeCell && cell.getName() in positionByGeneratedName
+			} ?: return
+		val name = (clash.value as NodeCell).getName()
+		val semaphorePosition = positionByGeneratedName.getValue(name)
+		throw IllegalArgumentException(
+			"The unnamed RailSemaphore at ${format(semaphorePosition)} gets the generated name $name, " +
+				"which is already the name of the element at ${format(clash.key)}; " +
+				"give the semaphore at ${format(semaphorePosition)} a name attribute in the XML"
+		)
+	}
+
+	private fun format(position: Point): String = "(${position.x},${position.y})"
 
 	private fun parseRailSwitch(attrs: Map<String, String>): RailSwitch {
 		val spatialType = requireEnum<SpatialType>(attrs, "SpatialType")
