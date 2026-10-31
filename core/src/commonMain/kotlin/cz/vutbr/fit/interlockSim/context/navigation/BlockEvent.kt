@@ -79,12 +79,23 @@ sealed class BlockEvent {
 	 * which re-emits the conflict as a [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning.ReservationConflict]
 	 * after applying a deduplication window.
 	 *
+	 * The two sources are told apart by [atRunEnd] (Issue #1280): `false` for the mid-run registry
+	 * race, `true` for the end-of-run flush. A flushed contention is a train still queued behind
+	 * another when the run stopped -- the deadlock/starvation indicator of Issue #612, but also
+	 * ordinary queueing interrupted by an end-time cutoff -- and never a double-booking, so
+	 * [cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService] counts it apart from the
+	 * mid-run conflicts.
+	 *
+	 * @property atRunEnd `true` when the event comes from the end-of-run flush
+	 *   ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.flushUnresolvedConflicts]),
+	 *   stamped with the run's end time; `false` for a conflict detected while the run was live.
 	 * @since Issue #612 (Goal 3 SP2)
 	 */
 	data class ReservationConflictDetected(
 		override val block: DynamicTrackBlock,
 		val trainId: String,
 		val conflictingTrainId: String,
-		override val time: Double
+		override val time: Double,
+		val atRunEnd: Boolean = false
 	) : BlockEvent()
 }

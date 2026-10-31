@@ -12,12 +12,17 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.sim.Interlocking
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -98,5 +103,47 @@ class MetricsIntegrationTest : KoinTestBase() {
 		assertThat(snap.totalBlocks).isGreaterThan(0)
 		// Train #1 completes at ~49.5s, so at least one train has completed.
 		assertThat(snap.completedTrains).isGreaterThan(0)
+	}
+
+	/**
+	 * Issue #1280, end to end: a contention still open when the run ends reaches the metrics
+	 * through [DefaultSimulationContext]'s end-of-run flush, and is counted as
+	 * [MetricsSnapshot.unresolvedAtRunEndCount] — not as a [MetricsSnapshot.conflictCount], which
+	 * stays for mid-run double-bookings. Same scenario as `ReservationConflictWarningTest`'s
+	 * end-of-run flush test: one train holds A→B, a second is refused and the run stops.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `a contention open at run end is counted as unresolved and not as a conflict`() {
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
+		ctx.use {
+			val inOuts = ctx.getInOuts()
+			val reservationService = ctx.getRoutingServices().getPathReservationService()
+			val metrics = ctx.getMetricsServices().getMetricsCollectionService()
+			val process =
+				object : Interlocking(ctx) {
+					override suspend fun iteration() {
+						val inA = inOuts.first { it.name == "A" }
+						val inB = inOuts.first { it.name == "B" }
+						assertThat(reservationService.reservePath("TrainBusy", inA, inB))
+							.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+						hold(2.0)
+						assertThat(reservationService.reservePath("TrainWaiting", inA, inB))
+							.isInstanceOf(PathReservationService.ReservationResult.AllPathsBlocked::class)
+						env.stop()
+					}
+
+					override suspend fun interLoopSleep() {
+						terminate()
+					}
+				}
+			ctx.setMainProcess(process)
+
+			ctx.run()
+
+			val snap = metrics.getSnapshot()
+			assertThat(snap.conflictCount).isZero()
+			assertThat(snap.unresolvedAtRunEndCount).isEqualTo(1)
+		}
 	}
 }

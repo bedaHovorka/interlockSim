@@ -611,7 +611,8 @@ class RunReportAggregatorTest {
 						maxConcurrentTrains = 3L,
 						blockTransitions = 20L,
 						conflicts = 1L,
-						failedReservations = 2L
+						failedReservations = 2L,
+						unresolvedAtRunEnd = 3L
 					)
 			)
 		val report = aggregator.aggregate(listOf(snap))
@@ -640,6 +641,8 @@ class RunReportAggregatorTest {
 		assertThat(outcomeCells[16]).isEqualTo("20")
 		assertThat(outcomeCells[17]).isEqualTo("1")
 		assertThat(outcomeCells[18]).isEqualTo("2")
+		// Issue #1280: the run-end contentions are appended as the last column, so no existing column moves.
+		assertThat(outcomeCells[19]).isEqualTo("3")
 	}
 
 	@Test

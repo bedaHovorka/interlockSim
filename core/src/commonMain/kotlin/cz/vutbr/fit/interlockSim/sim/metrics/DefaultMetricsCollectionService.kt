@@ -24,7 +24,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * | KPI | Source events |
  * |-----|---------------|
- * | Conflicts | [BlockEvent.ReservationConflictDetected] — each event is one conflict |
+ * | Conflicts | [BlockEvent.ReservationConflictDetected], `atRunEnd = false` — one mid-run conflict each |
+ * | Unresolved at run end | [BlockEvent.ReservationConflictDetected], `atRunEnd = true` — end-of-run flush (#1280) |
  * | Delay | [BlockEvent.BlockReserved] sets a timer; [BlockEvent.OccupancySet] closes it |
  * | Throughput | [BlockEvent.BlockReleased] when a train's reservation count → 0, **and** the train has had at least one [BlockEvent.OccupancySet] (physically moved) |
  * | Utilization | [BlockEvent.OccupancySet] / [BlockEvent.OccupancyCleared] vs total blocks |
@@ -62,8 +63,11 @@ class DefaultMetricsCollectionService(
 ) : MetricsCollectionService {
 	// ── KPI accumulators ─────────────────────────────────────────────────────
 
-	/** Total reservation conflicts detected since start. */
+	/** Reservation conflicts detected while the run was live. */
 	private var conflictCount: Int = 0
+
+	/** Contentions still open when the run ended, delivered by the end-of-run flush (Issue #1280). */
+	private var unresolvedAtRunEndCount: Int = 0
 
 	/** Trains that have fully released all their reserved blocks. */
 	private var completedTrains: Int = 0
@@ -164,7 +168,8 @@ class DefaultMetricsCollectionService(
 				totalBlocks = total,
 				utilization = utilization,
 				trainsHoldingReservations = activeReservationCount.size,
-				heldBlocks = blockReservedAt.size
+				heldBlocks = blockReservedAt.size,
+				unresolvedAtRunEndCount = unresolvedAtRunEndCount
 			)
 		logger.debug { "Metrics snapshot queried: $snapshot" }
 		return snapshot
@@ -178,9 +183,9 @@ class DefaultMetricsCollectionService(
 			logger.warn {
 				"$trainCount train(s) still hold $reservationCount block reservation(s) at run end — " +
 					"${holding.sorted().joinToString(", ")}. This is expected when the run was stopped " +
-					"early (manual stop, time limit, or deadlock); it is a leak only on a natural " +
-					"completion, where those journeys were never credited and the blocks never " +
-					"returned (see Issue #936)."
+					"early (manual stop or deadlock) or cut off at its end time with those trains still " +
+					"on the network; it is a leak only when every journey had finished, where those " +
+					"journeys were never credited and the blocks never returned (see Issue #936)."
 			}
 		}
 		return holding
@@ -282,11 +287,30 @@ class DefaultMetricsCollectionService(
 	}
 
 	private fun onReservationConflict(event: BlockEvent.ReservationConflictDetected) {
+		if (event.atRunEnd) {
+			onUnresolvedAtRunEnd(event)
+			return
+		}
 		conflictCount++
 		logger.warn {
 			"Reservation conflict recorded: block=${event.block} " +
 				"trainId=${event.trainId} conflictingTrain=${event.conflictingTrainId} " +
 				"t=${event.time} totalConflicts=$conflictCount"
+		}
+	}
+
+	/**
+	 * Count a contention the end-of-run flush reported (Issue #1280). Kept out of [conflictCount]:
+	 * the train was still waiting for a block another train held when the run stopped, which is the
+	 * Issue #612 deadlock/starvation indicator but also ordinary queueing cut off by the end time —
+	 * never a double-booking.
+	 */
+	private fun onUnresolvedAtRunEnd(event: BlockEvent.ReservationConflictDetected) {
+		unresolvedAtRunEndCount++
+		logger.warn {
+			"Contention unresolved at run end: block=${event.block} " +
+				"trainId=${event.trainId} waitingFor=${event.conflictingTrainId} " +
+				"t=${event.time} totalUnresolvedAtRunEnd=$unresolvedAtRunEndCount"
 		}
 	}
 
