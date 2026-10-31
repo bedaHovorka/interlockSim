@@ -8,7 +8,7 @@ wait-for-cycle watchdog. Inputs read first: `SP1-fail-fast-harness.md` (demand 2
 
 | Part | Before | After |
 |---|---|---|
-| Retry of a blocked entry | Every dispatcher tick (2 simulated seconds) re-ran `reservePath` for every unstarted train | A refused train waits in the loop's own FIFO deque. A `BlockReleased` or `ReservationExpired` event wakes one retry process at the simulation time of the release; it attempts the waiting trains in queue order |
+| Retry of a blocked entry | Every dispatcher tick (2 simulated seconds) re-ran `reservePath` for every unstarted train | A refused train waits in the loop's own FIFO deque. A release event (`BlockReleased` or `ReservationExpired`; since Issue #1271 also `OccupancyCleared` and `SwitchClaimsReleased`) wakes one retry process at the simulation time of the release; it attempts the waiting trains in queue order |
 | `maxEntryAttempts` | Attempts, one per tick | The first attempt plus the retries that releases trigger. A run with no release makes no retry; the train stays queued to the run end and the run-end residue log names it |
 | Stuck run | Silent until `endTime` | `SimulationStalled` and `errorStop` when a wait-for cycle persists |
 
@@ -33,8 +33,10 @@ Design choices:
   once.
 - **A failing drain is contained.** An exception inside one drain kills neither the run nor the
   retry process: the waiters stay queued and later releases keep waking the retry.
-- **An attempt's own rollback is not a release.** A refused `reservePath` rolls back and emits
-  `BlockReleased` for its own train; the listener ignores events whose train is the one attempting.
+- **An attempt's own rollback is not a release.** A refused `reservePath` rolls its candidate back
+  inside the call; where such a rollback emits `BlockReleased` for its own train (the bypass
+  rollback of `reservePathToAnyNextSemaphore`), the listener ignores events whose train is the one
+  attempting.
   Without this a refused attempt would wake itself in a zero-time loop.
 - **Listeners only record.** Both listeners run inside the reservation service; they set a flag and
   reactivate the retry process (`Process.reactivate`), nothing more.
@@ -84,14 +86,80 @@ Known approximations (these do not change today's behaviour, only what Goal 9B m
    dispatcher avoids it by granting a train a route only when its whole remaining path is free
    (the current atomic rule), or by granting incremental routes in one global block order.
 3. **Keep the release events.** Retry is only as good as the events: any state change that can
-   unblock a train (block release, expiry, and in future switch release or signal reset) must emit a
-   `BlockReleased` or `ReservationExpired`. A release without an event is a lost wake-up: the train
-   waits until another release or the run ends. Today every release path emits one.
+   unblock a train (block release, expiry, switch release, a physically freed block) must reach the
+   retry as a `BlockReleased`, `ReservationExpired`, `OccupancyCleared` or `SwitchClaimsReleased`. A
+   release without an event is a lost wake-up: the train waits until another release or the run
+   ends. The audit below (Issue #1271) lists every path and its event or its justified exception.
 4. **Treat `SimulationStalled` as a verdict, not a retry hint.** It carries the cycle, the number of
    persisted ticks and the time; a dispatcher should resolve the cycle (release one holding) before
    the persistence bound, not after.
 5. **The attempt cap counts releases.** Size `maxEntryAttempts` for the number of releases a
    scenario produces, not for its duration.
+
+## Release-path audit (2026-10-31, Issue #1271)
+
+Every state change that can turn a refused entry into a granted one, the event that reaches
+`MultiTrainLoop.onReleaseSignal`, and the test that pins the wake. The tests stage a holder (a
+reservation without a train process) that keeps one waiting train out, drive one path on it at a
+known instant, and assert the retry activation at that instant and the waiter's grant:
+`BlockReleasePathWakeTest` (linear track; tail expiry on `vyhybna.xml`) and
+`SwitchReleasePathWakeTest` (y-junction). Both are `commonTest`, so they run on the JVM and on
+linuxX64.
+
+What a `reservePath` refusal can depend on, and so what a wake must cover: a block that is owned by
+another train or not physically FREE (Step 2b, `isBlockAvailable`), a switch locked or claimed by
+another train (Step 2f, `SwitchConfigOutcome.Locked`). The START signal check (G4) is static: it
+reads the semaphore's facing, never its aspect.
+
+### Paths with an event
+
+| Path (production caller) | Code | Event | Test |
+|---|---|---|---|
+| Tail clears a block (`Train.Tail.separatorAction`) | `RouteReleaser.unregisterBlock` -> `dropFreedBlock`; `DynamicTrackBlock.leave` before it | `BlockReleased` (and `OccupancyCleared` from `leave`, coalesced) | `tailClearanceOfEachBlockWakesTheWaiter` |
+| Train exit (`Train.actions` -> `releaseTrainReservations`) | `RouteReleaser.unregister` | `BlockReleased` per remaining block | `trainExitUnregisterWakesTheWaiter` |
+| Committed per-block release (`RegistryPartialRouteReleaser`) | `RouteReleaser.releaseBlock` | `BlockReleased` | `releaseBlockWakesTheWaiter` |
+| Unconditional route release (tests only) | `RouteReleaser.releasePath` -> `releaseAllBlocks` | `BlockReleased` per block | `unconditionalReleasePathWakesTheWaiter` |
+| `cancel_route`, orphan sweeper (`NetworkActuatorPort.releaseRoute`) | `RouteReleaser.releasePathDetailed` -> `releaseAllBlocks` or `releaseAllBut` | `BlockReleased` per freed block | `cancelRouteReleaseWakesTheWaiterOnTheCallThatFreesTheRoute` |
+| Expiry phase 1, loop tick or another train's `reservePath` | `DefaultReservationExpiry.expireStale` (whole holding) | `BlockReleased` + `ReservationExpired` | `wholeHoldingExpiryWakesTheWaiter` |
+| Expiry phase 2 (stalled tail of a standing train) | `DefaultReservationExpiry.expireStale` -> `releaseAllBut` | `BlockReleased` + `ReservationExpired` | `tailExpiryOfAStandingTrainWakesTheWaiter` |
+| Plain switch claim freed with its last adjacent block | `PathReservationRegistry.unregisterBlock` reclaims before `dropFreedBlock` emits | the block's `BlockReleased` | `switchReleaseRidesOnTheEventOfItsLastAdjacentBlock` |
+| **New:** flank claim released at train exit after the last block is gone | `RouteReleaser.unregister` | **`SwitchClaimsReleased`** (internal) | `flankClaimReleasedAtTrainExitWakesTheWaiter` (red before) |
+| **New:** a block left by a train the registry does not attribute it to (the #893 shape) | `DynamicTrackBlock.leave`; `unregisterBlock` has nothing to drop | **`OccupancyCleared`** (now a wake) | `leavingABlockTheRegistryDoesNotAttributeWakesTheWaiter` (red before) |
+
+The two lost wake-ups the audit found, both fixed:
+
+1. **Flank claim at the teardown.** A flank claim (`DefaultInterlockingFacade.lockRouteAtomic`)
+   never goes stale, so it survives the train's last block and is released only by the wholesale
+   unlock in `RouteReleaser.unregister`. That train holds no block any more, so no `BlockReleased`
+   went out, and a waiter refused on that switch waited forever. `unregister` now emits the internal
+   `SwitchClaimsReleased` for any claim it releases, and the loop wakes on it. `MultiTrainLoop`
+   itself makes no flank claims (`reservePath` registers plain claims, and none born stale since
+   #1173), so this closes the gap for a run that mixes it with a facade dispatcher. `releaseAllBlocks`
+   needs no such event: `RouteReleaser.release` reaches it only for a train that still holds blocks,
+   whose `BlockReleased` events go out in the same call.
+2. **Unattributed occupancy.** The Tail's `unregisterBlock` drops only a block the leaving train
+   owns. A block it stands on without a registry entry -- the #893 shape the expiry's occupancy scan
+   already guards against -- became FREE with only `DynamicTrackBlock.leave`'s `OccupancyCleared`,
+   which the loop ignored. The loop now wakes on `OccupancyCleared` too. For an owned block the
+   `BlockReleased` of the same Tail step follows at once; both reach the loop before the retry runs,
+   so the wake count and the retry order do not change.
+
+### Paths without an event (justified)
+
+| Path | Code | Why no wake is needed | Test |
+|---|---|---|---|
+| A refused candidate's own rollback | `CandidateCommitter.rollbackRegistryConflict`, `rollbackAndClassifyReservationFailure`, `rollbackUnconfigurableCandidate` (`RouteReleaser.rollbackBlock`, `rollbackReservation`, `SwitchConfigurator.releaseCandidateSwitches`), the merge-abort and START-signal rollbacks | `reservePath` never suspends, so no other process sees the candidate's blocks or switches held; after the rollback the state equals the state before the call, so nothing is free that was not free before. A wake would only burn an attempt (and the own-train filter of `onReleaseSignal` would drop one: the rollback runs inside the attempting train's call) | `candidateRollbackOfAnotherAttemptIsNotAWake` |
+| Stale foreign switch claim reclaimed by somebody else's attempt | `SwitchConfigurator.reclaimStaleForeignSwitchOwnership`, `PathReservationRegistry.reclaimStaleSwitchOwnership` (also inside `rollbackBlock`) | Self-healing: the waiter's own attempt runs the same reclaim (Step 2e.5) before its switch check, so a stale claim never refuses an entry | `staleForeignSwitchClaimNeedsNoWake` |
+| Orphan switch lock (locked, no owner) | `SwitchConfigurator.releaseOrphanSwitchLocks` | Self-healing, as above (Step 2e.5) | `orphanSwitchLockNeedsNoWake` |
+| Approach-lock deferral and refused untrimmable release | `RouteReleaser.deferUntrimmable`, `refuseUntrimmable`; deferred expiry | Frees no block (signals go to STOP only); the later call that frees the blocks emits | first call of `cancelRouteReleaseWakesTheWaiterOnTheCallThatFreesTheRoute` |
+| Signal resets | `ClearedSignalLedger.resetClearedSemaphores`, `resetSemaphoresForReleasedBlocks` | `reservePath` has no aspect precondition (the G4 check reads the facing only), so a reset cannot unblock a waiter; resets also always come with, and before, the block release of the same call | none: no refusal reads an aspect |
+| Bypass rollback of `reservePathToAnyNextSemaphore` | `DefaultPathReservationService.releaseBypassRollbackBlocks` | Emits `BlockReleased` anyway (it balances the announced reservation, #961); in-call like the rows above, and `MultiTrainLoop` does not call it | none needed |
+| Facade rollbacks | `DefaultInterlockingFacade.rollbackBlocks`, `rollbackRouteLocks` | In-call like the candidate rollback: they undo only what the same request acquired; the facade is the dispatcher's path, not the loop's | none needed |
+| The loop's own `BlockResourceRegistry` gate | `BlockResourceRegistry.releaseFreeResources` | The gate is inert: it never refuses an attempt (see its KDoc) | none needed |
+
+The own-train filter of `onReleaseSignal` stays: an attempting train's own release is in-call by
+the first row. A train that releases blocks while some other train is attempting cannot exist,
+because no other process runs inside `reservePath`.
 
 ## Measurements
 
