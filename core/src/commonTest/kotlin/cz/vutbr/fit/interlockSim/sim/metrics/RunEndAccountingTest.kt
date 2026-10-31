@@ -83,7 +83,7 @@ class RunEndAccountingTest {
 	}
 
 	@Test
-	fun `queued trains count as entered, exits as exited, and a different exit as a wrong exit`() {
+	fun `queued trains count as entered exits as exited and a different exit as a wrong exit`() {
 		queue("T1", plannedExit = "B")
 		queue("T2", plannedExit = "A")
 		queue("T3", plannedExit = "B")
@@ -150,7 +150,7 @@ class RunEndAccountingTest {
 	}
 
 	@Test
-	fun `a stall is kept with its cycle, knot, ticks and time`() {
+	fun `a stall is kept with its cycle knot ticks and time`() {
 		accounting.onAccounting(RunAccountingEvent.Stalled(listOf("T1", "T2"), setOf("T1", "T2", "T3"), 2, 14.0))
 
 		val stall = summary().stall
@@ -186,7 +186,7 @@ class RunEndAccountingTest {
 	}
 
 	@Test
-	fun `the snapshot supplies journeys, conflicts and unresolved contentions`() {
+	fun `the snapshot supplies journeys conflicts and unresolved contentions`() {
 		val s =
 			accounting.summary(
 				EMPTY.copy(completedTrains = 7, conflictCount = 1, unresolvedAtRunEndCount = 3)
@@ -241,7 +241,7 @@ class RunEndAccountingTest {
 	}
 
 	@Test
-	fun `classify follows the order stall, end time, unfinished journeys`() {
+	fun `classify follows the order stall end time unfinished journeys`() {
 		assertThat(RunEndClassification.classify(stalled = true, endTimeReached = true, unfinishedJourneys = 0))
 			.isEqualTo(RunEndClassification.STALLED)
 		assertThat(RunEndClassification.classify(stalled = false, endTimeReached = true, unfinishedJourneys = 1))
