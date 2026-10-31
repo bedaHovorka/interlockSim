@@ -50,6 +50,22 @@ problem.
 **Goal 9B demand:** a per-candidate statement of progress toward the train's destination
 (reachability, remaining distance, or a "this target is on a path to X" flag).
 
+**Update 2026-10-31 (Issue #1278).** Červený Újezd (two exits per side) made the gap visible:
+the nearest-exit rule sent trains out by the other east exit than their timetable's, and
+`Train` reported `ends in wrong out` (2 of the 3 seeded trains of `CervenyUjezdRunTest`). The
+first step is in: `BlockInputObservation.destinationName` carries the owning train's timetable
+exit (filled by `ShuntingLoop` only where `candidateTargets` is), and `ReservationTargetPolicy.pick`
+takes that exit when it is an *available* `IN_OUT` candidate; otherwise the fixed order stays.
+Every dispatcher arm still picks through `chosenTargetName`, so `NextHopResolver` follows the
+same choice. On `vyhybna.xml` (one exit per side) the pick is unchanged.
+
+What it does not cover, and D2 still demands: the destination decides only among candidates one
+section ahead. The signal a train is routed to inside the station is still the first available
+one, and the policy never waits for the own exit: in the seeded run Train #2 stands at `e32`
+while its exit `east_exit_1` is a candidate but not available (Train #1 holds the throat), so the
+fallback takes `east_exit_2` — 1 of 3 wrong-out reports left. Waiting for the own exit, and
+steering through the station toward it, belong to a destination-aware router (Goal 19).
+
 ### D3 — Why a candidate is unavailable
 
 `available = false` is a single bit. The dispatcher cannot distinguish *occupied by a train*
