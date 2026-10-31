@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -73,6 +74,7 @@ internal const val DEFAULT_MAX_PATH_DEPTH = 100
  */
 interface PathReservationService :
 	ApproachLockedPathRelease,
+	BlockOwnerQuery,
 	BlockReleaseSteps,
 	ReservationExpiry {
 	/**
@@ -121,10 +123,22 @@ interface PathReservationService :
 		 * Path(s) exist but all are blocked (OCCUPIED or RESERVED by other trains).
 		 *
 		 * @property attemptedPaths Number of candidate paths that were checked
+		 * @property blockedBy What kept each busy candidate out (Issue #1269, Goal 9B demand 1): one
+		 *   [BlockedCandidate] per candidate refused on contention, in the order the candidates were
+		 *   tried. A candidate refused for a permanent reason (geometric, divergent) is not listed:
+		 *   no release can make it reservable. Filled by [reservePath]; the multi-target forms
+		 *   ([reservePathToAny], [reservePathToAnyNextSemaphore]) report it empty. A request is
+		 *   granted once ANY listed candidate is free, and a candidate is free once ALL its
+		 *   blockers are gone (an OR of ANDs).
 		 */
 		data class AllPathsBlocked(
-			val attemptedPaths: Int
-		) : ReservationResult()
+			val attemptedPaths: Int,
+			val blockedBy: List<BlockedCandidate> = emptyList()
+		) : ReservationResult() {
+			/** Every train named by [blockedBy], in first-seen order. */
+			val blockingTrains: Set<String>
+				get() = blockedBy.flatMapTo(linkedSetOf()) { it.blockingTrains }
+		}
 
 		/**
 		 * Reservation conflict detected during atomic reservation.
@@ -257,6 +271,31 @@ interface PathReservationService :
 			val heldTarget: String,
 			val reason: String
 		) : ReservationResult()
+	}
+
+	/**
+	 * One candidate route of a refused request and what held it (Issue #1269, Goal 9B demand 1):
+	 * the "blocked by" part of [ReservationResult.AllPathsBlocked].
+	 *
+	 * The blockers are taken after the candidate's own rollback, so they show the network as other
+	 * trains hold it. All of them must go before the candidate is reservable.
+	 *
+	 * @property candidateIndex Position of the candidate in the request's candidate list (the
+	 *   order `RouteFinder` or the topology search gave), so a per-route view stays possible
+	 * @property blockedBlocks Each block of the candidate that is neither free nor this train's,
+	 *   with the train [BlockOwnerQuery.getBlockOwner] named for it at refusal time (`null`: no
+	 *   train attributed)
+	 * @property lockedSwitches Each switch of the candidate whose live claim belongs to another
+	 *   train, with that train (a stale claim is left out: the next attempt reclaims it)
+	 */
+	data class BlockedCandidate(
+		val candidateIndex: Int,
+		val blockedBlocks: Map<DynamicTrackBlock, String?>,
+		val lockedSwitches: Map<DynamicRailSwitch, String>
+	) {
+		/** The trains named by [blockedBlocks] and [lockedSwitches], in first-seen order. */
+		val blockingTrains: Set<String>
+			get() = (blockedBlocks.values.filterNotNull() + lockedSwitches.values).toCollection(linkedSetOf())
 	}
 
 	/**
