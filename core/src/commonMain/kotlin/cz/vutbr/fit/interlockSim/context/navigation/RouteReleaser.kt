@@ -329,9 +329,9 @@ internal class RouteReleaser(
 			return blocks
 		} finally {
 			// Unregister blocks and switches from registry - ALWAYS executed
-			// This prevents memory leaks and stale reservations if block release fails
+			// This prevents memory leaks and stale reservations if block release fails.
+			// registry.unregister releases the train's switch claims too (Issue #1103).
 			registry.unregister(trainId)
-			registry.unregisterSwitches(trainId)
 			// Whatever deferral window was still open for these blocks is over: the train's
 			// whole footprint is gone (Issue #1050 review round).
 			blocks.forEach { approachLockDeferredUntil.remove(it) }
@@ -555,8 +555,8 @@ internal class RouteReleaser(
 			}
 		}
 
+		// Releases the switch claims too (Issue #1103), so no separate unregisterSwitches is needed.
 		val releasedBlocks = registry.unregister(trainId)
-		registry.unregisterSwitches(trainId)
 		forgetUntrimmable(trainId)
 		// Whatever deferral window was still open for these blocks is over: the train's whole
 		// footprint is gone (Issue #1050 review round; unregister() is the other wholesale-release
