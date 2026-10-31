@@ -13,6 +13,7 @@ import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * One step of a train's journey through the network (Issue #673, Goal 6 SP2): queued at its entry
@@ -29,10 +30,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @since Issue #673 (Goal 6 SP2)
  */
 sealed interface TrainJourneyEvent {
-	/** Name of the train ([Train.name]). */
+	/**
+	 * Name of the train ([Train.name]).
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
 	val trainId: String
 
-	/** Simulation time of the step. */
+	/**
+	 * Simulation time of the step.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
 	val time: Double
 
 	/**
@@ -75,10 +84,40 @@ sealed interface TrainJourneyEvent {
 private val logger = KotlinLogging.logger {}
 
 /**
- * Send [event] on the kDisco event bus. The top-level kDisco `emitCustom`, so a no-op outside a
- * running simulation and never a failure for the emitting process.
+ * Qualified name of kDisco's `internal` `ProcessTerminatedException`, which `Process.terminate()` always
+ * throws to unwind the terminated process. interlockSim cannot name the type, so the guard of
+ * [emitTrainJourneyEvent] recognises it by name; `TrainJourneyEventEmitTest` pins that a real
+ * termination still passes through, so a kDisco rename fails a test instead of being swallowed.
  */
-internal fun emitTrainJourneyEvent(event: TrainJourneyEvent) = emitCustom(event)
+private const val KDISCO_PROCESS_TERMINATED = "cz.ksimulantenbande.kdisco.ProcessTerminatedException"
+
+/**
+ * Send [event] on the kDisco event bus with the top-level kDisco `emitCustom`, a no-op outside a
+ * running simulation.
+ *
+ * Guarded so that announcing a journey step never changes the run. kDisco's bus calls its raw
+ * listeners with no guard of its own, so a raw [SimulationEnvironment.onSimulationEvent] subscriber
+ * that throws would otherwise end the train or generator process that emitted the step — and before
+ * Issue #673 nothing was emitted there. Such a failure is logged at WARN and the process carries on;
+ * the raw subscribers after the failing one miss this step (kDisco stops its delivery loop).
+ *
+ * kDisco's process control is not swallowed: a `CancellationException` and kDisco's
+ * `ProcessTerminatedException` (a listener terminating the running process) are rethrown, and an
+ * [Error] is never caught (ruling of the traffic-simulation-expert, 2026-10-31, option A).
+ */
+internal fun emitTrainJourneyEvent(event: TrainJourneyEvent) {
+	try {
+		emitCustom(event)
+	} catch (e: CancellationException) {
+		throw e
+	} catch (e: Exception) {
+		if (e::class.qualifiedName == KDISCO_PROCESS_TERMINATED) throw e
+		logger.warn(e) {
+			"A raw simulation event listener failed on $event; the emitting process continues and the " +
+				"listeners after the failing one miss this step (Issue #673)"
+		}
+	}
+}
 
 /**
  * Subscribe to [TrainJourneyEvent]s (Issue #673). Sugar over [SimulationEnvironment.onSimulationEvent],

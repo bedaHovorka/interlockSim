@@ -14,8 +14,10 @@ import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
@@ -39,6 +41,61 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 	private companion object {
 		/** Long enough for two trains to leave `vyhybna.xml`. */
 		const val END_TIME = 120L
+	}
+
+	/** What one run left behind, compared between a plain run and one with a throwing raw subscriber. */
+	private data class RunOutcome(
+		val trainsExited: Int,
+		val completedTrains: Int,
+		val journeys: List<TrainJourneyRecord>
+	)
+
+	private fun newContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingXml().use { stream ->
+			Util.assertInstanceOf<DefaultSimulationContext>(
+				getKoin().get<SimulationContextFactory>().createContext(stream)
+			)
+		}
+
+	/** One `ShuntingLoop` run; [beforeRun] may subscribe after the metrics service has subscribed. */
+	private fun runOnce(beforeRun: (DefaultSimulationContext) -> Unit): RunOutcome {
+		val context = newContext()
+		val loop = prepareShuntingLoop(context, END_TIME)
+		val metrics = context.getMetricsServices().getMetricsCollectionService()
+		beforeRun(context)
+		context.run()
+		// Train numbers come from a JVM-wide counter, so the second run's trains have other names;
+		// everything else about the journeys must match.
+		val journeys = metrics.journeys().map { it.copy(trainId = "") }
+		return RunOutcome(loop.getTrainsExited(), metrics.getSnapshot().completedTrains, journeys)
+	}
+
+	/**
+	 * A raw [cz.vutbr.fit.interlockSim.context.SimulationEnvironment.onSimulationEvent] subscriber is
+	 * not isolated by kDisco's bus, so without the guard in [emitTrainJourneyEvent] its failure would
+	 * end the train or generator process that emitted the step. With the guard the run is the same as
+	 * a run without that subscriber: same exits, same completed trains, same journey records. The
+	 * subscriber registers after the metrics service, so the service still sees every step.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `a raw subscriber that throws on a journey step does not change the run`() {
+		val plain = runOnce {}
+		var thrown = 0
+		val withThrower =
+			runOnce { context ->
+				context.onSimulationEvent { event ->
+					if ((event as? SimulationEvent.Custom)?.payload is TrainJourneyEvent) {
+						thrown++
+						error("raw subscriber failure injected by the test")
+					}
+				}
+			}
+
+		assertThat(plain.trainsExited, "trains exited in the plain run").isGreaterThan(0)
+		val steps = withThrower.journeys.sumOf { listOfNotNull(it.entryTime, it.admissionTime, it.exitTime).size }
+		assertThat(thrown, "the raw subscriber threw on every step").isEqualTo(steps)
+		assertThat(withThrower).isEqualTo(plain)
 	}
 
 	@Test
