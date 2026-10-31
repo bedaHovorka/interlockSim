@@ -24,8 +24,9 @@ import kotlin.test.assertTrue
  *
  * Verifies that:
  * - A vyhybna-compatible network produces an empty issue list.
- * - Networks ShuntingLoop cannot run (Červený Újezd, Praha) are rejected (Issue #1162).
+ * - Červený Újezd is accepted (Issue #1163); Praha, which ShuntingLoop cannot run, is rejected (Issue #1162).
  * - A non-compatible network (e.g., LINEAR_TRACK_XML) produces actionable issues.
+ * - A home signal facing its InOut is named as the reason (signal direction, Issue #1272).
  */
 class ShuntingLoopNetworkValidatorTest {
 	private val factory = NativeContextFactory()
@@ -65,6 +66,18 @@ class ShuntingLoopNetworkValidatorTest {
 			assertTrue(
 				issues.any { it.contains("neither a home signal nor a platform-track end") },
 				"expected an unattached-signal issue; got: $issues"
+			)
+		}
+	}
+
+	@Test
+	fun `validateShuntingLoopCompatible names a home signal that faces its InOut`() {
+		factory.createFromXml(NetworkResources.STATION_HOME_SIGNAL_FACING_AWAY_XML).use { ctx ->
+			// Signal direction (Issue #1272): zA ends the block at InOut A but faces A.
+			val issues = ShuntingLoopNetworkValidator.validateShuntingLoopCompatible(ctx)
+			assertTrue(
+				issues.any { it.contains("kA") && it.contains("no home signal") && it.contains("zA faces the InOut") },
+				"expected the misdirected home signal zA to be named; got: $issues"
 			)
 		}
 	}

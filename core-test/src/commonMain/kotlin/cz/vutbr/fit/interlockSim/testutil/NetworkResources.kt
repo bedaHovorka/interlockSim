@@ -73,4 +73,7 @@ object NetworkResources {
 
 	/** Vyhybna whose signal next to InOut A faces away from an incoming train (Issue #1192). */
 	val STATION_HOME_SIGNAL_FACING_AWAY_XML: String by lazy { fixture("station-home-signal-facing-away.xml") }
+
+	/** The same station with the misdirected signal left nameless in the XML (Issue #1272). */
+	val STATION_UNNAMED_HOME_SIGNAL_XML: String by lazy { fixture("station-unnamed-home-signal.xml") }
 }

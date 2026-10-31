@@ -46,6 +46,17 @@ name stays `cerveny_ujezd` everywhere: the file `cerveny_ujezd.xml`, `NetworkRes
   ownership.
 - **Capacity above vyhybna.** Capacity is 4 (the track count), against 2 on vyhybna.
 
+## Follow-up: signal direction in the compatibility rule (2026-10-31, #1272)
+
+`ShuntingLoop.compatibilityIssues` takes the signal direction from `Station`, the one place the rule is
+decided (`Station.from`, "Signal direction" in its KDoc). An entry/exit block whose end semaphore faces
+its InOut has no home signal; `Station` keeps that semaphore as `StationBlock.misdirectedSignals`, and the
+issue names it (`station-home-signal-facing-away.xml`: "... kA ... has no home signal: its end
+RailSemaphore zA faces the InOut, away from the incoming train") instead of claiming the block does not
+end at a RailSemaphore. The verdicts are unchanged: vyhybna and Červený Újezd are accepted (no
+misdirected signals), Praha is rejected; `StationCapacityTest`, `StationSignalDirectionTest` and
+`:fast-sim`'s `ShuntingLoopNetworkValidatorTest` pin it.
+
 ## Left out — demands on Goal 9B
 
 ### D1 — Explicit conflict set of routes (Czech rule book D1)
