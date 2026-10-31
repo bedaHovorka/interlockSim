@@ -66,7 +66,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | 3 | **B** | Snapshot Collision Detection on a Separate Thread | J: Safety & Compliance | High | 🆕 Planned | 2 months |
 | 4 | — | Interlocking Validation and Generation | J: Safety & Compliance | High | 🆕 Open (#660) | 4 months |
 | 5 | — | Save and Restore Simulation State | I: System Operations | High | 🆕 Open (#666) | 3 months |
-| 6 | — | Performance Metrics Collection | F: Research & Analysis | High | 🆕 Open (#659) | 2 months |
+| 6 | — | Performance Metrics Collection | F: Research & Analysis | High | 🟡 Replanned 2026-10-31, parallel with Goal 1B (#659) | 2 months |
 | 7 | — | Simulation Speed Control | I: System Operations | High | ✅ Complete | 1 month |
 | 8 | — | Pause and Single-Step Simulation | I: System Operations | High | ✅ Complete | 1 month |
 | 9 | — | Automatic Conflict Detection and Resolution | A: Intelligent Automation | Critical | ✅ Complete | 4 months |
@@ -225,6 +225,7 @@ Do not schedule Goal 5 as ready to start until these land.
 **Category:** F: Research & Analysis
 **Priority:** High *(re-scoped 2026-07-01 from Critical — not on Goal 10's dependency chain; tracked in #659)*
 **Development Estimate:** 2 months
+**Status:** 🟡 Replanned 2026-10-31 (#659) — runs in parallel with Goal 1B, must finish before Goal 9B starts
 
 **User Value:**
 Users can automatically collect key performance indicators during simulation including delays, conflicts, throughput, and utilization. This provides quantitative data for research, capacity analysis, and optimization studies.
@@ -235,12 +236,31 @@ Users can automatically collect key performance indicators during simulation inc
 - Configurable metrics selection
 - Data export capability for external analysis
 
-**Dependencies:** None (can implement early)
+**Dependencies:** None for the framework itself. Scheduling (replan 2026-10-31): runs in parallel with Goal 1B on branch `goal-6`, stacked on `goal-1B` (PR #1180), and must finish before the first Goal 9B sub-issue starts. SP6 additionally waits for PR #1289 and the Goal 1B stack #1284 -> #1292 -> #1294; SP5 (#676) additionally waits for PR #1289.
 
 **Implementation Notes:**
 - Build statistics collection framework
-- Consider integration with existing kDisco statistics capabilities
+- No kDisco changes: the work publishes through the existing event path (the kDisco-side items SP9 F1/F2 are excluded)
 - Foundation for Goals 13, 17, and 18
+- The measuring demands formerly kept in `docs/goal9b-demands/` moved into Goal 6 (for example SP12.1 D1/D2 now belong to SP7)
+
+**Branch model:** `goal-6` is branched from `goal-1B`; the draft parent PR `goal-6 -> goal-1B` is retargeted to `develop` when #1180 merges. Sub-PRs target `goal-6` as drafts.
+
+**Sub-issues (task order):**
+
+| Order | Sub-issue | Scope | Depends on |
+|-------|-----------|-------|------------|
+| 1 | #673 SP2 | History, journey records, thread-safe latest snapshot | - |
+| 1 | #674 SP4 | Metric groups, measured overhead | - |
+| 2 | #1304 SP6 | Run-end accounting, end-cause classification | SP2; Goal 1B PR #1289 + stack #1284 -> #1292 -> #1294 |
+| 2 | #676 SP5 | Run-record contract for every harness | SP2, SP6, PR #1289 |
+| 3 | #1305 SP7 | Per-train wait and delay KPIs, capacity pressure | SP6 (#1269 optional) |
+| 3 | #1306 SP8 | Performance row, sweep aggregation, native print | SP5 |
+| 4 | #675 SP3 | Swing dashboard (may trail Goal 9B's start) | SP2, SP6 |
+
+Same order number = may run in parallel. **Critical path:** SP2 -> SP6 -> SP5 -> SP8 (about 3-4 weeks of work).
+
+**Exit criterion:** SP2, SP4, SP5, SP6, SP7 and SP8 are merged before the first Goal 9B sub-issue starts. Every harness then prints and persists the same run record.
 
 ---
 
@@ -913,7 +933,7 @@ away from this phase.
 
 | Goal | Title | Months | Rationale | Tracking |
 |------|-------|--------|-----------|----------|
-| 6 | Performance Metrics | 2 | No dependencies; foundation for Goals 13, 17, 18 | #659 |
+| 6 | Performance Metrics | 2 | 🟡 Replanned 2026-10-31: parallel with Goal 1B (branch `goal-6` on `goal-1B`, #1180), no kDisco changes, SP2+SP4 -> SP6+SP5 -> SP7+SP8 -> SP3, critical path SP2 -> SP6 -> SP5 -> SP8; SP2, SP4, SP5, SP6, SP7, SP8 must merge before Goal 9B starts; foundation for Goals 13, 17, 18 | #659 |
 | 5 | Save/Restore State | 3 | Dependencies (Goals 7, 8) complete; **blocked upstream** on kdisco#42/#43/#44 (SP1 #677); foundation for Goals 15, 18 | #666 |
 | 4 | Interlocking Validation | 4 | Depends on Goal 2 (done) + Goal 3 (Phase 0) | #660 |
 | 11 | Track Physics: Gradients and Curves | 3 | No dependencies. **Very Low priority** — kept because the differential-equation solver must stay in the application | #664, #665 |
@@ -1034,7 +1054,7 @@ Critical Path 1: Safety Chain (re-scoped to High priority, no longer schedule-cr
   Risk: Goal 4 now only risks its own schedule, not Goal 10's - demoted from Critical to High.
 
 Critical Path 2: Analytics Chain (re-scoped to High priority, no longer schedule-critical)
-  Goal 6 (metrics) -> Goal 13 (timetable viz) -> Goal 18 (timeline)
+  Goal 6 (metrics; parallel with Goal 1B, before Goal 9B) -> Goal 13 (timetable viz) -> Goal 18 (timeline)
   Risk: Entirely independent of Goal 10 - can proceed in parallel with Phase 0 without
   any risk of delaying the top-priority goal.
 ```
@@ -1143,6 +1163,7 @@ The following categories of goals were deferred for future consideration:
 
 **Document Version:** 1.2
 **Created:** 2026-01-09
+**Last Updated:** 2026-10-31 (#659) — Goal 6 replanned: parallel with Goal 1B on branch `goal-6`, finishes before Goal 9B, no kDisco changes, measuring demands moved from `docs/goal9b-demands/` into Goal 6.
 **Last Revised:** 2026-08-24 (#839, SP2c.16) — restated the **Goal Stages** convention in the owner's own wording (the first stage carries no letter, so "Goal 10 stage A" is now "Goal 10, first stage" throughout); marked **Goal 10's first stage complete** and recorded the amended acceptance contract (#822 §7) together with SP2c.14's measured A4 result, including the LLM arm's failure to reach the ≥ 8/10 gate; corrected the P8 determinism claim (a sampling seed cannot reach Ollama through Koog 1.1.1 — prompt determinism only); **redefined Goal 11** to cover gradients *and* curves at Very Low priority, folding in the old Goal 12; **created a new Goal 12** for inter-station tracks and multiple dispatcher agents, absorbing #821; added brief **Goal 1B, 9B, 3B** sections and the new **Next Stages** block (1B → 9B → 12 → 3B); restructured Implementation Strategy, Total Development Effort, and Risk Assessment accordingly; renamed the "Phase 0B" block to **Next Stages** and the two live dependency chains to **Critical Path A** (closed) and **Critical Path B** (the schedule-critical one), per review on PR #954
 **Previously Revised:** 2026-07-01 — re-prioritized around Goal 10 as the top-priority goal; only its dependency chain (Goal 1 → 2 → 3 → 9 → 10) remained Critical; Goal 9/Goal 10 dependency lines reconciled with the GitHub issue tracker (#531, #532) to include Goal 3
 **Approved By:** traffic-simulation-expert, agent-architect, kotlin-tech-lead, railway-engineer
