@@ -34,6 +34,15 @@ name stays `cerveny_ujezd` everywhere: the file `cerveny_ujezd.xml`, `NetworkRes
   "identical exit order" is compared as generation ordinals (first, second, third generated train).
 - **The seed is a generator seed only.** It fixes arrivals and the InOut pairs. The dispatcher is
   deterministic by construction, so the exit order is a function of the seed.
+- **Unnamed switches print `unknown` block labels (2026-10-31, #1279).** The first GUI run printed
+  `Train #3 enter block unknown` for the throat blocks: `blockLabel` (and `BlockIdentity.stableBlockId`)
+  fall back to `unknown` when a block and both its end separators are unnamed, and all 12 `RailSwitch`
+  elements had no `name`. Both XML copies now name them in ladder order, from the station boundary
+  inward, row 31 before row 32: `vW1`–`vW6` (columns 7, 8, 9) and `vE1`–`vE6` (columns 35, 34, 33),
+  after vyhybna's `vA`/`vB`. `CervenyUjezdBlockLabelTest` pins that no TRAIN_EVENTS block label of the
+  seeded run is `unknown`. Routing, seeds and physics are unchanged. Side effect: the dispatcher-agent
+  topology (`StationTopologySerializer.describe`) now lists the 12 switches, and throat blocks get
+  distinct `<end>-<end>` ids instead of collapsing into one `unknown` id.
 
 ## Railway conflicts the scenario exposes
 
