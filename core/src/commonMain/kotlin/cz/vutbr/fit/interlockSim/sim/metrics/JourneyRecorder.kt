@@ -32,13 +32,17 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #673 (Goal 6 SP2)
  */
-class JourneyRecorder {
+internal class JourneyRecorder {
 	private val records = mutableListOf<TrainJourneyRecord>()
 
 	/** Index into [records] of each train's open journey. */
 	private val openJourneyIndex = mutableMapOf<String, Int>()
 
-	/** Apply one journey step. */
+	/**
+	 * Apply one journey step.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
 	fun record(event: TrainJourneyEvent) {
 		when (event) {
 			is TrainJourneyEvent.Queued -> onQueued(event)
@@ -47,7 +51,11 @@ class JourneyRecorder {
 		}
 	}
 
-	/** Every journey recorded so far, open or closed, in the order opened; a copy. */
+	/**
+	 * Every journey recorded so far, open or closed, in the order opened; a copy.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
 	fun records(): List<TrainJourneyRecord> = records.toList()
 
 	private fun onQueued(event: TrainJourneyEvent.Queued) {

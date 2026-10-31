@@ -44,6 +44,8 @@ data class TrainJourneyRecord(
 	/**
 	 * `true` when the train left through another InOut than its timetable planned — the
 	 * `ends in wrong out` count of Issue #1276. `false` while either end is unknown.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
 	 */
 	val wrongExit: Boolean
 		get() = plannedExit != null && actualExit != null && plannedExit != actualExit

@@ -106,8 +106,8 @@ interface MetricsCollectionService {
 	 * The snapshot last published by the simulation thread — the one call of this interface that is
 	 * **safe from any thread** (a dashboard, a dispatcher thread).
 	 *
-	 * The simulation thread publishes a new immutable [MetricsSnapshot] after every handled event,
-	 * through a single volatile reference write, so a reader on another thread always sees one whole
+	 * The simulation thread publishes a new immutable [MetricsSnapshot] after every handled block
+	 * event (journey events publish nothing), through a single volatile reference write, so a reader on another thread always sees one whole
 	 * snapshot of one instant, never fields of two (the off-thread tearing of Goal 9B SP9 F5/F9).
 	 * Before the first event it is the all-zero snapshot. Unlike [getSnapshot], it never computes
 	 * anything on the caller's thread.

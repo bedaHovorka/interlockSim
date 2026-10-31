@@ -16,8 +16,10 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * event. Two caps keep memory bounded on long runs, and both evict the **oldest** entries first:
  *
  * - **count cap** [maxEntries] — never more than this many snapshots. Default
- *   [DEFAULT_MAX_ENTRIES] (10 000): a few hundred KB for the eleven-number snapshot, and several
- *   hours of `vyhybna.xml` traffic at a few block events per simulated minute.
+ *   [DEFAULT_MAX_ENTRIES] (10 000): a few hundred KB for the eleven-number snapshot. A
+ *   `shuntingLoop` run on `vyhybna.xml` published 409 snapshots in 600 simulated seconds
+ *   (measured 2026-10-31, about 41 block events per simulated minute), so the default holds about
+ *   four simulated hours of that traffic; a busier station fills it sooner.
  * - **time window** [retentionSeconds] — when set, a snapshot more than this many simulated seconds
  *   older than the last one added is dropped. Default `null`: no time window, only the count cap.
  *
@@ -48,7 +50,11 @@ class MetricsHistory(
 
 	private val entries = ArrayDeque<MetricsSnapshot>()
 
-	/** Number of snapshots currently kept. */
+	/**
+	 * Number of snapshots currently kept.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
 	val size: Int
 		get() = entries.size
 
@@ -68,21 +74,35 @@ class MetricsHistory(
 		}
 	}
 
-	/** Every kept snapshot, oldest first, as a copy the history does not change afterwards. */
+	/**
+	 * Every kept snapshot, oldest first, as a copy the history does not change afterwards.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
 	fun all(): List<MetricsSnapshot> = entries.toList()
 
 	/**
 	 * Snapshots with `fromTime <= time <= toTime`, in time order; snapshots of one instant keep the
 	 * order they arrived in. Empty when nothing lies in the range or when `fromTime > toTime`.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
 	 */
 	fun between(
 		fromTime: Double,
 		toTime: Double
 	): List<MetricsSnapshot> = entries.filter { it.time in fromTime..toTime }.sortedBy { it.time }
 
-	/** Defaults of [MetricsHistory]. */
+	/**
+	 * Defaults of [MetricsHistory].
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
 	companion object {
-		/** Default [maxEntries]: 10 000 snapshots. */
+		/**
+		 * Default [maxEntries]: 10 000 snapshots.
+		 *
+		 * @since Issue #673 (Goal 6 SP2)
+		 */
 		const val DEFAULT_MAX_ENTRIES: Int = 10_000
 	}
 }

@@ -51,7 +51,7 @@ import kotlin.concurrent.thread
 @Tag("integration-test")
 class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 	private companion object {
-		/** Long enough for several trains and hundreds of block events on `vyhybna.xml`. */
+		/** Long enough for several trains and hundreds of block events on `vyhybna.xml` (409 measured). */
 		const val END_TIME = 600L
 
 		/** Publications handed to the reader explicitly. */
@@ -100,7 +100,7 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 					val seen = metrics.latestSnapshot()
 					violations += inconsistencies(previous, seen)
 					previous = seen
-					if (handed != null) handoverRead.put(seen)
+					if (handed != null) handoverRead.put(seen) else Thread.onSpinWait()
 				}
 			}
 
