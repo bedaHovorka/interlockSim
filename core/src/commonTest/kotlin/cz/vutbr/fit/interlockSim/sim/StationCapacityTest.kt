@@ -218,13 +218,13 @@ class StationCapacityTest : CommonKoinTestBase() {
 
 	@Test
 	fun shuntingLoopNamesAnUnnamedHomeSignalFacingItsInOut() {
-		// The same facing-away zA, but nameless in the XML: the issue falls back to the
-		// Station.UNNAMED label instead of printing an empty name (Issue #1272 review).
+		// The same facing-away zA, but nameless in the XML: the loader names it by its grid
+		// position (Issue #1273), so the issue prints that name instead of an empty one.
 		val station = Station.from(load(NetworkResources.STATION_UNNAMED_HOME_SIGNAL_XML))
 
 		assertThat(ShuntingLoop.compatibilityIssues(station)).containsExactly(
 			"entry/exit block kA (11,8)-(14,8) has no home signal: its end RailSemaphore " +
-				"${Station.UNNAMED} faces the InOut, away from the incoming train",
+				"S_14_8 faces the InOut, away from the incoming train",
 			"1 RailSemaphore(s) are neither a home signal nor a platform-track end"
 		)
 	}
