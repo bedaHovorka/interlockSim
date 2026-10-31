@@ -78,6 +78,7 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		assertBlocksFreeAndUnowned(blocks)
 		switches.forEach { switch -> assertThat(switch.locked, "lock of ${switch.name}").isFalse() }
 		assertThat(registry.getSwitches("train1")).isEmpty()
+		switches.forEach { switch -> assertThat(registry.getSwitchOwner(switch), "claim on ${switch.name}").isNull() }
 		assertThat(entry.signal.isAllowing(), "entry after release").isFalse()
 		assertThat(service.hasClearedSignals("train1")).isFalse()
 		assertThat(releasedEvents(listener).map { it.block }).isEqualTo(blocks)
@@ -122,6 +123,7 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 	fun `unregister frees the route, unlocks its switches and announces each block once`() {
 		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
 		val switches = registry.getSwitches("train1")
+		assertThat(switches, "switches of the route").isNotEmpty()
 		val listener = RecordingBlockOccupancyListener()
 		environment.addBlockOccupancyListener(listener)
 
@@ -130,6 +132,8 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 		assertThat(released.toSet()).isEqualTo(blocks.toSet())
 		blocks.forEach { block -> assertThat(block.getState()).isEqualTo(TrackFacility.State.FREE) }
 		switches.forEach { switch -> assertThat(switch.locked, "lock of ${switch.name}").isFalse() }
+		assertThat(registry.getSwitches("train1"), "switch claims of train1").isEmpty()
+		switches.forEach { switch -> assertThat(registry.getSwitchOwner(switch), "claim on ${switch.name}").isNull() }
 		assertThat(service.hasClearedSignals("train1")).isFalse()
 		assertThat(releasedEvents(listener)).hasSize(blocks.size)
 	}
