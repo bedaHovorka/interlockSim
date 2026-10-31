@@ -1,0 +1,150 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator - Test Suite
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.sim.metrics
+
+import assertk.assertThat
+import assertk.assertions.containsExactly
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isSameInstanceAs
+import assertk.assertions.isZero
+import assertk.assertions.single
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
+import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+
+/**
+ * Unit tests for the Goal 6 SP2 surface of [DefaultMetricsCollectionService]: the published
+ * [MetricsCollectionService.latestSnapshot], the [MetricsCollectionService.history] buffer and
+ * the [MetricsCollectionService.journeys] records. Kept apart from
+ * [DefaultMetricsCollectionServiceTest], which covers the SP1 KPI derivation.
+ *
+ * @since Issue #673 (Goal 6 SP2)
+ */
+class DefaultMetricsCollectionServiceHistoryTest {
+	private var context: DefaultSimulationContext? = null
+
+	@BeforeTest
+	fun setUpKoin() {
+		startKoin { modules(commonCoreTestModule) }
+	}
+
+	@AfterTest
+	fun tearDown() {
+		context?.close()
+		context = null
+		stopKoin()
+	}
+
+	private fun realBlock(): DynamicTrackBlock {
+		val ctx =
+			CommonTestFixtures.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				DefaultSimulationProcessFactory()
+			)
+		context = ctx
+		return ctx.getGraph().values().first()
+	}
+
+	@Test
+	fun `before any event the latest snapshot is the all-zero snapshot`() {
+		val service = DefaultMetricsCollectionService()
+
+		val latest = service.latestSnapshot()
+		assertThat(latest.time).isZero()
+		assertThat(latest.completedTrains).isZero()
+		assertThat(latest.totalBlocks).isZero()
+		assertThat(service.history().size).isZero()
+	}
+
+	@Test
+	fun `every handled block event publishes a latest snapshot equal to the current one`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		assertThat(service.latestSnapshot()).isEqualTo(service.getSnapshot())
+
+		service.handleBlockEvent(BlockEvent.ReservationConflictDetected(block, "T2", "T1", time = 2.0))
+		assertThat(service.latestSnapshot().conflictCount).isEqualTo(1)
+		assertThat(service.latestSnapshot().time).isEqualTo(2.0)
+	}
+
+	@Test
+	fun `listeners receive the very snapshot that was published`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+		val received = mutableListOf<MetricsSnapshot>()
+		service.onSnapshot { received += it }
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+
+		assertThat(received.single()).isSameInstanceAs(service.latestSnapshot())
+	}
+
+	@Test
+	fun `every published snapshot is appended to the history in time order`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.ReservationConflictDetected(block, "T2", "T1", time = 2.0))
+		service.handleBlockEvent(BlockEvent.ReservationConflictDetected(block, "T3", "T1", time = 3.0))
+
+		assertThat(service.history().all().map { it.time }).containsExactly(1.0, 2.0, 3.0)
+		assertThat(service.history().between(2.0, 3.0).map { it.conflictCount }).containsExactly(1, 2)
+		assertThat(service.history().all().last()).isSameInstanceAs(service.latestSnapshot())
+	}
+
+	@Test
+	fun `the configured history bounds what the service keeps`() {
+		val service = DefaultMetricsCollectionService(history = MetricsHistory(maxEntries = 2))
+		val block = realBlock()
+
+		listOf(1.0, 2.0, 3.0).forEach { t ->
+			service.handleBlockEvent(BlockEvent.ReservationConflictDetected(block, "T2", "T1", time = t))
+		}
+
+		assertThat(service.history().all().map { it.time }).containsExactly(2.0, 3.0)
+	}
+
+	@Test
+	fun `journey events become journey records`() {
+		val service = DefaultMetricsCollectionService()
+
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Admitted("T1", 2.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Exited("T1", "A", 40.0))
+
+		val record = service.journeys().single()
+		assertThat(record.entryInOut).isEqualTo("A")
+		assertThat(record.exitTime).isEqualTo(40.0)
+		assertThat(record.wrongExit).isEqualTo(true)
+	}
+
+	@Test
+	fun `journey events do not publish a snapshot`() {
+		val service = DefaultMetricsCollectionService()
+
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+
+		assertThat(service.history().all()).isEmpty()
+	}
+}

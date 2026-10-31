@@ -31,8 +31,8 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * ## Thread Safety
  *
  * Listeners are invoked synchronously on the simulation thread.
- * [getSnapshot] is safe to call from the simulation thread; external callers
- * must synchronise externally if they read the snapshot from a different thread.
+ * [getSnapshot] is safe to call from the simulation thread; a reader on another
+ * thread uses [latestSnapshot] (Issue #673).
  *
  * @since Issue #672 (Goal 6 SP1)
  */
@@ -101,4 +101,34 @@ interface MetricsCollectionService {
 	 * @return Train ids with outstanding reservations; empty when every train settled cleanly.
 	 */
 	fun reportUnreleasedReservations(): Set<String>
+
+	/**
+	 * The snapshot last published by the simulation thread — the one call of this interface that is
+	 * **safe from any thread** (a dashboard, a dispatcher thread).
+	 *
+	 * The simulation thread publishes a new immutable [MetricsSnapshot] after every handled event,
+	 * through a single volatile reference write, so a reader on another thread always sees one whole
+	 * snapshot of one instant, never fields of two (the off-thread tearing of Goal 9B SP9 F5/F9).
+	 * Before the first event it is the all-zero snapshot. Unlike [getSnapshot], it never computes
+	 * anything on the caller's thread.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
+	fun latestSnapshot(): MetricsSnapshot
+
+	/**
+	 * The bounded history of every published snapshot (see [MetricsHistory] for the caps).
+	 * Read it on the simulation thread or after the run; it is not safe to read concurrently.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
+	fun history(): MetricsHistory
+
+	/**
+	 * One [TrainJourneyRecord] per train journey so far, in the order the journeys began.
+	 * Read it on the simulation thread or after the run; it is not safe to read concurrently.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
+	fun journeys(): List<TrainJourneyRecord>
 }

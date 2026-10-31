@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
+import cz.vutbr.fit.interlockSim.sim.onTrainJourneyEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -43,23 +45,34 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * state change.  The current snapshot is always visible in logs, satisfying the
  * Goal 10 requirement that metrics are observable in stdout/log without a GUI.
  *
+ * ## History and journeys (Issue #673, Goal 6 SP2)
+ *
+ * After every handled [BlockEvent] the service publishes the new snapshot: it becomes
+ * [latestSnapshot], is appended to [history] and is handed to the listeners — one instance
+ * for all three. [TrainJourneyEvent]s (subscribed through [onTrainJourneyEvent]) feed a
+ * [JourneyRecorder], read through [journeys]; they publish no snapshot.
+ *
  * ## Thread safety
  *
- * This class is **not thread-safe**. It is intended to be driven solely by the
- * kDisco event stream — i.e. the single-threaded `emitCustom` callbacks that
- * fire inside `runBlocking { context.run() }`. [getSnapshot] is meant to be
- * polled after `context.run()` completes, not concurrently from another thread
- * while events are being processed.
+ * This class is **not thread-safe**, with one exception. It is intended to be driven
+ * solely by the kDisco event stream — i.e. the single-threaded `emitCustom` callbacks
+ * that fire inside `runBlocking { context.run() }`. [getSnapshot], [history] and
+ * [journeys] are meant to be read on that thread or after `context.run()` completes.
+ * The exception is [latestSnapshot]: an immutable snapshot behind a volatile reference,
+ * safe to read from any thread while events are being processed.
  *
  * ## Constructor
  *
- * @param env The simulation environment used to subscribe to block events.
+ * @param env The simulation environment used to subscribe to block and journey events.
  *   Pass `null` only in unit tests that drive [handleBlockEvent] directly.
+ * @param history Buffer the published snapshots are appended to; defaults to a
+ *   [MetricsHistory] with its default caps (Issue #673).
  *
  * @since Issue #672 (Goal 6 SP1)
  */
 class DefaultMetricsCollectionService(
-	env: SimulationEnvironment? = null
+	env: SimulationEnvironment? = null,
+	private val history: MetricsHistory = MetricsHistory()
 ) : MetricsCollectionService {
 	// ── KPI accumulators ─────────────────────────────────────────────────────
 
@@ -139,10 +152,19 @@ class DefaultMetricsCollectionService(
 
 	private val listeners: MutableList<(MetricsSnapshot) -> Unit> = mutableListOf()
 
+	// ── Published state (Issue #673) ─────────────────────────────────────────
+
+	/** Last published snapshot; the one field read across threads (see [latestSnapshot]). */
+	@kotlin.concurrent.Volatile
+	private var published: MetricsSnapshot = EMPTY_SNAPSHOT
+
+	private val journeyRecorder = JourneyRecorder()
+
 	// ── Subscription ─────────────────────────────────────────────────────────
 
 	init {
 		env?.onBlockEvent { event -> handleBlockEvent(event) }
+		env?.onTrainJourneyEvent { event -> handleJourneyEvent(event) }
 	}
 
 	// ── Interface implementation ──────────────────────────────────────────────
@@ -199,6 +221,12 @@ class DefaultMetricsCollectionService(
 		listeners -= listener
 	}
 
+	override fun latestSnapshot(): MetricsSnapshot = published
+
+	override fun history(): MetricsHistory = history
+
+	override fun journeys(): List<TrainJourneyRecord> = journeyRecorder.records()
+
 	// ── Internal event handler (internal for test access) ────────────────────
 
 	/**
@@ -218,7 +246,15 @@ class DefaultMetricsCollectionService(
 			is BlockEvent.OccupancyCleared -> onOccupancyCleared(event)
 			is BlockEvent.ReservationConflictDetected -> onReservationConflict(event)
 		}
-		notifyListeners()
+		publishSnapshot()
+	}
+
+	/**
+	 * Feed one [TrainJourneyEvent] to the journey records (Issue #673). `internal` for the
+	 * same reason as [handleBlockEvent].
+	 */
+	internal fun handleJourneyEvent(event: TrainJourneyEvent) {
+		journeyRecorder.record(event)
 	}
 
 	// ── Private event handlers ────────────────────────────────────────────────
@@ -339,9 +375,19 @@ class DefaultMetricsCollectionService(
 		return "$whole.$frac"
 	}
 
-	private fun notifyListeners() {
-		if (listeners.isEmpty()) return
+	/**
+	 * Publish the current snapshot as [latestSnapshot] (one volatile write of an immutable
+	 * value), append it to [history], then hand the same instance to the listeners.
+	 */
+	private fun publishSnapshot() {
 		val snapshot = getSnapshot()
+		published = snapshot
+		history.add(snapshot)
+		notifyListeners(snapshot)
+	}
+
+	private fun notifyListeners(snapshot: MetricsSnapshot) {
+		if (listeners.isEmpty()) return
 		listeners.toList().forEach { listener ->
 			try {
 				listener(snapshot)
@@ -353,5 +399,19 @@ class DefaultMetricsCollectionService(
 
 	private companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/** [latestSnapshot] before the first event: every KPI zero. */
+		private val EMPTY_SNAPSHOT =
+			MetricsSnapshot(
+				time = 0.0,
+				conflictCount = 0,
+				completedTrains = 0,
+				throughput = 0.0,
+				totalWaitSeconds = 0.0,
+				averageWaitSeconds = 0.0,
+				occupiedBlocks = 0,
+				totalBlocks = 0,
+				utilization = 0.0
+			)
 	}
 }
