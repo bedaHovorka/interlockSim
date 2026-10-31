@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThanOrEqualTo
+import assertk.assertions.isNull
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
@@ -89,6 +90,7 @@ class MultiTrainScaleValidationTest : CommonKoinTestBase() {
 				"entryFailures=${loop.getEntryFailures()}, wall=${wallSeconds}s"
 		}
 		assertThat(loop.getEntryFailures(), name = "entry failures").isEmpty()
+		assertThat(loop.stall, name = "deadlock watchdog report (Issue #1154)").isNull()
 		assertThat(loop.getTrainsEntered(), name = "trains entered").isEqualTo(TRAINS)
 		assertThat(loop.getTrainsExited(), name = "trains exited").isEqualTo(TRAINS)
 		assertThat(loop.getOccupiedResourceCount(), name = "occupied resources").isZero()
