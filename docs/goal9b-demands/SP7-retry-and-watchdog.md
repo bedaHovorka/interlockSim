@@ -46,11 +46,11 @@ Design choices:
 
 ## Wait-for graph the watchdog needs
 
-Nodes are trains. An edge `waiter -> holder` exists when `waiter` is approved but not started and
-`holder` owns a block of one of `waiter`'s candidate routes (the route-search blocks the entry gate
-already caches per `(entry, exit)` pair). Owners come from `PathReservationService.getReservedBlocks`
-of every approved train; the interface has no "owner of this block" query, which is why the graph is
-built by inverting the per-train holdings.
+Nodes are trains. As first shipped (#1154), an edge `waiter -> holder` existed when `waiter` was
+approved but not started and `holder`, an approved train, owned a block of one of `waiter`'s
+candidate routes (the route-search blocks the entry gate caches per `(entry, exit)` pair), found by
+inverting `PathReservationService.getReservedBlocks` of every approved train. Since Issue #1269 the
+edges come from what actually refused the waiter; see "Exact wait-for edges" below.
 
 The persistence rules (`DeadlockWatchdog`): either the same cycle (same member set) on
 `stallPersistTicks` (default 5, ten simulated seconds) successive dispatcher ticks, or any cycle on
@@ -63,14 +63,16 @@ Known approximations (these do not change today's behaviour, only what Goal 9B m
 
 1. **AND model on an OR wait.** A waiter needs only one free candidate route, but the graph points at
    the holders of all of them. A cycle through such edges is not always a deadlock. The persistence
-   rule bounds the risk; an exact test needs a knot search on the per-route graph.
+   rule bounds the risk; an exact test needs a knot search on the per-route graph. Since Issue #1269
+   the per-route data exists: `MultiTrainLoop` keeps each waiter's `BlockedCandidate` list.
 2. **Started trains wait for nobody.** `MultiTrainLoop` reserves the whole path before it starts a
    train, so a started train never waits on another train's reservation and never has an outgoing
-   edge. With full-path reservation the graph has no cycle in production (`fiveTrainCompleteness`
+   edge (it can be the target of one, Issue #1269). With full-path reservation the graph has no cycle in production (`fiveTrainCompleteness`
    asserts `stall == null` on JVM and native). The watchdog is a guard for the moment this
    invariant breaks, which is exactly what incremental reservation by a Goal 9B dispatcher does.
 3. **Constructed cycle in tests.** `WatchdogDetectsCycleTest` stages the holdings with a fake
-   reservation service, because the real service cannot produce the cycle.
+   reservation service, because the real service cannot produce the cycle. Since Issue #1269 the
+   fake publishes them through `getBlockOwner` and names the route blocks in its refusals.
 4. **The expiry hoist subsumes only pure-TTL staleness.** The loop's top-of-tick expiry clears
    whatever an attempt's own internal `expireStaleReservations` would find. The service's deferred
    releases (the #1220 tail-stall retry and the approach-lock booking window) can still free a
@@ -82,6 +84,8 @@ Known approximations (these do not change today's behaviour, only what Goal 9B m
 1. **Publish who blocks whom.** A dispatcher that reserves incrementally must expose, per waiting
    train, the owner of the block it needs next (`PathReservationService` needs a block-owner query
    and a "blocked by" result). The watchdog graph then gets exact edges, including started trains.
+   The service half is done (Issue #1269, below); what remains for Goal 9B is to carry the
+   blocked-by result through the multi-target reservations and the dispatcher ports.
 2. **Avoid cycles by ordering.** A cycle needs two trains each holding what the other needs. A
    dispatcher avoids it by granting a train a route only when its whole remaining path is free
    (the current atomic rule), or by granting incremental routes in one global block order.
@@ -95,6 +99,53 @@ Known approximations (these do not change today's behaviour, only what Goal 9B m
    the persistence bound, not after.
 5. **The attempt cap counts releases.** Size `maxEntryAttempts` for the number of releases a
    scenario produces, not for its duration.
+
+## Exact wait-for edges (2026-10-31, Issue #1269)
+
+Goal 9B demand 1, service half. Two additions to `PathReservationService`:
+
+- **Block-owner query** `getBlockOwner(block)`, declared in the new `BlockOwnerQuery` interface that
+  `PathReservationService` extends (the detekt function budget of `PathReservationService` is full,
+  as for `BlockReleaseSteps`): the registry owner of the block; else the train the block records as
+  reserved for (`DynamicTrackBlock.trainName`) or standing on it, the Issue #893 shape of a block
+  held without a registry entry; `null` when no train is attributed. O(1), the inverse of
+  `getReservedBlocks`.
+- **Blocked-by result** `ReservationResult.AllPathsBlocked.blockedBy`: one `BlockedCandidate` per
+  candidate refused on contention, with its index in the candidate list, `blockedBlocks` (each block
+  that is not FREE or held by another train, with its owner at refusal time) and `lockedSwitches`
+  (each switch of the candidate whose live claim belongs to another train). The field has a default
+  (`emptyList()`), so every existing constructor keeps compiling.
+
+The record is taken by `CandidateBlockerScan` after the candidate's own rollback, so it shows only
+other trains' holdings. Which candidates are listed:
+
+| Candidate refused at | Listed | Why |
+|---|---|---|
+| Step 2b, a forward block not free | yes | contention |
+| Step 2c, the atomic block reservation failed | yes | contention (a TOCTOU race) |
+| Step 2f, a switch locked by another train | yes | contention (Issue #1065: transient) |
+| A later step that records no geometric failure (merge abort, a failed START write) | yes, possibly with no blocker | not proven permanent; an empty record says "no train holds anything here" |
+| Step 2f unconfigurable switch, the G4 START rejection (`RejectedG4`), or a screened-out candidate (rear-facing end, divergent) | no | permanent: no release can make it reservable |
+
+A stale switch claim is not listed: the waiter's next attempt reclaims it (`CandidateCommitter`
+Step 2e.5), so it never refuses an entry. `reservePath` fills `blockedBy`; `reservePathToAny`
+passes the last target's list through (indices relative to that target); `reservePathToAnyNextSemaphore`
+and the facade/port mappings (`DenialCause.AllPathsBlocked`, `RouteRequestResult.AllPathsBlocked`)
+carry the count alone.
+
+The watchdog graph (`MultiTrainLoop.buildWaitForGraph`) now draws from the waiter's last refusal: an
+edge to the CURRENT owner (`getBlockOwner`) of each block the refusal named -- a block freed since adds
+no edge -- and to the holder of each switch claim it named. The record cannot be staler than the
+last release, because every release wakes a new attempt that replaces it. A holder no longer has to
+be a train of the loop, nor share a block with the waiter's candidate routes:
+`WaitForEdgesFromOwnersTest` runs two trains on the y-junction; once the first, started, train's
+tail has cleared the shared entry block it holds only its exit block, yet its claim on the junction
+refuses the second train. The candidate-route builder showed no edge in that window (red at 28.5 to
+38.5 s); the new builder shows `waiter -> started train` on every sample of it.
+
+Pins: `BlockOwnerQueryTest` (owner of a reserved, a free and an unattributed block; a refusal names
+the train holding its block, and the train holding its switch), `WaitForEdgesFromOwnersTest`, and
+`WatchdogDetectsCycleTest` and `fiveTrainCompleteness` unchanged in their assertions.
 
 ## Release-path audit (2026-10-31, Issue #1271)
 
