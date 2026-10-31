@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
@@ -567,7 +568,27 @@ internal class RouteReleaser(
 				releasedBlocks.joinToString(", ") { it.toString() }
 		}
 		emitReleasesContained("unregister", releasedBlocks, trainId)
+		announceSwitchReleases(switches, trainId)
 		return releasedBlocks
+	}
+
+	/**
+	 * Announce the switch claims [unregister] released (Issue #1271): a flank claim can outlive the
+	 * train's last block, so no `BlockReleased` of this teardown may carry its release. Emitted for any
+	 * released claim, after the block events; a throwing subscriber is contained like there.
+	 * [releaseAllBlocks] needs no such announcement: [release] reaches it only for a train that still
+	 * holds blocks, whose `BlockReleased` events go out in the same call.
+	 */
+	private fun announceSwitchReleases(
+		switches: List<DynamicRailSwitch>,
+		trainId: String
+	) {
+		if (switches.isEmpty()) return
+		try {
+			emitCustom(SwitchClaimsReleased(trainId, switches, currentSimulationTime()))
+		} catch (e: Exception) {
+			logger.warn(e) { "unregister: Failed to announce the switch release of '$trainId'" }
+		}
 	}
 
 	/**

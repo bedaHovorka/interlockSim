@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.extractUniqueBlocks
 import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
+import cz.vutbr.fit.interlockSim.context.navigation.onSwitchClaimsReleased
 import cz.vutbr.fit.interlockSim.exceptions.SimulationStalled
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -339,11 +340,18 @@ open class MultiTrainLoop(
 
 	init {
 		context.onBlockEvent { event ->
-			if (event is BlockEvent.BlockReleased) {
-				onReleaseSignal(event.trainId)
+			when (event) {
+				is BlockEvent.BlockReleased -> onReleaseSignal(event.trainId)
+				// Issue #1271: a block a train stands on without a registry entry (the #893 shape)
+				// becomes FREE with no BlockReleased; its leave() announces it. For an owned block
+				// the BlockReleased of the same Tail step follows, and the two wakes coalesce.
+				is BlockEvent.OccupancyCleared -> onReleaseSignal(null)
+				else -> Unit
 			}
 		}
 		context.onReservationExpired { onReleaseSignal(it.trainId) }
+		// Issue #1271: a flank switch claim can outlive the train's last block (no BlockReleased).
+		context.onSwitchClaimsReleased { onReleaseSignal(it.trainId) }
 	}
 
 	// Test-observability counters (#365 pattern).
