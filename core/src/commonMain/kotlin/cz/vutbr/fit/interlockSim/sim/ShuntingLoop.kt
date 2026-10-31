@@ -158,7 +158,8 @@ class ShuntingLoop(
 		 *   side, so Červený Újezd (two InOuts per side) runs and trains never go between same-side
 		 *   exits (Issue #1163);
 		 * - every entry/exit block ends at a home signal — the dispatcher only moves trains from
-		 *   outer blocks toward a home signal;
+		 *   outer blocks toward a home signal. The signal direction is [Station]'s rule: a semaphore
+		 *   there that faces the InOut is named as the reason (Issue #1272);
 		 * - every RailSemaphore is a home signal or a platform-track end — the dispatcher only
 		 *   reads block inputs at those signals, a train held at any other one would never move.
 		 *
@@ -168,7 +169,7 @@ class ShuntingLoop(
 		fun compatibilityIssues(station: Station): List<String> =
 			buildList {
 				if (station.platformTracks.isEmpty()) {
-					add("no platform track: no block has a RailSemaphore at both ends away from the home signals")
+					add("no platform track: no block has a RailSemaphore at both ends facing away from it")
 				}
 				val orientations = station.inOuts.map { it.getOrientation() }.toSet()
 				if (orientations.size < 2) {
@@ -178,7 +179,11 @@ class ShuntingLoop(
 					)
 				}
 				station.entryExitBlocks.filter { it.signals.isEmpty() }.forEach { entryExit ->
-					add("entry/exit block ${entryExit.name} ${entryExit.id} has no home signal: it does not end at a RailSemaphore")
+					val reason =
+						entryExit.misdirectedSignals.firstOrNull()?.let { signal ->
+							"its end RailSemaphore ${signal.name.ifBlank { Station.UNNAMED }} faces the InOut, away from the incoming train"
+						} ?: "it does not end at a RailSemaphore"
+					add("entry/exit block ${entryExit.name} ${entryExit.id} has no home signal: $reason")
 				}
 				val attached = station.allBlocks.flatMap { it.signals }.toSet()
 				val unattached = station.signals.count { it !in attached }

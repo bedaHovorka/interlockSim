@@ -16,8 +16,10 @@ InOuts), a home signal on every entry/exit block, and no RailSemaphore that is n
 signal nor a platform-track end (the dispatcher only reads block inputs at those signals). Červený Újezd (4 InOuts) and
 Praha (11 InOuts, 6 without a home signal, 14 unattached signals) are therefore rejected with an
 English message — `fast-sim sim <file>` exits with code 2 — until SP3 (#1150) adds the first
-runnable Červený Újezd scenario. The rule is structural only: track lengths, connectivity and
-signal direction are not checked (`Station` checks signal direction since #1192, `ShuntingLoop` does not). A vyhybna-shaped network whose
+runnable Červený Újezd scenario. The rule is structural only: track lengths and connectivity are
+not checked, but signal direction is (update 2026-10-31: `Station` checks it since #1192, and
+`ShuntingLoop.compatibilityIssues` reads it from `Station`; since #1272 the issue names a home
+signal that faces its InOut, `StationBlock.misdirectedSignals`). A vyhybna-shaped network whose
 shortest InOut-to-InOut distance is shorter than a train still passes it and aborts at run time
 (found in the SP2 review; it predates SP2 — the old coordinate validator accepted it too).
 

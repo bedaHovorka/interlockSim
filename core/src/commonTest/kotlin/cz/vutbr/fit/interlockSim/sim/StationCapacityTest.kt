@@ -9,6 +9,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.hasMessage
 import assertk.assertions.isEmpty
@@ -202,11 +203,41 @@ class StationCapacityTest : CommonKoinTestBase() {
 	}
 
 	@Test
+	fun shuntingLoopRejectsAHomeSignalFacingItsInOut() {
+		// zA ends the entry/exit block kA but faces the InOut A, so a train entering from A has
+		// no home signal (signal direction, Issue #1272); the issue names zA instead of claiming
+		// the block does not end at a RailSemaphore.
+		val station = Station.from(load(NetworkResources.STATION_HOME_SIGNAL_FACING_AWAY_XML))
+
+		assertThat(ShuntingLoop.compatibilityIssues(station)).containsExactly(
+			"entry/exit block kA (11,8)-(14,8) has no home signal: its end RailSemaphore zA faces " +
+				"the InOut, away from the incoming train",
+			"1 RailSemaphore(s) are neither a home signal nor a platform-track end"
+		)
+	}
+
+	@Test
+	fun shuntingLoopNamesAnUnnamedHomeSignalFacingItsInOut() {
+		// The same facing-away zA, but nameless in the XML: the issue falls back to the
+		// Station.UNNAMED label instead of printing an empty name (Issue #1272 review).
+		val station = Station.from(load(NetworkResources.STATION_UNNAMED_HOME_SIGNAL_XML))
+
+		assertThat(ShuntingLoop.compatibilityIssues(station)).containsExactly(
+			"entry/exit block kA (11,8)-(14,8) has no home signal: its end RailSemaphore " +
+				"${Station.UNNAMED} faces the InOut, away from the incoming train",
+			"1 RailSemaphore(s) are neither a home signal nor a platform-track end"
+		)
+	}
+
+	@Test
 	fun shuntingLoopCompatibilityNamesWhatALinearTrackLacks() {
 		val issues = ShuntingLoop.compatibilityIssues(Station.from(load(NetworkResources.LINEAR_TRACK_XML)))
 
 		assertThat(issues).isNotEmpty()
 		assertThat(issues.any { "platform track" in it }).isEqualTo(true)
 		assertThat(issues.any { "no home signal" in it }).isEqualTo(true)
+		// No semaphore at all, so no direction to blame (Issue #1272): the reasons say so.
+		assertThat(issues).contains("no platform track: no block has a RailSemaphore at both ends facing away from it")
+		assertThat(issues.any { it.endsWith("has no home signal: it does not end at a RailSemaphore") }).isEqualTo(true)
 	}
 }

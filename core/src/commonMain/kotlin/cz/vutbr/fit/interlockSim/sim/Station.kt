@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.Point
@@ -41,9 +42,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   meets it as an entry signal.
  * - An **entry/exit block** is the block at an InOut. Its signal is the home signal: the
  *   [DynamicRailSemaphore] at the other end of that block when there is one and it faces away from
- *   the block, that is towards the station, so it faces the train entering from the InOut. Entry/exit
- *   blocks keep the order of [SimulationEnvironment.getInOuts] (the document order of the
- *   network XML). Corners: an InOut node may host more than one block (each block is still one
+ *   the block, that is towards the station, so it faces the train entering from the InOut; a semaphore
+ *   there that faces into the block is no home signal and is kept as [StationBlock.misdirectedSignals]
+ *   (Issue #1272). Entry/exit blocks keep the order of [SimulationEnvironment.getInOuts] (the
+ *   document order of the network XML). Corners: an InOut node may host more than one block (each block is still one
  *   entry/exit block), two InOuts joined by a single block produce one entry/exit block naming
  *   both, and an InOut with no grid location is skipped with a warning.
  * - A **platform track** is a block bounded by a [DynamicRailSemaphore] at both ends where both
@@ -90,16 +92,21 @@ class Station private constructor(
 	 *
 	 * @property id unique within the station: the block's two end points in row order
 	 * @property signals for a platform track both end signals; for an entry/exit block the home
-	 *   signal, or nothing when the block does not end at a semaphore
+	 *   signal, or nothing when there is no end semaphore or its end semaphore faces into the
+	 *   block (see [misdirectedSignals])
 	 * @property inOuts the InOut(s) of an entry/exit block — two when one block joins two InOuts;
 	 *   empty for a platform track
+	 * @property misdirectedSignals the semaphores at the ends of an entry/exit block that face into
+	 *   it (see "Signal direction"), so they are no home signal; empty for a platform track, whose
+	 *   end signals all face away by definition (Issue #1272)
 	 */
 	class StationBlock(
 		val id: String,
 		val name: String,
 		val block: DynamicTrackBlock,
 		val signals: List<DynamicRailSemaphore>,
-		val inOuts: List<DynamicInOut>
+		val inOuts: List<DynamicInOut>,
+		val misdirectedSignals: List<DynamicRailSemaphore> = emptyList()
 	) {
 		/** The first InOut of an entry/exit block; `null` for a platform track. */
 		val inOut: DynamicInOut? get() = inOuts.firstOrNull()
@@ -133,7 +140,7 @@ class Station private constructor(
 	companion object {
 		private val logger = KotlinLogging.logger {}
 		private const val BLOCK_PREFIX = "k"
-		private const val UNNAMED = "(unnamed)"
+		internal const val UNNAMED = "(unnamed)"
 
 		/** Derives the station of the network loaded into [context]. */
 		fun from(context: SimulationEnvironment): Station {
@@ -148,15 +155,18 @@ class Station private constructor(
 
 			// One entry/exit block per block at an InOut: a block joining two InOuts (a plain
 			// linear track) is one block naming both, so ids stay unique.
-			// The semaphores at the ends of [block] that face away from it (see "Signal direction").
-			fun semaphoresFacingAway(
+			// The semaphores at the ends of [block]: first those that face away from it, then those
+			// that face into it (see "Signal direction").
+			fun endSemaphores(
 				ends: List<Point>,
 				block: DynamicTrackBlock
-			): List<DynamicRailSemaphore> =
-				ends.mapNotNull { end ->
-					val signal = grid[end] as? DynamicRailSemaphore
-					signal?.takeIf { graph.assignedEdges(end)[it.direction()] !== block }
-				}
+			): Pair<List<DynamicRailSemaphore>, List<DynamicRailSemaphore>> {
+				val (facingAway, facingInto) =
+					ends
+						.mapNotNull { end -> (grid[end] as? DynamicRailSemaphore)?.let { end to it } }
+						.partition { (end, signal) -> facesAwayFrom(graph.assignedEdges(end), signal, block) }
+				return facingAway.map { it.second } to facingInto.map { it.second }
+			}
 
 			val inOuts = context.getInOuts().toList()
 			val inOutLabels = inOuts.mapIndexed { index, inOut -> inOut.name.ifBlank { "InOut${index + 1}" } }
@@ -175,16 +185,17 @@ class Station private constructor(
 			val entryExitBlocks =
 				inOutsByBlock.map { (block, indices) ->
 					val ends = endpoints[block].orEmpty()
-					val homeSignal = semaphoresFacingAway(ends, block).singleOrNull()
+					val (facingAway, misdirected) = endSemaphores(ends, block)
+					val homeSignal = facingAway.singleOrNull()
 					val name = BLOCK_PREFIX + indices.joinToString("/") { inOutLabels[it] }
 					val blockInOuts = indices.map { inOuts[it] }
-					StationBlock(idOf(ends), name, block, listOfNotNull(homeSignal), blockInOuts)
+					StationBlock(idOf(ends), name, block, listOfNotNull(homeSignal), blockInOuts, misdirected)
 				}
 
 			val platformTracks =
 				endpoints
 					.mapNotNull { (block, ends) ->
-						val signals = semaphoresFacingAway(ends, block)
+						val signals = endSemaphores(ends, block).first
 						val isStationTrack = ends.size == 2 && signals.size == 2
 						if (isStationTrack) block to signals else null
 					}.mapIndexed { index, (block, signals) ->
@@ -198,6 +209,17 @@ class Station private constructor(
 				logger.info { station.describe() }
 			}
 		}
+
+		/**
+		 * The signal-direction rule (see "Signal direction" in the class KDoc), the one place it is
+		 * decided: [signal], whose node has [edgesAtSignal], faces away from [block] when the
+		 * segment a train leaves [signal] through is not the one [block] is attached to.
+		 */
+		private fun facesAwayFrom(
+			edgesAtSignal: Map<Cell.Segment, DynamicTrackBlock>,
+			signal: DynamicRailSemaphore,
+			block: DynamicTrackBlock
+		): Boolean = edgesAtSignal[signal.direction()] !== block
 
 		private fun idOf(ends: List<Point>): String = ends.joinToString("-") { "(${it.x},${it.y})" }
 	}

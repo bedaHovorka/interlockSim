@@ -60,6 +60,23 @@ class StationSignalDirectionTest : CommonKoinTestBase() {
 	}
 
 	@Test
+	fun signalFacingTheInOutIsRecordedAsMisdirected() {
+		val station = station(NetworkResources.STATION_HOME_SIGNAL_FACING_AWAY_XML)
+
+		val byName = station.allBlocks.associateBy { it.name }
+		assertThat(byName.getValue("kA").misdirectedSignals.map { it.name }).containsExactly("zA")
+		assertThat(byName.getValue("kB").misdirectedSignals).isEmpty()
+		assertThat(byName.getValue("k1").misdirectedSignals).isEmpty()
+	}
+
+	@Test
+	fun stationsShuntingLoopRunsHaveNoMisdirectedSignals() {
+		for (xml in listOf(NetworkResources.VYHYBNA_XML, NetworkResources.CERVENY_UJEZD_XML)) {
+			assertThat(station(xml).allBlocks.flatMap { it.misdirectedSignals }).isEmpty()
+		}
+	}
+
+	@Test
 	fun prahaSameDirectionBlockStaysOutsideTheStationTracks() {
 		val station = station(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML)
 
